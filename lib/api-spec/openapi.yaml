@@ -1,22 +1,35 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Diagnostic Center Billing ERP API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: patients
+    description: Patient management
+  - name: tests
+    description: Diagnostic test catalog
+  - name: orders
+    description: Test orders / requisitions
+  - name: bills
+    description: Billing and invoices
+  - name: payments
+    description: Payment records
+  - name: reports
+    description: Reports and analytics
+  - name: doctors
+    description: Referring doctors
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +37,532 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # Patients
+  /patients:
+    get:
+      operationId: listPatients
+      tags: [patients]
+      summary: List patients
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: List of patients
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PatientList"
+    post:
+      operationId: createPatient
+      tags: [patients]
+      summary: Register new patient
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePatientBody"
+      responses:
+        "201":
+          description: Patient created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Patient"
+
+  /patients/{id}:
+    get:
+      operationId: getPatient
+      tags: [patients]
+      summary: Get patient by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Patient
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Patient"
+    put:
+      operationId: updatePatient
+      tags: [patients]
+      summary: Update patient
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePatientBody"
+      responses:
+        "200":
+          description: Updated patient
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Patient"
+
+  /patients/{id}/history:
+    get:
+      operationId: getPatientHistory
+      tags: [patients]
+      summary: Get patient order history
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Patient history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderList"
+
+  # Tests
+  /tests:
+    get:
+      operationId: listTests
+      tags: [tests]
+      summary: List diagnostic tests
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: category
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tests list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestList"
+    post:
+      operationId: createTest
+      tags: [tests]
+      summary: Create diagnostic test
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTestBody"
+      responses:
+        "201":
+          description: Test created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiagnosticTest"
+
+  /tests/{id}:
+    get:
+      operationId: getTest
+      tags: [tests]
+      summary: Get test by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Test
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiagnosticTest"
+    put:
+      operationId: updateTest
+      tags: [tests]
+      summary: Update test
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTestBody"
+      responses:
+        "200":
+          description: Updated test
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiagnosticTest"
+
+  # Orders
+  /orders:
+    get:
+      operationId: listOrders
+      tags: [orders]
+      summary: List test orders
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, collected, processing, completed, cancelled]
+        - name: patientId
+          in: query
+          schema:
+            type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+        - name: dateTo
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Orders list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderList"
+    post:
+      operationId: createOrder
+      tags: [orders]
+      summary: Create test order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderBody"
+      responses:
+        "201":
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+
+  /orders/{id}:
+    get:
+      operationId: getOrder
+      tags: [orders]
+      summary: Get order by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+    put:
+      operationId: updateOrder
+      tags: [orders]
+      summary: Update order status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOrderBody"
+      responses:
+        "200":
+          description: Updated order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+
+  # Bills
+  /bills:
+    get:
+      operationId: listBills
+      tags: [bills]
+      summary: List bills
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, pending, partial, paid, cancelled]
+        - name: patientId
+          in: query
+          schema:
+            type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Bills list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillList"
+    post:
+      operationId: createBill
+      tags: [bills]
+      summary: Create bill for order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBillBody"
+      responses:
+        "201":
+          description: Bill created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bill"
+
+  /bills/{id}:
+    get:
+      operationId: getBill
+      tags: [bills]
+      summary: Get bill by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Bill
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bill"
+    put:
+      operationId: updateBill
+      tags: [bills]
+      summary: Update bill
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBillBody"
+      responses:
+        "200":
+          description: Updated bill
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bill"
+
+  # Payments
+  /payments:
+    get:
+      operationId: listPayments
+      tags: [payments]
+      summary: List payments
+      parameters:
+        - name: billId
+          in: query
+          schema:
+            type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Payments list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentList"
+    post:
+      operationId: createPayment
+      tags: [payments]
+      summary: Record payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePaymentBody"
+      responses:
+        "201":
+          description: Payment recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+
+  # Doctors
+  /doctors:
+    get:
+      operationId: listDoctors
+      tags: [doctors]
+      summary: List referring doctors
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Doctors list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DoctorList"
+    post:
+      operationId: createDoctor
+      tags: [doctors]
+      summary: Add referring doctor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDoctorBody"
+      responses:
+        "201":
+          description: Doctor created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Doctor"
+
+  # Reports & Analytics
+  /reports/dashboard:
+    get:
+      operationId: getDashboardStats
+      tags: [reports]
+      summary: Get dashboard statistics
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /reports/revenue:
+    get:
+      operationId: getRevenueReport
+      tags: [reports]
+      summary: Get revenue report by date range
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [daily, weekly, monthly]
+            default: monthly
+      responses:
+        "200":
+          description: Revenue report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevenueReport"
+
+  /reports/popular-tests:
+    get:
+      operationId: getPopularTests
+      tags: [reports]
+      summary: Get most ordered tests
+      responses:
+        "200":
+          description: Popular tests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PopularTestList"
+
+  /reports/recent-activity:
+    get:
+      operationId: getRecentActivity
+      tags: [reports]
+      summary: Get recent activity feed
+      responses:
+        "200":
+          description: Recent activity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivityList"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +570,517 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    Patient:
+      type: object
+      properties:
+        id:
+          type: integer
+        patientId:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        dateOfBirth:
+          type: string
+        gender:
+          type: string
+          enum: [male, female, other]
+        phone:
+          type: string
+        email:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        bloodGroup:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required: [id, patientId, firstName, lastName, dateOfBirth, gender, phone, createdAt]
+
+    PatientList:
+      type: object
+      properties:
+        patients:
+          type: array
+          items:
+            $ref: "#/components/schemas/Patient"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required: [patients, total, page, limit]
+
+    CreatePatientBody:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        dateOfBirth:
+          type: string
+        gender:
+          type: string
+          enum: [male, female, other]
+        phone:
+          type: string
+        email:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        bloodGroup:
+          type: string
+          nullable: true
+      required: [firstName, lastName, dateOfBirth, gender, phone]
+
+    DiagnosticTest:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+        price:
+          type: number
+        duration:
+          type: string
+        description:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+      required: [id, code, name, category, price, duration, isActive, createdAt]
+
+    TestList:
+      type: object
+      properties:
+        tests:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiagnosticTest"
+        total:
+          type: integer
+      required: [tests, total]
+
+    CreateTestBody:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+        price:
+          type: number
+        duration:
+          type: string
+        description:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+      required: [code, name, category, price, duration]
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: integer
+        orderNumber:
+          type: string
+        patientId:
+          type: integer
+        patient:
+          $ref: "#/components/schemas/Patient"
+        doctorId:
+          type: integer
+          nullable: true
+        doctor:
+          $ref: "#/components/schemas/Doctor"
+          nullable: true
+        status:
+          type: string
+          enum: [pending, collected, processing, completed, cancelled]
+        tests:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderTest"
+        totalAmount:
+          type: number
+        notes:
+          type: string
+          nullable: true
+        collectedAt:
+          type: string
+          nullable: true
+        completedAt:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required: [id, orderNumber, patientId, patient, status, tests, totalAmount, createdAt]
+
+    OrderTest:
+      type: object
+      properties:
+        id:
+          type: integer
+        testId:
+          type: integer
+        test:
+          $ref: "#/components/schemas/DiagnosticTest"
+        price:
+          type: number
+        result:
+          type: string
+          nullable: true
+        resultStatus:
+          type: string
+          nullable: true
+      required: [id, testId, test, price]
+
+    OrderList:
+      type: object
+      properties:
+        orders:
+          type: array
+          items:
+            $ref: "#/components/schemas/Order"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required: [orders, total, page, limit]
+
+    CreateOrderBody:
+      type: object
+      properties:
+        patientId:
+          type: integer
+        doctorId:
+          type: integer
+          nullable: true
+        testIds:
+          type: array
+          items:
+            type: integer
+        notes:
+          type: string
+          nullable: true
+      required: [patientId, testIds]
+
+    UpdateOrderBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, collected, processing, completed, cancelled]
+        notes:
+          type: string
+          nullable: true
+      required: [status]
+
+    Bill:
+      type: object
+      properties:
+        id:
+          type: integer
+        billNumber:
+          type: string
+        orderId:
+          type: integer
+        order:
+          $ref: "#/components/schemas/Order"
+        patientId:
+          type: integer
+        patient:
+          $ref: "#/components/schemas/Patient"
+        subtotal:
+          type: number
+        discount:
+          type: number
+        taxAmount:
+          type: number
+        totalAmount:
+          type: number
+        paidAmount:
+          type: number
+        balanceAmount:
+          type: number
+        status:
+          type: string
+          enum: [draft, pending, partial, paid, cancelled]
+        dueDate:
+          type: string
+          nullable: true
+        payments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Payment"
+        createdAt:
+          type: string
+      required: [id, billNumber, orderId, order, patientId, patient, subtotal, discount, taxAmount, totalAmount, paidAmount, balanceAmount, status, payments, createdAt]
+
+    BillList:
+      type: object
+      properties:
+        bills:
+          type: array
+          items:
+            $ref: "#/components/schemas/Bill"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required: [bills, total, page, limit]
+
+    CreateBillBody:
+      type: object
+      properties:
+        orderId:
+          type: integer
+        discount:
+          type: number
+        dueDate:
+          type: string
+          nullable: true
+      required: [orderId]
+
+    UpdateBillBody:
+      type: object
+      properties:
+        discount:
+          type: number
+        status:
+          type: string
+          enum: [draft, pending, partial, paid, cancelled]
+        dueDate:
+          type: string
+          nullable: true
+
+    Payment:
+      type: object
+      properties:
+        id:
+          type: integer
+        billId:
+          type: integer
+        amount:
+          type: number
+        method:
+          type: string
+          enum: [cash, card, upi, insurance, cheque]
+        referenceNumber:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required: [id, billId, amount, method, createdAt]
+
+    PaymentList:
+      type: object
+      properties:
+        payments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Payment"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required: [payments, total, page, limit]
+
+    CreatePaymentBody:
+      type: object
+      properties:
+        billId:
+          type: integer
+        amount:
+          type: number
+        method:
+          type: string
+          enum: [cash, card, upi, insurance, cheque]
+        referenceNumber:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+      required: [billId, amount, method]
+
+    Doctor:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        specialization:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        hospitalAffiliation:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required: [id, name, specialization, createdAt]
+
+    DoctorList:
+      type: object
+      properties:
+        doctors:
+          type: array
+          items:
+            $ref: "#/components/schemas/Doctor"
+        total:
+          type: integer
+      required: [doctors, total]
+
+    CreateDoctorBody:
+      type: object
+      properties:
+        name:
+          type: string
+        specialization:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        hospitalAffiliation:
+          type: string
+          nullable: true
+      required: [name, specialization]
+
+    DashboardStats:
+      type: object
+      properties:
+        totalPatients:
+          type: integer
+        todayOrders:
+          type: integer
+        pendingOrders:
+          type: integer
+        todayRevenue:
+          type: number
+        monthRevenue:
+          type: number
+        pendingPayments:
+          type: number
+        completedTests:
+          type: integer
+        ordersByStatus:
+          type: array
+          items:
+            type: object
+            properties:
+              status:
+                type: string
+              count:
+                type: integer
+            required: [status, count]
+      required: [totalPatients, todayOrders, pendingOrders, todayRevenue, monthRevenue, pendingPayments, completedTests, ordersByStatus]
+
+    RevenueReport:
+      type: object
+      properties:
+        period:
+          type: string
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              revenue:
+                type: number
+              orders:
+                type: integer
+            required: [label, revenue, orders]
+        totalRevenue:
+          type: number
+        totalOrders:
+          type: integer
+      required: [period, data, totalRevenue, totalOrders]
+
+    PopularTest:
+      type: object
+      properties:
+        testId:
+          type: integer
+        testName:
+          type: string
+        testCode:
+          type: string
+        category:
+          type: string
+        orderCount:
+          type: integer
+        revenue:
+          type: number
+      required: [testId, testName, testCode, category, orderCount, revenue]
+
+    PopularTestList:
+      type: object
+      properties:
+        tests:
+          type: array
+          items:
+            $ref: "#/components/schemas/PopularTest"
+      required: [tests]
+
+    Activity:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [order_created, payment_received, order_completed, patient_registered, bill_generated]
+        description:
+          type: string
+        patientName:
+          type: string
+        amount:
+          type: number
+          nullable: true
+        createdAt:
+          type: string
+      required: [id, type, description, patientName, createdAt]
+
+    ActivityList:
+      type: object
+      properties:
+        activities:
+          type: array
+          items:
+            $ref: "#/components/schemas/Activity"
+      required: [activities]

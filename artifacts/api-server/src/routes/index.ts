@@ -1,8 +1,21 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
+import { patientsRouter } from "./patients";
+import { doctorsRouter } from "./doctors";
+import { testsRouter } from "./tests";
+import { ordersRouter } from "./orders";
+import { billsRouter, paymentsRouter } from "./bills";
+import { reportsRouter } from "./reports";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use("/patients", patientsRouter);
+router.use("/doctors", doctorsRouter);
+router.use("/tests", testsRouter);
+router.use("/orders", ordersRouter);
+router.use("/bills", billsRouter);
+router.use("/payments", paymentsRouter);
+router.use("/reports", reportsRouter);
 
 export default router;
