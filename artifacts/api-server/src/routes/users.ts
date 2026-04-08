@@ -5,9 +5,12 @@ import { eq } from "drizzle-orm";
 
 const router = Router();
 
-const ROLES = ["admin", "manager", "accountant", "billing", "lab", "receptionist"];
+const ROLES = ["super_admin", "admin", "manager", "accountant", "billing", "lab", "receptionist"];
+
+const ALL_PATHS = ["/", "/patients", "/orders", "/tests", "/billing", "/payments", "/doctors", "/reports", "/report-generator", "/inventory", "/referrals", "/accounting", "/discounts", "/settings", "/register", "/pacs"];
 
 const DEFAULT_PERMISSIONS: Record<string, string[]> = {
+  super_admin: ALL_PATHS,
   admin: ["/", "/patients", "/orders", "/tests", "/billing", "/payments", "/doctors", "/reports", "/report-generator", "/inventory", "/referrals", "/accounting", "/discounts", "/settings", "/register"],
   manager: ["/", "/patients", "/orders", "/billing", "/payments", "/doctors", "/reports", "/referrals", "/accounting", "/discounts", "/register"],
   accountant: ["/", "/accounting", "/reports", "/billing", "/payments"],

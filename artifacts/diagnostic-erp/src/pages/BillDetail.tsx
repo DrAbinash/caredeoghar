@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useGetBill, useCreatePayment, getGetBillQueryKey, getListBillsQueryKey } from "@workspace/api-client-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
@@ -14,7 +14,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Plus, Pencil, History, Clock } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, History, Clock, ShieldAlert, Trash2, AlertTriangle } from "lucide-react";
 import { useForm } from "react-hook-form";
 
 type PaymentForm = {
@@ -29,6 +29,20 @@ type EditForm = {
   status: string;
   editedBy: string;
   reason: string;
+};
+
+type SuperEditForm = {
+  subtotal: number;
+  discount: number;
+  taxAmount: number;
+  superAdminName: string;
+  reason: string;
+};
+
+type DeleteForm = {
+  deletedBy: string;
+  reason: string;
+  confirmText: string;
 };
 
 type BillAudit = {
@@ -46,10 +60,13 @@ const PAYMENT_METHODS = ["cash", "card", "upi", "insurance", "cheque"];
 const BILL_STATUSES = ["pending", "partial", "paid", "cancelled"];
 
 export default function BillDetail({ id }: { id: number }) {
+  const [, navigate] = useLocation();
   const { data: bill, isLoading } = useGetBill(id);
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
+  const [superEditOpen, setSuperEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: audits = [], refetch: refetchAudits } = useQuery<BillAudit[]>({
@@ -81,9 +98,36 @@ export default function BillDetail({ id }: { id: number }) {
     },
   });
 
+  const superEditBill = useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      api.patch(`/api/bills/${id}/super-edit`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getGetBillQueryKey(id) });
+      queryClient.invalidateQueries({ queryKey: getListBillsQueryKey() });
+      refetchAudits();
+      setSuperEditOpen(false);
+      resetSuperEdit();
+    },
+  });
+
+  const deleteBill = useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      api.delete(`/api/bills/${id}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getListBillsQueryKey() });
+      navigate("/billing");
+    },
+  });
+
   const { register, handleSubmit, reset, setValue, watch } = useForm<PaymentForm>({ defaultValues: { method: "cash" } });
   const { register: regEdit, handleSubmit: handleEdit, reset: resetEdit, setValue: setEditVal, watch: watchEdit } = useForm<EditForm>({
     defaultValues: { discount: 0, status: "pending", editedBy: "", reason: "" },
+  });
+  const { register: regSuperEdit, handleSubmit: handleSuperEdit, reset: resetSuperEdit, watch: watchSuperEdit } = useForm<SuperEditForm>({
+    defaultValues: { subtotal: 0, discount: 0, taxAmount: 0, superAdminName: "", reason: "" },
+  });
+  const { register: regDelete, handleSubmit: handleDelete, reset: resetDelete, watch: watchDelete } = useForm<DeleteForm>({
+    defaultValues: { deletedBy: "", reason: "", confirmText: "" },
   });
 
   const onSubmit = (data: PaymentForm) => {
@@ -99,10 +143,37 @@ export default function BillDetail({ id }: { id: number }) {
     });
   });
 
+  const onSuperEditSubmit = handleSuperEdit((d) => {
+    superEditBill.mutate({
+      subtotal: Number(d.subtotal),
+      discount: Number(d.discount),
+      taxAmount: Number(d.taxAmount),
+      superAdminName: d.superAdminName,
+      reason: d.reason,
+    });
+  });
+
+  const onDeleteSubmit = handleDelete((d) => {
+    if (d.confirmText !== bill?.billNumber) return;
+    deleteBill.mutate({ deletedBy: d.deletedBy, reason: d.reason });
+  });
+
   const openEdit = () => {
     if (!bill) return;
     resetEdit({ discount: bill.discount, status: bill.status, editedBy: "", reason: "" });
     setEditOpen(true);
+  };
+
+  const openSuperEdit = () => {
+    if (!bill) return;
+    resetSuperEdit({
+      subtotal: Number(bill.subtotal),
+      discount: Number(bill.discount),
+      taxAmount: Number(bill.taxAmount),
+      superAdminName: "",
+      reason: "",
+    });
+    setSuperEditOpen(true);
   };
 
   const formatCurrency = (n: number) =>
@@ -112,6 +183,11 @@ export default function BillDetail({ id }: { id: number }) {
   if (!bill) return <div className="p-6 text-muted-foreground">Bill not found.</div>;
 
   const canEdit = bill.status !== "paid" && bill.status !== "cancelled";
+  const superSub = watchSuperEdit("subtotal");
+  const superDisc = watchSuperEdit("discount");
+  const superTax = watchSuperEdit("taxAmount");
+  const projectedTotal = (Number(superSub) || 0) - (Number(superDisc) || 0) + (Number(superTax) || 0);
+  const confirmVal = watchDelete("confirmText");
 
   return (
     <div className="pb-8">
@@ -125,7 +201,7 @@ export default function BillDetail({ id }: { id: number }) {
         title={bill.billNumber}
         subtitle={`Generated ${new Date(bill.createdAt).toLocaleString()}`}
         actions={
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button size="sm" variant="outline" onClick={() => { setAuditOpen(true); }}>
               <History size={14} className="mr-1" /> History
             </Button>
@@ -270,6 +346,25 @@ export default function BillDetail({ id }: { id: number }) {
             )}
           </div>
         </div>
+
+        {/* Super Admin Actions */}
+        <div className="border border-rose-200 dark:border-rose-900/50 rounded-xl p-4 bg-rose-50/50 dark:bg-rose-950/20">
+          <div className="flex items-center gap-2 mb-3">
+            <ShieldAlert size={15} className="text-rose-600 dark:text-rose-400" />
+            <span className="text-xs font-semibold uppercase tracking-wide text-rose-700 dark:text-rose-400">Super Admin Actions</span>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            These actions are irreversible and require a verified super admin user. All actions are fully audited.
+          </p>
+          <div className="flex gap-2 flex-wrap">
+            <Button size="sm" variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/30" onClick={openSuperEdit}>
+              <Pencil size={13} className="mr-1.5" /> Super Edit Amounts
+            </Button>
+            <Button size="sm" variant="outline" className="border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30" onClick={() => { resetDelete(); setDeleteOpen(true); }}>
+              <Trash2 size={13} className="mr-1.5" /> Delete Bill
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* Add payment dialog */}
@@ -367,6 +462,115 @@ export default function BillDetail({ id }: { id: number }) {
         </DialogContent>
       </Dialog>
 
+      {/* Super Edit Dialog */}
+      <Dialog open={superEditOpen} onOpenChange={setSuperEditOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldAlert size={16} className="text-amber-600" />
+              Super Edit — {bill.billNumber}
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSuperEdit(onSuperEditSubmit)} className="space-y-4">
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-xs text-amber-700 dark:text-amber-400">
+              Editing amounts will recalculate the total and balance. All changes are permanently logged.
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label>Subtotal (₹)</Label>
+                <Input type="number" step="0.01" min="0" {...regSuperEdit("subtotal", { valueAsNumber: true })} className="mt-1" />
+                <p className="text-xs text-muted-foreground mt-0.5">Was: {formatCurrency(bill.subtotal)}</p>
+              </div>
+              <div>
+                <Label>Discount (₹)</Label>
+                <Input type="number" step="0.01" min="0" {...regSuperEdit("discount", { valueAsNumber: true })} className="mt-1" />
+                <p className="text-xs text-muted-foreground mt-0.5">Was: {formatCurrency(bill.discount)}</p>
+              </div>
+              <div>
+                <Label>Tax (₹)</Label>
+                <Input type="number" step="0.01" min="0" {...regSuperEdit("taxAmount", { valueAsNumber: true })} className="mt-1" />
+                <p className="text-xs text-muted-foreground mt-0.5">Was: {formatCurrency(bill.taxAmount)}</p>
+              </div>
+            </div>
+            <div className="bg-muted/40 rounded-lg px-4 py-2 text-sm flex justify-between items-center">
+              <span className="text-muted-foreground">New Total</span>
+              <span className="font-bold text-base">{formatCurrency(projectedTotal)}</span>
+            </div>
+            <div className="border-t border-border pt-4 space-y-3">
+              <p className="text-xs font-semibold uppercase text-muted-foreground">Super Admin Authorization</p>
+              <div>
+                <Label>Super Admin Name *</Label>
+                <Input {...regSuperEdit("superAdminName", { required: true })} className="mt-1" placeholder="Must match a super_admin user" />
+              </div>
+              <div>
+                <Label>Reason *</Label>
+                <Input {...regSuperEdit("reason", { required: true })} className="mt-1" placeholder="e.g., Billing correction — test price error" />
+              </div>
+            </div>
+            {superEditBill.isError && (
+              <p className="text-xs text-red-600">{(superEditBill.error as Error)?.message ?? "Authorization failed. Verify super_admin name."}</p>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setSuperEditOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={superEditBill.isPending} className="bg-amber-600 hover:bg-amber-700 text-white">
+                {superEditBill.isPending ? "Saving…" : "Apply Super Edit"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Bill Dialog */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle size={16} /> Delete Bill — {bill.billNumber}
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleDelete(onDeleteSubmit)} className="space-y-4">
+            <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-3 text-xs text-red-700 dark:text-red-400 space-y-1">
+              <p className="font-semibold">This action cannot be undone.</p>
+              <p>Deleting this bill will:</p>
+              <ul className="list-disc list-inside space-y-0.5 pl-1">
+                <li>Permanently remove all payment records</li>
+                <li>Reset the linked order status to "pending"</li>
+                <li>Renumber subsequent bills in {bill.billNumber.slice(0, 12)}</li>
+              </ul>
+            </div>
+            <div>
+              <Label>Super Admin Name *</Label>
+              <Input {...regDelete("deletedBy", { required: true })} className="mt-1" placeholder="Must match a super_admin user" />
+            </div>
+            <div>
+              <Label>Reason for Deletion *</Label>
+              <Input {...regDelete("reason", { required: true })} className="mt-1" placeholder="e.g., Duplicate bill — created in error" />
+            </div>
+            <div>
+              <Label>Type <span className="font-mono font-bold text-red-600">{bill.billNumber}</span> to confirm</Label>
+              <Input
+                {...regDelete("confirmText", { required: true })}
+                className="mt-1 font-mono"
+                placeholder={bill.billNumber}
+              />
+            </div>
+            {deleteBill.isError && (
+              <p className="text-xs text-red-600">{(deleteBill.error as Error)?.message ?? "Authorization failed. Verify super_admin name."}</p>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+              <Button
+                type="submit"
+                disabled={deleteBill.isPending || confirmVal !== bill.billNumber}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {deleteBill.isPending ? "Deleting…" : "Permanently Delete"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Audit History Dialog */}
       <Dialog open={auditOpen} onOpenChange={setAuditOpen}>
         <DialogContent className="max-w-lg">
@@ -385,7 +589,12 @@ export default function BillDetail({ id }: { id: number }) {
               {audits.map(a => (
                 <div key={a.id} className="border border-card-border rounded-lg p-3 text-sm">
                   <div className="flex items-center justify-between mb-1">
-                    <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded ${a.changeType === "discount" ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"}`}>
+                    <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded ${
+                      a.changeType === "deleted" ? "bg-red-100 text-red-700" :
+                      a.changeType === "discount" ? "bg-blue-100 text-blue-700" :
+                      a.changeType === "subtotal" || a.changeType === "taxAmount" || a.changeType === "totalAmount" ? "bg-amber-100 text-amber-700" :
+                      "bg-orange-100 text-orange-700"
+                    }`}>
                       {a.changeType}
                     </span>
                     <span className="text-xs text-muted-foreground">{new Date(a.createdAt).toLocaleString()}</span>

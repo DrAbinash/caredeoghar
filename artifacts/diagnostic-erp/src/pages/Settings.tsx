@@ -36,8 +36,9 @@ type EmailSettings = {
 
 /* ── Constants ──────────────────────────────────────────────── */
 
-const ROLES = ["admin", "manager", "accountant", "billing", "lab", "receptionist"];
+const ROLES = ["super_admin", "admin", "manager", "accountant", "billing", "lab", "receptionist"];
 const ROLE_COLORS: Record<string, string> = {
+  super_admin: "bg-rose-100 text-rose-800 font-bold",
   admin: "bg-red-100 text-red-700",
   manager: "bg-purple-100 text-purple-700",
   accountant: "bg-indigo-100 text-indigo-700",
@@ -63,6 +64,7 @@ const ALL_MODULES = [
   { path: "/settings", label: "Settings" },
 ];
 const DEFAULT_PERMISSIONS: Record<string, string[]> = {
+  super_admin: ALL_MODULES.map(m => m.path),
   admin: ALL_MODULES.map(m => m.path),
   manager: ["/", "/patients", "/billing", "/payments", "/doctors", "/reports", "/referrals", "/accounting", "/register", "/discounts"],
   accountant: ["/", "/accounting", "/reports", "/billing", "/payments"],
@@ -246,6 +248,7 @@ function UsersTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
           <p className="text-xs font-semibold uppercase text-muted-foreground mb-3">Role Descriptions</p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
             {[
+              { role: "super_admin", desc: "All permissions + delete/super-edit bills" },
               { role: "admin", desc: "Full access to all modules" },
               { role: "manager", desc: "Reports, billing, referrals, accounting, discounts" },
               { role: "accountant", desc: "Accounting, reports, billing & payments view" },

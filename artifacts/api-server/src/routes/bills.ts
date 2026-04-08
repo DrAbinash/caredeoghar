@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { db, billsTable, paymentsTable, ordersTable, patientsTable } from "@workspace/db";
-import { billAuditsTable } from "@workspace/db/schema";
+import { billAuditsTable, usersTable } from "@workspace/db/schema";
 import { sendBillEditEmail } from "../email";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, sql, desc, like } from "drizzle-orm";
 import {
   ListBillsQueryParams,
   CreateBillBody,
@@ -215,6 +215,117 @@ billsRouter.get("/:id/audits", async (req, res) => {
   const id = Number(req.params.id);
   const audits = await db.select().from(billAuditsTable).where(eq(billAuditsTable.billId, id)).orderBy(desc(billAuditsTable.createdAt));
   res.json(audits);
+});
+
+// ── Super-admin: full amount edit ─────────────────────────────────────────────
+billsRouter.patch("/:id/super-edit", async (req, res) => {
+  const id = Number(req.params.id);
+  const { superAdminName, reason, subtotal, discount, taxAmount } = req.body;
+
+  if (!superAdminName || !reason) {
+    return res.status(400).json({ error: "superAdminName and reason are required" });
+  }
+
+  // Verify the named user is super_admin
+  const [superUser] = await db.select().from(usersTable).where(eq(usersTable.name, superAdminName));
+  if (!superUser || superUser.role !== "super_admin") {
+    return res.status(403).json({ error: "Only users with super_admin role can perform this action" });
+  }
+
+  const [bill] = await db.select().from(billsTable).where(eq(billsTable.id, id));
+  if (!bill) return res.status(404).json({ error: "Bill not found" });
+
+  const newSubtotal  = subtotal  !== undefined ? Number(subtotal)  : Number(bill.subtotal);
+  const newDiscount  = discount  !== undefined ? Number(discount)  : Number(bill.discount);
+  const newTaxAmount = taxAmount !== undefined ? Number(taxAmount) : Number(bill.taxAmount);
+  const newTotal     = newSubtotal - newDiscount + newTaxAmount;
+  const paidAmount   = Number(bill.paidAmount);
+  const newBalance   = newTotal - paidAmount;
+  const newStatus    = newBalance <= 0 && paidAmount > 0 ? "paid"
+                     : paidAmount > 0 ? "partial"
+                     : "pending";
+
+  const [updated] = await db.update(billsTable).set({
+    subtotal:      String(newSubtotal),
+    discount:      String(newDiscount),
+    taxAmount:     String(newTaxAmount),
+    totalAmount:   String(newTotal),
+    balanceAmount: String(Math.max(0, newBalance)),
+    status:        newStatus,
+  }).where(eq(billsTable.id, id)).returning();
+
+  // Audit each changed field
+  const auditRows: { billId: number; editedBy: string; reason: string; changeType: string; oldValue: string | null; newValue: string | null }[] = [];
+  if (newSubtotal !== Number(bill.subtotal))   auditRows.push({ billId: id, editedBy: superAdminName, reason, changeType: "subtotal",   oldValue: bill.subtotal,   newValue: String(newSubtotal) });
+  if (newDiscount !== Number(bill.discount))   auditRows.push({ billId: id, editedBy: superAdminName, reason, changeType: "discount",   oldValue: bill.discount,   newValue: String(newDiscount) });
+  if (newTaxAmount !== Number(bill.taxAmount)) auditRows.push({ billId: id, editedBy: superAdminName, reason, changeType: "taxAmount",  oldValue: bill.taxAmount,  newValue: String(newTaxAmount) });
+  if (newTotal !== Number(bill.totalAmount))   auditRows.push({ billId: id, editedBy: superAdminName, reason, changeType: "totalAmount", oldValue: bill.totalAmount, newValue: String(newTotal) });
+  if (auditRows.length > 0) await db.insert(billAuditsTable).values(auditRows);
+
+  res.json(await buildBill(updated));
+});
+
+// ── Super-admin: delete bill + renumber subsequent ────────────────────────────
+billsRouter.delete("/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  const { deletedBy, reason } = req.body;
+
+  if (!deletedBy || !reason) {
+    return res.status(400).json({ error: "deletedBy and reason are required" });
+  }
+
+  // Verify super admin
+  const [superUser] = await db.select().from(usersTable).where(eq(usersTable.name, deletedBy));
+  if (!superUser || superUser.role !== "super_admin") {
+    return res.status(403).json({ error: "Only users with super_admin role can delete bills" });
+  }
+
+  const [bill] = await db.select().from(billsTable).where(eq(billsTable.id, id));
+  if (!bill) return res.status(404).json({ error: "Bill not found" });
+
+  // Parse bill number to get YYYYMM prefix and sequence number
+  const billNumMatch = bill.billNumber.match(/^BILL-(\d{6})-(\d+)$/);
+
+  // Pre-audit (bill_audits has no FK constraint so insert before or after is fine)
+  await db.insert(billAuditsTable).values({
+    billId: id,
+    editedBy: deletedBy,
+    reason: `[DELETED] ${reason}`,
+    changeType: "deleted",
+    oldValue: bill.billNumber,
+    newValue: null,
+  });
+
+  // Delete payments and audits for this bill first, then the bill
+  await db.delete(paymentsTable).where(eq(paymentsTable.billId, id));
+  await db.delete(billsTable).where(eq(billsTable.id, id));
+
+  // Reset order back to pending so a new bill can be generated
+  await db.update(ordersTable).set({ status: "pending" }).where(eq(ordersTable.id, bill.orderId));
+
+  // Renumber bills in the same YYYYMM that come after the deleted one
+  if (billNumMatch) {
+    const monthPrefix = billNumMatch[1]; // e.g. "202604"
+    const deletedSeq  = Number(billNumMatch[2]);
+
+    // Fetch all bills in this month with a higher sequence
+    const laterBills = await db
+      .select()
+      .from(billsTable)
+      .where(like(billsTable.billNumber, `BILL-${monthPrefix}-%`))
+      .orderBy(billsTable.billNumber);
+
+    for (const lb of laterBills) {
+      const m = lb.billNumber.match(/^BILL-(\d{6})-(\d+)$/);
+      if (!m) continue;
+      const seq = Number(m[2]);
+      if (seq <= deletedSeq) continue;  // only renumber those after the deleted one
+      const newBillNumber = `BILL-${m[1]}-${String(seq - 1).padStart(4, "0")}`;
+      await db.update(billsTable).set({ billNumber: newBillNumber }).where(eq(billsTable.id, lb.id));
+    }
+  }
+
+  res.json({ ok: true, deletedBillNumber: bill.billNumber });
 });
 
 // Payments
