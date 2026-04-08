@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, billsTable, paymentsTable, ordersTable, patientsTable } from "@workspace/db";
 import { billAuditsTable } from "@workspace/db/schema";
+import { sendBillEditEmail } from "../email";
 import { eq, and, sql, desc } from "drizzle-orm";
 import {
   ListBillsQueryParams,
@@ -174,18 +175,36 @@ billsRouter.put("/:id", async (req, res) => {
 
   const [updated] = await db.update(billsTable).set(updateData).where(eq(billsTable.id, paramsParsed.data.id)).returning();
 
-  // Audit trail
+  // Audit trail + email notification
   const { editedBy, reason } = req.body;
   if (editedBy && reason) {
-    const auditEntries = [];
+    const auditEntries: { billId: number; editedBy: string; reason: string; changeType: string; oldValue: string | null; newValue: string | null }[] = [];
+    const emailChanges: { field: string; from: string | null; to: string | null }[] = [];
+
     if (status !== undefined && status !== existingBill.status) {
       auditEntries.push({ billId: paramsParsed.data.id, editedBy, reason, changeType: "status", oldValue: existingBill.status, newValue: status });
+      emailChanges.push({ field: "Status", from: existingBill.status, to: status });
     }
     if (discount !== undefined && String(discount) !== existingBill.discount) {
       auditEntries.push({ billId: paramsParsed.data.id, editedBy, reason, changeType: "discount", oldValue: existingBill.discount, newValue: String(discount) });
+      emailChanges.push({ field: "Discount (₹)", from: existingBill.discount, to: String(discount) });
     }
     if (auditEntries.length > 0) {
       await db.insert(billAuditsTable).values(auditEntries);
+
+      // Fire email asynchronously — don't block the response
+      const billForEmail = await buildBill(updated);
+      const patientName = billForEmail.patient
+        ? `${billForEmail.patient.firstName} ${billForEmail.patient.lastName}`
+        : "Unknown Patient";
+
+      sendBillEditEmail({
+        billNumber: updated.billNumber,
+        patientName,
+        editedBy,
+        reason,
+        changes: emailChanges,
+      }).catch(err => console.error("[email] bill edit notification failed:", err));
     }
   }
 

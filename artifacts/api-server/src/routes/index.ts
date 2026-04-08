@@ -10,6 +10,7 @@ import inventoryRouter from "./inventory";
 import accountingRouter from "./accounting";
 import commissionRouter from "./commission";
 import usersRouter from "./users";
+import emailSettingsRouter from "./email-settings";
 
 const router: IRouter = Router();
 
@@ -25,5 +26,6 @@ router.use("/inventory", inventoryRouter);
 router.use("/accounting", accountingRouter);
 router.use("/commission", commissionRouter);
 router.use("/users", usersRouter);
+router.use("/email-settings", emailSettingsRouter);
 
 export default router;

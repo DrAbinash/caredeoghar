@@ -7,3 +7,4 @@ export * from "./inventory";
 export * from "./accounting";
 export * from "./commission";
 export * from "./users";
+export * from "./email";

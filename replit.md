@@ -67,7 +67,17 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - `GET/POST/PATCH/DELETE /api/users` — user management
 - `GET /api/users/default-permissions` — default permissions per role
 - `GET /api/bills/:id/audits` — bill edit audit trail
-- `PUT /api/bills/:id` — supports editedBy + reason for audit logging
+- `PUT /api/bills/:id` — supports editedBy + reason for audit logging + email notification
+- `GET/POST /api/email-settings` — email notification settings (SMTP, recipients, triggers)
+- `POST /api/email-settings/test` — send test email
+- `POST /api/email-settings/send-summary` — trigger daily summary manually
+
+### Email Notifications (artifacts/api-server/src/email.ts + cron.ts)
+- Powered by nodemailer (SMTP) + node-cron
+- **Bill edit notifications**: fires email immediately on every bill edit (async, non-blocking)
+- **Daily summary**: cron checks every minute; fires at configured time (default 17:00) with today's stats
+- Settings stored in `email_settings` DB table (SMTP credentials, from, recipients, toggles, time)
+- Recipients: admin email + extra recipients list (managed from Settings → Email Notifications tab)
 
 ### Notes
 - New frontend pages use direct fetch via `src/lib/fetchApi.ts` (put/patch/post/delete helpers)
@@ -75,3 +85,4 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - Voucher numbering: PV-YYYYMM-XXXX, RV-..., BT-..., JV-...
 - Commission rules stored with JSON arrays for `categories` and `testIds` fields
 - Bill edits require editedBy + reason; stored in bill_audits table
+- Email settings include setup tips for Gmail, Outlook, Zoho

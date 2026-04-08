@@ -14,13 +14,26 @@ import {
 } from "@/components/ui/select";
 import { useForm } from "react-hook-form";
 import {
-  Plus, Trash2, Pencil, User2, Shield, CheckSquare, Square,
+  Plus, Trash2, Pencil, User2, Shield, CheckSquare, Square, Mail,
+  Settings2, Users, Send, TestTube2, RefreshCw, X,
 } from "lucide-react";
+
+/* ── Types ─────────────────────────────────────────────────── */
 
 type AppUser = {
   id: number; name: string; email: string; role: string;
   permissions: string | null; pin: string | null; isActive: boolean;
 };
+
+type EmailSettings = {
+  id?: number;
+  smtpHost: string; smtpPort: string; smtpUser: string; smtpPassword: string;
+  smtpSecure: boolean; fromAddress: string; fromName: string;
+  adminEmail: string; extraRecipients: string;
+  billEditEnabled: boolean; dailySummaryEnabled: boolean; dailySummaryTime: string;
+};
+
+/* ── Constants ──────────────────────────────────────────────── */
 
 const ROLES = ["admin", "manager", "billing", "lab", "receptionist"];
 const ROLE_COLORS: Record<string, string> = {
@@ -30,7 +43,6 @@ const ROLE_COLORS: Record<string, string> = {
   lab: "bg-green-100 text-green-700",
   receptionist: "bg-amber-100 text-amber-700",
 };
-
 const ALL_MODULES = [
   { path: "/", label: "Dashboard" },
   { path: "/patients", label: "Patients" },
@@ -47,37 +59,73 @@ const ALL_MODULES = [
   { path: "/accounting", label: "Accounting" },
   { path: "/settings", label: "Settings" },
 ];
+const DEFAULT_PERMISSIONS: Record<string, string[]> = {
+  admin: ALL_MODULES.map(m => m.path),
+  manager: ["/", "/patients", "/billing", "/payments", "/doctors", "/reports", "/referrals", "/accounting", "/register"],
+  billing: ["/", "/patients", "/billing", "/payments", "/register"],
+  lab: ["/orders", "/tests", "/report-generator", "/inventory"],
+  receptionist: ["/", "/patients", "/orders", "/register"],
+};
+
+const TABS = [
+  { id: "users", label: "Users", icon: Users },
+  { id: "email", label: "Email Notifications", icon: Mail },
+];
+
+/* ── Main Component ─────────────────────────────────────────── */
 
 export default function Settings() {
   const qc = useQueryClient();
+  const [tab, setTab] = useState<string>("users");
+
+  return (
+    <div className="pb-8">
+      <PageHeader title="Settings" subtitle="User management and system configuration" />
+      <div className="px-6">
+        {/* Tab nav */}
+        <div className="flex gap-1 bg-muted p-1 rounded-xl mb-6 w-fit">
+          {TABS.map(t => {
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all
+                  ${tab === t.id ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                <Icon size={14} />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {tab === "users" && <UsersTab qc={qc} />}
+        {tab === "email" && <EmailTab />}
+      </div>
+    </div>
+  );
+}
+
+/* ── Users Tab ──────────────────────────────────────────────── */
+
+function UsersTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
   const [open, setOpen] = useState(false);
   const [editUser, setEditUser] = useState<AppUser | null>(null);
   const [selectedPerms, setSelectedPerms] = useState<string[]>([]);
-  const [defaultPerms, setDefaultPerms] = useState<Record<string, string[]>>({});
 
   const { data: users = [], isLoading } = useQuery<AppUser[]>({
     queryKey: ["users"],
     queryFn: () => api.get("/api/users"),
   });
-  useQuery<Record<string, string[]>>({
-    queryKey: ["default-permissions"],
-    queryFn: async () => {
-      const data = await api.get<Record<string, string[]>>("/api/users/default-permissions");
-      setDefaultPerms(data);
-      return data;
-    },
-  });
 
   const saveUser = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
-      editUser
-        ? api.patch(`/api/users/${editUser.id}`, body)
-        : api.post("/api/users", body),
+      editUser ? api.patch(`/api/users/${editUser.id}`, body) : api.post("/api/users", body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["users"] }); setOpen(false); setEditUser(null); reset(); },
   });
   const toggleActive = useMutation({
-    mutationFn: ({ id, isActive }: { id: number; isActive: boolean }) =>
-      api.patch(`/api/users/${id}`, { isActive }),
+    mutationFn: ({ id, isActive }: { id: number; isActive: boolean }) => api.patch(`/api/users/${id}`, { isActive }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
   });
   const deleteUser = useMutation({
@@ -88,49 +136,39 @@ export default function Settings() {
   const { register, handleSubmit, reset, setValue, watch } = useForm<{
     name: string; email: string; role: string; pin: string;
   }>();
-  const roleWatch = watch("role");
 
   const openAdd = () => {
     setEditUser(null);
-    setSelectedPerms(defaultPerms["receptionist"] ?? []);
+    setSelectedPerms(DEFAULT_PERMISSIONS["receptionist"]);
     reset({ role: "receptionist" });
     setOpen(true);
   };
   const openEdit = (u: AppUser) => {
     setEditUser(u);
-    setSelectedPerms(u.permissions ? JSON.parse(u.permissions) : (defaultPerms[u.role] ?? []));
+    setSelectedPerms(u.permissions ? JSON.parse(u.permissions) : DEFAULT_PERMISSIONS[u.role] ?? []);
     reset({ name: u.name, email: u.email, role: u.role, pin: u.pin ?? "" });
     setOpen(true);
   };
-
-  const togglePerm = (path: string) => {
-    setSelectedPerms(prev =>
-      prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]
-    );
-  };
+  const togglePerm = (path: string) =>
+    setSelectedPerms(prev => prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]);
 
   const onSave = handleSubmit((d) => {
     saveUser.mutate({ ...d, permissions: selectedPerms, pin: d.pin || null });
   });
 
   return (
-    <div className="pb-8">
-      <PageHeader
-        title="Settings — User Management"
-        subtitle="Manage user accounts, roles, and module permissions"
-        actions={
-          <Button size="sm" onClick={openAdd}>
-            <Plus size={14} className="mr-1" /> Add User
-          </Button>
-        }
-      />
+    <>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm text-muted-foreground">Manage user accounts, roles, and module access</p>
+        <Button size="sm" onClick={openAdd}><Plus size={14} className="mr-1" /> Add User</Button>
+      </div>
 
-      <div className="px-6 space-y-4">
+      <div className="space-y-4">
         {isLoading ? (
-          <div className="space-y-3">{[...Array(4)].map((_, i) => <div key={i} className="h-20 bg-muted rounded-xl animate-pulse" />)}</div>
+          <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-muted rounded-xl animate-pulse" />)}</div>
         ) : users.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground">
-            <User2 size={40} className="mx-auto mb-3 opacity-30" />
+            <User2 size={36} className="mx-auto mb-3 opacity-30" />
             <p>No users yet. Add your first user to get started.</p>
           </div>
         ) : (
@@ -183,12 +221,8 @@ export default function Settings() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-1 justify-end">
-                          <Button size="sm" variant="ghost" className="h-7" onClick={() => openEdit(u)}>
-                            <Pencil size={13} />
-                          </Button>
-                          <Button size="sm" variant="ghost" className="h-7 text-destructive hover:text-destructive" onClick={() => deleteUser.mutate(u.id)}>
-                            <Trash2 size={13} />
-                          </Button>
+                          <Button size="sm" variant="ghost" className="h-7" onClick={() => openEdit(u)}><Pencil size={13} /></Button>
+                          <Button size="sm" variant="ghost" className="h-7 text-destructive hover:text-destructive" onClick={() => deleteUser.mutate(u.id)}><Trash2 size={13} /></Button>
                         </div>
                       </td>
                     </tr>
@@ -199,7 +233,6 @@ export default function Settings() {
           </div>
         )}
 
-        {/* Role info */}
         <div className="bg-muted/30 border border-card-border rounded-xl p-4">
           <p className="text-xs font-semibold uppercase text-muted-foreground mb-3">Role Descriptions</p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
@@ -219,7 +252,6 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Add / Edit Dialog */}
       <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setEditUser(null); }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -227,46 +259,19 @@ export default function Settings() {
           </DialogHeader>
           <form onSubmit={onSave} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Full Name *</Label>
-                <Input {...register("name", { required: true })} className="mt-1" />
-              </div>
-              <div>
-                <Label>Email *</Label>
-                <Input type="email" {...register("email", { required: true })} className="mt-1" />
-              </div>
+              <div><Label>Full Name *</Label><Input {...register("name", { required: true })} className="mt-1" /></div>
+              <div><Label>Email *</Label><Input type="email" {...register("email", { required: true })} className="mt-1" /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Role *</Label>
-                <Select
-                  defaultValue={editUser?.role ?? "receptionist"}
-                  onValueChange={(v) => {
-                    setValue("role", v);
-                    setSelectedPerms(defaultPerms[v] ?? []);
-                  }}
-                >
+                <Select defaultValue={editUser?.role ?? "receptionist"} onValueChange={(v) => { setValue("role", v); setSelectedPerms(DEFAULT_PERMISSIONS[v] ?? []); }}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {ROLES.map(r => (
-                      <SelectItem key={r} value={r} className="capitalize">{r}</SelectItem>
-                    ))}
-                  </SelectContent>
+                  <SelectContent>{ROLES.map(r => <SelectItem key={r} value={r} className="capitalize">{r}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label>PIN (4 digits)</Label>
-                <Input
-                  type="text"
-                  maxLength={4}
-                  pattern="[0-9]{4}"
-                  {...register("pin")}
-                  className="mt-1"
-                  placeholder="Optional"
-                />
-              </div>
+              <div><Label>PIN (4 digits)</Label><Input type="text" maxLength={4} pattern="[0-9]{4}" {...register("pin")} className="mt-1" placeholder="Optional" /></div>
             </div>
-
             <div>
               <div className="flex items-center justify-between mb-2">
                 <Label>Module Permissions</Label>
@@ -280,12 +285,9 @@ export default function Settings() {
                 {ALL_MODULES.map(mod => {
                   const checked = selectedPerms.includes(mod.path);
                   return (
-                    <button
-                      key={mod.path}
-                      type="button"
+                    <button key={mod.path} type="button"
                       className={`flex items-center gap-2 text-sm text-left px-2 py-1.5 rounded-md transition-colors ${checked ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}
-                      onClick={() => togglePerm(mod.path)}
-                    >
+                      onClick={() => togglePerm(mod.path)}>
                       {checked ? <CheckSquare size={14} /> : <Square size={14} />}
                       {mod.label}
                     </button>
@@ -294,16 +296,225 @@ export default function Settings() {
               </div>
               <p className="text-xs text-muted-foreground mt-1">{selectedPerms.length} of {ALL_MODULES.length} modules selected</p>
             </div>
-
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={saveUser.isPending}>
-                {saveUser.isPending ? "Saving…" : editUser ? "Update User" : "Add User"}
-              </Button>
+              <Button type="submit" disabled={saveUser.isPending}>{saveUser.isPending ? "Saving…" : editUser ? "Update User" : "Add User"}</Button>
             </div>
           </form>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
+  );
+}
+
+/* ── Email Tab ──────────────────────────────────────────────── */
+
+function EmailTab() {
+  const qc = useQueryClient();
+  const [extraInput, setExtraInput] = useState("");
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [summaryResult, setSummaryResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const { data: settings, isLoading } = useQuery<EmailSettings | null>({
+    queryKey: ["email-settings"],
+    queryFn: () => api.get<EmailSettings | null>("/api/email-settings"),
+  });
+
+  const { register, handleSubmit, watch, setValue, getValues } = useForm<EmailSettings>({
+    values: settings ?? {
+      smtpHost: "", smtpPort: "587", smtpUser: "", smtpPassword: "",
+      smtpSecure: false, fromAddress: "", fromName: "DiagnoCenter ERP",
+      adminEmail: "", extraRecipients: "[]",
+      billEditEnabled: true, dailySummaryEnabled: true, dailySummaryTime: "17:00",
+    },
+  });
+
+  const extraList: string[] = (() => {
+    try { return JSON.parse(watch("extraRecipients") || "[]"); }
+    catch { return []; }
+  })();
+
+  const addExtra = () => {
+    if (!extraInput.trim()) return;
+    const updated = [...extraList, extraInput.trim()];
+    setValue("extraRecipients", JSON.stringify(updated));
+    setExtraInput("");
+  };
+  const removeExtra = (email: string) => {
+    setValue("extraRecipients", JSON.stringify(extraList.filter(e => e !== email)));
+  };
+
+  const saveSettings = useMutation({
+    mutationFn: (body: EmailSettings) => api.post("/api/email-settings", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["email-settings"] }),
+  });
+
+  const sendTest = useMutation({
+    mutationFn: () => api.post<{ ok: boolean; message: string }>("/api/email-settings/test", {}),
+    onSuccess: (data) => setTestResult(data),
+    onError: (e) => setTestResult({ ok: false, message: e.message }),
+  });
+
+  const sendSummary = useMutation({
+    mutationFn: () => api.post<{ ok: boolean; message: string }>("/api/email-settings/send-summary", {}),
+    onSuccess: (data) => setSummaryResult(data),
+    onError: (e) => setSummaryResult({ ok: false, message: e.message }),
+  });
+
+  const onSave = handleSubmit((d) => saveSettings.mutate(d));
+
+  if (isLoading) return <div className="space-y-3">{[...Array(4)].map((_, i) => <div key={i} className="h-12 bg-muted rounded-xl animate-pulse" />)}</div>;
+
+  return (
+    <form onSubmit={onSave} className="space-y-5 max-w-2xl">
+      {/* SMTP Config */}
+      <div className="bg-card border border-card-border rounded-xl p-5 shadow-sm space-y-4">
+        <div className="flex items-center gap-2 mb-1">
+          <Settings2 size={15} className="text-primary" />
+          <h3 className="font-semibold text-sm">SMTP Configuration</h3>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><Label>SMTP Host</Label><Input {...register("smtpHost")} className="mt-1" placeholder="smtp.gmail.com" /></div>
+          <div><Label>Port</Label><Input type="number" {...register("smtpPort")} className="mt-1" placeholder="587" /></div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><Label>Username / Email</Label><Input {...register("smtpUser")} className="mt-1" placeholder="you@gmail.com" /></div>
+          <div><Label>Password / App Password</Label><Input type="password" {...register("smtpPassword")} className="mt-1" placeholder="••••••••" /></div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><Label>From Address</Label><Input {...register("fromAddress")} className="mt-1" placeholder="noreply@yourclinic.com" /></div>
+          <div><Label>From Name</Label><Input {...register("fromName")} className="mt-1" /></div>
+        </div>
+        <div className="flex items-center gap-2 mt-1">
+          <input type="checkbox" id="smtpSecure" checked={watch("smtpSecure")} onChange={e => setValue("smtpSecure", e.target.checked)} className="rounded" />
+          <label htmlFor="smtpSecure" className="text-sm cursor-pointer">Use SSL/TLS (port 465)</label>
+        </div>
+        <p className="text-xs text-muted-foreground">For Gmail, enable 2FA and use an App Password instead of your account password.</p>
+      </div>
+
+      {/* Recipients */}
+      <div className="bg-card border border-card-border rounded-xl p-5 shadow-sm space-y-4">
+        <div className="flex items-center gap-2 mb-1">
+          <Mail size={15} className="text-primary" />
+          <h3 className="font-semibold text-sm">Recipients</h3>
+        </div>
+        <div>
+          <Label>Admin Email (always notified)</Label>
+          <Input type="email" {...register("adminEmail")} className="mt-1" placeholder="admin@yourclinic.com" />
+        </div>
+        <div>
+          <Label>Additional Recipients</Label>
+          <div className="flex gap-2 mt-1">
+            <Input
+              type="email"
+              value={extraInput}
+              onChange={e => setExtraInput(e.target.value)}
+              placeholder="Add email and press Enter"
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addExtra(); } }}
+              className="flex-1"
+            />
+            <Button type="button" variant="outline" size="sm" onClick={addExtra}><Plus size={14} /></Button>
+          </div>
+          {extraList.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {extraList.map(email => (
+                <span key={email} className="flex items-center gap-1 bg-muted text-xs px-2 py-1 rounded-full">
+                  {email}
+                  <button type="button" onClick={() => removeExtra(email)}><X size={11} /></button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Notification Triggers */}
+      <div className="bg-card border border-card-border rounded-xl p-5 shadow-sm space-y-4">
+        <div className="flex items-center gap-2 mb-1">
+          <Send size={15} className="text-primary" />
+          <h3 className="font-semibold text-sm">Notification Triggers</h3>
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between p-3 bg-muted/40 rounded-lg">
+            <div>
+              <p className="text-sm font-medium">Bill Edit Notifications</p>
+              <p className="text-xs text-muted-foreground">Send email whenever a bill is edited with reason</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={watch("billEditEnabled")}
+              onChange={e => setValue("billEditEnabled", e.target.checked)}
+              className="rounded w-4 h-4"
+            />
+          </div>
+
+          <div className="flex items-center justify-between p-3 bg-muted/40 rounded-lg">
+            <div>
+              <p className="text-sm font-medium">Daily Summary Report</p>
+              <p className="text-xs text-muted-foreground">Daily billing summary — bills created, payments collected, edits made</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={watch("dailySummaryEnabled")}
+              onChange={e => setValue("dailySummaryEnabled", e.target.checked)}
+              className="rounded w-4 h-4"
+            />
+          </div>
+
+          {watch("dailySummaryEnabled") && (
+            <div className="ml-4">
+              <Label>Send daily summary at</Label>
+              <Input type="time" {...register("dailySummaryTime")} className="mt-1 w-36" />
+              <p className="text-xs text-muted-foreground mt-1">Default: 17:00 (5 PM). Server checks every minute.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Action bar */}
+      <div className="flex flex-wrap gap-3 items-center">
+        <Button type="submit" disabled={saveSettings.isPending}>
+          {saveSettings.isPending ? <><RefreshCw size={14} className="mr-1 animate-spin" /> Saving…</> : "Save Settings"}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={sendTest.isPending}
+          onClick={() => { setTestResult(null); sendTest.mutate(); }}
+        >
+          <TestTube2 size={14} className="mr-1" />
+          {sendTest.isPending ? "Sending…" : "Send Test Email"}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={sendSummary.isPending}
+          onClick={() => { setSummaryResult(null); sendSummary.mutate(); }}
+        >
+          <Send size={14} className="mr-1" />
+          {sendSummary.isPending ? "Sending…" : "Send Summary Now"}
+        </Button>
+      </div>
+
+      {testResult && (
+        <div className={`text-sm px-4 py-2.5 rounded-lg ${testResult.ok ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+          {testResult.ok ? "✓ " : "✗ "}{testResult.message}
+        </div>
+      )}
+      {summaryResult && (
+        <div className={`text-sm px-4 py-2.5 rounded-lg ${summaryResult.ok ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+          {summaryResult.ok ? "✓ " : "✗ "}{summaryResult.message}
+        </div>
+      )}
+
+      <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl p-4 text-xs text-blue-800 dark:text-blue-300 space-y-1">
+        <p className="font-semibold">Setup Tips</p>
+        <p>• Gmail: use an App Password (Google Account → Security → App Passwords)</p>
+        <p>• Outlook/Microsoft 365: host <code>smtp.office365.com</code>, port 587, TLS off</p>
+        <p>• Zoho Mail: host <code>smtp.zoho.in</code>, port 587</p>
+        <p>• Daily summary fires at the configured time — server checks every minute</p>
+      </div>
+    </form>
   );
 }
