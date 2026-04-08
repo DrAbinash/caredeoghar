@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db, ordersTable, patientsTable, billsTable, paymentsTable, orderTestsTable, testsTable } from "@workspace/db";
+import { accountsTable, vouchersTable } from "@workspace/db/schema";
 import { eq, sql, gte, lte, and, desc } from "drizzle-orm";
 import { GetRevenueReportQueryParams } from "@workspace/api-zod";
 
@@ -228,4 +229,175 @@ reportsRouter.get("/recent-activity", async (_req, res) => {
     .slice(0, 10);
 
   res.json({ activities });
+});
+
+// Income / Expense daily breakdown  ─────────────────────────────────────────
+reportsRouter.get("/income-expense", async (req, res) => {
+  const { from, to } = req.query as Record<string, string>;
+  const fromDate = from ? new Date(from) : (() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; })();
+  const toDate   = to   ? new Date(to + "T23:59:59.999Z") : (() => { const d = new Date(); d.setHours(23,59,59,999); return d; })();
+
+  // Payments received (income by day + method)
+  const payments = await db.select().from(paymentsTable)
+    .where(and(gte(paymentsTable.createdAt, fromDate), lte(paymentsTable.createdAt, toDate)));
+
+  // Vouchers that are expenses (type = journal/purchase/payment with debit to expense accounts)
+  const vouchers = await db.select({ v: vouchersTable, a: accountsTable })
+    .from(vouchersTable)
+    .leftJoin(accountsTable, eq(vouchersTable.accountId, accountsTable.id))
+    .where(and(gte(vouchersTable.date, fromDate), lte(vouchersTable.date, toDate)));
+
+  // Group payments by date
+  const incomeByDay: Record<string, { date: string; cash: number; upi: number; card: number; bank: number; insurance: number; cheque: number; total: number }> = {};
+  for (const p of payments) {
+    const day = p.createdAt.toISOString().split("T")[0];
+    if (!incomeByDay[day]) incomeByDay[day] = { date: day, cash: 0, upi: 0, card: 0, bank: 0, insurance: 0, cheque: 0, total: 0 };
+    const method = (p.method || "cash") as string;
+    const amt = Number(p.amount);
+    const m = incomeByDay[day];
+    if (method === "cash") m.cash += amt;
+    else if (method === "upi") m.upi += amt;
+    else if (method === "card" || method === "credit_card" || method === "debit_card") m.card += amt;
+    else if (method === "bank_transfer" || method === "neft" || method === "rtgs" || method === "imps") m.bank += amt;
+    else if (method === "insurance") m.insurance += amt;
+    else if (method === "cheque") m.cheque += amt;
+    m.total += amt;
+  }
+
+  // Expense vouchers by day (payments / purchase vouchers)
+  const expenseByDay: Record<string, { date: string; amount: number; count: number }> = {};
+  for (const row of vouchers) {
+    if (!row.v || !["payment","purchase"].includes(row.v.type)) continue;
+    const acc = row.a;
+    if (!acc) continue;
+    const isExpense = acc.tallyGroup && ["Direct Expenses","Indirect Expenses","Purchase Accounts"].some(g => acc.tallyGroup?.includes(g));
+    if (!isExpense && acc.type !== "expense") continue;
+    const day = row.v.date.toISOString().split("T")[0];
+    if (!expenseByDay[day]) expenseByDay[day] = { date: day, amount: 0, count: 0 };
+    expenseByDay[day].amount += Number(row.v.amount);
+    expenseByDay[day].count++;
+  }
+
+  const allDays = [...new Set([...Object.keys(incomeByDay), ...Object.keys(expenseByDay)])].sort();
+  const rows = allDays.map(day => ({
+    date: day,
+    income: incomeByDay[day] ?? { date: day, cash: 0, upi: 0, card: 0, bank: 0, insurance: 0, cheque: 0, total: 0 },
+    expense: expenseByDay[day] ?? { date: day, amount: 0, count: 0 },
+    net: (incomeByDay[day]?.total ?? 0) - (expenseByDay[day]?.amount ?? 0),
+  }));
+
+  const totals = {
+    income: rows.reduce((s, r) => s + r.income.total, 0),
+    expense: rows.reduce((s, r) => s + r.expense.amount, 0),
+    net: rows.reduce((s, r) => s + r.net, 0),
+    cash: rows.reduce((s, r) => s + r.income.cash, 0),
+    upi: rows.reduce((s, r) => s + r.income.upi, 0),
+    card: rows.reduce((s, r) => s + r.income.card, 0),
+    bank: rows.reduce((s, r) => s + r.income.bank, 0),
+    insurance: rows.reduce((s, r) => s + r.income.insurance, 0),
+    cheque: rows.reduce((s, r) => s + r.income.cheque, 0),
+  };
+
+  res.json({ rows, totals });
+});
+
+// Payment method summary  ─────────────────────────────────────────────────────
+reportsRouter.get("/payment-methods", async (req, res) => {
+  const { from, to } = req.query as Record<string, string>;
+  const fromDate = from ? new Date(from) : (() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; })();
+  const toDate   = to   ? new Date(to + "T23:59:59.999Z") : (() => { const d = new Date(); d.setHours(23,59,59,999); return d; })();
+
+  const payments = await db.select({
+    payment: paymentsTable, bill: billsTable, patient: patientsTable,
+  })
+    .from(paymentsTable)
+    .leftJoin(billsTable, eq(paymentsTable.billId, billsTable.id))
+    .leftJoin(patientsTable, eq(billsTable.patientId, patientsTable.id))
+    .where(and(gte(paymentsTable.createdAt, fromDate), lte(paymentsTable.createdAt, toDate)))
+    .orderBy(desc(paymentsTable.createdAt));
+
+  const byMethod: Record<string, { method: string; count: number; total: number; transactions: typeof payments }> = {};
+  for (const row of payments) {
+    const method = row.payment.method || "cash";
+    if (!byMethod[method]) byMethod[method] = { method, count: 0, total: 0, transactions: [] };
+    byMethod[method].count++;
+    byMethod[method].total += Number(row.payment.amount);
+    byMethod[method].transactions.push(row);
+  }
+
+  const methods = Object.values(byMethod).sort((a, b) => b.total - a.total);
+  const grandTotal = methods.reduce((s, m) => s + m.total, 0);
+
+  res.json({
+    methods: methods.map(m => ({
+      method: m.method,
+      count: m.count,
+      total: m.total,
+      percentage: grandTotal > 0 ? Number(((m.total / grandTotal) * 100).toFixed(1)) : 0,
+      transactions: m.transactions.map(r => ({
+        id: r.payment.id,
+        date: r.payment.createdAt.toISOString().split("T")[0],
+        time: r.payment.createdAt.toTimeString().slice(0,5),
+        amount: Number(r.payment.amount),
+        billNumber: (r.bill as { billNumber?: string } | null)?.billNumber ?? "",
+        patientName: r.patient ? `${r.patient.firstName} ${r.patient.lastName}` : "Unknown",
+        reference: r.payment.transactionRef ?? "",
+      })),
+    })),
+    grandTotal,
+  });
+});
+
+// Daily full summary (single date) ────────────────────────────────────────────
+reportsRouter.get("/daily-summary", async (req, res) => {
+  const date = (req.query.date as string) || new Date().toISOString().split("T")[0];
+  const fromDate = new Date(date);
+  fromDate.setHours(0,0,0,0);
+  const toDate = new Date(date);
+  toDate.setHours(23,59,59,999);
+
+  const [bills, payments, orders] = await Promise.all([
+    db.select({ b: billsTable, p: patientsTable })
+      .from(billsTable)
+      .leftJoin(patientsTable, eq(billsTable.patientId, patientsTable.id))
+      .where(and(gte(billsTable.createdAt, fromDate), lte(billsTable.createdAt, toDate)))
+      .orderBy(desc(billsTable.createdAt)),
+    db.select().from(paymentsTable)
+      .where(and(gte(paymentsTable.createdAt, fromDate), lte(paymentsTable.createdAt, toDate))),
+    db.select().from(ordersTable)
+      .where(and(gte(ordersTable.createdAt, fromDate), lte(ordersTable.createdAt, toDate))),
+  ]);
+
+  const totalBilled   = bills.reduce((s, r) => s + Number(r.b.totalAmount), 0);
+  const totalReceived = payments.reduce((s, p) => s + Number(p.amount), 0);
+  const outstanding   = totalBilled - totalReceived;
+
+  const byMethod: Record<string, number> = {};
+  for (const p of payments) {
+    const m = p.method || "cash";
+    byMethod[m] = (byMethod[m] || 0) + Number(p.amount);
+  }
+
+  const billsByStatus = {
+    paid:     bills.filter(r => r.b.status === "paid").length,
+    partial:  bills.filter(r => r.b.status === "partial").length,
+    pending:  bills.filter(r => r.b.status === "pending").length,
+    cancelled:bills.filter(r => r.b.status === "cancelled").length,
+  };
+
+  res.json({
+    date,
+    summary: { totalBilled, totalReceived, outstanding, billCount: bills.length, orderCount: orders.length },
+    byMethod,
+    billsByStatus,
+    bills: bills.map(r => ({
+      id: r.b.id,
+      billNumber: r.b.billNumber,
+      patientName: r.p ? `${r.p.firstName} ${r.p.lastName}` : "Unknown",
+      totalAmount: Number(r.b.totalAmount),
+      paidAmount: Number(r.b.paidAmount),
+      status: r.b.status,
+      createdAt: r.b.createdAt.toISOString(),
+    })),
+  });
 });

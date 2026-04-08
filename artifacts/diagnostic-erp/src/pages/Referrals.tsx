@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useListDoctors, useListTests } from "@workspace/api-client-react";
 import { api } from "@/lib/fetchApi";
@@ -16,8 +16,8 @@ import {
 } from "@/components/ui/select";
 import { useForm } from "react-hook-form";
 import {
-  Plus, Trash2, ChevronDown, ChevronUp, IndianRupee,
-  Stethoscope, Star, TrendingUp,
+  Plus, Trash2, ChevronDown, ChevronUp, Stethoscope, Star,
+  Printer, BarChart2, List, Tag, ClipboardList,
 } from "lucide-react";
 
 type CommRule = {
@@ -25,7 +25,23 @@ type CommRule = {
   value: number; scope: "all" | "category" | "test"; categories: string[];
   testIds: number[]; isExclusive: boolean; isActive: boolean;
 };
-type ReportEntry = {
+
+type TestRow = {
+  testId: number; testName: string; category: string;
+  orderId: number; orderNumber: string; orderDate: string;
+  price: number; commission: number; ruleName: string;
+};
+
+type DetailedDoctor = {
+  doctor: { id: number; name: string; specialization: string; defaultCommission: number; defaultCommissionType: string };
+  orderCount: number; testCount: number;
+  totalRevenue: number; totalCommission: number; effectiveRate: number;
+  grouped: unknown;
+  testRows?: TestRow[];
+};
+type DetailedReport = { report: DetailedDoctor[]; grandTotal: { doctors: number; orders: number; revenue: number; commission: number } };
+
+type SimpleEntry = {
   doctor: { id: number; name: string; specialization: string; defaultCommission: number; defaultCommissionType: string };
   orderCount: number; totalRevenue: number; totalCommission: number;
   orders: { orderId: number; orderNumber: string; date: string; revenue: number; commission: number; commissionRule: string }[];
@@ -34,15 +50,27 @@ type ReportEntry = {
 const CATEGORIES = ["hematology", "biochemistry", "microbiology", "serology", "radiology", "cardiology", "urine analysis", "other"];
 const inr = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+type GroupBy = "consolidated" | "order" | "test" | "category";
+
+const GROUP_OPTIONS: { value: GroupBy; label: string; icon: React.ReactNode }[] = [
+  { value: "consolidated", label: "Consolidated", icon: <BarChart2 size={14} /> },
+  { value: "order",        label: "By Order",     icon: <ClipboardList size={14} /> },
+  { value: "test",         label: "By Test",      icon: <List size={14} /> },
+  { value: "category",     label: "By Category",  icon: <Tag size={14} /> },
+];
+
 export default function Referrals() {
   const qc = useQueryClient();
+  const printRef = useRef<HTMLDivElement>(null);
+
   const [selectedDoctorId, setSelectedDoctorId] = useState<number | null>(null);
   const [ruleOpen, setRuleOpen] = useState(false);
   const [editRule, setEditRule] = useState<CommRule | null>(null);
   const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
+  const [groupBy, setGroupBy] = useState<GroupBy>("consolidated");
+
   const [from, setFrom] = useState(() => {
-    const d = new Date(); d.setMonth(d.getMonth() - 1);
-    return d.toISOString().split("T")[0];
+    const d = new Date(); d.setDate(1); return d.toISOString().split("T")[0];
   });
   const [to, setTo] = useState(new Date().toISOString().split("T")[0]);
 
@@ -55,15 +83,25 @@ export default function Referrals() {
     queryKey: ["commission-rules", selectedDoctorId],
     queryFn: () => api.get(`/api/commission/rules${selectedDoctorId ? `?doctorId=${selectedDoctorId}` : ""}`),
   });
-  const { data: report = [], isLoading: reportLoading } = useQuery<ReportEntry[]>({
-    queryKey: ["commission-report", from, to, selectedDoctorId],
+
+  const { data: detailedData, isLoading: reportLoading } = useQuery<DetailedReport>({
+    queryKey: ["commission-report-detailed", from, to, selectedDoctorId, groupBy],
+    queryFn: () =>
+      api.get(`/api/commission/report-detailed?from=${from}&to=${to}&groupBy=${groupBy === "consolidated" ? "consolidated" : groupBy}${selectedDoctorId ? `&doctorId=${selectedDoctorId}` : ""}`),
+  });
+
+  // Legacy consolidated also for the simple order view
+  const { data: simpleReport = [] } = useQuery<SimpleEntry[]>({
+    queryKey: ["commission-report-simple", from, to, selectedDoctorId],
     queryFn: () => api.get(`/api/commission/report?from=${from}&to=${to}${selectedDoctorId ? `&doctorId=${selectedDoctorId}` : ""}`),
+    enabled: groupBy === "order",
   });
 
   const deleteRule = useMutation({
     mutationFn: (id: number) => api.delete(`/api/commission/rules/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["commission-rules"] }),
   });
+
   const saveRule = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       editRule ? api.patch(`/api/commission/rules/${editRule.id}`, body) : api.post("/api/commission/rules", body),
@@ -89,17 +127,56 @@ export default function Referrals() {
 
   const onSave = handleSubmit((d) => {
     const body: Record<string, unknown> = {
-      doctorId: selectedDoctorId,
-      name: d.name, type: d.type, value: Number(d.value), scope: d.scope,
-      isExclusive: d.isExclusive === "true",
+      doctorId: selectedDoctorId, name: d.name, type: d.type, value: Number(d.value),
+      scope: d.scope, isExclusive: d.isExclusive === "true",
     };
     if (d.scope === "category") body.categories = d.categories.split(",").map(s => s.trim()).filter(Boolean);
     if (d.scope === "test") body.testIds = d.testIds.split(",").map(n => Number(n)).filter(Boolean);
     saveRule.mutate(body);
   });
 
-  const totalCommission = report.reduce((s, r) => s + r.totalCommission, 0);
-  const totalRevenue = report.reduce((s, r) => s + r.totalRevenue, 0);
+  const report = detailedData?.report ?? [];
+  const grandTotal = detailedData?.grandTotal ?? { doctors: 0, orders: 0, revenue: 0, commission: 0 };
+
+  const handlePrint = () => {
+    const el = printRef.current;
+    if (!el) return;
+    const win = window.open("", "_blank", "width=900,height=700");
+    if (!win) return;
+    win.document.write(`
+      <html><head>
+        <title>Commission Report — ${from} to ${to}</title>
+        <style>
+          * { box-sizing:border-box; margin:0; padding:0; }
+          body { font-family:sans-serif; font-size:13px; color:#1a1a1a; padding:24px; }
+          h1 { font-size:18px; margin-bottom:4px; }
+          h2 { font-size:14px; font-weight:600; margin:16px 0 6px; color:#374151; }
+          .meta { font-size:12px; color:#6b7280; margin-bottom:16px; }
+          .summary { display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+          .card { border:1px solid #e5e7eb; border-radius:6px; padding:10px 14px; flex:1; min-width:100px; }
+          .card-label { font-size:10px; text-transform:uppercase; color:#6b7280; letter-spacing:.05em; }
+          .card-value { font-size:18px; font-weight:700; margin-top:2px; }
+          table { width:100%; border-collapse:collapse; margin-bottom:20px; }
+          thead { background:#f3f4f6; }
+          th { padding:7px 10px; text-align:left; font-size:11px; text-transform:uppercase; color:#6b7280; border-bottom:2px solid #e5e7eb; }
+          td { padding:7px 10px; border-bottom:1px solid #f3f4f6; }
+          .right { text-align:right; }
+          .bold { font-weight:600; }
+          .amber { color:#d97706; }
+          .doctor-header { background:#fffbeb; font-weight:600; }
+          .sub-row { background:#f9fafb; }
+          @media print {
+            @page { margin:15mm; }
+            body { padding:0; }
+          }
+        </style>
+      </head><body>
+        ${el.innerHTML}
+        <script>window.onload=function(){window.print();}<\/script>
+      </body></html>
+    `);
+    win.document.close();
+  };
 
   return (
     <div className="pb-8">
@@ -136,32 +213,29 @@ export default function Referrals() {
 
             {!selectedDoctorId ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {doctors.map((d) => {
-                  const doctorRules = rules.filter(r => r.doctorId === d.id);
-                  return (
-                    <div
-                      key={d.id}
-                      className="bg-card border border-card-border rounded-xl p-5 cursor-pointer hover:shadow-md transition-shadow"
-                      onClick={() => setSelectedDoctorId(d.id)}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <Stethoscope size={16} className="text-primary" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-semibold text-sm">{d.name}</p>
-                          <p className="text-xs text-muted-foreground">{d.specialization}</p>
-                          <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
-                            <Star size={11} className="text-amber-500" />
-                            Default: {Number((d as unknown as Record<string, string>).defaultCommission) > 0
-                              ? `${(d as unknown as Record<string, string>).defaultCommissionType === "percentage" ? Number((d as unknown as Record<string, string>).defaultCommission) + "%" : inr(Number((d as unknown as Record<string, string>).defaultCommission))} per referral`
-                              : "No default"}
-                          </div>
+                {doctors.map((d) => (
+                  <div
+                    key={d.id}
+                    className="bg-card border border-card-border rounded-xl p-5 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => setSelectedDoctorId(d.id)}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                        <Stethoscope size={16} className="text-primary" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm">{d.name}</p>
+                        <p className="text-xs text-muted-foreground">{d.specialization}</p>
+                        <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+                          <Star size={11} className="text-amber-500" />
+                          Default: {Number((d as unknown as Record<string, string>).defaultCommission) > 0
+                            ? `${(d as unknown as Record<string, string>).defaultCommissionType === "percentage" ? Number((d as unknown as Record<string, string>).defaultCommission) + "%" : inr(Number((d as unknown as Record<string, string>).defaultCommission))} per referral`
+                            : "No default"}
                         </div>
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             ) : (
               <div className="space-y-3">
@@ -214,115 +288,120 @@ export default function Referrals() {
 
           {/* ── Payout Report Tab ── */}
           <TabsContent value="report" className="space-y-4">
-            <div className="flex flex-wrap gap-3 items-end">
-              <div>
-                <Label className="text-xs">From</Label>
-                <Input type="date" value={from} onChange={e => setFrom(e.target.value)} className="mt-1 w-36" />
+            {/* Filters */}
+            <div className="flex flex-wrap gap-3 items-end justify-between">
+              <div className="flex flex-wrap gap-3 items-end">
+                <div>
+                  <Label className="text-xs">From</Label>
+                  <Input type="date" value={from} onChange={e => setFrom(e.target.value)} className="mt-1 w-36" />
+                </div>
+                <div>
+                  <Label className="text-xs">To</Label>
+                  <Input type="date" value={to} onChange={e => setTo(e.target.value)} className="mt-1 w-36" />
+                </div>
+                <div>
+                  <Label className="text-xs">Doctor</Label>
+                  <Select onValueChange={v => setSelectedDoctorId(v === "all" ? null : Number(v))}>
+                    <SelectTrigger className="mt-1 w-48"><SelectValue placeholder="All Doctors" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Doctors</SelectItem>
+                      {doctors.map(d => <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">Group By</Label>
+                  <div className="mt-1 flex gap-1">
+                    {GROUP_OPTIONS.map(opt => (
+                      <Button
+                        key={opt.value}
+                        size="sm"
+                        variant={groupBy === opt.value ? "default" : "outline"}
+                        className="h-9 text-xs gap-1"
+                        onClick={() => setGroupBy(opt.value)}
+                      >
+                        {opt.icon}{opt.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <div>
-                <Label className="text-xs">To</Label>
-                <Input type="date" value={to} onChange={e => setTo(e.target.value)} className="mt-1 w-36" />
-              </div>
-              <div>
-                <Label className="text-xs">Doctor</Label>
-                <Select onValueChange={v => setSelectedDoctorId(v === "all" ? null : Number(v))}>
-                  <SelectTrigger className="mt-1 w-48"><SelectValue placeholder="All Doctors" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Doctors</SelectItem>
-                    {doctors.map(d => <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+              <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1">
+                <Printer size={14} /> Print Report
+              </Button>
             </div>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-card border border-card-border rounded-xl p-4">
-                <p className="text-xs text-muted-foreground mb-1">Total Revenue (Referrals)</p>
-                <p className="text-xl font-bold text-foreground">{inr(totalRevenue)}</p>
+                <p className="text-xs text-muted-foreground mb-1">Doctors with Referrals</p>
+                <p className="text-xl font-bold">{grandTotal.doctors}</p>
               </div>
               <div className="bg-card border border-card-border rounded-xl p-4">
-                <p className="text-xs text-muted-foreground mb-1">Total Commission Payable</p>
-                <p className="text-xl font-bold text-amber-600">{inr(totalCommission)}</p>
+                <p className="text-xs text-muted-foreground mb-1">Total Orders</p>
+                <p className="text-xl font-bold">{grandTotal.orders}</p>
               </div>
               <div className="bg-card border border-card-border rounded-xl p-4">
-                <p className="text-xs text-muted-foreground mb-1">Effective Rate</p>
-                <p className="text-xl font-bold text-foreground">
-                  {totalRevenue > 0 ? ((totalCommission / totalRevenue) * 100).toFixed(1) : "0"}%
-                </p>
+                <p className="text-xs text-muted-foreground mb-1">Total Revenue</p>
+                <p className="text-xl font-bold">{inr(grandTotal.revenue)}</p>
+              </div>
+              <div className="bg-card border border-card-border rounded-xl p-4">
+                <p className="text-xs text-muted-foreground mb-1">Commission Payable</p>
+                <p className="text-xl font-bold text-amber-600">{inr(grandTotal.commission)}</p>
               </div>
             </div>
 
-            {reportLoading ? (
-              <div className="space-y-3">{[...Array(4)].map((_, i) => <div key={i} className="h-20 bg-muted rounded-xl animate-pulse" />)}</div>
-            ) : report.filter(r => r.orderCount > 0).length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">No referral data for selected period</div>
-            ) : (
-              <div className="space-y-3">
-                {report.filter(r => r.orderCount > 0).map((entry) => {
-                  const expanded = expandedOrders.has(entry.doctor.id);
-                  return (
-                    <div key={entry.doctor.id} className="bg-card border border-card-border rounded-xl overflow-hidden">
-                      <div
-                        className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/20"
-                        onClick={() => setExpandedOrders(prev => {
-                          const next = new Set(prev);
-                          expanded ? next.delete(entry.doctor.id) : next.add(entry.doctor.id);
-                          return next;
-                        })}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                            <Stethoscope size={15} className="text-primary" />
-                          </div>
-                          <div>
-                            <p className="font-semibold text-sm">{entry.doctor.name}</p>
-                            <p className="text-xs text-muted-foreground">{entry.doctor.specialization} · {entry.orderCount} orders</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-6">
-                          <div className="text-right">
-                            <p className="text-xs text-muted-foreground">Revenue</p>
-                            <p className="font-semibold text-sm">{inr(entry.totalRevenue)}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-xs text-muted-foreground">Commission</p>
-                            <p className="font-semibold text-sm text-amber-600">{inr(entry.totalCommission)}</p>
-                          </div>
-                          {expanded ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
-                        </div>
-                      </div>
-                      {expanded && entry.orders.length > 0 && (
-                        <div className="border-t border-card-border">
-                          <table className="w-full text-xs">
-                            <thead className="bg-muted/50">
-                              <tr>
-                                <th className="text-left px-4 py-2 text-muted-foreground">Order</th>
-                                <th className="text-left px-4 py-2 text-muted-foreground">Date</th>
-                                <th className="text-right px-4 py-2 text-muted-foreground">Revenue</th>
-                                <th className="text-right px-4 py-2 text-muted-foreground">Commission</th>
-                                <th className="text-left px-4 py-2 text-muted-foreground">Rule Applied</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {entry.orders.map(o => (
-                                <tr key={o.orderId} className="border-t border-card-border">
-                                  <td className="px-4 py-2 font-mono">{o.orderNumber}</td>
-                                  <td className="px-4 py-2 text-muted-foreground">{o.date}</td>
-                                  <td className="px-4 py-2 text-right">{inr(o.revenue)}</td>
-                                  <td className="px-4 py-2 text-right text-amber-600">{inr(o.commission)}</td>
-                                  <td className="px-4 py-2 text-muted-foreground">{o.commissionRule}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+            {/* Print-friendly wrapper */}
+            <div ref={printRef}>
+              <div className="print-header" style={{ display: "none" }}>
+                <h1>Commission Report</h1>
+                <p className="meta">Period: {from} to {to} &nbsp;|&nbsp; Group: {groupBy} &nbsp;|&nbsp; Generated: {new Date().toLocaleString("en-IN")}</p>
+                <div className="summary">
+                  <div className="card"><div className="card-label">Doctors</div><div className="card-value">{grandTotal.doctors}</div></div>
+                  <div className="card"><div className="card-label">Orders</div><div className="card-value">{grandTotal.orders}</div></div>
+                  <div className="card"><div className="card-label">Revenue</div><div className="card-value">{inr(grandTotal.revenue)}</div></div>
+                  <div className="card"><div className="card-label">Commission</div><div className="card-value amber">{inr(grandTotal.commission)}</div></div>
+                </div>
               </div>
-            )}
+
+              {reportLoading ? (
+                <div className="space-y-3">{[...Array(4)].map((_, i) => <div key={i} className="h-20 bg-muted rounded-xl animate-pulse" />)}</div>
+              ) : report.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">No referral data for selected period</div>
+              ) : (
+                <div className="space-y-3">
+                  {report.map((entry) => (
+                    <DoctorCard
+                      key={entry.doctor.id}
+                      entry={entry}
+                      groupBy={groupBy}
+                      simpleEntry={simpleReport.find(s => s.doctor.id === entry.doctor.id)}
+                      expandedOrders={expandedOrders}
+                      setExpandedOrders={setExpandedOrders}
+                    />
+                  ))}
+
+                  {/* Grand Total Row */}
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between">
+                    <div className="font-semibold text-sm">Grand Total — {grandTotal.doctors} doctors, {grandTotal.orders} orders</div>
+                    <div className="flex gap-8">
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground">Revenue</p>
+                        <p className="font-bold">{inr(grandTotal.revenue)}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground">Commission</p>
+                        <p className="font-bold text-amber-600">{inr(grandTotal.commission)}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground">Eff. Rate</p>
+                        <p className="font-bold">{grandTotal.revenue > 0 ? ((grandTotal.commission / grandTotal.revenue) * 100).toFixed(1) : "0"}%</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </TabsContent>
         </Tabs>
       </div>
@@ -405,6 +484,151 @@ export default function Referrals() {
           </form>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ─── Doctor Card sub-component ────────────────────────────────────────────────
+function DoctorCard({
+  entry, groupBy, simpleEntry, expandedOrders, setExpandedOrders,
+}: {
+  entry: DetailedDoctor;
+  groupBy: GroupBy;
+  simpleEntry?: SimpleEntry;
+  expandedOrders: Set<number>;
+  setExpandedOrders: (fn: (prev: Set<number>) => Set<number>) => void;
+}) {
+  const expanded = expandedOrders.has(entry.doctor.id);
+  const toggle = () => setExpandedOrders(prev => {
+    const next = new Set(prev);
+    expanded ? next.delete(entry.doctor.id) : next.add(entry.doctor.id);
+    return next;
+  });
+
+  return (
+    <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+      {/* Doctor header row */}
+      <div
+        className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/20"
+        onClick={toggle}
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+            <Stethoscope size={15} className="text-primary" />
+          </div>
+          <div>
+            <p className="font-semibold text-sm">{entry.doctor.name}</p>
+            <p className="text-xs text-muted-foreground">
+              {entry.doctor.specialization} · {entry.orderCount} orders · {entry.testCount} tests
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-6">
+          <div className="text-right">
+            <p className="text-xs text-muted-foreground">Revenue</p>
+            <p className="font-semibold text-sm">{inr(entry.totalRevenue)}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-muted-foreground">Commission</p>
+            <p className="font-semibold text-sm text-amber-600">{inr(entry.totalCommission)}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-muted-foreground">Rate</p>
+            <p className="font-semibold text-sm">{entry.effectiveRate}%</p>
+          </div>
+          {expanded ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
+        </div>
+      </div>
+
+      {/* Expandable detail */}
+      {expanded && (
+        <div className="border-t border-card-border">
+          {groupBy === "consolidated" && (
+            <div className="p-4 text-sm text-muted-foreground">
+              <p>Effective commission rate: <strong className="text-foreground">{entry.effectiveRate}%</strong></p>
+              <p className="mt-1">Total revenue from this doctor's referrals: <strong className="text-foreground">{inr(entry.totalRevenue)}</strong></p>
+              <p className="mt-1">Commission payable: <strong className="text-amber-600">{inr(entry.totalCommission)}</strong></p>
+            </div>
+          )}
+
+          {groupBy === "order" && simpleEntry && simpleEntry.orders.length > 0 && (
+            <table className="w-full text-xs">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="text-left px-4 py-2 text-muted-foreground">Order</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground">Date</th>
+                  <th className="text-right px-4 py-2 text-muted-foreground">Revenue</th>
+                  <th className="text-right px-4 py-2 text-muted-foreground">Commission</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground">Rule</th>
+                </tr>
+              </thead>
+              <tbody>
+                {simpleEntry.orders.map(o => (
+                  <tr key={o.orderId} className="border-t border-card-border">
+                    <td className="px-4 py-2 font-mono">{o.orderNumber}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{o.date}</td>
+                    <td className="px-4 py-2 text-right">{inr(o.revenue)}</td>
+                    <td className="px-4 py-2 text-right text-amber-600">{inr(o.commission)}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{o.commissionRule}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {groupBy === "test" && Array.isArray(entry.grouped) && (
+            <table className="w-full text-xs">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="text-left px-4 py-2 text-muted-foreground">Test Name</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground">Category</th>
+                  <th className="text-right px-4 py-2 text-muted-foreground">Count</th>
+                  <th className="text-right px-4 py-2 text-muted-foreground">Revenue</th>
+                  <th className="text-right px-4 py-2 text-muted-foreground">Commission</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground">Rule</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(entry.grouped as { testId: number; testName: string; category: string; count: number; revenue: number; commission: number; ruleName: string }[]).map(row => (
+                  <tr key={row.testId} className="border-t border-card-border">
+                    <td className="px-4 py-2 font-medium">{row.testName}</td>
+                    <td className="px-4 py-2 text-muted-foreground capitalize">{row.category}</td>
+                    <td className="px-4 py-2 text-right">{row.count}</td>
+                    <td className="px-4 py-2 text-right">{inr(row.revenue)}</td>
+                    <td className="px-4 py-2 text-right text-amber-600">{inr(row.commission)}</td>
+                    <td className="px-4 py-2 text-muted-foreground text-xs">{row.ruleName}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {groupBy === "category" && Array.isArray(entry.grouped) && (
+            <table className="w-full text-xs">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="text-left px-4 py-2 text-muted-foreground">Category</th>
+                  <th className="text-right px-4 py-2 text-muted-foreground">Tests</th>
+                  <th className="text-right px-4 py-2 text-muted-foreground">Orders</th>
+                  <th className="text-right px-4 py-2 text-muted-foreground">Revenue</th>
+                  <th className="text-right px-4 py-2 text-muted-foreground">Commission</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(entry.grouped as { category: string; testCount: number; orderCount: number; revenue: number; commission: number }[]).map(row => (
+                  <tr key={row.category} className="border-t border-card-border">
+                    <td className="px-4 py-2 font-medium capitalize">{row.category}</td>
+                    <td className="px-4 py-2 text-right">{row.testCount}</td>
+                    <td className="px-4 py-2 text-right">{row.orderCount}</td>
+                    <td className="px-4 py-2 text-right">{inr(row.revenue)}</td>
+                    <td className="px-4 py-2 text-right text-amber-600">{inr(row.commission)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
     </div>
   );
 }

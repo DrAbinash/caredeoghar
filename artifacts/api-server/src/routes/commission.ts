@@ -71,110 +71,99 @@ router.delete("/rules/:id", async (req, res) => {
   res.json({ ok: true });
 });
 
-// Commission payout report
+// ─── Commission calculation helper ────────────────────────────────────────────
+type TestInfo = { id: number; name: string; category: string | null; price: number };
+type RuleInfo = typeof import("@workspace/db/schema").commissionRulesTable.$inferSelect;
+type DoctorInfo = typeof import("@workspace/db/schema").doctorsTable.$inferSelect;
+
+function calcTestCommission(
+  ot: { testId: number; price: string },
+  test: TestInfo | undefined,
+  rules: RuleInfo[],
+  doctor: DoctorInfo,
+): { commission: number; ruleName: string } {
+  const price = Number(ot.price);
+
+  // 1) Exclusive rules first (test-scoped then category-scoped)
+  let matched = rules.find(r => {
+    if (!r.isExclusive || !r.isActive) return false;
+    if (r.scope === "test" && r.testIds) return (JSON.parse(r.testIds) as number[]).includes(ot.testId);
+    if (r.scope === "category" && r.categories && test) return (JSON.parse(r.categories) as string[]).includes(test.category || "");
+    return false;
+  });
+
+  // 2) Non-exclusive specific rules
+  if (!matched) {
+    matched = rules.find(r => {
+      if (!r.isActive) return false;
+      if (r.scope === "test" && r.testIds) return (JSON.parse(r.testIds) as number[]).includes(ot.testId);
+      if (r.scope === "category" && r.categories && test) return (JSON.parse(r.categories) as string[]).includes(test.category || "");
+      return false;
+    });
+  }
+
+  // 3) Catch-all rule
+  if (!matched) matched = rules.find(r => r.isActive && r.scope === "all");
+
+  if (matched) {
+    const val = Number(matched.value);
+    return {
+      commission: matched.type === "percentage" ? (price * val) / 100 : val,
+      ruleName: matched.name,
+    };
+  }
+
+  // 4) Doctor default
+  const defVal = Number(doctor.defaultCommission);
+  if (defVal > 0) {
+    return {
+      commission: doctor.defaultCommissionType === "percentage" ? (price * defVal) / 100 : defVal,
+      ruleName: "Default",
+    };
+  }
+
+  return { commission: 0, ruleName: "None" };
+}
+
+// Commission payout report (consolidated — for backwards compat)
 router.get("/report", async (req, res) => {
   const { from, to, doctorId } = req.query as Record<string, string>;
 
-  // Get all doctors with their commission rules
   const doctors = await db.select().from(doctorsTable);
   const allRules = await db.select().from(commissionRulesTable);
   const allTests = await db.select().from(testsTable);
-  const testMap = new Map(allTests.map(t => [t.id, t]));
+  const testMap = new Map(allTests.map(t => [t.id, { id: t.id, name: t.name, category: t.category, price: Number(t.price) }]));
 
-  // Get completed orders with their tests
   const conditions = [];
   if (doctorId) conditions.push(eq(ordersTable.doctorId, Number(doctorId)));
   if (from) conditions.push(gte(ordersTable.createdAt, new Date(from)));
   if (to) conditions.push(lte(ordersTable.createdAt, new Date(to + "T23:59:59Z")));
 
-  const orders = await db
-    .select()
-    .from(ordersTable)
-    .where(conditions.length ? and(...conditions) : undefined);
-
+  const orders = await db.select().from(ordersTable).where(conditions.length ? and(...conditions) : undefined);
   const orderIds = orders.map(o => o.id);
-  const orderTests = orderIds.length
-    ? await db.select().from(orderTestsTable).where(inArray(orderTestsTable.orderId, orderIds))
-    : [];
+  const orderTests = orderIds.length ? await db.select().from(orderTestsTable).where(inArray(orderTestsTable.orderId, orderIds)) : [];
 
   const report = doctors
     .filter(d => !doctorId || d.id === Number(doctorId))
     .map(doctor => {
       const doctorOrders = orders.filter(o => o.doctorId === doctor.id);
-      const rules = allRules.filter(r => r.doctorId === doctor.id && r.isActive);
-
-      let totalRevenue = 0;
-      let totalCommission = 0;
-      const orderDetails: {
-        orderId: number; orderNumber: string; date: string;
-        revenue: number; commission: number; commissionRule: string;
-      }[] = [];
+      const rules = allRules.filter(r => r.doctorId === doctor.id);
+      let totalRevenue = 0, totalCommission = 0;
+      const orderDetails: { orderId: number; orderNumber: string; date: string; revenue: number; commission: number; commissionRule: string }[] = [];
 
       for (const order of doctorOrders) {
         const tests = orderTests.filter(ot => ot.orderId === order.id);
-        let orderRevenue = 0;
-        let orderCommission = 0;
-        let appliedRule = "Default";
-
+        let orderRevenue = 0, orderCommission = 0, lastRule = "Default";
         for (const ot of tests) {
-          const price = Number(ot.price);
-          orderRevenue += price;
           const test = testMap.get(ot.testId);
-
-          // Find matching exclusive rule first
-          let matchedRule = rules.find(r => {
-            if (!r.isExclusive) return false;
-            if (r.scope === "test" && r.testIds) {
-              const ids = JSON.parse(r.testIds) as number[];
-              return ids.includes(ot.testId);
-            }
-            if (r.scope === "category" && r.categories && test) {
-              const cats = JSON.parse(r.categories) as string[];
-              return cats.includes(test.category || "");
-            }
-            return false;
-          });
-
-          if (!matchedRule) {
-            matchedRule = rules.find(r => {
-              if (r.scope === "test" && r.testIds) {
-                const ids = JSON.parse(r.testIds) as number[];
-                return ids.includes(ot.testId);
-              }
-              if (r.scope === "category" && r.categories && test) {
-                const cats = JSON.parse(r.categories) as string[];
-                return cats.includes(test.category || "");
-              }
-              return r.scope === "all";
-            });
-          }
-
-          if (matchedRule) {
-            const val = Number(matchedRule.value);
-            orderCommission += matchedRule.type === "percentage" ? (price * val) / 100 : val;
-            appliedRule = matchedRule.name;
-          } else if (Number(doctor.defaultCommission) > 0) {
-            const defVal = Number(doctor.defaultCommission);
-            orderCommission += doctor.defaultCommissionType === "percentage"
-              ? (price * defVal) / 100
-              : defVal;
-            appliedRule = "Default";
-          }
+          const { commission, ruleName } = calcTestCommission(ot, test, rules, doctor);
+          orderRevenue += Number(ot.price);
+          orderCommission += commission;
+          lastRule = ruleName;
         }
-
         totalRevenue += orderRevenue;
         totalCommission += orderCommission;
-
-        if (doctorOrders.length > 0) {
-          orderDetails.push({
-            orderId: order.id,
-            orderNumber: order.orderNumber,
-            date: order.createdAt.toISOString().split("T")[0],
-            revenue: orderRevenue,
-            commission: orderCommission,
-            commissionRule: appliedRule,
-          });
-        }
+        orderDetails.push({ orderId: order.id, orderNumber: order.orderNumber, date: order.createdAt.toISOString().split("T")[0], revenue: orderRevenue, commission: orderCommission, commissionRule: lastRule });
       }
 
       return {
@@ -187,6 +176,123 @@ router.get("/report", async (req, res) => {
     });
 
   res.json(report);
+});
+
+// ─── Detailed commission report (test-wise / category-wise / consolidated) ────
+router.get("/report-detailed", async (req, res) => {
+  const { from, to, doctorId, groupBy = "order" } = req.query as Record<string, string>;
+
+  const doctors = await db.select().from(doctorsTable);
+  const allRules = await db.select().from(commissionRulesTable);
+  const allTests = await db.select().from(testsTable);
+  const testMap = new Map(allTests.map(t => [t.id, { id: t.id, name: t.name, category: t.category ?? "Other", price: Number(t.price) }]));
+
+  const conditions = [];
+  if (doctorId) conditions.push(eq(ordersTable.doctorId, Number(doctorId)));
+  if (from) conditions.push(gte(ordersTable.createdAt, new Date(from)));
+  if (to) conditions.push(lte(ordersTable.createdAt, new Date(to + "T23:59:59Z")));
+
+  const orders = await db.select().from(ordersTable).where(conditions.length ? and(...conditions) : undefined);
+  const orderIds = orders.map(o => o.id);
+  const orderTests = orderIds.length ? await db.select().from(orderTestsTable).where(inArray(orderTestsTable.orderId, orderIds)) : [];
+
+  const filteredDoctors = doctors.filter(d => !doctorId || d.id === Number(doctorId));
+
+  const result = filteredDoctors.map(doctor => {
+    const doctorOrders = orders.filter(o => o.doctorId === doctor.id);
+    const rules = allRules.filter(r => r.doctorId === doctor.id);
+
+    // Build flat test-level rows
+    type TestRow = {
+      testId: number; testName: string; category: string;
+      orderId: number; orderNumber: string; orderDate: string;
+      price: number; commission: number; ruleName: string;
+    };
+    const testRows: TestRow[] = [];
+
+    for (const order of doctorOrders) {
+      const ots = orderTests.filter(ot => ot.orderId === order.id);
+      for (const ot of ots) {
+        const test = testMap.get(ot.testId);
+        const { commission, ruleName } = calcTestCommission(ot, test, rules, doctor);
+        testRows.push({
+          testId: ot.testId,
+          testName: test?.name ?? "Unknown",
+          category: test?.category ?? "Other",
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          orderDate: order.createdAt.toISOString().split("T")[0],
+          price: Number(ot.price),
+          commission,
+          ruleName,
+        });
+      }
+    }
+
+    const totalRevenue = testRows.reduce((s, r) => s + r.price, 0);
+    const totalCommission = testRows.reduce((s, r) => s + r.commission, 0);
+
+    // Build groupBy views
+    let grouped: unknown = null;
+
+    if (groupBy === "test") {
+      const byTest: Record<number, { testId: number; testName: string; category: string; count: number; revenue: number; commission: number; ruleName: string }> = {};
+      for (const row of testRows) {
+        if (!byTest[row.testId]) byTest[row.testId] = { testId: row.testId, testName: row.testName, category: row.category, count: 0, revenue: 0, commission: 0, ruleName: row.ruleName };
+        byTest[row.testId].count++;
+        byTest[row.testId].revenue += row.price;
+        byTest[row.testId].commission += row.commission;
+      }
+      grouped = Object.values(byTest).sort((a, b) => b.commission - a.commission);
+    } else if (groupBy === "category") {
+      const byCat: Record<string, { category: string; testCount: number; orderCount: number; revenue: number; commission: number }> = {};
+      for (const row of testRows) {
+        if (!byCat[row.category]) byCat[row.category] = { category: row.category, testCount: 0, orderCount: 0, revenue: 0, commission: 0 };
+        byCat[row.category].testCount++;
+        byCat[row.category].revenue += row.price;
+        byCat[row.category].commission += row.commission;
+      }
+      // Count unique orders per category
+      for (const row of testRows) {
+        const cat = byCat[row.category];
+        // approximate: count distinct orders
+        cat.orderCount = new Set(testRows.filter(r => r.category === row.category).map(r => r.orderId)).size;
+      }
+      grouped = Object.values(byCat).sort((a, b) => b.commission - a.commission);
+    } else if (groupBy === "order") {
+      const byOrder: Record<number, { orderId: number; orderNumber: string; orderDate: string; testCount: number; revenue: number; commission: number; tests: TestRow[] }> = {};
+      for (const row of testRows) {
+        if (!byOrder[row.orderId]) byOrder[row.orderId] = { orderId: row.orderId, orderNumber: row.orderNumber, orderDate: row.orderDate, testCount: 0, revenue: 0, commission: 0, tests: [] };
+        byOrder[row.orderId].testCount++;
+        byOrder[row.orderId].revenue += row.price;
+        byOrder[row.orderId].commission += row.commission;
+        byOrder[row.orderId].tests.push(row);
+      }
+      grouped = Object.values(byOrder).sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
+    } else {
+      grouped = null; // consolidated — just totals
+    }
+
+    return {
+      doctor: { id: doctor.id, name: doctor.name, specialization: doctor.specialization, defaultCommission: Number(doctor.defaultCommission), defaultCommissionType: doctor.defaultCommissionType },
+      orderCount: doctorOrders.length,
+      testCount: testRows.length,
+      totalRevenue,
+      totalCommission,
+      effectiveRate: totalRevenue > 0 ? Number(((totalCommission / totalRevenue) * 100).toFixed(2)) : 0,
+      grouped,
+      testRows: groupBy === "test" ? testRows : undefined,
+    };
+  });
+
+  const grandTotal = {
+    doctors: result.filter(r => r.orderCount > 0).length,
+    orders: result.reduce((s, r) => s + r.orderCount, 0),
+    revenue: result.reduce((s, r) => s + r.totalRevenue, 0),
+    commission: result.reduce((s, r) => s + r.totalCommission, 0),
+  };
+
+  res.json({ report: result.filter(r => r.orderCount > 0), grandTotal });
 });
 
 export default router;

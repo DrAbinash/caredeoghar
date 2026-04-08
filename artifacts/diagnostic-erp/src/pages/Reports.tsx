@@ -9,14 +9,15 @@ import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend,
+  ResponsiveContainer, Legend, PieChart, Pie, Cell,
 } from "recharts";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, FlaskConical, IndianRupee, Users2, Sparkles, RefreshCw } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { TrendingUp, FlaskConical, Users2, Sparkles, RefreshCw, CalendarDays, ArrowUpDown, CreditCard, ChevronDown, ChevronUp } from "lucide-react";
 
 type CommissionReport = {
   doctorId: number;
@@ -30,11 +31,37 @@ type CommissionReport = {
 };
 
 const TABS = [
-  { id: "overview", label: "Overview", icon: TrendingUp },
-  { id: "tests", label: "Test Analysis", icon: FlaskConical },
-  { id: "commission", label: "Commission Report", icon: Users2 },
-  { id: "ai", label: "AI Insights", icon: Sparkles },
+  { id: "overview",         label: "Overview",        icon: TrendingUp },
+  { id: "tests",            label: "Test Analysis",    icon: FlaskConical },
+  { id: "daily",            label: "Daily Report",     icon: CalendarDays },
+  { id: "income-expense",   label: "Income / Expense", icon: ArrowUpDown },
+  { id: "payment-methods",  label: "Payment Methods",  icon: CreditCard },
+  { id: "commission",       label: "Commission",       icon: Users2 },
+  { id: "ai",               label: "AI Insights",      icon: Sparkles },
 ];
+
+// ── Types for new report endpoints ────────────────────────────────────────────
+type IncomeExpenseRow = {
+  date: string;
+  income: { date: string; cash: number; upi: number; card: number; bank: number; insurance: number; cheque: number; total: number };
+  expense: { date: string; amount: number; count: number };
+  net: number;
+};
+type IncomeExpenseData = {
+  rows: IncomeExpenseRow[];
+  totals: { income: number; expense: number; net: number; cash: number; upi: number; card: number; bank: number; insurance: number; cheque: number };
+};
+type PaymentMethodData = {
+  methods: { method: string; count: number; total: number; percentage: number; transactions: { id: number; date: string; time: string; amount: number; billNumber: string; patientName: string; reference: string }[] }[];
+  grandTotal: number;
+};
+type DailySummaryData = {
+  date: string;
+  summary: { totalBilled: number; totalReceived: number; outstanding: number; billCount: number; orderCount: number };
+  byMethod: Record<string, number>;
+  billsByStatus: { paid: number; partial: number; pending: number; cancelled: number };
+  bills: { id: number; billNumber: string; patientName: string; totalAmount: number; paidAmount: number; status: string; createdAt: string }[];
+};
 
 export default function Reports() {
   const [period, setPeriod] = useState<"daily" | "weekly" | "monthly">("monthly");
@@ -46,19 +73,49 @@ export default function Reports() {
   });
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
 
+  const [dailyDate, setDailyDate] = useState(new Date().toISOString().split("T")[0]);
+  const [expandedMethod, setExpandedMethod] = useState<string | null>(null);
+
   const { data: revenue } = useGetRevenueReport({ period });
   const { data: popular } = useGetPopularTests();
   const { data: stats } = useGetDashboardStats();
+
   const { data: commissionData, isLoading: loadingComm } = useQuery<CommissionReport[]>({
     queryKey: ["commission-report", dateFrom, dateTo],
     queryFn: () => api.get(`/api/commission/report?from=${dateFrom}&to=${dateTo}`),
     enabled: activeTab === "commission",
   });
 
+  const { data: incomeExpenseData, isLoading: loadingIE } = useQuery<IncomeExpenseData>({
+    queryKey: ["income-expense", dateFrom, dateTo],
+    queryFn: () => api.get(`/api/reports/income-expense?from=${dateFrom}&to=${dateTo}`),
+    enabled: activeTab === "income-expense",
+  });
+
+  const { data: paymentMethodData, isLoading: loadingPM } = useQuery<PaymentMethodData>({
+    queryKey: ["payment-methods", dateFrom, dateTo],
+    queryFn: () => api.get(`/api/reports/payment-methods?from=${dateFrom}&to=${dateTo}`),
+    enabled: activeTab === "payment-methods",
+  });
+
+  const { data: dailySummaryData, isLoading: loadingDaily } = useQuery<DailySummaryData>({
+    queryKey: ["daily-summary", dailyDate],
+    queryFn: () => api.get(`/api/reports/daily-summary?date=${dailyDate}`),
+    enabled: activeTab === "daily",
+  });
+
   const formatCurrency = (n: number) =>
     new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
+  const inr2 = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const totalCommission = commissionData?.reduce((s, r) => s + r.commissionAmount, 0) ?? 0;
+
+  const METHOD_COLORS: Record<string, string> = {
+    cash: "#16a34a", upi: "#2563eb", card: "#7c3aed",
+    bank_transfer: "#0891b2", insurance: "#ea580c", cheque: "#d97706",
+  };
+  const methodLabel = (m: string) =>
+    ({ cash: "Cash", upi: "UPI", card: "Card", bank_transfer: "Bank Transfer", insurance: "Insurance", cheque: "Cheque" })[m] ?? m.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 
   return (
     <div className="pb-8">
@@ -277,6 +334,342 @@ export default function Reports() {
             </div>
           </div>
         )}
+        {/* ── Daily Report Tab ─────────────────────────────────────────────── */}
+        {activeTab === "daily" && (
+          <div className="space-y-5">
+            <div className="flex items-end gap-3">
+              <div>
+                <Label className="text-xs">Date</Label>
+                <Input type="date" value={dailyDate} onChange={e => setDailyDate(e.target.value)} className="mt-1 w-40" />
+              </div>
+            </div>
+            {loadingDaily ? (
+              <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-20 bg-muted animate-pulse rounded-xl" />)}</div>
+            ) : !dailySummaryData ? (
+              <div className="text-center py-12 text-muted-foreground">Select a date to view the report</div>
+            ) : (
+              <div className="space-y-5">
+                {/* KPI Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {[
+                    { label: "Billed", value: inr2(dailySummaryData.summary.totalBilled), color: "text-foreground" },
+                    { label: "Collected", value: inr2(dailySummaryData.summary.totalReceived), color: "text-green-600" },
+                    { label: "Outstanding", value: inr2(dailySummaryData.summary.outstanding), color: "text-red-500" },
+                    { label: "Bills Created", value: String(dailySummaryData.summary.billCount), color: "text-foreground" },
+                  ].map(c => (
+                    <div key={c.label} className="bg-card border border-card-border rounded-xl p-4">
+                      <p className="text-xs text-muted-foreground">{c.label}</p>
+                      <p className={`text-xl font-bold mt-1 ${c.color}`}>{c.value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Payment Method Breakdown */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="bg-card border border-card-border rounded-xl p-4">
+                    <h3 className="text-sm font-semibold mb-3">Collection by Method</h3>
+                    {Object.keys(dailySummaryData.byMethod).length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No payments collected today</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {Object.entries(dailySummaryData.byMethod).map(([method, amount]) => (
+                          <div key={method} className="flex items-center justify-between text-sm">
+                            <span className="capitalize text-muted-foreground">{methodLabel(method)}</span>
+                            <span className="font-semibold">{inr2(amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-card border border-card-border rounded-xl p-4">
+                    <h3 className="text-sm font-semibold mb-3">Bills by Status</h3>
+                    <div className="space-y-2">
+                      {Object.entries(dailySummaryData.billsByStatus).map(([status, count]) => (
+                        <div key={status} className="flex items-center justify-between text-sm">
+                          <span className="capitalize text-muted-foreground">{status}</span>
+                          <span className="font-semibold">{count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bills Table */}
+                {dailySummaryData.bills.length > 0 && (
+                  <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+                    <div className="px-4 py-3 border-b border-card-border">
+                      <h3 className="text-sm font-semibold">Bills — {dailySummaryData.date}</h3>
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="text-left px-4 py-2 text-xs text-muted-foreground">Bill #</th>
+                          <th className="text-left px-4 py-2 text-xs text-muted-foreground">Patient</th>
+                          <th className="text-right px-4 py-2 text-xs text-muted-foreground">Billed</th>
+                          <th className="text-right px-4 py-2 text-xs text-muted-foreground">Paid</th>
+                          <th className="text-left px-4 py-2 text-xs text-muted-foreground">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dailySummaryData.bills.map(b => (
+                          <tr key={b.id} className="border-t border-card-border hover:bg-muted/20">
+                            <td className="px-4 py-2 font-mono text-xs">{b.billNumber}</td>
+                            <td className="px-4 py-2">{b.patientName}</td>
+                            <td className="px-4 py-2 text-right">{inr2(b.totalAmount)}</td>
+                            <td className="px-4 py-2 text-right text-green-600">{inr2(b.paidAmount)}</td>
+                            <td className="px-4 py-2">
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                b.status === "paid" ? "bg-green-100 text-green-700" :
+                                b.status === "partial" ? "bg-amber-100 text-amber-700" :
+                                b.status === "pending" ? "bg-red-100 text-red-700" :
+                                "bg-gray-100 text-gray-600"
+                              }`}>{b.status}</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Income / Expense Tab ──────────────────────────────────────────── */}
+        {activeTab === "income-expense" && (
+          <div className="space-y-5">
+            <div className="flex flex-wrap gap-3 items-end">
+              <div>
+                <Label className="text-xs">From</Label>
+                <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="mt-1 w-40" />
+              </div>
+              <div>
+                <Label className="text-xs">To</Label>
+                <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="mt-1 w-40" />
+              </div>
+            </div>
+
+            {loadingIE ? (
+              <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-10 bg-muted animate-pulse rounded-xl" />)}</div>
+            ) : !incomeExpenseData ? null : (
+              <div className="space-y-5">
+                {/* Totals */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {[
+                    { label: "Total Income", value: inr2(incomeExpenseData.totals.income), color: "text-green-600" },
+                    { label: "Total Expense", value: inr2(incomeExpenseData.totals.expense), color: "text-red-500" },
+                    { label: "Net", value: inr2(incomeExpenseData.totals.net), color: incomeExpenseData.totals.net >= 0 ? "text-green-600" : "text-red-500" },
+                    { label: "Days with Activity", value: String(incomeExpenseData.rows.length), color: "text-foreground" },
+                  ].map(c => (
+                    <div key={c.label} className="bg-card border border-card-border rounded-xl p-4">
+                      <p className="text-xs text-muted-foreground">{c.label}</p>
+                      <p className={`text-xl font-bold mt-1 ${c.color}`}>{c.value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Method breakdown */}
+                <div className="bg-card border border-card-border rounded-xl p-4">
+                  <h3 className="text-sm font-semibold mb-3">Income by Payment Method</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {["cash","upi","card","bank","insurance","cheque"].map(method => (
+                      <div key={method} className="flex items-center justify-between p-2 bg-muted/30 rounded-lg text-sm">
+                        <span className="capitalize text-muted-foreground">{methodLabel(method)}</span>
+                        <span className="font-semibold">{inr2((incomeExpenseData.totals as Record<string,number>)[method] ?? 0)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Chart */}
+                {incomeExpenseData.rows.length > 0 && (
+                  <div className="bg-card border border-card-border rounded-xl p-5">
+                    <h3 className="text-sm font-semibold mb-3">Daily Income vs Expense</h3>
+                    <ResponsiveContainer width="100%" height={260}>
+                      <BarChart data={incomeExpenseData.rows.map(r => ({ date: r.date, Income: r.income.total, Expense: r.expense.amount, Net: r.net }))}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                        <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickFormatter={v => `₹${(v/1000).toFixed(0)}k`} />
+                        <Tooltip formatter={(v: number) => inr2(v)} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
+                        <Legend />
+                        <Bar dataKey="Income" fill="#16a34a" radius={[3,3,0,0]} />
+                        <Bar dataKey="Expense" fill="#dc2626" radius={[3,3,0,0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Daily Table */}
+                <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 border-b border-card-border">
+                      <tr>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Date</th>
+                        <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">Cash</th>
+                        <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">UPI</th>
+                        <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">Card</th>
+                        <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">Bank</th>
+                        <th className="text-right px-4 py-3 text-xs font-semibold text-green-600">Total Income</th>
+                        <th className="text-right px-4 py-3 text-xs font-semibold text-red-500">Expense</th>
+                        <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">Net</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {incomeExpenseData.rows.map(row => (
+                        <tr key={row.date} className="border-b border-card-border hover:bg-muted/20">
+                          <td className="px-4 py-2.5 font-medium">{row.date}</td>
+                          <td className="px-4 py-2.5 text-right text-xs">{inr2(row.income.cash)}</td>
+                          <td className="px-4 py-2.5 text-right text-xs">{inr2(row.income.upi)}</td>
+                          <td className="px-4 py-2.5 text-right text-xs">{inr2(row.income.card)}</td>
+                          <td className="px-4 py-2.5 text-right text-xs">{inr2(row.income.bank)}</td>
+                          <td className="px-4 py-2.5 text-right font-semibold text-green-600">{inr2(row.income.total)}</td>
+                          <td className="px-4 py-2.5 text-right text-red-500">{row.expense.amount > 0 ? inr2(row.expense.amount) : "—"}</td>
+                          <td className={`px-4 py-2.5 text-right font-semibold ${row.net >= 0 ? "text-foreground" : "text-red-500"}`}>{inr2(row.net)}</td>
+                        </tr>
+                      ))}
+                      <tr className="bg-muted/30 font-bold text-sm">
+                        <td className="px-4 py-3">Total</td>
+                        <td className="px-4 py-3 text-right">{inr2(incomeExpenseData.totals.cash)}</td>
+                        <td className="px-4 py-3 text-right">{inr2(incomeExpenseData.totals.upi)}</td>
+                        <td className="px-4 py-3 text-right">{inr2(incomeExpenseData.totals.card)}</td>
+                        <td className="px-4 py-3 text-right">{inr2(incomeExpenseData.totals.bank)}</td>
+                        <td className="px-4 py-3 text-right text-green-600">{inr2(incomeExpenseData.totals.income)}</td>
+                        <td className="px-4 py-3 text-right text-red-500">{inr2(incomeExpenseData.totals.expense)}</td>
+                        <td className={`px-4 py-3 text-right ${incomeExpenseData.totals.net >= 0 ? "" : "text-red-500"}`}>{inr2(incomeExpenseData.totals.net)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Payment Methods Tab ───────────────────────────────────────────── */}
+        {activeTab === "payment-methods" && (
+          <div className="space-y-5">
+            <div className="flex flex-wrap gap-3 items-end">
+              <div>
+                <Label className="text-xs">From</Label>
+                <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="mt-1 w-40" />
+              </div>
+              <div>
+                <Label className="text-xs">To</Label>
+                <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="mt-1 w-40" />
+              </div>
+            </div>
+
+            {loadingPM ? (
+              <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-14 bg-muted animate-pulse rounded-xl" />)}</div>
+            ) : !paymentMethodData ? null : (
+              <div className="space-y-5">
+                {/* Pie + summary */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="bg-card border border-card-border rounded-xl p-5">
+                    <h3 className="text-sm font-semibold mb-3">Collection Mix</h3>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <PieChart>
+                        <Pie
+                          data={paymentMethodData.methods}
+                          dataKey="total"
+                          nameKey="method"
+                          cx="50%" cy="50%"
+                          outerRadius={90}
+                          label={({ method, percentage }: { method: string; percentage: number }) => `${methodLabel(method)} ${percentage}%`}
+                          labelLine={false}
+                        >
+                          {paymentMethodData.methods.map((m) => (
+                            <Cell key={m.method} fill={METHOD_COLORS[m.method] ?? "#94a3b8"} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(v: number) => inr2(v)} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <div className="bg-card border border-card-border rounded-xl p-5">
+                    <h3 className="text-sm font-semibold mb-3">By Method Summary</h3>
+                    <div className="space-y-3">
+                      {paymentMethodData.methods.map(m => (
+                        <div key={m.method} className="flex items-center gap-3">
+                          <div className="w-2 h-8 rounded-full" style={{ background: METHOD_COLORS[m.method] ?? "#94a3b8" }} />
+                          <div className="flex-1">
+                            <div className="flex justify-between text-sm">
+                              <span className="font-medium">{methodLabel(m.method)}</span>
+                              <span className="font-bold">{inr2(m.total)}</span>
+                            </div>
+                            <div className="flex justify-between text-xs text-muted-foreground mt-0.5">
+                              <span>{m.count} transactions</span>
+                              <span>{m.percentage}% of total</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      <div className="pt-2 border-t border-card-border flex justify-between font-bold">
+                        <span>Grand Total</span>
+                        <span>{inr2(paymentMethodData.grandTotal)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Method-wise transaction tables */}
+                <div className="space-y-3">
+                  {paymentMethodData.methods.map(m => (
+                    <div key={m.method} className="bg-card border border-card-border rounded-xl overflow-hidden">
+                      <button
+                        className="w-full flex items-center justify-between p-4 hover:bg-muted/20 transition-colors"
+                        onClick={() => setExpandedMethod(expandedMethod === m.method ? null : m.method)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-3 h-3 rounded-full" style={{ background: METHOD_COLORS[m.method] ?? "#94a3b8" }} />
+                          <span className="font-semibold text-sm">{methodLabel(m.method)}</span>
+                          <span className="text-xs text-muted-foreground">{m.count} transactions</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className="font-bold">{inr2(m.total)}</span>
+                          {expandedMethod === m.method ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </div>
+                      </button>
+                      {expandedMethod === m.method && m.transactions.length > 0 && (
+                        <div className="border-t border-card-border">
+                          <table className="w-full text-xs">
+                            <thead className="bg-muted/50">
+                              <tr>
+                                <th className="text-left px-4 py-2 text-muted-foreground">Date</th>
+                                <th className="text-left px-4 py-2 text-muted-foreground">Bill #</th>
+                                <th className="text-left px-4 py-2 text-muted-foreground">Patient</th>
+                                <th className="text-left px-4 py-2 text-muted-foreground">Ref</th>
+                                <th className="text-right px-4 py-2 text-muted-foreground">Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {m.transactions.slice(0, 50).map(t => (
+                                <tr key={t.id} className="border-t border-card-border hover:bg-muted/10">
+                                  <td className="px-4 py-1.5">{t.date} {t.time}</td>
+                                  <td className="px-4 py-1.5 font-mono">{t.billNumber}</td>
+                                  <td className="px-4 py-1.5">{t.patientName}</td>
+                                  <td className="px-4 py-1.5 text-muted-foreground">{t.reference || "—"}</td>
+                                  <td className="px-4 py-1.5 text-right font-medium">{inr2(t.amount)}</td>
+                                </tr>
+                              ))}
+                              {m.transactions.length > 50 && (
+                                <tr><td colSpan={5} className="px-4 py-2 text-center text-muted-foreground text-xs">+ {m.transactions.length - 50} more transactions</td></tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* AI Insights Tab */}
         {activeTab === "ai" && (
           <AIInsightsTab dateFrom={dateFrom} dateTo={dateTo} setDateFrom={setDateFrom} setDateTo={setDateTo} />
