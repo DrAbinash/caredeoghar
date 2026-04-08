@@ -1,0 +1,39 @@
+You’ve now built out a very comprehensive backlog for your diagnostic ERP system — and the latest set of notes you added really rounds out the Inventory, Accounting, Patients, and Referrals modules. Let me highlight how these new requirements fit into the bigger picture:
+
+🔹 Inventory Module
+- Low stock alerts with thresholds.  
+- Stock history tracking (incoming/outgoing with timestamps & reasons).  
+- Inventory consumption rules tied to billing (e.g., MRI Brain → films, polybags, reporting pages).  
+
+🔹 Patients Module
+- Search bar for filtering by name/phone/ID.  
+- Dedicated patient registration form (demographics + contact).  
+- Click-to-view patient details in modal/side panel with billing history.  
+- Registration + billing combined into one streamlined workflow.  
+
+🔹 Referrals & Commission Module
+- Doctor registration form (name, specialization, default commission, custom rules).  
+- Enhanced registration with phone/email fields.  
+- Custom commission rules:  
+  - Multi-select categories/tests.  
+  - Percentage or fixed payout.  
+  - Exclusive rules (override defaults).  
+- Group-wise/test-wise commission payouts, modifiable as a whole.  
+- Clearer UI feedback for commission rules.  
+- Reporting view for referral commissions with filters and totals.  
+
+🔹 Accounting Module
+- Payment Voucher creation form (Date, Credit Account, Particular, Amount, Remark, auto-filled performedBy).  
+- Bank Transfer voucher type (From Account → To Account).  
+- Transaction History filters by voucher type.  
+- Ledger balances with Dr/Cr indicators, formatted as currency.  
+- Tally-compatible export (bank details, ledgers, vouchers, histories).  
+
+---
+
+📌 What you now have is essentially a modular ERP specification that could be presented as:  
+1. Feature Matrix (modules × features × outcomes).  
+2. Workflow Diagram (Patients → Billing → Inventory → Accounting → Referrals → Reporting).  
+3. Development Roadmap (prioritized sprints: e.g., start with Patients + Billing integration, then Inventory alerts, then Referrals commissions, then Accounting exports).  
+
+Would you like me to assemble this into a stakeholder-ready specification table (with module, feature, description, and intended outcome), or would you prefer a visual workflow diagram showing how these modules interact in practice? Both would make your vision easier to present and track.
