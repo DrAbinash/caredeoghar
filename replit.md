@@ -41,7 +41,8 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - **Report Generator** — formatted diagnostic report creation with PDF/HTML/text export and voice readout
 - **Inventory** — stock management (items, stock in/out/adjust, history, low-stock alerts, consumption rules per test)
 - **Referrals** — doctor commission rules (percentage/fixed, per-test/category/all scope, exclusive rules) + payout report
-- **Accounting** — chart of accounts, payment/receipt/bank-transfer/journal vouchers, ledger, Tally XML export
+- **Accounting** — chart of accounts with Tally groups + opening balances + GST/PAN; vouchers (Payment/Receipt/Contra/Journal/Sales/Purchase); ledger; Trial Balance; Profit & Loss; Balance Sheet; TallyPrime XML export
+- **PACS Viewer** (`/pacs`) — Orthanc DICOM server integration; study/series browser with instance thumbnails; Weasis desktop launcher; OHIF web viewer link; WADO proxy
 - **Discounts** (`/discounts`) — discount rules: percentage/fixed, scope (all/category/test), expiry date, active/inactive toggle
 - **Settings** (`/settings`) — User management with roles (admin/manager/accountant/billing/lab/receptionist), per-module permissions, per-user max discount % cap
 - **PatientDetail** — AI Clinical Note generation + AI patient message drafting (follow-up/results/payment) via Gemini
@@ -76,8 +77,19 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - `GET /api/commission/report` — payout report with date/doctor filters
 - `GET/POST /api/accounting/accounts` — accounts
 - `GET/POST/DELETE /api/accounting/vouchers` — vouchers with filters
-- `GET /api/accounting/ledger` — running ledger per account
-- `GET /api/accounting/export/tally` — Tally XML download
+- `GET /api/accounting/ledger` — running ledger per account with opening balances
+- `GET /api/accounting/trial-balance` — trial balance with Dr/Cr totals
+- `GET /api/accounting/profit-loss` — income vs expenses P&L summary
+- `GET /api/accounting/balance-sheet` — assets vs liabilities balance sheet
+- `GET /api/accounting/export/tally` — TallyPrime XML with ledger masters + vouchers (date range optional)
+- `GET /api/pacs/config` — PACS server config info
+- `GET /api/pacs/health` — Orthanc connection health check
+- `GET /api/pacs/studies` — list all DICOM studies (expanded)
+- `GET /api/pacs/studies/:id/series` — series in a study
+- `GET /api/pacs/instances/:id/preview` — DICOM instance thumbnail (proxied)
+- `GET /api/pacs/wado` — WADO-URI proxy
+- `GET /api/pacs/search?q=` — patient name/ID search across studies
+- `GET /api/pacs/studies/:id/weasis-url` — Weasis/OHIF viewer URLs
 - `GET/POST/PATCH/DELETE /api/users` — user management
 - `GET /api/users/default-permissions` — default permissions per role
 - `GET /api/bills/:id/audits` — bill edit audit trail
@@ -96,7 +108,10 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 ### Notes
 - New frontend pages use direct fetch via `src/lib/fetchApi.ts` (put/patch/post/delete helpers)
 - Currency: Indian Rupee (₹), `en-IN` locale
-- Voucher numbering: PV-YYYYMM-XXXX, RV-..., BT-..., JV-...
+- Voucher numbering: PV (payment), RV (receipt), BT (contra), JV (journal), SV (sales), PUR (purchase) — all YYYYMM-XXXX
+- PACS uses env vars: ORTHANC_URL, ORTHANC_USERNAME, ORTHANC_PASSWORD, PACS_VIEWER_TYPE, OHIF_URL, WADO_URL
+- Accounting accounts have: tallyGroup (TALLY_GROUPS list), openingBalance/openingBalanceType, gstNumber, pan
+- Tally export maps account types to groups: cash→Cash-in-Hand, bank→Bank Accounts, income→Direct Income, etc.
 - Commission rules stored with JSON arrays for `categories` and `testIds` fields
 - Bill edits require editedBy + reason; stored in bill_audits table
 - Email settings include setup tips for Gmail, Outlook, Zoho

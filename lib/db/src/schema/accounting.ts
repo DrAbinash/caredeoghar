@@ -2,6 +2,35 @@ import { pgTable, text, serial, timestamp, numeric, boolean } from "drizzle-orm/
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
+// Tally-compatible account groups
+export const TALLY_GROUPS = [
+  // Assets
+  "Current Assets",
+  "Fixed Assets",
+  "Investments",
+  "Loans & Advances (Asset)",
+  "Misc. Expenses (Asset)",
+  // Liabilities
+  "Current Liabilities",
+  "Loans (Liability)",
+  "Unsecured Loans",
+  "Capital Account",
+  "Reserves & Surplus",
+  // Income
+  "Direct Income",
+  "Indirect Income",
+  // Expenses
+  "Direct Expenses",
+  "Indirect Expenses",
+  // Special
+  "Cash-in-Hand",
+  "Bank Accounts",
+  "Bank OD Accounts",
+  "Duties & Taxes",
+  "Sundry Creditors",
+  "Sundry Debtors",
+] as const;
+
 export const accountsTable = pgTable("accounts", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -11,13 +40,20 @@ export const accountsTable = pgTable("accounts", {
   accountNumber: text("account_number"),
   ifscCode: text("ifsc_code"),
   isActive: boolean("is_active").notNull().default(true),
+  // Tally-compatible fields
+  tallyGroup: text("tally_group"),       // One of TALLY_GROUPS
+  openingBalance: numeric("opening_balance", { precision: 14, scale: 2 }).default("0"),
+  openingBalanceType: text("opening_balance_type").default("Dr"), // 'Dr' | 'Cr'
+  gstApplicable: boolean("gst_applicable").default(false),
+  gstNumber: text("gst_number"),
+  pan: text("pan"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const vouchersTable = pgTable("vouchers", {
   id: serial("id").primaryKey(),
   voucherNumber: text("voucher_number").notNull().unique(),
-  type: text("type").notNull(), // 'payment' | 'receipt' | 'bank_transfer' | 'journal'
+  type: text("type").notNull(), // 'payment' | 'receipt' | 'contra' | 'journal' | 'sales' | 'purchase'
   date: text("date").notNull(),
   creditAccountId: text("credit_account_id").notNull(),
   debitAccountId: text("debit_account_id").notNull(),
@@ -26,6 +62,7 @@ export const vouchersTable = pgTable("vouchers", {
   remark: text("remark"),
   performedBy: text("performed_by"),
   reference: text("reference"),
+  narration: text("narration"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

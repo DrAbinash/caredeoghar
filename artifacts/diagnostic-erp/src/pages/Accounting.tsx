@@ -15,33 +15,88 @@ import {
 } from "@/components/ui/select";
 import { useForm } from "react-hook-form";
 import {
-  Plus, Download, Landmark, FileText, BarChart3, Trash2,
-  TrendingUp, TrendingDown, ArrowRightLeft, Receipt,
+  Plus, Download, Landmark, FileText, Trash2,
+  TrendingUp, TrendingDown, ArrowRightLeft, BarChart3,
+  BookOpen, Scale, ChevronDown, ChevronUp, CheckCircle2, AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 type Account = {
   id: number; name: string; type: string; code?: string;
   bankName?: string; accountNumber?: string; ifscCode?: string; isActive: boolean;
+  tallyGroup?: string; openingBalance?: number; openingBalanceType?: string;
+  gstApplicable?: boolean; gstNumber?: string; pan?: string;
 };
 type Voucher = {
   id: number; voucherNumber: string; type: string; date: string;
   creditAccountId: string; debitAccountId: string; amount: number;
   particular: string; remark?: string; performedBy?: string; reference?: string;
-  createdAt: string;
+  narration?: string; createdAt: string;
 };
 type LedgerEntry = {
   account: Account; dr: number; cr: number; balance: number;
   entries: { date: string; particular: string; dr: number; cr: number; balance: number; voucherNumber: string }[];
 };
+type TrialBalance = {
+  rows: { id: number; name: string; type: string; tallyGroup: string; parent: string; dr: number; cr: number; balance: number; balanceDr: number; balanceCr: number }[];
+  totalDr: number; totalCr: number; balanced: boolean;
+};
+type ProfitLoss = {
+  income: { name: string; group: string; amount: number }[];
+  expenses: { name: string; group: string; amount: number }[];
+  totalIncome: number; totalExpenses: number; netProfit: number;
+};
+type BalanceSheet = {
+  assets: { name: string; group: string; amount: number }[];
+  liabilities: { name: string; group: string; amount: number }[];
+  totalAssets: number; totalLiabilities: number;
+};
+
+// ── Constants ────────────────────────────────────────────────────────────────
 
 const ACCOUNT_TYPES = ["cash", "bank", "income", "expense", "liability", "asset"];
-const VOUCHER_TYPES = [
-  { value: "payment", label: "Payment Voucher", icon: TrendingDown },
-  { value: "receipt", label: "Receipt Voucher", icon: TrendingUp },
-  { value: "bank_transfer", label: "Bank Transfer", icon: ArrowRightLeft },
-  { value: "journal", label: "Journal Entry", icon: FileText },
+const TALLY_GROUPS = [
+  "Cash-in-Hand", "Bank Accounts", "Bank OD Accounts",
+  "Current Assets", "Fixed Assets", "Investments", "Loans & Advances (Asset)", "Misc. Expenses (Asset)", "Sundry Debtors",
+  "Current Liabilities", "Duties & Taxes", "Sundry Creditors", "Loans (Liability)", "Unsecured Loans",
+  "Capital Account", "Reserves & Surplus",
+  "Direct Income", "Indirect Income",
+  "Direct Expenses", "Indirect Expenses",
 ];
+const VOUCHER_TYPES = [
+  { value: "payment", label: "Payment Voucher", icon: TrendingDown, desc: "Cash/bank payment to party" },
+  { value: "receipt", label: "Receipt Voucher", icon: TrendingUp, desc: "Cash/bank received from party" },
+  { value: "contra", label: "Contra Voucher", icon: ArrowRightLeft, desc: "Cash/bank to cash/bank transfer" },
+  { value: "journal", label: "Journal Entry", icon: FileText, desc: "General ledger adjustment" },
+  { value: "sales", label: "Sales Voucher", icon: TrendingUp, desc: "Sales invoice entry" },
+  { value: "purchase", label: "Purchase Voucher", icon: TrendingDown, desc: "Purchase invoice entry" },
+];
+
 const inr = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+const vBadgeStyle: Record<string, string> = {
+  payment: "bg-red-100 text-red-700",
+  receipt: "bg-green-100 text-green-700",
+  contra: "bg-blue-100 text-blue-700",
+  bank_transfer: "bg-blue-100 text-blue-700",
+  journal: "bg-purple-100 text-purple-700",
+  sales: "bg-emerald-100 text-emerald-700",
+  purchase: "bg-orange-100 text-orange-700",
+};
+const vBadgeLabel: Record<string, string> = {
+  payment: "Payment", receipt: "Receipt", contra: "Contra",
+  bank_transfer: "Contra", journal: "Journal", sales: "Sales", purchase: "Purchase",
+};
+
+function VoucherBadge({ type }: { type: string }) {
+  return <Badge className={`${vBadgeStyle[type] || "bg-gray-100 text-gray-700"} text-xs`}>{vBadgeLabel[type] || type}</Badge>;
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function Accounting() {
   const qc = useQueryClient();
@@ -50,6 +105,15 @@ export default function Accounting() {
   const [voucherType, setVoucherType] = useState("payment");
   const [expandedLedger, setExpandedLedger] = useState<Set<number>>(new Set());
   const [filters, setFilters] = useState({ type: "all", from: "", to: "", q: "" });
+  const [exportDates, setExportDates] = useState({ from: "", to: "" });
+
+  // Report date range
+  const defaultFrom = (() => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); })();
+  const defaultTo = new Date().toISOString().slice(0, 10);
+  const [rptFrom, setRptFrom] = useState(defaultFrom);
+  const [rptTo, setRptTo] = useState(defaultTo);
+
+  // ── Queries ──────────────────────────────────────────────────────────────────
 
   const { data: accounts = [], isLoading: accLoading } = useQuery<Account[]>({
     queryKey: ["accounts"],
@@ -70,6 +134,20 @@ export default function Accounting() {
     queryKey: ["ledger"],
     queryFn: () => api.get("/api/accounting/ledger"),
   });
+  const { data: trialBalance, refetch: refetchTB, isFetching: tbFetching } = useQuery<TrialBalance>({
+    queryKey: ["trial-balance", rptFrom, rptTo],
+    queryFn: () => api.get(`/api/accounting/trial-balance?from=${rptFrom}&to=${rptTo}`),
+  });
+  const { data: profitLoss, refetch: refetchPL, isFetching: plFetching } = useQuery<ProfitLoss>({
+    queryKey: ["profit-loss", rptFrom, rptTo],
+    queryFn: () => api.get(`/api/accounting/profit-loss?from=${rptFrom}&to=${rptTo}`),
+  });
+  const { data: balanceSheet, refetch: refetchBS, isFetching: bsFetching } = useQuery<BalanceSheet>({
+    queryKey: ["balance-sheet", rptTo],
+    queryFn: () => api.get(`/api/accounting/balance-sheet?asOf=${rptTo}`),
+  });
+
+  // ── Mutations ────────────────────────────────────────────────────────────────
 
   const createAccount = useMutation({
     mutationFn: (body: Record<string, unknown>) => api.post("/api/accounting/accounts", body),
@@ -77,12 +155,19 @@ export default function Accounting() {
   });
   const createVoucher = useMutation({
     mutationFn: (body: Record<string, unknown>) => api.post("/api/accounting/vouchers", body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["vouchers"] }); qc.invalidateQueries({ queryKey: ["ledger"] }); setVoucherOpen(false); resetV(); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["vouchers"] }); qc.invalidateQueries({ queryKey: ["ledger"] });
+      qc.invalidateQueries({ queryKey: ["trial-balance"] }); qc.invalidateQueries({ queryKey: ["profit-loss"] });
+      qc.invalidateQueries({ queryKey: ["balance-sheet"] });
+      setVoucherOpen(false); resetV();
+    },
   });
   const deleteVoucher = useMutation({
     mutationFn: (id: number) => api.delete(`/api/accounting/vouchers/${id}`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["vouchers"] }); qc.invalidateQueries({ queryKey: ["ledger"] }); },
   });
+
+  // ── Forms ────────────────────────────────────────────────────────────────────
 
   const { register: regAcc, handleSubmit: subAcc, reset: resetAcc, setValue: setAccVal, watch: watchAcc } = useForm<Record<string, string>>();
   const { register: regV, handleSubmit: subV, reset: resetV, setValue: setVVal } = useForm<Record<string, string>>();
@@ -91,30 +176,36 @@ export default function Accounting() {
   const activeAccounts = accounts.filter(a => a.isActive);
   const accountName = (id: string) => accounts.find(a => a.id.toString() === id)?.name || id;
 
-  const vBadge = (type: string) => {
-    const colors: Record<string, string> = {
-      payment: "bg-red-100 text-red-700",
-      receipt: "bg-green-100 text-green-700",
-      bank_transfer: "bg-blue-100 text-blue-700",
-      journal: "bg-purple-100 text-purple-700",
-    };
-    const labels: Record<string, string> = { payment: "Payment", receipt: "Receipt", bank_transfer: "Bank Transfer", journal: "Journal" };
-    return <Badge className={`${colors[type] || "bg-gray-100 text-gray-700"} text-xs`}>{labels[type] || type}</Badge>;
-  };
-
   const totalDr = ledger.reduce((s, l) => s + l.dr, 0);
   const totalCr = ledger.reduce((s, l) => s + l.cr, 0);
 
+  // ── Tally Export ─────────────────────────────────────────────────────────────
+
+  const downloadTallyExport = () => {
+    const params = new URLSearchParams();
+    if (exportDates.from) params.set("from", exportDates.from);
+    if (exportDates.to) params.set("to", exportDates.to);
+    const a = document.createElement("a");
+    a.href = `/api/accounting/export/tally?${params}`;
+    a.download = `tally-export${exportDates.from ? `-${exportDates.from}` : ""}.xml`;
+    a.click();
+  };
+
+  // ── Render ───────────────────────────────────────────────────────────────────
+
   return (
     <div className="pb-8">
-      <PageHeader title="Accounting" subtitle="Vouchers, ledgers, and Tally export" />
+      <PageHeader title="Accounting" subtitle="Double-entry bookkeeping · Tally-compatible" />
 
       <div className="px-6">
         <Tabs defaultValue="vouchers">
-          <TabsList className="mb-4">
+          <TabsList className="mb-4 flex-wrap gap-1">
             <TabsTrigger value="vouchers">Vouchers</TabsTrigger>
             <TabsTrigger value="accounts">Chart of Accounts</TabsTrigger>
             <TabsTrigger value="ledger">Ledger</TabsTrigger>
+            <TabsTrigger value="trial-balance">Trial Balance</TabsTrigger>
+            <TabsTrigger value="pnl">P&amp;L</TabsTrigger>
+            <TabsTrigger value="balance-sheet">Balance Sheet</TabsTrigger>
             <TabsTrigger value="export">Tally Export</TabsTrigger>
           </TabsList>
 
@@ -129,11 +220,11 @@ export default function Accounting() {
                     {VOUCHER_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <Input type="date" value={filters.from} onChange={e => setFilters(f => ({ ...f, from: e.target.value }))} className="w-36" placeholder="From" />
-                <Input type="date" value={filters.to} onChange={e => setFilters(f => ({ ...f, to: e.target.value }))} className="w-36" placeholder="To" />
-                <Input value={filters.q} onChange={e => setFilters(f => ({ ...f, q: e.target.value }))} className="w-40" placeholder="Search…" />
+                <Input type="date" value={filters.from} onChange={e => setFilters(f => ({ ...f, from: e.target.value }))} className="w-36" />
+                <Input type="date" value={filters.to} onChange={e => setFilters(f => ({ ...f, to: e.target.value }))} className="w-36" />
+                <Input value={filters.q} onChange={e => setFilters(f => ({ ...f, q: e.target.value }))} className="w-44" placeholder="Search particular…" />
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {VOUCHER_TYPES.map(t => (
                   <Button key={t.value} size="sm" variant="outline" onClick={() => { setVoucherType(t.value); resetV({ type: t.value, date: new Date().toISOString().split("T")[0] }); setVoucherOpen(true); }}>
                     <t.icon size={13} className="mr-1" /> {t.label.split(" ")[0]}
@@ -166,7 +257,7 @@ export default function Accounting() {
                       <tr key={v.id} className="border-b border-card-border last:border-0 hover:bg-muted/20">
                         <td className="px-4 py-3 font-mono text-xs">{v.voucherNumber}</td>
                         <td className="px-4 py-3 text-muted-foreground">{v.date}</td>
-                        <td className="px-4 py-3">{vBadge(v.type)}</td>
+                        <td className="px-4 py-3"><VoucherBadge type={v.type} /></td>
                         <td className="px-4 py-3 max-w-[180px] truncate">{v.particular}</td>
                         <td className="px-4 py-3 text-xs text-muted-foreground">{accountName(v.debitAccountId)}</td>
                         <td className="px-4 py-3 text-xs text-muted-foreground">{accountName(v.creditAccountId)}</td>
@@ -200,26 +291,56 @@ export default function Accounting() {
             </div>
 
             {accLoading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{[...Array(6)].map((_, i) => <div key={i} className="h-20 bg-muted rounded-xl animate-pulse" />)}</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{[...Array(6)].map((_, i) => <div key={i} className="h-24 bg-muted rounded-xl animate-pulse" />)}</div>
             ) : accounts.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">No accounts. Add your first account to get started.</div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {accounts.map((acc) => (
-                  <div key={acc.id} className={`bg-card border rounded-xl p-4 ${!acc.isActive ? "opacity-60" : "border-card-border"}`}>
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                        <Landmark size={15} className="text-primary" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-sm">{acc.name}</p>
-                        <p className="text-xs text-muted-foreground capitalize">{acc.type}{acc.code ? ` · ${acc.code}` : ""}</p>
-                        {acc.bankName && <p className="text-xs text-muted-foreground mt-0.5">{acc.bankName} {acc.accountNumber ? `· ${acc.accountNumber}` : ""}</p>}
-                      </div>
-                      {!acc.isActive && <Badge className="bg-gray-100 text-gray-500 text-xs ml-auto">Inactive</Badge>}
-                    </div>
-                  </div>
-                ))}
+              <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 border-b border-card-border">
+                    <tr>
+                      <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Account</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Type / Tally Group</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Code</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Opening Balance</th>
+                      <th className="px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {accounts.map(acc => (
+                      <tr key={acc.id} className={`border-b border-card-border last:border-0 ${!acc.isActive ? "opacity-60" : "hover:bg-muted/20"}`}>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                              <Landmark size={13} className="text-primary" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm">{acc.name}</p>
+                              {acc.bankName && <p className="text-xs text-muted-foreground">{acc.bankName} {acc.accountNumber ? `· ${acc.accountNumber}` : ""}</p>}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-xs capitalize text-muted-foreground">{acc.type}</span>
+                          {acc.tallyGroup && (
+                            <p className="text-xs text-primary/70 mt-0.5">{acc.tallyGroup}</p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{acc.code || "—"}</td>
+                        <td className="px-4 py-3 text-right text-sm">
+                          {(acc.openingBalance || 0) > 0
+                            ? <span className={acc.openingBalanceType === "Dr" ? "text-green-600" : "text-red-500"}>{inr(acc.openingBalance || 0)} {acc.openingBalanceType}</span>
+                            : <span className="text-muted-foreground">—</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge className={acc.isActive ? "bg-green-100 text-green-700 text-xs" : "bg-gray-100 text-gray-500 text-xs"}>
+                            {acc.isActive ? "Active" : "Inactive"}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </TabsContent>
@@ -259,7 +380,7 @@ export default function Accounting() {
                       >
                         <div>
                           <p className="font-semibold text-sm">{l.account.name}</p>
-                          <p className="text-xs text-muted-foreground capitalize">{l.account.type}</p>
+                          <p className="text-xs text-muted-foreground capitalize">{l.account.tallyGroup || l.account.type}</p>
                         </div>
                         <div className="flex items-center gap-6 text-sm">
                           <div className="text-right">
@@ -276,6 +397,7 @@ export default function Accounting() {
                               {inr(Math.abs(l.balance))} {l.balance >= 0 ? "Dr" : "Cr"}
                             </p>
                           </div>
+                          {expanded ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
                         </div>
                       </div>
                       {expanded && l.entries.length > 0 && (
@@ -315,57 +437,286 @@ export default function Accounting() {
             )}
           </TabsContent>
 
+          {/* ── Trial Balance Tab ── */}
+          <TabsContent value="trial-balance" className="space-y-4">
+            <div className="flex flex-wrap gap-3 items-end bg-card border border-card-border rounded-xl p-4">
+              <div>
+                <Label className="text-xs">From</Label>
+                <Input type="date" value={rptFrom} onChange={e => setRptFrom(e.target.value)} className="mt-1 w-36" />
+              </div>
+              <div>
+                <Label className="text-xs">To</Label>
+                <Input type="date" value={rptTo} onChange={e => setRptTo(e.target.value)} className="mt-1 w-36" />
+              </div>
+              <Button size="sm" variant="outline" onClick={() => refetchTB()} disabled={tbFetching}>
+                <RefreshCw size={13} className={`mr-1 ${tbFetching ? "animate-spin" : ""}`} /> Refresh
+              </Button>
+              {trialBalance && (
+                <div className={`flex items-center gap-2 ml-2 text-sm font-medium ${trialBalance.balanced ? "text-green-600" : "text-red-500"}`}>
+                  {trialBalance.balanced ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+                  {trialBalance.balanced ? "Balanced" : "Out of Balance"}
+                </div>
+              )}
+            </div>
+
+            {trialBalance && (
+              <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 border-b border-card-border">
+                    <tr>
+                      <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Account</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Group</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Debit (Dr)</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Credit (Cr)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {trialBalance.rows.map(r => (
+                      <tr key={r.id} className="border-b border-card-border last:border-0 hover:bg-muted/20">
+                        <td className="px-4 py-3 font-medium">{r.name}</td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground">{r.tallyGroup}</td>
+                        <td className="px-4 py-3 text-right font-mono">{r.balanceDr > 0 ? inr(r.balanceDr) : "—"}</td>
+                        <td className="px-4 py-3 text-right font-mono">{r.balanceCr > 0 ? inr(r.balanceCr) : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="border-t-2 border-card-border bg-muted/50">
+                    <tr>
+                      <td colSpan={2} className="px-4 py-3 font-bold text-sm">Total</td>
+                      <td className="px-4 py-3 text-right font-bold">{inr(trialBalance.totalDr)}</td>
+                      <td className="px-4 py-3 text-right font-bold">{inr(trialBalance.totalCr)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* ── P&L Tab ── */}
+          <TabsContent value="pnl" className="space-y-4">
+            <div className="flex flex-wrap gap-3 items-end bg-card border border-card-border rounded-xl p-4">
+              <div>
+                <Label className="text-xs">From</Label>
+                <Input type="date" value={rptFrom} onChange={e => setRptFrom(e.target.value)} className="mt-1 w-36" />
+              </div>
+              <div>
+                <Label className="text-xs">To</Label>
+                <Input type="date" value={rptTo} onChange={e => setRptTo(e.target.value)} className="mt-1 w-36" />
+              </div>
+              <Button size="sm" variant="outline" onClick={() => refetchPL()} disabled={plFetching}>
+                <RefreshCw size={13} className={`mr-1 ${plFetching ? "animate-spin" : ""}`} /> Refresh
+              </Button>
+            </div>
+
+            {profitLoss && (
+              <>
+                <div className={`rounded-xl p-5 border-2 ${profitLoss.netProfit >= 0 ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{profitLoss.netProfit >= 0 ? "Net Profit" : "Net Loss"}</p>
+                  <p className={`text-3xl font-bold mt-1 ${profitLoss.netProfit >= 0 ? "text-green-700" : "text-red-600"}`}>{inr(Math.abs(profitLoss.netProfit))}</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  {/* Income */}
+                  <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+                    <div className="bg-green-50 border-b border-card-border px-4 py-3 flex justify-between">
+                      <p className="font-semibold text-green-800 text-sm">Income</p>
+                      <p className="font-bold text-green-700">{inr(profitLoss.totalIncome)}</p>
+                    </div>
+                    {profitLoss.income.length === 0 ? (
+                      <div className="p-6 text-center text-muted-foreground text-sm">No income entries</div>
+                    ) : (
+                      <table className="w-full text-sm">
+                        <tbody>
+                          {profitLoss.income.map((r, i) => (
+                            <tr key={i} className="border-b border-card-border last:border-0 hover:bg-muted/20">
+                              <td className="px-4 py-2.5 font-medium">{r.name}</td>
+                              <td className="px-4 py-2.5 text-xs text-muted-foreground">{r.group}</td>
+                              <td className="px-4 py-2.5 text-right text-green-700 font-semibold">{inr(r.amount)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+
+                  {/* Expenses */}
+                  <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+                    <div className="bg-red-50 border-b border-card-border px-4 py-3 flex justify-between">
+                      <p className="font-semibold text-red-800 text-sm">Expenses</p>
+                      <p className="font-bold text-red-700">{inr(profitLoss.totalExpenses)}</p>
+                    </div>
+                    {profitLoss.expenses.length === 0 ? (
+                      <div className="p-6 text-center text-muted-foreground text-sm">No expense entries</div>
+                    ) : (
+                      <table className="w-full text-sm">
+                        <tbody>
+                          {profitLoss.expenses.map((r, i) => (
+                            <tr key={i} className="border-b border-card-border last:border-0 hover:bg-muted/20">
+                              <td className="px-4 py-2.5 font-medium">{r.name}</td>
+                              <td className="px-4 py-2.5 text-xs text-muted-foreground">{r.group}</td>
+                              <td className="px-4 py-2.5 text-right text-red-600 font-semibold">{inr(r.amount)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </TabsContent>
+
+          {/* ── Balance Sheet Tab ── */}
+          <TabsContent value="balance-sheet" className="space-y-4">
+            <div className="flex flex-wrap gap-3 items-end bg-card border border-card-border rounded-xl p-4">
+              <div>
+                <Label className="text-xs">As of Date</Label>
+                <Input type="date" value={rptTo} onChange={e => setRptTo(e.target.value)} className="mt-1 w-36" />
+              </div>
+              <Button size="sm" variant="outline" onClick={() => refetchBS()} disabled={bsFetching}>
+                <RefreshCw size={13} className={`mr-1 ${bsFetching ? "animate-spin" : ""}`} /> Refresh
+              </Button>
+            </div>
+
+            {balanceSheet && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                    <p className="text-xs text-muted-foreground">Total Assets</p>
+                    <p className="text-2xl font-bold text-blue-700">{inr(balanceSheet.totalAssets)}</p>
+                  </div>
+                  <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                    <p className="text-xs text-muted-foreground">Total Liabilities</p>
+                    <p className="text-2xl font-bold text-purple-700">{inr(balanceSheet.totalLiabilities)}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  {/* Assets */}
+                  <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+                    <div className="bg-blue-50 border-b border-card-border px-4 py-3 flex justify-between">
+                      <p className="font-semibold text-blue-800 text-sm">Assets</p>
+                      <p className="font-bold text-blue-700">{inr(balanceSheet.totalAssets)}</p>
+                    </div>
+                    {balanceSheet.assets.length === 0 ? (
+                      <div className="p-6 text-center text-muted-foreground text-sm">No asset accounts</div>
+                    ) : (
+                      <table className="w-full text-sm">
+                        <tbody>
+                          {balanceSheet.assets.map((r, i) => (
+                            <tr key={i} className="border-b border-card-border last:border-0 hover:bg-muted/20">
+                              <td className="px-4 py-2.5 font-medium">{r.name}</td>
+                              <td className="px-4 py-2.5 text-xs text-muted-foreground">{r.group}</td>
+                              <td className="px-4 py-2.5 text-right font-semibold">{inr(r.amount)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+
+                  {/* Liabilities */}
+                  <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+                    <div className="bg-purple-50 border-b border-card-border px-4 py-3 flex justify-between">
+                      <p className="font-semibold text-purple-800 text-sm">Liabilities &amp; Capital</p>
+                      <p className="font-bold text-purple-700">{inr(balanceSheet.totalLiabilities)}</p>
+                    </div>
+                    {balanceSheet.liabilities.length === 0 ? (
+                      <div className="p-6 text-center text-muted-foreground text-sm">No liability accounts</div>
+                    ) : (
+                      <table className="w-full text-sm">
+                        <tbody>
+                          {balanceSheet.liabilities.map((r, i) => (
+                            <tr key={i} className="border-b border-card-border last:border-0 hover:bg-muted/20">
+                              <td className="px-4 py-2.5 font-medium">{r.name}</td>
+                              <td className="px-4 py-2.5 text-xs text-muted-foreground">{r.group}</td>
+                              <td className="px-4 py-2.5 text-right font-semibold">{inr(r.amount)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </TabsContent>
+
           {/* ── Tally Export Tab ── */}
           <TabsContent value="export" className="space-y-6">
-            <div className="bg-card border border-card-border rounded-xl p-6 max-w-lg">
+            <div className="bg-card border border-card-border rounded-xl p-6 max-w-xl">
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
                   <Download size={22} className="text-primary" />
                 </div>
-                <div>
+                <div className="flex-1">
                   <h3 className="font-semibold text-base">Export to Tally XML</h3>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Downloads all ledger masters and vouchers in Tally-compatible XML format.
-                    Import this file in Tally ERP 9 / TallyPrime via <strong>Gateway of Tally → Import Data</strong>.
+                    Downloads all ledger masters and vouchers in TallyPrime-compatible XML format. Includes account groups, opening balances, GST details, and proper voucher types.
                   </p>
-                  <div className="mt-4 space-y-1 text-xs text-muted-foreground">
-                    <p>• {accounts.length} account masters</p>
-                    <p>• {vouchers.length} vouchers (unfiltered)</p>
+
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs">From Date (optional)</Label>
+                      <Input type="date" value={exportDates.from} onChange={e => setExportDates(d => ({ ...d, from: e.target.value }))} className="mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs">To Date (optional)</Label>
+                      <Input type="date" value={exportDates.to} onChange={e => setExportDates(d => ({ ...d, to: e.target.value }))} className="mt-1" />
+                    </div>
                   </div>
-                  <Button
-                    className="mt-4"
-                    onClick={() => {
-                      const a = document.createElement("a");
-                      a.href = "/api/accounting/export/tally";
-                      a.download = "tally-export.xml";
-                      a.click();
-                    }}
-                  >
+
+                  <div className="mt-4 space-y-1 text-xs text-muted-foreground">
+                    <p>• {accounts.length} account masters (with Tally group mapping)</p>
+                    <p>• {vouchers.length} vouchers (in selected range)</p>
+                    <p>• Voucher types: Payment, Receipt, Contra, Journal, Sales, Purchase</p>
+                    <p>• Opening balances and GST numbers included</p>
+                  </div>
+
+                  <Button className="mt-4" onClick={downloadTallyExport}>
                     <Download size={15} className="mr-2" /> Download Tally XML
                   </Button>
                 </div>
               </div>
             </div>
 
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 max-w-lg text-sm text-amber-800">
-              <p className="font-semibold mb-1">Import Instructions (TallyPrime)</p>
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 max-w-xl text-sm text-amber-800">
+              <p className="font-semibold mb-2">Import Instructions (TallyPrime)</p>
               <ol className="list-decimal list-inside space-y-1 text-xs">
-                <li>Open TallyPrime → Go to <strong>Gateway of Tally</strong></li>
-                <li>Press <strong>Alt + O</strong> (or click Import)</li>
+                <li>Open TallyPrime → <strong>Gateway of Tally</strong></li>
+                <li>Press <strong>Alt + O</strong> → click <strong>Import</strong></li>
                 <li>Select <strong>Data</strong> and choose the downloaded XML file</li>
-                <li>Tally will import all ledgers and vouchers automatically</li>
+                <li>Tally imports ledger masters first, then all vouchers</li>
+                <li>Verify Trial Balance in Tally matches the one here</li>
               </ol>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 max-w-xl text-sm text-blue-800">
+              <p className="font-semibold mb-2">Tally Group Mapping</p>
+              <div className="grid grid-cols-2 gap-1 text-xs mt-2">
+                {[
+                  ["cash", "Cash-in-Hand"], ["bank", "Bank Accounts"], ["income", "Direct Income"],
+                  ["expense", "Indirect Expenses"], ["asset", "Current Assets"], ["liability", "Current Liabilities"],
+                ].map(([t, g]) => (
+                  <div key={t} className="flex gap-2">
+                    <span className="text-blue-600 font-mono">{t}</span>
+                    <span className="text-blue-500">→</span>
+                    <span>{g}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs mt-2 text-blue-600">Set a custom Tally Group on each account to override these defaults.</p>
             </div>
           </TabsContent>
         </Tabs>
       </div>
 
-      {/* Add Account Dialog */}
+      {/* ── Add Account Dialog ── */}
       <Dialog open={accOpen} onOpenChange={setAccOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Add Account</DialogTitle></DialogHeader>
-          <form onSubmit={subAcc((d) => createAccount.mutate(d))} className="space-y-4">
-            <div><Label>Account Name *</Label><Input {...regAcc("name", { required: true })} className="mt-1" /></div>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Add Ledger Account</DialogTitle></DialogHeader>
+          <form onSubmit={subAcc((d) => createAccount.mutate({ ...d, openingBalance: Number(d.openingBalance || 0), gstApplicable: !!d.gstApplicable }))} className="space-y-4">
+            <div><Label>Account Name *</Label><Input {...regAcc("name", { required: true })} className="mt-1" placeholder="e.g., Cash Account" /></div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Type *</Label>
@@ -376,7 +727,33 @@ export default function Accounting() {
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>Code</Label><Input {...regAcc("code")} className="mt-1" placeholder="e.g. 1001" /></div>
+              <div><Label>Code / Alias</Label><Input {...regAcc("code")} className="mt-1" placeholder="e.g. 1001" /></div>
+            </div>
+            <div>
+              <Label>Tally Group</Label>
+              <Select onValueChange={(v) => setAccVal("tallyGroup", v)}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Select Tally group (optional)" /></SelectTrigger>
+                <SelectContent>
+                  {TALLY_GROUPS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">Maps to the correct group in TallyPrime when exported</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Opening Balance (₹)</Label>
+                <Input type="number" step="0.01" {...regAcc("openingBalance")} className="mt-1" placeholder="0" />
+              </div>
+              <div>
+                <Label>Opening Balance Type</Label>
+                <Select onValueChange={(v) => setAccVal("openingBalanceType", v)} defaultValue="Dr">
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Dr">Debit (Dr)</SelectItem>
+                    <SelectItem value="Cr">Credit (Cr)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             {(accType === "bank") && (
               <>
@@ -387,6 +764,10 @@ export default function Accounting() {
                 </div>
               </>
             )}
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>GST Number</Label><Input {...regAcc("gstNumber")} className="mt-1" placeholder="27AAACR5055K1ZX" /></div>
+              <div><Label>PAN</Label><Input {...regAcc("pan")} className="mt-1" placeholder="AAACR5055K" /></div>
+            </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setAccOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={createAccount.isPending}>{createAccount.isPending ? "Saving…" : "Add Account"}</Button>
@@ -395,12 +776,15 @@ export default function Accounting() {
         </DialogContent>
       </Dialog>
 
-      {/* Create Voucher Dialog */}
+      {/* ── Create Voucher Dialog ── */}
       <Dialog open={voucherOpen} onOpenChange={setVoucherOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{VOUCHER_TYPES.find(t => t.value === voucherType)?.label || "New Voucher"}</DialogTitle>
           </DialogHeader>
+          {VOUCHER_TYPES.find(t => t.value === voucherType) && (
+            <p className="text-xs text-muted-foreground -mt-2">{VOUCHER_TYPES.find(t => t.value === voucherType)?.desc}</p>
+          )}
           <form
             onSubmit={subV((d) => createVoucher.mutate({ ...d, type: voucherType, amount: Number(d.amount) }))}
             className="space-y-4"
@@ -416,28 +800,34 @@ export default function Accounting() {
               </div>
             </div>
             <div>
-              <Label>{voucherType === "bank_transfer" ? "From Account (Credit)" : "Credit Account"} *</Label>
+              <Label>{voucherType === "contra" || voucherType === "bank_transfer" ? "From Account (Credit)" : "Credit Account"} *</Label>
               <Select onValueChange={(v) => setVVal("creditAccountId", v)}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="Select account…" /></SelectTrigger>
                 <SelectContent>
-                  {(voucherType === "bank_transfer" ? activeAccounts.filter(a => a.type === "cash" || a.type === "bank") : activeAccounts).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
+                  {(voucherType === "contra" || voucherType === "bank_transfer"
+                    ? activeAccounts.filter(a => a.type === "cash" || a.type === "bank")
+                    : activeAccounts
+                  ).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label>{voucherType === "bank_transfer" ? "To Account (Debit)" : "Debit Account"} *</Label>
+              <Label>{voucherType === "contra" || voucherType === "bank_transfer" ? "To Account (Debit)" : "Debit Account"} *</Label>
               <Select onValueChange={(v) => setVVal("debitAccountId", v)}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="Select account…" /></SelectTrigger>
                 <SelectContent>
-                  {(voucherType === "bank_transfer" ? activeAccounts.filter(a => a.type === "bank") : activeAccounts).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
+                  {(voucherType === "contra" || voucherType === "bank_transfer"
+                    ? activeAccounts.filter(a => a.type === "bank")
+                    : activeAccounts
+                  ).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div><Label>Particular *</Label><Input {...regV("particular", { required: true })} className="mt-1" placeholder="e.g., Lab supplies purchase" /></div>
-            <div><Label>Remark</Label><Input {...regV("remark")} className="mt-1" /></div>
+            <div><Label>Narration</Label><Input {...regV("narration")} className="mt-1" placeholder="Additional notes" /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Performed By</Label><Input {...regV("performedBy")} className="mt-1" /></div>
-              <div><Label>Reference</Label><Input {...regV("reference")} className="mt-1" placeholder="Bill#, Order#…" /></div>
+              <div><Label>Reference No.</Label><Input {...regV("reference")} className="mt-1" placeholder="Bill#, Cheque#…" /></div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setVoucherOpen(false)}>Cancel</Button>

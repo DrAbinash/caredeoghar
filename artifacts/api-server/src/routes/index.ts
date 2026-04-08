@@ -13,6 +13,7 @@ import usersRouter from "./users";
 import emailSettingsRouter from "./email-settings";
 import discountsRouter from "./discounts";
 import aiRouter from "./ai";
+import pacsRouter from "./pacs";
 
 const router: IRouter = Router();
 
@@ -31,5 +32,6 @@ router.use("/users", usersRouter);
 router.use("/email-settings", emailSettingsRouter);
 router.use("/discounts", discountsRouter);
 router.use("/ai", aiRouter);
+router.use("/pacs", pacsRouter);
 
 export default router;
