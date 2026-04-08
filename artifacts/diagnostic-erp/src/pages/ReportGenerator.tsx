@@ -1,0 +1,827 @@
+import { useState, useRef, useEffect } from "react";
+import { useListPatients, useListOrders, useGetOrder } from "@workspace/api-client-react";
+import PageHeader from "@/components/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Printer,
+  Volume2,
+  VolumeX,
+  Upload,
+  Download,
+  FileText,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
+import { Link } from "wouter";
+
+type FindingFlag = "normal" | "low" | "high" | "critical";
+
+interface TestParameter {
+  name: string;
+  result: string;
+  unit: string;
+  refRange: string;
+  flag: FindingFlag;
+}
+
+interface TestFinding {
+  testId: number;
+  testName: string;
+  testCode: string;
+  parameters: TestParameter[];
+  remarks: string;
+  collapsed: boolean;
+}
+
+const PARAMETERS_BY_CODE: Record<string, { name: string; unit: string; refRange: string }[]> = {
+  CBC: [
+    { name: "Hemoglobin", unit: "g/dL", refRange: "12.0–16.0 (F) / 13.0–17.0 (M)" },
+    { name: "Total WBC Count", unit: "cells/µL", refRange: "4,000–11,000" },
+    { name: "Platelet Count", unit: "lakhs/µL", refRange: "1.5–4.5" },
+    { name: "RBC Count", unit: "million/µL", refRange: "3.8–5.2 (F) / 4.5–5.9 (M)" },
+    { name: "PCV / Hematocrit", unit: "%", refRange: "36–46 (F) / 40–52 (M)" },
+    { name: "MCV", unit: "fL", refRange: "80–100" },
+    { name: "MCH", unit: "pg", refRange: "27–33" },
+    { name: "MCHC", unit: "g/dL", refRange: "31–36" },
+    { name: "Neutrophils", unit: "%", refRange: "40–70" },
+    { name: "Lymphocytes", unit: "%", refRange: "20–45" },
+    { name: "Monocytes", unit: "%", refRange: "2–10" },
+    { name: "Eosinophils", unit: "%", refRange: "1–6" },
+    { name: "Basophils", unit: "%", refRange: "0–1" },
+  ],
+  "BS-F": [
+    { name: "Fasting Blood Glucose", unit: "mg/dL", refRange: "70–100" },
+  ],
+  "BS-PP": [
+    { name: "Post-Prandial Blood Glucose", unit: "mg/dL", refRange: "< 140" },
+  ],
+  "BS-R": [
+    { name: "Random Blood Glucose", unit: "mg/dL", refRange: "< 200" },
+  ],
+  LFT: [
+    { name: "Total Bilirubin", unit: "mg/dL", refRange: "0.2–1.2" },
+    { name: "Direct Bilirubin", unit: "mg/dL", refRange: "0.0–0.3" },
+    { name: "Indirect Bilirubin", unit: "mg/dL", refRange: "0.1–0.9" },
+    { name: "SGOT (AST)", unit: "U/L", refRange: "10–40" },
+    { name: "SGPT (ALT)", unit: "U/L", refRange: "7–56" },
+    { name: "Alkaline Phosphatase", unit: "U/L", refRange: "44–147" },
+    { name: "Total Protein", unit: "g/dL", refRange: "6.0–8.3" },
+    { name: "Albumin", unit: "g/dL", refRange: "3.5–5.0" },
+    { name: "Globulin", unit: "g/dL", refRange: "2.0–3.5" },
+    { name: "A/G Ratio", unit: "", refRange: "1.0–2.5" },
+  ],
+  KFT: [
+    { name: "Blood Urea Nitrogen (BUN)", unit: "mg/dL", refRange: "7–20" },
+    { name: "Serum Creatinine", unit: "mg/dL", refRange: "0.6–1.2 (M) / 0.5–1.1 (F)" },
+    { name: "Uric Acid", unit: "mg/dL", refRange: "3.4–7.0 (M) / 2.4–6.0 (F)" },
+    { name: "eGFR", unit: "mL/min/1.73m²", refRange: "> 90" },
+    { name: "Serum Sodium", unit: "mEq/L", refRange: "136–145" },
+    { name: "Serum Potassium", unit: "mEq/L", refRange: "3.5–5.1" },
+    { name: "Serum Chloride", unit: "mEq/L", refRange: "98–107" },
+  ],
+  TSH: [
+    { name: "Thyroid Stimulating Hormone (TSH)", unit: "µIU/mL", refRange: "0.4–4.0" },
+  ],
+  T3: [
+    { name: "Triiodothyronine (T3)", unit: "ng/dL", refRange: "80–200" },
+  ],
+  T4: [
+    { name: "Thyroxine (T4)", unit: "µg/dL", refRange: "5.1–14.1" },
+  ],
+  LIPID: [
+    { name: "Total Cholesterol", unit: "mg/dL", refRange: "< 200 (Desirable)" },
+    { name: "LDL Cholesterol", unit: "mg/dL", refRange: "< 130 (Near Optimal)" },
+    { name: "HDL Cholesterol", unit: "mg/dL", refRange: "> 40 (M) / > 50 (F)" },
+    { name: "VLDL Cholesterol", unit: "mg/dL", refRange: "2–30" },
+    { name: "Triglycerides", unit: "mg/dL", refRange: "< 150" },
+    { name: "Total Cholesterol / HDL Ratio", unit: "", refRange: "< 5.0" },
+  ],
+  HBA1C: [
+    { name: "Glycated Hemoglobin (HbA1c)", unit: "%", refRange: "< 5.7 (Normal) / 5.7–6.4 (Pre-diabetic) / ≥ 6.5 (Diabetic)" },
+  ],
+  "URINE-R": [
+    { name: "Colour", unit: "", refRange: "Pale Yellow to Amber" },
+    { name: "Appearance", unit: "", refRange: "Clear" },
+    { name: "Specific Gravity", unit: "", refRange: "1.005–1.030" },
+    { name: "pH", unit: "", refRange: "5.0–8.0" },
+    { name: "Protein", unit: "", refRange: "Negative" },
+    { name: "Glucose", unit: "", refRange: "Negative" },
+    { name: "Ketones", unit: "", refRange: "Negative" },
+    { name: "Blood", unit: "", refRange: "Negative" },
+    { name: "Bilirubin", unit: "", refRange: "Negative" },
+    { name: "Urobilinogen", unit: "EU/dL", refRange: "0.1–1.0" },
+    { name: "Nitrites", unit: "", refRange: "Negative" },
+    { name: "Leucocyte Esterase", unit: "", refRange: "Negative" },
+    { name: "WBCs", unit: "cells/HPF", refRange: "0–5" },
+    { name: "RBCs", unit: "cells/HPF", refRange: "0–2" },
+    { name: "Epithelial Cells", unit: "cells/HPF", refRange: "0–5" },
+    { name: "Casts", unit: "", refRange: "Absent" },
+    { name: "Crystals", unit: "", refRange: "Absent" },
+  ],
+  ECG: [
+    { name: "Heart Rate", unit: "bpm", refRange: "60–100" },
+    { name: "Rhythm", unit: "", refRange: "Regular Sinus Rhythm" },
+    { name: "QRS Axis", unit: "degrees", refRange: "-30 to +90" },
+    { name: "PR Interval", unit: "ms", refRange: "120–200" },
+    { name: "QRS Duration", unit: "ms", refRange: "< 120" },
+    { name: "QT Interval", unit: "ms", refRange: "360–440" },
+    { name: "ST Segment", unit: "", refRange: "Isoelectric" },
+    { name: "T Wave", unit: "", refRange: "Normal" },
+  ],
+  XRAY: [
+    { name: "Lung Fields", unit: "", refRange: "Clear" },
+    { name: "Heart Size", unit: "", refRange: "Normal" },
+    { name: "Mediastinum", unit: "", refRange: "Normal width" },
+    { name: "Costophrenic Angles", unit: "", refRange: "Sharp" },
+    { name: "Bony Structures", unit: "", refRange: "No abnormality" },
+  ],
+};
+
+function makeDefaultParameters(code: string): TestParameter[] {
+  const defs = PARAMETERS_BY_CODE[code.toUpperCase()];
+  if (defs) {
+    return defs.map((d) => ({ name: d.name, result: "", unit: d.unit, refRange: d.refRange, flag: "normal" as FindingFlag }));
+  }
+  return [{ name: "Result", result: "", unit: "", refRange: "", flag: "normal" }];
+}
+
+const FLAG_STYLES: Record<FindingFlag, string> = {
+  normal: "text-green-600 dark:text-green-400",
+  low: "text-blue-600 dark:text-blue-400 font-bold",
+  high: "text-red-600 dark:text-red-400 font-bold",
+  critical: "text-red-700 dark:text-red-300 font-extrabold animate-pulse",
+};
+
+const FLAG_PRINT: Record<FindingFlag, string> = {
+  normal: "",
+  low: " ↓ LOW",
+  high: " ↑ HIGH",
+  critical: " ⚠ CRITICAL",
+};
+
+export default function ReportGenerator() {
+  const [patientId, setPatientId] = useState<number | null>(null);
+  const [orderId, setOrderId] = useState<number | null>(null);
+  const [findings, setFindings] = useState<TestFinding[]>([]);
+  const [labDirector, setLabDirector] = useState("Dr. Laboratory Director");
+  const [reportDate, setReportDate] = useState(new Date().toISOString().slice(0, 10));
+  const [outputFormat, setOutputFormat] = useState<"print" | "html" | "text">("print");
+  const [speaking, setSpeaking] = useState(false);
+  const [templateContent, setTemplateContent] = useState<string | null>(null);
+  const [templateResult, setTemplateResult] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const reportRef = useRef<HTMLDivElement>(null);
+
+  const { data: patients } = useListPatients({ limit: 200 });
+  const { data: orders } = useListOrders({ patientId: patientId ?? undefined, limit: 50 });
+  const { data: order } = useGetOrder(orderId ?? 0, { query: { enabled: !!orderId } });
+
+  useEffect(() => {
+    if (order?.tests) {
+      setFindings(
+        order.tests.map((ot) => ({
+          testId: ot.id,
+          testName: ot.test?.name ?? "Unknown",
+          testCode: ot.test?.code ?? "",
+          parameters: makeDefaultParameters(ot.test?.code ?? ""),
+          remarks: "",
+          collapsed: false,
+        }))
+      );
+    }
+  }, [order]);
+
+  const patient = patients?.patients?.find((p) => p.id === patientId);
+  const age = patient ? new Date().getFullYear() - new Date(patient.dateOfBirth).getFullYear() : null;
+
+  const updateParam = (testIdx: number, paramIdx: number, field: keyof TestParameter, value: string) => {
+    setFindings((prev) => prev.map((f, fi) =>
+      fi !== testIdx ? f : {
+        ...f,
+        parameters: f.parameters.map((p, pi) =>
+          pi !== paramIdx ? p : { ...p, [field]: value }
+        ),
+      }
+    ));
+  };
+
+  const toggleCollapse = (idx: number) => {
+    setFindings((prev) => prev.map((f, i) => i === idx ? { ...f, collapsed: !f.collapsed } : f));
+  };
+
+  const updateRemarks = (idx: number, val: string) => {
+    setFindings((prev) => prev.map((f, i) => i === idx ? { ...f, remarks: val } : f));
+  };
+
+  // Voice readout
+  const speak = () => {
+    if (speaking) { window.speechSynthesis.cancel(); setSpeaking(false); return; }
+    if (!patient || !order) return;
+    const abnormal = findings.flatMap((f) =>
+      f.parameters.filter((p) => p.flag !== "normal" && p.result).map((p) => `${p.name}: ${p.result} ${p.unit}, ${p.flag}`)
+    );
+    const text = [
+      `Diagnostic Report for patient ${patient.firstName} ${patient.lastName}, ${age} years old.`,
+      `Order number ${order.orderNumber}, dated ${new Date(order.createdAt).toLocaleDateString()}.`,
+      abnormal.length > 0
+        ? `Abnormal findings: ${abnormal.join("; ")}.`
+        : "All findings are within normal limits.",
+      findings.map((f) => f.remarks).filter(Boolean).join(". "),
+    ].join(" ");
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-IN";
+    utterance.rate = 0.9;
+    utterance.onend = () => setSpeaking(false);
+    setSpeaking(true);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // Handle template upload & replace
+  const handleTemplateUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target?.result as string;
+      setTemplateContent(content);
+      setTemplateResult(applyFindingsToTemplate(content));
+    };
+    reader.readAsText(file);
+  };
+
+  const applyFindingsToTemplate = (content: string): string => {
+    let result = content;
+    if (patient) {
+      result = result
+        .replace(/\[PATIENT_NAME\]|\bPatient Name\b:\s*[^\n]*/gi, `Patient Name: ${patient.firstName} ${patient.lastName}`)
+        .replace(/\[PATIENT_ID\]|\bPatient ID\b:\s*[^\n]*/gi, `Patient ID: ${patient.patientId}`)
+        .replace(/\[AGE\]|\bAge\b:\s*[^\n]*/gi, `Age: ${age} Years`)
+        .replace(/\[GENDER\]|\bGender\b:\s*[^\n]*/gi, `Gender: ${patient.gender}`);
+    }
+    if (order) {
+      result = result.replace(/\[ORDER_NO\]|\bOrder No\b[.:]?\s*[^\n]*/gi, `Order No: ${order.orderNumber}`);
+      result = result.replace(/\[REPORT_DATE\]|\bReport Date\b[.:]?\s*[^\n]*/gi, `Report Date: ${new Date(reportDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`);
+      if (order.doctor) {
+        result = result.replace(/\[DOCTOR\]|\bRef(?:erring)? Doctor\b[.:]?\s*[^\n]*/gi, `Referring Doctor: ${order.doctor.name}`);
+      }
+    }
+    // Replace per-parameter values
+    findings.forEach((f) => {
+      f.parameters.forEach((p) => {
+        if (!p.result) return;
+        const displayVal = `${p.result} ${p.unit}${FLAG_PRINT[p.flag]}`.trim();
+        // Replace "Normal" near the parameter name
+        const safeParamName = p.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const paramPattern = new RegExp(`(${safeParamName}[^\\n]*?)(Normal|WNL|NIL|Nil|\\d+\\.?\\d*)`, "gi");
+        result = result.replace(paramPattern, `$1${displayVal}`);
+        // Also replace placeholders like [CBC_HEMOGLOBIN]
+        const placeholder = `[${f.testCode}_${p.name.toUpperCase().replace(/\s+/g, "_")}]`;
+        result = result.replace(placeholder, displayVal);
+      });
+    });
+    return result;
+  };
+
+  const reapplyTemplate = () => {
+    if (templateContent) setTemplateResult(applyFindingsToTemplate(templateContent));
+  };
+
+  // Export handlers
+  const handlePrint = () => window.print();
+
+  const handleDownloadHTML = () => {
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Diagnostic Report</title><style>
+      body{font-family:Arial,sans-serif;font-size:12px;margin:20px;color:#000}
+      table{width:100%;border-collapse:collapse;margin:8px 0}
+      th,td{border:1px solid #333;padding:6px 10px;text-align:left}
+      th{background:#f0f0f0;font-weight:bold}
+      h1{font-size:18px;text-align:center;text-transform:uppercase;letter-spacing:2px}
+      h2{font-size:13px;border-bottom:2px solid #333;padding-bottom:4px;margin-top:20px}
+      .flag-low{color:blue;font-weight:bold} .flag-high{color:red;font-weight:bold} .flag-critical{color:darkred;font-weight:900}
+    </style></head><body>${document.getElementById("report-preview")?.innerHTML ?? ""}</body></html>`;
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `report-${order?.orderNumber ?? "draft"}.html`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadText = () => {
+    if (!patient || !order) return;
+    const lines = [
+      "DIAGNOSTIC LABORATORY REPORT",
+      "=".repeat(60),
+      "",
+      "PATIENT INFORMATION",
+      "-".repeat(40),
+      `Name          : ${patient.firstName} ${patient.lastName}`,
+      `Patient ID    : ${patient.patientId}`,
+      `Age / Gender  : ${age} Yrs / ${patient.gender}`,
+      patient.bloodGroup ? `Blood Group   : ${patient.bloodGroup}` : "",
+      patient.phone ? `Phone         : ${patient.phone}` : "",
+      "",
+      "CLINICAL INFORMATION",
+      "-".repeat(40),
+      order.doctor ? `Referring Doctor : ${order.doctor.name} (${order.doctor.specialization})` : "Self Referred",
+      order.notes ? `Clinical Notes   : ${order.notes}` : "",
+      "",
+      "SAMPLE INFORMATION",
+      "-".repeat(40),
+      `Order Number  : ${order.orderNumber}`,
+      `Collection    : ${new Date(order.createdAt).toLocaleDateString("en-IN")}`,
+      `Report Date   : ${new Date(reportDate).toLocaleDateString("en-IN")}`,
+      "",
+      "TEST RESULTS",
+      "=".repeat(60),
+      ...findings.flatMap((f) => [
+        "",
+        `[${f.testCode}] ${f.testName.toUpperCase()}`,
+        "-".repeat(40),
+        ...f.parameters.map((p) =>
+          `${p.name.padEnd(30)} ${p.result ? (p.result + " " + p.unit + FLAG_PRINT[p.flag]).padEnd(20) : "—".padEnd(20)} Ref: ${p.refRange}`
+        ),
+        f.remarks ? `\nRemarks: ${f.remarks}` : "",
+      ]),
+      "",
+      "=".repeat(60),
+      "",
+      `Authorized By: ${labDirector}`,
+      "DiagnoCenter Laboratory",
+      `Report Date  : ${new Date(reportDate).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })}`,
+    ].filter((l) => l !== undefined);
+    const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `report-${order?.orderNumber ?? "draft"}.txt`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExport = () => {
+    if (outputFormat === "print") handlePrint();
+    else if (outputFormat === "html") handleDownloadHTML();
+    else handleDownloadText();
+  };
+
+  const abnormalCount = findings.reduce((n, f) => n + f.parameters.filter((p) => p.flag !== "normal").length, 0);
+
+  return (
+    <>
+      {/* Print CSS */}
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          .print-container { margin: 0; padding: 0; }
+          #report-preview { font-size: 11pt; }
+        }
+      `}</style>
+
+      <div className="pb-10">
+        <PageHeader title="Report Generator" subtitle="Create formatted diagnostic reports" />
+
+        <div className="px-6 space-y-5">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+            {/* ── Left Panel: Controls ── */}
+            <div className="no-print lg:col-span-1 space-y-4">
+
+              {/* Patient & Order */}
+              <div className="bg-card border border-card-border rounded-xl p-4 shadow-sm space-y-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Select Patient & Order</h3>
+                <div>
+                  <Label className="text-xs">Patient</Label>
+                  <Select onValueChange={(v) => { setPatientId(Number(v)); setOrderId(null); setFindings([]); }}>
+                    <SelectTrigger className="mt-1 h-8 text-xs"><SelectValue placeholder="Select patient..." /></SelectTrigger>
+                    <SelectContent>
+                      {patients?.patients?.map((p) => (
+                        <SelectItem key={p.id} value={String(p.id)}>
+                          {p.firstName} {p.lastName} ({p.patientId})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {patientId && (
+                  <div>
+                    <Label className="text-xs">Order</Label>
+                    <Select onValueChange={(v) => setOrderId(Number(v))}>
+                      <SelectTrigger className="mt-1 h-8 text-xs"><SelectValue placeholder="Select order..." /></SelectTrigger>
+                      <SelectContent>
+                        {orders?.orders?.map((o) => (
+                          <SelectItem key={o.id} value={String(o.id)}>
+                            {o.orderNumber} — {new Date(o.createdAt).toLocaleDateString()} ({o.status})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              {/* Lab Director */}
+              <div className="bg-card border border-card-border rounded-xl p-4 shadow-sm space-y-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Report Details</h3>
+                <div>
+                  <Label className="text-xs">Authorized By</Label>
+                  <Input value={labDirector} onChange={(e) => setLabDirector(e.target.value)} className="mt-1 h-8 text-xs" />
+                </div>
+                <div>
+                  <Label className="text-xs">Report Date</Label>
+                  <Input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} className="mt-1 h-8 text-xs" />
+                </div>
+              </div>
+
+              {/* Output Format */}
+              <div className="bg-card border border-card-border rounded-xl p-4 shadow-sm space-y-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Output Format</h3>
+                <div className="space-y-2">
+                  {(["print", "html", "text"] as const).map((fmt) => (
+                    <label key={fmt} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="format"
+                        value={fmt}
+                        checked={outputFormat === fmt}
+                        onChange={() => setOutputFormat(fmt)}
+                        className="accent-primary"
+                      />
+                      <span className="text-sm capitalize">
+                        {fmt === "print" ? "🖨 Print / Save as PDF" : fmt === "html" ? "🌐 HTML File" : "📄 Plain Text"}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <Button
+                  size="sm"
+                  className="w-full"
+                  disabled={!order}
+                  onClick={handleExport}
+                >
+                  <Printer size={13} className="mr-1.5" />
+                  {outputFormat === "print" ? "Print / PDF" : "Download"}
+                </Button>
+              </div>
+
+              {/* Voice */}
+              <div className="bg-card border border-card-border rounded-xl p-4 shadow-sm space-y-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Voice Readout</h3>
+                <p className="text-xs text-muted-foreground">Read aloud the report summary including abnormal findings.</p>
+                <Button
+                  size="sm"
+                  variant={speaking ? "destructive" : "outline"}
+                  className="w-full"
+                  disabled={!order}
+                  onClick={speak}
+                >
+                  {speaking ? <><VolumeX size={13} className="mr-1.5" />Stop Reading</> : <><Volume2 size={13} className="mr-1.5" />Read Report Aloud</>}
+                </Button>
+              </div>
+
+              {/* Upload Template */}
+              <div className="bg-card border border-card-border rounded-xl p-4 shadow-sm space-y-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Upload Template</h3>
+                <p className="text-xs text-muted-foreground">Upload a .txt or .html report template. Normal findings will be replaced with actual values.</p>
+                <input ref={fileInputRef} type="file" accept=".txt,.html,.htm" className="hidden" onChange={handleTemplateUpload} />
+                <Button size="sm" variant="outline" className="w-full" onClick={() => fileInputRef.current?.click()}>
+                  <Upload size={13} className="mr-1.5" /> Upload Template
+                </Button>
+                {templateContent && (
+                  <Button size="sm" variant="outline" className="w-full" onClick={reapplyTemplate}>
+                    Replace Findings
+                  </Button>
+                )}
+                {templateResult && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      const blob = new Blob([templateResult], { type: "text/plain" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a"); a.href = url; a.download = "report-filled.txt"; a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
+                    <Download size={13} className="mr-1.5" /> Download Filled Template
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* ── Right Panel: Report Preview + Findings Editor ── */}
+            <div className="lg:col-span-3 space-y-5">
+
+              {/* Abnormal badge */}
+              {abnormalCount > 0 && (
+                <div className="no-print flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800/40 rounded-lg">
+                  <AlertTriangle size={14} className="text-red-500" />
+                  <span className="text-sm font-medium text-red-700 dark:text-red-300">{abnormalCount} abnormal finding{abnormalCount > 1 ? "s" : ""} flagged</span>
+                </div>
+              )}
+
+              {/* Template result preview */}
+              {templateResult && (
+                <div className="bg-card border border-card-border rounded-xl shadow-sm overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2 bg-yellow-50 dark:bg-yellow-900/10 border-b border-yellow-200 dark:border-yellow-800/40">
+                    <span className="text-xs font-semibold text-yellow-700 dark:text-yellow-400">Filled Template Preview</span>
+                    <button className="text-xs text-muted-foreground hover:text-foreground" onClick={() => { setTemplateContent(null); setTemplateResult(null); }}>Dismiss</button>
+                  </div>
+                  <pre className="p-4 text-xs font-mono text-foreground overflow-x-auto whitespace-pre-wrap max-h-80 overflow-y-auto bg-muted/10">{templateResult}</pre>
+                </div>
+              )}
+
+              {/* Findings editor */}
+              {findings.length > 0 && (
+                <div className="no-print space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-foreground">Enter Test Findings</h3>
+                    <span className="text-xs text-muted-foreground">Values entered here appear in the report below</span>
+                  </div>
+                  {findings.map((f, fi) => (
+                    <div key={f.testId} className="bg-card border border-card-border rounded-xl shadow-sm overflow-hidden">
+                      <button
+                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors"
+                        onClick={() => toggleCollapse(fi)}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-primary">{f.testCode}</span>
+                          <span className="text-sm font-semibold text-foreground">{f.testName}</span>
+                          {f.parameters.some((p) => p.flag !== "normal") && (
+                            <span className="px-1.5 py-0.5 bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 rounded text-xs">
+                              {f.parameters.filter((p) => p.flag !== "normal").length} abnormal
+                            </span>
+                          )}
+                        </div>
+                        {f.collapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                      </button>
+                      {!f.collapsed && (
+                        <div className="border-t border-border">
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="bg-muted/30 text-muted-foreground">
+                                  <th className="px-3 py-2 font-medium text-left w-48">Parameter</th>
+                                  <th className="px-3 py-2 font-medium text-left w-28">Result</th>
+                                  <th className="px-3 py-2 font-medium text-left w-20">Unit</th>
+                                  <th className="px-3 py-2 font-medium text-left">Reference Range</th>
+                                  <th className="px-3 py-2 font-medium text-left w-28">Flag</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {f.parameters.map((p, pi) => (
+                                  <tr key={pi} className="border-t border-border/40">
+                                    <td className="px-3 py-1.5 font-medium text-foreground">{p.name}</td>
+                                    <td className="px-3 py-1.5">
+                                      <Input
+                                        value={p.result}
+                                        onChange={(e) => updateParam(fi, pi, "result", e.target.value)}
+                                        className="h-6 text-xs px-1.5 w-24"
+                                        placeholder="Enter value"
+                                      />
+                                    </td>
+                                    <td className="px-3 py-1.5">
+                                      <Input
+                                        value={p.unit}
+                                        onChange={(e) => updateParam(fi, pi, "unit", e.target.value)}
+                                        className="h-6 text-xs px-1.5 w-16"
+                                      />
+                                    </td>
+                                    <td className="px-3 py-1.5 text-muted-foreground text-xs">{p.refRange}</td>
+                                    <td className="px-3 py-1.5">
+                                      <Select value={p.flag} onValueChange={(v) => updateParam(fi, pi, "flag", v)}>
+                                        <SelectTrigger className="h-6 text-xs w-24">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="normal">Normal</SelectItem>
+                                          <SelectItem value="low">Low ↓</SelectItem>
+                                          <SelectItem value="high">High ↑</SelectItem>
+                                          <SelectItem value="critical">Critical ⚠</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          <div className="px-3 pb-3 pt-2">
+                            <Label className="text-xs text-muted-foreground">Remarks for this test</Label>
+                            <Textarea
+                              value={f.remarks}
+                              onChange={(e) => updateRemarks(fi, e.target.value)}
+                              className="mt-1 text-xs min-h-[48px]"
+                              placeholder="Add any interpretation or remarks..."
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* ── Report Preview (printable) ── */}
+              <div id="report-preview" ref={reportRef} className="bg-white dark:bg-card text-black dark:text-foreground border border-card-border rounded-xl shadow-sm overflow-hidden print-container">
+                {!order ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-muted-foreground space-y-2">
+                    <FileText size={36} className="opacity-30" />
+                    <p className="text-sm">Select a patient and order to generate a report</p>
+                  </div>
+                ) : (
+                  <div className="p-8 space-y-6 text-sm">
+
+                    {/* Header */}
+                    <div className="text-center border-b-2 border-gray-800 dark:border-gray-300 pb-4">
+                      <h1 className="text-xl font-black uppercase tracking-widest text-gray-900 dark:text-foreground">
+                        DiagnoCenter Laboratory
+                      </h1>
+                      <p className="text-xs text-gray-500 dark:text-muted-foreground mt-0.5">
+                        Pathology · Biochemistry · Haematology · Microbiology
+                      </p>
+                      <div className="mt-2 inline-block px-4 py-0.5 bg-gray-900 dark:bg-primary text-white text-xs font-bold uppercase tracking-widest rounded">
+                        Diagnostic Laboratory Report
+                      </div>
+                    </div>
+
+                    {/* Patient Info + Sample Info */}
+                    <div className="grid grid-cols-2 gap-6 text-xs border border-gray-200 dark:border-border rounded-lg overflow-hidden">
+                      <div className="p-4 space-y-1.5 border-r border-gray-200 dark:border-border">
+                        <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-muted-foreground mb-2">Patient Information</h2>
+                        <div className="flex gap-2">
+                          <span className="text-gray-500 dark:text-muted-foreground w-24 flex-shrink-0">Name</span>
+                          <span className="font-bold text-gray-900 dark:text-foreground">{patient?.firstName} {patient?.lastName}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <span className="text-gray-500 dark:text-muted-foreground w-24 flex-shrink-0">Patient ID</span>
+                          <span className="font-mono font-semibold">{patient?.patientId}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <span className="text-gray-500 dark:text-muted-foreground w-24 flex-shrink-0">Age / Gender</span>
+                          <span>{age} Yrs / <span className="capitalize">{patient?.gender}</span></span>
+                        </div>
+                        {patient?.bloodGroup && (
+                          <div className="flex gap-2">
+                            <span className="text-gray-500 dark:text-muted-foreground w-24 flex-shrink-0">Blood Group</span>
+                            <span className="font-bold text-red-600">{patient.bloodGroup}</span>
+                          </div>
+                        )}
+                        {patient?.phone && (
+                          <div className="flex gap-2">
+                            <span className="text-gray-500 dark:text-muted-foreground w-24 flex-shrink-0">Phone</span>
+                            <span>{patient.phone}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="p-4 space-y-1.5">
+                        <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-muted-foreground mb-2">Sample Information</h2>
+                        <div className="flex gap-2">
+                          <span className="text-gray-500 dark:text-muted-foreground w-24 flex-shrink-0">Order No</span>
+                          <span className="font-mono font-bold text-blue-700 dark:text-primary">{order.orderNumber}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <span className="text-gray-500 dark:text-muted-foreground w-24 flex-shrink-0">Collected</span>
+                          <span>{new Date(order.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <span className="text-gray-500 dark:text-muted-foreground w-24 flex-shrink-0">Report Date</span>
+                          <span>{new Date(reportDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <span className="text-gray-500 dark:text-muted-foreground w-24 flex-shrink-0">Ref. Doctor</span>
+                          <span className="font-medium">{order.doctor ? `${order.doctor.name}` : "Self Referred"}</span>
+                        </div>
+                        {order.doctor?.specialization && (
+                          <div className="flex gap-2">
+                            <span className="text-gray-500 dark:text-muted-foreground w-24 flex-shrink-0">Specialization</span>
+                            <span>{order.doctor.specialization}</span>
+                          </div>
+                        )}
+                        {order.notes && (
+                          <div className="flex gap-2">
+                            <span className="text-gray-500 dark:text-muted-foreground w-24 flex-shrink-0">Clinical Notes</span>
+                            <span className="italic">{order.notes}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Test Results */}
+                    <div className="space-y-5">
+                      <h2 className="text-sm font-bold uppercase tracking-wider border-b-2 border-gray-800 dark:border-gray-300 pb-1">
+                        Test Results
+                      </h2>
+
+                      {findings.map((f) => (
+                        <div key={f.testId}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="px-2 py-0.5 bg-gray-800 dark:bg-primary text-white text-xs font-bold rounded">{f.testCode}</span>
+                            <h3 className="text-xs font-bold uppercase tracking-wide text-gray-700 dark:text-foreground">{f.testName}</h3>
+                          </div>
+
+                          <table className="w-full text-xs border border-gray-300 dark:border-border rounded overflow-hidden">
+                            <thead>
+                              <tr className="bg-gray-100 dark:bg-muted/50 text-gray-700 dark:text-muted-foreground">
+                                <th className="px-3 py-2 text-left font-semibold border-b border-gray-300 dark:border-border w-1/3">Parameter</th>
+                                <th className="px-3 py-2 text-left font-semibold border-b border-gray-300 dark:border-border w-1/5">Result</th>
+                                <th className="px-3 py-2 text-left font-semibold border-b border-gray-300 dark:border-border w-1/8">Unit</th>
+                                <th className="px-3 py-2 text-left font-semibold border-b border-gray-300 dark:border-border">Reference Range</th>
+                                <th className="px-3 py-2 text-center font-semibold border-b border-gray-300 dark:border-border w-16">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {f.parameters.map((p, pi) => (
+                                <tr
+                                  key={pi}
+                                  className={`border-b border-gray-200 dark:border-border/50 last:border-0 ${p.flag !== "normal" ? "bg-red-50 dark:bg-red-900/5" : ""}`}
+                                >
+                                  <td className="px-3 py-2 font-medium text-gray-800 dark:text-foreground">{p.name}</td>
+                                  <td className={`px-3 py-2 font-bold ${FLAG_STYLES[p.flag]}`}>
+                                    {p.result || <span className="text-gray-300 dark:text-muted-foreground/30 font-normal">—</span>}
+                                  </td>
+                                  <td className="px-3 py-2 text-gray-500 dark:text-muted-foreground">{p.unit}</td>
+                                  <td className="px-3 py-2 text-gray-500 dark:text-muted-foreground">{p.refRange}</td>
+                                  <td className="px-3 py-2 text-center">
+                                    {p.flag === "normal" ? (
+                                      <CheckCircle2 size={13} className="text-green-500 inline" />
+                                    ) : p.flag === "critical" ? (
+                                      <XCircle size={13} className="text-red-600 inline" />
+                                    ) : (
+                                      <AlertTriangle size={13} className={`inline ${p.flag === "high" ? "text-red-500" : "text-blue-500"}`} />
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+
+                          {f.remarks && (
+                            <div className="mt-1.5 px-3 py-1.5 bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-800/30 rounded text-xs text-gray-700 dark:text-foreground">
+                              <span className="font-semibold">Remarks: </span>{f.remarks}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Summary of Abnormal Findings */}
+                    {abnormalCount > 0 && (
+                      <div className="border border-red-300 dark:border-red-800/40 rounded-lg p-4 bg-red-50 dark:bg-red-900/10">
+                        <h2 className="text-xs font-bold uppercase tracking-wider text-red-700 dark:text-red-400 mb-2">
+                          Summary of Abnormal Findings
+                        </h2>
+                        <ul className="space-y-1">
+                          {findings.flatMap((f) =>
+                            f.parameters.filter((p) => p.flag !== "normal" && p.result).map((p, i) => (
+                              <li key={`${f.testId}-${i}`} className="text-xs flex items-start gap-1.5">
+                                <AlertTriangle size={11} className={`mt-0.5 flex-shrink-0 ${p.flag === "critical" ? "text-red-700" : p.flag === "high" ? "text-red-500" : "text-blue-500"}`} />
+                                <span>
+                                  <span className="font-semibold">{p.name}</span>: {p.result} {p.unit}
+                                  <span className={`ml-1 font-bold ${FLAG_STYLES[p.flag]}`}>({p.flag.toUpperCase()})</span>
+                                  {p.refRange && <span className="text-gray-500 dark:text-muted-foreground ml-1">— Ref: {p.refRange}</span>}
+                                </span>
+                              </li>
+                            ))
+                          )}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Footer / Signature */}
+                    <div className="border-t-2 border-gray-800 dark:border-gray-300 pt-4">
+                      <div className="flex justify-between items-end">
+                        <div className="text-xs text-gray-500 dark:text-muted-foreground space-y-0.5">
+                          <p>This report is generated electronically and is valid without signature.</p>
+                          <p>For queries, contact the laboratory.</p>
+                        </div>
+                        <div className="text-right text-xs">
+                          <div className="border-t border-gray-500 dark:border-gray-400 pt-1 mt-8 w-44">
+                            <p className="font-bold text-gray-800 dark:text-foreground">{labDirector}</p>
+                            <p className="text-gray-500 dark:text-muted-foreground">Laboratory Director</p>
+                            <p className="text-gray-500 dark:text-muted-foreground">DiagnoCenter Laboratory</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                )}
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}

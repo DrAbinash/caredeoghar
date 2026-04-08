@@ -14,6 +14,7 @@ import BillDetail from "@/pages/BillDetail";
 import Payments from "@/pages/Payments";
 import Doctors from "@/pages/Doctors";
 import Reports from "@/pages/Reports";
+import ReportGenerator from "@/pages/ReportGenerator";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -46,6 +47,7 @@ function Router() {
         <Route path="/payments" component={Payments} />
         <Route path="/doctors" component={Doctors} />
         <Route path="/reports" component={Reports} />
+        <Route path="/report-generator" component={ReportGenerator} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
