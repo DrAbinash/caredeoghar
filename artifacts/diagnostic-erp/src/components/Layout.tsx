@@ -14,6 +14,9 @@ import {
   Sun,
   Activity,
   FilePen,
+  Package,
+  HandCoins,
+  BookOpen,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -29,6 +32,9 @@ const navItems = [
   { path: "/doctors", icon: Stethoscope, label: "Doctors" },
   { path: "/reports", icon: BarChart3, label: "Reports" },
   { path: "/report-generator", icon: FilePen, label: "Report Generator" },
+  { path: "/inventory", icon: Package, label: "Inventory" },
+  { path: "/referrals", icon: HandCoins, label: "Referrals" },
+  { path: "/accounting", icon: BookOpen, label: "Accounting" },
 ];
 
 function ThemeToggle() {

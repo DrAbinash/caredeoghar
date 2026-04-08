@@ -6,6 +6,9 @@ import { testsRouter } from "./tests";
 import { ordersRouter } from "./orders";
 import { billsRouter, paymentsRouter } from "./bills";
 import { reportsRouter } from "./reports";
+import inventoryRouter from "./inventory";
+import accountingRouter from "./accounting";
+import commissionRouter from "./commission";
 
 const router: IRouter = Router();
 
@@ -17,5 +20,8 @@ router.use("/orders", ordersRouter);
 router.use("/bills", billsRouter);
 router.use("/payments", paymentsRouter);
 router.use("/reports", reportsRouter);
+router.use("/inventory", inventoryRouter);
+router.use("/accounting", accountingRouter);
+router.use("/commission", commissionRouter);
 
 export default router;

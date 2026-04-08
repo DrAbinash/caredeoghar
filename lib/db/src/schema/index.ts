@@ -3,3 +3,6 @@ export * from "./doctors";
 export * from "./tests";
 export * from "./orders";
 export * from "./bills";
+export * from "./inventory";
+export * from "./accounting";
+export * from "./commission";

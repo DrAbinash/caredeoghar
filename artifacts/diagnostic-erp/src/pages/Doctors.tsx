@@ -15,15 +15,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, Search, Stethoscope, Phone, Building2 } from "lucide-react";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { Plus, Search, Stethoscope, Phone, Building2, Mail, IndianRupee, Percent } from "lucide-react";
 import { useForm } from "react-hook-form";
 
 type DoctorForm = {
   name: string;
   specialization: string;
   phone?: string;
+  email?: string;
   hospitalAffiliation?: string;
+  defaultCommissionType: string;
+  defaultCommission: string;
 };
+
+const inr = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
 
 export default function Doctors() {
   const [search, setSearch] = useState("");
@@ -41,9 +49,18 @@ export default function Doctors() {
     },
   });
 
-  const { register, handleSubmit, reset } = useForm<DoctorForm>();
+  const { register, handleSubmit, reset, setValue, watch } = useForm<DoctorForm>({
+    defaultValues: { defaultCommissionType: "percentage", defaultCommission: "0" },
+  });
+  const commType = watch("defaultCommissionType");
+
   const onSubmit = (data: DoctorForm) => {
-    createDoctor.mutate({ data });
+    createDoctor.mutate({
+      data: {
+        ...data,
+        defaultCommission: data.defaultCommission || "0",
+      } as Parameters<typeof createDoctor.mutate>[0]["data"],
+    });
   };
 
   return (
@@ -72,29 +89,44 @@ export default function Doctors() {
           <div className="text-center py-12 text-muted-foreground">No doctors found</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {data?.doctors?.map((d) => (
-              <div key={d.id} className="bg-card border border-card-border rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <Stethoscope size={18} className="text-primary" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-semibold text-foreground truncate">{d.name}</p>
-                    <p className="text-xs text-primary font-medium mt-0.5">{d.specialization}</p>
-                    {d.phone && (
-                      <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
-                        <Phone size={11} /> {d.phone}
-                      </div>
-                    )}
-                    {d.hospitalAffiliation && (
-                      <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
-                        <Building2 size={11} /> {d.hospitalAffiliation}
-                      </div>
-                    )}
+            {data?.doctors?.map((d) => {
+              const defComm = Number((d as unknown as Record<string, string>).defaultCommission ?? 0);
+              const defType = (d as unknown as Record<string, string>).defaultCommissionType ?? "percentage";
+              return (
+                <div key={d.id} className="bg-card border border-card-border rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <Stethoscope size={18} className="text-primary" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-foreground truncate">{d.name}</p>
+                      <p className="text-xs text-primary font-medium mt-0.5">{d.specialization}</p>
+                      {d.phone && (
+                        <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
+                          <Phone size={11} /> {d.phone}
+                        </div>
+                      )}
+                      {(d as unknown as Record<string, string>).email && (
+                        <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
+                          <Mail size={11} /> {(d as unknown as Record<string, string>).email}
+                        </div>
+                      )}
+                      {d.hospitalAffiliation && (
+                        <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
+                          <Building2 size={11} /> {d.hospitalAffiliation}
+                        </div>
+                      )}
+                      {defComm > 0 && (
+                        <div className="flex items-center gap-1.5 mt-1 text-xs text-amber-600 font-medium">
+                          {defType === "percentage" ? <Percent size={11} /> : <IndianRupee size={11} />}
+                          Default: {defType === "percentage" ? `${defComm}%` : inr(defComm)}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -113,13 +145,38 @@ export default function Doctors() {
               <Label>Specialization *</Label>
               <Input {...register("specialization", { required: true })} className="mt-1" placeholder="e.g. Cardiologist" />
             </div>
-            <div>
-              <Label>Phone</Label>
-              <Input {...register("phone")} className="mt-1" />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Phone</Label>
+                <Input {...register("phone")} className="mt-1" />
+              </div>
+              <div>
+                <Label>Email</Label>
+                <Input type="email" {...register("email")} className="mt-1" />
+              </div>
             </div>
             <div>
               <Label>Hospital / Clinic Affiliation</Label>
               <Input {...register("hospitalAffiliation")} className="mt-1" />
+            </div>
+            <div className="border border-dashed border-input rounded-lg p-3 space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase">Default Commission</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Type</Label>
+                  <Select defaultValue="percentage" onValueChange={(v) => setValue("defaultCommissionType", v)}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="percentage">Percentage (%)</SelectItem>
+                      <SelectItem value="fixed">Fixed Amount (₹)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">{commType === "percentage" ? "%" : "₹"} Value</Label>
+                  <Input type="number" step="any" min="0" {...register("defaultCommission")} className="mt-1" defaultValue="0" />
+                </div>
+              </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>

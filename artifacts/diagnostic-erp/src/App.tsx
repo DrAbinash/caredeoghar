@@ -15,6 +15,9 @@ import Payments from "@/pages/Payments";
 import Doctors from "@/pages/Doctors";
 import Reports from "@/pages/Reports";
 import ReportGenerator from "@/pages/ReportGenerator";
+import Inventory from "@/pages/Inventory";
+import Referrals from "@/pages/Referrals";
+import Accounting from "@/pages/Accounting";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -48,6 +51,9 @@ function Router() {
         <Route path="/doctors" component={Doctors} />
         <Route path="/reports" component={Reports} />
         <Route path="/report-generator" component={ReportGenerator} />
+        <Route path="/inventory" component={Inventory} />
+        <Route path="/referrals" component={Referrals} />
+        <Route path="/accounting" component={Accounting} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
