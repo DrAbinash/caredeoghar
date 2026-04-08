@@ -23,6 +23,7 @@ import {
 type AppUser = {
   id: number; name: string; email: string; role: string;
   permissions: string | null; pin: string | null; isActive: boolean;
+  maxDiscount: number | null;
 };
 
 type EmailSettings = {
@@ -35,10 +36,11 @@ type EmailSettings = {
 
 /* ── Constants ──────────────────────────────────────────────── */
 
-const ROLES = ["admin", "manager", "billing", "lab", "receptionist"];
+const ROLES = ["admin", "manager", "accountant", "billing", "lab", "receptionist"];
 const ROLE_COLORS: Record<string, string> = {
   admin: "bg-red-100 text-red-700",
   manager: "bg-purple-100 text-purple-700",
+  accountant: "bg-indigo-100 text-indigo-700",
   billing: "bg-blue-100 text-blue-700",
   lab: "bg-green-100 text-green-700",
   receptionist: "bg-amber-100 text-amber-700",
@@ -57,12 +59,14 @@ const ALL_MODULES = [
   { path: "/inventory", label: "Inventory" },
   { path: "/referrals", label: "Referrals" },
   { path: "/accounting", label: "Accounting" },
+  { path: "/discounts", label: "Discounts" },
   { path: "/settings", label: "Settings" },
 ];
 const DEFAULT_PERMISSIONS: Record<string, string[]> = {
   admin: ALL_MODULES.map(m => m.path),
-  manager: ["/", "/patients", "/billing", "/payments", "/doctors", "/reports", "/referrals", "/accounting", "/register"],
-  billing: ["/", "/patients", "/billing", "/payments", "/register"],
+  manager: ["/", "/patients", "/billing", "/payments", "/doctors", "/reports", "/referrals", "/accounting", "/register", "/discounts"],
+  accountant: ["/", "/accounting", "/reports", "/billing", "/payments"],
+  billing: ["/", "/patients", "/billing", "/payments", "/register", "/discounts"],
   lab: ["/orders", "/tests", "/report-generator", "/inventory"],
   receptionist: ["/", "/patients", "/orders", "/register"],
 };
@@ -134,26 +138,31 @@ function UsersTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
   });
 
   const { register, handleSubmit, reset, setValue, watch } = useForm<{
-    name: string; email: string; role: string; pin: string;
+    name: string; email: string; role: string; pin: string; maxDiscount: string;
   }>();
 
   const openAdd = () => {
     setEditUser(null);
     setSelectedPerms(DEFAULT_PERMISSIONS["receptionist"]);
-    reset({ role: "receptionist" });
+    reset({ role: "receptionist", maxDiscount: "" });
     setOpen(true);
   };
   const openEdit = (u: AppUser) => {
     setEditUser(u);
     setSelectedPerms(u.permissions ? JSON.parse(u.permissions) : DEFAULT_PERMISSIONS[u.role] ?? []);
-    reset({ name: u.name, email: u.email, role: u.role, pin: u.pin ?? "" });
+    reset({ name: u.name, email: u.email, role: u.role, pin: u.pin ?? "", maxDiscount: u.maxDiscount != null ? String(u.maxDiscount) : "" });
     setOpen(true);
   };
   const togglePerm = (path: string) =>
     setSelectedPerms(prev => prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]);
 
   const onSave = handleSubmit((d) => {
-    saveUser.mutate({ ...d, permissions: selectedPerms, pin: d.pin || null });
+    saveUser.mutate({
+      ...d,
+      permissions: selectedPerms,
+      pin: d.pin || null,
+      maxDiscount: d.maxDiscount !== "" ? Number(d.maxDiscount) : null,
+    });
   });
 
   return (
@@ -238,8 +247,9 @@ function UsersTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
             {[
               { role: "admin", desc: "Full access to all modules" },
-              { role: "manager", desc: "Reports, billing, referrals, accounting" },
-              { role: "billing", desc: "Patients, billing, payments, quick register" },
+              { role: "manager", desc: "Reports, billing, referrals, accounting, discounts" },
+              { role: "accountant", desc: "Accounting, reports, billing & payments view" },
+              { role: "billing", desc: "Patients, billing, payments, quick register, discounts" },
               { role: "lab", desc: "Orders, test catalog, report generator, inventory" },
               { role: "receptionist", desc: "Patients, orders, quick register" },
             ].map(r => (
@@ -271,6 +281,11 @@ function UsersTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
                 </Select>
               </div>
               <div><Label>PIN (4 digits)</Label><Input type="text" maxLength={4} pattern="[0-9]{4}" {...register("pin")} className="mt-1" placeholder="Optional" /></div>
+            </div>
+            <div>
+              <Label>Max Discount Allowed (%)</Label>
+              <Input type="number" min="0" max="100" step="1" {...register("maxDiscount")} className="mt-1" placeholder="e.g. 30 (blank = no limit)" />
+              <p className="text-xs text-muted-foreground mt-1">Maximum discount % this user can apply during billing. Leave blank for no restriction.</p>
             </div>
             <div>
               <div className="flex items-center justify-between mb-2">

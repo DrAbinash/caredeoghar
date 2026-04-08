@@ -20,6 +20,7 @@ import Referrals from "@/pages/Referrals";
 import Accounting from "@/pages/Accounting";
 import Register from "@/pages/Register";
 import Settings from "@/pages/Settings";
+import Discounts from "@/pages/Discounts";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -57,6 +58,7 @@ function Router() {
         <Route path="/referrals" component={Referrals} />
         <Route path="/accounting" component={Accounting} />
         <Route path="/register" component={Register} />
+        <Route path="/discounts" component={Discounts} />
         <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>

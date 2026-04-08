@@ -1,13 +1,57 @@
+import { useState } from "react";
 import { Link } from "wouter";
 import { useGetPatient, useGetPatientHistory } from "@workspace/api-client-react";
+import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, User, Phone, MapPin, Droplet } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  ArrowLeft, User, Phone, MapPin, Droplet, Sparkles,
+  Copy, CheckCheck, MessageSquare, FileText,
+} from "lucide-react";
+
+type AIType = "clinical-note" | "patient-message";
+type MessageType = "followup" | "results" | "payment";
 
 export default function PatientDetail({ id }: { id: number }) {
   const { data: patient, isLoading } = useGetPatient(id);
   const { data: history } = useGetPatientHistory(id);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiType, setAiType] = useState<AIType>("clinical-note");
+  const [msgType, setMsgType] = useState<MessageType>("followup");
+  const [aiResult, setAiResult] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const generateAI = async (type: AIType, mtype?: MessageType) => {
+    setAiType(type);
+    setAiResult("");
+    setAiOpen(true);
+    setAiLoading(true);
+    try {
+      if (type === "clinical-note") {
+        const res = await api.post("/api/ai/clinical-note", { patientId: id });
+        setAiResult(res.note);
+      } else {
+        const res = await api.post("/api/ai/patient-message", { patientId: id, type: mtype ?? msgType });
+        setAiResult(res.message);
+      }
+    } catch {
+      setAiResult("Failed to generate. Please try again.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const copyResult = () => {
+    navigator.clipboard.writeText(aiResult);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   if (isLoading) {
     return <div className="p-6 animate-pulse"><div className="h-8 bg-muted rounded w-64" /></div>;
@@ -30,9 +74,17 @@ export default function PatientDetail({ id }: { id: number }) {
         title={`${patient.firstName} ${patient.lastName}`}
         subtitle={patient.patientId}
         actions={
-          <Link href={`/orders?patientId=${id}`} asChild>
-            <Button size="sm">New Order</Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => { setMsgType("followup"); generateAI("patient-message", "followup"); }}>
+              <MessageSquare size={14} className="mr-1.5" />AI Message
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => generateAI("clinical-note")}>
+              <Sparkles size={14} className="mr-1.5" />Clinical Note
+            </Button>
+            <Link href={`/orders?patientId=${id}`} asChild>
+              <Button size="sm">New Order</Button>
+            </Link>
+          </div>
         }
       />
 
@@ -73,6 +125,27 @@ export default function PatientDetail({ id }: { id: number }) {
           </div>
         </div>
 
+        {/* AI Message quick buttons */}
+        <div className="bg-gradient-to-r from-violet-50 to-blue-50 dark:from-violet-950/20 dark:to-blue-950/20 border border-violet-200 dark:border-violet-800 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles size={15} className="text-violet-600" />
+            <p className="text-sm font-semibold text-violet-800 dark:text-violet-300">AI Patient Communication</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {([
+              { type: "followup" as MessageType, label: "Follow-up Reminder" },
+              { type: "results" as MessageType, label: "Results Ready" },
+              { type: "payment" as MessageType, label: "Payment Reminder" },
+            ]).map(({ type, label }) => (
+              <Button key={type} size="sm" variant="outline"
+                className="border-violet-300 text-violet-700 hover:bg-violet-100 dark:border-violet-700 dark:text-violet-300"
+                onClick={() => { setMsgType(type); generateAI("patient-message", type); }}>
+                {label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
         {/* Order history */}
         <div>
           <h2 className="text-sm font-semibold text-foreground mb-3">Test Order History</h2>
@@ -110,6 +183,48 @@ export default function PatientDetail({ id }: { id: number }) {
           </div>
         </div>
       </div>
+
+      {/* AI Result Dialog */}
+      <Dialog open={aiOpen} onOpenChange={setAiOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles size={16} className="text-violet-500" />
+              {aiType === "clinical-note" ? "AI Clinical Note" : `AI Message — ${msgType.replace("-", " ").replace(/\b\w/g, c => c.toUpperCase())}`}
+            </DialogTitle>
+          </DialogHeader>
+          {aiLoading ? (
+            <div className="space-y-2 animate-pulse py-4">
+              <div className="h-4 bg-muted rounded w-full" />
+              <div className="h-4 bg-muted rounded w-5/6" />
+              <div className="h-4 bg-muted rounded w-4/6" />
+              <p className="text-xs text-center text-muted-foreground mt-3">Generating with AI…</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="bg-muted/40 rounded-lg p-4 text-sm leading-relaxed whitespace-pre-wrap">{aiResult}</div>
+              <div className="flex justify-between items-center">
+                <Button size="sm" variant="outline" onClick={copyResult}>
+                  {copied ? <><CheckCheck size={13} className="mr-1.5 text-green-600" />Copied!</> : <><Copy size={13} className="mr-1.5" />Copy</>}
+                </Button>
+                {aiType === "patient-message" && (
+                  <div className="flex gap-1.5">
+                    {(["followup", "results", "payment"] as MessageType[]).map(t => (
+                      <Button key={t} size="sm" variant={msgType === t ? "default" : "outline"}
+                        onClick={() => { setMsgType(t); generateAI("patient-message", t); }}>
+                        {t.charAt(0).toUpperCase() + t.slice(1)}
+                      </Button>
+                    ))}
+                  </div>
+                )}
+                {aiType === "clinical-note" && (
+                  <Button size="sm" variant="outline" onClick={() => generateAI("clinical-note")}>Regenerate</Button>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

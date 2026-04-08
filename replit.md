@@ -37,19 +37,33 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - **Billing** — bill generation and management; bill edit with audit trail; audit history viewer
 - **Payments** — payment recording (cash/card/UPI/insurance/cheque)
 - **Doctors** — referring doctor management (name, specialization, phone, email, hospital, default commission)
-- **Reports** — analytics with 3 tabs: Overview, Test Analysis, Commission Report
+- **Reports** — analytics with 4 tabs: Overview, Test Analysis, Commission Report, **AI Insights** (Gemini-powered billing trend analysis)
 - **Report Generator** — formatted diagnostic report creation with PDF/HTML/text export and voice readout
 - **Inventory** — stock management (items, stock in/out/adjust, history, low-stock alerts, consumption rules per test)
 - **Referrals** — doctor commission rules (percentage/fixed, per-test/category/all scope, exclusive rules) + payout report
 - **Accounting** — chart of accounts, payment/receipt/bank-transfer/journal vouchers, ledger, Tally XML export
-- **Settings** (`/settings`) — User management with roles (admin/manager/billing/lab/receptionist) and per-module permissions
+- **Discounts** (`/discounts`) — discount rules: percentage/fixed, scope (all/category/test), expiry date, active/inactive toggle
+- **Settings** (`/settings`) — User management with roles (admin/manager/accountant/billing/lab/receptionist), per-module permissions, per-user max discount % cap
+- **PatientDetail** — AI Clinical Note generation + AI patient message drafting (follow-up/results/payment) via Gemini
+
+### AI Features (Gemini via Replit AI Integrations)
+- Clinical note generation for patients (POST /api/ai/clinical-note)
+- Billing insights analysis (POST /api/ai/billing-insights)
+- Patient communication drafting (POST /api/ai/patient-message)
+- Uses direct fetch to Gemini REST API with AI_INTEGRATIONS_GEMINI_BASE_URL + AI_INTEGRATIONS_GEMINI_API_KEY
+
+### Quick Register — Discount Integration
+- When proceeding to billing step, auto-fetches applicable discount rules
+- Shows suggestion card with "Apply" button if a matching rule is found
+- Shows discount reason field when a discount is applied
 
 ### DB Tables
 - `inventory_items`, `inventory_transactions`, `inventory_consumption_rules`
 - `commission_rules`
 - `accounts`, `vouchers`
-- `users` — name, email, role, permissions (JSON), PIN, isActive
+- `users` — name, email, role, permissions (JSON), PIN, isActive, maxDiscount (numeric)
 - `bill_audits` — audit trail for bill edits (who changed what, when, why)
+- `discount_rules` — name, type (percentage/fixed), value, scope, categories (JSON), testIds (JSON), expiresAt, isActive
 - Extended `doctors` with: `email`, `default_commission`, `default_commission_type`
 
 ### API Routes

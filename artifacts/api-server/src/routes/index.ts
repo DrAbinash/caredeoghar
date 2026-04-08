@@ -11,6 +11,8 @@ import accountingRouter from "./accounting";
 import commissionRouter from "./commission";
 import usersRouter from "./users";
 import emailSettingsRouter from "./email-settings";
+import discountsRouter from "./discounts";
+import aiRouter from "./ai";
 
 const router: IRouter = Router();
 
@@ -27,5 +29,7 @@ router.use("/accounting", accountingRouter);
 router.use("/commission", commissionRouter);
 router.use("/users", usersRouter);
 router.use("/email-settings", emailSettingsRouter);
+router.use("/discounts", discountsRouter);
+router.use("/ai", aiRouter);
 
 export default router;

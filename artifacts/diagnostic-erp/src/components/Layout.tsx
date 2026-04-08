@@ -19,6 +19,7 @@ import {
   BookOpen,
   UserPlus,
   Settings2,
+  Tag,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,7 @@ const navItems = [
   { path: "/inventory", icon: Package, label: "Inventory" },
   { path: "/referrals", icon: HandCoins, label: "Referrals" },
   { path: "/accounting", icon: BookOpen, label: "Accounting" },
+  { path: "/discounts", icon: Tag, label: "Discounts" },
   { path: "/settings", icon: Settings2, label: "Settings" },
 ];
 

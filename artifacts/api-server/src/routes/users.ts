@@ -5,12 +5,13 @@ import { eq } from "drizzle-orm";
 
 const router = Router();
 
-const ROLES = ["admin", "manager", "billing", "lab", "receptionist"];
+const ROLES = ["admin", "manager", "accountant", "billing", "lab", "receptionist"];
 
 const DEFAULT_PERMISSIONS: Record<string, string[]> = {
-  admin: ["/", "/patients", "/orders", "/tests", "/billing", "/payments", "/doctors", "/reports", "/report-generator", "/inventory", "/referrals", "/accounting", "/settings", "/register"],
-  manager: ["/", "/patients", "/orders", "/billing", "/payments", "/doctors", "/reports", "/referrals", "/accounting", "/register"],
-  billing: ["/", "/patients", "/billing", "/payments", "/register"],
+  admin: ["/", "/patients", "/orders", "/tests", "/billing", "/payments", "/doctors", "/reports", "/report-generator", "/inventory", "/referrals", "/accounting", "/discounts", "/settings", "/register"],
+  manager: ["/", "/patients", "/orders", "/billing", "/payments", "/doctors", "/reports", "/referrals", "/accounting", "/discounts", "/register"],
+  accountant: ["/", "/accounting", "/reports", "/billing", "/payments"],
+  billing: ["/", "/patients", "/billing", "/payments", "/register", "/discounts"],
   lab: ["/orders", "/tests", "/report-generator", "/inventory"],
   receptionist: ["/", "/patients", "/orders", "/register"],
 };
@@ -21,15 +22,15 @@ router.get("/", async (_req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const { name, email, role, permissions, pin } = req.body;
+  const { name, email, role, permissions, pin, maxDiscount } = req.body;
   if (!name || !email || !role) return res.status(400).json({ error: "name, email and role are required" });
 
   const perms = permissions ?? DEFAULT_PERMISSIONS[role] ?? DEFAULT_PERMISSIONS.receptionist;
   const [user] = await db
     .insert(usersTable)
-    .values({ name, email, role, permissions: JSON.stringify(perms), pin: pin || null })
+    .values({ name, email, role, permissions: JSON.stringify(perms), pin: pin || null, maxDiscount: maxDiscount != null ? String(maxDiscount) : null })
     .returning();
-  res.status(201).json({ ...user, pin: undefined });
+  res.status(201).json({ ...user, pin: undefined, maxDiscount: user.maxDiscount != null ? Number(user.maxDiscount) : null });
 });
 
 router.patch("/:id", async (req, res) => {
@@ -41,10 +42,11 @@ router.patch("/:id", async (req, res) => {
   if (req.body.permissions !== undefined) updates.permissions = JSON.stringify(req.body.permissions);
   if (req.body.pin !== undefined) updates.pin = req.body.pin;
   if (req.body.isActive !== undefined) updates.isActive = req.body.isActive;
+  if (req.body.maxDiscount !== undefined) updates.maxDiscount = req.body.maxDiscount != null ? String(req.body.maxDiscount) : null;
 
   const [user] = await db.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning();
   if (!user) return res.status(404).json({ error: "User not found" });
-  res.json({ ...user, pin: undefined });
+  res.json({ ...user, pin: undefined, maxDiscount: user.maxDiscount != null ? Number(user.maxDiscount) : null });
 });
 
 router.delete("/:id", async (req, res) => {

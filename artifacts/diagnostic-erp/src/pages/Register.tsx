@@ -19,7 +19,7 @@ import {
 import { useForm } from "react-hook-form";
 import {
   User2, FlaskConical, Receipt, CheckCircle2, Plus, X, ChevronRight,
-  Search, IndianRupee,
+  Search, IndianRupee, Tag, Zap,
 } from "lucide-react";
 
 type Doctor = { id: number; name: string; specialization: string };
@@ -43,6 +43,9 @@ export default function Register() {
   const [payNow, setPayNow] = useState(true);
   const [createdBillId, setCreatedBillId] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
+  const [discountReason, setDiscountReason] = useState("");
+  const [discountSuggestion, setDiscountSuggestion] = useState<{ discount: number; rule: { id: number; name: string; reason: string | null } | null } | null>(null);
+  const [loadingSuggestion, setLoadingSuggestion] = useState(false);
 
   const { data: testsData } = useListTests({});
   const { data: doctors = [] } = useQuery<Doctor[]>({
@@ -79,9 +82,21 @@ export default function Register() {
   });
 
   // Step 2: Tests selection → Step 3
-  const proceedToBilling = () => {
+  const proceedToBilling = async () => {
     if (selectedTests.length === 0) return;
     setStep(3);
+    // Fetch applicable discount suggestion
+    setLoadingSuggestion(true);
+    try {
+      const result = await api.post("/api/discounts/apply", {
+        tests: selectedTests.map(t => ({ testId: t.testId, category: t.category, price: t.price })),
+      });
+      setDiscountSuggestion(result);
+    } catch {
+      setDiscountSuggestion(null);
+    } finally {
+      setLoadingSuggestion(false);
+    }
   };
 
   // Step 3: Create order + bill + payment
@@ -356,6 +371,35 @@ export default function Register() {
               </div>
             </div>
 
+            {/* Discount Rule Suggestion */}
+            {loadingSuggestion && (
+              <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 rounded-lg px-4 py-2.5 flex items-center gap-2 text-sm text-blue-700">
+                <Zap size={14} className="animate-pulse" /> Checking applicable discount rules…
+              </div>
+            )}
+            {!loadingSuggestion && discountSuggestion && discountSuggestion.discount > 0 && (
+              <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 rounded-lg px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-green-800 dark:text-green-300 flex items-center gap-1.5">
+                      <Tag size={14} /> Auto-suggested Discount
+                    </p>
+                    <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
+                      {discountSuggestion.rule?.name}: Save {inr(discountSuggestion.discount)}
+                      {discountSuggestion.rule?.reason && ` — ${discountSuggestion.rule.reason}`}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex-shrink-0"
+                    onClick={() => { setDiscount(discountSuggestion.discount); setDiscountReason(discountSuggestion.rule?.reason ?? ""); }}
+                  >
+                    Apply {inr(discountSuggestion.discount)}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div>
               <Label>Discount (₹)</Label>
               <Input
@@ -367,6 +411,17 @@ export default function Register() {
                 className="mt-1"
               />
             </div>
+            {discount > 0 && (
+              <div>
+                <Label>Discount Reason</Label>
+                <Input
+                  value={discountReason}
+                  onChange={e => setDiscountReason(e.target.value)}
+                  className="mt-1"
+                  placeholder="e.g., Senior citizen discount, Corporate tie-up"
+                />
+              </div>
+            )}
 
             <div className="flex justify-between text-lg font-bold">
               <span>Total Payable</span>

@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, FlaskConical, IndianRupee, Users2 } from "lucide-react";
+import { TrendingUp, FlaskConical, IndianRupee, Users2, Sparkles, RefreshCw } from "lucide-react";
 
 type CommissionReport = {
   doctorId: number;
@@ -33,6 +33,7 @@ const TABS = [
   { id: "overview", label: "Overview", icon: TrendingUp },
   { id: "tests", label: "Test Analysis", icon: FlaskConical },
   { id: "commission", label: "Commission Report", icon: Users2 },
+  { id: "ai", label: "AI Insights", icon: Sparkles },
 ];
 
 export default function Reports() {
@@ -276,7 +277,95 @@ export default function Reports() {
             </div>
           </div>
         )}
+        {/* AI Insights Tab */}
+        {activeTab === "ai" && (
+          <AIInsightsTab dateFrom={dateFrom} dateTo={dateTo} setDateFrom={setDateFrom} setDateTo={setDateTo} />
+        )}
       </div>
+    </div>
+  );
+}
+
+function AIInsightsTab({ dateFrom, dateTo, setDateFrom, setDateTo }: {
+  dateFrom: string; dateTo: string;
+  setDateFrom: (v: string) => void; setDateTo: (v: string) => void;
+}) {
+  const [insights, setInsights] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [generated, setGenerated] = useState(false);
+
+  const generate = async () => {
+    setLoading(true);
+    setInsights("");
+    try {
+      const res = await fetch("/api/ai/billing-insights", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from: dateFrom, to: dateTo }),
+      });
+      const data = await res.json();
+      setInsights(data.insights ?? "");
+      setGenerated(true);
+    } catch {
+      setInsights("Failed to generate insights. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-gradient-to-r from-violet-50 to-blue-50 dark:from-violet-950/20 dark:to-blue-950/20 border border-violet-200 dark:border-violet-800 rounded-xl p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <Sparkles size={18} className="text-violet-600" />
+          <h3 className="font-semibold text-violet-800 dark:text-violet-300">AI Billing Insights</h3>
+        </div>
+        <p className="text-sm text-violet-700 dark:text-violet-400 mb-4">
+          Powered by Gemini AI — analyzes your billing data and generates actionable business insights.
+        </p>
+        <div className="flex items-end gap-3 flex-wrap">
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">From</p>
+            <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-36" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">To</p>
+            <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-36" />
+          </div>
+          <Button onClick={generate} disabled={loading} className="bg-violet-600 hover:bg-violet-700">
+            {loading ? <><RefreshCw size={14} className="mr-1.5 animate-spin" />Analyzing…</> : <><Sparkles size={14} className="mr-1.5" />Generate Insights</>}
+          </Button>
+        </div>
+      </div>
+
+      {loading && (
+        <div className="bg-card border border-card-border rounded-xl p-6 space-y-3">
+          <div className="animate-pulse space-y-2">
+            {[100, 90, 80, 70, 85].map((w, i) => (
+              <div key={i} className="h-4 bg-muted rounded" style={{ width: `${w}%` }} />
+            ))}
+          </div>
+          <p className="text-xs text-center text-muted-foreground">Gemini AI is analyzing your billing data…</p>
+        </div>
+      )}
+
+      {!loading && insights && (
+        <div className="bg-card border border-card-border rounded-xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="font-semibold flex items-center gap-2"><Sparkles size={15} className="text-violet-500" />AI Analysis Results</h4>
+            <Button size="sm" variant="outline" onClick={generate}><RefreshCw size={13} className="mr-1.5" />Refresh</Button>
+          </div>
+          <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{insights}</div>
+        </div>
+      )}
+
+      {!loading && !generated && (
+        <div className="bg-card border border-card-border rounded-xl p-12 text-center">
+          <Sparkles size={36} className="text-muted-foreground mx-auto mb-3 opacity-40" />
+          <p className="font-medium text-muted-foreground">Click "Generate Insights" to get AI-powered billing analysis</p>
+          <p className="text-xs text-muted-foreground mt-1">Analysis includes collection rate, revenue trends, discount patterns, and recommendations</p>
+        </div>
+      )}
     </div>
   );
 }
