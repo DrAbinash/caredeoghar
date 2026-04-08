@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db, billsTable, paymentsTable, ordersTable, patientsTable } from "@workspace/db";
+import { billAuditsTable } from "@workspace/db/schema";
 import { eq, and, sql, desc } from "drizzle-orm";
 import {
   ListBillsQueryParams,
@@ -172,7 +173,29 @@ billsRouter.put("/:id", async (req, res) => {
   }
 
   const [updated] = await db.update(billsTable).set(updateData).where(eq(billsTable.id, paramsParsed.data.id)).returning();
+
+  // Audit trail
+  const { editedBy, reason } = req.body;
+  if (editedBy && reason) {
+    const auditEntries = [];
+    if (status !== undefined && status !== existingBill.status) {
+      auditEntries.push({ billId: paramsParsed.data.id, editedBy, reason, changeType: "status", oldValue: existingBill.status, newValue: status });
+    }
+    if (discount !== undefined && String(discount) !== existingBill.discount) {
+      auditEntries.push({ billId: paramsParsed.data.id, editedBy, reason, changeType: "discount", oldValue: existingBill.discount, newValue: String(discount) });
+    }
+    if (auditEntries.length > 0) {
+      await db.insert(billAuditsTable).values(auditEntries);
+    }
+  }
+
   res.json(await buildBill(updated));
+});
+
+billsRouter.get("/:id/audits", async (req, res) => {
+  const id = Number(req.params.id);
+  const audits = await db.select().from(billAuditsTable).where(eq(billAuditsTable.billId, id)).orderBy(desc(billAuditsTable.createdAt));
+  res.json(audits);
 });
 
 // Payments

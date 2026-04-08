@@ -17,6 +17,8 @@ import {
   Package,
   HandCoins,
   BookOpen,
+  UserPlus,
+  Settings2,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -24,6 +26,7 @@ import { Button } from "@/components/ui/button";
 
 const navItems = [
   { path: "/", icon: LayoutDashboard, label: "Dashboard" },
+  { path: "/register", icon: UserPlus, label: "Quick Register" },
   { path: "/patients", icon: Users, label: "Patients" },
   { path: "/orders", icon: ClipboardList, label: "Orders" },
   { path: "/tests", icon: FlaskConical, label: "Test Catalog" },
@@ -35,6 +38,7 @@ const navItems = [
   { path: "/inventory", icon: Package, label: "Inventory" },
   { path: "/referrals", icon: HandCoins, label: "Referrals" },
   { path: "/accounting", icon: BookOpen, label: "Accounting" },
+  { path: "/settings", icon: Settings2, label: "Settings" },
 ];
 
 function ThemeToggle() {

@@ -30,25 +30,29 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 
 ### Implemented Pages (artifacts/diagnostic-erp)
 - **Dashboard** — KPI cards, recent transactions, quick actions, alerts
+- **Quick Register** (`/register`) — 3-step patient registration + test selection + billing/payment workflow
 - **Patients** — list with search, patient registration, detail view
 - **Orders** — test order management with status flow
 - **Test Catalog** — diagnostic tests with categories and pricing
-- **Billing** — bill generation and management
+- **Billing** — bill generation and management; bill edit with audit trail; audit history viewer
 - **Payments** — payment recording (cash/card/UPI/insurance/cheque)
 - **Doctors** — referring doctor management (name, specialization, phone, email, hospital, default commission)
-- **Reports** — analytics and reports dashboard
+- **Reports** — analytics with 3 tabs: Overview, Test Analysis, Commission Report
 - **Report Generator** — formatted diagnostic report creation with PDF/HTML/text export and voice readout
 - **Inventory** — stock management (items, stock in/out/adjust, history, low-stock alerts, consumption rules per test)
 - **Referrals** — doctor commission rules (percentage/fixed, per-test/category/all scope, exclusive rules) + payout report
 - **Accounting** — chart of accounts, payment/receipt/bank-transfer/journal vouchers, ledger, Tally XML export
+- **Settings** (`/settings`) — User management with roles (admin/manager/billing/lab/receptionist) and per-module permissions
 
-### New DB Tables (added)
+### DB Tables
 - `inventory_items`, `inventory_transactions`, `inventory_consumption_rules`
 - `commission_rules`
 - `accounts`, `vouchers`
+- `users` — name, email, role, permissions (JSON), PIN, isActive
+- `bill_audits` — audit trail for bill edits (who changed what, when, why)
 - Extended `doctors` with: `email`, `default_commission`, `default_commission_type`
 
-### New API Routes
+### API Routes
 - `GET/POST /api/inventory` — inventory items
 - `POST /api/inventory/:id/stock-in|stock-out|adjust` — stock operations
 - `GET /api/inventory/:id/history` — transaction history
@@ -60,9 +64,14 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - `GET/POST/DELETE /api/accounting/vouchers` — vouchers with filters
 - `GET /api/accounting/ledger` — running ledger per account
 - `GET /api/accounting/export/tally` — Tally XML download
+- `GET/POST/PATCH/DELETE /api/users` — user management
+- `GET /api/users/default-permissions` — default permissions per role
+- `GET /api/bills/:id/audits` — bill edit audit trail
+- `PUT /api/bills/:id` — supports editedBy + reason for audit logging
 
 ### Notes
-- New frontend pages use direct fetch via `src/lib/fetchApi.ts` (not codegen hooks) since new endpoints not added to openapi.yaml
+- New frontend pages use direct fetch via `src/lib/fetchApi.ts` (put/patch/post/delete helpers)
 - Currency: Indian Rupee (₹), `en-IN` locale
 - Voucher numbering: PV-YYYYMM-XXXX, RV-..., BT-..., JV-...
 - Commission rules stored with JSON arrays for `categories` and `testIds` fields
+- Bill edits require editedBy + reason; stored in bill_audits table

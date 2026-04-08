@@ -18,6 +18,8 @@ import ReportGenerator from "@/pages/ReportGenerator";
 import Inventory from "@/pages/Inventory";
 import Referrals from "@/pages/Referrals";
 import Accounting from "@/pages/Accounting";
+import Register from "@/pages/Register";
+import Settings from "@/pages/Settings";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -54,6 +56,8 @@ function Router() {
         <Route path="/inventory" component={Inventory} />
         <Route path="/referrals" component={Referrals} />
         <Route path="/accounting" component={Accounting} />
+        <Route path="/register" component={Register} />
+        <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

@@ -9,6 +9,7 @@ import { reportsRouter } from "./reports";
 import inventoryRouter from "./inventory";
 import accountingRouter from "./accounting";
 import commissionRouter from "./commission";
+import usersRouter from "./users";
 
 const router: IRouter = Router();
 
@@ -23,5 +24,6 @@ router.use("/reports", reportsRouter);
 router.use("/inventory", inventoryRouter);
 router.use("/accounting", accountingRouter);
 router.use("/commission", commissionRouter);
+router.use("/users", usersRouter);
 
 export default router;
