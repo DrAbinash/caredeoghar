@@ -130,9 +130,9 @@ export default function Patients() {
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          <Link href={`/patients/${p.id}`} className="text-muted-foreground hover:text-foreground inline-flex">
-                            <ChevronRight size={16} />
-                          </Link>
+                        <Link href={`/patients/${p.id}`} className="text-muted-foreground hover:text-foreground inline-flex">
+                          <ChevronRight size={16} />
+                        </Link>
                         </td>
                       </tr>
                     );
