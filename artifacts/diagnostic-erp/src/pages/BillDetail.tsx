@@ -14,8 +14,9 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Plus, Pencil, History, Clock, ShieldAlert, Trash2, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, History, Clock, ShieldAlert, Trash2, AlertTriangle, ExternalLink } from "lucide-react";
 import { useForm } from "react-hook-form";
+import { useSuperAdmin, getSuperAdminToken } from "@/hooks/useSuperAdmin";
 
 type PaymentForm = {
   amount: number;
@@ -35,12 +36,10 @@ type SuperEditForm = {
   subtotal: number;
   discount: number;
   taxAmount: number;
-  superAdminName: string;
   reason: string;
 };
 
 type DeleteForm = {
-  deletedBy: string;
   reason: string;
   confirmText: string;
 };
@@ -68,6 +67,7 @@ export default function BillDetail({ id }: { id: number }) {
   const [superEditOpen, setSuperEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const queryClient = useQueryClient();
+  const superAdmin = useSuperAdmin();
 
   const { data: audits = [], refetch: refetchAudits } = useQuery<BillAudit[]>({
     queryKey: ["bill-audits", id],
@@ -124,10 +124,10 @@ export default function BillDetail({ id }: { id: number }) {
     defaultValues: { discount: 0, status: "pending", editedBy: "", reason: "" },
   });
   const { register: regSuperEdit, handleSubmit: handleSuperEdit, reset: resetSuperEdit, watch: watchSuperEdit } = useForm<SuperEditForm>({
-    defaultValues: { subtotal: 0, discount: 0, taxAmount: 0, superAdminName: "", reason: "" },
+    defaultValues: { subtotal: 0, discount: 0, taxAmount: 0, reason: "" },
   });
   const { register: regDelete, handleSubmit: handleDelete, reset: resetDelete, watch: watchDelete } = useForm<DeleteForm>({
-    defaultValues: { deletedBy: "", reason: "", confirmText: "" },
+    defaultValues: { reason: "", confirmText: "" },
   });
 
   const onSubmit = (data: PaymentForm) => {
@@ -144,18 +144,20 @@ export default function BillDetail({ id }: { id: number }) {
   });
 
   const onSuperEditSubmit = handleSuperEdit((d) => {
+    const token = getSuperAdminToken();
     superEditBill.mutate({
       subtotal: Number(d.subtotal),
       discount: Number(d.discount),
       taxAmount: Number(d.taxAmount),
-      superAdminName: d.superAdminName,
+      token,
       reason: d.reason,
     });
   });
 
   const onDeleteSubmit = handleDelete((d) => {
     if (d.confirmText !== bill?.billNumber) return;
-    deleteBill.mutate({ deletedBy: d.deletedBy, reason: d.reason });
+    const token = getSuperAdminToken();
+    deleteBill.mutate({ token, reason: d.reason });
   });
 
   const openEdit = () => {
@@ -170,7 +172,6 @@ export default function BillDetail({ id }: { id: number }) {
       subtotal: Number(bill.subtotal),
       discount: Number(bill.discount),
       taxAmount: Number(bill.taxAmount),
-      superAdminName: "",
       reason: "",
     });
     setSuperEditOpen(true);
@@ -352,18 +353,44 @@ export default function BillDetail({ id }: { id: number }) {
           <div className="flex items-center gap-2 mb-3">
             <ShieldAlert size={15} className="text-rose-600 dark:text-rose-400" />
             <span className="text-xs font-semibold uppercase tracking-wide text-rose-700 dark:text-rose-400">Super Admin Actions</span>
+            {superAdmin.isActive && (
+              <span className="ml-auto flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                {superAdmin.userName}
+              </span>
+            )}
           </div>
-          <p className="text-xs text-muted-foreground mb-3">
-            These actions are irreversible and require a verified super admin user. All actions are fully audited.
-          </p>
-          <div className="flex gap-2 flex-wrap">
-            <Button size="sm" variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/30" onClick={openSuperEdit}>
-              <Pencil size={13} className="mr-1.5" /> Super Edit Amounts
-            </Button>
-            <Button size="sm" variant="outline" className="border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30" onClick={() => { resetDelete(); setDeleteOpen(true); }}>
-              <Trash2 size={13} className="mr-1.5" /> Delete Bill
-            </Button>
-          </div>
+          {superAdmin.isActive ? (
+            <>
+              <p className="text-xs text-muted-foreground mb-3">
+                Authenticated as <span className="font-semibold">{superAdmin.userName}</span>. These actions are irreversible and fully audited.
+              </p>
+              <div className="flex gap-2 flex-wrap">
+                <Button size="sm" variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/30" onClick={openSuperEdit}>
+                  <Pencil size={13} className="mr-1.5" /> Super Edit Amounts
+                </Button>
+                <Button size="sm" variant="outline" className="border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30" onClick={() => { resetDelete(); setDeleteOpen(true); }}>
+                  <Trash2 size={13} className="mr-1.5" /> Delete Bill
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                Super admin session required. Open the Super Admin Portal to authenticate, then use the generated link.
+              </p>
+              <a
+                href="/super-admin-portal/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-3 flex-shrink-0"
+              >
+                <Button size="sm" variant="outline" className="border-rose-300 text-rose-600 hover:bg-rose-50 dark:border-rose-700 dark:text-rose-400 dark:hover:bg-rose-950/30 whitespace-nowrap">
+                  <ExternalLink size={13} className="mr-1.5" /> Open Portal
+                </Button>
+              </a>
+            </div>
+          )}
         </div>
       </div>
 
@@ -497,10 +524,9 @@ export default function BillDetail({ id }: { id: number }) {
               <span className="font-bold text-base">{formatCurrency(projectedTotal)}</span>
             </div>
             <div className="border-t border-border pt-4 space-y-3">
-              <p className="text-xs font-semibold uppercase text-muted-foreground">Super Admin Authorization</p>
-              <div>
-                <Label>Super Admin Name *</Label>
-                <Input {...regSuperEdit("superAdminName", { required: true })} className="mt-1" placeholder="Must match a super_admin user" />
+              <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                Authorized as <strong>{superAdmin.userName}</strong> via session token
               </div>
               <div>
                 <Label>Reason *</Label>
@@ -508,7 +534,7 @@ export default function BillDetail({ id }: { id: number }) {
               </div>
             </div>
             {superEditBill.isError && (
-              <p className="text-xs text-red-600">{(superEditBill.error as Error)?.message ?? "Authorization failed. Verify super_admin name."}</p>
+              <p className="text-xs text-red-600">{(superEditBill.error as Error)?.message ?? "Authorization failed. Token may have expired."}</p>
             )}
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setSuperEditOpen(false)}>Cancel</Button>
@@ -538,9 +564,9 @@ export default function BillDetail({ id }: { id: number }) {
                 <li>Renumber subsequent bills in {bill.billNumber.slice(0, 12)}</li>
               </ul>
             </div>
-            <div>
-              <Label>Super Admin Name *</Label>
-              <Input {...regDelete("deletedBy", { required: true })} className="mt-1" placeholder="Must match a super_admin user" />
+            <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+              Authorized as <strong>{superAdmin.userName}</strong> via session token
             </div>
             <div>
               <Label>Reason for Deletion *</Label>
@@ -555,7 +581,7 @@ export default function BillDetail({ id }: { id: number }) {
               />
             </div>
             {deleteBill.isError && (
-              <p className="text-xs text-red-600">{(deleteBill.error as Error)?.message ?? "Authorization failed. Verify super_admin name."}</p>
+              <p className="text-xs text-red-600">{(deleteBill.error as Error)?.message ?? "Authorization failed. Token may have expired."}</p>
             )}
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>

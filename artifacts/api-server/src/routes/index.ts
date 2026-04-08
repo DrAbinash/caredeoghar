@@ -14,6 +14,7 @@ import emailSettingsRouter from "./email-settings";
 import discountsRouter from "./discounts";
 import aiRouter from "./ai";
 import pacsRouter from "./pacs";
+import { superAdminRouter } from "./super-admin";
 
 const router: IRouter = Router();
 
@@ -33,5 +34,6 @@ router.use("/email-settings", emailSettingsRouter);
 router.use("/discounts", discountsRouter);
 router.use("/ai", aiRouter);
 router.use("/pacs", pacsRouter);
+router.use("/super-admin", superAdminRouter);
 
 export default router;

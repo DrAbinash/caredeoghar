@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, billsTable, paymentsTable, ordersTable, patientsTable } from "@workspace/db";
-import { billAuditsTable, usersTable } from "@workspace/db/schema";
+import { billAuditsTable, superAdminSessionsTable } from "@workspace/db/schema";
 import { sendBillEditEmail } from "../email";
 import { eq, and, sql, desc, like } from "drizzle-orm";
 import {
@@ -217,20 +217,30 @@ billsRouter.get("/:id/audits", async (req, res) => {
   res.json(audits);
 });
 
+// Helper: verify super admin session token
+async function verifySuperAdminToken(token: string): Promise<{ valid: boolean; userName: string }> {
+  if (!token) return { valid: false, userName: "" };
+  const [session] = await db.select().from(superAdminSessionsTable).where(eq(superAdminSessionsTable.token, token));
+  if (!session || !session.isActive || new Date(session.expiresAt) < new Date()) {
+    return { valid: false, userName: "" };
+  }
+  return { valid: true, userName: session.userName };
+}
+
 // ── Super-admin: full amount edit ─────────────────────────────────────────────
 billsRouter.patch("/:id/super-edit", async (req, res) => {
   const id = Number(req.params.id);
-  const { superAdminName, reason, subtotal, discount, taxAmount } = req.body;
+  const { token, reason, subtotal, discount, taxAmount } = req.body;
 
-  if (!superAdminName || !reason) {
-    return res.status(400).json({ error: "superAdminName and reason are required" });
+  if (!token || !reason) {
+    return res.status(400).json({ error: "token and reason are required" });
   }
 
-  // Verify the named user is super_admin
-  const [superUser] = await db.select().from(usersTable).where(eq(usersTable.name, superAdminName));
-  if (!superUser || superUser.role !== "super_admin") {
-    return res.status(403).json({ error: "Only users with super_admin role can perform this action" });
+  const { valid, userName } = await verifySuperAdminToken(token);
+  if (!valid) {
+    return res.status(403).json({ error: "Super admin session expired or invalid. Please re-authenticate via the Super Admin Portal." });
   }
+  const superAdminName = userName;
 
   const [bill] = await db.select().from(billsTable).where(eq(billsTable.id, id));
   if (!bill) return res.status(404).json({ error: "Bill not found" });
@@ -268,16 +278,15 @@ billsRouter.patch("/:id/super-edit", async (req, res) => {
 // ── Super-admin: delete bill + renumber subsequent ────────────────────────────
 billsRouter.delete("/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const { deletedBy, reason } = req.body;
+  const { token, reason } = req.body;
 
-  if (!deletedBy || !reason) {
-    return res.status(400).json({ error: "deletedBy and reason are required" });
+  if (!token || !reason) {
+    return res.status(400).json({ error: "token and reason are required" });
   }
 
-  // Verify super admin
-  const [superUser] = await db.select().from(usersTable).where(eq(usersTable.name, deletedBy));
-  if (!superUser || superUser.role !== "super_admin") {
-    return res.status(403).json({ error: "Only users with super_admin role can delete bills" });
+  const { valid, userName } = await verifySuperAdminToken(token);
+  if (!valid) {
+    return res.status(403).json({ error: "Super admin session expired or invalid. Please re-authenticate via the Super Admin Portal." });
   }
 
   const [bill] = await db.select().from(billsTable).where(eq(billsTable.id, id));
@@ -289,7 +298,7 @@ billsRouter.delete("/:id", async (req, res) => {
   // Pre-audit (bill_audits has no FK constraint so insert before or after is fine)
   await db.insert(billAuditsTable).values({
     billId: id,
-    editedBy: deletedBy,
+    editedBy: userName,
     reason: `[DELETED] ${reason}`,
     changeType: "deleted",
     oldValue: bill.billNumber,
