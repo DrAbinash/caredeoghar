@@ -420,7 +420,7 @@ export default function Accounting() {
               <Select onValueChange={(v) => setVVal("creditAccountId", v)}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="Select account…" /></SelectTrigger>
                 <SelectContent>
-                  {activeAccounts.map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
+                  {(voucherType === "bank_transfer" ? activeAccounts.filter(a => a.type === "cash" || a.type === "bank") : activeAccounts).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -429,7 +429,7 @@ export default function Accounting() {
               <Select onValueChange={(v) => setVVal("debitAccountId", v)}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="Select account…" /></SelectTrigger>
                 <SelectContent>
-                  {activeAccounts.map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
+                  {(voucherType === "bank_transfer" ? activeAccounts.filter(a => a.type === "bank") : activeAccounts).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
