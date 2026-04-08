@@ -1,18 +1,24 @@
+import { useNavigate } from "wouter";
 import {
   useGetDashboardStats,
-  useGetRecentActivity,
   useGetRevenueReport,
   useGetPopularTests,
 } from "@workspace/api-client-react";
 import PageHeader from "@/components/PageHeader";
+import StatusBadge from "@/components/StatusBadge";
 import {
   Users,
   ClipboardList,
   IndianRupee,
-  Clock,
+  FileText,
+  UserCheck,
+  AlertTriangle,
   TrendingUp,
-  CheckCircle2,
-  AlertCircle,
+  Plus,
+  BarChart3,
+  Package,
+  ChevronRight,
+  Stethoscope,
 } from "lucide-react";
 import {
   BarChart,
@@ -23,117 +29,243 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import StatusBadge from "@/components/StatusBadge";
+import { Link } from "wouter";
 
-function StatCard({ icon: Icon, label, value, sub, color }: {
+function KpiCard({
+  icon: Icon,
+  label,
+  value,
+  sub,
+  iconBg,
+  trend,
+}: {
   icon: React.ElementType;
   label: string;
   value: string | number;
   sub?: string;
-  color: string;
+  iconBg: string;
+  trend?: { label: string; positive: boolean };
 }) {
   return (
-    <div className="bg-card border border-card-border rounded-xl p-5 shadow-sm">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
-          <p className="mt-1.5 text-2xl font-bold text-foreground">{value}</p>
-          {sub && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
+    <div className="bg-card border border-card-border rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
+          <p className="mt-2 text-2xl font-bold text-foreground leading-none">{value}</p>
+          {sub && <p className="mt-1.5 text-xs text-muted-foreground">{sub}</p>}
+          {trend && (
+            <p className={`mt-1.5 text-xs font-medium ${trend.positive ? "text-green-600 dark:text-green-400" : "text-red-500"}`}>
+              {trend.positive ? "↑" : "↓"} {trend.label}
+            </p>
+          )}
         </div>
-        <div className={`p-2.5 rounded-lg ${color}`}>
-          <Icon size={18} />
+        <div className={`p-3 rounded-xl flex-shrink-0 ${iconBg}`}>
+          <Icon size={20} />
         </div>
       </div>
     </div>
   );
 }
 
-function activityIcon(type: string) {
-  switch (type) {
-    case "payment_received": return <CheckCircle2 size={14} className="text-green-500" />;
-    case "order_completed": return <CheckCircle2 size={14} className="text-blue-500" />;
-    case "order_created": return <ClipboardList size={14} className="text-primary" />;
-    case "patient_registered": return <Users size={14} className="text-purple-500" />;
-    default: return <AlertCircle size={14} className="text-muted-foreground" />;
-  }
-}
-
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+function QuickActionCard({
+  icon: Icon,
+  label,
+  description,
+  href,
+  color,
+}: {
+  icon: React.ElementType;
+  label: string;
+  description: string;
+  href: string;
+  color: string;
+}) {
+  return (
+    <Link href={href} className="group block">
+      <div className="bg-card border border-card-border rounded-xl p-4 shadow-sm hover:shadow-md hover:border-primary/40 transition-all cursor-pointer">
+        <div className="flex items-center gap-3">
+          <div className={`p-2.5 rounded-lg ${color} group-hover:scale-105 transition-transform`}>
+            <Icon size={16} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">{label}</p>
+            <p className="text-xs text-muted-foreground mt-0.5 truncate">{description}</p>
+          </div>
+          <ChevronRight size={14} className="text-muted-foreground ml-auto flex-shrink-0 group-hover:text-primary transition-colors" />
+        </div>
+      </div>
+    </Link>
+  );
 }
 
 export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useGetDashboardStats();
-  const { data: activity } = useGetRecentActivity();
   const { data: revenue } = useGetRevenueReport({ period: "monthly" });
   const { data: popular } = useGetPopularTests();
 
-  const formatCurrency = (n: number) =>
+  const fmt = (n: number) =>
     new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
+
+  const billStatusColor: Record<string, string> = {
+    draft: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
+    pending: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+    partial: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    paid: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    cancelled: "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400",
+  };
 
   if (statsLoading) {
     return (
       <div className="p-6">
-        <div className="animate-pulse space-y-4">
+        <div className="animate-pulse space-y-5">
           <div className="h-8 bg-muted rounded w-48" />
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[...Array(8)].map((_, i) => <div key={i} className="h-24 bg-muted rounded-xl" />)}
+            {[...Array(4)].map((_, i) => <div key={i} className="h-28 bg-muted rounded-xl" />)}
           </div>
+          <div className="h-64 bg-muted rounded-xl" />
         </div>
       </div>
     );
   }
 
-  const statusColors: Record<string, string> = {
-    pending: "#EAB308",
-    collected: "#3B82F6",
-    processing: "#8B5CF6",
-    completed: "#22C55E",
-    cancelled: "#EF4444",
-  };
+  const recentBills = (stats as any)?.recentBills ?? [];
+  const overdueAlerts = (stats as any)?.overdueAlerts ?? [];
+  const totalBills = (stats as any)?.totalBills ?? 0;
+  const referralPayouts = (stats as any)?.referralPayouts ?? 0;
+  const pendingReports = (stats as any)?.pendingReports ?? 0;
 
   return (
-    <div className="pb-8">
+    <div className="pb-10">
       <PageHeader title="Dashboard" subtitle="Diagnostic Center Overview" />
 
       <div className="px-6 space-y-6">
-        {/* Stats grid */}
+
+        {/* ── KPI Row ── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard icon={Users} label="Total Patients" value={stats?.totalPatients ?? 0} color="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" />
-          <StatCard icon={ClipboardList} label="Today's Orders" value={stats?.todayOrders ?? 0} sub={`${stats?.pendingOrders ?? 0} pending`} color="bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400" />
-          <StatCard icon={IndianRupee} label="Today's Revenue" value={formatCurrency(stats?.todayRevenue ?? 0)} sub="Collected" color="bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400" />
-          <StatCard icon={IndianRupee} label="Month Revenue" value={formatCurrency(stats?.monthRevenue ?? 0)} sub={`${formatCurrency(stats?.pendingPayments ?? 0)} pending`} color="bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400" />
-          <StatCard icon={CheckCircle2} label="Completed Tests" value={stats?.completedTests ?? 0} color="bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400" />
-          <StatCard icon={Clock} label="Pending Orders" value={stats?.pendingOrders ?? 0} color="bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400" />
-          <StatCard icon={AlertCircle} label="Pending Payments" value={formatCurrency(stats?.pendingPayments ?? 0)} color="bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400" />
-          <StatCard icon={TrendingUp} label="Order Status" value={stats?.ordersByStatus?.length ?? 0 + " types"} color="bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400" />
+          <KpiCard
+            icon={IndianRupee}
+            label="Today's Revenue"
+            value={fmt(stats?.todayRevenue ?? 0)}
+            sub={`Month: ${fmt(stats?.monthRevenue ?? 0)}`}
+            iconBg="bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400"
+          />
+          <KpiCard
+            icon={FileText}
+            label="Total Bills"
+            value={totalBills}
+            sub={`${fmt(stats?.pendingPayments ?? 0)} outstanding`}
+            iconBg="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
+          />
+          <KpiCard
+            icon={Stethoscope}
+            label="Referral Payouts"
+            value={fmt(referralPayouts)}
+            sub="Revenue via referrals"
+            iconBg="bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400"
+          />
+          <KpiCard
+            icon={ClipboardList}
+            label="Pending Reports"
+            value={pendingReports}
+            sub="Orders awaiting completion"
+            iconBg="bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400"
+          />
         </div>
 
-        {/* Order status breakdown */}
-        {stats?.ordersByStatus && stats.ordersByStatus.length > 0 && (
-          <div className="bg-card border border-card-border rounded-xl p-5 shadow-sm">
-            <h3 className="text-sm font-semibold text-foreground mb-4">Order Status Breakdown</h3>
-            <div className="flex flex-wrap gap-3">
-              {stats.ordersByStatus.map((s) => (
-                <div key={s.status} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: statusColors[s.status] ?? "#6B7280" }} />
-                  <span className="text-xs text-foreground capitalize">{s.status}</span>
-                  <span className="text-xs font-bold text-foreground">{s.count}</span>
-                </div>
-              ))}
+        {/* ── Secondary KPIs ── */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: "Total Patients", value: stats?.totalPatients ?? 0, icon: Users, color: "text-blue-500" },
+            { label: "Today's Orders", value: stats?.todayOrders ?? 0, icon: ClipboardList, color: "text-purple-500" },
+            { label: "Completed Tests", value: stats?.completedTests ?? 0, icon: TrendingUp, color: "text-green-500" },
+            { label: "Pending Orders", value: stats?.pendingOrders ?? 0, icon: AlertTriangle, color: "text-yellow-500" },
+          ].map(({ label, value, icon: Icon, color }) => (
+            <div key={label} className="bg-card border border-card-border rounded-lg px-4 py-3 flex items-center gap-3 shadow-sm">
+              <Icon size={16} className={color} />
+              <div>
+                <p className="text-xs text-muted-foreground">{label}</p>
+                <p className="text-base font-bold text-foreground">{value}</p>
+              </div>
             </div>
-          </div>
-        )}
+          ))}
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Revenue chart */}
+
+          {/* ── Quick Actions ── */}
+          <div className="lg:col-span-1 space-y-3">
+            <h3 className="text-sm font-semibold text-foreground">Quick Actions</h3>
+            <QuickActionCard
+              icon={Plus}
+              label="New Bill"
+              description="Generate a bill for a completed order"
+              href="/billing"
+              color="bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400"
+            />
+            <QuickActionCard
+              icon={Users}
+              label="Register Patient"
+              description="Add a new patient to the system"
+              href="/patients"
+              color="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
+            />
+            <QuickActionCard
+              icon={BarChart3}
+              label="Generate Reports"
+              description="View revenue and analytics reports"
+              href="/reports"
+              color="bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400"
+            />
+            <QuickActionCard
+              icon={Package}
+              label="Test Catalog"
+              description="Manage diagnostic test inventory"
+              href="/tests"
+              color="bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400"
+            />
+
+            {/* ── Alerts ── */}
+            {overdueAlerts.length > 0 && (
+              <div className="mt-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle size={14} className="text-yellow-500" />
+                  <h3 className="text-sm font-semibold text-foreground">Alerts</h3>
+                  <span className="ml-auto px-2 py-0.5 bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 rounded-full text-xs font-bold">
+                    {overdueAlerts.length}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {overdueAlerts.map((alert: { billNumber: string; balanceAmount: number; dueDate: string | null }) => (
+                    <div key={alert.billNumber} className="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-800/40 rounded-lg px-3 py-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-yellow-800 dark:text-yellow-300 truncate">{alert.billNumber}</p>
+                          <p className="text-xs text-yellow-700 dark:text-yellow-400">Balance outstanding</p>
+                        </div>
+                        <span className="text-xs font-bold text-red-600 dark:text-red-400 flex-shrink-0">{fmt(alert.balanceAmount)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {overdueAlerts.length === 0 && (
+              <div className="mt-4 bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800/40 rounded-lg px-4 py-3 flex items-center gap-2.5">
+                <div className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
+                <p className="text-xs text-green-700 dark:text-green-400 font-medium">No outstanding balance alerts</p>
+              </div>
+            )}
+          </div>
+
+          {/* ── Revenue Chart ── */}
           <div className="lg:col-span-2 bg-card border border-card-border rounded-xl p-5 shadow-sm">
-            <h3 className="text-sm font-semibold text-foreground mb-4">Monthly Revenue</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-foreground">Monthly Revenue</h3>
+              {revenue && (
+                <span className="text-xs text-muted-foreground">{fmt(revenue.totalRevenue ?? 0)} total</span>
+              )}
+            </div>
             {revenue?.data && revenue.data.length > 0 ? (
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={revenue.data} margin={{ top: 0, right: 0, left: -10, bottom: 0 }}>
@@ -141,7 +273,7 @@ export default function Dashboard() {
                   <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
                   <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
                   <Tooltip
-                    formatter={(v: number) => [formatCurrency(v), "Revenue"]}
+                    formatter={(v: number) => [fmt(v), "Revenue"]}
                     contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }}
                   />
                   <Bar dataKey="revenue" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
@@ -151,53 +283,107 @@ export default function Dashboard() {
               <div className="h-[220px] flex items-center justify-center text-sm text-muted-foreground">No revenue data yet</div>
             )}
           </div>
+        </div>
 
-          {/* Recent activity */}
-          <div className="bg-card border border-card-border rounded-xl p-5 shadow-sm">
-            <h3 className="text-sm font-semibold text-foreground mb-4">Recent Activity</h3>
-            <div className="space-y-3">
-              {activity?.activities && activity.activities.length > 0 ? activity.activities.map((a) => (
-                <div key={a.id} className="flex items-start gap-2.5">
-                  <div className="mt-0.5 flex-shrink-0">{activityIcon(a.type)}</div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs text-foreground truncate">{a.description}</p>
-                    <p className="text-xs text-muted-foreground">{a.patientName} · {timeAgo(a.createdAt)}</p>
-                  </div>
-                  {a.amount != null && (
-                    <span className="text-xs font-medium text-foreground flex-shrink-0">₹{a.amount.toFixed(0)}</span>
+        {/* ── Recent Transactions ── */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-foreground">Recent Transactions</h3>
+            <Link href="/billing" className="text-xs text-primary hover:underline">View all bills →</Link>
+          </div>
+          <div className="bg-card border border-card-border rounded-xl shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-muted-foreground border-b border-border bg-muted/30">
+                    <th className="px-4 py-3 font-medium">Bill ID</th>
+                    <th className="px-4 py-3 font-medium">Patient Name</th>
+                    <th className="px-4 py-3 font-medium text-right">Amount</th>
+                    <th className="px-4 py-3 font-medium text-right">Paid</th>
+                    <th className="px-4 py-3 font-medium text-right">Balance</th>
+                    <th className="px-4 py-3 font-medium">Payment Status</th>
+                    <th className="px-4 py-3 font-medium">Date</th>
+                    <th className="px-4 py-3 font-medium"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentBills.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground text-sm">
+                        No bills generated yet
+                      </td>
+                    </tr>
+                  ) : (
+                    recentBills.map((bill: {
+                      id: number;
+                      billNumber: string;
+                      patientName: string;
+                      patientCode: string;
+                      totalAmount: number;
+                      paidAmount: number;
+                      balanceAmount: number;
+                      status: string;
+                      createdAt: string;
+                    }) => (
+                      <tr key={bill.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
+                        <td className="px-4 py-3 font-mono text-xs font-semibold text-primary">{bill.billNumber}</td>
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-foreground">{bill.patientName}</div>
+                          <div className="text-xs text-muted-foreground">{bill.patientCode}</div>
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold text-foreground">{fmt(bill.totalAmount)}</td>
+                        <td className="px-4 py-3 text-right font-medium text-green-600 dark:text-green-400">{fmt(bill.paidAmount)}</td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={bill.balanceAmount > 0 ? "font-semibold text-red-600 dark:text-red-400" : "text-muted-foreground"}>
+                            {fmt(bill.balanceAmount)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${billStatusColor[bill.status] ?? "bg-gray-100 text-gray-600"}`}>
+                            {bill.status.charAt(0).toUpperCase() + bill.status.slice(1)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground">
+                          {new Date(bill.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Link href={`/billing/${bill.id}`} className="text-muted-foreground hover:text-primary transition-colors inline-flex">
+                            <ChevronRight size={15} />
+                          </Link>
+                        </td>
+                      </tr>
+                    ))
                   )}
-                </div>
-              )) : (
-                <p className="text-sm text-muted-foreground">No recent activity</p>
-              )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
 
-        {/* Popular tests */}
+        {/* ── Popular Tests ── */}
         {popular?.tests && popular.tests.length > 0 && (
-          <div className="bg-card border border-card-border rounded-xl p-5 shadow-sm">
-            <h3 className="text-sm font-semibold text-foreground mb-4">Most Ordered Tests</h3>
-            <div className="overflow-x-auto">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground mb-3">Most Ordered Tests</h3>
+            <div className="bg-card border border-card-border rounded-xl p-5 shadow-sm overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs text-muted-foreground border-b border-border">
-                    <th className="pb-2 font-medium">Test</th>
-                    <th className="pb-2 font-medium">Category</th>
-                    <th className="pb-2 font-medium text-right">Orders</th>
-                    <th className="pb-2 font-medium text-right">Revenue</th>
+                    <th className="pb-2.5 font-medium">Test</th>
+                    <th className="pb-2.5 font-medium">Category</th>
+                    <th className="pb-2.5 font-medium text-right">Orders</th>
+                    <th className="pb-2.5 font-medium text-right">Revenue</th>
                   </tr>
                 </thead>
                 <tbody>
                   {popular.tests.slice(0, 5).map((t) => (
-                    <tr key={t.testId} className="border-b border-border/50 last:border-0">
+                    <tr key={t.testId} className="border-b border-border/50 last:border-0 hover:bg-muted/20">
                       <td className="py-2.5">
                         <div className="font-medium text-foreground">{t.testName}</div>
                         <div className="text-xs text-muted-foreground">{t.testCode}</div>
                       </td>
                       <td className="py-2.5 text-muted-foreground">{t.category}</td>
                       <td className="py-2.5 text-right font-medium">{t.orderCount}</td>
-                      <td className="py-2.5 text-right font-medium text-green-600 dark:text-green-400">{formatCurrency(t.revenue)}</td>
+                      <td className="py-2.5 text-right font-semibold text-green-600 dark:text-green-400">{fmt(t.revenue)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -205,6 +391,7 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
       </div>
     </div>
   );

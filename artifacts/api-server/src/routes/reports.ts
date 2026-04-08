@@ -21,6 +21,11 @@ reportsRouter.get("/dashboard", async (_req, res) => {
     pendingPayments,
     completedTests,
     ordersByStatus,
+    totalBills,
+    referralOrders,
+    pendingReports,
+    overdueAlerts,
+    recentBills,
   ] = await Promise.all([
     db.select({ count: sql<number>`count(*)` }).from(patientsTable),
     db.select({ count: sql<number>`count(*)` }).from(ordersTable).where(and(gte(ordersTable.createdAt, today), lte(ordersTable.createdAt, endOfDay))),
@@ -30,6 +35,37 @@ reportsRouter.get("/dashboard", async (_req, res) => {
     db.select({ sum: sql<number>`coalesce(sum(balance_amount), 0)` }).from(billsTable).where(sql`status IN ('pending','partial')`),
     db.select({ count: sql<number>`count(*)` }).from(ordersTable).where(eq(ordersTable.status, "completed")),
     db.select({ status: ordersTable.status, count: sql<number>`count(*)` }).from(ordersTable).groupBy(ordersTable.status),
+    db.select({ count: sql<number>`count(*)` }).from(billsTable),
+    db.select({ sum: sql<number>`coalesce(sum(o.total_amount), 0)` })
+      .from(sql`orders o`)
+      .where(sql`o.doctor_id IS NOT NULL`),
+    db.select({ count: sql<number>`count(*)` }).from(ordersTable).where(sql`status IN ('pending','collected','processing')`),
+    db.select({
+      billNumber: billsTable.billNumber,
+      balanceAmount: billsTable.balanceAmount,
+      dueDate: billsTable.dueDate,
+      patientId: billsTable.patientId,
+    })
+      .from(billsTable)
+      .where(and(sql`status IN ('pending','partial')`, sql`balance_amount > 0`))
+      .orderBy(desc(billsTable.balanceAmount))
+      .limit(5),
+    db.select({
+      id: billsTable.id,
+      billNumber: billsTable.billNumber,
+      totalAmount: billsTable.totalAmount,
+      paidAmount: billsTable.paidAmount,
+      balanceAmount: billsTable.balanceAmount,
+      status: billsTable.status,
+      createdAt: billsTable.createdAt,
+      patientFirstName: patientsTable.firstName,
+      patientLastName: patientsTable.lastName,
+      patientId: patientsTable.patientId,
+    })
+      .from(billsTable)
+      .leftJoin(patientsTable, eq(billsTable.patientId, patientsTable.id))
+      .orderBy(desc(billsTable.createdAt))
+      .limit(8),
   ]);
 
   res.json({
@@ -40,9 +76,25 @@ reportsRouter.get("/dashboard", async (_req, res) => {
     monthRevenue: Number(monthRevenue[0]?.sum ?? 0),
     pendingPayments: Number(pendingPayments[0]?.sum ?? 0),
     completedTests: Number(completedTests[0]?.count ?? 0),
-    ordersByStatus: ordersByStatus.map((row) => ({
-      status: row.status,
-      count: Number(row.count),
+    ordersByStatus: ordersByStatus.map((row) => ({ status: row.status, count: Number(row.count) })),
+    totalBills: Number(totalBills[0]?.count ?? 0),
+    referralPayouts: Number(referralOrders[0]?.sum ?? 0),
+    pendingReports: Number(pendingReports[0]?.count ?? 0),
+    overdueAlerts: overdueAlerts.map((a) => ({
+      billNumber: a.billNumber,
+      balanceAmount: Number(a.balanceAmount),
+      dueDate: a.dueDate,
+    })),
+    recentBills: recentBills.map((b) => ({
+      id: b.id,
+      billNumber: b.billNumber,
+      totalAmount: Number(b.totalAmount),
+      paidAmount: Number(b.paidAmount),
+      balanceAmount: Number(b.balanceAmount),
+      status: b.status,
+      createdAt: b.createdAt?.toISOString() ?? "",
+      patientName: b.patientFirstName ? `${b.patientFirstName} ${b.patientLastName}` : "Unknown",
+      patientCode: b.patientId ?? "",
     })),
   });
 });
