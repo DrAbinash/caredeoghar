@@ -24,24 +24,25 @@ import {
   CalendarDays,
   Boxes,
   TrendingDown,
+  Zap,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
 const navItems = [
-  { path: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { path: "/register", icon: UserPlus, label: "Quick Register" },
+  { path: "/", icon: Zap, label: "Billing Desk" },
+  { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { path: "/patients", icon: Users, label: "Patients" },
+  { path: "/appointments", icon: CalendarDays, label: "Appointments" },
   { path: "/orders", icon: ClipboardList, label: "Orders" },
   { path: "/tests", icon: FlaskConical, label: "Test Catalog" },
+  { path: "/packages", icon: Boxes, label: "Test Packages" },
   { path: "/billing", icon: Receipt, label: "Billing" },
   { path: "/payments", icon: CreditCard, label: "Payments" },
   { path: "/doctors", icon: Stethoscope, label: "Doctors" },
   { path: "/reports", icon: BarChart3, label: "Reports" },
   { path: "/report-generator", icon: FilePen, label: "Report Generator" },
-  { path: "/appointments", icon: CalendarDays, label: "Appointments" },
-  { path: "/packages", icon: Boxes, label: "Test Packages" },
   { path: "/inventory", icon: Package, label: "Inventory" },
   { path: "/expenses", icon: TrendingDown, label: "Expenses" },
   { path: "/referrals", icon: HandCoins, label: "Referrals" },

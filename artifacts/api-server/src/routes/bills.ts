@@ -71,6 +71,14 @@ async function buildBill(bill: typeof billsTable.$inferSelect) {
   };
 }
 
+billsRouter.get("/preview-number", async (_req, res) => {
+  const count = await db.select({ count: sql<number>`count(*)` }).from(billsTable);
+  const num = Number(count[0]?.count ?? 0) + 1;
+  const date = new Date();
+  const next = `BILL-${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}-${String(num).padStart(4, "0")}`;
+  return res.json({ next });
+});
+
 billsRouter.get("/", async (req, res) => {
   const parsed = ListBillsQueryParams.safeParse(req.query);
   if (!parsed.success) {

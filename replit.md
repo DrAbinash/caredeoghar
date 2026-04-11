@@ -29,7 +29,8 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 ## Diagnostic ERP — Modules
 
 ### Implemented Pages (artifacts/diagnostic-erp)
-- **Dashboard** — KPI cards, recent transactions, quick actions, alerts
+- **Billing Desk** (`/`) — **Home page on login**; unified single-page billing workflow: live patient search + inline new patient registration, referral doctor, test catalog with category filter + package quick-add, running bill summary, ₹/% discount toggle, payment collection, auto date + auto bill number preview, "Generate Bill" creates order + bill + payment in one click
+- **Dashboard** (`/dashboard`) — KPI cards, recent transactions, quick actions, alerts
 - **Quick Register** (`/register`) — 3-step patient registration + test selection + billing/payment workflow
 - **Patients** — list with search, patient registration, detail view
 - **Orders** — test order management with status flow

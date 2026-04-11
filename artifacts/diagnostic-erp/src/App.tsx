@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Layout from "@/components/Layout";
+import BillingDesk from "@/pages/BillingDesk";
 import Dashboard from "@/pages/Dashboard";
 import Patients from "@/pages/Patients";
 import PatientDetail from "@/pages/PatientDetail";
@@ -40,7 +41,8 @@ function Router() {
   return (
     <Layout>
       <Switch>
-        <Route path="/" component={Dashboard} />
+        <Route path="/" component={BillingDesk} />
+        <Route path="/dashboard" component={Dashboard} />
         <Route path="/patients" component={Patients} />
         <Route path="/patients/:id">
           {(params) => <PatientDetail id={Number(params.id)} />}
