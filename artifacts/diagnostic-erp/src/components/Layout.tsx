@@ -21,6 +21,9 @@ import {
   Settings2,
   Tag,
   Monitor,
+  CalendarDays,
+  Boxes,
+  TrendingDown,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -37,7 +40,10 @@ const navItems = [
   { path: "/doctors", icon: Stethoscope, label: "Doctors" },
   { path: "/reports", icon: BarChart3, label: "Reports" },
   { path: "/report-generator", icon: FilePen, label: "Report Generator" },
+  { path: "/appointments", icon: CalendarDays, label: "Appointments" },
+  { path: "/packages", icon: Boxes, label: "Test Packages" },
   { path: "/inventory", icon: Package, label: "Inventory" },
+  { path: "/expenses", icon: TrendingDown, label: "Expenses" },
   { path: "/referrals", icon: HandCoins, label: "Referrals" },
   { path: "/accounting", icon: BookOpen, label: "Accounting" },
   { path: "/discounts", icon: Tag, label: "Discounts" },

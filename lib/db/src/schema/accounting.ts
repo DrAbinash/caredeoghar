@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, numeric, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, numeric, boolean, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -63,13 +63,31 @@ export const vouchersTable = pgTable("vouchers", {
   performedBy: text("performed_by"),
   reference: text("reference"),
   narration: text("narration"),
+  // Optional link to a bill for filtering
+  billId: integer("bill_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Audit trail for voucher edits
+export const voucherAuditsTable = pgTable("voucher_audits", {
+  id: serial("id").primaryKey(),
+  voucherId: integer("voucher_id").notNull(),
+  voucherNumber: text("voucher_number").notNull(),
+  editedBy: text("edited_by").notNull(),
+  reason: text("reason").notNull(),
+  changeType: text("change_type").notNull(), // 'amount' | 'particular' | 'date' | 'reference' | 'narration' | 'accounts' | 'general'
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const insertAccountSchema = createInsertSchema(accountsTable).omit({ id: true, createdAt: true });
 export const insertVoucherSchema = createInsertSchema(vouchersTable).omit({ id: true, voucherNumber: true, createdAt: true });
+export const insertVoucherAuditSchema = createInsertSchema(voucherAuditsTable).omit({ id: true, createdAt: true });
 
 export type Account = typeof accountsTable.$inferSelect;
 export type Voucher = typeof vouchersTable.$inferSelect;
+export type VoucherAudit = typeof voucherAuditsTable.$inferSelect;
 export type InsertAccount = z.infer<typeof insertAccountSchema>;
 export type InsertVoucher = z.infer<typeof insertVoucherSchema>;
+export type InsertVoucherAudit = z.infer<typeof insertVoucherAuditSchema>;

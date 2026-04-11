@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { accountsTable, vouchersTable } from "@workspace/db/schema";
+import { accountsTable, vouchersTable, voucherAuditsTable } from "@workspace/db/schema";
 import { eq, desc, and, gte, lte, like } from "drizzle-orm";
 
 const router = Router();
@@ -16,7 +16,7 @@ const TALLY_VOUCHER_TYPE: Record<string, string> = {
   purchase:      "Purchase",
 };
 
-// ─── Tally group → parent group mapping (double-entry group hierarchy) ────────
+// ─── Tally group → parent group mapping ──────────────────────────────────────
 const TALLY_PARENT: Record<string, string> = {
   "Current Assets":           "Assets",
   "Fixed Assets":             "Assets",
@@ -45,6 +45,7 @@ const TALLY_PARENT: Record<string, string> = {
 router.get("/accounts", async (_req, res) => {
   const rows = await db.select().from(accountsTable).orderBy(accountsTable.name);
   res.json(rows.map(r => ({ ...r, openingBalance: Number(r.openingBalance || 0) })));
+  return;
 });
 
 router.post("/accounts", async (req, res) => {
@@ -62,6 +63,7 @@ router.post("/accounts", async (req, res) => {
     })
     .returning();
   res.status(201).json({ ...account, openingBalance: Number(account.openingBalance || 0) });
+  return;
 });
 
 router.patch("/accounts/:id", async (req, res) => {
@@ -75,8 +77,12 @@ router.patch("/accounts/:id", async (req, res) => {
     }
   }
   const [row] = await db.update(accountsTable).set(updates).where(eq(accountsTable.id, id)).returning();
-  if (!row) return res.status(404).json({ error: "Account not found" });
+  if (!row) {
+    res.status(404).json({ error: "Account not found" });
+    return;
+  }
   res.json({ ...row, openingBalance: Number(row.openingBalance || 0) });
+  return;
 });
 
 // ─── Vouchers ────────────────────────────────────────────────────────────────
@@ -95,7 +101,7 @@ async function nextVoucherNumber(type: string): Promise<string> {
 }
 
 router.get("/vouchers", async (req, res) => {
-  const { type, from, to, q } = req.query as Record<string, string>;
+  const { type, from, to, q, billId } = req.query as Record<string, string>;
 
   let query = db.select().from(vouchersTable).$dynamic();
   const conditions = [];
@@ -104,15 +110,17 @@ router.get("/vouchers", async (req, res) => {
   if (from) conditions.push(gte(vouchersTable.date, from));
   if (to) conditions.push(lte(vouchersTable.date, to));
   if (q) conditions.push(like(vouchersTable.particular, `%${q}%`));
+  if (billId) conditions.push(eq(vouchersTable.billId, Number(billId)));
 
   if (conditions.length) query = query.where(and(...conditions));
 
   const rows = await query.orderBy(desc(vouchersTable.createdAt));
   res.json(rows.map(v => ({ ...v, amount: Number(v.amount) })));
+  return;
 });
 
 router.post("/vouchers", async (req, res) => {
-  const { type, date, creditAccountId, debitAccountId, amount, particular, remark, performedBy, reference, narration } = req.body;
+  const { type, date, creditAccountId, debitAccountId, amount, particular, remark, performedBy, reference, narration, billId } = req.body;
   const voucherNumber = await nextVoucherNumber(type);
   const [voucher] = await db
     .insert(vouchersTable)
@@ -128,14 +136,114 @@ router.post("/vouchers", async (req, res) => {
       performedBy,
       reference,
       narration,
+      billId: billId ? Number(billId) : null,
     })
     .returning();
   res.status(201).json({ ...voucher, amount: Number(voucher.amount) });
+  return;
+});
+
+// Edit voucher with audit trail
+router.patch("/vouchers/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  const { editedBy, reason, date, amount, particular, remark, performedBy, reference, narration, creditAccountId, debitAccountId } = req.body;
+
+  if (!editedBy || !reason) {
+    res.status(400).json({ error: "editedBy and reason are required" });
+    return;
+  }
+
+  const [existing] = await db.select().from(vouchersTable).where(eq(vouchersTable.id, id));
+  if (!existing) {
+    res.status(404).json({ error: "Voucher not found" });
+    return;
+  }
+
+  const updates: Record<string, unknown> = {};
+  const auditRows: { voucherId: number; voucherNumber: string; editedBy: string; reason: string; changeType: string; oldValue: string | null; newValue: string | null }[] = [];
+
+  if (date !== undefined && date !== existing.date) {
+    updates.date = date;
+    auditRows.push({ voucherId: id, voucherNumber: existing.voucherNumber, editedBy, reason, changeType: "date", oldValue: existing.date, newValue: date });
+  }
+  if (amount !== undefined && String(amount) !== existing.amount) {
+    updates.amount = String(amount);
+    auditRows.push({ voucherId: id, voucherNumber: existing.voucherNumber, editedBy, reason, changeType: "amount", oldValue: existing.amount, newValue: String(amount) });
+  }
+  if (particular !== undefined && particular !== existing.particular) {
+    updates.particular = particular;
+    auditRows.push({ voucherId: id, voucherNumber: existing.voucherNumber, editedBy, reason, changeType: "particular", oldValue: existing.particular, newValue: particular });
+  }
+  if (remark !== undefined && remark !== existing.remark) {
+    updates.remark = remark;
+    auditRows.push({ voucherId: id, voucherNumber: existing.voucherNumber, editedBy, reason, changeType: "remark", oldValue: existing.remark, newValue: remark });
+  }
+  if (performedBy !== undefined && performedBy !== existing.performedBy) {
+    updates.performedBy = performedBy;
+    auditRows.push({ voucherId: id, voucherNumber: existing.voucherNumber, editedBy, reason, changeType: "performedBy", oldValue: existing.performedBy, newValue: performedBy });
+  }
+  if (reference !== undefined && reference !== existing.reference) {
+    updates.reference = reference;
+    auditRows.push({ voucherId: id, voucherNumber: existing.voucherNumber, editedBy, reason, changeType: "reference", oldValue: existing.reference, newValue: reference });
+  }
+  if (narration !== undefined && narration !== existing.narration) {
+    updates.narration = narration;
+    auditRows.push({ voucherId: id, voucherNumber: existing.voucherNumber, editedBy, reason, changeType: "narration", oldValue: existing.narration, newValue: narration });
+  }
+  if (creditAccountId !== undefined && String(creditAccountId) !== existing.creditAccountId) {
+    updates.creditAccountId = String(creditAccountId);
+    auditRows.push({ voucherId: id, voucherNumber: existing.voucherNumber, editedBy, reason, changeType: "creditAccount", oldValue: existing.creditAccountId, newValue: String(creditAccountId) });
+  }
+  if (debitAccountId !== undefined && String(debitAccountId) !== existing.debitAccountId) {
+    updates.debitAccountId = String(debitAccountId);
+    auditRows.push({ voucherId: id, voucherNumber: existing.voucherNumber, editedBy, reason, changeType: "debitAccount", oldValue: existing.debitAccountId, newValue: String(debitAccountId) });
+  }
+
+  if (Object.keys(updates).length === 0) {
+    res.json({ ...existing, amount: Number(existing.amount) });
+    return;
+  }
+
+  const [updated] = await db.update(vouchersTable).set(updates).where(eq(vouchersTable.id, id)).returning();
+  if (auditRows.length > 0) {
+    await db.insert(voucherAuditsTable).values(auditRows);
+  }
+
+  res.json({ ...updated, amount: Number(updated.amount) });
+  return;
 });
 
 router.delete("/vouchers/:id", async (req, res) => {
   await db.delete(vouchersTable).where(eq(vouchersTable.id, Number(req.params.id)));
   res.json({ ok: true });
+  return;
+});
+
+// Get audit history for a specific voucher
+router.get("/vouchers/:id/audits", async (req, res) => {
+  const id = Number(req.params.id);
+  const audits = await db.select().from(voucherAuditsTable).where(eq(voucherAuditsTable.voucherId, id)).orderBy(desc(voucherAuditsTable.createdAt));
+  res.json(audits);
+  return;
+});
+
+// System report: all voucher edits
+router.get("/voucher-audits", async (req, res) => {
+  const { from, to, editedBy, voucherNumber } = req.query as Record<string, string>;
+  let query = db.select().from(voucherAuditsTable).$dynamic();
+  const conditions = [];
+  if (from) conditions.push(gte(voucherAuditsTable.createdAt, new Date(from)));
+  if (to) {
+    const toDate = new Date(to);
+    toDate.setHours(23, 59, 59, 999);
+    conditions.push(lte(voucherAuditsTable.createdAt, toDate));
+  }
+  if (editedBy) conditions.push(like(voucherAuditsTable.editedBy, `%${editedBy}%`));
+  if (voucherNumber) conditions.push(like(voucherAuditsTable.voucherNumber, `%${voucherNumber}%`));
+  if (conditions.length) query = query.where(and(...conditions));
+  const rows = await query.orderBy(desc(voucherAuditsTable.createdAt));
+  res.json(rows);
+  return;
 });
 
 // ─── Ledger ──────────────────────────────────────────────────────────────────
@@ -148,7 +256,6 @@ router.get("/ledger", async (req, res) => {
 
   const ledger = allAccounts.map((account) => {
     const accIdStr = account.id.toString();
-    // Opening balance
     const openBal = Number(account.openingBalance || 0);
     const openType = account.openingBalanceType || "Dr";
     let dr = openType === "Dr" ? openBal : 0;
@@ -159,7 +266,6 @@ router.get("/ledger", async (req, res) => {
       date: string; particular: string; dr: number; cr: number; balance: number; voucherNumber: string;
     }[] = [];
 
-    // Opening balance entry (if non-zero)
     if (openBal > 0) {
       entries.push({
         date: "Opening",
@@ -201,6 +307,7 @@ router.get("/ledger", async (req, res) => {
 
   const filtered = accountId ? ledger.filter(l => l.account.id.toString() === accountId) : ledger;
   res.json(filtered);
+  return;
 });
 
 // ─── Trial Balance ────────────────────────────────────────────────────────────
@@ -248,6 +355,7 @@ router.get("/trial-balance", async (req, res) => {
   const totalCr = rows.reduce((s, r) => s + r.balanceCr, 0);
 
   res.json({ rows, totalDr, totalCr, balanced: Math.abs(totalDr - totalCr) < 0.01 });
+  return;
 });
 
 // ─── Profit & Loss ────────────────────────────────────────────────────────────
@@ -282,10 +390,10 @@ router.get("/profit-loss", async (req, res) => {
 
     const { dr, cr } = compute(account);
     if (isIncome) {
-      const amount = cr - dr; // Income is credit-positive
+      const amount = cr - dr;
       if (amount !== 0) income.push({ name: account.name, group: grp || "Income", amount });
     } else {
-      const amount = dr - cr; // Expense is debit-positive
+      const amount = dr - cr;
       if (amount !== 0) expenses.push({ name: account.name, group: grp || "Expenses", amount });
     }
   }
@@ -295,6 +403,7 @@ router.get("/profit-loss", async (req, res) => {
   const netProfit = totalIncome - totalExpenses;
 
   res.json({ income, expenses, totalIncome, totalExpenses, netProfit });
+  return;
 });
 
 // ─── Balance Sheet ─────────────────────────────────────────────────────────────
@@ -344,6 +453,7 @@ router.get("/balance-sheet", async (req, res) => {
   const totalLiabilities = liabilities.reduce((s, r) => s + r.amount, 0);
 
   res.json({ assets, liabilities, totalAssets, totalLiabilities });
+  return;
 });
 
 // ─── Tally XML Export ─────────────────────────────────────────────────────────
@@ -361,7 +471,6 @@ router.get("/export/tally", async (req, res) => {
 
   const accountMap = new Map(accounts.map(a => [a.id.toString(), a.name]));
 
-  // Ledger masters XML
   const masterXml = accounts
     .map(a => {
       const parent = a.tallyGroup || (
@@ -391,7 +500,6 @@ router.get("/export/tally", async (req, res) => {
     })
     .join("\n");
 
-  // Vouchers XML
   const voucherXml = vouchers
     .map(v => {
       const drName = accountMap.get(v.debitAccountId) || v.debitAccountId;
@@ -464,6 +572,7 @@ ${voucherXml}
   res.setHeader("Content-Type", "application/xml");
   res.setHeader("Content-Disposition", `attachment; filename=tally-export${from ? `-${from}` : ""}${to ? `-to-${to}` : ""}.xml`);
   res.send(xml);
+  return;
 });
 
 function escapeXml(s: string): string {

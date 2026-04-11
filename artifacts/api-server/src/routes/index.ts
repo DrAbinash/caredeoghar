@@ -15,6 +15,9 @@ import discountsRouter from "./discounts";
 import aiRouter from "./ai";
 import pacsRouter from "./pacs";
 import { superAdminRouter } from "./super-admin";
+import { appointmentsRouter } from "./appointments";
+import { packagesRouter } from "./packages";
+import { expensesRouter } from "./expenses";
 
 const router: IRouter = Router();
 
@@ -35,5 +38,8 @@ router.use("/discounts", discountsRouter);
 router.use("/ai", aiRouter);
 router.use("/pacs", pacsRouter);
 router.use("/super-admin", superAdminRouter);
+router.use("/appointments", appointmentsRouter);
+router.use("/packages", packagesRouter);
+router.use("/expenses", expensesRouter);
 
 export default router;

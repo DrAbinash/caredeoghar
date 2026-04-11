@@ -44,6 +44,9 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - **Accounting** — chart of accounts with Tally groups + opening balances + GST/PAN; vouchers (Payment/Receipt/Contra/Journal/Sales/Purchase); ledger; Trial Balance; Profit & Loss; Balance Sheet; TallyPrime XML export
 - **PACS Viewer** (`/pacs`) — Orthanc DICOM server integration; study/series browser with instance thumbnails; Weasis desktop launcher; OHIF web viewer link; WADO proxy
 - **Discounts** (`/discounts`) — discount rules: percentage/fixed, scope (all/category/test), expiry date, active/inactive toggle
+- **Appointments** (`/appointments`) — day-view appointment scheduler; status flow (scheduled/confirmed/completed/cancelled/no-show); stats row; date navigator; patient/doctor assignment; type (walk-in/scheduled/emergency/follow-up)
+- **Test Packages** (`/packages`) — bundle multiple tests into priced packages; MRP + discount%; effective price preview; card grid with test list; create/edit/delete
+- **Expenses** (`/expenses`) — operational expense tracking; 9 categories; list + Category Summary tabs; date-range + payment-mode filters; auto-generated EXP-YYMM-XXXX IDs
 - **Settings** (`/settings`) — User management with roles (admin/manager/accountant/billing/lab/receptionist), per-module permissions, per-user max discount % cap
 - **PatientDetail** — AI Clinical Note generation + AI patient message drafting (follow-up/results/payment) via Gemini
 
@@ -61,11 +64,14 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 ### DB Tables
 - `inventory_items`, `inventory_transactions`, `inventory_consumption_rules`
 - `commission_rules`
-- `accounts`, `vouchers`
+- `accounts`, `vouchers`, `voucher_audits`
 - `users` — name, email, role, permissions (JSON), PIN, isActive, maxDiscount (numeric)
 - `bill_audits` — audit trail for bill edits (who changed what, when, why)
 - `discount_rules` — name, type (percentage/fixed), value, scope, categories (JSON), testIds (JSON), expiresAt, isActive
 - Extended `doctors` with: `email`, `default_commission`, `default_commission_type`
+- `appointments`, `appointment_counter` — APT-YYMM-XXXX IDs, status, timeSlot, type, patientId/doctorId FKs
+- `packages`, `package_tests`, `package_counter` — PKG-XXXX codes; junction table links packages to tests
+- `expenses`, `expense_counter` — EXP-YYMM-XXXX IDs; category, paymentMode, paidTo, approvedBy
 
 ### API Routes
 - `GET/POST /api/inventory` — inventory items

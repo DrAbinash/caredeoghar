@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
@@ -18,7 +18,8 @@ import {
   Plus, Download, Landmark, FileText, Trash2,
   TrendingUp, TrendingDown, ArrowRightLeft, BarChart3,
   BookOpen, Scale, ChevronDown, ChevronUp, CheckCircle2, AlertTriangle,
-  RefreshCw,
+  RefreshCw, Pencil, History, Building2, ArrowUpDown, Search, Clock,
+  CreditCard, Filter,
 } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -33,7 +34,12 @@ type Voucher = {
   id: number; voucherNumber: string; type: string; date: string;
   creditAccountId: string; debitAccountId: string; amount: number;
   particular: string; remark?: string; performedBy?: string; reference?: string;
-  narration?: string; createdAt: string;
+  narration?: string; billId?: number | null; createdAt: string;
+};
+type VoucherAudit = {
+  id: number; voucherId: number; voucherNumber: string;
+  editedBy: string; reason: string; changeType: string;
+  oldValue: string | null; newValue: string | null; createdAt: string;
 };
 type LedgerEntry = {
   account: Account; dr: number; cr: number; balance: number;
@@ -54,7 +60,7 @@ type BalanceSheet = {
   totalAssets: number; totalLiabilities: number;
 };
 
-// ── Constants ────────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const ACCOUNT_TYPES = ["cash", "bank", "income", "expense", "liability", "asset"];
 const TALLY_GROUPS = [
@@ -76,8 +82,6 @@ const VOUCHER_TYPES = [
 
 const inr = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
 const vBadgeStyle: Record<string, string> = {
   payment: "bg-red-100 text-red-700",
   receipt: "bg-green-100 text-green-700",
@@ -92,11 +96,23 @@ const vBadgeLabel: Record<string, string> = {
   bank_transfer: "Contra", journal: "Journal", sales: "Sales", purchase: "Purchase",
 };
 
+const auditBadgeStyle: Record<string, string> = {
+  amount:       "bg-amber-100 text-amber-700",
+  date:         "bg-blue-100 text-blue-700",
+  particular:   "bg-purple-100 text-purple-700",
+  reference:    "bg-indigo-100 text-indigo-700",
+  narration:    "bg-cyan-100 text-cyan-700",
+  performedBy:  "bg-gray-100 text-gray-600",
+  remark:       "bg-gray-100 text-gray-600",
+  creditAccount:"bg-orange-100 text-orange-700",
+  debitAccount: "bg-orange-100 text-orange-700",
+};
+
 function VoucherBadge({ type }: { type: string }) {
   return <Badge className={`${vBadgeStyle[type] || "bg-gray-100 text-gray-700"} text-xs`}>{vBadgeLabel[type] || type}</Badge>;
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function Accounting() {
   const qc = useQueryClient();
@@ -104,14 +120,30 @@ export default function Accounting() {
   const [voucherOpen, setVoucherOpen] = useState(false);
   const [voucherType, setVoucherType] = useState("payment");
   const [expandedLedger, setExpandedLedger] = useState<Set<number>>(new Set());
-  const [filters, setFilters] = useState({ type: "all", from: "", to: "", q: "" });
-  const [exportDates, setExportDates] = useState({ from: "", to: "" });
+  const [expandedVoucherAudits, setExpandedVoucherAudits] = useState<Set<number>>(new Set());
+  const [editVoucherOpen, setEditVoucherOpen] = useState(false);
+  const [editingVoucher, setEditingVoucher] = useState<Voucher | null>(null);
+  const [voucherAuditMap, setVoucherAuditMap] = useState<Record<number, VoucherAudit[]>>({});
+
+  // Voucher filters
+  const [filters, setFilters] = useState({ type: "all", from: "", to: "", q: "", billId: "" });
+
+  // Ledger filters
+  const [ledgerSearch, setLedgerSearch] = useState("");
+  const [ledgerTypeFilter, setLedgerTypeFilter] = useState("all");
+  const [ledgerSortBy, setLedgerSortBy] = useState<"name" | "balance" | "dr" | "cr">("name");
+  const [ledgerSortDir, setLedgerSortDir] = useState<"asc" | "desc">("asc");
+
+  // Voucher audit system report filters
+  const [auditFilters, setAuditFilters] = useState({ from: "", to: "", editedBy: "", voucherNumber: "" });
 
   // Report date range
   const defaultFrom = (() => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); })();
   const defaultTo = new Date().toISOString().slice(0, 10);
   const [rptFrom, setRptFrom] = useState(defaultFrom);
   const [rptTo, setRptTo] = useState(defaultTo);
+
+  const [exportDates, setExportDates] = useState({ from: "", to: "" });
 
   // ── Queries ──────────────────────────────────────────────────────────────────
 
@@ -127,6 +159,7 @@ export default function Accounting() {
       if (filters.from) params.set("from", filters.from);
       if (filters.to) params.set("to", filters.to);
       if (filters.q) params.set("q", filters.q);
+      if (filters.billId) params.set("billId", filters.billId);
       return api.get(`/api/accounting/vouchers?${params}`);
     },
   });
@@ -146,6 +179,17 @@ export default function Accounting() {
     queryKey: ["balance-sheet", rptTo],
     queryFn: () => api.get(`/api/accounting/balance-sheet?asOf=${rptTo}`),
   });
+  const { data: voucherAudits = [], isFetching: auditFetching, refetch: refetchAudits } = useQuery<VoucherAudit[]>({
+    queryKey: ["voucher-audits", auditFilters],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (auditFilters.from) params.set("from", auditFilters.from);
+      if (auditFilters.to) params.set("to", auditFilters.to);
+      if (auditFilters.editedBy) params.set("editedBy", auditFilters.editedBy);
+      if (auditFilters.voucherNumber) params.set("voucherNumber", auditFilters.voucherNumber);
+      return api.get(`/api/accounting/voucher-audits?${params}`);
+    },
+  });
 
   // ── Mutations ────────────────────────────────────────────────────────────────
 
@@ -162,6 +206,14 @@ export default function Accounting() {
       setVoucherOpen(false); resetV();
     },
   });
+  const editVoucher = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: Record<string, unknown> }) => api.patch(`/api/accounting/vouchers/${id}`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["vouchers"] }); qc.invalidateQueries({ queryKey: ["ledger"] });
+      qc.invalidateQueries({ queryKey: ["voucher-audits"] });
+      setEditVoucherOpen(false); setEditingVoucher(null); resetEV();
+    },
+  });
   const deleteVoucher = useMutation({
     mutationFn: (id: number) => api.delete(`/api/accounting/vouchers/${id}`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["vouchers"] }); qc.invalidateQueries({ queryKey: ["ledger"] }); },
@@ -171,13 +223,73 @@ export default function Accounting() {
 
   const { register: regAcc, handleSubmit: subAcc, reset: resetAcc, setValue: setAccVal, watch: watchAcc } = useForm<Record<string, string>>();
   const { register: regV, handleSubmit: subV, reset: resetV, setValue: setVVal } = useForm<Record<string, string>>();
+  const { register: regEV, handleSubmit: subEV, reset: resetEV } = useForm<Record<string, string>>();
   const accType = watchAcc("type");
 
   const activeAccounts = accounts.filter(a => a.isActive);
+  const bankAccounts = accounts.filter(a => a.type === "bank");
   const accountName = (id: string) => accounts.find(a => a.id.toString() === id)?.name || id;
 
   const totalDr = ledger.reduce((s, l) => s + l.dr, 0);
   const totalCr = ledger.reduce((s, l) => s + l.cr, 0);
+
+  // ── Ledger filtering + sorting ────────────────────────────────────────────────
+
+  const filteredLedger = ledger
+    .filter(l => l.dr + l.cr > 0)
+    .filter(l => {
+      if (ledgerTypeFilter !== "all" && l.account.type !== ledgerTypeFilter) return false;
+      if (ledgerSearch && !l.account.name.toLowerCase().includes(ledgerSearch.toLowerCase())) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      let diff = 0;
+      if (ledgerSortBy === "name") diff = a.account.name.localeCompare(b.account.name);
+      else if (ledgerSortBy === "balance") diff = a.balance - b.balance;
+      else if (ledgerSortBy === "dr") diff = a.dr - b.dr;
+      else if (ledgerSortBy === "cr") diff = a.cr - b.cr;
+      return ledgerSortDir === "asc" ? diff : -diff;
+    });
+
+  const toggleLedgerSort = (col: typeof ledgerSortBy) => {
+    if (ledgerSortBy === col) setLedgerSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setLedgerSortBy(col); setLedgerSortDir("asc"); }
+  };
+  const SortIcon = ({ col }: { col: typeof ledgerSortBy }) => (
+    <ArrowUpDown size={10} className={`inline ml-1 ${ledgerSortBy === col ? "text-primary" : "text-muted-foreground/50"}`} />
+  );
+
+  // ── Voucher audit expansion ───────────────────────────────────────────────────
+
+  const toggleVoucherAudit = async (voucher: Voucher) => {
+    const next = new Set(expandedVoucherAudits);
+    if (next.has(voucher.id)) {
+      next.delete(voucher.id);
+    } else {
+      next.add(voucher.id);
+      if (!voucherAuditMap[voucher.id]) {
+        const data = await api.get(`/api/accounting/vouchers/${voucher.id}/audits`) as VoucherAudit[];
+        setVoucherAuditMap(prev => ({ ...prev, [voucher.id]: data }));
+      }
+    }
+    setExpandedVoucherAudits(next);
+  };
+
+  const openEditVoucher = (v: Voucher) => {
+    setEditingVoucher(v);
+    resetEV({
+      date: v.date,
+      amount: String(v.amount),
+      particular: v.particular,
+      remark: v.remark || "",
+      performedBy: v.performedBy || "",
+      reference: v.reference || "",
+      narration: v.narration || "",
+      editedBy: "",
+      reason: "",
+    });
+    setEditVoucherOpen(true);
+  };
 
   // ── Tally Export ─────────────────────────────────────────────────────────────
 
@@ -199,13 +311,15 @@ export default function Accounting() {
 
       <div className="px-6">
         <Tabs defaultValue="vouchers">
-          <TabsList className="mb-4 flex-wrap gap-1">
+          <TabsList className="mb-4 flex-wrap gap-1 h-auto">
             <TabsTrigger value="vouchers">Vouchers</TabsTrigger>
             <TabsTrigger value="accounts">Chart of Accounts</TabsTrigger>
+            <TabsTrigger value="bank-details">Bank Details</TabsTrigger>
             <TabsTrigger value="ledger">Ledger</TabsTrigger>
             <TabsTrigger value="trial-balance">Trial Balance</TabsTrigger>
             <TabsTrigger value="pnl">P&amp;L</TabsTrigger>
             <TabsTrigger value="balance-sheet">Balance Sheet</TabsTrigger>
+            <TabsTrigger value="voucher-edits">Voucher Edits</TabsTrigger>
             <TabsTrigger value="export">Tally Export</TabsTrigger>
           </TabsList>
 
@@ -223,6 +337,16 @@ export default function Accounting() {
                 <Input type="date" value={filters.from} onChange={e => setFilters(f => ({ ...f, from: e.target.value }))} className="w-36" />
                 <Input type="date" value={filters.to} onChange={e => setFilters(f => ({ ...f, to: e.target.value }))} className="w-36" />
                 <Input value={filters.q} onChange={e => setFilters(f => ({ ...f, q: e.target.value }))} className="w-44" placeholder="Search particular…" />
+                <div className="flex items-center gap-1">
+                  <Filter size={13} className="text-muted-foreground" />
+                  <Input
+                    value={filters.billId}
+                    onChange={e => setFilters(f => ({ ...f, billId: e.target.value }))}
+                    className="w-32"
+                    placeholder="Bill ID…"
+                    type="number"
+                  />
+                </div>
               </div>
               <div className="flex flex-wrap gap-2">
                 {VOUCHER_TYPES.map(t => (
@@ -232,6 +356,14 @@ export default function Accounting() {
                 ))}
               </div>
             </div>
+
+            {filters.billId && (
+              <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm text-blue-700">
+                <Filter size={13} />
+                Filtering by Bill ID: <strong>{filters.billId}</strong>
+                <button className="ml-auto text-blue-500 hover:text-blue-700" onClick={() => setFilters(f => ({ ...f, billId: "" }))}>✕ Clear</button>
+              </div>
+            )}
 
             {vLoading ? (
               <div className="space-y-2">{[...Array(5)].map((_, i) => <div key={i} className="h-14 bg-muted rounded-xl animate-pulse" />)}</div>
@@ -253,22 +385,70 @@ export default function Accounting() {
                     </tr>
                   </thead>
                   <tbody>
-                    {vouchers.map((v) => (
-                      <tr key={v.id} className="border-b border-card-border last:border-0 hover:bg-muted/20">
-                        <td className="px-4 py-3 font-mono text-xs">{v.voucherNumber}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{v.date}</td>
-                        <td className="px-4 py-3"><VoucherBadge type={v.type} /></td>
-                        <td className="px-4 py-3 max-w-[180px] truncate">{v.particular}</td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground">{accountName(v.debitAccountId)}</td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground">{accountName(v.creditAccountId)}</td>
-                        <td className="px-4 py-3 text-right font-semibold">{inr(v.amount)}</td>
-                        <td className="px-4 py-3">
-                          <Button size="sm" variant="ghost" className="h-7 text-destructive hover:text-destructive" onClick={() => deleteVoucher.mutate(v.id)}>
-                            <Trash2 size={13} />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
+                    {vouchers.map((v) => {
+                      const auditExpanded = expandedVoucherAudits.has(v.id);
+                      const auditsForV = voucherAuditMap[v.id] || [];
+                      return (
+                        <Fragment key={v.id}>
+                          <tr className="border-b border-card-border last:border-0 hover:bg-muted/20">
+                            <td className="px-4 py-3 font-mono text-xs">
+                              <div className="flex items-center gap-1">
+                                {v.voucherNumber}
+                                {v.billId && <span className="text-[10px] bg-blue-100 text-blue-600 px-1 py-0.5 rounded">Bill#{v.billId}</span>}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground">{v.date}</td>
+                            <td className="px-4 py-3"><VoucherBadge type={v.type} /></td>
+                            <td className="px-4 py-3 max-w-[180px] truncate">{v.particular}</td>
+                            <td className="px-4 py-3 text-xs text-muted-foreground">{accountName(v.debitAccountId)}</td>
+                            <td className="px-4 py-3 text-xs text-muted-foreground">{accountName(v.creditAccountId)}</td>
+                            <td className="px-4 py-3 text-right font-semibold">{inr(v.amount)}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-1 justify-end">
+                                <Button size="sm" variant="ghost" className="h-7" onClick={() => toggleVoucherAudit(v)}>
+                                  <History size={13} className={auditExpanded ? "text-primary" : ""} />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-7" onClick={() => openEditVoucher(v)}>
+                                  <Pencil size={13} />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-7 text-destructive hover:text-destructive" onClick={() => deleteVoucher.mutate(v.id)}>
+                                  <Trash2 size={13} />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                          {auditExpanded && (
+                            <tr className="bg-muted/10">
+                              <td colSpan={8} className="px-4 py-3">
+                                <div className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-1">
+                                  <History size={11} /> Edit History — {v.voucherNumber}
+                                </div>
+                                {auditsForV.length === 0 ? (
+                                  <p className="text-xs text-muted-foreground italic">No edits recorded for this voucher.</p>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {auditsForV.map(a => (
+                                      <div key={a.id} className="bg-card border border-card-border rounded-lg p-3 text-xs">
+                                        <div className="flex items-center justify-between mb-1">
+                                          <span className={`font-bold uppercase px-1.5 py-0.5 rounded text-[10px] ${auditBadgeStyle[a.changeType] || "bg-gray-100 text-gray-600"}`}>{a.changeType}</span>
+                                          <span className="text-muted-foreground">{new Date(a.createdAt).toLocaleString()}</span>
+                                        </div>
+                                        <p className="font-medium">{a.editedBy}</p>
+                                        <p className="text-muted-foreground">{a.reason}</p>
+                                        <div className="flex gap-4 mt-1">
+                                          <span className="text-red-500">Before: {a.oldValue ?? "—"}</span>
+                                          <span className="text-green-600">After: {a.newValue ?? "—"}</span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
                   </tbody>
                   <tfoot className="border-t border-card-border bg-muted/30">
                     <tr>
@@ -282,7 +462,7 @@ export default function Accounting() {
             )}
           </TabsContent>
 
-          {/* ── Accounts Tab ── */}
+          {/* ── Chart of Accounts Tab ── */}
           <TabsContent value="accounts" className="space-y-4">
             <div className="flex justify-end">
               <Button size="sm" onClick={() => { setAccOpen(true); resetAcc(); }}>
@@ -322,9 +502,7 @@ export default function Accounting() {
                         </td>
                         <td className="px-4 py-3">
                           <span className="text-xs capitalize text-muted-foreground">{acc.type}</span>
-                          {acc.tallyGroup && (
-                            <p className="text-xs text-primary/70 mt-0.5">{acc.tallyGroup}</p>
-                          )}
+                          {acc.tallyGroup && <p className="text-xs text-primary/70 mt-0.5">{acc.tallyGroup}</p>}
                         </td>
                         <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{acc.code || "—"}</td>
                         <td className="px-4 py-3 text-right text-sm">
@@ -345,16 +523,157 @@ export default function Accounting() {
             )}
           </TabsContent>
 
+          {/* ── Bank Details Tab ── */}
+          <TabsContent value="bank-details" className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">Bank accounts with full details — IFSC, account numbers, and balances</p>
+              <Button size="sm" onClick={() => { setAccOpen(true); resetAcc({ type: "bank" }); setAccVal("type", "bank"); setAccVal("tallyGroup", "Bank Accounts"); }}>
+                <Plus size={14} className="mr-1" /> Add Bank Account
+              </Button>
+            </div>
+
+            {bankAccounts.length === 0 ? (
+              <div className="text-center py-16 text-muted-foreground">
+                <Building2 size={36} className="mx-auto mb-3 opacity-30" />
+                <p>No bank accounts configured yet.</p>
+                <p className="text-xs mt-1">Add a bank account from the Chart of Accounts or the button above.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {bankAccounts.map(acc => {
+                  const ledgerEntry = ledger.find(l => l.account.id === acc.id);
+                  const balance = ledgerEntry ? ledgerEntry.balance : (acc.openingBalance || 0);
+                  return (
+                    <div key={acc.id} className="bg-card border border-card-border rounded-xl p-5">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+                            <Building2 size={18} className="text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="font-semibold">{acc.name}</p>
+                            <p className="text-xs text-muted-foreground">{acc.bankName || "—"}</p>
+                          </div>
+                        </div>
+                        <Badge className={acc.isActive ? "bg-green-100 text-green-700 text-xs" : "bg-gray-100 text-gray-500 text-xs"}>
+                          {acc.isActive ? "Active" : "Inactive"}
+                        </Badge>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Account Number</p>
+                          <p className="font-mono font-medium">{acc.accountNumber || "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">IFSC Code</p>
+                          <p className="font-mono font-medium">{acc.ifscCode || "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Code / Alias</p>
+                          <p className="font-mono text-xs">{acc.code || "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Tally Group</p>
+                          <p className="text-xs">{acc.tallyGroup || "Bank Accounts"}</p>
+                        </div>
+                        {acc.gstNumber && (
+                          <div className="col-span-2">
+                            <p className="text-xs text-muted-foreground">GST Number</p>
+                            <p className="font-mono text-xs">{acc.gstNumber}</p>
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-4 pt-3 border-t border-card-border flex justify-between items-center">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Opening Balance</p>
+                          <p className="text-sm font-medium">
+                            {(acc.openingBalance || 0) > 0 ? `${inr(acc.openingBalance || 0)} ${acc.openingBalanceType}` : "—"}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">Current Balance</p>
+                          <p className={`text-base font-bold ${balance >= 0 ? "text-green-600" : "text-red-500"}`}>
+                            {inr(Math.abs(balance))} {balance >= 0 ? "Dr" : "Cr"}
+                          </p>
+                        </div>
+                      </div>
+                      {ledgerEntry && ledgerEntry.entries.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-card-border">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">Recent Transactions</p>
+                          <div className="space-y-1">
+                            {ledgerEntry.entries.slice(-3).reverse().map((e, i) => (
+                              <div key={i} className="flex justify-between text-xs">
+                                <span className="text-muted-foreground">{e.date} · {e.particular}</span>
+                                <span className={e.dr > 0 ? "text-green-600 font-medium" : "text-red-500 font-medium"}>
+                                  {e.dr > 0 ? `+${inr(e.dr)}` : `-${inr(e.cr)}`}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Bank summary totals */}
+            {bankAccounts.length > 0 && (
+              <div className="bg-muted/30 border border-card-border rounded-xl p-4">
+                <p className="text-xs font-semibold uppercase text-muted-foreground mb-3">Bank Balance Summary</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-xs text-muted-foreground border-b border-card-border">
+                        <th className="text-left pb-2">Bank Account</th>
+                        <th className="text-left pb-2">Bank Name</th>
+                        <th className="text-right pb-2">Dr (Debit)</th>
+                        <th className="text-right pb-2">Cr (Credit)</th>
+                        <th className="text-right pb-2">Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bankAccounts.map(acc => {
+                        const le = ledger.find(l => l.account.id === acc.id);
+                        return (
+                          <tr key={acc.id} className="border-b border-card-border/50 last:border-0">
+                            <td className="py-2 font-medium">{acc.name}</td>
+                            <td className="py-2 text-muted-foreground">{acc.bankName || "—"}</td>
+                            <td className="py-2 text-right text-green-600">{le ? inr(le.dr) : "—"}</td>
+                            <td className="py-2 text-right text-red-500">{le ? inr(le.cr) : "—"}</td>
+                            <td className={`py-2 text-right font-semibold ${(le?.balance ?? 0) >= 0 ? "text-green-600" : "text-red-500"}`}>
+                              {le ? `${inr(Math.abs(le.balance))} ${le.balance >= 0 ? "Dr" : "Cr"}` : "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot className="border-t-2 border-card-border">
+                      <tr>
+                        <td colSpan={2} className="py-2 font-bold text-sm">Total</td>
+                        <td className="py-2 text-right font-bold text-green-600">{inr(bankAccounts.reduce((s, a) => s + (ledger.find(l => l.account.id === a.id)?.dr || 0), 0))}</td>
+                        <td className="py-2 text-right font-bold text-red-500">{inr(bankAccounts.reduce((s, a) => s + (ledger.find(l => l.account.id === a.id)?.cr || 0), 0))}</td>
+                        <td className="py-2 text-right font-bold">{inr(Math.abs(bankAccounts.reduce((s, a) => s + (ledger.find(l => l.account.id === a.id)?.balance || 0), 0)))}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            )}
+          </TabsContent>
+
           {/* ── Ledger Tab ── */}
           <TabsContent value="ledger" className="space-y-4">
-            <div className="grid grid-cols-3 gap-4 mb-2">
+            {/* Summary cards */}
+            <div className="grid grid-cols-3 gap-4">
               <div className="bg-card border border-card-border rounded-xl p-4">
                 <p className="text-xs text-muted-foreground">Total Debits</p>
-                <p className="text-lg font-bold text-foreground">{inr(totalDr)}</p>
+                <p className="text-lg font-bold">{inr(totalDr)}</p>
               </div>
               <div className="bg-card border border-card-border rounded-xl p-4">
                 <p className="text-xs text-muted-foreground">Total Credits</p>
-                <p className="text-lg font-bold text-foreground">{inr(totalCr)}</p>
+                <p className="text-lg font-bold">{inr(totalCr)}</p>
               </div>
               <div className="bg-card border border-card-border rounded-xl p-4">
                 <p className="text-xs text-muted-foreground">Net Balance</p>
@@ -362,11 +681,40 @@ export default function Accounting() {
               </div>
             </div>
 
-            {ledger.filter(l => l.dr + l.cr > 0).length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">No ledger entries yet</div>
+            {/* Filters + sorting */}
+            <div className="flex flex-wrap gap-2 items-center bg-card border border-card-border rounded-xl p-3">
+              <div className="flex items-center gap-1.5 flex-1 min-w-[160px]">
+                <Search size={13} className="text-muted-foreground" />
+                <Input value={ledgerSearch} onChange={e => setLedgerSearch(e.target.value)} placeholder="Search accounts…" className="h-8 text-sm" />
+              </div>
+              <Select value={ledgerTypeFilter} onValueChange={setLedgerTypeFilter}>
+                <SelectTrigger className="w-32 h-8 text-sm"><SelectValue placeholder="All types" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  {ACCOUNT_TYPES.map(t => <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <ArrowUpDown size={12} /> Sort:
+              </div>
+              {(["name", "dr", "cr", "balance"] as const).map(col => (
+                <button
+                  key={col}
+                  onClick={() => toggleLedgerSort(col)}
+                  className={`text-xs px-2 py-1 rounded border ${ledgerSortBy === col ? "border-primary text-primary bg-primary/5" : "border-border text-muted-foreground hover:text-foreground"}`}
+                >
+                  {col === "name" ? "Name" : col === "dr" ? "Debit" : col === "cr" ? "Credit" : "Balance"}
+                  <SortIcon col={col} />
+                </button>
+              ))}
+              <span className="text-xs text-muted-foreground">{filteredLedger.length} account{filteredLedger.length !== 1 ? "s" : ""}</span>
+            </div>
+
+            {filteredLedger.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">No ledger entries match the current filters</div>
             ) : (
               <div className="space-y-2">
-                {ledger.filter(l => l.dr + l.cr > 0).map((l) => {
+                {filteredLedger.map((l) => {
                   const expanded = expandedLedger.has(l.account.id);
                   return (
                     <div key={l.account.id} className="bg-card border border-card-border rounded-xl overflow-hidden">
@@ -379,8 +727,13 @@ export default function Accounting() {
                         })}
                       >
                         <div>
-                          <p className="font-semibold text-sm">{l.account.name}</p>
-                          <p className="text-xs text-muted-foreground capitalize">{l.account.tallyGroup || l.account.type}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-sm">{l.account.name}</p>
+                            <Badge className={`text-[10px] capitalize ${l.account.type === "bank" ? "bg-blue-100 text-blue-700" : l.account.type === "cash" ? "bg-green-100 text-green-700" : l.account.type === "income" ? "bg-emerald-100 text-emerald-700" : l.account.type === "expense" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-600"}`}>
+                              {l.account.type}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">{l.account.tallyGroup || l.account.type} · {l.entries.length - (l.entries[0]?.voucherNumber === "OB" ? 1 : 0)} transactions</p>
                         </div>
                         <div className="flex items-center gap-6 text-sm">
                           <div className="text-right">
@@ -419,8 +772,8 @@ export default function Accounting() {
                                   <td className="px-4 py-2 text-muted-foreground">{e.date}</td>
                                   <td className="px-4 py-2 font-mono">{e.voucherNumber}</td>
                                   <td className="px-4 py-2">{e.particular}</td>
-                                  <td className="px-4 py-2 text-right">{e.dr ? inr(e.dr) : "—"}</td>
-                                  <td className="px-4 py-2 text-right">{e.cr ? inr(e.cr) : "—"}</td>
+                                  <td className="px-4 py-2 text-right text-green-600">{e.dr ? inr(e.dr) : "—"}</td>
+                                  <td className="px-4 py-2 text-right text-red-500">{e.cr ? inr(e.cr) : "—"}</td>
                                   <td className={`px-4 py-2 text-right font-medium ${e.balance >= 0 ? "text-green-600" : "text-red-500"}`}>
                                     {inr(Math.abs(e.balance))} {e.balance >= 0 ? "Dr" : "Cr"}
                                   </td>
@@ -495,70 +848,33 @@ export default function Accounting() {
           {/* ── P&L Tab ── */}
           <TabsContent value="pnl" className="space-y-4">
             <div className="flex flex-wrap gap-3 items-end bg-card border border-card-border rounded-xl p-4">
-              <div>
-                <Label className="text-xs">From</Label>
-                <Input type="date" value={rptFrom} onChange={e => setRptFrom(e.target.value)} className="mt-1 w-36" />
-              </div>
-              <div>
-                <Label className="text-xs">To</Label>
-                <Input type="date" value={rptTo} onChange={e => setRptTo(e.target.value)} className="mt-1 w-36" />
-              </div>
-              <Button size="sm" variant="outline" onClick={() => refetchPL()} disabled={plFetching}>
-                <RefreshCw size={13} className={`mr-1 ${plFetching ? "animate-spin" : ""}`} /> Refresh
-              </Button>
+              <div><Label className="text-xs">From</Label><Input type="date" value={rptFrom} onChange={e => setRptFrom(e.target.value)} className="mt-1 w-36" /></div>
+              <div><Label className="text-xs">To</Label><Input type="date" value={rptTo} onChange={e => setRptTo(e.target.value)} className="mt-1 w-36" /></div>
+              <Button size="sm" variant="outline" onClick={() => refetchPL()} disabled={plFetching}><RefreshCw size={13} className={`mr-1 ${plFetching ? "animate-spin" : ""}`} /> Refresh</Button>
             </div>
-
             {profitLoss && (
               <>
                 <div className={`rounded-xl p-5 border-2 ${profitLoss.netProfit >= 0 ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{profitLoss.netProfit >= 0 ? "Net Profit" : "Net Loss"}</p>
                   <p className={`text-3xl font-bold mt-1 ${profitLoss.netProfit >= 0 ? "text-green-700" : "text-red-600"}`}>{inr(Math.abs(profitLoss.netProfit))}</p>
                 </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  {/* Income */}
                   <div className="bg-card border border-card-border rounded-xl overflow-hidden">
                     <div className="bg-green-50 border-b border-card-border px-4 py-3 flex justify-between">
                       <p className="font-semibold text-green-800 text-sm">Income</p>
                       <p className="font-bold text-green-700">{inr(profitLoss.totalIncome)}</p>
                     </div>
-                    {profitLoss.income.length === 0 ? (
-                      <div className="p-6 text-center text-muted-foreground text-sm">No income entries</div>
-                    ) : (
-                      <table className="w-full text-sm">
-                        <tbody>
-                          {profitLoss.income.map((r, i) => (
-                            <tr key={i} className="border-b border-card-border last:border-0 hover:bg-muted/20">
-                              <td className="px-4 py-2.5 font-medium">{r.name}</td>
-                              <td className="px-4 py-2.5 text-xs text-muted-foreground">{r.group}</td>
-                              <td className="px-4 py-2.5 text-right text-green-700 font-semibold">{inr(r.amount)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                    {profitLoss.income.length === 0 ? <div className="p-6 text-center text-muted-foreground text-sm">No income entries</div> : (
+                      <table className="w-full text-sm"><tbody>{profitLoss.income.map((r, i) => (<tr key={i} className="border-b border-card-border last:border-0 hover:bg-muted/20"><td className="px-4 py-2.5 font-medium">{r.name}</td><td className="px-4 py-2.5 text-xs text-muted-foreground">{r.group}</td><td className="px-4 py-2.5 text-right text-green-700 font-semibold">{inr(r.amount)}</td></tr>))}</tbody></table>
                     )}
                   </div>
-
-                  {/* Expenses */}
                   <div className="bg-card border border-card-border rounded-xl overflow-hidden">
                     <div className="bg-red-50 border-b border-card-border px-4 py-3 flex justify-between">
                       <p className="font-semibold text-red-800 text-sm">Expenses</p>
                       <p className="font-bold text-red-700">{inr(profitLoss.totalExpenses)}</p>
                     </div>
-                    {profitLoss.expenses.length === 0 ? (
-                      <div className="p-6 text-center text-muted-foreground text-sm">No expense entries</div>
-                    ) : (
-                      <table className="w-full text-sm">
-                        <tbody>
-                          {profitLoss.expenses.map((r, i) => (
-                            <tr key={i} className="border-b border-card-border last:border-0 hover:bg-muted/20">
-                              <td className="px-4 py-2.5 font-medium">{r.name}</td>
-                              <td className="px-4 py-2.5 text-xs text-muted-foreground">{r.group}</td>
-                              <td className="px-4 py-2.5 text-right text-red-600 font-semibold">{inr(r.amount)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                    {profitLoss.expenses.length === 0 ? <div className="p-6 text-center text-muted-foreground text-sm">No expense entries</div> : (
+                      <table className="w-full text-sm"><tbody>{profitLoss.expenses.map((r, i) => (<tr key={i} className="border-b border-card-border last:border-0 hover:bg-muted/20"><td className="px-4 py-2.5 font-medium">{r.name}</td><td className="px-4 py-2.5 text-xs text-muted-foreground">{r.group}</td><td className="px-4 py-2.5 text-right text-red-600 font-semibold">{inr(r.amount)}</td></tr>))}</tbody></table>
                     )}
                   </div>
                 </div>
@@ -569,76 +885,100 @@ export default function Accounting() {
           {/* ── Balance Sheet Tab ── */}
           <TabsContent value="balance-sheet" className="space-y-4">
             <div className="flex flex-wrap gap-3 items-end bg-card border border-card-border rounded-xl p-4">
-              <div>
-                <Label className="text-xs">As of Date</Label>
-                <Input type="date" value={rptTo} onChange={e => setRptTo(e.target.value)} className="mt-1 w-36" />
-              </div>
-              <Button size="sm" variant="outline" onClick={() => refetchBS()} disabled={bsFetching}>
-                <RefreshCw size={13} className={`mr-1 ${bsFetching ? "animate-spin" : ""}`} /> Refresh
-              </Button>
+              <div><Label className="text-xs">As of Date</Label><Input type="date" value={rptTo} onChange={e => setRptTo(e.target.value)} className="mt-1 w-36" /></div>
+              <Button size="sm" variant="outline" onClick={() => refetchBS()} disabled={bsFetching}><RefreshCw size={13} className={`mr-1 ${bsFetching ? "animate-spin" : ""}`} /> Refresh</Button>
             </div>
-
             {balanceSheet && (
               <>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                    <p className="text-xs text-muted-foreground">Total Assets</p>
-                    <p className="text-2xl font-bold text-blue-700">{inr(balanceSheet.totalAssets)}</p>
-                  </div>
-                  <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
-                    <p className="text-xs text-muted-foreground">Total Liabilities</p>
-                    <p className="text-2xl font-bold text-purple-700">{inr(balanceSheet.totalLiabilities)}</p>
-                  </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4"><p className="text-xs text-muted-foreground">Total Assets</p><p className="text-2xl font-bold text-blue-700">{inr(balanceSheet.totalAssets)}</p></div>
+                  <div className="bg-purple-50 border border-purple-200 rounded-xl p-4"><p className="text-xs text-muted-foreground">Total Liabilities</p><p className="text-2xl font-bold text-purple-700">{inr(balanceSheet.totalLiabilities)}</p></div>
                 </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  {/* Assets */}
                   <div className="bg-card border border-card-border rounded-xl overflow-hidden">
-                    <div className="bg-blue-50 border-b border-card-border px-4 py-3 flex justify-between">
-                      <p className="font-semibold text-blue-800 text-sm">Assets</p>
-                      <p className="font-bold text-blue-700">{inr(balanceSheet.totalAssets)}</p>
-                    </div>
-                    {balanceSheet.assets.length === 0 ? (
-                      <div className="p-6 text-center text-muted-foreground text-sm">No asset accounts</div>
-                    ) : (
-                      <table className="w-full text-sm">
-                        <tbody>
-                          {balanceSheet.assets.map((r, i) => (
-                            <tr key={i} className="border-b border-card-border last:border-0 hover:bg-muted/20">
-                              <td className="px-4 py-2.5 font-medium">{r.name}</td>
-                              <td className="px-4 py-2.5 text-xs text-muted-foreground">{r.group}</td>
-                              <td className="px-4 py-2.5 text-right font-semibold">{inr(r.amount)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                    <div className="bg-blue-50 border-b border-card-border px-4 py-3 flex justify-between"><p className="font-semibold text-blue-800 text-sm">Assets</p><p className="font-bold text-blue-700">{inr(balanceSheet.totalAssets)}</p></div>
+                    {balanceSheet.assets.length === 0 ? <div className="p-6 text-center text-muted-foreground text-sm">No asset accounts</div> : (
+                      <table className="w-full text-sm"><tbody>{balanceSheet.assets.map((r, i) => (<tr key={i} className="border-b border-card-border last:border-0 hover:bg-muted/20"><td className="px-4 py-2.5 font-medium">{r.name}</td><td className="px-4 py-2.5 text-xs text-muted-foreground">{r.group}</td><td className="px-4 py-2.5 text-right font-semibold">{inr(r.amount)}</td></tr>))}</tbody></table>
                     )}
                   </div>
-
-                  {/* Liabilities */}
                   <div className="bg-card border border-card-border rounded-xl overflow-hidden">
-                    <div className="bg-purple-50 border-b border-card-border px-4 py-3 flex justify-between">
-                      <p className="font-semibold text-purple-800 text-sm">Liabilities &amp; Capital</p>
-                      <p className="font-bold text-purple-700">{inr(balanceSheet.totalLiabilities)}</p>
-                    </div>
-                    {balanceSheet.liabilities.length === 0 ? (
-                      <div className="p-6 text-center text-muted-foreground text-sm">No liability accounts</div>
-                    ) : (
-                      <table className="w-full text-sm">
-                        <tbody>
-                          {balanceSheet.liabilities.map((r, i) => (
-                            <tr key={i} className="border-b border-card-border last:border-0 hover:bg-muted/20">
-                              <td className="px-4 py-2.5 font-medium">{r.name}</td>
-                              <td className="px-4 py-2.5 text-xs text-muted-foreground">{r.group}</td>
-                              <td className="px-4 py-2.5 text-right font-semibold">{inr(r.amount)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                    <div className="bg-purple-50 border-b border-card-border px-4 py-3 flex justify-between"><p className="font-semibold text-purple-800 text-sm">Liabilities &amp; Capital</p><p className="font-bold text-purple-700">{inr(balanceSheet.totalLiabilities)}</p></div>
+                    {balanceSheet.liabilities.length === 0 ? <div className="p-6 text-center text-muted-foreground text-sm">No liability accounts</div> : (
+                      <table className="w-full text-sm"><tbody>{balanceSheet.liabilities.map((r, i) => (<tr key={i} className="border-b border-card-border last:border-0 hover:bg-muted/20"><td className="px-4 py-2.5 font-medium">{r.name}</td><td className="px-4 py-2.5 text-xs text-muted-foreground">{r.group}</td><td className="px-4 py-2.5 text-right font-semibold">{inr(r.amount)}</td></tr>))}</tbody></table>
                     )}
                   </div>
                 </div>
               </>
+            )}
+          </TabsContent>
+
+          {/* ── Voucher Edits Report Tab ── */}
+          <TabsContent value="voucher-edits" className="space-y-4">
+            <div className="bg-card border border-card-border rounded-xl p-4">
+              <p className="text-xs font-semibold uppercase text-muted-foreground mb-3 flex items-center gap-1"><History size={13} /> System Audit Report — All Voucher Edits</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                  <Label className="text-xs">From Date</Label>
+                  <Input type="date" value={auditFilters.from} onChange={e => setAuditFilters(f => ({ ...f, from: e.target.value }))} className="mt-1 h-8 text-sm" />
+                </div>
+                <div>
+                  <Label className="text-xs">To Date</Label>
+                  <Input type="date" value={auditFilters.to} onChange={e => setAuditFilters(f => ({ ...f, to: e.target.value }))} className="mt-1 h-8 text-sm" />
+                </div>
+                <div>
+                  <Label className="text-xs">Edited By</Label>
+                  <Input value={auditFilters.editedBy} onChange={e => setAuditFilters(f => ({ ...f, editedBy: e.target.value }))} className="mt-1 h-8 text-sm" placeholder="Name…" />
+                </div>
+                <div>
+                  <Label className="text-xs">Voucher Number</Label>
+                  <Input value={auditFilters.voucherNumber} onChange={e => setAuditFilters(f => ({ ...f, voucherNumber: e.target.value }))} className="mt-1 h-8 text-sm" placeholder="e.g. PV-202604…" />
+                </div>
+              </div>
+              <div className="flex justify-between items-center mt-3">
+                <span className="text-xs text-muted-foreground">{voucherAudits.length} record{voucherAudits.length !== 1 ? "s" : ""}</span>
+                <Button size="sm" variant="outline" onClick={() => refetchAudits()} disabled={auditFetching}>
+                  <RefreshCw size={12} className={`mr-1 ${auditFetching ? "animate-spin" : ""}`} /> Refresh
+                </Button>
+              </div>
+            </div>
+
+            {voucherAudits.length === 0 ? (
+              <div className="text-center py-16 text-muted-foreground">
+                <Clock size={36} className="mx-auto mb-3 opacity-30" />
+                <p>No voucher edit records found.</p>
+                <p className="text-xs mt-1">Edit a voucher to see the audit trail here.</p>
+              </div>
+            ) : (
+              <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 border-b border-card-border">
+                    <tr>
+                      <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Timestamp</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Voucher</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Field Changed</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Edited By</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Reason</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Before</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">After</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {voucherAudits.map(a => (
+                      <tr key={a.id} className="border-b border-card-border last:border-0 hover:bg-muted/20">
+                        <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{new Date(a.createdAt).toLocaleString()}</td>
+                        <td className="px-4 py-3 font-mono text-xs font-medium">{a.voucherNumber}</td>
+                        <td className="px-4 py-3">
+                          <span className={`text-xs font-bold uppercase px-1.5 py-0.5 rounded ${auditBadgeStyle[a.changeType] || "bg-gray-100 text-gray-600"}`}>{a.changeType}</span>
+                        </td>
+                        <td className="px-4 py-3 font-medium">{a.editedBy}</td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs max-w-[180px] truncate">{a.reason}</td>
+                        <td className="px-4 py-3 text-red-500 text-xs font-mono max-w-[120px] truncate">{a.oldValue ?? "—"}</td>
+                        <td className="px-4 py-3 text-green-600 text-xs font-mono max-w-[120px] truncate">{a.newValue ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </TabsContent>
 
@@ -651,35 +991,21 @@ export default function Accounting() {
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold text-base">Export to Tally XML</h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Downloads all ledger masters and vouchers in TallyPrime-compatible XML format. Includes account groups, opening balances, GST details, and proper voucher types.
-                  </p>
-
+                  <p className="text-sm text-muted-foreground mt-1">Downloads all ledger masters and vouchers in TallyPrime-compatible XML format.</p>
                   <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div>
-                      <Label className="text-xs">From Date (optional)</Label>
-                      <Input type="date" value={exportDates.from} onChange={e => setExportDates(d => ({ ...d, from: e.target.value }))} className="mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-xs">To Date (optional)</Label>
-                      <Input type="date" value={exportDates.to} onChange={e => setExportDates(d => ({ ...d, to: e.target.value }))} className="mt-1" />
-                    </div>
+                    <div><Label className="text-xs">From Date (optional)</Label><Input type="date" value={exportDates.from} onChange={e => setExportDates(d => ({ ...d, from: e.target.value }))} className="mt-1" /></div>
+                    <div><Label className="text-xs">To Date (optional)</Label><Input type="date" value={exportDates.to} onChange={e => setExportDates(d => ({ ...d, to: e.target.value }))} className="mt-1" /></div>
                   </div>
-
                   <div className="mt-4 space-y-1 text-xs text-muted-foreground">
                     <p>• {accounts.length} account masters (with Tally group mapping)</p>
                     <p>• {vouchers.length} vouchers (in selected range)</p>
                     <p>• Voucher types: Payment, Receipt, Contra, Journal, Sales, Purchase</p>
                     <p>• Opening balances and GST numbers included</p>
                   </div>
-
-                  <Button className="mt-4" onClick={downloadTallyExport}>
-                    <Download size={15} className="mr-2" /> Download Tally XML
-                  </Button>
+                  <Button className="mt-4" onClick={downloadTallyExport}><Download size={15} className="mr-2" /> Download Tally XML</Button>
                 </div>
               </div>
             </div>
-
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 max-w-xl text-sm text-amber-800">
               <p className="font-semibold mb-2">Import Instructions (TallyPrime)</p>
               <ol className="list-decimal list-inside space-y-1 text-xs">
@@ -690,23 +1016,6 @@ export default function Accounting() {
                 <li>Verify Trial Balance in Tally matches the one here</li>
               </ol>
             </div>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 max-w-xl text-sm text-blue-800">
-              <p className="font-semibold mb-2">Tally Group Mapping</p>
-              <div className="grid grid-cols-2 gap-1 text-xs mt-2">
-                {[
-                  ["cash", "Cash-in-Hand"], ["bank", "Bank Accounts"], ["income", "Direct Income"],
-                  ["expense", "Indirect Expenses"], ["asset", "Current Assets"], ["liability", "Current Liabilities"],
-                ].map(([t, g]) => (
-                  <div key={t} className="flex gap-2">
-                    <span className="text-blue-600 font-mono">{t}</span>
-                    <span className="text-blue-500">→</span>
-                    <span>{g}</span>
-                  </div>
-                ))}
-              </div>
-              <p className="text-xs mt-2 text-blue-600">Set a custom Tally Group on each account to override these defaults.</p>
-            </div>
           </TabsContent>
         </Tabs>
       </div>
@@ -716,15 +1025,13 @@ export default function Accounting() {
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Add Ledger Account</DialogTitle></DialogHeader>
           <form onSubmit={subAcc((d) => createAccount.mutate({ ...d, openingBalance: Number(d.openingBalance || 0), gstApplicable: !!d.gstApplicable }))} className="space-y-4">
-            <div><Label>Account Name *</Label><Input {...regAcc("name", { required: true })} className="mt-1" placeholder="e.g., Cash Account" /></div>
+            <div><Label>Account Name *</Label><Input {...regAcc("name", { required: true })} className="mt-1" placeholder="e.g., SBI Current Account" /></div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Type *</Label>
                 <Select onValueChange={(v) => setAccVal("type", v)}>
                   <SelectTrigger className="mt-1"><SelectValue placeholder="Select…" /></SelectTrigger>
-                  <SelectContent>
-                    {ACCOUNT_TYPES.map(t => <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>)}
-                  </SelectContent>
+                  <SelectContent>{ACCOUNT_TYPES.map(t => <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div><Label>Code / Alias</Label><Input {...regAcc("code")} className="mt-1" placeholder="e.g. 1001" /></div>
@@ -733,34 +1040,25 @@ export default function Accounting() {
               <Label>Tally Group</Label>
               <Select onValueChange={(v) => setAccVal("tallyGroup", v)}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="Select Tally group (optional)" /></SelectTrigger>
-                <SelectContent>
-                  {TALLY_GROUPS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
-                </SelectContent>
+                <SelectContent>{TALLY_GROUPS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground mt-1">Maps to the correct group in TallyPrime when exported</p>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Opening Balance (₹)</Label>
-                <Input type="number" step="0.01" {...regAcc("openingBalance")} className="mt-1" placeholder="0" />
-              </div>
+              <div><Label>Opening Balance (₹)</Label><Input type="number" step="0.01" {...regAcc("openingBalance")} className="mt-1" placeholder="0" /></div>
               <div>
                 <Label>Opening Balance Type</Label>
                 <Select onValueChange={(v) => setAccVal("openingBalanceType", v)} defaultValue="Dr">
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Dr">Debit (Dr)</SelectItem>
-                    <SelectItem value="Cr">Credit (Cr)</SelectItem>
-                  </SelectContent>
+                  <SelectContent><SelectItem value="Dr">Debit (Dr)</SelectItem><SelectItem value="Cr">Credit (Cr)</SelectItem></SelectContent>
                 </Select>
               </div>
             </div>
-            {(accType === "bank") && (
+            {accType === "bank" && (
               <>
-                <div><Label>Bank Name</Label><Input {...regAcc("bankName")} className="mt-1" /></div>
+                <div><Label>Bank Name</Label><Input {...regAcc("bankName")} className="mt-1" placeholder="e.g. State Bank of India" /></div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Account No.</Label><Input {...regAcc("accountNumber")} className="mt-1" /></div>
-                  <div><Label>IFSC</Label><Input {...regAcc("ifscCode")} className="mt-1" /></div>
+                  <div><Label>IFSC</Label><Input {...regAcc("ifscCode")} className="mt-1" placeholder="SBIN0001234" /></div>
                 </div>
               </>
             )}
@@ -785,29 +1083,18 @@ export default function Accounting() {
           {VOUCHER_TYPES.find(t => t.value === voucherType) && (
             <p className="text-xs text-muted-foreground -mt-2">{VOUCHER_TYPES.find(t => t.value === voucherType)?.desc}</p>
           )}
-          <form
-            onSubmit={subV((d) => createVoucher.mutate({ ...d, type: voucherType, amount: Number(d.amount) }))}
-            className="space-y-4"
-          >
+          <form onSubmit={subV((d) => createVoucher.mutate({ ...d, type: voucherType, amount: Number(d.amount), billId: d.billId ? Number(d.billId) : undefined }))} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Date *</Label>
-                <Input type="date" {...regV("date", { required: true })} className="mt-1" defaultValue={new Date().toISOString().split("T")[0]} />
-              </div>
-              <div>
-                <Label>Amount (₹) *</Label>
-                <Input type="number" step="0.01" {...regV("amount", { required: true })} className="mt-1" />
-              </div>
+              <div><Label>Date *</Label><Input type="date" {...regV("date", { required: true })} className="mt-1" defaultValue={new Date().toISOString().split("T")[0]} /></div>
+              <div><Label>Amount (₹) *</Label><Input type="number" step="0.01" {...regV("amount", { required: true })} className="mt-1" /></div>
             </div>
             <div>
               <Label>{voucherType === "contra" || voucherType === "bank_transfer" ? "From Account (Credit)" : "Credit Account"} *</Label>
               <Select onValueChange={(v) => setVVal("creditAccountId", v)}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="Select account…" /></SelectTrigger>
                 <SelectContent>
-                  {(voucherType === "contra" || voucherType === "bank_transfer"
-                    ? activeAccounts.filter(a => a.type === "cash" || a.type === "bank")
-                    : activeAccounts
-                  ).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
+                  {(voucherType === "contra" || voucherType === "bank_transfer" ? activeAccounts.filter(a => a.type === "cash" || a.type === "bank") : activeAccounts)
+                    .map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -816,10 +1103,8 @@ export default function Accounting() {
               <Select onValueChange={(v) => setVVal("debitAccountId", v)}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="Select account…" /></SelectTrigger>
                 <SelectContent>
-                  {(voucherType === "contra" || voucherType === "bank_transfer"
-                    ? activeAccounts.filter(a => a.type === "bank")
-                    : activeAccounts
-                  ).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
+                  {(voucherType === "contra" || voucherType === "bank_transfer" ? activeAccounts.filter(a => a.type === "bank") : activeAccounts)
+                    .map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -829,9 +1114,60 @@ export default function Accounting() {
               <div><Label>Performed By</Label><Input {...regV("performedBy")} className="mt-1" /></div>
               <div><Label>Reference No.</Label><Input {...regV("reference")} className="mt-1" placeholder="Bill#, Cheque#…" /></div>
             </div>
+            <div><Label>Link Bill ID (optional)</Label><Input type="number" {...regV("billId")} className="mt-1" placeholder="e.g. 42" /></div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setVoucherOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={createVoucher.isPending}>{createVoucher.isPending ? "Saving…" : "Create Voucher"}</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Edit Voucher Dialog ── */}
+      <Dialog open={editVoucherOpen} onOpenChange={setEditVoucherOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Pencil size={15} /> Edit Voucher — {editingVoucher?.voucherNumber}</DialogTitle>
+          </DialogHeader>
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
+            All changes are permanently logged in the audit trail for this voucher.
+          </div>
+          <form onSubmit={subEV((d) => {
+            if (!editingVoucher) return;
+            editVoucher.mutate({
+              id: editingVoucher.id,
+              body: {
+                date: d.date,
+                amount: Number(d.amount),
+                particular: d.particular,
+                remark: d.remark,
+                performedBy: d.performedBy,
+                reference: d.reference,
+                narration: d.narration,
+                editedBy: d.editedBy,
+                reason: d.reason,
+              },
+            });
+          })} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Date</Label><Input type="date" {...regEV("date")} className="mt-1" /></div>
+              <div><Label>Amount (₹)</Label><Input type="number" step="0.01" {...regEV("amount")} className="mt-1" /></div>
+            </div>
+            <div><Label>Particular</Label><Input {...regEV("particular")} className="mt-1" /></div>
+            <div><Label>Narration</Label><Input {...regEV("narration")} className="mt-1" /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Performed By</Label><Input {...regEV("performedBy")} className="mt-1" /></div>
+              <div><Label>Reference No.</Label><Input {...regEV("reference")} className="mt-1" /></div>
+            </div>
+            <div><Label>Remark</Label><Input {...regEV("remark")} className="mt-1" /></div>
+            <div className="border-t border-border pt-3 space-y-3">
+              <p className="text-xs font-semibold uppercase text-muted-foreground">Audit Information (Required)</p>
+              <div><Label>Your Name *</Label><Input {...regEV("editedBy", { required: true })} className="mt-1" placeholder="Who is making this edit?" /></div>
+              <div><Label>Reason for Edit *</Label><Input {...regEV("reason", { required: true })} className="mt-1" placeholder="e.g., Corrected wrong amount entry" /></div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setEditVoucherOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={editVoucher.isPending}>{editVoucher.isPending ? "Saving…" : "Save Changes"}</Button>
             </div>
           </form>
         </DialogContent>
