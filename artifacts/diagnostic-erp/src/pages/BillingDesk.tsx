@@ -35,6 +35,8 @@ import {
   Phone,
   RefreshCcw,
   Star,
+  Printer,
+  ExternalLink,
 } from "lucide-react";
 
 // ──────────────────────────────────────────────────────
@@ -59,6 +61,17 @@ type Pkg    = { id: number; packageCode: string; name: string; price: number; di
 
 type SelectedTest = { testId: number; name: string; price: number; category: string; source: "test" | "package" };
 type PaySplit = { mode: string; amount: string };
+type LastBill = {
+  id: number;
+  billNumber: string;
+  patient: Patient;
+  doctorName: string | null;
+  tests: SelectedTest[];
+  subtotal: number;
+  discount: number;
+  total: number;
+  payments: PaySplit[];
+};
 
 // ──────────────────────────────────────────────────────
 // Constants
@@ -137,6 +150,7 @@ export default function BillingDesk() {
   const [discountValue, setDiscountValue] = useState<number>(0);
   const [payNow, setPayNow]               = useState(true);
   const [paymentSplits, setPaymentSplits] = useState<PaySplit[]>([{ mode: "cash", amount: "" }]);
+  const [lastBill, setLastBill]           = useState<LastBill | null>(null);
   const [suggLoading, setSuggLoading]     = useState(false);
   const [suggestion, setSuggestion]       = useState<{ discount: number; rule: { name: string } | null } | null>(null);
 
@@ -240,8 +254,20 @@ export default function BillingDesk() {
       return bill;
     },
     onSuccess: (bill) => {
+      if (!selectedPatient) return;
+      const doctor = doctors.find((d) => d.id === doctorId);
+      setLastBill({
+        id: bill.id,
+        billNumber: bill.billNumber,
+        patient: selectedPatient,
+        doctorName: doctor?.name ?? null,
+        tests: [...selectedTests],
+        subtotal,
+        discount: discountAmt,
+        total,
+        payments: paymentSplits.filter((p) => Number(p.amount) > 0),
+      });
       toast({ title: `Bill ${bill.billNumber} generated!` });
-      navigate(`/billing/${bill.id}`);
     },
     onError: (err: Error) => toast({ title: err.message || "Failed to generate bill", variant: "destructive" }),
   });
@@ -341,6 +367,7 @@ export default function BillingDesk() {
     setDiscountValue(0);
     setPayNow(true);
     setPaymentSplits([{ mode: "cash", amount: "" }]);
+    setLastBill(null);
     setSuggestion(null);
   }
 
@@ -981,29 +1008,186 @@ export default function BillingDesk() {
               )}
             </div>
 
-            {/* ── Generate Bill Button ── */}
-            <div className="flex-shrink-0 p-3 bg-card">
-              {!canGenerate && (
-                <p className="text-xs text-muted-foreground text-center mb-2">
-                  {!selectedPatient ? "← Select or register a patient" : "← Add at least one test"}
-                </p>
+            {/* ── Generate Bill / Success Panel ── */}
+            <div className="flex-shrink-0 p-3 bg-card space-y-2">
+              {lastBill ? (
+                /* SUCCESS STATE */
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2">
+                    <CheckCircle2 size={15} className="text-green-600 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-semibold text-green-700 dark:text-green-400">Bill Generated</div>
+                      <div className="text-xs text-green-600 dark:text-green-500 font-mono truncate">{lastBill.billNumber}</div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      className="h-10 text-sm font-semibold bg-primary"
+                      onClick={() => window.print()}
+                    >
+                      <Printer size={14} className="mr-1.5" /> Print Bill
+                    </Button>
+                    <a href={`/billing/${lastBill.id}`} target="_blank" rel="noopener noreferrer" className="block">
+                      <Button variant="outline" className="w-full h-10 text-sm">
+                        <ExternalLink size={14} className="mr-1.5" /> View Bill
+                      </Button>
+                    </a>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    className="w-full h-8 text-xs text-muted-foreground"
+                    onClick={resetAll}
+                  >
+                    <RefreshCcw size={12} className="mr-1" /> New Bill
+                  </Button>
+                </div>
+              ) : (
+                /* GENERATE STATE */
+                <>
+                  {!canGenerate && (
+                    <p className="text-xs text-muted-foreground text-center">
+                      {!selectedPatient ? "← Select or register a patient" : "← Add at least one test"}
+                    </p>
+                  )}
+                  <Button
+                    className="w-full h-11 text-base font-semibold"
+                    disabled={!canGenerate || generateMut.isPending}
+                    onClick={() => generateMut.mutate()}
+                  >
+                    {generateMut.isPending ? (
+                      <><RefreshCcw size={16} className="mr-2 animate-spin" /> Generating…</>
+                    ) : (
+                      <><Receipt size={16} className="mr-2" /> Generate Bill</>
+                    )}
+                  </Button>
+                </>
               )}
-              <Button
-                className="w-full h-11 text-base font-semibold"
-                disabled={!canGenerate || generateMut.isPending}
-                onClick={() => generateMut.mutate()}
-              >
-                {generateMut.isPending ? (
-                  <><RefreshCcw size={16} className="mr-2 animate-spin" /> Generating…</>
-                ) : (
-                  <><Receipt size={16} className="mr-2" /> Generate Bill</>
-                )}
-              </Button>
             </div>
 
           </div>
         </div>
       </div>
+      {/* ── Hidden Print Receipt (shown only when printing) ── */}
+      {lastBill && (
+        <div className="billing-desk-receipt">
+          <style>{`
+            @media print {
+              body > * { display: none !important; }
+              .billing-desk-receipt { display: block !important; }
+            }
+            .billing-desk-receipt {
+              display: none;
+              font-family: Arial, sans-serif;
+              font-size: 12px;
+              color: #000;
+              max-width: 700px;
+              margin: 0 auto;
+              padding: 24px;
+            }
+            .bdr-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 14px; }
+            .bdr-header h1 { font-size: 20px; font-weight: 700; margin: 0 0 2px; }
+            .bdr-header p  { margin: 1px 0; font-size: 11px; color: #444; }
+            .bdr-title { text-align: center; font-size: 13px; font-weight: 700; letter-spacing: 1px; margin: 10px 0; text-transform: uppercase; border: 1px solid #000; padding: 4px; }
+            .bdr-meta { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 11px; }
+            .bdr-meta table td { padding: 1px 4px 1px 0; }
+            .bdr-meta table td:first-child { font-weight: 600; color: #444; white-space: nowrap; }
+            .bdr-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 11px; }
+            .bdr-table th { background: #f5f5f5; text-align: left; padding: 5px 6px; border: 1px solid #ccc; font-weight: 600; }
+            .bdr-table td { padding: 4px 6px; border: 1px solid #ccc; vertical-align: top; }
+            .bdr-table .text-right { text-align: right; }
+            .bdr-summary { margin-left: auto; width: 220px; font-size: 11px; margin-bottom: 12px; }
+            .bdr-summary table { width: 100%; border-collapse: collapse; }
+            .bdr-summary td { padding: 3px 6px; }
+            .bdr-summary tr:last-child td { font-weight: 700; border-top: 1px solid #000; padding-top: 5px; }
+            .bdr-payments { font-size: 11px; margin-bottom: 14px; }
+            .bdr-payments table { width: 100%; border-collapse: collapse; }
+            .bdr-payments th { text-align: left; border-bottom: 1px solid #ccc; padding: 3px 6px; font-weight: 600; }
+            .bdr-payments td { padding: 3px 6px; border-bottom: 1px solid #eee; }
+            .bdr-footer { text-align: center; font-size: 10px; color: #666; border-top: 1px solid #ccc; padding-top: 8px; margin-top: 8px; }
+          `}</style>
+
+          <div className="bdr-header">
+            <h1>Diagnostic Centre</h1>
+            <p>123 Health Avenue, Medical District | Ph: 1800-000-0000</p>
+            <p>GSTIN: 27XXXXX0000X1Z0 | Email: info@diagnosticcentre.in</p>
+          </div>
+          <div className="bdr-title">Tax Invoice</div>
+
+          <div className="bdr-meta">
+            <table>
+              <tbody>
+                <tr><td>Patient</td><td>: {lastBill.patient.firstName} {lastBill.patient.lastName}</td></tr>
+                <tr><td>Patient ID</td><td>: {lastBill.patient.patientId}</td></tr>
+                <tr><td>Phone</td><td>: {lastBill.patient.phone}</td></tr>
+                {lastBill.patient.gender && <tr><td>Gender</td><td>: {lastBill.patient.gender}</td></tr>}
+                {lastBill.doctorName && <tr><td>Ref. Doctor</td><td>: Dr. {lastBill.doctorName}</td></tr>}
+              </tbody>
+            </table>
+            <table>
+              <tbody>
+                <tr><td>Bill No.</td><td>: {lastBill.billNumber}</td></tr>
+                <tr><td>Date</td><td>: {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</td></tr>
+                <tr><td>Time</td><td>: {new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <table className="bdr-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Test Name</th>
+                <th>Category</th>
+                <th className="text-right">Amount (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lastBill.tests.map((t, i) => (
+                <tr key={t.testId}>
+                  <td>{i + 1}</td>
+                  <td>{t.name}</td>
+                  <td>{t.category}</td>
+                  <td className="text-right">{t.price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="bdr-summary">
+            <table>
+              <tbody>
+                <tr><td>Subtotal</td><td style={{ textAlign: "right" }}>₹{lastBill.subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>
+                {lastBill.discount > 0 && <tr><td>Discount</td><td style={{ textAlign: "right", color: "green" }}>−₹{lastBill.discount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>}
+                <tr><td>Total</td><td style={{ textAlign: "right" }}>₹{lastBill.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          {lastBill.payments.length > 0 && (
+            <div className="bdr-payments">
+              <strong>Payment Details</strong>
+              <table>
+                <thead>
+                  <tr><th>Mode</th><th style={{ textAlign: "right" }}>Amount (₹)</th></tr>
+                </thead>
+                <tbody>
+                  {lastBill.payments.map((p, i) => (
+                    <tr key={i}>
+                      <td style={{ textTransform: "capitalize" }}>{p.mode.replace(/_/g, " ")}</td>
+                      <td style={{ textAlign: "right" }}>{Number(p.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="bdr-footer">
+            <p>Thank you for choosing our diagnostic services. Report delivery is subject to test processing time.</p>
+            <p>This is a computer-generated invoice. No signature required.</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

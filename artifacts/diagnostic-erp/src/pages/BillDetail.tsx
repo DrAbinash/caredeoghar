@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useGetBill, useCreatePayment, getGetBillQueryKey, getListBillsQueryKey } from "@workspace/api-client-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
@@ -68,6 +68,15 @@ export default function BillDetail({ id }: { id: number }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const queryClient = useQueryClient();
   const superAdmin = useSuperAdmin();
+
+  useEffect(() => {
+    if (!bill) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("print") === "1") {
+      const timer = setTimeout(() => window.print(), 600);
+      return () => clearTimeout(timer);
+    }
+  }, [bill]);
 
   const { data: audits = [], refetch: refetchAudits } = useQuery<BillAudit[]>({
     queryKey: ["bill-audits", id],

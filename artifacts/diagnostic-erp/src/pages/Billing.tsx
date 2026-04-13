@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, ChevronRight } from "lucide-react";
+import { Plus, ChevronRight, Printer } from "lucide-react";
 import { useForm } from "react-hook-form";
 
 type BillForm = {
@@ -137,9 +137,20 @@ export default function Billing() {
                       <td className="px-4 py-3"><StatusBadge status={b.status} /></td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(b.createdAt).toLocaleDateString()}</td>
                       <td className="px-4 py-3">
-                        <Link href={`/billing/${b.id}`} className="text-muted-foreground hover:text-foreground inline-flex">
-                          <ChevronRight size={16} />
-                        </Link>
+                        <div className="flex items-center gap-1">
+                          <a
+                            href={`/billing/${b.id}?print=1`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-muted-foreground hover:text-foreground inline-flex p-1 rounded hover:bg-muted"
+                            title="Print Bill"
+                          >
+                            <Printer size={14} />
+                          </a>
+                          <Link href={`/billing/${b.id}`} className="text-muted-foreground hover:text-foreground inline-flex p-1 rounded hover:bg-muted">
+                            <ChevronRight size={16} />
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   ))
