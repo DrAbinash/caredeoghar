@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, testsTable } from "@workspace/db";
-import { eq, ilike, and, sql, desc } from "drizzle-orm";
+import { orderTestsTable } from "@workspace/db";
+import { eq, ilike, and, sql, desc, asc } from "drizzle-orm";
 import {
   ListTestsQueryParams,
   CreateTestBody,
@@ -18,6 +19,7 @@ testsRouter.get("/", async (req, res) => {
     return;
   }
   const { search, category } = parsed.data;
+  const sort = (req.query.sort as string) ?? "";
 
   let conditions: ReturnType<typeof eq>[] = [];
   if (search) {
@@ -28,14 +30,38 @@ testsRouter.get("/", async (req, res) => {
   if (category) {
     conditions.push(eq(testsTable.category, category));
   }
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  if (sort === "popular") {
+    const tests = await db
+      .select({
+        id: testsTable.id,
+        code: testsTable.code,
+        name: testsTable.name,
+        category: testsTable.category,
+        price: testsTable.price,
+        duration: testsTable.duration,
+        description: testsTable.description,
+        isActive: testsTable.isActive,
+        createdAt: testsTable.createdAt,
+        billCount: sql<number>`count(${orderTestsTable.id})`,
+      })
+      .from(testsTable)
+      .leftJoin(orderTestsTable, eq(orderTestsTable.testId, testsTable.id))
+      .where(where)
+      .groupBy(testsTable.id)
+      .orderBy(desc(sql`count(${orderTestsTable.id})`), asc(testsTable.name));
+
+    return res.json({ tests: tests.map(t => ({ ...t, price: Number(t.price) })), total: tests.length });
+  }
 
   const tests = await db
     .select()
     .from(testsTable)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .where(where)
     .orderBy(desc(testsTable.createdAt));
 
-  res.json({ tests: tests.map(t => ({ ...t, price: Number(t.price) })), total: tests.length });
+  return res.json({ tests: tests.map(t => ({ ...t, price: Number(t.price) })), total: tests.length });
 });
 
 testsRouter.post("/", async (req, res) => {

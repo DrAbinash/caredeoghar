@@ -34,6 +34,7 @@ import {
   Zap,
   Phone,
   RefreshCcw,
+  Star,
 } from "lucide-react";
 
 // ──────────────────────────────────────────────────────
@@ -112,6 +113,22 @@ export default function BillingDesk() {
   const [testSearch, setTestSearch]   = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [selectedTests, setSelectedTests] = useState<SelectedTest[]>([]);
+  const [pinnedTestIds, setPinnedTestIds] = useState<Set<number>>(() => {
+    try {
+      const stored = localStorage.getItem("billingDesk:pinnedTests");
+      return new Set(stored ? JSON.parse(stored) : []);
+    } catch { return new Set(); }
+  });
+
+  function togglePin(id: number, e: React.MouseEvent) {
+    e.stopPropagation();
+    setPinnedTestIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      localStorage.setItem("billingDesk:pinnedTests", JSON.stringify([...next]));
+      return next;
+    });
+  }
   const [showPackages, setShowPackages] = useState(false);
 
   // ── Billing ────────────────────────────────────────
@@ -152,8 +169,8 @@ export default function BillingDesk() {
   const patientResults = debouncedSearch.length >= 1 ? searchResults : recentPatients;
 
   const { data: allTests = [] } = useQuery<Test[]>({
-    queryKey: ["tests-all"],
-    queryFn: () => api.get<{ tests: Test[] }>("/api/tests?limit=500").then((d) => d.tests ?? []),
+    queryKey: ["tests-all-popular"],
+    queryFn: () => api.get<{ tests: Test[] }>("/api/tests?limit=500&sort=popular").then((d) => d.tests ?? []),
   });
 
   const { data: doctors = [] } = useQuery<Doctor[]>({
@@ -230,12 +247,18 @@ export default function BillingDesk() {
 
   const selectedTestIds = new Set(selectedTests.map((s) => s.testId));
 
-  const filteredTests = allTests.filter((t) => {
-    if (selectedTestIds.has(t.id)) return false;
-    const matchSearch = !testSearch || t.name.toLowerCase().includes(testSearch.toLowerCase()) || (t.code ?? "").toLowerCase().includes(testSearch.toLowerCase());
-    const matchCat    = categoryFilter === "all" || t.category === categoryFilter;
-    return matchSearch && matchCat && t.isActive !== false;
-  });
+  const filteredTests = allTests
+    .filter((t) => {
+      if (selectedTestIds.has(t.id)) return false;
+      const matchSearch = !testSearch || t.name.toLowerCase().includes(testSearch.toLowerCase()) || (t.code ?? "").toLowerCase().includes(testSearch.toLowerCase());
+      const matchCat    = categoryFilter === "all" || t.category === categoryFilter;
+      return matchSearch && matchCat && t.isActive !== false;
+    })
+    .sort((a, b) => {
+      const ap = pinnedTestIds.has(a.id) ? 0 : 1;
+      const bp = pinnedTestIds.has(b.id) ? 0 : 1;
+      return ap - bp; // pinned first; popularity order (from API) preserved within each group
+    });
 
   const subtotal    = selectedTests.reduce((s, t) => s + t.price, 0);
   const discountAmt = discountType === "amount"
@@ -677,24 +700,34 @@ export default function BillingDesk() {
                   {filteredTests.length === 0 ? (
                     <div className="px-3 py-4 text-xs text-muted-foreground text-center">No tests found</div>
                   ) : (
-                    filteredTests.slice(0, 30).map((t) => {
-                      const added = !!selectedTests.find((s) => s.testId === t.id);
+                    filteredTests.slice(0, 50).map((t) => {
+                      const added   = !!selectedTests.find((s) => s.testId === t.id);
+                      const pinned  = pinnedTestIds.has(t.id);
                       return (
-                        <button
-                          key={t.id}
-                          onClick={() => addTest(t)}
-                          disabled={added}
-                          className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors
-                            ${added ? "bg-primary/5 text-muted-foreground cursor-default" : "hover:bg-muted/50"}`}
-                        >
-                          <FlaskConical size={11} className={added ? "text-primary" : "text-muted-foreground"} />
-                          <span className="flex-1 font-medium truncate">{t.name}</span>
-                          <span className="text-xs text-muted-foreground font-mono flex-shrink-0">{t.code}</span>
-                          <span className={`text-xs font-semibold flex-shrink-0 ${added ? "text-primary" : ""}`}>{inr(t.price)}</span>
-                          {added
-                            ? <CheckCircle2 size={12} className="text-primary flex-shrink-0" />
-                            : <Plus size={12} className="text-muted-foreground flex-shrink-0" />}
-                        </button>
+                        <div key={t.id} className={`flex items-center ${added ? "bg-primary/5" : ""}`}>
+                          {/* Pin star */}
+                          <button
+                            onClick={(e) => togglePin(t.id, e)}
+                            className={`pl-2 pr-1 py-2 flex-shrink-0 transition-colors ${pinned ? "text-amber-400 hover:text-amber-500" : "text-muted-foreground/30 hover:text-amber-400"}`}
+                          >
+                            <Star size={11} fill={pinned ? "currentColor" : "none"} />
+                          </button>
+                          {/* Add row */}
+                          <button
+                            onClick={() => addTest(t)}
+                            disabled={added}
+                            className={`flex-1 flex items-center gap-2 pr-3 py-2 text-left text-sm transition-colors
+                              ${added ? "text-muted-foreground cursor-default" : "hover:bg-muted/50"}`}
+                          >
+                            <FlaskConical size={11} className={added ? "text-primary" : "text-muted-foreground"} />
+                            <span className="flex-1 font-medium truncate">{t.name}</span>
+                            <span className="text-xs text-muted-foreground font-mono flex-shrink-0">{t.code}</span>
+                            <span className={`text-xs font-semibold flex-shrink-0 ${added ? "text-primary" : ""}`}>{inr(t.price)}</span>
+                            {added
+                              ? <CheckCircle2 size={12} className="text-primary flex-shrink-0" />
+                              : <Plus size={12} className="text-muted-foreground flex-shrink-0" />}
+                          </button>
+                        </div>
                       );
                     })
                   )}
