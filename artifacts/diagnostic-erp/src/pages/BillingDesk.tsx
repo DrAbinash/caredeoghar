@@ -129,12 +129,25 @@ export default function BillingDesk() {
   });
 
   // ── Data queries ────────────────────────────────────
-  const debouncedSearch = useDebounce(patientSearch, 250);
-  const { data: patientResults } = useQuery<{ patients: Patient[] }>({
-    queryKey: ["patients-search", debouncedSearch],
-    queryFn: () => api.get<{ patients: Patient[] }>(`/api/patients?search=${encodeURIComponent(debouncedSearch)}&limit=8`),
-    enabled: debouncedSearch.length >= 1,
+  const debouncedSearch = useDebounce(patientSearch, 150);
+
+  // Recent patients — loaded once on mount, shown when search field is focused but empty
+  const { data: recentPatients } = useQuery<{ patients: Patient[] }>({
+    queryKey: ["patients-recent"],
+    queryFn: () => api.get<{ patients: Patient[] }>("/api/patients?limit=8&page=1"),
+    staleTime: 60_000,
   });
+
+  // Live search — fires from the very first character
+  const { data: searchResults } = useQuery<{ patients: Patient[] }>({
+    queryKey: ["patients-search", debouncedSearch],
+    queryFn: () => api.get<{ patients: Patient[] }>(`/api/patients?search=${encodeURIComponent(debouncedSearch)}&limit=10`),
+    enabled: debouncedSearch.length >= 1,
+    staleTime: 5_000,
+  });
+
+  // Which list to show in the dropdown
+  const patientResults = debouncedSearch.length >= 1 ? searchResults : recentPatients;
 
   const { data: allTests = [] } = useQuery<Test[]>({
     queryKey: ["tests-all"],
@@ -392,18 +405,27 @@ export default function BillingDesk() {
                         value={patientSearch}
                         onChange={(e) => { setPatientSearch(e.target.value); setSearchOpen(true); }}
                         onFocus={() => setSearchOpen(true)}
+                        onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
                         className="pl-9 text-sm"
                       />
                     </div>
-                    {searchOpen && patientSearch.length >= 1 && (
-                      <div className="absolute left-0 right-0 top-full mt-1 bg-popover border border-card-border rounded-lg shadow-xl z-50 max-h-52 overflow-y-auto">
+                    {searchOpen && (
+                      <div className="absolute left-0 right-0 top-full mt-1 bg-popover border border-card-border rounded-lg shadow-xl z-50 max-h-56 overflow-y-auto">
+                        {patientSearch.length === 0 && (
+                          <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-b border-border">
+                            Recent Patients
+                          </div>
+                        )}
                         {!patientResults?.patients?.length ? (
-                          <div className="px-4 py-3 text-sm text-muted-foreground text-center">No patients found</div>
+                          <div className="px-4 py-3 text-sm text-muted-foreground text-center">
+                            {patientSearch.length >= 1 ? "No patients found" : "No patients yet"}
+                          </div>
                         ) : (
                           patientResults.patients.map((p) => (
                             <button
                               key={p.id}
                               className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 transition-colors text-left"
+                              onMouseDown={(e) => e.preventDefault()}
                               onClick={() => { setSelectedPatient(p); setPatientSearch(""); setSearchOpen(false); }}
                             >
                               <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary flex-shrink-0">
