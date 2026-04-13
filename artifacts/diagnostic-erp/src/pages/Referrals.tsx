@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useListDoctors, useListTests } from "@workspace/api-client-react";
 import { api } from "@/lib/fetchApi";
+import { exportPDF, exportExcel, exportWord, type ExportDoctorSection, type ReportMeta } from "@/lib/exportReport";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,10 +13,14 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useForm } from "react-hook-form";
-import { Plus, Trash2, Stethoscope, Star, Printer } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Plus, Trash2, Stethoscope, Star, Printer, Download, ChevronDown, FileText, Sheet, FileType } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type CommRule = {
@@ -51,8 +56,11 @@ export default function Referrals() {
   const qc = useQueryClient();
   const printRef = useRef<HTMLDivElement>(null);
 
+  const { toast } = useToast();
+
   // report state
   const [reportDoctorId, setReportDoctorId] = useState<number | null>(null);
+  const [exportBusy, setExportBusy] = useState<"pdf" | "excel" | "word" | null>(null);
   const [from, setFrom] = useState(() => {
     const d = new Date(); d.setDate(1); return d.toISOString().split("T")[0];
   });
@@ -153,6 +161,58 @@ export default function Referrals() {
     win.document.close();
   };
 
+  // ── Build export data from current report ──
+  function buildExportData(): { sections: ExportDoctorSection[]; meta: ReportMeta } {
+    const ALPHA2 = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p"];
+    const sections: ExportDoctorSection[] = report.map((entry, idx) => ({
+      label: `${ALPHA2[idx] ?? String(idx + 1)})`,
+      doctorName: entry.doctor.name,
+      specialization: entry.doctor.specialization,
+      orderCount: entry.orderCount,
+      testCount: entry.testCount,
+      effectiveRate: entry.effectiveRate,
+      totalRevenue: entry.totalRevenue,
+      totalCommission: entry.totalCommission,
+      rows: (entry.grouped ?? []).map(r => ({
+        testName: r.testName,
+        count: r.count,
+        rateLabel: r.ruleType === "percentage" ? `${r.ruleValue}%` : `Rs.${r.ruleValue.toFixed(2)}`,
+        commission: r.commission,
+      })),
+    }));
+
+    const meta: ReportMeta = {
+      title: "Referral Commission Report",
+      from,
+      to,
+      doctorFilter: reportDoctorId ? (doctors.find(d => d.id === reportDoctorId)?.name ?? "—") : "All Doctors",
+      generatedAt: new Date().toLocaleString("en-IN"),
+      grandTotal: report.length > 0 ? grandTotal : undefined,
+    };
+
+    return { sections, meta };
+  }
+
+  async function handleExport(format: "pdf" | "excel" | "word") {
+    if (report.length === 0) {
+      toast({ title: "No data to export", description: "Select a date range with referral data.", variant: "destructive" });
+      return;
+    }
+    setExportBusy(format);
+    try {
+      const { sections, meta } = buildExportData();
+      if (format === "pdf")   await exportPDF(sections, meta);
+      if (format === "excel") await exportExcel(sections, meta);
+      if (format === "word")  await exportWord(sections, meta);
+      toast({ title: `${format.toUpperCase()} exported`, description: "File downloaded successfully." });
+    } catch (err) {
+      console.error(err);
+      toast({ title: "Export failed", description: String(err), variant: "destructive" });
+    } finally {
+      setExportBusy(null);
+    }
+  }
+
   return (
     <div className="pb-8">
       <PageHeader
@@ -198,9 +258,34 @@ export default function Referrals() {
                   </Select>
                 </div>
               </div>
-              <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1.5">
-                <Printer size={14} /> Print Report
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1.5">
+                  <Printer size={14} /> Print
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" className="gap-1.5" disabled={exportBusy !== null}>
+                      <Download size={14} />
+                      {exportBusy ? "Exporting…" : "Export"}
+                      <ChevronDown size={13} />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
+                    <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => handleExport("pdf")}>
+                      <FileText size={14} className="text-red-500" />
+                      <span>Export as PDF</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => handleExport("excel")}>
+                      <Sheet size={14} className="text-green-600" />
+                      <span>Export as Excel</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => handleExport("word")}>
+                      <FileType size={14} className="text-blue-600" />
+                      <span>Export as Word</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
 
             {/* Summary Cards */}
