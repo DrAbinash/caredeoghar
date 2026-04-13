@@ -561,18 +561,20 @@ export default function BillingDesk() {
                     </button>
                   </div>
                 ) : (
-                  <div className="relative">
-                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      placeholder="Search doctor by name or specialization…"
-                      value={doctorSearch}
-                      onChange={(e) => { setDoctorSearch(e.target.value); setDoctorSearchOpen(true); }}
-                      onFocus={() => setDoctorSearchOpen(true)}
-                      onBlur={() => setTimeout(() => setDoctorSearchOpen(false), 150)}
-                      className="pl-9 text-sm"
-                    />
+                  <div>
+                    <div className="relative">
+                      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        placeholder="Search doctor by name or specialization…"
+                        value={doctorSearch}
+                        onChange={(e) => { setDoctorSearch(e.target.value); setDoctorSearchOpen(true); }}
+                        onFocus={() => setDoctorSearchOpen(true)}
+                        onBlur={() => setTimeout(() => setDoctorSearchOpen(false), 150)}
+                        className="pl-9 text-sm"
+                      />
+                    </div>
                     {doctorSearchOpen && (
-                      <div className="absolute left-0 right-0 top-full mt-1 bg-popover border border-card-border rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto">
+                      <div className="mt-1 border border-card-border rounded-lg bg-popover shadow-lg max-h-48 overflow-y-auto">
                         <button
                           className="w-full text-left px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted/50 border-b border-border italic"
                           onMouseDown={(e) => e.preventDefault()}
@@ -580,13 +582,15 @@ export default function BillingDesk() {
                         >
                           No referral
                         </button>
-                        {doctors
-                          .filter(d =>
+                        {(() => {
+                          const filtered = doctors.filter(d =>
                             !doctorSearch ||
                             d.name.toLowerCase().includes(doctorSearch.toLowerCase()) ||
                             d.specialization.toLowerCase().includes(doctorSearch.toLowerCase())
-                          )
-                          .map(d => (
+                          );
+                          return filtered.length === 0 ? (
+                            <div className="px-4 py-3 text-sm text-muted-foreground text-center">No doctors found</div>
+                          ) : filtered.map(d => (
                             <button
                               key={d.id}
                               className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 transition-colors text-left"
@@ -601,15 +605,8 @@ export default function BillingDesk() {
                                 <div className="text-xs text-muted-foreground">{d.specialization}</div>
                               </div>
                             </button>
-                          ))
-                        }
-                        {doctors.filter(d =>
-                          !doctorSearch ||
-                          d.name.toLowerCase().includes(doctorSearch.toLowerCase()) ||
-                          d.specialization.toLowerCase().includes(doctorSearch.toLowerCase())
-                        ).length === 0 && (
-                          <div className="px-4 py-3 text-sm text-muted-foreground text-center">No doctors found</div>
-                        )}
+                          ));
+                        })()}
                       </div>
                     )}
                   </div>

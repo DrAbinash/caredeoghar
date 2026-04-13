@@ -13,16 +13,13 @@ import {
 export const patientsRouter = Router();
 
 async function generatePatientId(): Promise<string> {
-  const result = await db
-    .insert(patientCounterTable)
-    .values({ counter: 1 })
-    .onConflictDoUpdate({
-      target: patientCounterTable.id,
-      set: { counter: sql`patient_counter.counter + 1` },
-    })
-    .returning();
-  const counter = result[0]?.counter ?? 1;
-  return `P-${String(counter).padStart(5, "0")}`;
+  // Derive next ID from the maximum existing patient_id value
+  const [row] = await db
+    .select({ max: sql<string>`max(patient_id)` })
+    .from(patientsTable);
+  const last = row?.max; // e.g. "P-00003" or null
+  const next = last ? parseInt(last.slice(2), 10) + 1 : 1;
+  return `P-${String(next).padStart(5, "0")}`;
 }
 
 patientsRouter.get("/", async (req, res) => {
