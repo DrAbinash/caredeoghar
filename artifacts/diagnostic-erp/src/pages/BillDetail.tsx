@@ -14,7 +14,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Plus, Pencil, History, Clock, ShieldAlert, Trash2, AlertTriangle, ExternalLink } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, History, Clock, ShieldAlert, Trash2, AlertTriangle, ExternalLink, Printer } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useSuperAdmin, getSuperAdminToken } from "@/hooks/useSuperAdmin";
 
@@ -203,6 +203,9 @@ export default function BillDetail({ id }: { id: number }) {
         subtitle={`Generated ${new Date(bill.createdAt).toLocaleString()}`}
         actions={
           <div className="flex gap-2 flex-wrap">
+            <Button size="sm" variant="outline" onClick={() => window.print()}>
+              <Printer size={14} className="mr-1" /> Print
+            </Button>
             <Button size="sm" variant="outline" onClick={() => { setAuditOpen(true); }}>
               <History size={14} className="mr-1" /> History
             </Button>
@@ -391,6 +394,191 @@ export default function BillDetail({ id }: { id: number }) {
               </a>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ── Print Receipt (hidden on screen, visible when printing) ── */}
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          .print-receipt, .print-receipt * { visibility: visible !important; }
+          .print-receipt {
+            position: fixed !important;
+            top: 0 !important; left: 0 !important;
+            width: 100% !important;
+            padding: 24px 32px !important;
+            background: white !important;
+            color: black !important;
+            font-family: Arial, sans-serif !important;
+            font-size: 13px !important;
+          }
+          @page { margin: 12mm 10mm; }
+        }
+        @media screen { .print-receipt { display: none; } }
+      `}</style>
+
+      <div className="print-receipt">
+        {/* Clinic header */}
+        <div style={{ textAlign: "center", borderBottom: "2px solid #1e40af", paddingBottom: "12px", marginBottom: "16px" }}>
+          <div style={{ fontSize: "22px", fontWeight: "800", color: "#1e40af", letterSpacing: "0.5px" }}>DiagnoCenter</div>
+          <div style={{ fontSize: "11px", color: "#555", marginTop: "2px" }}>Diagnostic Laboratory & Billing Center</div>
+          <div style={{ fontSize: "11px", color: "#555" }}>Tel: 1800-XXX-XXXX &nbsp;|&nbsp; diagnosticcenter@example.com</div>
+        </div>
+
+        {/* Bill title + meta */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
+          <div>
+            <div style={{ fontSize: "16px", fontWeight: "700", color: "#111" }}>TAX INVOICE</div>
+            <div style={{ fontSize: "12px", color: "#444", marginTop: "3px" }}>Bill No: <strong>{bill.billNumber}</strong></div>
+            <div style={{ fontSize: "11px", color: "#666" }}>Date: {new Date(bill.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</div>
+            <div style={{ fontSize: "11px", color: "#666" }}>Time: {new Date(bill.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{
+              display: "inline-block",
+              padding: "4px 14px",
+              borderRadius: "20px",
+              fontSize: "11px",
+              fontWeight: "700",
+              textTransform: "uppercase",
+              background: bill.status === "paid" ? "#dcfce7" : bill.status === "cancelled" ? "#fee2e2" : "#fef9c3",
+              color: bill.status === "paid" ? "#15803d" : bill.status === "cancelled" ? "#dc2626" : "#854d0e",
+              border: `1px solid ${bill.status === "paid" ? "#86efac" : bill.status === "cancelled" ? "#fca5a5" : "#fde047"}`,
+            }}>
+              {bill.status}
+            </div>
+            {bill.order?.orderNumber && (
+              <div style={{ fontSize: "11px", color: "#666", marginTop: "4px" }}>Order: {bill.order.orderNumber}</div>
+            )}
+          </div>
+        </div>
+
+        {/* Patient + Doctor info */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px", padding: "12px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "6px" }}>
+          <div>
+            <div style={{ fontSize: "10px", fontWeight: "700", textTransform: "uppercase", color: "#64748b", marginBottom: "4px" }}>Patient Details</div>
+            {bill.patient && (
+              <>
+                <div style={{ fontWeight: "700", fontSize: "14px" }}>{bill.patient.firstName} {bill.patient.lastName}</div>
+                <div style={{ fontSize: "11px", color: "#555" }}>ID: {bill.patient.patientId}</div>
+                <div style={{ fontSize: "11px", color: "#555" }}>Ph: {bill.patient.phone}</div>
+                {bill.patient.gender && <div style={{ fontSize: "11px", color: "#555" }}>Gender: {bill.patient.gender}</div>}
+                {bill.patient.age && <div style={{ fontSize: "11px", color: "#555" }}>Age: {bill.patient.age} yrs</div>}
+              </>
+            )}
+          </div>
+          <div>
+            <div style={{ fontSize: "10px", fontWeight: "700", textTransform: "uppercase", color: "#64748b", marginBottom: "4px" }}>Referred By</div>
+            {bill.order?.doctor ? (
+              <>
+                <div style={{ fontWeight: "600", fontSize: "13px" }}>Dr. {bill.order.doctor.name}</div>
+                {bill.order.doctor.specialization && <div style={{ fontSize: "11px", color: "#555" }}>{bill.order.doctor.specialization}</div>}
+              </>
+            ) : (
+              <div style={{ fontSize: "12px", color: "#94a3b8" }}>Self-referred / Walk-in</div>
+            )}
+          </div>
+        </div>
+
+        {/* Tests table */}
+        {bill.order?.tests && bill.order.tests.length > 0 && (
+          <div style={{ marginBottom: "16px" }}>
+            <div style={{ fontSize: "10px", fontWeight: "700", textTransform: "uppercase", color: "#64748b", marginBottom: "6px" }}>Tests / Services</div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+              <thead>
+                <tr style={{ background: "#1e40af", color: "white" }}>
+                  <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: "600" }}>Code</th>
+                  <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: "600" }}>Test / Service</th>
+                  <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: "600" }}>Category</th>
+                  <th style={{ padding: "7px 10px", textAlign: "right", fontWeight: "600" }}>Amount (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bill.order.tests.map((ot, i) => (
+                  <tr key={ot.id} style={{ background: i % 2 === 0 ? "#f8fafc" : "white", borderBottom: "1px solid #e2e8f0" }}>
+                    <td style={{ padding: "6px 10px", fontFamily: "monospace", fontWeight: "700", color: "#1e40af" }}>{ot.test?.code}</td>
+                    <td style={{ padding: "6px 10px", fontWeight: "500" }}>{ot.test?.name}</td>
+                    <td style={{ padding: "6px 10px", color: "#666" }}>{ot.test?.category}</td>
+                    <td style={{ padding: "6px 10px", textAlign: "right", fontWeight: "600" }}>{Number(ot.price).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Financial summary */}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "16px" }}>
+          <table style={{ width: "260px", fontSize: "12px", borderCollapse: "collapse" }}>
+            <tbody>
+              <tr>
+                <td style={{ padding: "4px 10px", color: "#555" }}>Subtotal</td>
+                <td style={{ padding: "4px 10px", textAlign: "right" }}>₹{Number(bill.subtotal).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+              </tr>
+              {bill.discount > 0 && (
+                <tr>
+                  <td style={{ padding: "4px 10px", color: "#16a34a" }}>Discount</td>
+                  <td style={{ padding: "4px 10px", textAlign: "right", color: "#16a34a" }}>- ₹{Number(bill.discount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                </tr>
+              )}
+              {bill.taxAmount > 0 && (
+                <tr>
+                  <td style={{ padding: "4px 10px", color: "#555" }}>Tax</td>
+                  <td style={{ padding: "4px 10px", textAlign: "right" }}>₹{Number(bill.taxAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                </tr>
+              )}
+              <tr style={{ background: "#1e40af", color: "white", fontWeight: "700" }}>
+                <td style={{ padding: "7px 10px", fontSize: "13px" }}>Total Amount</td>
+                <td style={{ padding: "7px 10px", textAlign: "right", fontSize: "13px" }}>₹{Number(bill.totalAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+              </tr>
+              <tr style={{ color: "#16a34a" }}>
+                <td style={{ padding: "4px 10px" }}>Amount Paid</td>
+                <td style={{ padding: "4px 10px", textAlign: "right" }}>- ₹{Number(bill.paidAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+              </tr>
+              <tr style={{ fontWeight: "700", color: bill.balanceAmount > 0 ? "#dc2626" : "#16a34a", borderTop: "2px solid #e2e8f0" }}>
+                <td style={{ padding: "6px 10px" }}>Balance Due</td>
+                <td style={{ padding: "6px 10px", textAlign: "right" }}>₹{Number(bill.balanceAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Payment history */}
+        {bill.payments && bill.payments.length > 0 && (
+          <div style={{ marginBottom: "16px" }}>
+            <div style={{ fontSize: "10px", fontWeight: "700", textTransform: "uppercase", color: "#64748b", marginBottom: "6px" }}>Payment History</div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
+              <thead>
+                <tr style={{ background: "#f1f5f9", borderBottom: "1px solid #cbd5e1" }}>
+                  <th style={{ padding: "5px 8px", textAlign: "left", color: "#475569" }}>Date &amp; Time</th>
+                  <th style={{ padding: "5px 8px", textAlign: "left", color: "#475569" }}>Method</th>
+                  <th style={{ padding: "5px 8px", textAlign: "left", color: "#475569" }}>Reference</th>
+                  <th style={{ padding: "5px 8px", textAlign: "right", color: "#475569" }}>Amount (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bill.payments.map((p) => (
+                  <tr key={p.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
+                    <td style={{ padding: "5px 8px", color: "#555" }}>{new Date(p.createdAt).toLocaleString("en-IN")}</td>
+                    <td style={{ padding: "5px 8px", textTransform: "uppercase", fontWeight: "600", color: "#1e40af" }}>{p.method}</td>
+                    <td style={{ padding: "5px 8px", color: "#555" }}>{p.referenceNumber || "—"}</td>
+                    <td style={{ padding: "5px 8px", textAlign: "right", fontWeight: "600" }}>{Number(p.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div style={{ borderTop: "1px dashed #cbd5e1", paddingTop: "12px", textAlign: "center" }}>
+          {bill.balanceAmount <= 0 ? (
+            <div style={{ fontSize: "12px", color: "#16a34a", fontWeight: "600", marginBottom: "6px" }}>✓ Payment Received in Full — Thank You!</div>
+          ) : (
+            <div style={{ fontSize: "12px", color: "#dc2626", fontWeight: "600", marginBottom: "6px" }}>Balance of ₹{Number(bill.balanceAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })} is pending</div>
+          )}
+          <div style={{ fontSize: "10px", color: "#94a3b8" }}>This is a computer-generated invoice. No signature required.</div>
+          <div style={{ fontSize: "10px", color: "#94a3b8", marginTop: "2px" }}>Reports will be available as per turnaround time. For queries, please call us.</div>
         </div>
       </div>
 
