@@ -252,6 +252,7 @@ export default function BillingDesk() {
       return;
     }
     setSelectedTests((prev) => [...prev, { testId: t.id, name: t.name, price: t.price, category: t.category, source: "test" }]);
+    setTestSearch("");
   }
 
   function addPackage(pkg: Pkg) {
