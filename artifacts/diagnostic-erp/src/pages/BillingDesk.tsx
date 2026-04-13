@@ -94,16 +94,18 @@ export default function BillingDesk() {
   // ── Patient state ──────────────────────────────────
   const [patientSearch, setPatientSearch] = useState("");
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  const [showNewPatient, setShowNewPatient] = useState(false);
   const [newPatient, setNewPatient] = useState({
     firstName: "", lastName: "", phone: "", gender: "male",
-    dateOfBirth: "", email: "", address: "", bloodGroup: "",
+    age: "", email: "", address: "", bloodGroup: "",
   });
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
-  // ── Doctor / notes ─────────────────────────────────
+  // ── Doctor search state ─────────────────────────────
   const [doctorId, setDoctorId] = useState<number | null>(null);
+  const [doctorSearch, setDoctorSearch] = useState("");
+  const [doctorSearchOpen, setDoctorSearchOpen] = useState(false);
+  const doctorRef = useRef<HTMLDivElement>(null);
   const [notes, setNotes] = useState("");
 
   // ── Test selection ─────────────────────────────────
@@ -167,11 +169,16 @@ export default function BillingDesk() {
 
   // ── Create mutations ───────────────────────────────
   const createPatientMut = useMutation({
-    mutationFn: (body: typeof newPatient) => api.post("/api/patients", body),
+    mutationFn: (body: typeof newPatient) => {
+      // Convert age → approximate dateOfBirth (Jan 1 of birth year)
+      const ageNum = Number(body.age);
+      const birthYear = new Date().getFullYear() - ageNum;
+      const dateOfBirth = ageNum > 0 ? `${birthYear}-01-01` : "";
+      return api.post("/api/patients", { ...body, dateOfBirth, age: undefined });
+    },
     onSuccess: (p: Patient) => {
       setSelectedPatient(p);
-      setShowNewPatient(false);
-      setNewPatient({ firstName: "", lastName: "", phone: "", gender: "male", dateOfBirth: "", email: "", address: "", bloodGroup: "" });
+      setNewPatient({ firstName: "", lastName: "", phone: "", gender: "male", age: "", email: "", address: "", bloodGroup: "" });
       toast({ title: `Patient registered: ${p.patientId}` });
     },
     onError: () => toast({ title: "Failed to register patient", variant: "destructive" }),
@@ -283,6 +290,9 @@ export default function BillingDesk() {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
         setSearchOpen(false);
       }
+      if (doctorRef.current && !doctorRef.current.contains(e.target as Node)) {
+        setDoctorSearchOpen(false);
+      }
     }
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -292,8 +302,9 @@ export default function BillingDesk() {
   function resetAll() {
     setSelectedPatient(null);
     setPatientSearch("");
-    setShowNewPatient(false);
+    setNewPatient({ firstName: "", lastName: "", phone: "", gender: "male", age: "", email: "", address: "", bloodGroup: "" });
     setDoctorId(null);
+    setDoctorSearch("");
     setNotes("");
     setSelectedTests([]);
     setDiscountValue(0);
@@ -343,22 +354,12 @@ export default function BillingDesk() {
         <div className="w-[52%] border-r border-card-border flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
 
-            {/* ── Patient Section ── */}
+            {/* ── Patient Section — Search ── */}
             <div className="bg-card border border-card-border rounded-xl overflow-hidden">
               <div className="px-4 py-2.5 border-b border-card-border flex items-center justify-between bg-muted/20">
                 <div className="flex items-center gap-2 text-sm font-semibold">
-                  <User size={14} className="text-primary" /> Patient
+                  <User size={14} className="text-primary" /> Search Patient
                 </div>
-                {!selectedPatient && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => { setShowNewPatient(!showNewPatient); setPatientSearch(""); setSearchOpen(false); }}
-                  >
-                    {showNewPatient ? <><X size={11} className="mr-1" /> Cancel</> : <><UserPlus size={11} className="mr-1" /> New Patient</>}
-                  </Button>
-                )}
                 {selectedPatient && (
                   <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => { setSelectedPatient(null); setPatientSearch(""); }}>
                     <X size={11} className="mr-1" /> Change
@@ -366,9 +367,9 @@ export default function BillingDesk() {
                 )}
               </div>
 
-              <div className="p-3 space-y-3">
+              <div className="p-3 space-y-2">
                 {/* Selected patient card */}
-                {selectedPatient && (
+                {selectedPatient ? (
                   <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 space-y-1">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm flex-shrink-0">
@@ -389,19 +390,14 @@ export default function BillingDesk() {
                         {selectedPatient.bloodGroup && <span className="ml-2 bg-red-100 text-red-600 px-1.5 rounded font-medium">{selectedPatient.bloodGroup}</span>}
                       </div>
                     )}
-                    {selectedPatient.address && (
-                      <div className="text-xs text-muted-foreground pl-10 truncate">{selectedPatient.address}</div>
-                    )}
                   </div>
-                )}
-
-                {/* Search existing patient */}
-                {!selectedPatient && !showNewPatient && (
+                ) : (
+                  /* Search existing patient */
                   <div ref={searchRef} className="relative">
                     <div className="relative">
                       <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                       <Input
-                        placeholder="Search patient by name, ID or phone…"
+                        placeholder="Search by name, ID or phone…"
                         value={patientSearch}
                         onChange={(e) => { setPatientSearch(e.target.value); setSearchOpen(true); }}
                         onFocus={() => setSearchOpen(true)}
@@ -410,7 +406,7 @@ export default function BillingDesk() {
                       />
                     </div>
                     {searchOpen && (
-                      <div className="absolute left-0 right-0 top-full mt-1 bg-popover border border-card-border rounded-lg shadow-xl z-50 max-h-56 overflow-y-auto">
+                      <div className="absolute left-0 right-0 top-full mt-1 bg-popover border border-card-border rounded-lg shadow-xl z-50 max-h-52 overflow-y-auto">
                         {patientSearch.length === 0 && (
                           <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-b border-border">
                             Recent Patients
@@ -443,70 +439,78 @@ export default function BillingDesk() {
                     )}
                   </div>
                 )}
+              </div>
+            </div>
 
-                {/* New patient inline form */}
-                {!selectedPatient && showNewPatient && (
-                  <div className="space-y-2.5">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs">First Name *</Label>
-                        <Input
-                          value={newPatient.firstName}
-                          onChange={(e) => setNewPatient({ ...newPatient, firstName: e.target.value })}
-                          placeholder="First name"
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Last Name *</Label>
-                        <Input
-                          value={newPatient.lastName}
-                          onChange={(e) => setNewPatient({ ...newPatient, lastName: e.target.value })}
-                          placeholder="Last name"
-                          className="h-8 text-sm"
-                        />
-                      </div>
+            {/* ── Add New Patient — Always Visible ── */}
+            {!selectedPatient && (
+              <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-card-border bg-muted/20 flex items-center gap-2 text-sm font-semibold">
+                  <UserPlus size={14} className="text-primary" /> Add New Patient
+                </div>
+                <div className="p-3 space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">First Name *</Label>
+                      <Input
+                        value={newPatient.firstName}
+                        onChange={(e) => setNewPatient({ ...newPatient, firstName: e.target.value })}
+                        placeholder="First name"
+                        className="h-8 text-sm"
+                      />
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Phone *</Label>
-                        <Input
-                          value={newPatient.phone}
-                          onChange={(e) => setNewPatient({ ...newPatient, phone: e.target.value })}
-                          placeholder="10-digit number"
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Gender *</Label>
-                        <Select value={newPatient.gender} onValueChange={(v) => setNewPatient({ ...newPatient, gender: v })}>
-                          <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {GENDERS.map((g) => <SelectItem key={g} value={g} className="capitalize">{g}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Last Name *</Label>
+                      <Input
+                        value={newPatient.lastName}
+                        onChange={(e) => setNewPatient({ ...newPatient, lastName: e.target.value })}
+                        placeholder="Last name"
+                        className="h-8 text-sm"
+                      />
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Date of Birth *</Label>
-                        <Input
-                          type="date"
-                          value={newPatient.dateOfBirth}
-                          onChange={(e) => setNewPatient({ ...newPatient, dateOfBirth: e.target.value })}
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Blood Group</Label>
-                        <Select value={newPatient.bloodGroup || "none"} onValueChange={(v) => setNewPatient({ ...newPatient, bloodGroup: v === "none" ? "" : v })}>
-                          <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">—</SelectItem>
-                            {BLOOD_GROUPS.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="space-y-1 col-span-1">
+                      <Label className="text-xs">Phone *</Label>
+                      <Input
+                        value={newPatient.phone}
+                        onChange={(e) => setNewPatient({ ...newPatient, phone: e.target.value })}
+                        placeholder="10-digit"
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Age *</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={120}
+                        value={newPatient.age}
+                        onChange={(e) => setNewPatient({ ...newPatient, age: e.target.value })}
+                        placeholder="Years"
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Gender *</Label>
+                      <Select value={newPatient.gender} onValueChange={(v) => setNewPatient({ ...newPatient, gender: v })}>
+                        <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {GENDERS.map((g) => <SelectItem key={g} value={g} className="capitalize">{g}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Blood Group</Label>
+                      <Select value={newPatient.bloodGroup || "none"} onValueChange={(v) => setNewPatient({ ...newPatient, bloodGroup: v === "none" ? "" : v })}>
+                        <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">—</SelectItem>
+                          {BLOOD_GROUPS.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Address</Label>
@@ -517,42 +521,99 @@ export default function BillingDesk() {
                         className="h-8 text-sm"
                       />
                     </div>
-                    <Button
-                      size="sm"
-                      className="w-full"
-                      disabled={!newPatient.firstName || !newPatient.lastName || !newPatient.phone || !newPatient.dateOfBirth || createPatientMut.isPending}
-                      onClick={() => createPatientMut.mutate(newPatient)}
-                    >
-                      {createPatientMut.isPending ? "Registering…" : <><UserPlus size={13} className="mr-1.5" /> Register & Continue</>}
-                    </Button>
                   </div>
-                )}
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    disabled={!newPatient.firstName || !newPatient.lastName || !newPatient.phone || !newPatient.age || createPatientMut.isPending}
+                    onClick={() => createPatientMut.mutate(newPatient)}
+                  >
+                    {createPatientMut.isPending ? "Registering…" : <><UserPlus size={13} className="mr-1.5" /> Register & Select</>}
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* ── Referral / Doctor ── */}
+            {/* ── Referral / Doctor — searchable ── */}
             <div className="bg-card border border-card-border rounded-xl overflow-hidden">
               <div className="px-4 py-2.5 border-b border-card-border bg-muted/20 flex items-center gap-2 text-sm font-semibold">
                 <Stethoscope size={14} className="text-primary" /> Referral Doctor
                 <span className="ml-auto text-xs font-normal text-muted-foreground">optional</span>
               </div>
-              <div className="p-3">
-                <Select
-                  value={doctorId ? String(doctorId) : "none"}
-                  onValueChange={(v) => setDoctorId(v === "none" ? null : Number(v))}
-                >
-                  <SelectTrigger className="text-sm">
-                    <SelectValue placeholder="No referral" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No referral</SelectItem>
-                    {doctors.map((d) => (
-                      <SelectItem key={d.id} value={String(d.id)}>
-                        Dr. {d.name} · {d.specialization}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="p-3" ref={doctorRef}>
+                {/* Selected doctor chip */}
+                {doctorId ? (
+                  <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg px-3 py-2">
+                    <Stethoscope size={13} className="text-primary flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium">
+                        Dr. {doctors.find(d => d.id === doctorId)?.name}
+                      </span>
+                      <span className="text-xs text-muted-foreground ml-1.5">
+                        {doctors.find(d => d.id === doctorId)?.specialization}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => { setDoctorId(null); setDoctorSearch(""); }}
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search doctor by name or specialization…"
+                      value={doctorSearch}
+                      onChange={(e) => { setDoctorSearch(e.target.value); setDoctorSearchOpen(true); }}
+                      onFocus={() => setDoctorSearchOpen(true)}
+                      onBlur={() => setTimeout(() => setDoctorSearchOpen(false), 150)}
+                      className="pl-9 text-sm"
+                    />
+                    {doctorSearchOpen && (
+                      <div className="absolute left-0 right-0 top-full mt-1 bg-popover border border-card-border rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto">
+                        <button
+                          className="w-full text-left px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted/50 border-b border-border italic"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => { setDoctorId(null); setDoctorSearch(""); setDoctorSearchOpen(false); }}
+                        >
+                          No referral
+                        </button>
+                        {doctors
+                          .filter(d =>
+                            !doctorSearch ||
+                            d.name.toLowerCase().includes(doctorSearch.toLowerCase()) ||
+                            d.specialization.toLowerCase().includes(doctorSearch.toLowerCase())
+                          )
+                          .map(d => (
+                            <button
+                              key={d.id}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 transition-colors text-left"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => { setDoctorId(d.id); setDoctorSearch(""); setDoctorSearchOpen(false); }}
+                            >
+                              <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                <Stethoscope size={12} className="text-primary" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium">Dr. {d.name}</div>
+                                <div className="text-xs text-muted-foreground">{d.specialization}</div>
+                              </div>
+                            </button>
+                          ))
+                        }
+                        {doctors.filter(d =>
+                          !doctorSearch ||
+                          d.name.toLowerCase().includes(doctorSearch.toLowerCase()) ||
+                          d.specialization.toLowerCase().includes(doctorSearch.toLowerCase())
+                        ).length === 0 && (
+                          <div className="px-4 py-3 text-sm text-muted-foreground text-center">No doctors found</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
