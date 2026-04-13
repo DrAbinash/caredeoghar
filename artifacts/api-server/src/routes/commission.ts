@@ -236,9 +236,22 @@ router.get("/report-detailed", async (req, res) => {
     let grouped: unknown = null;
 
     if (groupBy === "test") {
-      const byTest: Record<number, { testId: number; testName: string; category: string; count: number; revenue: number; commission: number; ruleName: string }> = {};
+      const byTest: Record<number, { testId: number; testName: string; category: string; count: number; revenue: number; commission: number; ruleName: string; ruleValue: number; ruleType: string }> = {};
       for (const row of testRows) {
-        if (!byTest[row.testId]) byTest[row.testId] = { testId: row.testId, testName: row.testName, category: row.category, count: 0, revenue: 0, commission: 0, ruleName: row.ruleName };
+        if (!byTest[row.testId]) {
+          // Find the matching rule to get its value and type
+          const matchedRule = rules.find(r => {
+            if (!r.isActive) return false;
+            if (r.isExclusive && r.scope === "test" && r.testIds) return (JSON.parse(r.testIds) as number[]).includes(row.testId);
+            if (r.isExclusive && r.scope === "category" && r.categories) return (JSON.parse(r.categories) as string[]).includes(row.category);
+            if (r.scope === "test" && r.testIds) return (JSON.parse(r.testIds) as number[]).includes(row.testId);
+            if (r.scope === "category" && r.categories) return (JSON.parse(r.categories) as string[]).includes(row.category);
+            return r.scope === "all";
+          });
+          const ruleValue = matchedRule ? Number(matchedRule.value) : Number(doctor.defaultCommission);
+          const ruleType = matchedRule ? matchedRule.type : (doctor.defaultCommissionType || "percentage");
+          byTest[row.testId] = { testId: row.testId, testName: row.testName, category: row.category, count: 0, revenue: 0, commission: 0, ruleName: row.ruleName, ruleValue, ruleType };
+        }
         byTest[row.testId].count++;
         byTest[row.testId].revenue += row.price;
         byTest[row.testId].commission += row.commission;
