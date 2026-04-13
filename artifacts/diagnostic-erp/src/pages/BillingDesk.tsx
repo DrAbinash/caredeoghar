@@ -397,7 +397,7 @@ export default function BillingDesk() {
                   </div>
                 ) : (
                   /* Search existing patient */
-                  <div ref={searchRef} className="relative">
+                  <div ref={searchRef}>
                     <div className="relative">
                       <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                       <Input
@@ -410,7 +410,7 @@ export default function BillingDesk() {
                       />
                     </div>
                     {searchOpen && (
-                      <div className="absolute left-0 right-0 top-full mt-1 bg-popover border border-card-border rounded-lg shadow-xl z-50 max-h-52 overflow-y-auto">
+                      <div className="mt-1 border border-card-border rounded-lg bg-popover shadow-lg max-h-52 overflow-y-auto">
                         {patientSearch.length === 0 && (
                           <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-b border-border">
                             Recent Patients
