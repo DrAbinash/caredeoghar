@@ -76,13 +76,20 @@ ordersRouter.post("/", async (req, res) => {
     res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
     return;
   }
-  const { patientId, doctorId, testIds, notes } = parsed.data;
+  const { patientId, doctorId, testIds, tests: customTests, notes } = parsed.data;
 
-  const tests = await db.select().from(testsTable).where(
-    sql`${testsTable.id} = ANY(${testIds})`
-  );
+  // Support two formats: custom [{testId, price}] or legacy testIds[]
+  let lineItems: { testId: number; price: string }[] = [];
+  if (customTests && customTests.length > 0) {
+    lineItems = customTests.map((ct) => ({ testId: ct.testId, price: String(ct.price) }));
+  } else if (testIds && testIds.length > 0) {
+    const tests = await db.select().from(testsTable).where(
+      sql`${testsTable.id} = ANY(${testIds})`
+    );
+    lineItems = tests.map((t) => ({ testId: t.id, price: t.price }));
+  }
 
-  const totalAmount = tests.reduce((sum, t) => sum + Number(t.price), 0);
+  const totalAmount = lineItems.reduce((sum, t) => sum + Number(t.price), 0);
   const orderNumber = await generateOrderNumber();
 
   const [order] = await db.insert(ordersTable).values({
@@ -94,11 +101,11 @@ ordersRouter.post("/", async (req, res) => {
     status: "pending",
   }).returning();
 
-  if (tests.length > 0) {
+  if (lineItems.length > 0) {
     await db.insert(orderTestsTable).values(
-      tests.map((t) => ({
+      lineItems.map((t) => ({
         orderId: order.id,
-        testId: t.id,
+        testId: t.testId,
         price: t.price,
       }))
     );

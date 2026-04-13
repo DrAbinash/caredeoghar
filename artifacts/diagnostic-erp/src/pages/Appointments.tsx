@@ -113,12 +113,12 @@ export default function Appointments() {
 
   const { data: patients = [] } = useQuery<{ id: number; patientId: string; firstName: string; lastName: string; phone: string }[]>({
     queryKey: ["patients-list"],
-    queryFn: () => api("/patients?limit=500"),
+    queryFn: () => api<{ patients: { id: number; patientId: string; firstName: string; lastName: string; phone: string }[] }>("/patients?limit=500").then((d) => d.patients),
   });
 
   const { data: doctors = [] } = useQuery<{ id: number; name: string }[]>({
     queryKey: ["doctors-list"],
-    queryFn: () => api("/doctors"),
+    queryFn: () => api<{ doctors: { id: number; name: string }[] }>("/doctors").then((d) => d.doctors),
   });
 
   const createMut = useMutation({

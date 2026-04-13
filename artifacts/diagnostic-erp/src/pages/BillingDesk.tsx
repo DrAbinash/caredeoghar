@@ -58,6 +58,7 @@ type Test   = { id: number; name: string; code: string; price: number; category:
 type Pkg    = { id: number; packageCode: string; name: string; price: number; discountPct: number; isActive?: boolean; tests: Test[] };
 
 type SelectedTest = { testId: number; name: string; price: number; category: string; source: "test" | "package" };
+type PaySplit = { mode: string; amount: string };
 
 // ──────────────────────────────────────────────────────
 // Constants
@@ -135,8 +136,7 @@ export default function BillingDesk() {
   const [discountType, setDiscountType]   = useState<"amount" | "pct">("amount");
   const [discountValue, setDiscountValue] = useState<number>(0);
   const [payNow, setPayNow]               = useState(true);
-  const [paymentMode, setPaymentMode]     = useState("cash");
-  const [partialAmount, setPartialAmount] = useState<number | "">("");
+  const [paymentSplits, setPaymentSplits] = useState<PaySplit[]>([{ mode: "cash", amount: "" }]);
   const [suggLoading, setSuggLoading]     = useState(false);
   const [suggestion, setSuggestion]       = useState<{ discount: number; rule: { name: string } | null } | null>(null);
 
@@ -210,7 +210,7 @@ export default function BillingDesk() {
       if (!selectedPatient) throw new Error("No patient selected");
       if (selectedTests.length === 0) throw new Error("No tests selected");
 
-      // 1. Create order
+      // 1. Create order (with custom per-test prices to preserve package discounts)
       const order = await api.post<{ id: number; orderNumber: string }>("/api/orders", {
         patientId: selectedPatient.id,
         doctorId: doctorId ?? undefined,
@@ -224,14 +224,14 @@ export default function BillingDesk() {
         discount: discountAmt,
       });
 
-      // 3. Record payment
+      // 3. Record payment split(s)
       if (payNow) {
-        const paidAmt = partialAmount !== "" ? Number(partialAmount) : total;
-        if (paidAmt > 0) {
+        const splits = paymentSplits.filter((s) => Number(s.amount) > 0);
+        for (const split of splits) {
           await api.post("/api/payments", {
             billId: bill.id,
-            amount: paidAmt,
-            method: paymentMode,
+            amount: Number(split.amount),
+            method: split.mode,
             reference: "",
           });
         }
@@ -269,8 +269,8 @@ export default function BillingDesk() {
     ? Math.min(discountValue, subtotal)
     : Math.min((subtotal * discountValue) / 100, subtotal);
   const total       = Math.max(0, subtotal - discountAmt);
-  const payAmt      = partialAmount !== "" ? Number(partialAmount) : total;
-  const balance     = Math.max(0, total - (payNow ? payAmt : 0));
+  const paidTotal   = payNow ? paymentSplits.reduce((s, p) => s + (Number(p.amount) || 0), 0) : 0;
+  const balance     = Math.max(0, total - paidTotal);
 
   // ── Test actions ────────────────────────────────────
   function addTest(t: Test) {
@@ -340,7 +340,7 @@ export default function BillingDesk() {
     setSelectedTests([]);
     setDiscountValue(0);
     setPayNow(true);
-    setPartialAmount("");
+    setPaymentSplits([{ mode: "cash", amount: "" }]);
     setSuggestion(null);
   }
 
@@ -897,6 +897,7 @@ export default function BillingDesk() {
 
             {/* ── Payment ── */}
             <div className="flex-shrink-0 bg-card p-3 space-y-2 border-b border-card-border">
+              {/* Toggle */}
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setPayNow(!payNow)}
@@ -910,42 +911,72 @@ export default function BillingDesk() {
 
               {payNow && (
                 <div className="space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Payment Mode</Label>
-                      <Select value={paymentMode} onValueChange={setPaymentMode}>
+                  {/* Header row */}
+                  <div className="grid grid-cols-[1fr_1fr_20px] gap-1.5 px-0.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Mode</span>
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Amount (₹)</span>
+                    <span />
+                  </div>
+
+                  {/* Split rows */}
+                  {paymentSplits.map((split, idx) => (
+                    <div key={idx} className="grid grid-cols-[1fr_1fr_20px] gap-1.5 items-center">
+                      <Select
+                        value={split.mode}
+                        onValueChange={(v) => setPaymentSplits((prev) => prev.map((s, i) => i === idx ? { ...s, mode: v } : s))}
+                      >
                         <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {PAYMENT_MODES.map((m) => (
-                            <SelectItem key={m} value={m} className="capitalize">{m}</SelectItem>
+                            <SelectItem key={m} value={m} className="capitalize">{m.toUpperCase()}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Amount Collected (₹)</Label>
                       <Input
                         type="number"
                         min={0}
                         step="0.01"
-                        placeholder={String(total.toFixed(2))}
-                        value={partialAmount}
-                        onChange={(e) => setPartialAmount(e.target.value === "" ? "" : Number(e.target.value))}
+                        placeholder={idx === 0 ? total.toFixed(2) : "0.00"}
+                        value={split.amount}
+                        onChange={(e) => setPaymentSplits((prev) => prev.map((s, i) => i === idx ? { ...s, amount: e.target.value } : s))}
                         className="h-8 text-sm"
                       />
+                      {paymentSplits.length > 1 ? (
+                        <button
+                          onClick={() => setPaymentSplits((prev) => prev.filter((_, i) => i !== idx))}
+                          className="text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          <X size={13} />
+                        </button>
+                      ) : <span />}
                     </div>
+                  ))}
+
+                  {/* Add split link */}
+                  {paymentSplits.length < PAYMENT_MODES.length && (
+                    <button
+                      onClick={() => setPaymentSplits((prev) => [...prev, { mode: "upi", amount: "" }])}
+                      className="text-xs text-primary hover:underline flex items-center gap-1"
+                    >
+                      <Plus size={11} /> Add another payment method
+                    </button>
+                  )}
+
+                  {/* Balance / paid status */}
+                  <div className="pt-1 border-t border-card-border flex justify-between items-center text-xs">
+                    {balance > 0 ? (
+                      <>
+                        <span className="text-muted-foreground">Balance due</span>
+                        <span className="text-orange-600 font-semibold">{inr(balance)}</span>
+                      </>
+                    ) : paidTotal > 0 && total > 0 ? (
+                      <span className="text-green-600 font-medium flex items-center gap-1 w-full justify-center">
+                        <CheckCircle2 size={11} /> Fully paid — {inr(paidTotal)}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">Enter amount(s) above</span>
+                    )}
                   </div>
-                  {balance > 0 && (
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">Balance due</span>
-                      <span className="text-orange-600 font-semibold">{inr(balance)}</span>
-                    </div>
-                  )}
-                  {balance === 0 && payNow && total > 0 && (
-                    <div className="text-xs text-green-600 font-medium flex items-center gap-1">
-                      <CheckCircle2 size={11} /> Fully paid
-                    </div>
-                  )}
                 </div>
               )}
             </div>

@@ -30,7 +30,7 @@ import {
 const inr = (n: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 
-type Test = { id: number; name: string; testCode: string; price: string | number; category: string };
+type Test = { id: number; name: string; code: string; price: string | number; category: string };
 type PackageItem = {
   id: number;
   packageCode: string;
@@ -67,7 +67,7 @@ export default function Packages() {
 
   const { data: allTests = [] } = useQuery<Test[]>({
     queryKey: ["tests-list"],
-    queryFn: () => api("/tests"),
+    queryFn: () => api<{ tests: Test[] }>("/tests").then((d) => d.tests),
   });
 
   const createMut = useMutation({
@@ -156,7 +156,7 @@ export default function Packages() {
     (t) =>
       !form.testSearch ||
       t.name.toLowerCase().includes(form.testSearch.toLowerCase()) ||
-      t.testCode.toLowerCase().includes(form.testSearch.toLowerCase())
+      t.code.toLowerCase().includes(form.testSearch.toLowerCase())
   );
 
   const effectivePrice = (pkg: PackageItem) =>
@@ -389,7 +389,7 @@ export default function Packages() {
                         className={selected ? "text-primary" : "text-muted-foreground/30"}
                       />
                       <span className="flex-1 font-medium">{t.name}</span>
-                      <span className="text-xs text-muted-foreground font-mono">{t.testCode}</span>
+                      <span className="text-xs text-muted-foreground font-mono">{t.code}</span>
                       <span className="text-xs text-muted-foreground">{inr(Number(t.price))}</span>
                     </button>
                   );

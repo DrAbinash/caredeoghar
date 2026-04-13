@@ -368,7 +368,8 @@ export const ListOrdersResponse = zod.object({
 export const CreateOrderBody = zod.object({
   patientId: zod.number(),
   doctorId: zod.number().nullish(),
-  testIds: zod.array(zod.number()),
+  testIds: zod.array(zod.number()).optional(),
+  tests: zod.array(zod.object({ testId: zod.number(), price: zod.number() })).optional(),
   notes: zod.string().nullish(),
 });
 
