@@ -228,7 +228,10 @@ export default function BillingDesk() {
   // ── Derived values ──────────────────────────────────
   const categories  = ["all", ...Array.from(new Set(allTests.map((t) => t.category))).sort()];
 
+  const selectedTestIds = new Set(selectedTests.map((s) => s.testId));
+
   const filteredTests = allTests.filter((t) => {
+    if (selectedTestIds.has(t.id)) return false;
     const matchSearch = !testSearch || t.name.toLowerCase().includes(testSearch.toLowerCase()) || (t.code ?? "").toLowerCase().includes(testSearch.toLowerCase());
     const matchCat    = categoryFilter === "all" || t.category === categoryFilter;
     return matchSearch && matchCat && t.isActive !== false;
