@@ -32,7 +32,8 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
-      staleTime: 30_000,
+      staleTime: 5 * 60_000,       // 5 minutes globally
+      refetchOnWindowFocus: false,  // never re-fetch just because user switched tabs
     },
   },
 });

@@ -150,37 +150,41 @@ export default function BillingDesk() {
   // ── Data queries ────────────────────────────────────
   const debouncedSearch = useDebounce(patientSearch, 150);
 
-  // Recent patients — loaded once on mount, shown when search field is focused but empty
+  // Recent patients — loaded once, refreshed only on mount
   const { data: recentPatients } = useQuery<{ patients: Patient[] }>({
     queryKey: ["patients-recent"],
     queryFn: () => api.get<{ patients: Patient[] }>("/api/patients?limit=8&page=1"),
-    staleTime: 60_000,
+    staleTime: 10 * 60_000,  // 10 min
   });
 
-  // Live search — fires from the very first character
+  // Live search — event-driven, short stale is fine
   const { data: searchResults } = useQuery<{ patients: Patient[] }>({
     queryKey: ["patients-search", debouncedSearch],
     queryFn: () => api.get<{ patients: Patient[] }>(`/api/patients?search=${encodeURIComponent(debouncedSearch)}&limit=10`),
     enabled: debouncedSearch.length >= 1,
-    staleTime: 5_000,
+    staleTime: 30_000,
   });
 
   // Which list to show in the dropdown
   const patientResults = debouncedSearch.length >= 1 ? searchResults : recentPatients;
 
+  // Static data — never auto-refresh during a billing session
   const { data: allTests = [] } = useQuery<Test[]>({
     queryKey: ["tests-all-popular"],
     queryFn: () => api.get<{ tests: Test[] }>("/api/tests?limit=500&sort=popular").then((d) => d.tests ?? []),
+    staleTime: Infinity,
   });
 
   const { data: doctors = [] } = useQuery<Doctor[]>({
     queryKey: ["doctors-list"],
     queryFn: () => api.get<{ doctors: Doctor[] }>("/api/doctors").then((d) => d.doctors ?? []),
+    staleTime: Infinity,
   });
 
   const { data: packages = [] } = useQuery<Pkg[]>({
     queryKey: ["packages-active"],
     queryFn: () => api.get<Pkg[]>("/api/packages"),
+    staleTime: Infinity,
     select: (d) => d.filter((p) => p.isActive !== false),
   });
 
