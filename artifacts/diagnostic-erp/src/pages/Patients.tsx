@@ -29,7 +29,7 @@ import { useForm } from "react-hook-form";
 type PatientForm = {
   firstName: string;
   lastName: string;
-  dateOfBirth: string;
+  age: number;
   gender: "male" | "female" | "other";
   phone: string;
   email?: string;
@@ -59,7 +59,10 @@ export default function Patients() {
   });
 
   const onSubmit = (data: PatientForm) => {
-    createPatient.mutate({ data });
+    const birthYear = new Date().getFullYear() - Number(data.age);
+    const dateOfBirth = `${birthYear}-01-01`;
+    const { age, ...rest } = data;
+    createPatient.mutate({ data: { ...rest, dateOfBirth } });
   };
 
   const bloodGroups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
@@ -96,7 +99,7 @@ export default function Patients() {
                 <tr className="text-left text-xs text-muted-foreground border-b border-border bg-muted/30">
                   <th className="px-4 py-3 font-medium">Patient ID</th>
                   <th className="px-4 py-3 font-medium">Name</th>
-                  <th className="px-4 py-3 font-medium">DOB / Age</th>
+                  <th className="px-4 py-3 font-medium">Age</th>
                   <th className="px-4 py-3 font-medium">Gender</th>
                   <th className="px-4 py-3 font-medium">Phone</th>
                   <th className="px-4 py-3 font-medium">Blood Group</th>
@@ -114,12 +117,14 @@ export default function Patients() {
                   <tr><td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">No patients found</td></tr>
                 ) : (
                   data?.patients?.map((p) => {
-                    const age = new Date().getFullYear() - new Date(p.dateOfBirth).getFullYear();
+                    const age = p.dateOfBirth
+                      ? new Date().getFullYear() - new Date(p.dateOfBirth).getFullYear()
+                      : null;
                     return (
                       <tr key={p.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
                         <td className="px-4 py-3 font-mono text-xs font-medium text-primary">{p.patientId}</td>
                         <td className="px-4 py-3 font-medium text-foreground">{p.firstName} {p.lastName}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{p.dateOfBirth} <span className="text-xs">({age}y)</span></td>
+                        <td className="px-4 py-3 text-muted-foreground">{age !== null ? `${age} yrs` : "—"}</td>
                         <td className="px-4 py-3 capitalize text-muted-foreground">{p.gender}</td>
                         <td className="px-4 py-3 text-muted-foreground">{p.phone}</td>
                         <td className="px-4 py-3">
@@ -176,8 +181,15 @@ export default function Patients() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Date of Birth *</Label>
-                <Input type="date" {...register("dateOfBirth", { required: true })} className="mt-1" />
+                <Label>Age (years) *</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={150}
+                  placeholder="e.g. 35"
+                  {...register("age", { required: true, min: 0, max: 150, valueAsNumber: true })}
+                  className="mt-1"
+                />
               </div>
               <div>
                 <Label>Gender *</Label>
