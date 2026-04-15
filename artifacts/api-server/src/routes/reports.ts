@@ -241,11 +241,14 @@ reportsRouter.get("/income-expense", async (req, res) => {
   const payments = await db.select().from(paymentsTable)
     .where(and(gte(paymentsTable.createdAt, fromDate), lte(paymentsTable.createdAt, toDate)));
 
-  // Vouchers that are expenses (type = journal/purchase/payment with debit to expense accounts)
-  const vouchers = await db.select({ v: vouchersTable, a: accountsTable })
-    .from(vouchersTable)
-    .leftJoin(accountsTable, eq(vouchersTable.accountId, accountsTable.id))
+  // Vouchers that are expenses — fetch separately and join in JS to avoid text↔integer type mismatch
+  const rawVouchers = await db.select().from(vouchersTable)
     .where(and(gte(vouchersTable.date, fromDate), lte(vouchersTable.date, toDate)));
+  const allAccounts = rawVouchers.length
+    ? await db.select().from(accountsTable)
+    : [];
+  const accountMap = new Map(allAccounts.map(a => [String(a.id), a]));
+  const vouchers = rawVouchers.map(v => ({ v, a: accountMap.get(v.debitAccountId) ?? null }));
 
   // Group payments by date
   const incomeByDay: Record<string, { date: string; cash: number; upi: number; card: number; bank: number; insurance: number; cheque: number; total: number }> = {};

@@ -167,10 +167,15 @@ router.get("/report", async (req, res) => {
       }
 
       return {
+        doctorId: doctor.id,
+        doctorName: doctor.name,
+        specialization: doctor.specialization ?? "",
+        totalOrders: doctorOrders.length,
+        totalBilled: totalRevenue,
+        commissionAmount: totalCommission,
+        commissionType: doctor.defaultCommissionType ?? "percentage",
+        commissionValue: Number(doctor.defaultCommission ?? 0),
         doctor: { ...doctor, defaultCommission: Number(doctor.defaultCommission) },
-        orderCount: doctorOrders.length,
-        totalRevenue,
-        totalCommission,
         orders: orderDetails,
       };
     });
