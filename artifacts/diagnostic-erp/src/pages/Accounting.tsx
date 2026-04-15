@@ -1,4 +1,4 @@
-import { useState, Fragment } from "react";
+import { useState, Fragment, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
@@ -191,6 +191,41 @@ export default function Accounting() {
     },
   });
 
+  // ── Auto-setup: seed defaults + sync billing when accounts are empty ─────────
+
+  const setupDone = useRef(false);
+  const [syncing, setSyncing] = useState(false);
+
+  useEffect(() => {
+    if (accLoading || setupDone.current) return;
+    if (accounts.length > 0) { setupDone.current = true; return; }
+
+    setSyncing(true);
+    setupDone.current = true;
+    api.post("/api/accounting/setup-defaults", {})
+      .then(() => api.post("/api/accounting/sync-billing", {}))
+      .then(() => {
+        qc.invalidateQueries({ queryKey: ["accounts"] });
+        qc.invalidateQueries({ queryKey: ["vouchers"] });
+        qc.invalidateQueries({ queryKey: ["ledger"] });
+        qc.invalidateQueries({ queryKey: ["trial-balance"] });
+        qc.invalidateQueries({ queryKey: ["profit-loss"] });
+        qc.invalidateQueries({ queryKey: ["balance-sheet"] });
+      })
+      .finally(() => setSyncing(false));
+  }, [accLoading, accounts.length]);
+
+  const syncBilling = useMutation({
+    mutationFn: () => api.post("/api/accounting/sync-billing", {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["vouchers"] });
+      qc.invalidateQueries({ queryKey: ["ledger"] });
+      qc.invalidateQueries({ queryKey: ["trial-balance"] });
+      qc.invalidateQueries({ queryKey: ["profit-loss"] });
+      qc.invalidateQueries({ queryKey: ["balance-sheet"] });
+    },
+  });
+
   // ── Mutations ────────────────────────────────────────────────────────────────
 
   const createAccount = useMutation({
@@ -307,7 +342,28 @@ export default function Accounting() {
 
   return (
     <div className="pb-8">
-      <PageHeader title="Accounting" subtitle="Double-entry bookkeeping · Tally-compatible" />
+      <PageHeader
+        title="Accounting"
+        subtitle="Double-entry bookkeeping · Tally-compatible"
+        actions={
+          <div className="flex items-center gap-2">
+            {syncing && (
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <RefreshCw size={12} className="animate-spin" /> Setting up accounting…
+              </span>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={syncBilling.isPending || syncing}
+              onClick={() => syncBilling.mutate()}
+            >
+              <RefreshCw size={13} className={`mr-1 ${syncBilling.isPending ? "animate-spin" : ""}`} />
+              Sync from Billing
+            </Button>
+          </div>
+        }
+      />
 
       <div className="px-6">
         <Tabs defaultValue="vouchers">

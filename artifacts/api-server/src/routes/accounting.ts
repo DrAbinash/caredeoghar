@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "@workspace/db";
+import { db, billsTable, paymentsTable } from "@workspace/db";
 import { accountsTable, vouchersTable, voucherAuditsTable } from "@workspace/db/schema";
 import { eq, desc, and, gte, lte, like } from "drizzle-orm";
 
@@ -573,6 +573,91 @@ ${voucherXml}
   res.setHeader("Content-Disposition", `attachment; filename=tally-export${from ? `-${from}` : ""}${to ? `-to-${to}` : ""}.xml`);
   res.send(xml);
   return;
+});
+
+// ─── Setup Default Chart of Accounts ─────────────────────────────────────────
+
+router.post("/setup-defaults", async (req, res) => {
+  const existing = await db.select().from(accountsTable);
+  if (existing.length > 0) {
+    return res.json({ message: "Accounts already exist", count: existing.length, accounts: existing });
+  }
+
+  const defaults = [
+    { name: "Cash in Hand",                 type: "cash",      code: "CASH-001", tallyGroup: "Cash-in-Hand",        isActive: true },
+    { name: "Bank Account",                 type: "bank",      code: "BANK-001", tallyGroup: "Bank Accounts",       isActive: true },
+    { name: "Lab Revenue",                  type: "income",    code: "INC-001",  tallyGroup: "Direct Income",       isActive: true },
+    { name: "Consultation Revenue",         type: "income",    code: "INC-002",  tallyGroup: "Direct Income",       isActive: true },
+    { name: "Staff Salaries",               type: "expense",   code: "EXP-001",  tallyGroup: "Indirect Expenses",   isActive: true },
+    { name: "Lab Supplies & Reagents",      type: "expense",   code: "EXP-002",  tallyGroup: "Direct Expenses",     isActive: true },
+    { name: "Equipment Maintenance",        type: "expense",   code: "EXP-003",  tallyGroup: "Indirect Expenses",   isActive: true },
+    { name: "Rent Expenses",                type: "expense",   code: "EXP-004",  tallyGroup: "Indirect Expenses",   isActive: true },
+    { name: "Utilities (Electricity/Water)",type: "expense",   code: "EXP-005",  tallyGroup: "Indirect Expenses",   isActive: true },
+    { name: "Sundry Debtors",               type: "asset",     code: "ASSET-001",tallyGroup: "Sundry Debtors",      isActive: true },
+    { name: "Fixed Assets",                 type: "asset",     code: "ASSET-002",tallyGroup: "Fixed Assets",        isActive: true },
+    { name: "Capital Account",              type: "liability", code: "CAP-001",  tallyGroup: "Capital Account",     isActive: true },
+    { name: "Sundry Creditors",             type: "liability", code: "LIA-001",  tallyGroup: "Sundry Creditors",    isActive: true },
+    { name: "Duties & Taxes",               type: "liability", code: "LIA-002",  tallyGroup: "Duties & Taxes",      isActive: true },
+  ];
+
+  const inserted = await db.insert(accountsTable).values(defaults).returning();
+  return res.json({ message: "Default accounts created", count: inserted.length, accounts: inserted });
+});
+
+// ─── Sync Billing Payments → Receipt Vouchers ─────────────────────────────────
+
+router.post("/sync-billing", async (req, res) => {
+  const allAccounts = await db.select().from(accountsTable);
+  const cashAcc  = allAccounts.find(a => a.tallyGroup === "Cash-in-Hand" || a.type === "cash");
+  const bankAcc  = allAccounts.find(a => a.tallyGroup === "Bank Accounts" || a.type === "bank");
+  const revAcc   = allAccounts.find(a => a.tallyGroup === "Direct Income"  || a.type === "income");
+
+  if (!cashAcc || !revAcc) {
+    return res.status(400).json({ error: "Required accounts (cash, income) not found. Run setup-defaults first." });
+  }
+
+  const payments = await db.select({ p: paymentsTable, b: billsTable })
+    .from(paymentsTable)
+    .leftJoin(billsTable, eq(paymentsTable.billId, billsTable.id));
+
+  const existingRefs = new Set(
+    (await db.select({ ref: vouchersTable.reference }).from(vouchersTable))
+      .map(v => v.ref).filter(Boolean)
+  );
+
+  let created = 0;
+  for (const { p, b } of payments) {
+    const ref = `PAY-${p.id}`;
+    if (existingRefs.has(ref)) continue;
+
+    const method = (p.method || "cash").toLowerCase();
+    const isBankMethod = ["upi", "card", "credit_card", "debit_card", "neft", "rtgs", "imps", "bank_transfer", "cheque"].includes(method);
+    const debitAcc = isBankMethod && bankAcc ? bankAcc : cashAcc;
+
+    const dateStr  = p.createdAt.toISOString().split("T")[0];
+    const billNum  = (b as { billNumber?: string } | null)?.billNumber ?? `Bill #${p.billId}`;
+
+    const prefix   = "RV";
+    const monthKey = dateStr.slice(0, 7).replace("-", "");
+    const monthCount = (await db.select().from(vouchersTable).where(like(vouchersTable.voucherNumber, `${prefix}-${monthKey}%`))).length;
+    const voucherNumber = `${prefix}-${monthKey}-${String(monthCount + 1 + created).padStart(4, "0")}`;
+
+    await db.insert(vouchersTable).values({
+      voucherNumber,
+      type:            "receipt",
+      date:            dateStr,
+      debitAccountId:  String(debitAcc.id),
+      creditAccountId: String(revAcc.id),
+      amount:          p.amount,
+      particular:      `Payment received — ${billNum}`,
+      reference:       ref,
+      narration:       `${method.toUpperCase()} payment`,
+      billId:          p.billId,
+    });
+    created++;
+  }
+
+  return res.json({ message: `Synced ${created} new payments to accounting`, created });
 });
 
 function escapeXml(s: string): string {
