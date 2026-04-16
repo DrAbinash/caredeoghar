@@ -151,6 +151,7 @@ export default function BillingDesk() {
   const [payNow, setPayNow]               = useState(true);
   const [paymentSplits, setPaymentSplits] = useState<PaySplit[]>([{ mode: "cash", amount: "" }]);
   const [lastBill, setLastBill]           = useState<LastBill | null>(null);
+  const [showBillToast, setShowBillToast] = useState(false);
   const [suggLoading, setSuggLoading]     = useState(false);
   const [suggestion, setSuggestion]       = useState<{ discount: number; rule: { name: string } | null } | null>(null);
 
@@ -267,6 +268,8 @@ export default function BillingDesk() {
         total,
         payments: paymentSplits.filter((p) => Number(p.amount) > 0),
       });
+      setShowBillToast(true);
+      window.setTimeout(() => setShowBillToast(false), 5000);
       toast({ title: `Bill ${bill.billNumber} generated!` });
     },
     onError: (err: Error) => toast({ title: err.message || "Failed to generate bill", variant: "destructive" }),
@@ -1008,72 +1011,79 @@ export default function BillingDesk() {
               )}
             </div>
 
-            {/* ── Generate Bill / Success Panel ── */}
+            {/* ── Generate Bill Button (always visible) ── */}
             <div className="flex-shrink-0 p-3 bg-card space-y-2">
-              {lastBill ? (
-                /* SUCCESS STATE */
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2">
-                    <CheckCircle2 size={15} className="text-green-600 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-semibold text-green-700 dark:text-green-400">Bill Generated</div>
-                      <div className="text-xs text-green-600 dark:text-green-500 font-mono truncate">{lastBill.billNumber}</div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      className="h-10 text-sm font-semibold bg-primary"
-                      onClick={() => window.print()}
-                    >
-                      <Printer size={14} className="mr-1.5" /> Print Bill
-                    </Button>
-                    <a href={`/billing/${lastBill.id}`} target="_blank" rel="noopener noreferrer" className="block">
-                      <Button variant="outline" className="w-full h-10 text-sm">
-                        <ExternalLink size={14} className="mr-1.5" /> View Bill
-                      </Button>
-                    </a>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    className="w-full h-8 text-xs text-muted-foreground"
-                    onClick={resetAll}
-                  >
-                    <RefreshCcw size={12} className="mr-1" /> New Bill
-                  </Button>
-                </div>
-              ) : (
-                /* GENERATE STATE */
-                <>
-                  {!canGenerate && (
-                    <p className="text-xs text-muted-foreground text-center">
-                      {!selectedPatient ? "← Select or register a patient" : "← Add at least one test"}
-                    </p>
-                  )}
-                  <Button
-                    className="w-full h-11 text-base font-semibold"
-                    disabled={!canGenerate || generateMut.isPending}
-                    onClick={() => generateMut.mutate()}
-                  >
-                    {generateMut.isPending ? (
-                      <><RefreshCcw size={16} className="mr-2 animate-spin" /> Generating…</>
-                    ) : (
-                      <><Receipt size={16} className="mr-2" /> Generate Bill</>
-                    )}
-                  </Button>
-                </>
+              {!canGenerate && !lastBill && (
+                <p className="text-xs text-muted-foreground text-center">
+                  {!selectedPatient ? "← Select or register a patient" : "← Add at least one test"}
+                </p>
               )}
+              <Button
+                className="w-full h-11 text-base font-semibold"
+                disabled={!canGenerate || generateMut.isPending}
+                onClick={() => generateMut.mutate()}
+              >
+                {generateMut.isPending ? (
+                  <><RefreshCcw size={16} className="mr-2 animate-spin" /> Generating…</>
+                ) : (
+                  <><Receipt size={16} className="mr-2" /> Generate Bill</>
+                )}
+              </Button>
             </div>
 
           </div>
         </div>
       </div>
+      {/* ── Floating Bill-Generated Notification (auto-dismiss 5s) ── */}
+      {lastBill && showBillToast && (
+        <div className="fixed top-20 right-6 z-50 w-80 bg-white dark:bg-card border border-green-200 dark:border-green-800 rounded-lg shadow-lg overflow-hidden animate-in slide-in-from-right-4 fade-in duration-300 print:hidden">
+          <div className="flex items-start gap-2 px-3 py-2 bg-green-50 dark:bg-green-950/30 border-b border-green-200 dark:border-green-800">
+            <CheckCircle2 size={16} className="text-green-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-green-700 dark:text-green-400">Bill Generated</div>
+              <div className="text-xs text-green-600 dark:text-green-500 font-mono truncate">{lastBill.billNumber}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowBillToast(false)}
+              className="text-muted-foreground hover:text-foreground text-xs leading-none p-1"
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="p-2 grid grid-cols-3 gap-1.5">
+            <Button size="sm" className="h-9 text-xs font-semibold" onClick={() => window.print()}>
+              <Printer size={12} className="mr-1" /> Print
+            </Button>
+            <a href={`/billing/${lastBill.id}`} target="_blank" rel="noopener noreferrer">
+              <Button size="sm" variant="outline" className="w-full h-9 text-xs">
+                <ExternalLink size={12} className="mr-1" /> View
+              </Button>
+            </a>
+            <Button size="sm" variant="ghost" className="h-9 text-xs" onClick={resetAll}>
+              <RefreshCcw size={12} className="mr-1" /> New
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* ── Hidden Print Receipt (shown only when printing) ── */}
       {lastBill && (
         <div className="billing-desk-receipt">
           <style>{`
             @media print {
-              body > * { display: none !important; }
-              .billing-desk-receipt { display: block !important; }
+              body * { visibility: hidden !important; }
+              .billing-desk-receipt, .billing-desk-receipt * { visibility: visible !important; }
+              .billing-desk-receipt {
+                display: block !important;
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                padding: 20px !important;
+              }
+              @page { margin: 10mm; }
             }
             .billing-desk-receipt {
               display: none;
