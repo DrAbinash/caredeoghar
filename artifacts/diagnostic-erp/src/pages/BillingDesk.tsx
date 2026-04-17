@@ -438,7 +438,7 @@ export default function BillingDesk() {
             LEFT COLUMN — Patient + Doctor + Notes
         ══════════════════════════════════════════════ */}
         <div className="w-full lg:w-[52%] lg:border-r border-card-border flex flex-col lg:overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="lg:flex-1 lg:overflow-y-auto p-4 space-y-4">
 
             {/* ── Patient Section — Search ── */}
             <div className="bg-card border border-card-border rounded-xl overflow-hidden">
@@ -727,8 +727,8 @@ export default function BillingDesk() {
         {/* ══════════════════════════════════════════════
             RIGHT COLUMN — Tests + Bill + Payment
         ══════════════════════════════════════════════ */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="w-full lg:flex-1 flex flex-col lg:overflow-hidden">
+          <div className="lg:flex-1 flex flex-col lg:overflow-hidden">
 
             {/* ── Test Search & Catalog ── */}
             <div className="flex-shrink-0 border-b border-card-border">
@@ -836,7 +836,7 @@ export default function BillingDesk() {
             </div>
 
             {/* ── Selected Tests ── */}
-            <div className="flex-1 overflow-y-auto border-b border-card-border">
+            <div className="lg:flex-1 lg:overflow-y-auto border-b border-card-border">
               <div className="px-4 py-2 bg-muted/10 flex items-center justify-between">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Selected Tests ({selectedTests.length})
