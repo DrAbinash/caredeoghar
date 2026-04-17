@@ -280,7 +280,6 @@ export default function BillingDesk() {
       });
       setShowBillToast(true);
       window.setTimeout(() => setShowBillToast(false), 5000);
-      toast({ title: `Bill ${bill.billNumber} generated!` });
       if (printAfterSaveRef.current) {
         printAfterSaveRef.current = false;
         window.setTimeout(() => window.print(), 250);
@@ -1097,7 +1096,7 @@ export default function BillingDesk() {
       </div>
       {/* ── Floating Bill-Generated Notification (auto-dismiss 5s) ── */}
       {lastBill && showBillToast && (
-        <div className="fixed bottom-6 right-6 z-50 w-80 bg-white dark:bg-card border border-green-200 dark:border-green-800 rounded-lg shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-300 print:hidden">
+        <div className="fixed top-24 right-6 z-50 w-80 bg-white dark:bg-card border-2 border-green-300 dark:border-green-700 rounded-lg shadow-2xl overflow-hidden animate-in slide-in-from-right-4 fade-in duration-300 print:hidden">
           <div className="flex items-start gap-2 px-3 py-2 bg-green-50 dark:bg-green-950/30 border-b border-green-200 dark:border-green-800">
             <CheckCircle2 size={16} className="text-green-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
