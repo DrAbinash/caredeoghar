@@ -142,6 +142,8 @@ router.get("/report", async (req, res) => {
   const orders = await db.select().from(ordersTable).where(conditions.length ? and(...conditions) : undefined);
   const orderIds = orders.map(o => o.id);
   const orderTests = orderIds.length ? await db.select().from(orderTestsTable).where(inArray(orderTestsTable.orderId, orderIds)) : [];
+  const billsForOrders = orderIds.length ? await db.select().from(billsTable).where(inArray(billsTable.orderId, orderIds)) : [];
+  const discountedOrderIds = new Set(billsForOrders.filter(b => Number(b.discount) > 0).map(b => b.orderId));
 
   const report = doctors
     .filter(d => !doctorId || d.id === Number(doctorId))
@@ -149,10 +151,15 @@ router.get("/report", async (req, res) => {
       const doctorOrders = orders.filter(o => o.doctorId === doctor.id);
       const rules = allRules.filter(r => r.doctorId === doctor.id);
       let totalRevenue = 0, totalCommission = 0;
-      const orderDetails: { orderId: number; orderNumber: string; date: string; revenue: number; commission: number; commissionRule: string }[] = [];
+      let testsFullPrice = 0, testsDiscounted = 0;
+      let revenueFullPrice = 0, revenueDiscounted = 0;
+      let commissionFullPrice = 0, commissionDiscounted = 0;
+      let ordersFullPrice = 0, ordersDiscounted = 0;
+      const orderDetails: { orderId: number; orderNumber: string; date: string; revenue: number; commission: number; commissionRule: string; isDiscounted: boolean }[] = [];
 
       for (const order of doctorOrders) {
         const tests = orderTests.filter(ot => ot.orderId === order.id);
+        const isDisc = discountedOrderIds.has(order.id);
         let orderRevenue = 0, orderCommission = 0, lastRule = "Default";
         for (const ot of tests) {
           const test = testMap.get(ot.testId);
@@ -160,10 +167,13 @@ router.get("/report", async (req, res) => {
           orderRevenue += Number(ot.price);
           orderCommission += commission;
           lastRule = ruleName;
+          if (isDisc) testsDiscounted++; else testsFullPrice++;
         }
         totalRevenue += orderRevenue;
         totalCommission += orderCommission;
-        orderDetails.push({ orderId: order.id, orderNumber: order.orderNumber, date: order.createdAt.toISOString().split("T")[0], revenue: orderRevenue, commission: orderCommission, commissionRule: lastRule });
+        if (isDisc) { ordersDiscounted++; revenueDiscounted += orderRevenue; commissionDiscounted += orderCommission; }
+        else        { ordersFullPrice++;  revenueFullPrice  += orderRevenue; commissionFullPrice  += orderCommission; }
+        orderDetails.push({ orderId: order.id, orderNumber: order.orderNumber, date: order.createdAt.toISOString().split("T")[0], revenue: orderRevenue, commission: orderCommission, commissionRule: lastRule, isDiscounted: isDisc });
       }
 
       return {
@@ -175,6 +185,15 @@ router.get("/report", async (req, res) => {
         commissionAmount: totalCommission,
         commissionType: doctor.defaultCommissionType ?? "percentage",
         commissionValue: Number(doctor.defaultCommission ?? 0),
+        // Discount-aware breakdown
+        ordersFullPrice,
+        ordersDiscounted,
+        testsFullPrice,
+        testsDiscounted,
+        revenueFullPrice,
+        revenueDiscounted,
+        commissionFullPrice,
+        commissionDiscounted,
         doctor: { ...doctor, defaultCommission: Number(doctor.defaultCommission) },
         orders: orderDetails,
       };

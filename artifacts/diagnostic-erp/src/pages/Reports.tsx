@@ -28,6 +28,14 @@ type CommissionReport = {
   commissionAmount: number;
   commissionType: string;
   commissionValue: number;
+  ordersFullPrice: number;
+  ordersDiscounted: number;
+  testsFullPrice: number;
+  testsDiscounted: number;
+  revenueFullPrice: number;
+  revenueDiscounted: number;
+  commissionFullPrice: number;
+  commissionDiscounted: number;
 };
 
 const TABS = [
@@ -293,43 +301,68 @@ export default function Reports() {
                   No commission data for this period
                 </div>
               ) : (
-                <table className="w-full text-sm">
+                <>
+                <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[900px]">
                   <thead className="bg-muted/50 border-b border-card-border">
                     <tr>
-                      <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Doctor</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Commission Rate</th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Referrals</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Billed</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Commission</th>
+                      <th rowSpan={2} className="text-left px-3 py-2 text-xs font-semibold uppercase text-muted-foreground align-bottom">Doctor</th>
+                      <th rowSpan={2} className="text-left px-3 py-2 text-xs font-semibold uppercase text-muted-foreground align-bottom">Rate</th>
+                      <th colSpan={3} className="text-center px-3 py-2 text-xs font-semibold uppercase text-emerald-700 border-l border-card-border">Full Price</th>
+                      <th colSpan={3} className="text-center px-3 py-2 text-xs font-semibold uppercase text-amber-700 border-l border-card-border">Discounted</th>
+                      <th rowSpan={2} className="text-right px-3 py-2 text-xs font-semibold uppercase text-muted-foreground align-bottom border-l border-card-border">Total Commission</th>
+                    </tr>
+                    <tr className="border-t border-card-border/60">
+                      <th className="text-center px-3 py-2 text-[11px] font-medium text-muted-foreground border-l border-card-border">Tests</th>
+                      <th className="text-right px-3 py-2 text-[11px] font-medium text-muted-foreground">Revenue</th>
+                      <th className="text-right px-3 py-2 text-[11px] font-medium text-muted-foreground">Comm.</th>
+                      <th className="text-center px-3 py-2 text-[11px] font-medium text-muted-foreground border-l border-card-border">Tests</th>
+                      <th className="text-right px-3 py-2 text-[11px] font-medium text-muted-foreground">Revenue</th>
+                      <th className="text-right px-3 py-2 text-[11px] font-medium text-muted-foreground">Comm.</th>
                     </tr>
                   </thead>
                   <tbody>
                     {commissionData.map(d => (
                       <tr key={d.doctorId} className="border-b border-card-border last:border-0 hover:bg-muted/20">
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-3">
                           <p className="font-medium">{d.doctorName}</p>
                           <p className="text-xs text-muted-foreground">{d.specialization}</p>
                         </td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs">
+                        <td className="px-3 py-3 text-muted-foreground text-xs">
                           {d.commissionType === "percentage"
                             ? `${d.commissionValue}%`
                             : d.commissionType === "fixed"
                             ? `₹${d.commissionValue} flat`
                             : `₹${d.commissionValue}/test`}
                         </td>
-                        <td className="px-4 py-3 text-center font-medium">{d.totalOrders}</td>
-                        <td className="px-4 py-3 text-right">{formatCurrency(d.totalBilled)}</td>
-                        <td className="px-4 py-3 text-right font-bold text-green-600">{formatCurrency(d.commissionAmount)}</td>
+                        <td className="px-3 py-3 text-center border-l border-card-border">{d.testsFullPrice}</td>
+                        <td className="px-3 py-3 text-right">{formatCurrency(d.revenueFullPrice)}</td>
+                        <td className="px-3 py-3 text-right text-emerald-700">{formatCurrency(d.commissionFullPrice)}</td>
+                        <td className="px-3 py-3 text-center border-l border-card-border">
+                          {d.testsDiscounted > 0 ? <span className="text-amber-700 font-medium">{d.testsDiscounted}</span> : <span className="text-muted-foreground">0</span>}
+                        </td>
+                        <td className="px-3 py-3 text-right">{d.revenueDiscounted > 0 ? formatCurrency(d.revenueDiscounted) : "—"}</td>
+                        <td className="px-3 py-3 text-right text-amber-700">{d.commissionDiscounted > 0 ? formatCurrency(d.commissionDiscounted) : "—"}</td>
+                        <td className="px-3 py-3 text-right font-bold text-green-600 border-l border-card-border">{formatCurrency(d.commissionAmount)}</td>
                       </tr>
                     ))}
                     <tr className="bg-muted/30 font-bold text-sm">
-                      <td className="px-4 py-3" colSpan={2}>Total</td>
-                      <td className="px-4 py-3 text-center">{commissionData.reduce((s, d) => s + d.totalOrders, 0)}</td>
-                      <td className="px-4 py-3 text-right">{formatCurrency(commissionData.reduce((s, d) => s + d.totalBilled, 0))}</td>
-                      <td className="px-4 py-3 text-right text-green-600">{formatCurrency(totalCommission)}</td>
+                      <td className="px-3 py-3" colSpan={2}>Total</td>
+                      <td className="px-3 py-3 text-center border-l border-card-border">{commissionData.reduce((s, d) => s + d.testsFullPrice, 0)}</td>
+                      <td className="px-3 py-3 text-right">{formatCurrency(commissionData.reduce((s, d) => s + d.revenueFullPrice, 0))}</td>
+                      <td className="px-3 py-3 text-right text-emerald-700">{formatCurrency(commissionData.reduce((s, d) => s + d.commissionFullPrice, 0))}</td>
+                      <td className="px-3 py-3 text-center border-l border-card-border">{commissionData.reduce((s, d) => s + d.testsDiscounted, 0)}</td>
+                      <td className="px-3 py-3 text-right">{formatCurrency(commissionData.reduce((s, d) => s + d.revenueDiscounted, 0))}</td>
+                      <td className="px-3 py-3 text-right text-amber-700">{formatCurrency(commissionData.reduce((s, d) => s + d.commissionDiscounted, 0))}</td>
+                      <td className="px-3 py-3 text-right text-green-600 border-l border-card-border">{formatCurrency(totalCommission)}</td>
                     </tr>
                   </tbody>
                 </table>
+                </div>
+                <p className="text-xs text-muted-foreground px-4 py-2 border-t border-card-border bg-muted/10">
+                  Tests on bills with any discount applied are shown separately so referral commission is transparent.
+                </p>
+                </>
               )}
             </div>
           </div>
