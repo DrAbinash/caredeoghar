@@ -4,6 +4,7 @@ import { useListDoctors, useListTests } from "@workspace/api-client-react";
 import { api } from "@/lib/fetchApi";
 import { exportPDF, exportExcel, exportWord, type ExportDoctorSection, type ReportMeta } from "@/lib/exportReport";
 import PageHeader from "@/components/PageHeader";
+import Doctors from "@/pages/Doctors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -225,7 +226,12 @@ export default function Referrals() {
           <TabsList className="mb-4">
             <TabsTrigger value="report">Commission Report</TabsTrigger>
             <TabsTrigger value="rules">Commission Rules</TabsTrigger>
+            <TabsTrigger value="doctors">Doctors</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="doctors" className="-mx-6">
+            <Doctors />
+          </TabsContent>
 
           {/* ══════════════════════════════════════════════════════════════════
               COMMISSION REPORT TAB

@@ -40,7 +40,6 @@ const navItems = [
   { path: "/packages", icon: Boxes, label: "Test Packages" },
   { path: "/billing", icon: Receipt, label: "Billing" },
   { path: "/payments", icon: CreditCard, label: "Payments" },
-  { path: "/doctors", icon: Stethoscope, label: "Doctors" },
   { path: "/reports", icon: BarChart3, label: "Reports" },
   { path: "/report-generator", icon: FilePen, label: "Report Generator" },
   { path: "/inventory", icon: Package, label: "Inventory" },
