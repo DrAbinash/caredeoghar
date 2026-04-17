@@ -227,6 +227,7 @@ export default function BillingDesk() {
     onError: () => toast({ title: "Failed to register patient", variant: "destructive" }),
   });
 
+  const printAfterSaveRef = useRef(false);
   const generateMut = useMutation({
     mutationFn: async () => {
       if (!selectedPatient) throw new Error("No patient selected");
@@ -280,6 +281,10 @@ export default function BillingDesk() {
       setShowBillToast(true);
       window.setTimeout(() => setShowBillToast(false), 5000);
       toast({ title: `Bill ${bill.billNumber} generated!` });
+      if (printAfterSaveRef.current) {
+        printAfterSaveRef.current = false;
+        window.setTimeout(() => window.print(), 250);
+      }
     },
     onError: (err: Error) => toast({ title: err.message || "Failed to generate bill", variant: "destructive" }),
   });
@@ -1060,17 +1065,31 @@ export default function BillingDesk() {
                   {!selectedPatient ? "← Select or register a patient" : "← Add at least one test"}
                 </p>
               )}
-              <Button
-                className="w-full h-11 text-base font-semibold"
-                disabled={!canGenerate || generateMut.isPending}
-                onClick={() => generateMut.mutate()}
-              >
-                {generateMut.isPending ? (
-                  <><RefreshCcw size={16} className="mr-2 animate-spin" /> Generating…</>
-                ) : (
-                  <><Receipt size={16} className="mr-2" /> Generate Bill</>
-                )}
-              </Button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  className="h-11 text-sm font-semibold"
+                  disabled={!canGenerate || generateMut.isPending}
+                  onClick={() => { printAfterSaveRef.current = false; generateMut.mutate(); }}
+                >
+                  {generateMut.isPending && !printAfterSaveRef.current ? (
+                    <><RefreshCcw size={15} className="mr-1.5 animate-spin" /> Saving…</>
+                  ) : (
+                    <><Receipt size={15} className="mr-1.5" /> Generate Bill</>
+                  )}
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="h-11 text-sm font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white border-0"
+                  disabled={!canGenerate || generateMut.isPending}
+                  onClick={() => { printAfterSaveRef.current = true; generateMut.mutate(); }}
+                >
+                  {generateMut.isPending && printAfterSaveRef.current ? (
+                    <><RefreshCcw size={15} className="mr-1.5 animate-spin" /> Saving…</>
+                  ) : (
+                    <><Printer size={15} className="mr-1.5" /> Save & Print</>
+                  )}
+                </Button>
+              </div>
             </div>
 
           </div>
@@ -1078,7 +1097,7 @@ export default function BillingDesk() {
       </div>
       {/* ── Floating Bill-Generated Notification (auto-dismiss 5s) ── */}
       {lastBill && showBillToast && (
-        <div className="fixed top-20 right-6 z-50 w-80 bg-white dark:bg-card border border-green-200 dark:border-green-800 rounded-lg shadow-lg overflow-hidden animate-in slide-in-from-right-4 fade-in duration-300 print:hidden">
+        <div className="fixed bottom-6 right-6 z-50 w-80 bg-white dark:bg-card border border-green-200 dark:border-green-800 rounded-lg shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-300 print:hidden">
           <div className="flex items-start gap-2 px-3 py-2 bg-green-50 dark:bg-green-950/30 border-b border-green-200 dark:border-green-800">
             <CheckCircle2 size={16} className="text-green-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
