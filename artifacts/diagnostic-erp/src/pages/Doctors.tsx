@@ -40,10 +40,7 @@ type DoctorForm = {
   hospitalAffiliation?: string;
   defaultCommissionType: string;
   defaultCommission: string;
-  ledgerId?: string;
 };
-
-type Book = { id: number; name: string; isDefault: boolean };
 
 type Doctor = {
   id: number;
@@ -66,10 +63,6 @@ export default function Doctors() {
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useListDoctors({ search: search || undefined });
-  const { data: books = [] } = useQuery<Book[]>({
-    queryKey: ["ledgers"],
-    queryFn: () => api.get<Book[]>("/api/ledgers"),
-  });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getListDoctorsQueryKey() });
 
