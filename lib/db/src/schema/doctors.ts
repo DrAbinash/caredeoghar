@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, numeric, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -11,6 +11,7 @@ export const doctorsTable = pgTable("doctors", {
   hospitalAffiliation: text("hospital_affiliation"),
   defaultCommissionType: text("default_commission_type").notNull().default("percentage"),
   defaultCommission: numeric("default_commission", { precision: 10, scale: 2 }).notNull().default("0"),
+  ledgerId: integer("ledger_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

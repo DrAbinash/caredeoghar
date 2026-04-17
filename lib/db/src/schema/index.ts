@@ -14,3 +14,4 @@ export * from "./packages";
 export * from "./expenses";
 export * from "./discountReasons";
 export * from "./clinicSettings";
+export * from "./ledgers";

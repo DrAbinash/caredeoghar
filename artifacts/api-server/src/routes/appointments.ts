@@ -118,6 +118,18 @@ router.post("/", async (req, res) => {
   }
 
   const aptId = await generateAppointmentId();
+
+  // Resolve ledger from doctor → patient → default
+  let ledgerId = 1;
+  if (doctorId) {
+    const [d] = await db.select().from(doctorsTable).where(eq(doctorsTable.id, Number(doctorId)));
+    if (d?.ledgerId) ledgerId = d.ledgerId;
+  }
+  if (ledgerId === 1) {
+    const [p] = await db.select().from(patientsTable).where(eq(patientsTable.id, Number(patientId)));
+    if (p?.ledgerId) ledgerId = p.ledgerId;
+  }
+
   const [apt] = await db
     .insert(appointmentsTable)
     .values({
@@ -130,6 +142,7 @@ router.post("/", async (req, res) => {
       status: status || "scheduled",
       type: type || "walk-in",
       notes: notes || null,
+      ledgerId,
     })
     .returning();
 

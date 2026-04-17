@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startCronScheduler } from "./cron";
+import { ensureDefaultLedger } from "./routes/ledgers";
 
 const rawPort = process.env["PORT"];
 
@@ -24,4 +25,5 @@ app.listen(port, (err) => {
 
   logger.info({ port }, "Server listening");
   startCronScheduler();
+  ensureDefaultLedger().catch((e) => logger.error({ err: e }, "Failed to seed default ledger"));
 });

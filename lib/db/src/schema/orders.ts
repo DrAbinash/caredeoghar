@@ -13,6 +13,7 @@ export const ordersTable = pgTable("orders", {
   status: text("status").notNull().default("pending"),
   totalAmount: numeric("total_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   notes: text("notes"),
+  ledgerId: integer("ledger_id"),
   collectedAt: timestamp("collected_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

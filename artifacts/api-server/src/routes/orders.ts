@@ -92,6 +92,13 @@ ordersRouter.post("/", async (req, res) => {
   const totalAmount = lineItems.reduce((sum, t) => sum + Number(t.price), 0);
   const orderNumber = await generateOrderNumber();
 
+  // Resolve ledger from doctor (fallback: default ledger 1)
+  let ledgerId = 1;
+  if (doctorId) {
+    const [d] = await db.select().from(doctorsTable).where(eq(doctorsTable.id, doctorId));
+    if (d?.ledgerId) ledgerId = d.ledgerId;
+  }
+
   const [order] = await db.insert(ordersTable).values({
     orderNumber,
     patientId,
@@ -99,6 +106,7 @@ ordersRouter.post("/", async (req, res) => {
     totalAmount: String(totalAmount),
     notes: notes ?? null,
     status: "pending",
+    ledgerId,
   }).returning();
 
   if (lineItems.length > 0) {

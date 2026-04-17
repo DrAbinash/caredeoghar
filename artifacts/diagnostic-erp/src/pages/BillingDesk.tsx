@@ -158,9 +158,9 @@ export default function BillingDesk() {
   const [suggestion, setSuggestion]       = useState<{ discount: number; rule: { name: string } | null } | null>(null);
 
   // ── Preview bill number ─────────────────────────────
-  const { data: previewBillNo } = useQuery<{ next: string }>({
-    queryKey: ["bill-preview-no"],
-    queryFn: () => api.get("/api/bills/preview-number"),
+  const { data: previewBillNo } = useQuery<{ next: string; ledgerId?: number }>({
+    queryKey: ["bill-preview-no", doctorId],
+    queryFn: () => api.get(doctorId ? `/api/bills/preview-number?doctorId=${doctorId}` : "/api/bills/preview-number"),
     retry: false,
   });
 

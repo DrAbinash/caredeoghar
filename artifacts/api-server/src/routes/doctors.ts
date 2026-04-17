@@ -34,13 +34,16 @@ doctorsRouter.post("/", async (req, res) => {
     res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
     return;
   }
-  const [doctor] = await db.insert(doctorsTable).values(parsed.data).returning();
+  const ledgerId = req.body?.ledgerId !== undefined && req.body.ledgerId !== null
+    ? Number(req.body.ledgerId)
+    : null;
+  const [doctor] = await db.insert(doctorsTable).values({ ...parsed.data, ledgerId }).returning();
   res.status(201).json(doctor);
 });
 
 doctorsRouter.patch("/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const { name, specialization, phone, email, hospitalAffiliation, defaultCommission, defaultCommissionType } = req.body;
+  const { name, specialization, phone, email, hospitalAffiliation, defaultCommission, defaultCommissionType, ledgerId } = req.body;
 
   const updates: Record<string, unknown> = {};
   if (name !== undefined) updates.name = name;
@@ -50,6 +53,7 @@ doctorsRouter.patch("/:id", async (req, res) => {
   if (hospitalAffiliation !== undefined) updates.hospitalAffiliation = hospitalAffiliation || null;
   if (defaultCommission !== undefined) updates.defaultCommission = String(defaultCommission);
   if (defaultCommissionType !== undefined) updates.defaultCommissionType = defaultCommissionType;
+  if (ledgerId !== undefined) updates.ledgerId = ledgerId === null ? null : Number(ledgerId);
 
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: "No fields to update" });

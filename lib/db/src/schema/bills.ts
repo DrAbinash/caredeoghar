@@ -18,6 +18,7 @@ export const billsTable = pgTable("bills", {
   paidAmount: numeric("paid_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   balanceAmount: numeric("balance_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   status: text("status").notNull().default("pending"),
+  ledgerId: integer("ledger_id"),
   dueDate: text("due_date"),
   createdByName: text("created_by_name"),
   cancelledAt: timestamp("cancelled_at", { withTimezone: true }),

@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useForm } from "react-hook-form";
-import { ShieldAlert, LogOut, ExternalLink, Copy, CheckCheck, Eye, EyeOff, Lock } from "lucide-react";
+import { ShieldAlert, LogOut, ExternalLink, Copy, CheckCheck, Eye, EyeOff, Lock, BookOpen } from "lucide-react";
+import BooksManager from "./pages/Books";
 
 const queryClient = new QueryClient();
 
@@ -163,7 +164,7 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
   );
 }
 
-function ActiveSessionScreen({ session, onEject }: { session: Session; onEject: () => void }) {
+function ActiveSessionScreen({ session, onEject, onManageBooks }: { session: Session; onEject: () => void; onManageBooks: () => void }) {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
   const erpLink = getErpLinkWithToken(session.token);
@@ -255,6 +256,20 @@ function ActiveSessionScreen({ session, onEject }: { session: Session; onEject: 
             </p>
           </div>
 
+          {/* Books / Ledgers */}
+          <div className="border-t border-border pt-5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+              Multi-Book Management
+            </p>
+            <Button variant="outline" className="w-full" onClick={onManageBooks}>
+              <BookOpen size={14} className="mr-2" />
+              Manage Books / Ledgers
+            </Button>
+            <p className="text-xs text-muted-foreground mt-2">
+              Partition bills & patients by referral doctor groups. Reset any book to start from bill #1.
+            </p>
+          </div>
+
           {/* Eject */}
           <div className="border-t border-border pt-4">
             <Button
@@ -277,13 +292,20 @@ function ActiveSessionScreen({ session, onEject }: { session: Session; onEject: 
 
 function App() {
   const [session, setSession] = useState<Session | null>(null);
+  const [view, setView] = useState<"home" | "books">("home");
 
   return (
     <QueryClientProvider client={queryClient}>
-      {session ? (
-        <ActiveSessionScreen session={session} onEject={() => setSession(null)} />
+      {!session ? (
+        <LoginScreen onLogin={(s) => { setSession(s); setView("home"); }} />
+      ) : view === "books" ? (
+        <BooksManager token={session.token} onBack={() => setView("home")} />
       ) : (
-        <LoginScreen onLogin={setSession} />
+        <ActiveSessionScreen
+          session={session}
+          onEject={() => { setSession(null); setView("home"); }}
+          onManageBooks={() => setView("books")}
+        />
       )}
       <Toaster />
     </QueryClientProvider>

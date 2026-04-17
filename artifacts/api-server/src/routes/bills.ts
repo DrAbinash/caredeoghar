@@ -17,9 +17,27 @@ import { orderTestsTable, testsTable, doctorsTable } from "@workspace/db";
 export const billsRouter = Router();
 export const paymentsRouter = Router();
 
-async function generateBillNumber(): Promise<string> {
-  const count = await db.select({ count: sql<number>`count(*)` }).from(billsTable);
-  const num = Number(count[0]?.count ?? 0) + 1;
+// Per-ledger counter — id=1 (default) also includes legacy NULL rows
+async function countBillsForLedger(ledgerId: number): Promise<number> {
+  const where = ledgerId === 1
+    ? sql`${billsTable.ledgerId} = 1 OR ${billsTable.ledgerId} IS NULL`
+    : sql`${billsTable.ledgerId} = ${ledgerId}`;
+  const r = await db.select({ count: sql<number>`count(*)` }).from(billsTable).where(where);
+  return Number(r[0]?.count ?? 0);
+}
+
+async function resolveLedgerForOrder(orderId: number): Promise<number> {
+  const [o] = await db.select().from(ordersTable).where(eq(ordersTable.id, orderId));
+  if (o?.ledgerId) return o.ledgerId;
+  if (o?.doctorId) {
+    const [d] = await db.select().from(doctorsTable).where(eq(doctorsTable.id, o.doctorId));
+    if (d?.ledgerId) return d.ledgerId;
+  }
+  return 1;
+}
+
+async function generateBillNumber(ledgerId: number): Promise<string> {
+  const num = (await countBillsForLedger(ledgerId)) + 1;
   const date = new Date();
   return `BILL-${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}-${String(num).padStart(4, "0")}`;
 }
@@ -118,12 +136,20 @@ billsRouter.get("/search", async (req, res) => {
   );
 });
 
-billsRouter.get("/preview-number", async (_req, res) => {
-  const count = await db.select({ count: sql<number>`count(*)` }).from(billsTable);
-  const num = Number(count[0]?.count ?? 0) + 1;
+billsRouter.get("/preview-number", async (req, res) => {
+  let ledgerId = 1;
+  const doctorIdRaw = req.query.doctorId;
+  const ledgerIdRaw = req.query.ledgerId;
+  if (ledgerIdRaw) {
+    ledgerId = Number(ledgerIdRaw) || 1;
+  } else if (doctorIdRaw) {
+    const [d] = await db.select().from(doctorsTable).where(eq(doctorsTable.id, Number(doctorIdRaw)));
+    ledgerId = d?.ledgerId ?? 1;
+  }
+  const num = (await countBillsForLedger(ledgerId)) + 1;
   const date = new Date();
   const next = `BILL-${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}-${String(num).padStart(4, "0")}`;
-  return res.json({ next });
+  return res.json({ next, ledgerId });
 });
 
 billsRouter.get("/", async (req, res) => {
@@ -168,7 +194,19 @@ billsRouter.post("/", async (req, res) => {
   const discountAmt = Number(discount);
   const taxAmount = 0;
   const totalAmount = subtotal - discountAmt + taxAmount;
-  const billNumber = await generateBillNumber();
+
+  const ledgerId = await resolveLedgerForOrder(orderId);
+  const billNumber = await generateBillNumber(ledgerId);
+
+  // Backfill order with its ledger
+  if (!order.ledgerId) {
+    await db.update(ordersTable).set({ ledgerId }).where(eq(ordersTable.id, orderId));
+  }
+  // Bind patient to this ledger if they don't already belong to one
+  const [pat] = await db.select().from(patientsTable).where(eq(patientsTable.id, order.patientId));
+  if (pat && !pat.ledgerId) {
+    await db.update(patientsTable).set({ ledgerId }).where(eq(patientsTable.id, pat.id));
+  }
 
   const [bill] = await db.insert(billsTable).values({
     billNumber,
@@ -183,6 +221,7 @@ billsRouter.post("/", async (req, res) => {
     paidAmount: "0",
     balanceAmount: String(totalAmount),
     status: "pending",
+    ledgerId,
     dueDate: dueDate ?? null,
   }).returning();
 

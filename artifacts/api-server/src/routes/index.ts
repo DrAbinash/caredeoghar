@@ -20,6 +20,7 @@ import { packagesRouter } from "./packages";
 import { expensesRouter } from "./expenses";
 import discountReasonsRouter from "./discountReasons";
 import clinicSettingsRouter from "./clinicSettings";
+import { ledgersRouter } from "./ledgers";
 
 const router: IRouter = Router();
 
@@ -45,5 +46,6 @@ router.use("/packages", packagesRouter);
 router.use("/expenses", expensesRouter);
 router.use("/discount-reasons", discountReasonsRouter);
 router.use("/clinic-settings", clinicSettingsRouter);
+router.use("/ledgers", ledgersRouter);
 
 export default router;
