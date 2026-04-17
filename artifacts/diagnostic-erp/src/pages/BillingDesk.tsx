@@ -192,6 +192,14 @@ export default function BillingDesk() {
     staleTime: Infinity,
   });
 
+  const { data: clinic } = useQuery<{
+    name: string; tagline: string; address: string; email: string; phone: string;
+    website: string; gstin: string; logoDataUrl: string | null; footerNote: string;
+  }>({
+    queryKey: ["clinic-settings"],
+    queryFn: () => api.get("/api/clinic-settings"),
+  });
+
   const { data: doctors = [] } = useQuery<Doctor[]>({
     queryKey: ["doctors-list"],
     queryFn: () => api.get<{ doctors: Doctor[] }>("/api/doctors").then((d) => d.doctors ?? []),
@@ -1176,10 +1184,27 @@ export default function BillingDesk() {
             .bdr-footer { text-align: center; font-size: 10px; color: #666; border-top: 1px solid #ccc; padding-top: 8px; margin-top: 8px; }
           `}</style>
 
-          <div className="bdr-header">
-            <h1>Diagnostic Centre</h1>
-            <p>123 Health Avenue, Medical District | Ph: 1800-000-0000</p>
-            <p>GSTIN: 27XXXXX0000X1Z0 | Email: info@diagnosticcentre.in</p>
+          <div className="bdr-header" style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "center", textAlign: "center" }}>
+            {clinic?.logoDataUrl && (
+              <img src={clinic.logoDataUrl} alt="Logo" style={{ maxHeight: 60, maxWidth: 100, objectFit: "contain" }} />
+            )}
+            <div>
+              <h1 style={{ margin: 0 }}>{clinic?.name || "Diagnostic Centre"}</h1>
+              {clinic?.tagline && <p style={{ margin: "2px 0", fontStyle: "italic", color: "#555" }}>{clinic.tagline}</p>}
+              {clinic?.address && <p style={{ margin: "2px 0" }}>{clinic.address}</p>}
+              <p style={{ margin: "2px 0" }}>
+                {clinic?.phone && <>Ph: {clinic.phone}</>}
+                {clinic?.phone && clinic?.email && " | "}
+                {clinic?.email && <>Email: {clinic.email}</>}
+              </p>
+              {(clinic?.gstin || clinic?.website) && (
+                <p style={{ margin: "2px 0", fontSize: 10 }}>
+                  {clinic?.gstin && <>GSTIN: {clinic.gstin}</>}
+                  {clinic?.gstin && clinic?.website && " | "}
+                  {clinic?.website && <>{clinic.website}</>}
+                </p>
+              )}
+            </div>
           </div>
           <div className="bdr-title">Tax Invoice</div>
 
@@ -1267,7 +1292,7 @@ export default function BillingDesk() {
           )}
 
           <div className="bdr-footer">
-            <p>Thank you for choosing our diagnostic services. Report delivery is subject to test processing time.</p>
+            <p>{clinic?.footerNote || "Thank you for choosing our diagnostic services."}</p>
             <p>This is a computer-generated invoice. No signature required.</p>
           </div>
         </div>

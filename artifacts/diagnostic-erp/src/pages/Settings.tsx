@@ -17,7 +17,7 @@ import {
   Plus, Trash2, Pencil, User2, Shield, CheckSquare, Square, Mail,
   Users, Download, FileText, BookOpen, ClipboardList, CreditCard,
   FlaskConical, Boxes, ShieldCheck, FileDown, KeyRound, Eye, EyeOff,
-  Tag,
+  Tag, Building2, Image as ImageIcon, Upload,
 } from "lucide-react";
 
 type AppUser = {
@@ -85,6 +85,7 @@ const DEFAULT_PERMISSIONS: Record<string, string[]> = {
 };
 
 const TABS = [
+  { id: "clinic", label: "Clinic Info", icon: Building2 },
   { id: "users", label: "Users", icon: Users },
   { id: "email", label: "Email Notifications", icon: Mail },
   { id: "discount-reasons", label: "Discount Reasons", icon: Tag },
@@ -162,6 +163,7 @@ export default function Settings() {
             return <button key={t.id} onClick={() => setTab(t.id)} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${tab === t.id ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}><Icon size={14} />{t.label}</button>;
           })}
         </div>
+        {tab === "clinic" && <ClinicInfoTab />}
         {tab === "users" && <UsersTab qc={qc} />}
         {tab === "email" && <EmailTab />}
         {tab === "discount-reasons" && <DiscountReasonsTab />}
@@ -186,6 +188,146 @@ function UsersTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
   const togglePerm = (path: string) => setSelectedPerms(prev => prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]);
   const onSave = handleSubmit((d) => { saveUser.mutate({ ...d, permissions: selectedPerms, pin: d.pin || null, maxDiscount: d.maxDiscount !== "" ? Number(d.maxDiscount) : null }); });
   return (<><div className="flex items-center justify-between mb-4"><p className="text-sm text-muted-foreground">Manage user accounts, roles, and module access</p><Button size="sm" onClick={openAdd}><Plus size={14} className="mr-1" /> Add User</Button></div><div className="space-y-4">{isLoading ? <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-muted rounded-xl animate-pulse" />)}</div> : users.length === 0 ? <div className="text-center py-16 text-muted-foreground"><User2 size={36} className="mx-auto mb-3 opacity-30" /><p>No users yet. Add your first user to get started.</p></div> : (<div className="bg-card border border-card-border rounded-xl overflow-hidden"><table className="w-full text-sm"><thead className="bg-muted/50 border-b border-card-border"><tr><th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Name</th><th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Email</th><th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Role</th><th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Modules</th><th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Status</th><th className="px-4 py-3" /></tr></thead><tbody>{users.map((u) => { const perms: string[] = u.permissions ? JSON.parse(u.permissions) : []; return (<tr key={u.id} className="border-b border-card-border last:border-0 hover:bg-muted/20"><td className="px-4 py-3"><div className="flex items-center gap-2"><div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">{u.name.charAt(0).toUpperCase()}</div><span className="font-medium">{u.name}</span>{u.pin && <Shield size={11} className="text-muted-foreground" />}</div></td><td className="px-4 py-3 text-muted-foreground">{u.email}</td><td className="px-4 py-3"><Badge className={`${ROLE_COLORS[u.role] ?? "bg-gray-100 text-gray-700"} text-xs capitalize`}>{u.role}</Badge></td><td className="px-4 py-3"><div className="flex flex-wrap gap-1 max-w-xs">{perms.slice(0, 4).map(p => { const mod = ALL_MODULES.find(m => m.path === p); return mod ? <span key={p} className="text-xs bg-muted px-1.5 py-0.5 rounded">{mod.label}</span> : null; })}{perms.length > 4 && <span className="text-xs text-muted-foreground">+{perms.length - 4} more</span>}</div></td><td className="px-4 py-3"><button onClick={() => toggleActive.mutate({ id: u.id, isActive: !u.isActive })} className={`text-xs px-2 py-0.5 rounded-full font-medium ${u.isActive ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>{u.isActive ? "Active" : "Inactive"}</button></td><td className="px-4 py-3"><div className="flex gap-1 justify-end"><Button size="sm" variant="ghost" className="h-7" onClick={() => openEdit(u)}><Pencil size={13} /></Button><Button size="sm" variant="ghost" className="h-7 text-destructive hover:text-destructive" onClick={() => deleteUser.mutate(u.id)}><Trash2 size={13} /></Button></div></td></tr>); })}</tbody></table></div>)}<div className="bg-muted/30 border border-card-border rounded-xl p-4"><p className="text-xs font-semibold uppercase text-muted-foreground mb-3">Role Descriptions</p><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">{[{ role: "super_admin", desc: "All permissions + delete/super-edit bills" }, { role: "admin", desc: "Full access to all modules" }, { role: "manager", desc: "Reports, billing, referrals, accounting, discounts" }, { role: "accountant", desc: "Accounting, reports, billing & payments view" }, { role: "billing", desc: "Patients, billing, payments, quick register, discounts" }, { role: "lab", desc: "Orders, test catalog, report generator, inventory" }, { role: "receptionist", desc: "Patients, orders, quick register" }].map(r => (<div key={r.role} className="flex items-start gap-2"><Badge className={`${ROLE_COLORS[r.role]} text-xs capitalize flex-shrink-0 mt-0.5`}>{r.role}</Badge><span className="text-muted-foreground">{r.desc}</span></div>))}</div></div></div><Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>{editUser ? "Edit User" : "Add User"}</DialogTitle></DialogHeader><form onSubmit={onSave} className="space-y-4"><div className="grid grid-cols-2 gap-4"><div><Label>Name</Label><Input {...register("name", { required: true })} className="mt-1" /></div><div><Label>Email</Label><Input {...register("email", { required: true })} className="mt-1" /></div><div><Label>Role</Label><Select value={watch("role")} onValueChange={(v) => setValue("role", v)}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent>{ROLES.map(r => <SelectItem key={r} value={r} className="capitalize">{r}</SelectItem>)}</SelectContent></Select></div><div><Label>PIN</Label><Input {...register("pin")} className="mt-1" /></div></div><div><Label>Max Discount</Label><Input {...register("maxDiscount")} className="mt-1" /></div><div className="border-t pt-4"><p className="text-xs font-semibold uppercase text-muted-foreground mb-3">Module Permissions</p><div className="grid grid-cols-2 gap-2">{ALL_MODULES.map(m => (<button key={m.path} type="button" onClick={() => togglePerm(m.path)} className="flex items-center gap-2 text-sm p-2 rounded-lg border border-border hover:bg-muted/50 text-left">{selectedPerms.includes(m.path) ? <CheckSquare size={14} /> : <Square size={14} />}<span>{m.label}</span></button>))}</div></div><div className="flex justify-end gap-2 pt-2"><Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit">Save</Button></div></form></DialogContent></Dialog></>);
+}
+
+type ClinicSettings = {
+  id?: number;
+  name: string; tagline: string; address: string; email: string; phone: string;
+  website: string; gstin: string; logoDataUrl: string | null; footerNote: string;
+};
+
+function ClinicInfoTab() {
+  const qc = useQueryClient();
+  const { data: settings } = useQuery<ClinicSettings>({
+    queryKey: ["clinic-settings"],
+    queryFn: () => api.get("/api/clinic-settings"),
+  });
+  const [form, setForm] = useState<ClinicSettings | null>(null);
+  const [uploadErr, setUploadErr] = useState("");
+
+  const current = form ?? settings ?? null;
+
+  const save = useMutation({
+    mutationFn: (body: ClinicSettings) => api.put("/api/clinic-settings", body),
+    onSuccess: (saved) => {
+      qc.invalidateQueries({ queryKey: ["clinic-settings"] });
+      setForm(saved as ClinicSettings);
+    },
+  });
+
+  const onLogoChange = (file: File | null) => {
+    setUploadErr("");
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { setUploadErr("Please upload an image file"); return; }
+    if (file.size > 1_500_000) { setUploadErr("Image too large (max 1.5 MB). Use a smaller logo."); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setForm({ ...(current as ClinicSettings), logoDataUrl: String(reader.result) });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  if (!current) {
+    return <div className="bg-card border border-card-border rounded-xl p-8 text-center text-muted-foreground">Loading clinic info…</div>;
+  }
+
+  const update = (k: keyof ClinicSettings, v: string) => setForm({ ...current, [k]: v });
+
+  return (
+    <div className="grid lg:grid-cols-3 gap-4">
+      <div className="lg:col-span-2 bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="font-bold text-lg">Hospital / Diagnostic Center Details</h2>
+          <p className="text-sm text-muted-foreground">These details appear on every printed bill and report.</p>
+        </div>
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <Label>Center Name *</Label>
+            <Input value={current.name} onChange={(e) => update("name", e.target.value)} className="mt-1" />
+          </div>
+          <div>
+            <Label>Tagline / Sub-title</Label>
+            <Input value={current.tagline} onChange={(e) => update("tagline", e.target.value)} className="mt-1" placeholder="e.g. Diagnostic & Pathology Services" />
+          </div>
+          <div className="md:col-span-2">
+            <Label>Address</Label>
+            <Input value={current.address} onChange={(e) => update("address", e.target.value)} className="mt-1" placeholder="Full address" />
+          </div>
+          <div>
+            <Label>Mobile / Phone Number</Label>
+            <Input value={current.phone} onChange={(e) => update("phone", e.target.value)} className="mt-1" placeholder="+91 ..." />
+          </div>
+          <div>
+            <Label>Email Id</Label>
+            <Input type="email" value={current.email} onChange={(e) => update("email", e.target.value)} className="mt-1" placeholder="info@example.com" />
+          </div>
+          <div>
+            <Label>Website</Label>
+            <Input value={current.website} onChange={(e) => update("website", e.target.value)} className="mt-1" placeholder="www.example.com" />
+          </div>
+          <div>
+            <Label>GSTIN / Tax No.</Label>
+            <Input value={current.gstin} onChange={(e) => update("gstin", e.target.value)} className="mt-1" />
+          </div>
+          <div className="md:col-span-2">
+            <Label>Bill Footer Note</Label>
+            <Input value={current.footerNote} onChange={(e) => update("footerNote", e.target.value)} className="mt-1" />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-2 border-t border-card-border">
+          <Button variant="outline" type="button" onClick={() => setForm(settings ?? null)}>Reset</Button>
+          <Button onClick={() => save.mutate(current)} disabled={save.isPending}>
+            {save.isPending ? "Saving…" : "Save Changes"}
+          </Button>
+        </div>
+      </div>
+
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="font-bold text-lg flex items-center gap-2"><ImageIcon size={16} /> Logo</h2>
+          <p className="text-sm text-muted-foreground">Recommended: square or wide PNG/JPG, &lt; 1.5 MB.</p>
+        </div>
+        <div className="border-2 border-dashed border-card-border rounded-lg p-4 flex items-center justify-center bg-muted/30 min-h-[180px]">
+          {current.logoDataUrl ? (
+            <img src={current.logoDataUrl} alt="Logo preview" className="max-h-40 max-w-full object-contain" />
+          ) : (
+            <div className="text-center text-muted-foreground text-sm">
+              <ImageIcon size={36} className="mx-auto mb-2 opacity-30" />
+              No logo uploaded
+            </div>
+          )}
+        </div>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => onLogoChange(e.target.files?.[0] ?? null)}
+          className="hidden"
+          id="clinic-logo-input"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => { document.getElementById("clinic-logo-input")?.click(); }}
+          className="w-full"
+        >
+          <Upload size={14} className="mr-2" /> Choose Logo Image
+        </Button>
+        {current.logoDataUrl && (
+          <Button
+            variant="ghost"
+            className="w-full text-destructive hover:text-destructive"
+            onClick={() => setForm({ ...current, logoDataUrl: null })}
+          >
+            <Trash2 size={14} className="mr-2" /> Remove Logo
+          </Button>
+        )}
+        {uploadErr && <p className="text-xs text-destructive">{uploadErr}</p>}
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          Click <strong>Save Changes</strong> after selecting a logo.
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function EmailTab() { const { data: settings } = useQuery<EmailSettings>({ queryKey: ["email-settings"], queryFn: () => api.get("/api/email-settings") }); const save = useMutation({ mutationFn: (body: EmailSettings) => api.put("/api/email-settings", body) }); const { register, handleSubmit, reset } = useForm<EmailSettings>({ defaultValues: settings }); return (<div className="grid grid-cols-1 gap-4"><div className="bg-card border border-card-border rounded-xl p-4"><p className="text-sm text-muted-foreground">Configure SMTP and email notifications.</p></div><form onSubmit={handleSubmit((d) => save.mutate(d))} className="space-y-4 bg-card border border-card-border rounded-xl p-4"><div className="grid md:grid-cols-2 gap-4"><div><Label>SMTP Host</Label><Input {...register("smtpHost")} className="mt-1" /></div><div><Label>SMTP Port</Label><Input {...register("smtpPort")} className="mt-1" /></div><div><Label>SMTP User</Label><Input {...register("smtpUser")} className="mt-1" /></div><div><Label>SMTP Password</Label><Input {...register("smtpPassword")} className="mt-1" type="password" /></div><div><Label>From Address</Label><Input {...register("fromAddress")} className="mt-1" /></div><div><Label>From Name</Label><Input {...register("fromName")} className="mt-1" /></div><div><Label>Admin Email</Label><Input {...register("adminEmail")} className="mt-1" /></div><div><Label>Extra Recipients</Label><Input {...register("extraRecipients")} className="mt-1" /></div></div><div className="flex justify-end gap-2"><Button variant="outline" type="button" onClick={() => reset(settings)}>Reset</Button><Button type="submit">Save</Button></div></form></div>);

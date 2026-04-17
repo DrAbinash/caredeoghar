@@ -19,6 +19,7 @@ import { appointmentsRouter } from "./appointments";
 import { packagesRouter } from "./packages";
 import { expensesRouter } from "./expenses";
 import discountReasonsRouter from "./discountReasons";
+import clinicSettingsRouter from "./clinicSettings";
 
 const router: IRouter = Router();
 
@@ -43,5 +44,6 @@ router.use("/appointments", appointmentsRouter);
 router.use("/packages", packagesRouter);
 router.use("/expenses", expensesRouter);
 router.use("/discount-reasons", discountReasonsRouter);
+router.use("/clinic-settings", clinicSettingsRouter);
 
 export default router;
