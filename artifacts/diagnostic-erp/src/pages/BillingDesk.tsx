@@ -407,37 +407,37 @@ export default function BillingDesk() {
     <div className="h-full flex flex-col overflow-hidden">
 
       {/* ── TOP BAR ── */}
-      <div className="flex-shrink-0 bg-card border-b border-card-border px-6 py-3 flex items-center gap-6">
+      <div className="flex-shrink-0 bg-card border-b border-card-border px-3 sm:px-6 py-2 sm:py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex items-center gap-2">
           <Receipt size={18} className="text-primary" />
           <span className="font-bold text-base">Billing Desk</span>
         </div>
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <div className="hidden sm:flex items-center gap-1.5 text-sm text-muted-foreground">
           <CalendarDays size={13} />
           <span>{today()}</span>
         </div>
-        <div className="flex items-center gap-1.5 text-sm">
+        <div className="flex items-center gap-1.5 text-xs sm:text-sm">
           <Hash size={13} className="text-muted-foreground" />
           <span className="font-mono text-primary font-semibold">
             {previewBillNo?.next ?? "BILL-…"}
           </span>
-          <span className="text-xs text-muted-foreground">(next bill no.)</span>
+          <span className="hidden sm:inline text-xs text-muted-foreground">(next bill no.)</span>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          <BillSearchBox />
-          <Button variant="ghost" size="sm" onClick={resetAll} className="text-muted-foreground hover:text-foreground">
-            <RefreshCcw size={13} className="mr-1" /> New Bill
+        <div className="ml-auto flex items-center gap-2 w-full sm:w-auto order-last sm:order-none">
+          <div className="flex-1 sm:flex-none"><BillSearchBox /></div>
+          <Button variant="ghost" size="sm" onClick={resetAll} className="text-muted-foreground hover:text-foreground flex-shrink-0">
+            <RefreshCcw size={13} className="mr-1" /> <span className="hidden xs:inline sm:inline">New Bill</span>
           </Button>
         </div>
       </div>
 
       {/* ── MAIN LAYOUT ── */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden lg:overflow-hidden overflow-y-auto">
 
         {/* ══════════════════════════════════════════════
             LEFT COLUMN — Patient + Doctor + Notes
         ══════════════════════════════════════════════ */}
-        <div className="w-[52%] border-r border-card-border flex flex-col overflow-hidden">
+        <div className="w-full lg:w-[52%] lg:border-r border-card-border flex flex-col lg:overflow-hidden">
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
 
             {/* ── Patient Section — Search ── */}
