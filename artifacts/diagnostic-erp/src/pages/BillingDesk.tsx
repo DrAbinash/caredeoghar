@@ -283,7 +283,8 @@ export default function BillingDesk() {
   const filteredTests = allTests
     .filter((t) => {
       if (selectedTestIds.has(t.id)) return false;
-      const matchSearch = !testSearch || t.name.toLowerCase().includes(testSearch.toLowerCase()) || (t.code ?? "").toLowerCase().includes(testSearch.toLowerCase());
+      const q = testSearch.trim().toLowerCase();
+      const matchSearch = !q || String(t.id) === q || String(t.id).includes(q) || t.name.toLowerCase().includes(q) || (t.code ?? "").toLowerCase().includes(q);
       const matchCat    = categoryFilter === "all" || t.category === categoryFilter;
       return matchSearch && matchCat && t.isActive !== false;
     })
@@ -605,7 +606,9 @@ export default function BillingDesk() {
                 {/* Selected doctor chip */}
                 {doctorId ? (
                   <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg px-3 py-2">
-                    <Stethoscope size={13} className="text-primary flex-shrink-0" />
+                    <span className="font-mono text-[11px] text-primary font-semibold bg-primary/10 px-1.5 py-0.5 rounded flex-shrink-0">
+                      #{doctorId}
+                    </span>
                     <div className="flex-1 min-w-0">
                       <span className="text-sm font-medium">
                         Dr. {doctors.find(d => d.id === doctorId)?.name}
@@ -644,10 +647,13 @@ export default function BillingDesk() {
                           No referral
                         </button>
                         {(() => {
+                          const q = doctorSearch.trim().toLowerCase();
                           const filtered = doctors.filter(d =>
-                            !doctorSearch ||
-                            d.name.toLowerCase().includes(doctorSearch.toLowerCase()) ||
-                            d.specialization.toLowerCase().includes(doctorSearch.toLowerCase())
+                            !q ||
+                            String(d.id) === q ||
+                            String(d.id).includes(q) ||
+                            d.name.toLowerCase().includes(q) ||
+                            d.specialization.toLowerCase().includes(q)
                           );
                           return filtered.length === 0 ? (
                             <div className="px-4 py-3 text-sm text-muted-foreground text-center">No doctors found</div>
@@ -658,8 +664,8 @@ export default function BillingDesk() {
                               onMouseDown={(e) => e.preventDefault()}
                               onClick={() => { setDoctorId(d.id); setDoctorSearch(""); setDoctorSearchOpen(false); }}
                             >
-                              <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                                <Stethoscope size={12} className="text-primary" />
+                              <div className="w-9 h-7 rounded bg-primary/10 flex items-center justify-center flex-shrink-0 font-mono text-[11px] text-primary font-semibold">
+                                #{d.id}
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="text-sm font-medium">Dr. {d.name}</div>
@@ -754,6 +760,7 @@ export default function BillingDesk() {
                               ${added ? "text-muted-foreground cursor-default" : "hover:bg-muted/50"}`}
                           >
                             <FlaskConical size={11} className={added ? "text-primary" : "text-muted-foreground"} />
+                            <span className="text-[10px] font-mono font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded flex-shrink-0">#{t.id}</span>
                             <span className="flex-1 font-medium truncate">{t.name}</span>
                             <span className="text-xs text-muted-foreground font-mono flex-shrink-0">{t.code}</span>
                             <span className={`text-xs font-semibold flex-shrink-0 ${added ? "text-primary" : ""}`}>{inr(t.price)}</span>
