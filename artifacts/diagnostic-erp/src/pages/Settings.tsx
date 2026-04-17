@@ -17,6 +17,7 @@ import {
   Plus, Trash2, Pencil, User2, Shield, CheckSquare, Square, Mail,
   Users, Download, FileText, BookOpen, ClipboardList, CreditCard,
   FlaskConical, Boxes, ShieldCheck, FileDown, KeyRound, Eye, EyeOff,
+  Tag,
 } from "lucide-react";
 
 type AppUser = {
@@ -86,6 +87,7 @@ const DEFAULT_PERMISSIONS: Record<string, string[]> = {
 const TABS = [
   { id: "users", label: "Users", icon: Users },
   { id: "email", label: "Email Notifications", icon: Mail },
+  { id: "discount-reasons", label: "Discount Reasons", icon: Tag },
   { id: "manual", label: "User Manual", icon: FileDown },
   { id: "password", label: "Change Password", icon: KeyRound },
 ];
@@ -162,6 +164,7 @@ export default function Settings() {
         </div>
         {tab === "users" && <UsersTab qc={qc} />}
         {tab === "email" && <EmailTab />}
+        {tab === "discount-reasons" && <DiscountReasonsTab />}
         {tab === "manual" && <ManualTab />}
         {tab === "password" && <ChangePasswordTab />}
       </div>
@@ -189,6 +192,125 @@ function EmailTab() { const { data: settings } = useQuery<EmailSettings>({ query
 }
 
 function ManualTab() { const manualText = buildManualText(); return (<div className="space-y-4"><div className="bg-card border border-card-border rounded-xl p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4"><div><p className="text-sm font-semibold uppercase text-muted-foreground mb-1">Downloadable Manual</p><h2 className="text-xl font-bold">User Manual & Software Functionality</h2><p className="text-sm text-muted-foreground mt-1">A printable guide covering daily workflow, billing, lab, inventory, referrals, and administration.</p></div><Button onClick={() => downloadTextFile("Diagnostic-Center-Billing-ERP-Manual.txt", manualText)}><Download size={14} className="mr-2" /> Download Manual</Button></div><div className="grid gap-4 md:grid-cols-2">{MANUAL_SECTIONS.map((section) => { const Icon = section.icon; return (<div key={section.title} className="bg-card border border-card-border rounded-xl p-5"><div className="flex items-center gap-2 mb-3"><Icon size={16} className="text-primary" /><h3 className="font-semibold">{section.title}</h3></div><ul className="space-y-2 text-sm text-muted-foreground list-disc pl-5">{section.points.map((point) => <li key={point}>{point}</li>)}</ul></div>); })}</div><div className="bg-muted/30 border border-card-border rounded-xl p-5"><div className="flex items-center gap-2 mb-3"><FileText size={16} className="text-primary" /><h3 className="font-semibold">Software Functionality Summary</h3></div><div className="grid gap-3 md:grid-cols-3 text-sm"><div className="bg-card border border-card-border rounded-lg p-3"><p className="font-medium mb-1">Patient Flow</p><p className="text-muted-foreground">Register, order tests, bill, collect payments, and track history.</p></div><div className="bg-card border border-card-border rounded-lg p-3"><p className="font-medium mb-1">Operations</p><p className="text-muted-foreground">Manage doctors, commissions, inventory, lab reports, and accounting.</p></div><div className="bg-card border border-card-border rounded-lg p-3"><p className="font-medium mb-1">Security</p><p className="text-muted-foreground">Role-based permissions, audit logs, email alerts, and super admin portal.</p></div></div></div></div>);
+}
+
+type DiscountReason = { id: number; label: string; isActive: boolean };
+
+function DiscountReasonsTab() {
+  const qc = useQueryClient();
+  const { data: reasons = [], isLoading } = useQuery<DiscountReason[]>({
+    queryKey: ["discount-reasons"],
+    queryFn: () => api.get("/api/discount-reasons"),
+  });
+  const [newLabel, setNewLabel] = useState("");
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+
+  const addReason = useMutation({
+    mutationFn: (label: string) => api.post("/api/discount-reasons", { label }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["discount-reasons"] }); setNewLabel(""); },
+  });
+  const updateReason = useMutation({
+    mutationFn: (body: { id: number; data: Partial<DiscountReason> }) => api.patch(`/api/discount-reasons/${body.id}`, body.data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["discount-reasons"] }); setEditId(null); },
+  });
+  const deleteReason = useMutation({
+    mutationFn: (id: number) => api.delete(`/api/discount-reasons/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["discount-reasons"] }),
+  });
+
+  return (
+    <div className="max-w-2xl space-y-4">
+      <div className="bg-card border border-card-border rounded-xl p-5">
+        <p className="text-sm text-muted-foreground">
+          Manage the list of preset reasons available in the Billing Desk discount field. Inactive reasons are hidden from billing but kept for historical bills.
+        </p>
+      </div>
+
+      <form
+        onSubmit={(e) => { e.preventDefault(); if (newLabel.trim()) addReason.mutate(newLabel.trim()); }}
+        className="bg-card border border-card-border rounded-xl p-4 flex gap-2"
+      >
+        <Input
+          value={newLabel}
+          onChange={(e) => setNewLabel(e.target.value)}
+          placeholder="New reason (e.g. Weekend Promo)"
+          className="flex-1"
+        />
+        <Button type="submit" disabled={!newLabel.trim() || addReason.isPending}>
+          <Plus size={14} className="mr-1" /> Add
+        </Button>
+      </form>
+
+      <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+        {isLoading ? (
+          <div className="p-6 text-sm text-muted-foreground">Loading…</div>
+        ) : reasons.length === 0 ? (
+          <div className="p-6 text-sm text-muted-foreground text-center">No reasons configured.</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 border-b border-card-border">
+              <tr>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase text-muted-foreground w-12">#</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase text-muted-foreground">Label</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase text-muted-foreground w-28">Status</th>
+                <th className="px-4 py-2.5 w-24" />
+              </tr>
+            </thead>
+            <tbody>
+              {reasons.map((r) => (
+                <tr key={r.id} className="border-b border-card-border last:border-0 hover:bg-muted/20">
+                  <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{r.id}</td>
+                  <td className="px-4 py-2">
+                    {editId === r.id ? (
+                      <Input
+                        value={editLabel}
+                        onChange={(e) => setEditLabel(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") updateReason.mutate({ id: r.id, data: { label: editLabel } });
+                          if (e.key === "Escape") setEditId(null);
+                        }}
+                        autoFocus
+                        className="h-8"
+                      />
+                    ) : (
+                      <span className="font-medium">{r.label}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2">
+                    <button
+                      onClick={() => updateReason.mutate({ id: r.id, data: { isActive: !r.isActive } })}
+                      className={`text-xs px-2 py-1 rounded font-medium ${r.isActive ? "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400" : "bg-muted text-muted-foreground"}`}
+                    >
+                      {r.isActive ? "Active" : "Inactive"}
+                    </button>
+                  </td>
+                  <td className="px-4 py-2">
+                    <div className="flex items-center justify-end gap-1">
+                      {editId === r.id ? (
+                        <>
+                          <Button size="sm" variant="ghost" onClick={() => updateReason.mutate({ id: r.id, data: { label: editLabel } })}>Save</Button>
+                          <Button size="sm" variant="ghost" onClick={() => setEditId(null)}>✕</Button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => { setEditId(r.id); setEditLabel(r.label); }} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"><Pencil size={13} /></button>
+                          <button
+                            onClick={() => { if (confirm(`Delete reason "${r.label}"?`)) deleteReason.mutate(r.id); }}
+                            className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                          ><Trash2 size={13} /></button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function ChangePasswordTab() {

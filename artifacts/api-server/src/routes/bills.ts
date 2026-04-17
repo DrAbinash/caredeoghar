@@ -108,6 +108,8 @@ billsRouter.post("/", async (req, res) => {
     return;
   }
   const { orderId, discount = 0, dueDate } = parsed.data;
+  const discountReason = typeof req.body?.discountReason === "string" ? req.body.discountReason.trim() || null : null;
+  const discountReasonNote = typeof req.body?.discountReasonNote === "string" ? req.body.discountReasonNote.trim() || null : null;
 
   const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, orderId));
   if (!order) {
@@ -127,6 +129,8 @@ billsRouter.post("/", async (req, res) => {
     patientId: order.patientId,
     subtotal: String(subtotal),
     discount: String(discountAmt),
+    discountReason,
+    discountReasonNote,
     taxAmount: String(taxAmount),
     totalAmount: String(totalAmount),
     paidAmount: "0",

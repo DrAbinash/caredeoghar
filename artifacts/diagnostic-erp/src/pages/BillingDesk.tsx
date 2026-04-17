@@ -148,6 +148,8 @@ export default function BillingDesk() {
   // ── Billing ────────────────────────────────────────
   const [discountType, setDiscountType]   = useState<"amount" | "pct">("amount");
   const [discountValue, setDiscountValue] = useState<number>(0);
+  const [discountReason, setDiscountReason] = useState<string>("");
+  const [discountNote, setDiscountNote]     = useState<string>("");
   const [payNow, setPayNow]               = useState(true);
   const [paymentSplits, setPaymentSplits] = useState<PaySplit[]>([{ mode: "cash", amount: "" }]);
   const [lastBill, setLastBill]           = useState<LastBill | null>(null);
@@ -196,6 +198,11 @@ export default function BillingDesk() {
     staleTime: Infinity,
   });
 
+  const { data: discountReasons = [] } = useQuery<{ id: number; label: string; isActive: boolean }[]>({
+    queryKey: ["discount-reasons"],
+    queryFn: () => api.get("/api/discount-reasons"),
+  });
+
   const { data: packages = [] } = useQuery<Pkg[]>({
     queryKey: ["packages-active"],
     queryFn: () => api.get<Pkg[]>("/api/packages"),
@@ -237,6 +244,8 @@ export default function BillingDesk() {
       const bill = await api.post<{ id: number; billNumber: string }>("/api/bills", {
         orderId: order.id,
         discount: discountAmt,
+        discountReason: discountAmt > 0 ? discountReason || null : null,
+        discountReasonNote: discountAmt > 0 ? discountNote || null : null,
       });
 
       // 3. Record payment split(s)
@@ -369,6 +378,8 @@ export default function BillingDesk() {
     setNotes("");
     setSelectedTests([]);
     setDiscountValue(0);
+    setDiscountReason("");
+    setDiscountNote("");
     setPayNow(true);
     setPaymentSplits([{ mode: "cash", amount: "" }]);
     setLastBill(null);
@@ -923,6 +934,29 @@ export default function BillingDesk() {
                     <span className="text-xs text-orange-600 font-medium flex-shrink-0">−{inr(discountAmt)}</span>
                   )}
                 </div>
+
+                {/* Discount reason (only when discount applied) */}
+                {discountAmt > 0 && (
+                  <div className="space-y-1.5 pl-[68px]">
+                    <select
+                      value={discountReason}
+                      onChange={(e) => setDiscountReason(e.target.value)}
+                      className="w-full h-7 text-xs border border-card-border rounded-md px-2 bg-background"
+                    >
+                      <option value="">— Select reason —</option>
+                      {discountReasons.filter(r => r.isActive).map(r => (
+                        <option key={r.id} value={r.label}>{r.label}</option>
+                      ))}
+                    </select>
+                    <Input
+                      placeholder="Custom note (optional)…"
+                      value={discountNote}
+                      onChange={(e) => setDiscountNote(e.target.value)}
+                      className="h-7 text-xs"
+                      maxLength={200}
+                    />
+                  </div>
+                )}
 
                 {/* Total */}
                 <div className="flex items-center justify-between pt-1 border-t border-card-border">

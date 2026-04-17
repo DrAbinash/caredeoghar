@@ -11,6 +11,8 @@ export const billsTable = pgTable("bills", {
   patientId: integer("patient_id").notNull().references(() => patientsTable.id),
   subtotal: numeric("subtotal", { precision: 10, scale: 2 }).notNull().default("0"),
   discount: numeric("discount", { precision: 10, scale: 2 }).notNull().default("0"),
+  discountReason: text("discount_reason"),
+  discountReasonNote: text("discount_reason_note"),
   taxAmount: numeric("tax_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   totalAmount: numeric("total_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   paidAmount: numeric("paid_amount", { precision: 10, scale: 2 }).notNull().default("0"),

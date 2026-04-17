@@ -12,3 +12,4 @@ export * from "./discounts";
 export * from "./appointments";
 export * from "./packages";
 export * from "./expenses";
+export * from "./discountReasons";

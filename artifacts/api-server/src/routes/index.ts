@@ -18,6 +18,7 @@ import { superAdminRouter } from "./super-admin";
 import { appointmentsRouter } from "./appointments";
 import { packagesRouter } from "./packages";
 import { expensesRouter } from "./expenses";
+import discountReasonsRouter from "./discountReasons";
 
 const router: IRouter = Router();
 
@@ -41,5 +42,6 @@ router.use("/super-admin", superAdminRouter);
 router.use("/appointments", appointmentsRouter);
 router.use("/packages", packagesRouter);
 router.use("/expenses", expensesRouter);
+router.use("/discount-reasons", discountReasonsRouter);
 
 export default router;
