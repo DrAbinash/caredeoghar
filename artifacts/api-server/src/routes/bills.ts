@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db, billsTable, paymentsTable, ordersTable, patientsTable } from "@workspace/db";
 import { billAuditsTable, superAdminSessionsTable } from "@workspace/db/schema";
 import { sendBillEditEmail } from "../email";
-import { eq, and, sql, desc, like } from "drizzle-orm";
+import { eq, and, sql, desc, like, or, gt } from "drizzle-orm";
 import {
   ListBillsQueryParams,
   CreateBillBody,
@@ -70,6 +70,53 @@ async function buildBill(bill: typeof billsTable.$inferSelect) {
     payments: payments.map((p) => ({ ...p, amount: Number(p.amount) })),
   };
 }
+
+billsRouter.get("/search", async (req, res) => {
+  const q = String(req.query.q ?? "").trim();
+  const dueOnly = req.query.dueOnly === "1" || req.query.dueOnly === "true";
+  if (q.length < 2) {
+    res.json([]);
+    return;
+  }
+  const pattern = `%${q.toLowerCase()}%`;
+  const rows = await db
+    .select({
+      id: billsTable.id,
+      billNumber: billsTable.billNumber,
+      totalAmount: billsTable.totalAmount,
+      paidAmount: billsTable.paidAmount,
+      balanceAmount: billsTable.balanceAmount,
+      status: billsTable.status,
+      createdAt: billsTable.createdAt,
+      patientName: sql<string>`${patientsTable.firstName} || ' ' || ${patientsTable.lastName}`,
+      patientId: patientsTable.patientId,
+      phone: patientsTable.phone,
+    })
+    .from(billsTable)
+    .leftJoin(patientsTable, eq(billsTable.patientId, patientsTable.id))
+    .where(
+      and(
+        or(
+          sql`LOWER(${billsTable.billNumber}) LIKE ${pattern}`,
+          sql`LOWER(${patientsTable.firstName} || ' ' || ${patientsTable.lastName}) LIKE ${pattern}`,
+          sql`LOWER(${patientsTable.patientId}) LIKE ${pattern}`,
+          sql`${patientsTable.phone} LIKE ${pattern}`,
+        ),
+        dueOnly ? gt(sql`${billsTable.balanceAmount}::numeric`, sql`0`) : undefined,
+      ),
+    )
+    .orderBy(desc(billsTable.createdAt))
+    .limit(15);
+
+  res.json(
+    rows.map((r) => ({
+      ...r,
+      totalAmount: Number(r.totalAmount),
+      paidAmount: Number(r.paidAmount),
+      balanceAmount: Number(r.balanceAmount),
+    })),
+  );
+});
 
 billsRouter.get("/preview-number", async (_req, res) => {
   const count = await db.select({ count: sql<number>`count(*)` }).from(billsTable);
