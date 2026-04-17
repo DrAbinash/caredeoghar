@@ -1223,15 +1223,29 @@ export default function BillingDesk() {
             </tbody>
           </table>
 
-          <div className="bdr-summary">
-            <table>
-              <tbody>
-                <tr><td>Subtotal</td><td style={{ textAlign: "right" }}>₹{lastBill.subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>
-                {lastBill.discount > 0 && <tr><td>Discount</td><td style={{ textAlign: "right", color: "green" }}>−₹{lastBill.discount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>}
-                <tr><td>Total</td><td style={{ textAlign: "right" }}>₹{lastBill.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>
-              </tbody>
-            </table>
-          </div>
+          {(() => {
+            const paidOnReceipt = lastBill.payments.reduce((s, p) => s + Number(p.amount || 0), 0);
+            const balanceOnReceipt = Math.max(0, lastBill.total - paidOnReceipt);
+            return (
+              <div className="bdr-summary">
+                <table>
+                  <tbody>
+                    <tr><td>Subtotal</td><td style={{ textAlign: "right" }}>₹{lastBill.subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>
+                    {lastBill.discount > 0 && <tr><td>Discount</td><td style={{ textAlign: "right", color: "green" }}>−₹{lastBill.discount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>}
+                    <tr><td><strong>Total</strong></td><td style={{ textAlign: "right" }}><strong>₹{lastBill.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong></td></tr>
+                    <tr><td>Paid</td><td style={{ textAlign: "right", color: "green" }}>₹{paidOnReceipt.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>
+                    <tr>
+                      <td><strong>Balance Due</strong></td>
+                      <td style={{ textAlign: "right", color: balanceOnReceipt > 0 ? "#c62828" : "green", fontWeight: 700 }}>
+                        ₹{balanceOnReceipt.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        {balanceOnReceipt === 0 && " (PAID)"}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
 
           {lastBill.payments.length > 0 && (
             <div className="bdr-payments">
