@@ -87,13 +87,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         )}
       >
         {/* Logo */}
-        <div className="flex items-center gap-2.5 px-5 py-4 border-b border-sidebar-border">
-          <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center flex-shrink-0">
-            <Activity size={16} className="text-white" />
+        <div className="flex items-center gap-3 px-5 py-5 border-b border-sidebar-border bg-gradient-to-br from-violet-600/30 via-indigo-600/20 to-fuchsia-600/20">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 via-indigo-500 to-fuchsia-500 flex items-center justify-center flex-shrink-0 shadow-lg shadow-violet-500/30">
+            <Activity size={20} className="text-white" />
           </div>
           <div>
-            <div className="text-sm font-semibold text-sidebar-foreground leading-tight">DiagnoCenter</div>
-            <div className="text-xs text-sidebar-foreground/50">Billing ERP</div>
+            <div className="text-base font-bold text-sidebar-foreground leading-tight tracking-tight">DiagnoCenter</div>
+            <div className="text-[11px] uppercase tracking-wider text-sidebar-foreground/60 font-medium">Billing ERP</div>
           </div>
           <button className="ml-auto lg:hidden text-sidebar-foreground" onClick={() => setSidebarOpen(false)}>
             <X size={16} />
