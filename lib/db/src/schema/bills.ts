@@ -19,6 +19,11 @@ export const billsTable = pgTable("bills", {
   balanceAmount: numeric("balance_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   status: text("status").notNull().default("pending"),
   dueDate: text("due_date"),
+  createdByName: text("created_by_name"),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  cancelledByName: text("cancelled_by_name"),
+  cancellationReason: text("cancellation_reason"),
+  refundAmount: numeric("refund_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
@@ -30,6 +35,7 @@ export const paymentsTable = pgTable("payments", {
   method: text("method").notNull(),
   referenceNumber: text("reference_number"),
   notes: text("notes"),
+  recordedByName: text("recorded_by_name"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
