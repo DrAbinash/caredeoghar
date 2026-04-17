@@ -131,14 +131,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Top bar (mobile) */}
-        <header className="lg:hidden flex items-center gap-3 px-4 py-3 border-b border-border bg-card">
-          <button onClick={() => setSidebarOpen(true)} className="text-foreground">
-            <Menu size={20} />
+        {/* Top bar (mobile/tablet) */}
+        <header className="lg:hidden sticky top-0 z-10 flex items-center gap-3 px-4 py-3 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="text-foreground p-1.5 -ml-1.5 rounded-md hover:bg-muted active:bg-muted/80 transition-colors"
+            aria-label="Open menu"
+          >
+            <Menu size={22} />
           </button>
-          <div className="flex items-center gap-2">
-            <Activity size={16} className="text-primary" />
-            <span className="font-semibold text-sm">DiagnoCenter</span>
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 via-indigo-500 to-fuchsia-500 flex items-center justify-center flex-shrink-0">
+              <Activity size={14} className="text-white" />
+            </div>
+            <span className="font-semibold text-sm truncate">
+              {navItems.find(n => n.path === "/" ? location === "/" : location.startsWith(n.path))?.label ?? "DiagnoCenter"}
+            </span>
+          </div>
+          <div className="ml-auto">
+            <ThemeToggle />
           </div>
         </header>
 
