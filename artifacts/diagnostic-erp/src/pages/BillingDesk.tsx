@@ -593,13 +593,13 @@ export default function BillingDesk() {
       </div>
 
       {/* ── MAIN LAYOUT ── */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden lg:overflow-hidden overflow-y-auto">
+      <div className="flex-1 flex flex-col xl:flex-row overflow-hidden overflow-y-auto">
 
         {/* ══════════════════════════════════════════════
             LEFT COLUMN — Patient + Doctor + Notes
         ══════════════════════════════════════════════ */}
-        <div className="w-full lg:w-[52%] lg:border-r border-card-border flex flex-col lg:overflow-hidden">
-          <div className="lg:flex-1 lg:overflow-y-auto p-4 space-y-4">
+        <div className="w-full xl:w-[52%] xl:border-r border-card-border flex flex-col xl:overflow-hidden">
+          <div className="xl:flex-1 xl:overflow-y-auto p-4 space-y-4">
 
             {/* ── Patient Section — Search ── */}
             <div className="bg-card border border-card-border rounded-xl overflow-hidden">
@@ -888,8 +888,8 @@ export default function BillingDesk() {
         {/* ══════════════════════════════════════════════
             RIGHT COLUMN — Tests + Bill + Payment
         ══════════════════════════════════════════════ */}
-        <div className="w-full lg:flex-1 flex flex-col lg:overflow-hidden">
-          <div className="lg:flex-1 flex flex-col lg:overflow-hidden">
+        <div className="w-full xl:flex-1 flex flex-col xl:overflow-hidden">
+          <div className="xl:flex-1 flex flex-col xl:overflow-hidden">
 
             {/* ── Test Search & Catalog ── */}
             <div className="flex-shrink-0 border-b border-card-border">
@@ -1265,7 +1265,7 @@ export default function BillingDesk() {
       </div>
       {/* ── Floating Bill-Generated Notification (auto-dismiss 5s) ── */}
       {lastBill && showBillToast && (
-        <div className="fixed top-24 right-6 z-50 w-80 bg-white dark:bg-card border-2 border-green-300 dark:border-green-700 rounded-lg shadow-2xl overflow-hidden animate-in slide-in-from-right-4 fade-in duration-300 print:hidden">
+        <div className="fixed top-24 right-4 sm:right-6 z-50 w-[calc(100vw-2rem)] sm:w-[22rem] max-w-[22rem] bg-white dark:bg-card border-2 border-green-300 dark:border-green-700 rounded-lg shadow-2xl overflow-hidden animate-in slide-in-from-right-4 fade-in duration-300 print:hidden">
           <div className="flex items-start gap-2 px-3 py-2 bg-green-50 dark:bg-green-950/30 border-b border-green-200 dark:border-green-800">
             <CheckCircle2 size={16} className="text-green-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
