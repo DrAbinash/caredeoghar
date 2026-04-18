@@ -17,7 +17,7 @@ import {
   Plus, Trash2, Pencil, User2, Shield, CheckSquare, Square, Mail,
   Users, Download, FileText, BookOpen, ClipboardList, CreditCard,
   FlaskConical, Boxes, ShieldCheck, FileDown, KeyRound, Eye, EyeOff,
-  Tag, Building2, Image as ImageIcon, Upload,
+  Tag, Building2, Image as ImageIcon, Upload, MessageCircle,
 } from "lucide-react";
 
 type AppUser = {
@@ -88,6 +88,7 @@ const TABS = [
   { id: "clinic", label: "Clinic Info", icon: Building2 },
   { id: "users", label: "Users", icon: Users },
   { id: "email", label: "Email Notifications", icon: Mail },
+  { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
   { id: "discount-reasons", label: "Discount Reasons", icon: Tag },
   { id: "manual", label: "User Manual", icon: FileDown },
   { id: "password", label: "Change Password", icon: KeyRound },
@@ -166,6 +167,7 @@ export default function Settings() {
         {tab === "clinic" && <ClinicInfoTab />}
         {tab === "users" && <UsersTab qc={qc} />}
         {tab === "email" && <EmailTab />}
+        {tab === "whatsapp" && <WhatsappTab />}
         {tab === "discount-reasons" && <DiscountReasonsTab />}
         {tab === "manual" && <ManualTab />}
         {tab === "password" && <ChangePasswordTab />}
@@ -337,6 +339,97 @@ function ManualTab() { const manualText = buildManualText(); return (<div classN
 }
 
 type DiscountReason = { id: number; label: string; isActive: boolean };
+
+type WhatsappCfg = { id?: number; enabled: boolean; phoneNumberId: string; accessToken: string; templateName: string; templateLang: string; defaultCountryCode: string };
+function WhatsappTab() {
+  const qc = useQueryClient();
+  const { data: cfg } = useQuery<WhatsappCfg>({ queryKey: ["whatsapp-settings"], queryFn: () => api.get("/api/whatsapp/settings") });
+  const [form, setForm] = useState<WhatsappCfg | null>(null);
+  const [testPhone, setTestPhone] = useState("");
+  const [showToken, setShowToken] = useState(false);
+  const cur = form ?? cfg ?? null;
+  const save = useMutation({
+    mutationFn: (body: WhatsappCfg) => api.put("/api/whatsapp/settings", body),
+    onSuccess: (saved) => { qc.invalidateQueries({ queryKey: ["whatsapp-settings"] }); setForm(saved as WhatsappCfg); },
+  });
+  const test = useMutation({
+    mutationFn: (phone: string) => api.post<{ ok: boolean; error?: string; messageId?: string }>("/api/whatsapp/test", { phone }),
+  });
+  if (!cur) return <div className="bg-card border border-card-border rounded-xl p-8 text-center text-muted-foreground">Loading WhatsApp settings…</div>;
+  const update = (k: keyof WhatsappCfg, v: string | boolean) => setForm({ ...(cur as WhatsappCfg), [k]: v });
+  return (
+    <div className="space-y-4">
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="font-bold text-lg flex items-center gap-2"><MessageCircle size={16} /> WhatsApp Cloud API</h2>
+            <p className="text-sm text-muted-foreground mt-1">When enabled, every new bill auto-sends a WhatsApp template message to the patient with bill number, amount, and queue token.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => update("enabled", !cur.enabled)}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${cur.enabled ? "bg-primary" : "bg-muted"}`}
+            aria-label="Toggle WhatsApp"
+          >
+            <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${cur.enabled ? "translate-x-5" : "translate-x-0"}`} />
+          </button>
+        </div>
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <Label>Phone Number ID *</Label>
+            <Input value={cur.phoneNumberId} onChange={(e) => update("phoneNumberId", e.target.value)} className="mt-1" placeholder="e.g. 105296888774421" />
+            <p className="text-[11px] text-muted-foreground mt-1">From Meta Business → WhatsApp Manager → API Setup.</p>
+          </div>
+          <div>
+            <Label>Permanent Access Token *</Label>
+            <div className="relative">
+              <Input type={showToken ? "text" : "password"} value={cur.accessToken} onChange={(e) => update("accessToken", e.target.value)} className="mt-1 pr-10" placeholder="EAAJk..." />
+              <button type="button" onClick={() => setShowToken(s => !s)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground" aria-label="Show/hide token">
+                {showToken ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <Label>Template Name *</Label>
+            <Input value={cur.templateName} onChange={(e) => update("templateName", e.target.value)} className="mt-1" placeholder="e.g. bill_notification" />
+            <p className="text-[11px] text-muted-foreground mt-1">Template body must accept 4 variables: {"{{1}}"} name, {"{{2}}"} bill no, {"{{3}}"} amount, {"{{4}}"} token.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Template Language</Label>
+              <Input value={cur.templateLang} onChange={(e) => update("templateLang", e.target.value)} className="mt-1" placeholder="en" />
+            </div>
+            <div>
+              <Label>Default Country Code</Label>
+              <Input value={cur.defaultCountryCode} onChange={(e) => update("defaultCountryCode", e.target.value)} className="mt-1" placeholder="91" />
+            </div>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-2 border-t border-card-border">
+          <Button variant="outline" type="button" onClick={() => setForm(cfg ?? null)}>Reset</Button>
+          <Button onClick={() => save.mutate(cur)} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
+        </div>
+      </div>
+
+      <div className="bg-card border border-card-border rounded-xl p-5">
+        <h3 className="font-semibold mb-2">Send Test Message</h3>
+        <p className="text-xs text-muted-foreground mb-3">Sends the configured template using placeholder values to verify your credentials and template approval.</p>
+        <div className="flex gap-2">
+          <Input value={testPhone} onChange={(e) => setTestPhone(e.target.value)} placeholder="10-digit phone (or full intl. format)" className="flex-1" />
+          <Button type="button" disabled={!testPhone || test.isPending || !cur.enabled} onClick={() => test.mutate(testPhone)}>
+            {test.isPending ? "Sending…" : "Send Test"}
+          </Button>
+        </div>
+        {test.data && (
+          <p className={`text-xs mt-3 ${test.data.ok ? "text-green-600" : "text-destructive"}`}>
+            {test.data.ok ? `Sent ✓  (msg id: ${test.data.messageId ?? "—"})` : `Failed: ${test.data.error}`}
+          </p>
+        )}
+        {!cur.enabled && <p className="text-xs text-muted-foreground mt-3">Enable WhatsApp above to send test messages.</p>}
+      </div>
+    </div>
+  );
+}
 
 function DiscountReasonsTab() {
   const qc = useQueryClient();

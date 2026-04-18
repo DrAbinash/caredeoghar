@@ -21,6 +21,8 @@ import { expensesRouter } from "./expenses";
 import discountReasonsRouter from "./discountReasons";
 import clinicSettingsRouter from "./clinicSettings";
 import { ledgersRouter } from "./ledgers";
+import { tokensRouter } from "./tokens";
+import { whatsappRouter } from "./whatsapp";
 
 const router: IRouter = Router();
 
@@ -47,5 +49,7 @@ router.use("/expenses", expensesRouter);
 router.use("/discount-reasons", discountReasonsRouter);
 router.use("/clinic-settings", clinicSettingsRouter);
 router.use("/ledgers", ledgersRouter);
+router.use("/tokens", tokensRouter);
+router.use("/whatsapp", whatsappRouter);
 
 export default router;

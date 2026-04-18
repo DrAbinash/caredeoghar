@@ -15,3 +15,5 @@ export * from "./expenses";
 export * from "./discountReasons";
 export * from "./clinicSettings";
 export * from "./ledgers";
+export * from "./tokens";
+export * from "./whatsappSettings";

@@ -71,6 +71,8 @@ type LastBill = {
   discount: number;
   total: number;
   payments: PaySplit[];
+  tokenNo?: number | null;
+  tokenDate?: string | null;
 };
 
 // ──────────────────────────────────────────────────────
@@ -102,6 +104,140 @@ function useDebounce<T>(value: T, delay = 300) {
 // ──────────────────────────────────────────────────────
 // Component
 // ──────────────────────────────────────────────────────
+type ClinicLite = { name?: string; tagline?: string; address?: string; phone?: string; logoDataUrl?: string | null } | undefined;
+
+function openPrintWindow(html: string) {
+  const w = window.open("", "_blank", "width=420,height=600");
+  if (!w) {
+    alert("Pop-up blocked. Please allow pop-ups for this site to print.");
+    return;
+  }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  // Defer print so resources (images / fonts) load first
+  w.onload = () => {
+    w.focus();
+    w.print();
+    setTimeout(() => w.close(), 400);
+  };
+}
+
+function escapeHtml(s: string) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+}
+
+function printBill(b: LastBill, clinic: ClinicLite) {
+  const rows = b.tests.map((t) => `<tr><td>${escapeHtml(t.name)}</td><td style="text-align:right">₹${t.price.toFixed(2)}</td></tr>`).join("");
+  const payRows = b.payments.map((p) => `<tr><td>${escapeHtml(p.mode.toUpperCase())}</td><td style="text-align:right">₹${Number(p.amount || 0).toFixed(2)}</td></tr>`).join("");
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Bill ${escapeHtml(b.billNumber)}</title>
+    <style>
+      @page { size: A5; margin: 8mm; }
+      body { font-family: Arial, sans-serif; font-size: 11px; color:#000; margin:0; }
+      h1 { margin:0; font-size:16px; text-align:center; }
+      .clinic { text-align:center; border-bottom:2px solid #000; padding-bottom:6px; margin-bottom:8px; }
+      .clinic p { margin:1px 0; font-size:10px; color:#444; }
+      table { width:100%; border-collapse:collapse; }
+      th, td { padding:3px 4px; border-bottom:1px solid #ddd; font-size:10px; }
+      th { background:#f4f4f4; text-align:left; }
+      .meta td { border:none; padding:1px 0; }
+      .totals td { border:none; padding:2px 0; }
+      .totals .grand td { border-top:1px solid #000; font-weight:700; padding-top:4px; }
+      .token { margin-top:8px; padding:4px; border:1px dashed #000; text-align:center; font-weight:700; }
+    </style></head><body>
+    <div class="clinic">
+      <h1>${escapeHtml(clinic?.name || "Diagnostic Centre")}</h1>
+      ${clinic?.tagline ? `<p>${escapeHtml(clinic.tagline)}</p>` : ""}
+      ${clinic?.address ? `<p>${escapeHtml(clinic.address)}</p>` : ""}
+      ${clinic?.phone ? `<p>Ph: ${escapeHtml(clinic.phone)}</p>` : ""}
+    </div>
+    <table class="meta"><tbody>
+      <tr><td><strong>Bill No</strong></td><td>: ${escapeHtml(b.billNumber)}</td><td><strong>Date</strong></td><td>: ${new Date().toLocaleDateString("en-IN")}</td></tr>
+      <tr><td><strong>Patient</strong></td><td colspan="3">: ${escapeHtml(b.patient.firstName)} ${escapeHtml(b.patient.lastName)} (${escapeHtml(b.patient.patientId)})</td></tr>
+      <tr><td><strong>Phone</strong></td><td>: ${escapeHtml(b.patient.phone || "")}</td>${b.doctorName ? `<td><strong>Ref. Dr</strong></td><td>: ${escapeHtml(b.doctorName)}</td>` : "<td></td><td></td>"}</tr>
+    </tbody></table>
+    <table style="margin-top:6px"><thead><tr><th>Test</th><th style="text-align:right">Amount</th></tr></thead><tbody>${rows}</tbody></table>
+    <table class="totals" style="margin-top:6px"><tbody>
+      <tr><td>Subtotal</td><td style="text-align:right">₹${b.subtotal.toFixed(2)}</td></tr>
+      ${b.discount > 0 ? `<tr><td>Discount</td><td style="text-align:right">−₹${b.discount.toFixed(2)}</td></tr>` : ""}
+      <tr class="grand"><td>Total</td><td style="text-align:right">₹${b.total.toFixed(2)}</td></tr>
+    </tbody></table>
+    ${payRows ? `<p style="margin:6px 0 2px;font-weight:600">Payments</p><table><tbody>${payRows}</tbody></table>` : ""}
+    ${b.tokenNo != null ? `<div class="token">QUEUE TOKEN&nbsp;#${String(b.tokenNo).padStart(3, "0")}</div>` : ""}
+  </body></html>`;
+  openPrintWindow(html);
+}
+
+function code128SVG(value: string): string {
+  // Lightweight inline barcode renderer (Code 128 B subset, digits + uppercase + symbols).
+  // For production accuracy use a library; this gives a scan-friendly visual barcode.
+  const PATTERNS: string[] = ["11011001100","11001101100","11001100110","10010011000","10010001100","10001001100","10011001000","10011000100","10001100100","11001001000","11001000100","11000100100","10110011100","10011011100","10011001110","10111001100","10011101100","10011100110","11001110010","11001011100","11001001110","11011100100","11001110100","11101101110","11101001100","11100101100","11100100110","11101100100","11100110100","11100110010","11011011000","11011000110","11000110110","10100011000","10001011000","10001000110","10110001000","10001101000","10001100010","11010001000","11000101000","11000100010","10110111000","10110001110","10001101110","10111011000","10111000110","10001110110","11101110110","11010001110","11000101110","11011101000","11011100010","11011101110","11101011000","11101000110","11100010110","11101101000","11101100010","11100011010","11101111010","11001000010","11110001010","10100110000","10100001100","10010110000","10010000110","10000101100","10000100110","10110010000","10110000100","10011010000","10011000010","10000110100","10000110010","11000010010","11001010000","11110111010","11000010100","10001111010","10100111100","10010111100","10010011110","10111100100","10011110100","10011110010","11110100100","11110010100","11110010010","11011011110","11011110110","11110110110","10101111000","10100011110","10001011110","10111101000","10111100010","11110101000","11110100010","10111011110","10111101110","11101011110","11110101110","11010000100","11010010000","11010011100","1100011101011"];
+  // 0..127 chars: ASCII offset 32 → index 0
+  const data: number[] = [];
+  for (const ch of value) data.push(Math.max(0, Math.min(94, ch.charCodeAt(0) - 32)));
+  let checksum = 104; // START B
+  data.forEach((c, i) => { checksum += c * (i + 1); });
+  checksum = checksum % 103;
+  const codes = [104, ...data, checksum, 106]; // START B + data + checksum + STOP
+  let bars = "";
+  let x = 0;
+  const W = 1.6, H = 50;
+  for (const code of codes) {
+    const pat = PATTERNS[code];
+    for (let i = 0; i < pat.length; i++) {
+      if (pat[i] === "1") bars += `<rect x="${x.toFixed(2)}" y="0" width="${W}" height="${H}" fill="#000"/>`;
+      x += W;
+    }
+  }
+  const totalW = x;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW} ${H}" width="${totalW}" height="${H}">${bars}</svg>`;
+}
+
+function printBarcode(b: LastBill) {
+  const value = b.billNumber;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Barcode ${escapeHtml(value)}</title>
+    <style>
+      @page { size: 70mm 30mm; margin: 2mm; }
+      body { font-family: Arial, sans-serif; margin:0; padding:4px; text-align:center; }
+      .wrap { display:flex; flex-direction:column; align-items:center; gap:2px; }
+      .name { font-size:11px; font-weight:600; }
+      .meta { font-size:9px; color:#333; }
+      svg { max-width:100%; height:auto; }
+    </style></head><body>
+    <div class="wrap">
+      <div class="name">${escapeHtml(b.patient.firstName)} ${escapeHtml(b.patient.lastName)}</div>
+      ${code128SVG(value)}
+      <div style="font-family:monospace;font-size:10px;letter-spacing:1px">${escapeHtml(value)}</div>
+      <div class="meta">${escapeHtml(b.patient.patientId)} · ${new Date().toLocaleDateString("en-IN")}</div>
+    </div>
+  </body></html>`;
+  openPrintWindow(html);
+}
+
+function printToken(b: LastBill, clinic: ClinicLite) {
+  if (b.tokenNo == null) return;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Token #${b.tokenNo}</title>
+    <style>
+      @page { size: 80mm 100mm; margin: 4mm; }
+      body { font-family: Arial, sans-serif; margin:0; padding:6px; text-align:center; color:#000; }
+      .clinic { font-size:11px; font-weight:700; border-bottom:1px dashed #000; padding-bottom:4px; margin-bottom:6px; }
+      .label { font-size:11px; letter-spacing:2px; text-transform:uppercase; color:#444; }
+      .num { font-size:64px; font-weight:900; line-height:1; margin:6px 0; }
+      .row { font-size:11px; margin:2px 0; }
+      .footer { margin-top:8px; padding-top:4px; border-top:1px dashed #000; font-size:9px; color:#555; }
+    </style></head><body>
+    <div class="clinic">${escapeHtml(clinic?.name || "Diagnostic Centre")}</div>
+    <div class="label">Token</div>
+    <div class="num">${String(b.tokenNo).padStart(3, "0")}</div>
+    <div class="row"><strong>${escapeHtml(b.patient.firstName)} ${escapeHtml(b.patient.lastName)}</strong></div>
+    <div class="row">${escapeHtml(b.patient.patientId)}</div>
+    <div class="row">${escapeHtml(b.billNumber)}</div>
+    ${b.doctorName ? `<div class="row">Ref: ${escapeHtml(b.doctorName)}</div>` : ""}
+    <div class="footer">${new Date().toLocaleString("en-IN")}<br/>Please wait for your token to be called.</div>
+  </body></html>`;
+  openPrintWindow(html);
+}
+
 export default function BillingDesk() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -250,7 +386,7 @@ export default function BillingDesk() {
       });
 
       // 2. Create bill
-      const bill = await api.post<{ id: number; billNumber: string }>("/api/bills", {
+      const bill = await api.post<{ id: number; billNumber: string; token?: { tokenNo: number; tokenDate: string } | null }>("/api/bills", {
         orderId: order.id,
         discount: discountAmt,
         discountReason: discountAmt > 0 ? discountReason || null : null,
@@ -285,6 +421,8 @@ export default function BillingDesk() {
         discount: discountAmt,
         total,
         payments: paymentSplits.filter((p) => Number(p.amount) > 0),
+        tokenNo: bill.token?.tokenNo ?? null,
+        tokenDate: bill.token?.tokenDate ?? null,
       });
       setShowBillToast(true);
       window.setTimeout(() => setShowBillToast(false), 5000);
@@ -1120,18 +1258,34 @@ export default function BillingDesk() {
               ✕
             </button>
           </div>
-          <div className="p-2 grid grid-cols-3 gap-1.5">
-            <Button size="sm" className="h-9 text-xs font-semibold" onClick={() => window.print()}>
-              <Printer size={12} className="mr-1" /> Print
-            </Button>
-            <a href={`/billing/${lastBill.id}`} target="_blank" rel="noopener noreferrer">
-              <Button size="sm" variant="outline" className="w-full h-9 text-xs">
-                <ExternalLink size={12} className="mr-1" /> View
+          <div className="p-2 space-y-1.5">
+            {lastBill.tokenNo != null && (
+              <div className="flex items-center justify-between bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded px-2 py-1">
+                <span className="text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-400 font-semibold">Token</span>
+                <span className="text-base font-bold text-amber-700 dark:text-amber-400 tabular-nums">#{String(lastBill.tokenNo).padStart(3, "0")}</span>
+              </div>
+            )}
+            <div className="grid grid-cols-3 gap-1.5">
+              <Button size="sm" className="h-8 text-[11px] font-semibold" onClick={() => printBill(lastBill, clinic)}>
+                <Printer size={11} className="mr-1" /> Bill
               </Button>
-            </a>
-            <Button size="sm" variant="ghost" className="h-9 text-xs" onClick={resetAll}>
-              <RefreshCcw size={12} className="mr-1" /> New
-            </Button>
+              <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => printBarcode(lastBill)}>
+                <Printer size={11} className="mr-1" /> Barcode
+              </Button>
+              <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => printToken(lastBill, clinic)} disabled={lastBill.tokenNo == null}>
+                <Printer size={11} className="mr-1" /> Token
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              <a href={`/billing/${lastBill.id}`} target="_blank" rel="noopener noreferrer">
+                <Button size="sm" variant="ghost" className="w-full h-8 text-[11px]">
+                  <ExternalLink size={11} className="mr-1" /> View
+                </Button>
+              </a>
+              <Button size="sm" variant="ghost" className="h-8 text-[11px]" onClick={resetAll}>
+                <RefreshCcw size={11} className="mr-1" /> New
+              </Button>
+            </div>
           </div>
         </div>
       )}

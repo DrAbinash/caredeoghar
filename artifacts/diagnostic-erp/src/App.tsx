@@ -26,6 +26,7 @@ import PACS from "@/pages/PACS";
 import Appointments from "@/pages/Appointments";
 import Packages from "@/pages/Packages";
 import Expenses from "@/pages/Expenses";
+import QueuePage from "@/pages/Queue";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -68,6 +69,7 @@ function Router() {
         <Route path="/discounts" component={Discounts} />
         <Route path="/pacs" component={PACS} />
         <Route path="/appointments" component={Appointments} />
+        <Route path="/queue" component={QueuePage} />
         <Route path="/packages" component={Packages} />
         <Route path="/expenses" component={Expenses} />
         <Route path="/settings" component={Settings} />

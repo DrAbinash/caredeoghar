@@ -2,6 +2,8 @@ import { Router } from "express";
 import { db, billsTable, paymentsTable, ordersTable, patientsTable } from "@workspace/db";
 import { billAuditsTable, superAdminSessionsTable } from "@workspace/db/schema";
 import { sendBillEditEmail } from "../email";
+import { generateTokenForBill } from "./tokens";
+import { sendBillWhatsapp } from "./whatsapp";
 import { eq, and, sql, desc, like, or, gt } from "drizzle-orm";
 import {
   ListBillsQueryParams,
@@ -225,7 +227,27 @@ billsRouter.post("/", async (req, res) => {
     dueDate: dueDate ?? null,
   }).returning();
 
-  res.status(201).json(await buildBill(bill));
+  // Auto-generate queue token (per book, resets daily) — never blocks bill creation
+  let tokenInfo: { tokenNo: number; tokenDate: string } | null = null;
+  try {
+    tokenInfo = await generateTokenForBill({ ledgerId, billId: bill.id, patientId: order.patientId });
+  } catch (err) {
+    console.warn("Token generation failed:", err);
+  }
+
+  // Fire WhatsApp send asynchronously — don't block the response
+  if (pat?.phone && tokenInfo) {
+    sendBillWhatsapp({
+      phone: pat.phone,
+      patientName: `${pat.firstName} ${pat.lastName}`.trim(),
+      billNumber: bill.billNumber,
+      totalAmount,
+      tokenNo: tokenInfo.tokenNo,
+    }).catch((err) => console.warn("WhatsApp send failed:", err));
+  }
+
+  const built = await buildBill(bill);
+  res.status(201).json({ ...built, token: tokenInfo });
 });
 
 billsRouter.get("/:id", async (req, res) => {
