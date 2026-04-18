@@ -17,3 +17,4 @@ export * from "./clinicSettings";
 export * from "./ledgers";
 export * from "./tokens";
 export * from "./whatsappSettings";
+export * from "./printerSettings";

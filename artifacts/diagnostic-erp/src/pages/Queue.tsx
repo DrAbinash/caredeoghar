@@ -62,7 +62,7 @@ export default function QueuePage() {
 
   return (
     <div className="p-4 md:p-6 space-y-4">
-      <PageHeader title="Queue Tokens" subtitle={`Today's tokens · ${tokens.length} total`} icon={Ticket} />
+      <PageHeader title="Queue Tokens" subtitle={`Today's tokens · ${tokens.length} total`} />
 
       <div className="bg-card border border-card-border rounded-xl p-4 flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">

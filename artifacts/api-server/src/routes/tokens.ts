@@ -76,14 +76,18 @@ tokensRouter.get("/today", async (req, res) => {
 });
 
 // PATCH /api/tokens/:id  { status }
-tokensRouter.patch("/:id", async (req, res) => {
+tokensRouter.patch("/:id", async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   const { status } = req.body as { status?: string };
   if (!status || !["waiting", "serving", "done", "skipped"].includes(status)) {
-    return res.status(400).json({ error: "Invalid status" });
+    res.status(400).json({ error: "Invalid status" });
+    return;
   }
   const [row] = await db.update(tokensTable).set({ status }).where(eq(tokensTable.id, id)).returning();
-  if (!row) return res.status(404).json({ error: "Token not found" });
+  if (!row) {
+    res.status(404).json({ error: "Token not found" });
+    return;
+  }
   res.json(row);
 });
 

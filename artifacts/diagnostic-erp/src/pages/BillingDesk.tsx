@@ -105,6 +105,7 @@ function useDebounce<T>(value: T, delay = 300) {
 // Component
 // ──────────────────────────────────────────────────────
 type ClinicLite = { name?: string; tagline?: string; address?: string; phone?: string; logoDataUrl?: string | null } | undefined;
+type PrinterCfg = { billPrinter?: string; barcodePrinter?: string; tokenPrinter?: string };
 
 function openPrintWindow(html: string) {
   const w = window.open("", "_blank", "width=420,height=600");
@@ -123,11 +124,25 @@ function openPrintWindow(html: string) {
   };
 }
 
+async function getPrinterSettings(): Promise<PrinterCfg> {
+  try {
+    return await api.get<PrinterCfg>("/api/printers/settings");
+  } catch {
+    return {};
+  }
+}
+
+function printerWindowFeatures(printerName?: string) {
+  const name = (printerName || "").trim();
+  return name ? `width=420,height=600,noopener,noreferrer` : "width=420,height=600,noopener,noreferrer";
+}
+
 function escapeHtml(s: string) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 }
 
-function printBill(b: LastBill, clinic: ClinicLite) {
+async function printBill(b: LastBill, clinic: ClinicLite) {
+  const p = await getPrinterSettings();
   const rows = b.tests.map((t) => `<tr><td>${escapeHtml(t.name)}</td><td style="text-align:right">₹${t.price.toFixed(2)}</td></tr>`).join("");
   const payRows = b.payments.map((p) => `<tr><td>${escapeHtml(p.mode.toUpperCase())}</td><td style="text-align:right">₹${Number(p.amount || 0).toFixed(2)}</td></tr>`).join("");
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Bill ${escapeHtml(b.billNumber)}</title>
@@ -165,7 +180,9 @@ function printBill(b: LastBill, clinic: ClinicLite) {
     ${payRows ? `<p style="margin:6px 0 2px;font-weight:600">Payments</p><table><tbody>${payRows}</tbody></table>` : ""}
     ${b.tokenNo != null ? `<div class="token">QUEUE TOKEN&nbsp;#${String(b.tokenNo).padStart(3, "0")}</div>` : ""}
   </body></html>`;
-  openPrintWindow(html);
+  const w = window.open("", "_blank", printerWindowFeatures(p.billPrinter));
+  if (!w) return openPrintWindow(html);
+  w.document.open(); w.document.write(html); w.document.close(); w.onload = () => { w.focus(); w.print(); setTimeout(() => w.close(), 400); };
 }
 
 function code128SVG(value: string): string {
@@ -193,7 +210,8 @@ function code128SVG(value: string): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW} ${H}" width="${totalW}" height="${H}">${bars}</svg>`;
 }
 
-function printBarcode(b: LastBill) {
+async function printBarcode(b: LastBill) {
+  const p = await getPrinterSettings();
   const value = b.billNumber;
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Barcode ${escapeHtml(value)}</title>
     <style>
@@ -211,10 +229,13 @@ function printBarcode(b: LastBill) {
       <div class="meta">${escapeHtml(b.patient.patientId)} · ${new Date().toLocaleDateString("en-IN")}</div>
     </div>
   </body></html>`;
-  openPrintWindow(html);
+  const w = window.open("", "_blank", printerWindowFeatures(p.barcodePrinter));
+  if (!w) return openPrintWindow(html);
+  w.document.open(); w.document.write(html); w.document.close(); w.onload = () => { w.focus(); w.print(); setTimeout(() => w.close(), 400); };
 }
 
-function printToken(b: LastBill, clinic: ClinicLite) {
+async function printToken(b: LastBill, clinic: ClinicLite) {
+  const p = await getPrinterSettings();
   if (b.tokenNo == null) return;
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Token #${b.tokenNo}</title>
     <style>
@@ -235,7 +256,9 @@ function printToken(b: LastBill, clinic: ClinicLite) {
     ${b.doctorName ? `<div class="row">Ref: ${escapeHtml(b.doctorName)}</div>` : ""}
     <div class="footer">${new Date().toLocaleString("en-IN")}<br/>Please wait for your token to be called.</div>
   </body></html>`;
-  openPrintWindow(html);
+  const w = window.open("", "_blank", printerWindowFeatures(p.tokenPrinter));
+  if (!w) return openPrintWindow(html);
+  w.document.open(); w.document.write(html); w.document.close(); w.onload = () => { w.focus(); w.print(); setTimeout(() => w.close(), 400); };
 }
 
 export default function BillingDesk() {
@@ -1266,13 +1289,13 @@ export default function BillingDesk() {
               </div>
             )}
             <div className="grid grid-cols-3 gap-1.5">
-              <Button size="sm" className="h-8 text-[11px] font-semibold" onClick={() => printBill(lastBill, clinic)}>
+              <Button size="sm" className="h-8 text-[11px] font-semibold" onClick={() => void printBill(lastBill, clinic)}>
                 <Printer size={11} className="mr-1" /> Bill
               </Button>
-              <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => printBarcode(lastBill)}>
+              <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => void printBarcode(lastBill)}>
                 <Printer size={11} className="mr-1" /> Barcode
               </Button>
-              <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => printToken(lastBill, clinic)} disabled={lastBill.tokenNo == null}>
+              <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => void printToken(lastBill, clinic)} disabled={lastBill.tokenNo == null}>
                 <Printer size={11} className="mr-1" /> Token
               </Button>
             </div>

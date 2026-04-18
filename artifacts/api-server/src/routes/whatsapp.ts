@@ -34,9 +34,12 @@ whatsappRouter.put("/settings", async (req, res) => {
 });
 
 // POST /api/whatsapp/test  { phone }
-whatsappRouter.post("/test", async (req, res) => {
+whatsappRouter.post("/test", async (req, res): Promise<void> => {
   const { phone } = req.body as { phone?: string };
-  if (!phone) return res.status(400).json({ error: "phone required" });
+  if (!phone) {
+    res.status(400).json({ error: "phone required" });
+    return;
+  }
   const result = await sendBillWhatsapp({ phone, patientName: "Test User", billNumber: "TEST-0001", totalAmount: 0, tokenNo: 1 });
   res.json(result);
 });

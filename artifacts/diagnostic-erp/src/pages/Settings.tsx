@@ -17,7 +17,7 @@ import {
   Plus, Trash2, Pencil, User2, Shield, CheckSquare, Square, Mail,
   Users, Download, FileText, BookOpen, ClipboardList, CreditCard,
   FlaskConical, Boxes, ShieldCheck, FileDown, KeyRound, Eye, EyeOff,
-  Tag, Building2, Image as ImageIcon, Upload, MessageCircle,
+  Tag, Building2, Image as ImageIcon, Upload, MessageCircle, Printer,
 } from "lucide-react";
 
 type AppUser = {
@@ -89,6 +89,7 @@ const TABS = [
   { id: "users", label: "Users", icon: Users },
   { id: "email", label: "Email Notifications", icon: Mail },
   { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
+  { id: "printers", label: "Printers", icon: Printer },
   { id: "discount-reasons", label: "Discount Reasons", icon: Tag },
   { id: "manual", label: "User Manual", icon: FileDown },
   { id: "password", label: "Change Password", icon: KeyRound },
@@ -168,6 +169,7 @@ export default function Settings() {
         {tab === "users" && <UsersTab qc={qc} />}
         {tab === "email" && <EmailTab />}
         {tab === "whatsapp" && <WhatsappTab />}
+        {tab === "printers" && <PrinterTab />}
         {tab === "discount-reasons" && <DiscountReasonsTab />}
         {tab === "manual" && <ManualTab />}
         {tab === "password" && <ChangePasswordTab />}
@@ -341,6 +343,37 @@ function ManualTab() { const manualText = buildManualText(); return (<div classN
 type DiscountReason = { id: number; label: string; isActive: boolean };
 
 type WhatsappCfg = { id?: number; enabled: boolean; phoneNumberId: string; accessToken: string; templateName: string; templateLang: string; defaultCountryCode: string };
+type PrinterCfg = { id?: number; billPrinter: string; barcodePrinter: string; tokenPrinter: string };
+
+function PrinterTab() {
+  const qc = useQueryClient();
+  const { data: cfg } = useQuery<PrinterCfg>({ queryKey: ["printer-settings"], queryFn: () => api.get("/api/printers/settings") });
+  const [form, setForm] = useState<PrinterCfg | null>(null);
+  const cur = form ?? cfg ?? null;
+  const save = useMutation({
+    mutationFn: (body: PrinterCfg) => api.put("/api/printers/settings", body),
+    onSuccess: (saved) => { qc.invalidateQueries({ queryKey: ["printer-settings"] }); setForm(saved as PrinterCfg); },
+  });
+  if (!cur) return <div className="bg-card border border-card-border rounded-xl p-8 text-center text-muted-foreground">Loading printer settings…</div>;
+  const update = (k: keyof PrinterCfg, v: string) => setForm({ ...(cur as PrinterCfg), [k]: v });
+  return (
+    <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+      <div>
+        <h2 className="font-bold text-lg flex items-center gap-2"><Printer size={16} /> Printer Routing</h2>
+        <p className="text-sm text-muted-foreground mt-1">Auto-routes bill, barcode, and token print jobs to the configured printer names.</p>
+      </div>
+      <div className="grid md:grid-cols-3 gap-4">
+        <div><Label>Bill Printer</Label><Input value={cur.billPrinter} onChange={(e) => update("billPrinter", e.target.value)} className="mt-1" placeholder="Windows / system printer name" /></div>
+        <div><Label>Barcode Printer</Label><Input value={cur.barcodePrinter} onChange={(e) => update("barcodePrinter", e.target.value)} className="mt-1" placeholder="Windows / system printer name" /></div>
+        <div><Label>Token Printer</Label><Input value={cur.tokenPrinter} onChange={(e) => update("tokenPrinter", e.target.value)} className="mt-1" placeholder="Windows / system printer name" /></div>
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" type="button" onClick={() => setForm(cfg ?? null)}>Reset</Button>
+        <Button onClick={() => save.mutate(cur)} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
+      </div>
+    </div>
+  );
+}
 function WhatsappTab() {
   const qc = useQueryClient();
   const { data: cfg } = useQuery<WhatsappCfg>({ queryKey: ["whatsapp-settings"], queryFn: () => api.get("/api/whatsapp/settings") });
