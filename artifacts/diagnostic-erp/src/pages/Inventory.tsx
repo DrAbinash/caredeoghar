@@ -17,7 +17,7 @@ import { useListTests } from "@workspace/api-client-react";
 import { useForm } from "react-hook-form";
 import {
   Plus, AlertTriangle, ArrowDown, ArrowUp, Settings2,
-  Package, Trash2, History, SlidersHorizontal,
+  Package, Trash2, History, SlidersHorizontal, Pencil,
 } from "lucide-react";
 
 type Item = {
@@ -45,6 +45,7 @@ export default function Inventory() {
   const [addOpen, setAddOpen] = useState(false);
   const [stockDialog, setStockDialog] = useState<{ item: Item; mode: "in" | "out" | "adjust" } | null>(null);
   const [historyItem, setHistoryItem] = useState<Item | null>(null);
+  const [editItem, setEditItem] = useState<Item | null>(null);
   const [ruleOpen, setRuleOpen] = useState(false);
 
   const { data: items = [], isLoading } = useQuery<Item[]>({
@@ -69,6 +70,10 @@ export default function Inventory() {
   const addItem = useMutation({
     mutationFn: (body: Record<string, unknown>) => api.post("/api/inventory", body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["inventory"] }); setAddOpen(false); resetAdd(); },
+  });
+  const updateItem = useMutation({
+    mutationFn: (d: { id: number; body: Record<string, unknown> }) => api.patch(`/api/inventory/${d.id}`, d.body),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["inventory"] }); qc.invalidateQueries({ queryKey: ["inventory-low"] }); setEditItem(null); },
   });
   const stockIn = useMutation({
     mutationFn: (d: { id: number; body: Record<string, unknown> }) => api.post(`/api/inventory/${d.id}/stock-in`, d.body),
@@ -198,6 +203,9 @@ export default function Inventory() {
                       </Button>
                       <Button size="sm" variant="outline" className="text-xs h-7 px-2" title="History" onClick={() => setHistoryItem(item)}>
                         <History size={11} />
+                      </Button>
+                      <Button size="sm" variant="outline" className="text-xs h-7 px-2" title="Edit" onClick={() => setEditItem(item)}>
+                        <Pencil size={11} />
                       </Button>
                     </div>
                   </div>
@@ -357,6 +365,55 @@ export default function Inventory() {
                 </tbody>
               </table>
             )}
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Edit Item Dialog */}
+      {editItem && (
+        <Dialog open onOpenChange={() => setEditItem(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader><DialogTitle>Edit Item — {editItem.name}</DialogTitle></DialogHeader>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                updateItem.mutate({
+                  id: editItem.id,
+                  body: {
+                    name: String(fd.get("name") || "").trim(),
+                    unit: String(fd.get("unit") || "").trim(),
+                    category: String(fd.get("category") || editItem.category),
+                    minStock: Number(fd.get("minStock") || 0),
+                    costPrice: Number(fd.get("costPrice") || 0),
+                  },
+                });
+              }}
+              className="space-y-4"
+            >
+              <div><Label>Item Name *</Label><Input name="name" defaultValue={editItem.name} required className="mt-1" /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>Unit *</Label><Input name="unit" defaultValue={editItem.unit} required className="mt-1" /></div>
+                <div>
+                  <Label>Category</Label>
+                  <Select name="category" defaultValue={editItem.category}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {CATEGORIES.map((c) => <SelectItem key={c} value={c} className="capitalize">{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>Min Stock</Label><Input type="number" step="any" name="minStock" defaultValue={editItem.minStock} className="mt-1" /></div>
+                <div><Label>Cost Price (₹)</Label><Input type="number" step="any" name="costPrice" defaultValue={editItem.costPrice} className="mt-1" /></div>
+              </div>
+              <p className="text-xs text-muted-foreground">Current stock can only be changed via Stock In / Out / Adjust.</p>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={() => setEditItem(null)}>Cancel</Button>
+                <Button type="submit" disabled={updateItem.isPending}>Save Changes</Button>
+              </div>
+            </form>
           </DialogContent>
         </Dialog>
       )}
