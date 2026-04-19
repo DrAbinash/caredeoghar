@@ -597,13 +597,13 @@ export default function BillingDesk() {
       </div>
 
       {/* ── MAIN LAYOUT ── */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden overflow-y-auto">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
 
         {/* ══════════════════════════════════════════════
             LEFT COLUMN — Patient + Doctor + Notes
         ══════════════════════════════════════════════ */}
-        <div className="w-full lg:w-[50%] lg:border-r border-card-border flex flex-col lg:overflow-hidden">
-          <div className="lg:flex-1 lg:overflow-y-auto p-3 space-y-3">
+        <div className="w-full lg:w-[50%] lg:border-r border-card-border flex flex-col lg:overflow-hidden min-h-0">
+          <div className="lg:flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
 
             {/* ── Patient Section — Search ── */}
             <div className="bg-card border border-card-border rounded-xl overflow-hidden">
@@ -880,8 +880,8 @@ export default function BillingDesk() {
         {/* ══════════════════════════════════════════════
             RIGHT COLUMN — Tests + Bill + Payment
         ══════════════════════════════════════════════ */}
-        <div className="w-full lg:flex-1 flex flex-col lg:overflow-hidden">
-          <div className="lg:flex-1 flex flex-col lg:overflow-hidden">
+        <div className="w-full lg:flex-1 flex flex-col lg:overflow-hidden min-h-0">
+          <div className="lg:flex-1 flex flex-col lg:overflow-hidden min-h-0">
 
             {/* ── Test Search & Catalog ── */}
             <div className="flex-shrink-0 border-b border-card-border">
@@ -1219,7 +1219,7 @@ export default function BillingDesk() {
             </div>
 
             {/* ── Action Footer — Generate / Save & Print ── */}
-            <div className="flex-shrink-0 bg-card p-3 flex items-center gap-2 border-t border-card-border">
+            <div className="sticky bottom-0 z-10 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/90 p-3 flex items-center gap-2 border-t border-card-border">
               <Button
                 variant="outline"
                 onClick={resetAll}
@@ -1244,6 +1244,28 @@ export default function BillingDesk() {
               >
                 <Printer size={14} className="mr-1" />
                 {generateMut.isPending && printAfterSaveRef.current ? "Saving…" : "Save & Print"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  if (!lastBill) return;
+                  await printBarcode(lastBill);
+                }}
+                disabled={!lastBill}
+                className="h-10"
+              >
+                Barcode
+              </Button>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  if (!lastBill) return;
+                  await printToken(lastBill, clinic);
+                }}
+                disabled={!lastBill || !lastBill.tokenNo}
+                className="h-10"
+              >
+                Token
               </Button>
             </div>
 
