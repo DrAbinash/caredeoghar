@@ -1219,7 +1219,7 @@ export default function BillingDesk() {
             </div>
 
             {/* ── Generate Bill Button (always visible) ── */}
-            <div className="flex-shrink-0 p-3 bg-card space-y-2 sticky bottom-0 z-20 border-t border-card-border shadow-[0_-6px_18px_rgba(0,0,0,0.04)]">
+            <div className="sticky bottom-0 z-30 flex-shrink-0 border-t border-card-border bg-card/95 p-3 space-y-2 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] backdrop-blur">
               {!canGenerate && !lastBill && (
                 <p className="text-xs text-muted-foreground text-center">
                   {!selectedPatient ? "← Select or register a patient" : "← Add at least one test"}
