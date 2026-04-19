@@ -12,7 +12,8 @@ function generateToken(): string {
 
 // POST /api/super-admin/login — validates name + PIN, creates session token
 superAdminRouter.post("/login", async (req, res) => {
-  const { name, pin } = req.body;
+  const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
+  const pin = typeof req.body.pin === "string" ? req.body.pin.trim() : "";
   if (!name || !pin) {
     return res.status(400).json({ error: "name and pin are required" });
   }

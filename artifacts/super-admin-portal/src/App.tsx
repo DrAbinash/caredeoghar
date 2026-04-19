@@ -97,7 +97,7 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
         <div className="bg-card border border-border rounded-2xl p-6 shadow-xl shadow-black/20">
           <div className="flex items-center gap-2 mb-5 text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
             <Lock size={12} className="text-primary" />
-            <span>Secure super-admin access · 8-hour session</span>
+            <span>Use your super-admin name and PIN · 8-hour session</span>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -109,7 +109,7 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
                 id="name"
                 {...register("name", { required: "Name is required" })}
                 className="mt-1.5"
-                placeholder="Enter your super admin name"
+                placeholder="e.g. Dr Abinash Kumar"
                 autoComplete="username"
               />
               {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
@@ -125,7 +125,7 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
                   type={showPin ? "text" : "password"}
                   {...register("pin", { required: "PIN is required" })}
                   className="pr-10 font-mono tracking-widest"
-                  placeholder="••••••"
+                  placeholder="4-digit PIN"
                   autoComplete="current-password"
                 />
                 <button
