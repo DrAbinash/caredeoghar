@@ -145,60 +145,58 @@ export async function exportExcel(
   sections: ExportDoctorSection[],
   meta: ReportMeta,
 ): Promise<void> {
-  const XLSX = await import("xlsx");
-
-  const wb = XLSX.utils.book_new();
+  const ExcelJS = await import("exceljs");
+  const wb = new ExcelJS.Workbook();
 
   // ── Summary sheet ──
-  const summaryRows: (string | number)[][] = [
-    [meta.title],
-    [`Date Range: ${meta.from} to ${meta.to}`],
-    [`Doctor: ${meta.doctorFilter}`],
-    [`Generated: ${meta.generatedAt}`],
-    [],
+  const summaryWs = wb.addWorksheet("Summary");
+  summaryWs.columns = [
+    { width: 28 }, { width: 20 }, { width: 10 },
+    { width: 10 }, { width: 16 }, { width: 18 }, { width: 12 },
   ];
+
+  summaryWs.addRow([meta.title]);
+  summaryWs.addRow([`Date Range: ${meta.from} to ${meta.to}`]);
+  summaryWs.addRow([`Doctor: ${meta.doctorFilter}`]);
+  summaryWs.addRow([`Generated: ${meta.generatedAt}`]);
+  summaryWs.addRow([]);
 
   if (meta.grandTotal) {
     const g = meta.grandTotal;
-    summaryRows.push(["Doctors with Referrals", "Total Orders", "Total Revenue", "Commission Payable"]);
-    summaryRows.push([g.doctors, g.orders, g.revenue, g.commission]);
-    summaryRows.push([]);
+    summaryWs.addRow(["Doctors with Referrals", "Total Orders", "Total Revenue", "Commission Payable"]);
+    summaryWs.addRow([g.doctors, g.orders, g.revenue, g.commission]);
+    summaryWs.addRow([]);
   }
 
-  summaryRows.push(["Doctor", "Specialization", "Orders", "Tests", "Total Revenue", "Total Commission", "Eff. Rate %"]);
+  summaryWs.addRow(["Doctor", "Specialization", "Orders", "Tests", "Total Revenue", "Total Commission", "Eff. Rate %"]);
   for (const s of sections) {
-    summaryRows.push([
+    summaryWs.addRow([
       s.doctorName, s.specialization, s.orderCount, s.testCount,
       s.totalRevenue, s.totalCommission, s.effectiveRate,
     ]);
   }
 
-  const summaryWs = XLSX.utils.aoa_to_sheet(summaryRows);
-  summaryWs["!cols"] = [{ wch: 28 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 16 }, { wch: 18 }, { wch: 12 }];
-  XLSX.utils.book_append_sheet(wb, summaryWs, "Summary");
-
   // ── Per-doctor detail sheet ──
-  const detailRows: (string | number)[][] = [
-    [meta.title],
-    [`Date Range: ${meta.from} to ${meta.to}`, "", "", `Doctor: ${meta.doctorFilter}`],
-    [],
+  const detailWs = wb.addWorksheet("Detailed Report");
+  detailWs.columns = [
+    { width: 30 }, { width: 14 }, { width: 14 }, { width: 18 },
   ];
 
+  detailWs.addRow([meta.title]);
+  detailWs.addRow([`Date Range: ${meta.from} to ${meta.to}`, "", "", `Doctor: ${meta.doctorFilter}`]);
+  detailWs.addRow([]);
+
   for (const s of sections) {
-    detailRows.push([`${s.label} ${s.doctorName}`, s.specialization, `${s.orderCount} orders`, `Eff. Rate: ${s.effectiveRate}%`]);
-    detailRows.push(["Test Name", "No of Tests", "% / Fixed", "Total Amount (₹)"]);
+    detailWs.addRow([`${s.label} ${s.doctorName}`, s.specialization, `${s.orderCount} orders`, `Eff. Rate: ${s.effectiveRate}%`]);
+    detailWs.addRow(["Test Name", "No of Tests", "% / Fixed", "Total Amount (Rs.)"]);
     for (const r of s.rows) {
-      detailRows.push([r.testName, r.count, r.rateLabel, r.commission]);
+      detailWs.addRow([r.testName, r.count, r.rateLabel, r.commission]);
     }
-    detailRows.push(["", "", "Total →", s.totalCommission]);
-    detailRows.push([]);
+    detailWs.addRow(["", "", "Total \u2192", s.totalCommission]);
+    detailWs.addRow([]);
   }
 
-  const detailWs = XLSX.utils.aoa_to_sheet(detailRows);
-  detailWs["!cols"] = [{ wch: 30 }, { wch: 14 }, { wch: 14 }, { wch: 18 }];
-  XLSX.utils.book_append_sheet(wb, detailWs, "Detailed Report");
-
-  const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+  const buf = await wb.xlsx.writeBuffer();
   saveAs(
     new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
     `${meta.title.replace(/\s+/g, "_")}_${meta.from}_to_${meta.to}.xlsx`,

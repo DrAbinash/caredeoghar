@@ -77,9 +77,9 @@
   },
   "dependencies": {
     "docx": "^9.6.1",
+    "exceljs": "^4.4.0",
     "file-saver": "^2.0.5",
     "jspdf": "^4.2.1",
-    "jspdf-autotable": "^5.0.7",
-    "xlsx": "^0.18.5"
+    "jspdf-autotable": "^5.0.7"
   }
 }
