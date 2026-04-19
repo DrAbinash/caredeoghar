@@ -6,6 +6,37 @@ import { GetRevenueReportQueryParams } from "@workspace/api-zod";
 
 export const reportsRouter = Router();
 
+function formatCurrency(n: number) {
+  return `₹${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(n)}`;
+}
+
+function buildReportHtml(title: string, subtitle: string, rows: { label: string; value: string }[], signatureName = "Authorized Signature") {
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
+    <style>
+      @page { size: A4; margin: 12mm; }
+      body { font-family: Arial, sans-serif; color:#000; margin:0; }
+      .hdr { text-align:center; border-bottom:2px solid #000; padding-bottom:8px; margin-bottom:12px; }
+      .title { font-size:18px; font-weight:700; }
+      .sub { font-size:11px; color:#555; }
+      .rows { width:100%; border-collapse:collapse; }
+      .rows td { padding:6px 0; font-size:12px; }
+      .rows td:last-child { text-align:right; font-weight:700; }
+      .sig { margin-top:28px; display:flex; justify-content:space-between; }
+      .sig div { width:45%; border-top:1px solid #000; padding-top:6px; text-align:center; font-size:11px; }
+      .ftr { margin-top:18px; font-size:10px; color:#555; text-align:center; border-top:1px solid #bbb; padding-top:8px; }
+    </style></head><body>
+      <div class="hdr">
+        <div class="title">Diagnostic Centre</div>
+        <div>${title}</div>
+        <div class="sub">${subtitle}</div>
+      </div>
+      <table class="rows">${rows.map((r) => `<tr><td>${r.label}</td><td>${r.value}</td></tr>`).join("")}</table>
+      <div class="sig"><div>${signatureName}</div><div>Admin Signature</div></div>
+      <div class="ftr">Generated on ${new Date().toLocaleString("en-IN")}</div>
+      <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 300); };</script>
+    </body></html>`;
+}
+
 reportsRouter.get("/dashboard", async (_req, res) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -403,4 +434,38 @@ reportsRouter.get("/daily-summary", async (req, res) => {
       createdAt: r.b.createdAt.toISOString(),
     })),
   });
+});
+
+reportsRouter.get("/daily-summary/pdf", async (req, res) => {
+  const date = (req.query.date as string) || new Date().toISOString().split("T")[0];
+  const fromDate = new Date(date);
+  fromDate.setHours(0,0,0,0);
+  const toDate = new Date(date);
+  toDate.setHours(23,59,59,999);
+
+  const [bills, payments] = await Promise.all([
+    db.select({ b: billsTable }).from(billsTable).where(and(gte(billsTable.createdAt, fromDate), lte(billsTable.createdAt, toDate))),
+    db.select().from(paymentsTable).where(and(gte(paymentsTable.createdAt, fromDate), lte(paymentsTable.createdAt, toDate))),
+  ]);
+
+  const totalBilled = bills.reduce((s, r) => s + Number(r.b.totalAmount), 0);
+  const totalReceived = payments.reduce((s, p) => s + Number(p.amount), 0);
+  const outstanding = totalBilled - totalReceived;
+  const paidBills = bills.filter((r) => r.b.status === "paid").length;
+  const partialBills = bills.filter((r) => r.b.status === "partial").length;
+  const pendingBills = bills.filter((r) => r.b.status === "pending").length;
+
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(buildReportHtml(
+    `Daily Report ${date}`,
+    `Date: ${date}`,
+    [
+      { label: "Total Billed", value: formatCurrency(totalBilled) },
+      { label: "Total Received", value: formatCurrency(totalReceived) },
+      { label: "Outstanding", value: formatCurrency(outstanding) },
+      { label: "Bills Created", value: String(bills.length) },
+      { label: "Paid / Partial / Pending", value: `${paidBills} / ${partialBills} / ${pendingBills}` },
+    ],
+    "Prepared By Accounts / Admin",
+  ));
 });

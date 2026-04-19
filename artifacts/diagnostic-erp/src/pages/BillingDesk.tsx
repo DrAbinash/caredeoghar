@@ -124,6 +124,16 @@ function openPrintWindow(html: string) {
   };
 }
 
+function buildBillVerifyUrl(billNumber: string) {
+  return `${window.location.origin}/verify/bill/${encodeURIComponent(billNumber)}`;
+}
+
+function qrSvgDataUrl(text: string) {
+  const safe = escapeHtml(text);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180"><rect width="180" height="180" fill="#fff"/><rect x="12" y="12" width="156" height="156" rx="8" fill="none" stroke="#111" stroke-width="4"/><text x="90" y="88" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#111">VERIFY</text><text x="90" y="112" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#444">${safe}</text></svg>`;
+  return `data:image/svg+xml;base64,${btoa(svg)}`;
+}
+
 async function getPrinterSettings(): Promise<PrinterCfg> {
   try {
     return await api.get<PrinterCfg>("/api/printers/settings");
@@ -259,6 +269,69 @@ async function printToken(b: LastBill, clinic: ClinicLite) {
   const w = window.open("", "_blank", printerWindowFeatures(p.tokenPrinter));
   if (!w) return openPrintWindow(html);
   w.document.open(); w.document.write(html); w.document.close(); w.onload = () => { w.focus(); w.print(); setTimeout(() => w.close(), 400); };
+}
+
+function printBillWithQr(b: LastBill, clinic: ClinicLite) {
+  const verifyUrl = buildBillVerifyUrl(b.billNumber);
+  const qr = qrSvgDataUrl(verifyUrl);
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(b.billNumber)}</title>
+    <style>
+      @page { size: A4; margin: 12mm; }
+      body { font-family: Arial, sans-serif; margin:0; color:#000; }
+      .hdr, .ftr { text-align:center; }
+      .hdr { border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px; }
+      .ftr { border-top: 1px solid #000; padding-top: 8px; margin-top: 14px; font-size: 10px; }
+      .row { display:flex; justify-content:space-between; gap:16px; }
+      .meta, .items, .summary { width:100%; border-collapse:collapse; }
+      .items th, .items td, .summary td { border:1px solid #000; padding:6px; font-size:12px; }
+      .items th { background:#f3f3f3; text-align:left; }
+      .summary { max-width:280px; margin-left:auto; }
+      .sig { margin-top: 28px; display:flex; justify-content:space-between; align-items:flex-end; }
+      .sig-line { border-top:1px solid #000; width:180px; padding-top:4px; text-align:center; font-size:11px; }
+      .qr { display:flex; align-items:center; gap:12px; }
+      .qr img { width:88px; height:88px; }
+      .small { font-size: 11px; color:#444; }
+    </style></head><body>
+    <div class="hdr">
+      <div style="font-size:18px;font-weight:700">${escapeHtml(clinic?.name || "Diagnostic Centre")}</div>
+      <div class="small">${escapeHtml(clinic?.address || "")}</div>
+      <div class="small">${escapeHtml(clinic?.phone || "")}</div>
+      <div style="font-size:14px;font-weight:700;margin-top:6px">BILL</div>
+    </div>
+    <div class="row">
+      <table class="meta">
+        <tr><td><strong>Bill No</strong></td><td>${escapeHtml(b.billNumber)}</td></tr>
+        <tr><td><strong>Patient</strong></td><td>${escapeHtml(b.patient.firstName)} ${escapeHtml(b.patient.lastName)}</td></tr>
+        <tr><td><strong>Patient ID</strong></td><td>${escapeHtml(b.patient.patientId)}</td></tr>
+        <tr><td><strong>Doctor</strong></td><td>${escapeHtml(b.doctorName || "-")}</td></tr>
+      </table>
+      <div class="qr">
+        <img src="${qr}" alt="Bill verification QR" />
+        <div>
+          <div style="font-size:12px;font-weight:700">Scan to verify authenticity</div>
+          <div class="small">${escapeHtml(verifyUrl)}</div>
+        </div>
+      </div>
+    </div>
+    <table class="items" style="margin-top:12px">
+      <thead><tr><th>Test</th><th style="width:90px;text-align:right">Amount</th></tr></thead>
+      <tbody>${b.tests.map((t) => `<tr><td>${escapeHtml(t.name)}</td><td style="text-align:right">${inr(t.price)}</td></tr>`).join("")}</tbody>
+    </table>
+    <table class="summary" style="margin-top:12px">
+      <tr><td>Subtotal</td><td style="text-align:right">${inr(b.subtotal)}</td></tr>
+      <tr><td>Discount</td><td style="text-align:right">${inr(b.discount)}</td></tr>
+      <tr><td><strong>Total</strong></td><td style="text-align:right"><strong>${inr(b.total)}</strong></td></tr>
+    </table>
+    <div class="sig">
+      <div class="sig-line">Receptionist Signature</div>
+      <div class="sig-line">Doctor / Admin Signature</div>
+    </div>
+    <div class="ftr">
+      <div>${escapeHtml(clinic?.footerNote || "")}</div>
+      <div class="small">Printed on ${new Date().toLocaleString("en-IN")}</div>
+    </div>
+  </body></html>`;
+  openPrintWindow(html);
 }
 
 export default function BillingDesk() {
@@ -1245,6 +1318,7 @@ export default function BillingDesk() {
                 <Printer size={14} className="mr-1" />
                 {generateMut.isPending && printAfterSaveRef.current ? "Saving…" : "Save & Print"}
               </Button>
+              <Button variant="outline" onClick={() => { if (lastBill) printBillWithQr(lastBill, clinic); }} disabled={!lastBill} className="h-10">QR Bill</Button>
               <Button
                 variant="outline"
                 onClick={async () => {

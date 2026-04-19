@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { TrendingUp, FlaskConical, Users2, Sparkles, RefreshCw, CalendarDays, ArrowUpDown, CreditCard, ChevronDown, ChevronUp } from "lucide-react";
+import { TrendingUp, FlaskConical, Users2, Sparkles, RefreshCw, CalendarDays, ArrowUpDown, CreditCard, ChevronDown, ChevronUp, Download } from "lucide-react";
 
 type CommissionReport = {
   doctorId: number;
@@ -128,6 +128,9 @@ export default function Reports() {
   };
   const methodLabel = (m: string) =>
     ({ cash: "Cash", upi: "UPI", card: "Card", bank_transfer: "Bank Transfer", insurance: "Insurance", cheque: "Cheque" })[m] ?? m.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const downloadDailyPdf = () => {
+    window.open(`/api/reports/daily-summary/pdf?date=${dailyDate}`, "_blank");
+  };
 
   return (
     <div className="pb-8">
@@ -391,6 +394,9 @@ export default function Reports() {
                 <Label className="text-xs">Date</Label>
                 <Input type="date" value={dailyDate} onChange={e => setDailyDate(e.target.value)} className="mt-1 w-40" />
               </div>
+              <Button variant="outline" onClick={downloadDailyPdf} className="h-9">
+                <Download size={14} className="mr-1" /> PDF
+              </Button>
             </div>
             {loadingDaily ? (
               <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-20 bg-muted animate-pulse rounded-xl" />)}</div>
