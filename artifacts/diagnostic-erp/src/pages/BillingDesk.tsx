@@ -1218,40 +1218,40 @@ export default function BillingDesk() {
               )}
             </div>
 
-            {/* ── Generate Bill Button (always visible) ── */}
-            <div className="sticky bottom-0 z-30 flex-shrink-0 border-t border-card-border bg-card/95 p-3 space-y-2 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] backdrop-blur">
-              {!canGenerate && !lastBill && (
-                <p className="text-xs text-muted-foreground text-center">
-                  {!selectedPatient ? "← Select or register a patient" : "← Add at least one test"}
-                </p>
+          </div>
+        </div>
+      </div>
+      <div className="fixed right-4 sm:right-6 bottom-4 sm:bottom-6 z-40 w-[calc(100vw-2rem)] sm:w-[22rem] max-w-[22rem] print:hidden">
+        <div className="rounded-lg border border-card-border bg-card/95 p-3 shadow-2xl backdrop-blur">
+          {!canGenerate && !lastBill && (
+            <p className="text-xs text-muted-foreground text-center mb-2">
+              {!selectedPatient ? "← Select or register a patient" : "← Add at least one test"}
+            </p>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              className="h-11 text-sm font-semibold"
+              disabled={!canGenerate || generateMut.isPending}
+              onClick={() => { printAfterSaveRef.current = false; generateMut.mutate(); }}
+            >
+              {generateMut.isPending && !printAfterSaveRef.current ? (
+                <><RefreshCcw size={15} className="mr-1.5 animate-spin" /> Saving…</>
+              ) : (
+                <><Receipt size={15} className="mr-1.5" /> Generate Bill</>
               )}
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  className="h-11 text-sm font-semibold"
-                  disabled={!canGenerate || generateMut.isPending}
-                  onClick={() => { printAfterSaveRef.current = false; generateMut.mutate(); }}
-                >
-                  {generateMut.isPending && !printAfterSaveRef.current ? (
-                    <><RefreshCcw size={15} className="mr-1.5 animate-spin" /> Saving…</>
-                  ) : (
-                    <><Receipt size={15} className="mr-1.5" /> Generate Bill</>
-                  )}
-                </Button>
-                <Button
-                  variant="secondary"
-                  className="h-11 text-sm font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white border-0"
-                  disabled={!canGenerate || generateMut.isPending}
-                  onClick={() => { printAfterSaveRef.current = true; generateMut.mutate(); }}
-                >
-                  {generateMut.isPending && printAfterSaveRef.current ? (
-                    <><RefreshCcw size={15} className="mr-1.5 animate-spin" /> Saving…</>
-                  ) : (
-                    <><Printer size={15} className="mr-1.5" /> Save & Print</>
-                  )}
-                </Button>
-              </div>
-            </div>
-
+            </Button>
+            <Button
+              variant="secondary"
+              className="h-11 text-sm font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white border-0"
+              disabled={!canGenerate || generateMut.isPending}
+              onClick={() => { printAfterSaveRef.current = true; generateMut.mutate(); }}
+            >
+              {generateMut.isPending && printAfterSaveRef.current ? (
+                <><RefreshCcw size={15} className="mr-1.5 animate-spin" /> Saving…</>
+              ) : (
+                <><Printer size={15} className="mr-1.5" /> Save & Print</>
+              )}
+            </Button>
           </div>
         </div>
       </div>
