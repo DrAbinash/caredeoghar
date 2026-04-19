@@ -1206,7 +1206,7 @@ export default function BillingDesk() {
             </div>
 
             {/* ── Payment ── */}
-            <div className="flex-shrink-0 bg-card p-3 space-y-2 border-b border-card-border">
+            <div className="flex-shrink-0 bg-card p-2.5 space-y-1.5 border-b border-card-border">
               {/* Toggle */}
               <div className="flex items-center gap-3">
                 <button
@@ -1220,9 +1220,9 @@ export default function BillingDesk() {
               </div>
 
               {payNow && (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {/* Header row */}
-                  <div className="grid grid-cols-[1fr_1fr_20px] gap-1.5 px-0.5">
+                  <div className="grid grid-cols-[1fr_1fr_18px] gap-1 px-0.5">
                     <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Mode</span>
                     <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Amount (₹)</span>
                     <span />
@@ -1230,12 +1230,12 @@ export default function BillingDesk() {
 
                   {/* Split rows */}
                   {paymentSplits.map((split, idx) => (
-                    <div key={idx} className="grid grid-cols-[1fr_1fr_20px] gap-1.5 items-center">
+                    <div key={idx} className="grid grid-cols-[1fr_1fr_18px] gap-1 items-center">
                       <Select
                         value={split.mode}
                         onValueChange={(v) => setPaymentSplits((prev) => prev.map((s, i) => i === idx ? { ...s, mode: v } : s))}
                       >
-                        <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {PAYMENT_MODES.map((m) => (
                             <SelectItem key={m} value={m} className="capitalize">{m.toUpperCase()}</SelectItem>
@@ -1249,7 +1249,7 @@ export default function BillingDesk() {
                         placeholder={idx === 0 ? total.toFixed(2) : "0.00"}
                         value={split.amount}
                         onChange={(e) => setPaymentSplits((prev) => prev.map((s, i) => i === idx ? { ...s, amount: e.target.value } : s))}
-                        className="h-8 text-sm"
+                        className="h-7 text-xs"
                       />
                       {paymentSplits.length > 1 ? (
                         <button
@@ -1266,14 +1266,14 @@ export default function BillingDesk() {
                   {paymentSplits.length < PAYMENT_MODES.length && (
                     <button
                       onClick={() => setPaymentSplits((prev) => [...prev, { mode: "upi", amount: "" }])}
-                      className="text-xs text-primary hover:underline flex items-center gap-1"
+                      className="text-[11px] text-primary hover:underline flex items-center gap-1"
                     >
                       <Plus size={11} /> Add another payment method
                     </button>
                   )}
 
                   {/* Balance / paid status */}
-                  <div className="pt-1 border-t border-card-border flex justify-between items-center text-xs">
+                  <div className="pt-1 border-t border-card-border flex justify-between items-center text-[11px]">
                     {balance > 0 ? (
                       <>
                         <span className="text-muted-foreground">Balance due</span>
@@ -1292,33 +1292,34 @@ export default function BillingDesk() {
             </div>
 
             {/* ── Action Footer — Generate / Save & Print ── */}
-            <div className="sticky bottom-0 z-10 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/90 p-3 flex items-center gap-2 border-t border-card-border">
+            <div className="sticky bottom-0 z-10 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/90 p-2.5 border-t border-card-border">
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
               <Button
                 variant="outline"
                 onClick={resetAll}
                 disabled={generateMut.isPending}
-                className="h-10"
+                className="h-9 text-xs"
               >
-                <RefreshCcw size={14} className="mr-1" /> Reset
+                <RefreshCcw size={13} className="mr-1" /> Reset
               </Button>
               <Button
                 onClick={() => { printAfterSaveRef.current = false; generateMut.mutate(); }}
                 disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending}
-                className="h-10 flex-1"
+                className="h-9 text-xs"
                 variant="secondary"
               >
-                <Receipt size={14} className="mr-1" />
+                <Receipt size={13} className="mr-1" />
                 {generateMut.isPending && !printAfterSaveRef.current ? "Generating…" : "Generate Bill"}
               </Button>
               <Button
                 onClick={() => { printAfterSaveRef.current = true; generateMut.mutate(); }}
                 disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending}
-                className="h-10 flex-1"
+                className="h-9 text-xs"
               >
-                <Printer size={14} className="mr-1" />
+                <Printer size={13} className="mr-1" />
                 {generateMut.isPending && printAfterSaveRef.current ? "Saving…" : "Save & Print"}
               </Button>
-              <Button variant="outline" onClick={() => { if (lastBill) printBillWithQr(lastBill, clinic); }} disabled={!lastBill} className="h-10">QR Bill</Button>
+              <Button variant="outline" onClick={() => { if (lastBill) printBillWithQr(lastBill, clinic); }} disabled={!lastBill} className="h-9 text-xs">QR Bill</Button>
               <Button
                 variant="outline"
                 onClick={async () => {
@@ -1326,7 +1327,7 @@ export default function BillingDesk() {
                   await printBarcode(lastBill);
                 }}
                 disabled={!lastBill}
-                className="h-10"
+                className="h-9 text-xs"
               >
                 Barcode
               </Button>
@@ -1337,10 +1338,11 @@ export default function BillingDesk() {
                   await printToken(lastBill, clinic);
                 }}
                 disabled={!lastBill || !lastBill.tokenNo}
-                className="h-10"
+                className="h-9 text-xs"
               >
                 Token
               </Button>
+              </div>
             </div>
 
           </div>
