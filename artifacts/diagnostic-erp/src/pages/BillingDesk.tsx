@@ -1347,7 +1347,6 @@ export default function BillingDesk() {
           </div>
         </div>
       </div>
-      </div>
       {/* ── Hidden Print Receipt (shown only when printing) ── */}
       {lastBill && (
         <div className="billing-desk-receipt">
