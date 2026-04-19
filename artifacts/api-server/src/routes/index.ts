@@ -25,6 +25,7 @@ import { tokensRouter } from "./tokens";
 import { whatsappRouter } from "./whatsapp";
 import { printersRouter } from "./printers";
 import { staffRouter } from "./staff";
+import { bridgeRouter } from "./bridge";
 
 const router: IRouter = Router();
 
@@ -55,5 +56,6 @@ router.use("/tokens", tokensRouter);
 router.use("/whatsapp", whatsappRouter);
 router.use("/printers", printersRouter);
 router.use("/staff", staffRouter);
+router.use("/bridge", bridgeRouter);
 
 export default router;
