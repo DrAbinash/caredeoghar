@@ -252,7 +252,7 @@ function ActiveSessionScreen({ session, onEject, onManageBooks }: { session: Ses
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-3">
-              The link embeds your session token. Super admin actions (edit amounts, delete bills) will be unlocked automatically when opened.
+              The link embeds your session token. In the ERP, this unlocks super-admin actions like edit amounts and delete bills.
             </p>
           </div>
 
@@ -266,7 +266,7 @@ function ActiveSessionScreen({ session, onEject, onManageBooks }: { session: Ses
               Manage Books / Ledgers
             </Button>
             <p className="text-xs text-muted-foreground mt-2">
-              Partition bills & patients by referral doctor groups. Reset any book to start from bill #1.
+              Partition bills & patients by referral doctor groups. Resetting a book deletes its bills and restarts numbering from bill #1.
             </p>
           </div>
 
