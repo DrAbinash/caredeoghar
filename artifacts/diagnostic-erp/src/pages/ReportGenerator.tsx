@@ -18,6 +18,7 @@ import {
   VolumeX,
   Upload,
   Download,
+  FileText,
   AlertTriangle,
   ChevronDown,
   ChevronUp,
@@ -26,6 +27,8 @@ import {
   Trash2,
   X as XIcon,
   Library,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -332,6 +335,8 @@ export default function ReportGenerator() {
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const [suggestionFor, setSuggestionFor] = useState<number | null>(null); // test idx whose remarks textarea is showing autocomplete
   const [suggestionQuery, setSuggestionQuery] = useState("");
+  const [findingFormOpen, setFindingFormOpen] = useState(false);
+  const [findingForm, setFindingForm] = useState<Partial<AbnormalFinding>>({ severity: "moderate", isActive: true });
 
   const loadTemplates = async () => {
     const r = await fetch("/api/report-templates");
@@ -345,7 +350,7 @@ export default function ReportGenerator() {
 
   const { data: patients } = useListPatients({ limit: 200 });
   const { data: orders } = useListOrders({ patientId: patientId ?? undefined, limit: 50 });
-  const { data: order } = useGetOrder(orderId ?? 0, { query: { enabled: !!orderId } });
+  const { data: order } = useGetOrder(orderId ?? 0, { query: { queryKey: ["order", orderId], enabled: !!orderId } });
 
   useEffect(() => {
     if (order?.tests) {
@@ -388,6 +393,90 @@ export default function ReportGenerator() {
 
   const updateRemarks = (idx: number, val: string) => {
     setFindings((prev) => prev.map((f, i) => i === idx ? { ...f, remarks: val } : f));
+  };
+
+  const pickTemplateFromTags = (testId: number, text: string) => {
+    const lc = text.toLowerCase();
+    const tmpl = templates.find((t) => {
+      if (t.testId !== testId) return false;
+      const tags = (t.tags ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+      const modality = (t.modality ?? "").trim().toLowerCase();
+      return tags.some((tag) => lc.includes(tag)) || (modality && lc.includes(modality));
+    });
+    if (tmpl) setActiveTemplateId((m) => ({ ...m, [testId]: tmpl.id }));
+  };
+
+  const startVoice = (testId: number) => {
+    const Ctor = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+    if (!Ctor) {
+      toast({ title: "Voice input isn't supported in this browser", variant: "destructive" });
+      return;
+    }
+    const recognition = new Ctor();
+    recognition.lang = "en-IN";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.onresult = (ev) => {
+      const transcript = Array.from(ev.results).map((r) => r[0]?.transcript ?? "").join(" ").trim();
+      setVoiceTranscript(transcript);
+      const idx = findings.findIndex((f) => f.testId === testId);
+      if (idx >= 0 && transcript) updateRemarks(idx, transcript);
+    };
+    recognition.onerror = () => {
+      setVoiceListening(false);
+      setVoiceTargetTestId(null);
+    };
+    recognition.onend = () => {
+      setVoiceListening(false);
+      setVoiceTargetTestId(null);
+    };
+    recognitionRef.current = recognition;
+    setVoiceTranscript("");
+    setVoiceTargetTestId(testId);
+    setVoiceListening(true);
+    recognition.start();
+  };
+
+  const stopVoice = () => {
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    setVoiceListening(false);
+    setVoiceTargetTestId(null);
+  };
+
+  const filteredFindings = (query: string, testId: number) => {
+    const lc = query.trim().toLowerCase();
+    return findingsLib.filter((f) => {
+      if (f.testId && f.testId !== testId) return false;
+      if (!lc) return true;
+      const aliases = (f.aliases ?? "").toLowerCase();
+      return f.keyword.toLowerCase().includes(lc) || aliases.includes(lc) || (f.category ?? "").toLowerCase().includes(lc);
+    }).slice(0, 8);
+  };
+
+  const saveFinding = async () => {
+    if (!findingForm.keyword || !findingForm.description) return;
+    const r = await fetch("/api/abnormal-findings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        testId: findingForm.testId ?? null,
+        modality: findingForm.modality ?? null,
+        category: findingForm.category ?? null,
+        keyword: String(findingForm.keyword).trim(),
+        aliases: findingForm.aliases ?? null,
+        description: String(findingForm.description),
+        severity: (findingForm.severity as AbnormalFinding["severity"]) || "moderate",
+        isActive: findingForm.isActive ?? true,
+      }),
+    });
+    if (!r.ok) {
+      toast({ title: "Could not save finding", variant: "destructive" });
+      return;
+    }
+    setFindingFormOpen(false);
+    setFindingForm({ severity: "moderate", isActive: true });
+    loadFindingsLib();
   };
 
   // Voice readout
@@ -514,6 +603,7 @@ export default function ReportGenerator() {
       }
       return next;
     });
+    findings.forEach((f) => pickTemplateFromTags(f.testId, [f.remarks, ...f.parameters.map((p) => p.result)].join(" ")));
   }, [findings, templates]);
 
   const applyFindingsToTemplate = (content: string, scopedFindings?: TestFinding[]): string => {
@@ -895,10 +985,50 @@ export default function ReportGenerator() {
                             <Label className="text-xs text-muted-foreground">Remarks for this test</Label>
                             <Textarea
                               value={f.remarks}
-                              onChange={(e) => updateRemarks(fi, e.target.value)}
+                              onChange={(e) => {
+                                updateRemarks(fi, e.target.value);
+                                setSuggestionFor(fi);
+                                setSuggestionQuery(e.target.value);
+                                pickTemplateFromTags(f.testId, e.target.value);
+                              }}
                               className="mt-1 text-xs min-h-[48px]"
                               placeholder="Add any interpretation or remarks..."
                             />
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <Button type="button" size="sm" variant="outline" onClick={() => (voiceListening && voiceTargetTestId === f.testId ? stopVoice() : startVoice(f.testId))}>
+                                {voiceListening && voiceTargetTestId === f.testId ? <MicOff size={14} className="mr-1" /> : <Mic size={14} className="mr-1" />}
+                                {voiceListening && voiceTargetTestId === f.testId ? "Stop Voice" : "Voice"}
+                              </Button>
+                              <Popover open={suggestionFor === fi} onOpenChange={(open) => setSuggestionFor(open ? fi : null)}>
+                                <PopoverTrigger asChild>
+                                  <Button type="button" size="sm" variant="outline">
+                                    <Sparkles size={14} className="mr-1" /> Suggestions
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-80 p-0">
+                                  <Command>
+                                    <CommandInput placeholder="Search findings…" value={suggestionQuery} onValueChange={setSuggestionQuery} />
+                                    <CommandList>
+                                      <CommandEmpty>No match</CommandEmpty>
+                                      <CommandGroup>
+                                        {filteredFindings(suggestionQuery, f.testId).map((item) => (
+                                          <CommandItem key={item.id} onSelect={() => {
+                                            updateRemarks(fi, item.description);
+                                            setSuggestionFor(null);
+                                            pickTemplateFromTags(f.testId, item.description);
+                                          }}>
+                                            <div>
+                                              <div className="font-medium">{item.keyword}</div>
+                                              <div className="text-xs text-muted-foreground">{item.description}</div>
+                                            </div>
+                                          </CommandItem>
+                                        ))}
+                                      </CommandGroup>
+                                    </CommandList>
+                                  </Command>
+                                </PopoverContent>
+                              </Popover>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -1103,6 +1233,25 @@ export default function ReportGenerator() {
       <input ref={fileInputRef} type="file" accept=".txt,.html,.htm" className="hidden" onChange={handleFilePick} />
 
       {/* ── Upload Template Dialog ── */}
+      <Dialog open={findingFormOpen} onOpenChange={setFindingFormOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Abnormal Finding</DialogTitle>
+            <DialogDescription>Create a reusable finding for voice and autocomplete.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input placeholder="Keyword" value={String(findingForm.keyword ?? "")} onChange={(e) => setFindingForm((v) => ({ ...v, keyword: e.target.value }))} />
+            <Input placeholder="Description" value={String(findingForm.description ?? "")} onChange={(e) => setFindingForm((v) => ({ ...v, description: e.target.value }))} />
+            <Input placeholder="Aliases, comma separated" value={String(findingForm.aliases ?? "")} onChange={(e) => setFindingForm((v) => ({ ...v, aliases: e.target.value }))} />
+            <Input placeholder="Modality" value={String(findingForm.modality ?? "")} onChange={(e) => setFindingForm((v) => ({ ...v, modality: e.target.value }))} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFindingFormOpen(false)}>Cancel</Button>
+            <Button onClick={saveFinding}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -1138,6 +1287,10 @@ export default function ReportGenerator() {
                 <input type="checkbox" checked={uploadIsDefault} onChange={(e) => setUploadIsDefault(e.target.checked)} className="accent-primary" />
                 Set as default for this test
               </label>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Input placeholder="Tags (comma separated)" value={uploadTags} onChange={(e) => setUploadTags(e.target.value)} />
+              <Input placeholder="Modality" value={uploadModality} onChange={(e) => setUploadModality(e.target.value)} />
             </div>
             <div>
               <Label className="text-xs">Template content</Label>
