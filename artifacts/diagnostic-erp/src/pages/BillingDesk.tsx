@@ -1257,7 +1257,7 @@ export default function BillingDesk() {
       </div>
       {/* ── Floating Bill-Generated Notification (auto-dismiss 5s) ── */}
       {lastBill && showBillToast && (
-        <div className="fixed top-24 right-4 sm:right-6 z-50 w-[calc(100vw-2rem)] sm:w-[22rem] max-w-[22rem] bg-white dark:bg-card border-2 border-green-300 dark:border-green-700 rounded-lg shadow-2xl overflow-hidden animate-in slide-in-from-right-4 fade-in duration-300 print:hidden">
+        <div className="fixed top-20 sm:top-24 right-3 sm:right-6 z-50 w-[min(22rem,calc(100vw-1.5rem))] sm:w-[22rem] max-h-[calc(100vh-6rem)] overflow-y-auto bg-white dark:bg-card border-2 border-green-300 dark:border-green-700 rounded-lg shadow-2xl overflow-hidden animate-in slide-in-from-right-4 fade-in duration-300 print:hidden">
           <div className="flex items-start gap-2 px-3 py-2 bg-green-50 dark:bg-green-950/30 border-b border-green-200 dark:border-green-800">
             <CheckCircle2 size={16} className="text-green-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
@@ -1280,6 +1280,10 @@ export default function BillingDesk() {
                 <span className="text-base font-bold text-amber-700 dark:text-amber-400 tabular-nums">#{String(lastBill.tokenNo).padStart(3, "0")}</span>
               </div>
             )}
+            <div className="rounded border border-green-200 dark:border-green-800 bg-green-50/60 dark:bg-green-950/20 px-2 py-1 text-[11px] text-green-700 dark:text-green-300">
+              <span className="font-semibold">Collect Payment Now</span>
+              <div className="text-[10px] text-green-600 dark:text-green-400">Use the buttons below to print, view, or start a new bill.</div>
+            </div>
             <div className="grid grid-cols-3 gap-1.5">
               <Button size="sm" className="h-8 text-[11px] font-semibold" onClick={() => void printBill(lastBill, clinic)}>
                 <Printer size={11} className="mr-1" /> Bill
