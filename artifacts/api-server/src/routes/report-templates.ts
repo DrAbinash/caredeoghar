@@ -34,6 +34,8 @@ reportTemplatesRouter.post("/", async (req, res) => {
 
   const format = body.format === "html" ? "html" : "text";
   const wantsDefault = !!body.isDefault;
+  const tags = typeof (body as { tags?: string }).tags === "string" ? (body as { tags?: string }).tags!.trim() : null;
+  const modality = typeof (body as { modality?: string }).modality === "string" ? (body as { modality?: string }).modality!.trim() : null;
 
   const inserted = await db.transaction(async (tx) => {
     if (wantsDefault) {
@@ -43,6 +45,7 @@ reportTemplatesRouter.post("/", async (req, res) => {
     }
     const [row] = await tx.insert(reportTemplatesTable).values({
       testId, name, content, format, isDefault: wantsDefault,
+      tags: tags || null, modality: modality || null,
     }).returning();
     return row;
   });
@@ -60,6 +63,9 @@ reportTemplatesRouter.patch("/:id", async (req, res) => {
   if (typeof body.name === "string") updates.name = body.name.trim();
   if (typeof body.content === "string") updates.content = body.content;
   if (body.format === "html" || body.format === "text") updates.format = body.format;
+  const ext = body as { tags?: string | null; modality?: string | null };
+  if (ext.tags !== undefined) updates.tags = ext.tags === null ? null : String(ext.tags).trim() || null;
+  if (ext.modality !== undefined) updates.modality = ext.modality === null ? null : String(ext.modality).trim() || null;
 
   const updated = await db.transaction(async (tx) => {
     if (body.isDefault === true) {

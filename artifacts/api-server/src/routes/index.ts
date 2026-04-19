@@ -27,6 +27,7 @@ import { printersRouter } from "./printers";
 import { staffRouter } from "./staff";
 import { bridgeRouter } from "./bridge";
 import { reportTemplatesRouter } from "./report-templates";
+import { abnormalFindingsRouter } from "./abnormal-findings";
 
 const router: IRouter = Router();
 
@@ -59,5 +60,6 @@ router.use("/printers", printersRouter);
 router.use("/staff", staffRouter);
 router.use("/bridge", bridgeRouter);
 router.use("/report-templates", reportTemplatesRouter);
+router.use("/abnormal-findings", abnormalFindingsRouter);
 
 export default router;

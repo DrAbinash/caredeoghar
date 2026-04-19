@@ -12,6 +12,12 @@ export const reportTemplatesTable = pgTable("report_templates", {
   format: text("format").notNull().default("text"), // text | html
   content: text("content").notNull(),         // template body with [PLACEHOLDERS]
   isDefault: boolean("is_default").notNull().default(false),
+  // Comma-separated finding keywords this template covers, e.g.
+  //   "fatty liver, hepatomegaly"  →  voice/auto-pick will choose this template
+  //   when those terms are mentioned. A template with empty tags is treated as
+  //   the all-normal default.
+  tags: text("tags"),
+  modality: text("modality"),                          // USG, CT, MRI, X-RAY, LAB, ECG, ...
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({

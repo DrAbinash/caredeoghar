@@ -30,6 +30,12 @@ import {
 import { Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { Mic, MicOff, Sparkles } from "lucide-react";
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import type { SpeechRecognitionLike } from "@/types/speech";
 
 type ReportTemplate = {
   id: number;
@@ -38,8 +44,25 @@ type ReportTemplate = {
   format: "text" | "html";
   content: string;
   isDefault: boolean;
+  tags: string | null;       // comma-separated finding keywords
+  modality: string | null;   // USG | CT | MRI | X-RAY | LAB | ECG | ...
   createdAt: string;
 };
+
+type AbnormalFinding = {
+  id: number;
+  testId: number | null;
+  modality: string | null;
+  category: string | null;
+  keyword: string;
+  aliases: string | null;
+  description: string;
+  severity: "mild" | "moderate" | "severe";
+  isActive: boolean;
+  usageCount: number;
+};
+
+const MODALITIES = ["USG", "CT", "MRI", "X-RAY", "ECG", "LAB", "ENDOSCOPY", "MAMMO", "DEXA", "OTHER"] as const;
 
 type FindingFlag = "normal" | "low" | "high" | "critical";
 
@@ -296,12 +319,29 @@ export default function ReportGenerator() {
   const [uploadContent, setUploadContent] = useState("");
   const [uploadFormat, setUploadFormat] = useState<"text" | "html">("text");
   const [uploadIsDefault, setUploadIsDefault] = useState(true);
+  const [uploadTags, setUploadTags] = useState("");
+  const [uploadModality, setUploadModality] = useState<string>("");
+
+  // ── Abnormal findings library + voice ──
+  const [findingsLib, setFindingsLib] = useState<AbnormalFinding[]>([]);
+  const [findingsLibOpen, setFindingsLibOpen] = useState(false);
+  const [findingEditor, setFindingEditor] = useState<Partial<AbnormalFinding> | null>(null);
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState("");
+  const [voiceTargetTestId, setVoiceTargetTestId] = useState<number | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const [suggestionFor, setSuggestionFor] = useState<number | null>(null); // test idx whose remarks textarea is showing autocomplete
+  const [suggestionQuery, setSuggestionQuery] = useState("");
 
   const loadTemplates = async () => {
     const r = await fetch("/api/report-templates");
     if (r.ok) setTemplates(await r.json());
   };
-  useEffect(() => { loadTemplates(); }, []);
+  const loadFindingsLib = async () => {
+    const r = await fetch("/api/abnormal-findings?limit=500");
+    if (r.ok) setFindingsLib(await r.json());
+  };
+  useEffect(() => { loadTemplates(); loadFindingsLib(); }, []);
 
   const { data: patients } = useListPatients({ limit: 200 });
   const { data: orders } = useListOrders({ patientId: patientId ?? undefined, limit: 50 });
