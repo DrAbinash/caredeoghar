@@ -283,8 +283,6 @@ export default function BillingDesk() {
   const [notes, setNotes] = useState("");
 
   // ── New patient form visibility ──────────────────────
-  const [showNewPatientForm, setShowNewPatientForm] = useState(false);
-
   // ── Test selection ─────────────────────────────────
   const [testSearch, setTestSearch]   = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -695,104 +693,96 @@ export default function BillingDesk() {
               </div>
             </div>
 
-            {/* ── Add New Patient — Collapsible ── */}
+            {/* ── Add New Patient ── */}
             {!selectedPatient && (
               <div className="bg-card border border-card-border rounded-xl overflow-hidden">
-                <button
-                  className="w-full px-4 py-2.5 border-b border-card-border bg-muted/20 flex items-center gap-2 text-sm font-semibold hover:bg-muted/30 transition-colors"
-                  onClick={() => setShowNewPatientForm(v => !v)}
-                >
+                <div className="w-full px-4 py-2.5 border-b border-card-border bg-muted/20 flex items-center gap-2 text-sm font-semibold">
                   <UserPlus size={14} className="text-primary" />
                   <span>Register New Patient</span>
-                  <span className="ml-auto text-xs font-normal text-muted-foreground">
-                    {showNewPatientForm ? "▲ collapse" : "▼ expand"}
-                  </span>
-                </button>
-                {showNewPatientForm && (
-                  <div className="p-3 space-y-2">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs">First Name *</Label>
-                        <Input
-                          value={newPatient.firstName}
-                          onChange={(e) => setNewPatient({ ...newPatient, firstName: e.target.value })}
-                          placeholder="First name"
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Last Name *</Label>
-                        <Input
-                          value={newPatient.lastName}
-                          onChange={(e) => setNewPatient({ ...newPatient, lastName: e.target.value })}
-                          placeholder="Last name"
-                          className="h-8 text-sm"
-                        />
-                      </div>
+                </div>
+                <div className="p-3 space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">First Name *</Label>
+                      <Input
+                        value={newPatient.firstName}
+                        onChange={(e) => setNewPatient({ ...newPatient, firstName: e.target.value })}
+                        placeholder="First name"
+                        className="h-8 text-sm"
+                      />
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="space-y-1 col-span-1">
-                        <Label className="text-xs">Phone *</Label>
-                        <Input
-                          value={newPatient.phone}
-                          onChange={(e) => setNewPatient({ ...newPatient, phone: e.target.value })}
-                          placeholder="10-digit"
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Age *</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={120}
-                          value={newPatient.age}
-                          onChange={(e) => setNewPatient({ ...newPatient, age: e.target.value })}
-                          placeholder="Years"
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Gender *</Label>
-                        <Select value={newPatient.gender} onValueChange={(v) => setNewPatient({ ...newPatient, gender: v })}>
-                          <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {GENDERS.map((g) => <SelectItem key={g} value={g} className="capitalize">{g}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Last Name *</Label>
+                      <Input
+                        value={newPatient.lastName}
+                        onChange={(e) => setNewPatient({ ...newPatient, lastName: e.target.value })}
+                        placeholder="Last name"
+                        className="h-8 text-sm"
+                      />
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Blood Group</Label>
-                        <Select value={newPatient.bloodGroup || "none"} onValueChange={(v) => setNewPatient({ ...newPatient, bloodGroup: v === "none" ? "" : v })}>
-                          <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">—</SelectItem>
-                            {BLOOD_GROUPS.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Address</Label>
-                        <Input
-                          value={newPatient.address}
-                          onChange={(e) => setNewPatient({ ...newPatient, address: e.target.value })}
-                          placeholder="Address (optional)"
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      className="w-full"
-                      disabled={!newPatient.firstName || !newPatient.lastName || !newPatient.phone || !newPatient.age || createPatientMut.isPending}
-                      onClick={() => createPatientMut.mutate(newPatient)}
-                    >
-                      {createPatientMut.isPending ? "Registering…" : <><UserPlus size={13} className="mr-1.5" /> Register & Select</>}
-                    </Button>
                   </div>
-                )}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="space-y-1 col-span-1">
+                      <Label className="text-xs">Phone *</Label>
+                      <Input
+                        value={newPatient.phone}
+                        onChange={(e) => setNewPatient({ ...newPatient, phone: e.target.value })}
+                        placeholder="10-digit"
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Age *</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={120}
+                        value={newPatient.age}
+                        onChange={(e) => setNewPatient({ ...newPatient, age: e.target.value })}
+                        placeholder="Years"
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Gender *</Label>
+                      <Select value={newPatient.gender} onValueChange={(v) => setNewPatient({ ...newPatient, gender: v })}>
+                        <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {GENDERS.map((g) => <SelectItem key={g} value={g} className="capitalize">{g}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Blood Group</Label>
+                      <Select value={newPatient.bloodGroup || "none"} onValueChange={(v) => setNewPatient({ ...newPatient, bloodGroup: v === "none" ? "" : v })}>
+                        <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">—</SelectItem>
+                          {BLOOD_GROUPS.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Address</Label>
+                      <Input
+                        value={newPatient.address}
+                        onChange={(e) => setNewPatient({ ...newPatient, address: e.target.value })}
+                        placeholder="Address (optional)"
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    disabled={!newPatient.firstName || !newPatient.lastName || !newPatient.phone || !newPatient.age || createPatientMut.isPending}
+                    onClick={() => createPatientMut.mutate(newPatient)}
+                  >
+                    {createPatientMut.isPending ? "Registering…" : <><UserPlus size={13} className="mr-1.5" /> Register & Select</>}
+                  </Button>
+                </div>
               </div>
             )}
 
@@ -878,22 +868,6 @@ export default function BillingDesk() {
                     )}
                   </div>
                 )}
-              </div>
-            </div>
-
-            {/* ── Notes ── */}
-            <div className="bg-card border border-card-border rounded-xl overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-card-border bg-muted/20 text-sm font-semibold">
-                Clinical Notes
-                <span className="ml-2 text-xs font-normal text-muted-foreground">optional</span>
-              </div>
-              <div className="p-3">
-                <Input
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="e.g. Fasting sample, STAT, physician instructions…"
-                  className="text-sm"
-                />
               </div>
             </div>
 
