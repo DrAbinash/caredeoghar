@@ -397,6 +397,7 @@ export default function BillingDesk() {
     onError: () => toast({ title: "Failed to register patient", variant: "destructive" }),
   });
 
+  const queryClient = useQueryClient();
   const printAfterSaveRef = useRef(false);
   const generateMut = useMutation({
     mutationFn: async () => {
@@ -452,6 +453,8 @@ export default function BillingDesk() {
       });
       setShowBillToast(true);
       window.setTimeout(() => setShowBillToast(false), 5000);
+      queryClient.invalidateQueries({ queryKey: ["recent-bills-today"] });
+      queryClient.invalidateQueries({ queryKey: ["bill-preview-no"] });
       if (printAfterSaveRef.current) {
         printAfterSaveRef.current = false;
         window.setTimeout(() => window.print(), 250);
@@ -893,6 +896,9 @@ export default function BillingDesk() {
                 />
               </div>
             </div>
+
+            {/* ── Today's Recent Bills ── */}
+            <RecentBillsPanel />
 
           </div>
         </div>
@@ -1589,6 +1595,85 @@ function BillSearchBox() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────
+// Today's Recent Bills — fills the lower-left area
+// ──────────────────────────────────────────────────────
+type RecentBill = {
+  id: number;
+  billNumber: string;
+  totalAmount: number;
+  balanceAmount: number;
+  status: string;
+  createdAt: string;
+  patient?: { firstName: string; lastName: string; patientId: string } | null;
+};
+
+function RecentBillsPanel() {
+  const [, navigate] = useLocation();
+  const { data, isLoading, isError } = useQuery<{ bills: RecentBill[] }>({
+    queryKey: ["recent-bills-today"],
+    queryFn: () => api.get<{ bills: RecentBill[] }>("/api/bills?limit=8&page=1"),
+    staleTime: 15_000,
+    refetchOnWindowFocus: true,
+  });
+
+  const today = new Date().toDateString();
+  const bills = (data?.bills ?? []).filter((b) => new Date(b.createdAt).toDateString() === today);
+
+  return (
+    <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-card-border bg-muted/20 flex items-center gap-2 text-sm font-semibold">
+        <Receipt size={14} className="text-primary" />
+        <span>Today's Recent Bills</span>
+        <span className="ml-auto text-xs font-normal text-muted-foreground">{bills.length}</span>
+      </div>
+      <div className="divide-y divide-card-border max-h-64 overflow-y-auto" aria-live="polite">
+        {isLoading ? (
+          <div className="px-4 py-6 text-xs text-muted-foreground text-center">Loading…</div>
+        ) : isError ? (
+          <div className="px-4 py-6 text-xs text-destructive text-center">Couldn't load recent bills. Check your connection.</div>
+        ) : bills.length === 0 ? (
+          <div className="px-4 py-6 text-xs text-muted-foreground text-center">No bills generated today yet</div>
+        ) : (
+          bills.map((b) => {
+            const due = b.balanceAmount > 0;
+            const time = new Date(b.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+            return (
+              <button
+                key={b.id}
+                type="button"
+                onClick={() => navigate(`/billing/${b.id}`)}
+                className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors flex items-center gap-2"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-semibold text-primary truncate">{b.billNumber}</span>
+                    {due ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 font-medium">DUE</span>
+                    ) : (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400 font-medium">PAID</span>
+                    )}
+                    <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">{time}</span>
+                  </div>
+                  <div className="text-xs text-foreground mt-0.5 truncate">
+                    {b.patient ? `${b.patient.firstName} ${b.patient.lastName}` : "—"}
+                    {b.patient?.patientId && <span className="text-muted-foreground"> · {b.patient.patientId}</span>}
+                  </div>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <div className="text-xs text-muted-foreground">{inr(b.totalAmount)}</div>
+                  {due && <div className="text-xs font-semibold text-orange-600">Bal {inr(b.balanceAmount)}</div>}
+                </div>
+                <ExternalLink size={11} className="text-muted-foreground flex-shrink-0" />
+              </button>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
