@@ -1221,60 +1221,6 @@ export default function BillingDesk() {
           </div>
         </div>
       </div>
-      {/* ── Floating Bill-Generated Notification (auto-dismiss 5s) ── */}
-      {lastBill && showBillToast && (
-        <div className="fixed top-20 sm:top-24 right-3 sm:right-6 z-50 w-[min(22rem,calc(100vw-1.5rem))] sm:w-[22rem] max-h-[calc(100vh-6rem)] overflow-y-auto bg-white dark:bg-card border-2 border-green-300 dark:border-green-700 rounded-lg shadow-2xl overflow-hidden animate-in slide-in-from-right-4 fade-in duration-300 print:hidden">
-          <div className="flex items-start gap-2 px-3 py-2 bg-green-50 dark:bg-green-950/30 border-b border-green-200 dark:border-green-800">
-            <CheckCircle2 size={16} className="text-green-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold text-green-700 dark:text-green-400">Bill Generated</div>
-              <div className="text-xs text-green-600 dark:text-green-500 font-mono truncate">{lastBill.billNumber}</div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowBillToast(false)}
-              className="text-muted-foreground hover:text-foreground text-xs leading-none p-1"
-              aria-label="Dismiss"
-            >
-              ✕
-            </button>
-          </div>
-          <div className="p-2 space-y-1.5">
-            {lastBill.tokenNo != null && (
-              <div className="flex items-center justify-between bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded px-2 py-1">
-                <span className="text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-400 font-semibold">Token</span>
-                <span className="text-base font-bold text-amber-700 dark:text-amber-400 tabular-nums">#{String(lastBill.tokenNo).padStart(3, "0")}</span>
-              </div>
-            )}
-            <div className="rounded border border-green-200 dark:border-green-800 bg-green-50/60 dark:bg-green-950/20 px-2 py-1 text-[11px] text-green-700 dark:text-green-300">
-              <span className="font-semibold">Collect Payment Now</span>
-              <div className="text-[10px] text-green-600 dark:text-green-400">Use the buttons below to print, view, or start a new bill.</div>
-            </div>
-            <div className="grid grid-cols-3 gap-1.5">
-              <Button size="sm" className="h-8 text-[11px] font-semibold" onClick={() => void printBill(lastBill, clinic)}>
-                <Printer size={11} className="mr-1" /> Bill
-              </Button>
-              <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => void printBarcode(lastBill)}>
-                <Printer size={11} className="mr-1" /> Barcode
-              </Button>
-              <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => void printToken(lastBill, clinic)} disabled={lastBill.tokenNo == null}>
-                <Printer size={11} className="mr-1" /> Token
-              </Button>
-            </div>
-            <div className="grid grid-cols-2 gap-1.5">
-              <a href={`/billing/${lastBill.id}`} target="_blank" rel="noopener noreferrer">
-                <Button size="sm" variant="ghost" className="w-full h-8 text-[11px]">
-                  <ExternalLink size={11} className="mr-1" /> View
-                </Button>
-              </a>
-              <Button size="sm" variant="ghost" className="h-8 text-[11px]" onClick={resetAll}>
-                <RefreshCcw size={11} className="mr-1" /> New
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ── Hidden Print Receipt (shown only when printing) ── */}
       {lastBill && (
         <div className="billing-desk-receipt">
