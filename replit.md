@@ -48,6 +48,7 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - **Appointments** (`/appointments`) — day-view appointment scheduler; status flow (scheduled/confirmed/completed/cancelled/no-show); stats row; date navigator; patient/doctor assignment; type (walk-in/scheduled/emergency/follow-up)
 - **Test Packages** (`/packages`) — bundle multiple tests into priced packages; MRP + discount%; effective price preview; card grid with test list; create/edit/delete
 - **Expenses** (`/expenses`) — operational expense tracking; 9 categories; list + Category Summary tabs; date-range + payment-mode filters; auto-generated EXP-YYMM-XXXX IDs
+- **Staff Management** (`/staff`) — employees (EMP-XXXX), salary, advances with FIFO recovery (capped to outstanding, transactional), attendance with `(staff_id, date)` unique constraint, manual punch-in/out, Fingerprint Kiosk powered by WebAuthn (full server-side verification via `@simplewebauthn/server`, requires platform authenticator + user verification)
 - **Settings** (`/settings`) — User management with roles (admin/manager/accountant/billing/lab/receptionist), per-module permissions, per-user max discount % cap
 - **PatientDetail** — AI Clinical Note generation + AI patient message drafting (follow-up/results/payment) via Gemini
 

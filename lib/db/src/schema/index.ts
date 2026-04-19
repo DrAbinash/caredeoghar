@@ -18,3 +18,4 @@ export * from "./ledgers";
 export * from "./tokens";
 export * from "./whatsappSettings";
 export * from "./printerSettings";
+export * from "./staff";

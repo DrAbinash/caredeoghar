@@ -26,6 +26,7 @@ import PACS from "@/pages/PACS";
 import Appointments from "@/pages/Appointments";
 import Packages from "@/pages/Packages";
 import Expenses from "@/pages/Expenses";
+import Staff from "@/pages/Staff";
 import QueuePage from "@/pages/Queue";
 import NotFound from "@/pages/not-found";
 
@@ -72,6 +73,7 @@ function Router() {
         <Route path="/queue" component={QueuePage} />
         <Route path="/packages" component={Packages} />
         <Route path="/expenses" component={Expenses} />
+        <Route path="/staff" component={Staff} />
         <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>

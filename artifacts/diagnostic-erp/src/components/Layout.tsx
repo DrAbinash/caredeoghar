@@ -26,6 +26,7 @@ import {
   Boxes,
   TrendingDown,
   Zap,
+  Fingerprint,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -46,6 +47,7 @@ const navItems = [
   { path: "/report-generator", icon: FilePen, label: "Report Generator" },
   { path: "/inventory", icon: Package, label: "Inventory" },
   { path: "/expenses", icon: TrendingDown, label: "Expenses" },
+  { path: "/staff", icon: Fingerprint, label: "Staff" },
   { path: "/referrals", icon: HandCoins, label: "Referrals" },
   { path: "/accounting", icon: BookOpen, label: "Accounting" },
   { path: "/discounts", icon: Tag, label: "Discounts" },
