@@ -39,7 +39,7 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - **Payments** — payment recording (cash/card/UPI/insurance/cheque)
 - **Doctors** — referring doctor management (name, specialization, phone, email, hospital, default commission)
 - **Reports** — analytics with 4 tabs: Overview, Test Analysis, Commission Report, **AI Insights** (Gemini-powered billing trend analysis)
-- **Report Generator** — formatted diagnostic report creation with PDF/HTML/text export and voice readout
+- **Report Generator** — formatted diagnostic report creation with PDF/HTML/text export and voice readout. **Per-test template library** (`report_templates` table) lets you upload formats tagged to specific tests (e.g. USG WHOLE ABDOMEN, X-RAY CHEST PA, MRI BRAIN); the default template auto-loads when an order is opened. **Auto-flag** (Normal/Low/High/Critical) is computed from the reference range and entered value (handles `a–b` ranges, `<X` / `>X` / `≥X` limits, gendered ranges, multi-tier HbA1c-style ranges, and qualitative `Negative` / `Nil` ranges); manual override still available.
 - **Inventory** — stock management (items, stock in/out/adjust, history, low-stock alerts, consumption rules per test)
 - **Referrals** — doctor commission rules (percentage/fixed, per-test/category/all scope, exclusive rules) + payout report
 - **Accounting** — chart of accounts with Tally groups + opening balances + GST/PAN; vouchers (Payment/Receipt/Contra/Journal/Sales/Purchase); ledger; Trial Balance; Profit & Loss; Balance Sheet; TallyPrime XML export

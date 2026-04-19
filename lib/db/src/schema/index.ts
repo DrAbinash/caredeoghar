@@ -19,3 +19,4 @@ export * from "./tokens";
 export * from "./whatsappSettings";
 export * from "./printerSettings";
 export * from "./staff";
+export * from "./reportTemplates";

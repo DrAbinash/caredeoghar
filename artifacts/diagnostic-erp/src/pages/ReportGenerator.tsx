@@ -18,14 +18,28 @@ import {
   VolumeX,
   Upload,
   Download,
-  FileText,
   AlertTriangle,
-  CheckCircle2,
-  XCircle,
   ChevronDown,
   ChevronUp,
+  FileType2,
+  Star,
+  Trash2,
+  X as XIcon,
+  Library,
 } from "lucide-react";
 import { Link } from "wouter";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+
+type ReportTemplate = {
+  id: number;
+  testId: number;
+  name: string;
+  format: "text" | "html";
+  content: string;
+  isDefault: boolean;
+  createdAt: string;
+};
 
 type FindingFlag = "normal" | "low" | "high" | "critical";
 
@@ -158,6 +172,92 @@ function makeDefaultParameters(code: string): TestParameter[] {
   return [{ name: "Result", result: "", unit: "", refRange: "", flag: "normal" }];
 }
 
+// ── Auto-flag from reference range + entered value ───────────────────────────
+// Handles common patterns:
+//   "12.0–16.0"          numeric range
+//   "12.0-16.0 (F) / 13.0-17.0 (M)"   gendered range (uses union)
+//   "< 200 (Desirable)"  upper limit only
+//   "> 90"               lower limit only
+//   "≥ 6.5 (Diabetic)"   lower limit only
+//   "Negative" / "Nil"   text expected — flag if value differs
+//   "5.7–6.4" with extra "≥ 6.5 (Diabetic)" → critical above hard threshold
+// Returns "normal" if it can't parse (so manual override still works).
+const NUM_RE = /-?\d+(?:\.\d+)?/g;
+
+export function computeAutoFlag(rawValue: string, refRange: string): FindingFlag {
+  if (!rawValue) return "normal";
+  const value = rawValue.trim();
+  const ref = (refRange ?? "").trim();
+  if (!ref) return "normal";
+
+  // Text-expected ranges (qualitative tests)
+  const negativeWords = ["negative", "nil", "absent", "not detected", "non reactive", "non-reactive", "normal", "wnl", "clear"];
+  const lcRef = ref.toLowerCase();
+  if (negativeWords.some((w) => lcRef === w || lcRef.startsWith(w + " ") || lcRef.startsWith(w + "/"))) {
+    const lcVal = value.toLowerCase();
+    if (negativeWords.some((w) => lcVal === w || lcVal.includes(w))) return "normal";
+    // anything else is abnormal (positive/present/etc.)
+    return "high";
+  }
+
+  const num = parseFloat(value.replace(/[^\d.\-]/g, ""));
+  if (Number.isNaN(num)) return "normal"; // can't compare non-numeric value to numeric range
+
+  // "Critical" tier — extract any "critical" or "≥ X" / "diabetic" markers as hard caps
+  const criticalMatch = ref.match(/(?:critical|panic)[^0-9<>]*([<>≤≥]?)\s*(-?\d+(?:\.\d+)?)/i);
+  if (criticalMatch) {
+    const op = criticalMatch[1] || "≥";
+    const cap = parseFloat(criticalMatch[2]);
+    if ((op === ">" || op === "≥") && num >= cap) return "critical";
+    if ((op === "<" || op === "≤") && num <= cap) return "critical";
+  }
+
+  // Multi-tier ranges (HbA1c style) — pick the strictest applicable label
+  // Look for "≥ 6.5" / "> 6.5" upper hard threshold marked with a severity word
+  const sevHigh = ref.match(/[≥>]\s*(-?\d+(?:\.\d+)?)\s*(?:\([^)]*(?:diabetic|severe|critical|crisis)[^)]*\))?/i);
+  // "<X" upper limit
+  const lessThan = [...ref.matchAll(/<\s*(-?\d+(?:\.\d+)?)/g)].map((m) => parseFloat(m[1]));
+  // ">X" lower limit
+  const greaterThan = [...ref.matchAll(/>\s*(-?\d+(?:\.\d+)?)/g)].map((m) => parseFloat(m[1]));
+
+  // Numeric range "a–b" or "a-b" (supports en-dash, em-dash, hyphen)
+  const rangeMatches = [...ref.matchAll(/(-?\d+(?:\.\d+)?)\s*[\u2013\u2014\-]\s*(-?\d+(?:\.\d+)?)/g)];
+  if (rangeMatches.length > 0) {
+    // Combine all numeric ranges into a permissive union (handles gendered ranges)
+    let lo = Infinity, hi = -Infinity;
+    for (const m of rangeMatches) {
+      lo = Math.min(lo, parseFloat(m[1]));
+      hi = Math.max(hi, parseFloat(m[2]));
+    }
+    if (Number.isFinite(lo) && Number.isFinite(hi)) {
+      if (num < lo) return num < lo * 0.5 ? "critical" : "low";
+      if (num > hi) {
+        // sevHigh marker — if value crosses it, escalate
+        if (sevHigh && num >= parseFloat(sevHigh[1])) return "critical";
+        return num > hi * 1.5 ? "critical" : "high";
+      }
+      return "normal";
+    }
+  }
+
+  // Single-sided limits
+  if (lessThan.length > 0) {
+    const cap = Math.min(...lessThan);
+    if (num >= cap) {
+      if (sevHigh && num >= parseFloat(sevHigh[1])) return "critical";
+      return num > cap * 1.5 ? "critical" : "high";
+    }
+    return "normal";
+  }
+  if (greaterThan.length > 0) {
+    const floor = Math.max(...greaterThan);
+    if (num <= floor) return num < floor * 0.5 ? "critical" : "low";
+    return "normal";
+  }
+
+  return "normal";
+}
+
 const FLAG_STYLES: Record<FindingFlag, string> = {
   normal: "text-green-600 dark:text-green-400",
   low: "text-blue-600 dark:text-blue-400 font-bold",
@@ -185,6 +285,24 @@ export default function ReportGenerator() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const reportRef = useRef<HTMLDivElement>(null);
 
+  // Per-test template library
+  const { toast } = useToast();
+  const [templates, setTemplates] = useState<ReportTemplate[]>([]);
+  const [activeTemplateId, setActiveTemplateId] = useState<Record<number, number>>({}); // testId → templateId
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [uploadForTestId, setUploadForTestId] = useState<number | null>(null);
+  const [uploadName, setUploadName] = useState("");
+  const [uploadContent, setUploadContent] = useState("");
+  const [uploadFormat, setUploadFormat] = useState<"text" | "html">("text");
+  const [uploadIsDefault, setUploadIsDefault] = useState(true);
+
+  const loadTemplates = async () => {
+    const r = await fetch("/api/report-templates");
+    if (r.ok) setTemplates(await r.json());
+  };
+  useEffect(() => { loadTemplates(); }, []);
+
   const { data: patients } = useListPatients({ limit: 200 });
   const { data: orders } = useListOrders({ patientId: patientId ?? undefined, limit: 50 });
   const { data: order } = useGetOrder(orderId ?? 0, { query: { enabled: !!orderId } });
@@ -211,9 +329,15 @@ export default function ReportGenerator() {
     setFindings((prev) => prev.map((f, fi) =>
       fi !== testIdx ? f : {
         ...f,
-        parameters: f.parameters.map((p, pi) =>
-          pi !== paramIdx ? p : { ...p, [field]: value }
-        ),
+        parameters: f.parameters.map((p, pi) => {
+          if (pi !== paramIdx) return p;
+          const next = { ...p, [field]: value };
+          // Auto-recompute flag whenever the result OR the reference range changes
+          if (field === "result" || field === "refRange") {
+            next.flag = computeAutoFlag(next.result, next.refRange);
+          }
+          return next;
+        }),
       }
     ));
   };
@@ -249,20 +373,111 @@ export default function ReportGenerator() {
     window.speechSynthesis.speak(utterance);
   };
 
-  // Handle template upload & replace
-  const handleTemplateUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ── Per-test template management ──
+  const templatesByTest = (testId: number) => templates.filter((t) => t.testId === testId);
+
+  const openUploadDialog = (testId: number, presetName = "") => {
+    setUploadForTestId(testId);
+    setUploadName(presetName);
+    setUploadContent("");
+    setUploadFormat("text");
+    setUploadIsDefault(templatesByTest(testId).length === 0);
+    setUploadDialogOpen(true);
+  };
+
+  const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const fmt = file.name.toLowerCase().endsWith(".html") || file.name.toLowerCase().endsWith(".htm") ? "html" : "text";
+    setUploadFormat(fmt);
+    if (!uploadName) setUploadName(file.name.replace(/\.(txt|html|htm)$/i, ""));
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      const content = ev.target?.result as string;
-      setTemplateContent(content);
-      setTemplateResult(applyFindingsToTemplate(content));
-    };
+    reader.onload = (ev) => setUploadContent((ev.target?.result as string) ?? "");
     reader.readAsText(file);
   };
 
-  const applyFindingsToTemplate = (content: string): string => {
+  const saveTemplate = async () => {
+    if (!uploadForTestId) return;
+    if (!uploadName.trim() || !uploadContent.trim()) {
+      toast({ title: "Name and content are required", variant: "destructive" });
+      return;
+    }
+    const r = await fetch("/api/report-templates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        testId: uploadForTestId,
+        name: uploadName.trim(),
+        format: uploadFormat,
+        content: uploadContent,
+        isDefault: uploadIsDefault,
+      }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      toast({ title: "Could not save template", description: err.error ?? r.statusText, variant: "destructive" });
+      return;
+    }
+    const created: ReportTemplate = await r.json();
+    setTemplates((prev) => {
+      const others = uploadIsDefault
+        ? prev.map((t) => t.testId === created.testId ? { ...t, isDefault: false } : t)
+        : prev;
+      return [...others, created];
+    });
+    if (uploadIsDefault) setActiveTemplateId((m) => ({ ...m, [uploadForTestId]: created.id }));
+    toast({ title: `Template saved`, description: created.name });
+    setUploadDialogOpen(false);
+  };
+
+  const deleteTemplate = async (id: number) => {
+    if (!confirm("Delete this template?")) return;
+    const r = await fetch(`/api/report-templates/${id}`, { method: "DELETE" });
+    if (r.ok) {
+      setTemplates((prev) => prev.filter((t) => t.id !== id));
+      toast({ title: "Template deleted" });
+    }
+  };
+
+  const setDefaultTemplate = async (t: ReportTemplate) => {
+    const r = await fetch(`/api/report-templates/${t.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isDefault: true }),
+    });
+    if (r.ok) {
+      setTemplates((prev) => prev.map((x) => x.testId === t.testId ? { ...x, isDefault: x.id === t.id } : x));
+      toast({ title: `Default set: ${t.name}` });
+    }
+  };
+
+  const useTemplateForTest = (testId: number, templateId: number) => {
+    const tmpl = templates.find((t) => t.id === templateId);
+    if (!tmpl) return;
+    setActiveTemplateId((m) => ({ ...m, [testId]: templateId }));
+    // Render preview of just this template, scoped to this test's findings
+    const finding = findings.find((f) => f.testId === testId);
+    const filled = applyFindingsToTemplate(tmpl.content, finding ? [finding] : undefined);
+    setTemplateContent(tmpl.content);
+    setTemplateResult(filled);
+  };
+
+  // Auto-pick default template for each test in the order
+  useEffect(() => {
+    if (findings.length === 0) return;
+    setActiveTemplateId((current) => {
+      const next = { ...current };
+      for (const f of findings) {
+        if (next[f.testId]) continue;
+        const def = templates.find((t) => t.testId === f.testId && t.isDefault);
+        if (def) next[f.testId] = def.id;
+      }
+      return next;
+    });
+  }, [findings, templates]);
+
+  const applyFindingsToTemplate = (content: string, scopedFindings?: TestFinding[]): string => {
+    const usedFindings = scopedFindings ?? findings;
     let result = content;
     if (patient) {
       result = result
@@ -279,7 +494,7 @@ export default function ReportGenerator() {
       }
     }
     // Replace per-parameter values
-    findings.forEach((f) => {
+    usedFindings.forEach((f) => {
       f.parameters.forEach((p) => {
         if (!p.result) return;
         const displayVal = `${p.result} ${p.unit}${FLAG_PRINT[p.flag]}`.trim();
@@ -487,19 +702,15 @@ export default function ReportGenerator() {
                 </Button>
               </div>
 
-              {/* Upload Template */}
+              {/* Templates */}
               <div className="bg-card border border-card-border rounded-xl p-4 shadow-sm space-y-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Upload Template</h3>
-                <p className="text-xs text-muted-foreground">Upload a .txt or .html report template. Normal findings will be replaced with actual values.</p>
-                <input ref={fileInputRef} type="file" accept=".txt,.html,.htm" className="hidden" onChange={handleTemplateUpload} />
-                <Button size="sm" variant="outline" className="w-full" onClick={() => fileInputRef.current?.click()}>
-                  <Upload size={13} className="mr-1.5" /> Upload Template
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Report Templates</h3>
+                <p className="text-xs text-muted-foreground">
+                  Upload formats per test (e.g. USG WHOLE ABDOMEN, X-RAY CHEST PA, MRI BRAIN). The default template auto-fills with patient + result data.
+                </p>
+                <Button size="sm" variant="outline" className="w-full" onClick={() => setLibraryOpen(true)}>
+                  <Library size={13} className="mr-1.5" /> Manage Template Library
                 </Button>
-                {templateContent && (
-                  <Button size="sm" variant="outline" className="w-full" onClick={reapplyTemplate}>
-                    Replace Findings
-                  </Button>
-                )}
                 {templateResult && (
                   <Button
                     size="sm"
@@ -566,6 +777,31 @@ export default function ReportGenerator() {
                       </button>
                       {!f.collapsed && (
                         <div className="border-t border-border">
+                          {/* Per-test template picker */}
+                          <div className="px-3 py-2 bg-muted/20 border-b border-border flex items-center gap-2 flex-wrap">
+                            <FileType2 size={13} className="text-muted-foreground" />
+                            <span className="text-[11px] font-medium text-muted-foreground">Template:</span>
+                            {templatesByTest(f.testId).length > 0 ? (
+                              <Select
+                                value={activeTemplateId[f.testId] ? String(activeTemplateId[f.testId]) : ""}
+                                onValueChange={(v) => useTemplateForTest(f.testId, Number(v))}
+                              >
+                                <SelectTrigger className="h-6 text-xs w-56"><SelectValue placeholder="Select template..." /></SelectTrigger>
+                                <SelectContent>
+                                  {templatesByTest(f.testId).map((t) => (
+                                    <SelectItem key={t.id} value={String(t.id)}>
+                                      {t.isDefault ? "★ " : ""}{t.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <span className="text-[11px] text-muted-foreground italic">No template tagged to {f.testCode || f.testName}</span>
+                            )}
+                            <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" onClick={() => openUploadDialog(f.testId, `${f.testName} — Standard`)}>
+                              <Upload size={11} className="mr-1" /> Upload
+                            </Button>
+                          </div>
                           <div className="overflow-x-auto">
                             <table className="w-full text-xs">
                               <thead>
@@ -822,6 +1058,125 @@ export default function ReportGenerator() {
           </div>
         </div>
       </div>
+
+      {/* Hidden file input used by Upload dialog */}
+      <input ref={fileInputRef} type="file" accept=".txt,.html,.htm" className="hidden" onChange={handleFilePick} />
+
+      {/* ── Upload Template Dialog ── */}
+      <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Upload Report Template</DialogTitle>
+            <DialogDescription>
+              {uploadForTestId && findings.find((f) => f.testId === uploadForTestId)
+                ? <>Tagged to <span className="font-mono font-semibold">{findings.find((f) => f.testId === uploadForTestId)?.testName}</span></>
+                : "This template will be tied to the selected test"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Template Name</Label>
+              <Input
+                value={uploadName}
+                onChange={(e) => setUploadName(e.target.value)}
+                placeholder="e.g. USG WHOLE ABDOMEN — Standard"
+                className="mt-1 h-8 text-sm"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                <Upload size={13} className="mr-1.5" /> Pick .txt / .html file
+              </Button>
+              <Select value={uploadFormat} onValueChange={(v: "text" | "html") => setUploadFormat(v)}>
+                <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="text">Plain text</SelectItem>
+                  <SelectItem value="html">HTML</SelectItem>
+                </SelectContent>
+              </Select>
+              <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                <input type="checkbox" checked={uploadIsDefault} onChange={(e) => setUploadIsDefault(e.target.checked)} className="accent-primary" />
+                Set as default for this test
+              </label>
+            </div>
+            <div>
+              <Label className="text-xs">Template content</Label>
+              <Textarea
+                value={uploadContent}
+                onChange={(e) => setUploadContent(e.target.value)}
+                placeholder={"Use placeholders like:\n[PATIENT_NAME]   [PATIENT_ID]   [AGE]   [GENDER]\n[ORDER_NO]   [REPORT_DATE]   [DOCTOR]\nor parameter-specific:  [USG_LIVER]\n\nLines like 'Liver: Normal' will have 'Normal' replaced by the actual finding."}
+                className="mt-1 text-xs min-h-[260px] font-mono"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUploadDialogOpen(false)}>Cancel</Button>
+            <Button onClick={saveTemplate}>Save Template</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Library Dialog ── */}
+      <Dialog open={libraryOpen} onOpenChange={setLibraryOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Template Library</DialogTitle>
+            <DialogDescription>All report templates, grouped by test. Star marks the default loaded automatically.</DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto space-y-4">
+            {(() => {
+              const grouped = new Map<number, ReportTemplate[]>();
+              for (const t of templates) {
+                const arr = grouped.get(t.testId) ?? [];
+                arr.push(t); grouped.set(t.testId, arr);
+              }
+              if (grouped.size === 0) {
+                return (
+                  <div className="text-center py-10 text-muted-foreground text-sm">
+                    No templates yet. Open an order and click <em>Upload</em> next to a test to add one.
+                  </div>
+                );
+              }
+              return Array.from(grouped.entries()).map(([testId, list]) => {
+                const testName = findings.find((f) => f.testId === testId)?.testName
+                  ?? order?.tests?.find((ot) => ot.id === testId)?.test?.name
+                  ?? `Test #${testId}`;
+                return (
+                  <div key={testId} className="border rounded-lg p-3 bg-muted/10">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">{testName}</div>
+                    <ul className="space-y-1">
+                      {list.map((t) => (
+                        <li key={t.id} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-muted/40">
+                          <div className="flex items-center gap-2 min-w-0">
+                            {t.isDefault
+                              ? <Star size={13} className="text-yellow-500 fill-yellow-500 flex-shrink-0" />
+                              : <Star size={13} className="text-muted-foreground/40 flex-shrink-0" />}
+                            <span className="text-sm truncate">{t.name}</span>
+                            <span className="text-[10px] uppercase text-muted-foreground">{t.format}</span>
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            {!t.isDefault && (
+                              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setDefaultTemplate(t)}>
+                                Set default
+                              </Button>
+                            )}
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => deleteTemplate(t.id)}>
+                              <Trash2 size={13} />
+                            </Button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLibraryOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

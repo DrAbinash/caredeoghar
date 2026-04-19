@@ -26,6 +26,7 @@ import { whatsappRouter } from "./whatsapp";
 import { printersRouter } from "./printers";
 import { staffRouter } from "./staff";
 import { bridgeRouter } from "./bridge";
+import { reportTemplatesRouter } from "./report-templates";
 
 const router: IRouter = Router();
 
@@ -57,5 +58,6 @@ router.use("/whatsapp", whatsappRouter);
 router.use("/printers", printersRouter);
 router.use("/staff", staffRouter);
 router.use("/bridge", bridgeRouter);
+router.use("/report-templates", reportTemplatesRouter);
 
 export default router;
