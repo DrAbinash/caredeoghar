@@ -1133,7 +1133,7 @@ export default function BillingDesk() {
             </div>
 
             {/* ── Payment ── */}
-            <div className="flex-shrink-0 bg-card p-3 space-y-2 border-b border-card-border">
+            <div className="flex-shrink-0 bg-card p-3 space-y-2 border-b border-card-border sticky bottom-0 z-20">
               {/* Toggle */}
               <div className="flex items-center gap-3">
                 <button
@@ -1219,7 +1219,7 @@ export default function BillingDesk() {
             </div>
 
             {/* ── Generate Bill Button (always visible) ── */}
-            <div className="flex-shrink-0 p-3 bg-card space-y-2">
+            <div className="flex-shrink-0 p-3 bg-card space-y-2 sticky bottom-0 z-20 border-t border-card-border shadow-[0_-6px_18px_rgba(0,0,0,0.04)]">
               {!canGenerate && !lastBill && (
                 <p className="text-xs text-muted-foreground text-center">
                   {!selectedPatient ? "← Select or register a patient" : "← Add at least one test"}
