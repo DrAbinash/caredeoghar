@@ -963,18 +963,18 @@ export default function BillingDesk() {
               </div>
               <div className="p-3 space-y-2">
                 {/* Search row */}
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
+                <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_140px] gap-2">
+                  <div className="relative min-w-0">
                     <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       placeholder="Search tests by name or code…"
                       value={testSearch}
                       onChange={(e) => setTestSearch(e.target.value)}
-                      className="pl-9 h-8 text-sm"
+                      className="pl-9 h-8 text-sm w-full"
                     />
                   </div>
                   <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                    <SelectTrigger className="h-8 w-36 text-xs">
+                    <SelectTrigger className="h-8 w-full text-xs">
                       <SelectValue placeholder="Category" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1062,7 +1062,7 @@ export default function BillingDesk() {
             </div>
 
             {/* ── Selected Tests ── */}
-            <div className="lg:flex-1 lg:overflow-y-auto border-b border-card-border">
+            <div className="lg:flex-1 min-h-0 overflow-y-auto border-b border-card-border">
               <div className="px-4 py-2 bg-muted/10 flex items-center justify-between">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Selected Tests ({selectedTests.length})
@@ -1293,60 +1293,59 @@ export default function BillingDesk() {
 
             {/* ── Action Footer — Generate / Save & Print ── */}
             <div className="sticky bottom-0 z-10 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/90 p-2.5 border-t border-card-border">
-              <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
-              <Button
-                variant="outline"
-                onClick={resetAll}
-                disabled={generateMut.isPending}
-                className="h-9 text-xs"
-              >
-                <RefreshCcw size={13} className="mr-1" /> Reset
-              </Button>
-              <Button
-                onClick={() => { printAfterSaveRef.current = false; generateMut.mutate(); }}
-                disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending}
-                className="h-9 text-xs"
-                variant="secondary"
-              >
-                <Receipt size={13} className="mr-1" />
-                {generateMut.isPending && !printAfterSaveRef.current ? "Generating…" : "Generate Bill"}
-              </Button>
-              <Button
-                onClick={() => { printAfterSaveRef.current = true; generateMut.mutate(); }}
-                disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending}
-                className="h-9 text-xs"
-              >
-                <Printer size={13} className="mr-1" />
-                {generateMut.isPending && printAfterSaveRef.current ? "Saving…" : "Save & Print"}
-              </Button>
-              <Button variant="outline" onClick={() => { if (lastBill) printBillWithQr(lastBill, clinic); }} disabled={!lastBill} className="h-9 text-xs">QR Bill</Button>
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  if (!lastBill) return;
-                  await printBarcode(lastBill);
-                }}
-                disabled={!lastBill}
-                className="h-9 text-xs"
-              >
-                Barcode
-              </Button>
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  if (!lastBill) return;
-                  await printToken(lastBill, clinic);
-                }}
-                disabled={!lastBill || !lastBill.tokenNo}
-                className="h-9 text-xs"
-              >
-                Token
-              </Button>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                <Button variant="outline" onClick={resetAll} disabled={generateMut.isPending} className="h-9 text-xs">
+                  <RefreshCcw size={13} className="mr-1" /> Reset
+                </Button>
+                <Button
+                  onClick={() => { printAfterSaveRef.current = false; generateMut.mutate(); }}
+                  disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending}
+                  className="h-9 text-xs"
+                  variant="secondary"
+                >
+                  <Receipt size={13} className="mr-1" />
+                  {generateMut.isPending && !printAfterSaveRef.current ? "Generating…" : "Generate Bill"}
+                </Button>
+                <Button
+                  onClick={() => { printAfterSaveRef.current = true; generateMut.mutate(); }}
+                  disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending}
+                  className="h-9 text-xs"
+                >
+                  <Printer size={13} className="mr-1" />
+                  {generateMut.isPending && printAfterSaveRef.current ? "Saving…" : "Save & Print"}
+                </Button>
+                <Button variant="outline" onClick={() => { if (lastBill) printBillWithQr(lastBill, clinic); }} disabled={!lastBill} className="h-9 text-xs">
+                  QR Bill
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    if (!lastBill) return;
+                    await printBarcode(lastBill);
+                  }}
+                  disabled={!lastBill}
+                  className="h-9 text-xs"
+                >
+                  Barcode
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    if (!lastBill) return;
+                    await printToken(lastBill, clinic);
+                  }}
+                  disabled={!lastBill || !lastBill.tokenNo}
+                  className="h-9 text-xs"
+                >
+                  Token
+                </Button>
+              </div>
               </div>
             </div>
 
           </div>
         </div>
+      </div>
       </div>
       {/* ── Hidden Print Receipt (shown only when printing) ── */}
       {lastBill && (
