@@ -233,7 +233,7 @@ export default function BillDetail({ id }: { id: number }) {
       />
 
       <div className="px-6 space-y-5">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {/* Patient info */}
           <div className="bg-card border border-card-border rounded-xl p-5 shadow-sm">
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Patient</h3>
@@ -360,7 +360,7 @@ export default function BillDetail({ id }: { id: number }) {
           </div>
         </div>
 
-        {/* Super Admin Actions */}
+        {superAdmin.isActive && (
         <div className="border border-rose-200 dark:border-rose-900/50 rounded-xl p-4 bg-rose-50/50 dark:bg-rose-950/20">
           <div className="flex items-center gap-2 mb-3">
             <ShieldAlert size={15} className="text-rose-600 dark:text-rose-400" />
@@ -372,38 +372,40 @@ export default function BillDetail({ id }: { id: number }) {
               </span>
             )}
           </div>
-          {superAdmin.isActive ? (
-            <>
-              <p className="text-xs text-muted-foreground mb-3">
-                Authenticated as <span className="font-semibold">{superAdmin.userName}</span>. These actions are irreversible and fully audited.
-              </p>
-              <div className="flex gap-2 flex-wrap">
-                <Button size="sm" variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/30" onClick={openSuperEdit}>
-                  <Pencil size={13} className="mr-1.5" /> Super Edit Amounts
-                </Button>
-                <Button size="sm" variant="outline" className="border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30" onClick={() => { resetDelete(); setDeleteOpen(true); }}>
-                  <Trash2 size={13} className="mr-1.5" /> Delete Bill
-                </Button>
-              </div>
-            </>
-          ) : (
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground">
-                Super admin session required. Open the Super Admin Portal to authenticate, then use the generated link.
-              </p>
-              <a
-                href="/super-admin-portal/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ml-3 flex-shrink-0"
-              >
-                <Button size="sm" variant="outline" className="border-rose-300 text-rose-600 hover:bg-rose-50 dark:border-rose-700 dark:text-rose-400 dark:hover:bg-rose-950/30 whitespace-nowrap">
-                  <ExternalLink size={13} className="mr-1.5" /> Open Portal
-                </Button>
-              </a>
-            </div>
-          )}
+          <p className="text-xs text-muted-foreground mb-3">
+            Authenticated as <span className="font-semibold">{superAdmin.userName}</span>. These actions are irreversible and fully audited.
+          </p>
+          <div className="flex gap-2 flex-wrap">
+            <Button size="sm" variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/30" onClick={openSuperEdit}>
+              <Pencil size={13} className="mr-1.5" /> Super Edit Amounts
+            </Button>
+            <Button size="sm" variant="outline" className="border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30" onClick={() => { resetDelete(); setDeleteOpen(true); }}>
+              <Trash2 size={13} className="mr-1.5" /> Delete Bill
+            </Button>
+          </div>
         </div>
+        )}
+        {!superAdmin.isActive && (
+          <div className="border border-dashed border-rose-200 dark:border-rose-900/50 rounded-xl p-4 bg-rose-50/30 dark:bg-rose-950/10">
+            <div className="flex items-center gap-2 mb-2">
+              <ShieldAlert size={15} className="text-rose-600 dark:text-rose-400" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-rose-700 dark:text-rose-400">Super Admin Actions Locked</span>
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">
+              Open the Super Admin Portal and generate a valid session token first. After the ERP receives the token, the delete and super-edit buttons will appear here.
+            </p>
+            <a
+              href="/super-admin-portal/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex"
+            >
+              <Button size="sm" variant="outline" className="border-rose-300 text-rose-600 hover:bg-rose-50 dark:border-rose-700 dark:text-rose-400 dark:hover:bg-rose-950/30 whitespace-nowrap">
+                <ExternalLink size={13} className="mr-1.5" /> Open Super Admin Portal
+              </Button>
+            </a>
+          </div>
+        )}
       </div>
 
       {/* ── Print Receipt (hidden on screen, visible when printing) ── */}
