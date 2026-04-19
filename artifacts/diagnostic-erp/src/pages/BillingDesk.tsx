@@ -1218,6 +1218,35 @@ export default function BillingDesk() {
               )}
             </div>
 
+            {/* ── Action Footer — Generate / Save & Print ── */}
+            <div className="flex-shrink-0 bg-card p-3 flex items-center gap-2 border-t border-card-border">
+              <Button
+                variant="outline"
+                onClick={resetAll}
+                disabled={generateMut.isPending}
+                className="h-10"
+              >
+                <RefreshCcw size={14} className="mr-1" /> Reset
+              </Button>
+              <Button
+                onClick={() => { printAfterSaveRef.current = false; generateMut.mutate(); }}
+                disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending}
+                className="h-10 flex-1"
+                variant="secondary"
+              >
+                <Receipt size={14} className="mr-1" />
+                {generateMut.isPending && !printAfterSaveRef.current ? "Generating…" : "Generate Bill"}
+              </Button>
+              <Button
+                onClick={() => { printAfterSaveRef.current = true; generateMut.mutate(); }}
+                disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending}
+                className="h-10 flex-1"
+              >
+                <Printer size={14} className="mr-1" />
+                {generateMut.isPending && printAfterSaveRef.current ? "Saving…" : "Save & Print"}
+              </Button>
+            </div>
+
           </div>
         </div>
       </div>
