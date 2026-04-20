@@ -60,6 +60,7 @@ type Test   = { id: number; name: string; code: string; price: number; category:
 type Pkg    = { id: number; packageCode: string; name: string; price: number; discountPct: number; isActive?: boolean; tests: Test[] };
 
 type SelectedTest = { testId: number; name: string; price: number; category: string; source: "test" | "package" };
+type SelectedPackage = { packageId: number; name: string; testIds: number[] };
 type PaySplit = { mode: string; amount: string };
 type LastBill = {
   id: number;
@@ -360,6 +361,7 @@ export default function BillingDesk() {
   const [testSearch, setTestSearch]   = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [selectedTests, setSelectedTests] = useState<SelectedTest[]>([]);
+  const [selectedPackages, setSelectedPackages] = useState<SelectedPackage[]>([]);
   const [pinnedTestIds, setPinnedTestIds] = useState<Set<number>>(() => {
     try {
       const stored = localStorage.getItem("billingDesk:pinnedTests");
@@ -563,7 +565,7 @@ export default function BillingDesk() {
 
   // ── Test actions ────────────────────────────────────
   function addTest(t: Test) {
-    if (selectedTests.find((s) => s.testId === t.id && s.source === "test")) {
+    if (selectedTests.find((s) => s.testId === t.id)) {
       toast({ title: "Test already added" });
       return;
     }
@@ -573,19 +575,35 @@ export default function BillingDesk() {
 
   function addPackage(pkg: Pkg) {
     const effective = pkg.price - (pkg.price * pkg.discountPct) / 100;
-    // Add package as individual tests using effective price share
     const count = pkg.tests.length || 1;
     const perTest = effective / count;
+    const existingIds = new Set(selectedTests.map((s) => s.testId));
     const toAdd: SelectedTest[] = pkg.tests
-      .filter((t) => !selectedTests.find((s) => s.testId === t.id))
+      .filter((t) => !existingIds.has(t.id))
       .map((t) => ({ testId: t.id, name: t.name, price: perTest, category: t.category, source: "package" as const }));
-    if (toAdd.length === 0) { toast({ title: "All tests in this package already added" }); return; }
+    if (toAdd.length === 0) {
+      toast({ title: "All tests in this package already added" });
+      return;
+    }
     setSelectedTests((prev) => [...prev, ...toAdd]);
+    setSelectedPackages((prev) => [...prev, { packageId: pkg.id, name: pkg.name, testIds: toAdd.map((t) => t.testId) }]);
     toast({ title: `Package "${pkg.name}" added (${toAdd.length} tests)` });
   }
 
   function removeTest(testId: number) {
     setSelectedTests((prev) => prev.filter((t) => t.testId !== testId));
+    setSelectedPackages((prev) => prev
+      .map((pkg) => ({ ...pkg, testIds: pkg.testIds.filter((id) => id !== testId) }))
+      .filter((pkg) => pkg.testIds.length > 0));
+  }
+
+  function removePackage(packageId: number) {
+    setSelectedPackages((prev) => {
+      const pkg = prev.find((p) => p.packageId === packageId);
+      if (!pkg) return prev;
+      setSelectedTests((tests) => tests.filter((t) => !pkg.testIds.includes(t.testId)));
+      return prev.filter((p) => p.packageId !== packageId);
+    });
   }
 
   // ── Discount suggestion ─────────────────────────────
@@ -962,6 +980,36 @@ export default function BillingDesk() {
                 <FlaskConical size={14} className="text-primary" /> Add Tests
               </div>
               <div className="p-2.5 space-y-1.5">
+                {packages.length > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                      <Package size={11} /> Add Package
+                    </div>
+                    <div className="max-h-24 overflow-y-auto border border-card-border rounded-lg divide-y divide-card-border">
+                      {packages.map((pkg) => {
+                        const added = selectedPackages.some((p) => p.packageId === pkg.id);
+                        const effective = pkg.price - (pkg.price * pkg.discountPct) / 100;
+                        return (
+                          <button
+                            key={pkg.id}
+                            onClick={() => addPackage(pkg)}
+                            disabled={added}
+                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${
+                              added ? "bg-primary/5 text-muted-foreground cursor-default" : "hover:bg-muted/50"
+                            }`}
+                          >
+                            <Package size={11} className="text-muted-foreground flex-shrink-0" />
+                            <span className="flex-1 font-medium truncate">{pkg.name}</span>
+                            <span className="text-xs text-muted-foreground">{pkg.tests.length} tests</span>
+                            <span className="text-xs font-semibold">{inr(effective)}</span>
+                            {added ? <CheckCircle2 size={12} className="text-primary flex-shrink-0" /> : <Plus size={12} className="text-muted-foreground flex-shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Search row */}
                 <div className="grid grid-cols-[minmax(0,1fr)_118px] gap-1.5 items-center">
                   <div className="relative min-w-0">
@@ -1094,6 +1142,24 @@ export default function BillingDesk() {
                       </button>
                     </div>
                   ))}
+                </div>
+              )}
+              {selectedPackages.length > 0 && (
+                <div className="border-t border-card-border bg-muted/5 px-4 py-3 space-y-2">
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Selected Packages</div>
+                  <div className="space-y-2">
+                    {selectedPackages.map((pkg) => (
+                      <div key={pkg.packageId} className="flex items-center justify-between gap-2 rounded-md border border-card-border px-3 py-2">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium truncate">{pkg.name}</div>
+                          <div className="text-xs text-muted-foreground">{pkg.testIds.length} tests included</div>
+                        </div>
+                        <button onClick={() => removePackage(pkg.packageId)} className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0">
+                          <X size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
