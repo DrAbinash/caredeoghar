@@ -177,14 +177,15 @@ billsRouter.get("/", async (req, res) => {
 });
 
 billsRouter.post("/", async (req, res) => {
-  const parsed = CreateBillBody.safeParse(req.body);
+  const payload = req.body?.data ?? req.body ?? {};
+  const parsed = CreateBillBody.safeParse(payload);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
     return;
   }
   const { orderId, discount = 0, dueDate } = parsed.data;
-  const discountReason = typeof req.body?.discountReason === "string" ? req.body.discountReason.trim() || null : null;
-  const discountReasonNote = typeof req.body?.discountReasonNote === "string" ? req.body.discountReasonNote.trim() || null : null;
+  const discountReason = typeof payload?.discountReason === "string" ? payload.discountReason.trim() || null : null;
+  const discountReasonNote = typeof payload?.discountReasonNote === "string" ? payload.discountReasonNote.trim() || null : null;
 
   const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, orderId));
   if (!order) {
@@ -214,14 +215,14 @@ billsRouter.post("/", async (req, res) => {
     billNumber,
     orderId,
     patientId: order.patientId,
-    subtotal: String(subtotal),
-    discount: String(discountAmt),
+    subtotal: subtotal.toFixed(2),
+    discount: discountAmt.toFixed(2),
     discountReason,
     discountReasonNote,
-    taxAmount: String(taxAmount),
-    totalAmount: String(totalAmount),
-    paidAmount: "0",
-    balanceAmount: String(totalAmount),
+    taxAmount: taxAmount.toFixed(2),
+    totalAmount: totalAmount.toFixed(2),
+    paidAmount: "0.00",
+    balanceAmount: totalAmount.toFixed(2),
     status: "pending",
     ledgerId,
     dueDate: dueDate ?? null,
