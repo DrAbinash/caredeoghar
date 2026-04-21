@@ -362,6 +362,7 @@ export default function BillingDesk() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [selectedTests, setSelectedTests] = useState<SelectedTest[]>([]);
   const [selectedPackages, setSelectedPackages] = useState<SelectedPackage[]>([]);
+  const [packageSearch, setPackageSearch] = useState("");
   const [pinnedTestIds, setPinnedTestIds] = useState<Set<number>>(() => {
     try {
       const stored = localStorage.getItem("billingDesk:pinnedTests");
@@ -429,7 +430,7 @@ export default function BillingDesk() {
 
   const { data: clinic } = useQuery<{
     name: string; tagline: string; address: string; email: string; phone: string;
-    website: string; gstin: string; logoDataUrl: string | null; footerNote: string;
+    website: string; gstin: string; logoDataUrl: string | null; footerNote?: string;
   }>({
     queryKey: ["clinic-settings"],
     queryFn: () => api.get("/api/clinic-settings"),
@@ -554,6 +555,16 @@ export default function BillingDesk() {
       const bp = pinnedTestIds.has(b.id) ? 0 : 1;
       return ap - bp; // pinned first; popularity order (from API) preserved within each group
     });
+
+  const filteredPackages = packages.filter((pkg) => {
+    const q = packageSearch.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      pkg.name.toLowerCase().includes(q) ||
+      pkg.packageCode.toLowerCase().includes(q) ||
+      pkg.tests.some((t) => t.name.toLowerCase().includes(q) || t.code.toLowerCase().includes(q))
+    );
+  });
 
   const subtotal    = selectedTests.reduce((s, t) => s + t.price, 0);
   const discountAmt = discountType === "amount"
@@ -980,13 +991,46 @@ export default function BillingDesk() {
                 <FlaskConical size={14} className="text-primary" /> Add Tests
               </div>
               <div className="p-2.5 space-y-1.5">
+                <div className="grid grid-cols-[minmax(0,1fr)_118px] gap-1.5 items-center">
+                  <div className="relative min-w-0">
+                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search tests by name or code…"
+                      value={testSearch}
+                      onChange={(e) => setTestSearch(e.target.value)}
+                      className="pl-9 h-8 text-sm w-full"
+                    />
+                  </div>
+                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                    <SelectTrigger className="h-8 w-full text-xs">
+                      <SelectValue placeholder="Category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((c) => (
+                        <SelectItem key={c} value={c} className="capitalize">{c === "all" ? "All Categories" : c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 {packages.length > 0 && (
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
                       <Package size={11} /> Add Package
                     </div>
+                    <div className="grid grid-cols-[minmax(0,1fr)_118px] gap-1.5 items-center">
+                      <div className="relative min-w-0">
+                        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          placeholder="Search packages by name, code, or test…"
+                          value={packageSearch}
+                          onChange={(e) => setPackageSearch(e.target.value)}
+                          className="pl-9 h-8 text-sm w-full"
+                        />
+                      </div>
+                    </div>
                     <div className="max-h-24 overflow-y-auto border border-card-border rounded-lg divide-y divide-card-border">
-                      {packages.map((pkg) => {
+                      {filteredPackages.map((pkg) => {
                         const added = selectedPackages.some((p) => p.packageId === pkg.id);
                         const effective = pkg.price - (pkg.price * pkg.discountPct) / 100;
                         return (
@@ -1009,29 +1053,6 @@ export default function BillingDesk() {
                     </div>
                   </div>
                 )}
-
-                {/* Search row */}
-                <div className="grid grid-cols-[minmax(0,1fr)_118px] gap-1.5 items-center">
-                  <div className="relative min-w-0">
-                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      placeholder="Search tests by name or code…"
-                      value={testSearch}
-                      onChange={(e) => setTestSearch(e.target.value)}
-                      className="pl-9 h-8 text-sm w-full"
-                    />
-                  </div>
-                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                    <SelectTrigger className="h-8 w-full text-xs">
-                      <SelectValue placeholder="Category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map((c) => (
-                        <SelectItem key={c} value={c} className="capitalize">{c === "all" ? "All Categories" : c}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
 
                 {/* Test list */}
                 <div className="max-h-32 overflow-y-auto border border-card-border rounded-lg divide-y divide-card-border">
