@@ -345,31 +345,238 @@ type DiscountReason = { id: number; label: string; isActive: boolean };
 type WhatsappCfg = { id?: number; enabled: boolean; phoneNumberId: string; accessToken: string; templateName: string; templateLang: string; defaultCountryCode: string };
 type PrinterCfg = { id?: number; billPrinter: string; barcodePrinter: string; tokenPrinter: string };
 
+const PRINTER_TABS: { key: keyof Omit<PrinterCfg, "id">; label: string; description: string }[] = [
+  { key: "billPrinter",    label: "Bill Printer",    description: "A4 / A5 receipts and invoice printouts." },
+  { key: "barcodePrinter", label: "Barcode Printer", description: "Small label printer used for sample barcodes." },
+  { key: "tokenPrinter",   label: "Token Printer",   description: "Queue token slip printer at the front desk." },
+];
+
+const KNOWN_PRINTERS_KEY = "diagnosticErp:knownPrinters";
+
+function loadKnownPrinters(): string[] {
+  try {
+    const raw = localStorage.getItem(KNOWN_PRINTERS_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.filter((s): s is string => typeof s === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveKnownPrinters(list: string[]) {
+  try { localStorage.setItem(KNOWN_PRINTERS_KEY, JSON.stringify(list)); } catch { /* noop */ }
+}
+
+function testPrintPrinter(printerName: string, label: string) {
+  const w = window.open("", "_blank", "width=420,height=600");
+  if (!w) {
+    alert("Pop-up blocked. Please allow pop-ups so the print dialog can open.");
+    return;
+  }
+  const safeName = printerName ? printerName.replace(/[<>&"']/g, "") : "(default)";
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Test ${label}</title>
+    <style>
+      @page { size: A6; margin: 6mm; }
+      body { font-family: Arial, sans-serif; padding: 12px; color:#000; }
+      h1 { font-size: 16px; margin: 0 0 8px; }
+      p { font-size: 12px; margin: 4px 0; }
+      .box { border: 1px dashed #000; padding: 10px; margin-top: 10px; text-align:center; font-weight:700; }
+    </style></head><body>
+    <h1>${label} — Test Print</h1>
+    <p>Configured printer name: <strong>${safeName}</strong></p>
+    <p>Date: ${new Date().toLocaleString("en-IN")}</p>
+    <div class="box">Choose <strong>${safeName}</strong> in the print dialog to confirm it works.</div>
+  </body></html>`;
+  w.document.open(); w.document.write(html); w.document.close();
+  w.onload = () => { w.focus(); w.print(); setTimeout(() => w.close(), 400); };
+}
+
 function PrinterTab() {
   const qc = useQueryClient();
   const { data: cfg } = useQuery<PrinterCfg>({ queryKey: ["printer-settings"], queryFn: () => api.get("/api/printers/settings") });
   const [form, setForm] = useState<PrinterCfg | null>(null);
+  const [activeTab, setActiveTab] = useState<keyof Omit<PrinterCfg, "id">>("billPrinter");
+  const [knownPrinters, setKnownPrinters] = useState<string[]>(() => loadKnownPrinters());
+  const [newPrinterName, setNewPrinterName] = useState("");
   const cur = form ?? cfg ?? null;
   const save = useMutation({
     mutationFn: (body: PrinterCfg) => api.put("/api/printers/settings", body),
     onSuccess: (saved) => { qc.invalidateQueries({ queryKey: ["printer-settings"] }); setForm(saved as PrinterCfg); },
   });
   if (!cur) return <div className="bg-card border border-card-border rounded-xl p-8 text-center text-muted-foreground">Loading printer settings…</div>;
+
   const update = (k: keyof PrinterCfg, v: string) => setForm({ ...(cur as PrinterCfg), [k]: v });
+
+  function addKnownPrinter() {
+    const name = newPrinterName.trim();
+    if (!name) return;
+    if (knownPrinters.includes(name)) { setNewPrinterName(""); return; }
+    const next = [...knownPrinters, name];
+    setKnownPrinters(next);
+    saveKnownPrinters(next);
+    setNewPrinterName("");
+  }
+
+  function removeKnownPrinter(name: string) {
+    const next = knownPrinters.filter((n) => n !== name);
+    setKnownPrinters(next);
+    saveKnownPrinters(next);
+  }
+
+  const activeMeta = PRINTER_TABS.find((t) => t.key === activeTab)!;
+  const activeValue = cur[activeTab] ?? "";
+
   return (
     <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
       <div>
         <h2 className="font-bold text-lg flex items-center gap-2"><Printer size={16} /> Printer Routing</h2>
-        <p className="text-sm text-muted-foreground mt-1">Auto-routes bill, barcode, and token print jobs to the configured printer names.</p>
+        <p className="text-sm text-muted-foreground mt-1">Configure each printer separately. Pick from the printer aliases saved on this workstation, or type the exact system printer name.</p>
       </div>
-      <div className="grid md:grid-cols-3 gap-4">
-        <div><Label>Bill Printer</Label><Input value={cur.billPrinter} onChange={(e) => update("billPrinter", e.target.value)} className="mt-1" placeholder="Windows / system printer name" /></div>
-        <div><Label>Barcode Printer</Label><Input value={cur.barcodePrinter} onChange={(e) => update("barcodePrinter", e.target.value)} className="mt-1" placeholder="Windows / system printer name" /></div>
-        <div><Label>Token Printer</Label><Input value={cur.tokenPrinter} onChange={(e) => update("tokenPrinter", e.target.value)} className="mt-1" placeholder="Windows / system printer name" /></div>
+
+      {/* Sub-tabs for the three printers */}
+      <div className="flex gap-1 border-b border-card-border">
+        {PRINTER_TABS.map((t) => {
+          const active = activeTab === t.key;
+          const value = cur[t.key];
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setActiveTab(t.key)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-2 ${
+                active
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Printer size={13} />
+              <span>{t.label}</span>
+              {value
+                ? <Badge variant="secondary" className="text-[10px] font-mono">{value}</Badge>
+                : <Badge variant="outline" className="text-[10px]">unset</Badge>}
+            </button>
+          );
+        })}
       </div>
-      <div className="flex justify-end gap-2">
-        <Button variant="outline" type="button" onClick={() => setForm(cfg ?? null)}>Reset</Button>
-        <Button onClick={() => save.mutate(cur)} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
+
+      {/* Active printer panel */}
+      <div className="space-y-4">
+        <div>
+          <h3 className="font-semibold text-sm">{activeMeta.label}</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">{activeMeta.description}</p>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Pick a saved printer</Label>
+            <Select
+              value={activeValue || "__none"}
+              onValueChange={(v) => update(activeTab, v === "__none" ? "" : v)}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder={knownPrinters.length === 0 ? "No printer aliases saved yet" : "Select a printer"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none">— None / use system default —</SelectItem>
+                {knownPrinters.map((p) => (
+                  <SelectItem key={p} value={p}>{p}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">
+              Browsers cannot auto-list installed printers. Add aliases for this workstation in the panel below.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Or type the exact printer name</Label>
+            <Input
+              value={activeValue}
+              onChange={(e) => update(activeTab, e.target.value)}
+              placeholder="e.g. HP LaserJet 1020 / Zebra GK420"
+              className="h-9"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Use the name shown in your operating system's "Printers & scanners" list.
+            </p>
+          </div>
+        </div>
+
+        {/* Manage workstation printer list */}
+        <div className="bg-muted/30 border border-card-border rounded-lg p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h4 className="text-sm font-semibold">Printers installed on this computer</h4>
+              <p className="text-[11px] text-muted-foreground">Saved locally in this browser. Add the printers physically installed on this workstation so they appear in the dropdown.</p>
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <Input
+              value={newPrinterName}
+              onChange={(e) => setNewPrinterName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addKnownPrinter(); } }}
+              placeholder="Add a printer name (as shown in OS)"
+              className="h-9"
+            />
+            <Button type="button" variant="outline" onClick={addKnownPrinter} disabled={!newPrinterName.trim()}>
+              <Plus size={14} className="mr-1" /> Add
+            </Button>
+          </div>
+
+          {knownPrinters.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">No printers saved yet on this computer.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {knownPrinters.map((p) => {
+                const inUse = p === activeValue;
+                return (
+                  <div
+                    key={p}
+                    className={`flex items-center gap-2 rounded-md border px-2.5 py-1 text-xs ${
+                      inUse ? "border-primary bg-primary/5 text-primary" : "border-card-border bg-card"
+                    }`}
+                  >
+                    <Printer size={11} />
+                    <span className="font-mono">{p}</span>
+                    {!inUse && (
+                      <button
+                        type="button"
+                        onClick={() => update(activeTab, p)}
+                        className="text-[10px] uppercase tracking-wide text-muted-foreground hover:text-primary"
+                      >
+                        Use
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeKnownPrinter(p)}
+                      className="text-muted-foreground hover:text-destructive"
+                      aria-label={`Remove ${p}`}
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => testPrintPrinter(activeValue, activeMeta.label)}
+          >
+            <Printer size={14} className="mr-1.5" /> Test Print
+          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" type="button" onClick={() => setForm(cfg ?? null)}>Reset</Button>
+            <Button onClick={() => save.mutate(cur)} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
+          </div>
+        </div>
       </div>
     </div>
   );
