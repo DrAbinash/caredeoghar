@@ -80,6 +80,49 @@ export async function sendBillEditEmail(params: {
   });
 }
 
+export async function sendBillReprintEmail(params: {
+  billNumber: string;
+  patientName: string;
+  reprintedBy: string;
+  reason: string;
+  reprintCount: number;
+  totalAmount: number;
+}) {
+  const s = await getEmailSettings();
+  // Re-use the bill-edit notification toggle so admins control reprint emails too.
+  if (!s || !s.billEditEnabled) return;
+
+  const transport = await getTransporter();
+  if (!transport) return;
+
+  const recipients = getAllRecipients(s);
+  if (recipients.length === 0) return;
+
+  const inr = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+
+  const html = `
+    <div style="font-family:sans-serif;max-width:560px;margin:0 auto;background:#f8fafc;padding:24px;border-radius:12px">
+      <div style="background:#b45309;color:white;padding:16px 20px;border-radius:8px 8px 0 0">
+        <h2 style="margin:0;font-size:18px">Bill Re-printed — ${params.billNumber}</h2>
+      </div>
+      <div style="background:white;padding:20px;border-radius:0 0 8px 8px;border:1px solid #e2e8f0">
+        <p style="margin:0 0 8px"><strong>Patient:</strong> ${params.patientName}</p>
+        <p style="margin:0 0 8px"><strong>Total:</strong> ${inr(params.totalAmount)}</p>
+        <p style="margin:0 0 8px"><strong>Re-printed by:</strong> ${params.reprintedBy}</p>
+        <p style="margin:0 0 8px"><strong>Reason:</strong> ${params.reason}</p>
+        <p style="margin:0 0 8px"><strong>Re-print count:</strong> #${params.reprintCount}</p>
+        <p style="margin:16px 0 0;font-size:11px;color:#94a3b8">DiagnoCenter ERP • ${new Date().toLocaleString("en-IN")}</p>
+      </div>
+    </div>`;
+
+  await transport.sendMail({
+    from: `"${s.fromName}" <${s.fromAddress}>`,
+    to: recipients.join(", "),
+    subject: `[Bill Re-print] ${params.billNumber} — ${params.patientName}`,
+    html,
+  });
+}
+
 export async function sendCommissionMonthEndEmail(params: {
   month: string; // e.g. "March 2026"
   from: string;

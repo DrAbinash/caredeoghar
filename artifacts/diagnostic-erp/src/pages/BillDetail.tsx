@@ -66,8 +66,50 @@ export default function BillDetail({ id }: { id: number }) {
   const [auditOpen, setAuditOpen] = useState(false);
   const [superEditOpen, setSuperEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [reprintOpen, setReprintOpen] = useState(false);
+  const [reprintBy, setReprintBy] = useState<string>(() => localStorage.getItem("diagnosticErp:lastReprintBy") || "");
+  const [reprintReason, setReprintReason] = useState<string>("");
+  const [paperSize, setPaperSize] = useState<"A4" | "A5">(() => (localStorage.getItem("diagnosticErp:billPaperSize") as "A4" | "A5") || "A4");
   const queryClient = useQueryClient();
   const superAdmin = useSuperAdmin();
+
+  useEffect(() => {
+    localStorage.setItem("diagnosticErp:billPaperSize", paperSize);
+  }, [paperSize]);
+
+  // Clinic settings for the printed receipt header
+  const { data: clinic } = useQuery<{
+    name: string; tagline: string; address: string; email: string; phone: string;
+    website: string; gstin: string; logoDataUrl: string | null; footerNote?: string;
+  }>({
+    queryKey: ["clinic-settings"],
+    queryFn: () => api.get("/api/clinic-settings"),
+    staleTime: 5 * 60_000,
+  });
+
+  const reprintLog = useMutation({
+    mutationFn: (body: { reprintedBy: string; reason: string }) =>
+      api.post(`/api/bills/${id}/reprint-log`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bill-audits", id] });
+    },
+  });
+
+  const submitReprint = async () => {
+    const by = reprintBy.trim();
+    const why = reprintReason.trim();
+    if (!by || !why) return;
+    localStorage.setItem("diagnosticErp:lastReprintBy", by);
+    try {
+      await reprintLog.mutateAsync({ reprintedBy: by, reason: why });
+    } catch (e) {
+      // Logging failure should not block printing — user already authorised reprint.
+      console.error("Reprint log failed:", e);
+    }
+    setReprintOpen(false);
+    setReprintReason("");
+    window.setTimeout(() => window.print(), 150);
+  };
 
   useEffect(() => {
     if (!bill) return;
@@ -211,9 +253,22 @@ export default function BillDetail({ id }: { id: number }) {
         title={bill.billNumber}
         subtitle={`Generated ${new Date(bill.createdAt).toLocaleString()}`}
         actions={
-          <div className="flex gap-2 flex-wrap">
-            <Button size="sm" variant="outline" onClick={() => window.print()}>
-              <Printer size={14} className="mr-1" /> Print
+          <div className="flex gap-2 flex-wrap items-center">
+            <div className="flex items-center gap-1 border border-border rounded-md px-1 py-0.5 text-xs">
+              <span className="text-muted-foreground px-1">Paper:</span>
+              <button
+                type="button"
+                onClick={() => setPaperSize("A4")}
+                className={`px-2 py-0.5 rounded ${paperSize === "A4" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
+              >A4</button>
+              <button
+                type="button"
+                onClick={() => setPaperSize("A5")}
+                className={`px-2 py-0.5 rounded ${paperSize === "A5" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
+              >A5</button>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => { setReprintReason(""); setReprintOpen(true); }}>
+              <Printer size={14} className="mr-1" /> Re-print
             </Button>
             <Button size="sm" variant="outline" onClick={() => { setAuditOpen(true); }}>
               <History size={14} className="mr-1" /> History
@@ -417,23 +472,61 @@ export default function BillDetail({ id }: { id: number }) {
             position: fixed !important;
             top: 0 !important; left: 0 !important;
             width: 100% !important;
-            padding: 24px 32px !important;
+            padding: ${paperSize === "A5" ? "10px 14px" : "20px 28px"} !important;
             background: white !important;
             color: black !important;
             font-family: Arial, sans-serif !important;
-            font-size: 13px !important;
+            font-size: ${paperSize === "A5" ? "11px" : "13px"} !important;
           }
-          @page { margin: 12mm 10mm; }
+          @page { size: ${paperSize}; margin: ${paperSize === "A5" ? "6mm 6mm" : "10mm 10mm"}; }
         }
         @media screen { .print-receipt { display: none; } }
       `}</style>
 
       <div className="print-receipt">
-        {/* Clinic header */}
-        <div style={{ textAlign: "center", borderBottom: "2px solid #1e40af", paddingBottom: "12px", marginBottom: "16px" }}>
-          <div style={{ fontSize: "22px", fontWeight: "800", color: "#1e40af", letterSpacing: "0.5px" }}>DiagnoCenter</div>
-          <div style={{ fontSize: "11px", color: "#555", marginTop: "2px" }}>Diagnostic Laboratory & Billing Center</div>
-          <div style={{ fontSize: "11px", color: "#555" }}>Tel: 1800-XXX-XXXX &nbsp;|&nbsp; diagnosticcenter@example.com</div>
+        {/* Clinic header — name + address on left, logo on right */}
+        <div style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: "16px",
+          borderBottom: "2px solid #1e40af",
+          paddingBottom: "10px",
+          marginBottom: "12px",
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: paperSize === "A5" ? "16px" : "20px", fontWeight: 800, color: "#1e40af", letterSpacing: "0.3px", lineHeight: 1.15 }}>
+              {clinic?.name || "DiagnoCenter"}
+            </div>
+            {clinic?.tagline && (
+              <div style={{ fontSize: "10.5px", color: "#666", marginTop: "1px", lineHeight: 1.2 }}>{clinic.tagline}</div>
+            )}
+            {clinic?.address && (
+              <div style={{ fontSize: "10.5px", color: "#444", marginTop: "3px", lineHeight: 1.25 }}>
+                {clinic.address.replace(/\s*\n\s*/g, ", ").trim()}
+              </div>
+            )}
+            <div style={{ fontSize: "10.5px", color: "#444", marginTop: "2px", lineHeight: 1.25 }}>
+              {[clinic?.phone && `Ph: ${clinic.phone}`, clinic?.email, clinic?.website]
+                .filter(Boolean)
+                .join("  •  ")}
+            </div>
+            {clinic?.gstin && (
+              <div style={{ fontSize: "10px", color: "#666", marginTop: "1px" }}>GSTIN: {clinic.gstin}</div>
+            )}
+          </div>
+          {clinic?.logoDataUrl && (
+            <img
+              src={clinic.logoDataUrl}
+              alt="logo"
+              style={{
+                maxHeight: paperSize === "A5" ? "48px" : "64px",
+                maxWidth: paperSize === "A5" ? "110px" : "150px",
+                objectFit: "contain",
+                flexShrink: 0,
+              }}
+            />
+          )}
         </div>
 
         {/* Bill title + meta */}
@@ -592,6 +685,53 @@ export default function BillDetail({ id }: { id: number }) {
           <div style={{ fontSize: "10px", color: "#94a3b8", marginTop: "2px" }}>Reports will be available as per turnaround time. For queries, please call us.</div>
         </div>
       </div>
+
+      {/* Re-print Dialog */}
+      <Dialog open={reprintOpen} onOpenChange={setReprintOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Printer size={16} /> Re-print Bill — {bill.billNumber}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-xs text-amber-700 dark:text-amber-400">
+              Re-prints are logged in the bill audit trail and a notification email is sent to admin & super-admin recipients.
+            </div>
+            <div>
+              <Label>Your Name *</Label>
+              <Input
+                value={reprintBy}
+                onChange={(e) => setReprintBy(e.target.value)}
+                className="mt-1"
+                placeholder="e.g., Anita (Reception)"
+              />
+            </div>
+            <div>
+              <Label>Reason for Re-print *</Label>
+              <Input
+                value={reprintReason}
+                onChange={(e) => setReprintReason(e.target.value)}
+                className="mt-1"
+                placeholder="e.g., Patient lost original copy"
+              />
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Paper size: <strong>{paperSize}</strong> · Change above the Re-print button.
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setReprintOpen(false)}>Cancel</Button>
+              <Button
+                type="button"
+                onClick={submitReprint}
+                disabled={!reprintBy.trim() || !reprintReason.trim() || reprintLog.isPending}
+              >
+                {reprintLog.isPending ? "Logging…" : "Log & Print"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Add payment dialog */}
       <Dialog open={open} onOpenChange={setOpen}>

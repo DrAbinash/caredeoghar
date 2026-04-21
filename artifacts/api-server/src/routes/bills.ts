@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, billsTable, paymentsTable, ordersTable, patientsTable } from "@workspace/db";
 import { billAuditsTable, superAdminSessionsTable } from "@workspace/db/schema";
-import { sendBillEditEmail } from "../email";
+import { sendBillEditEmail, sendBillReprintEmail } from "../email";
 import { generateTokenForBill } from "./tokens";
 import { sendBillWhatsapp } from "./whatsapp";
 import { eq, and, sql, desc, like, or, gt } from "drizzle-orm";
@@ -330,6 +330,66 @@ billsRouter.put("/:id", async (req, res) => {
   }
 
   res.json(await buildBill(updated));
+});
+
+// ── Re-print log: insert audit + email admin/super-admin ─────────────────────
+billsRouter.post("/:id/reprint-log", async (req, res) => {
+  const id = Number(req.params.id);
+  const reprintedBy = String(req.body?.reprintedBy || "").trim();
+  const reason = String(req.body?.reason || "").trim();
+  if (!id || !reprintedBy || !reason) {
+    res.status(400).json({ error: "id, reprintedBy and reason are required" });
+    return;
+  }
+
+  const [bill] = await db.select().from(billsTable).where(eq(billsTable.id, id));
+  if (!bill) {
+    res.status(404).json({ error: "Bill not found" });
+    return;
+  }
+
+  // Insert the audit row first so concurrent reprints can never collide on the
+  // sequence number. The count is then read back, including this just-inserted
+  // row, which gives a monotonic per-bill reprint number even under contention.
+  const [inserted] = await db.insert(billAuditsTable).values({
+    billId: id,
+    editedBy: reprintedBy,
+    reason,
+    changeType: "reprint",
+    oldValue: null,
+    newValue: "reprint",
+  }).returning();
+
+  const counted = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(billAuditsTable)
+    .where(and(
+      eq(billAuditsTable.billId, id),
+      eq(billAuditsTable.changeType, "reprint"),
+      sql`${billAuditsTable.id} <= ${inserted.id}`,
+    ));
+  const reprintCount = Number(counted[0]?.count ?? 1);
+
+  // Patch the row with its assigned sequence number for cleaner audit display.
+  await db.update(billAuditsTable)
+    .set({ newValue: `reprint #${reprintCount}` })
+    .where(eq(billAuditsTable.id, inserted.id));
+
+  // Patient name for the email
+  const [pat] = await db.select().from(patientsTable).where(eq(patientsTable.id, bill.patientId));
+  const patientName = pat ? `${pat.firstName} ${pat.lastName}`.trim() : "Unknown Patient";
+
+  // Fire email asynchronously — don't block the response
+  sendBillReprintEmail({
+    billNumber: bill.billNumber,
+    patientName,
+    reprintedBy,
+    reason,
+    reprintCount,
+    totalAmount: Number(bill.totalAmount),
+  }).catch((err) => console.error("[email] bill reprint notification failed:", err));
+
+  res.json({ ok: true, reprintCount });
 });
 
 billsRouter.get("/:id/audits", async (req, res) => {
