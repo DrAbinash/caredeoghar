@@ -27,6 +27,8 @@ import {
   TrendingDown,
   Zap,
   Fingerprint,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -62,8 +64,41 @@ function ThemeToggle() {
     setDark(!dark);
   };
   return (
-    <button onClick={toggle} className="p-2 rounded-md text-sidebar-foreground hover:bg-sidebar-accent transition-colors">
+    <button onClick={toggle} className="p-2 rounded-md text-sidebar-foreground hover:bg-sidebar-accent transition-colors" title="Toggle theme">
       {dark ? <Sun size={16} /> : <Moon size={16} />}
+    </button>
+  );
+}
+
+function FullscreenToggle() {
+  const [isFs, setIsFs] = useState(() => typeof document !== "undefined" && !!document.fullscreenElement);
+
+  useEffect(() => {
+    const onChange = () => setIsFs(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  const toggle = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch (err) {
+      console.warn("Fullscreen toggle failed:", err);
+    }
+  };
+
+  return (
+    <button
+      onClick={toggle}
+      className="p-2 rounded-md text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+      title={isFs ? "Exit full screen (F11)" : "Enter full screen (F11)"}
+      aria-label={isFs ? "Exit full screen" : "Enter full screen"}
+    >
+      {isFs ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
     </button>
   );
 }
@@ -129,7 +164,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {/* Footer */}
         <div className="px-4 py-3 border-t border-sidebar-border flex items-center justify-between">
           <span className="text-xs text-sidebar-foreground/40">v1.0.0</span>
-          <ThemeToggle />
+          <div className="flex items-center gap-1">
+            <FullscreenToggle />
+            <ThemeToggle />
+          </div>
         </div>
       </aside>
 
@@ -152,7 +190,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               {navItems.find(n => n.path === "/" ? location === "/" : location.startsWith(n.path))?.label ?? "DiagnoCenter"}
             </span>
           </div>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-1">
+            <FullscreenToggle />
             <ThemeToggle />
           </div>
         </header>
