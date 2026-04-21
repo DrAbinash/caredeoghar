@@ -987,7 +987,7 @@ export default function BillingDesk() {
               <div className="px-4 py-2.5 bg-muted/20 border-b border-card-border flex items-center gap-2 text-sm font-semibold">
                 <FlaskConical size={14} className="text-primary" /> Add Tests
               </div>
-              <div className="p-2.5 space-y-1.5">
+              <div className="p-2.5 space-y-1">
                 <div className="grid grid-cols-[minmax(0,1fr)_118px] gap-1.5 items-center">
                   <div className="relative min-w-0">
                     <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -1011,7 +1011,7 @@ export default function BillingDesk() {
                 </div>
 
                 {/* Add Package — always visible */}
-                <div className="space-y-1.5 bg-orange-50/40 dark:bg-orange-950/10 border border-orange-200/60 dark:border-orange-900/40 rounded-lg p-2">
+                <div className="space-y-1 bg-orange-50/40 dark:bg-orange-950/10 border border-orange-200/60 dark:border-orange-900/40 rounded-lg p-2">
                   <div className="flex items-center justify-between gap-2 text-xs font-semibold">
                     <div className="flex items-center gap-1.5 text-orange-700 dark:text-orange-300">
                       <Package size={12} /> Add Package
@@ -1069,7 +1069,7 @@ export default function BillingDesk() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground pt-1">
+                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground pt-0.5">
                   <FlaskConical size={11} /> Individual Tests
                 </div>
 
