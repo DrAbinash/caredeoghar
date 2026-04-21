@@ -62,16 +62,16 @@ export default function Packages() {
 
   const { data: packages = [], isLoading } = useQuery<PackageItem[]>({
     queryKey: ["packages"],
-    queryFn: () => api("/packages"),
+    queryFn: () => api.get<PackageItem[]>("/api/packages"),
   });
 
   const { data: allTests = [] } = useQuery<Test[]>({
     queryKey: ["tests-list"],
-    queryFn: () => api<{ tests: Test[] }>("/tests").then((d) => d.tests),
+    queryFn: () => api.get<{ tests: Test[] }>("/api/tests?limit=1000").then((d) => d.tests ?? []),
   });
 
   const createMut = useMutation({
-    mutationFn: (body: Record<string, unknown>) => api("/packages", { method: "POST", body: JSON.stringify(body) }),
+    mutationFn: (body: Record<string, unknown>) => api.post("/api/packages", body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["packages"] });
       setShowForm(false);
@@ -83,7 +83,7 @@ export default function Packages() {
 
   const updateMut = useMutation({
     mutationFn: ({ id, ...body }: Record<string, unknown>) =>
-      api(`/packages/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+      api.patch(`/api/packages/${id}`, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["packages"] });
       setEditPkg(null);
@@ -93,7 +93,7 @@ export default function Packages() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id: number) => api(`/packages/${id}`, { method: "DELETE" }),
+    mutationFn: (id: number) => api.delete(`/api/packages/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["packages"] });
       toast({ title: "Package deleted" });
@@ -167,7 +167,7 @@ export default function Packages() {
       <PageHeader
         title="Test Packages"
         subtitle="Bundle multiple tests into discounted packages"
-        action={
+        actions={
           <Button onClick={openCreate}>
             <Plus size={15} className="mr-1.5" /> New Package
           </Button>

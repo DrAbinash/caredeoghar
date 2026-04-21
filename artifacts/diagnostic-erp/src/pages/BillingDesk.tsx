@@ -28,8 +28,6 @@ import {
   IndianRupee,
   CalendarDays,
   Hash,
-  ChevronDown,
-  ChevronRight,
   Package,
   Zap,
   Phone,
@@ -379,7 +377,6 @@ export default function BillingDesk() {
       return next;
     });
   }
-  const [showPackages, setShowPackages] = useState(false);
 
   // ── Billing ────────────────────────────────────────
   const [discountType, setDiscountType]   = useState<"amount" | "pct">("amount");
@@ -1013,24 +1010,39 @@ export default function BillingDesk() {
                   </Select>
                 </div>
 
-                {packages.length > 0 && (
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
-                      <Package size={11} /> Add Package
+                {/* Add Package — always visible */}
+                <div className="space-y-1.5 bg-orange-50/40 dark:bg-orange-950/10 border border-orange-200/60 dark:border-orange-900/40 rounded-lg p-2">
+                  <div className="flex items-center justify-between gap-2 text-xs font-semibold">
+                    <div className="flex items-center gap-1.5 text-orange-700 dark:text-orange-300">
+                      <Package size={12} /> Add Package
                     </div>
-                    <div className="grid grid-cols-[minmax(0,1fr)_118px] gap-1.5 items-center">
-                      <div className="relative min-w-0">
-                        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                          placeholder="Search packages by name, code, or test…"
-                          value={packageSearch}
-                          onChange={(e) => setPackageSearch(e.target.value)}
-                          className="pl-9 h-8 text-sm w-full"
-                        />
+                    <button
+                      type="button"
+                      onClick={() => navigate("/packages")}
+                      className="text-[11px] font-normal text-muted-foreground hover:text-foreground"
+                    >
+                      Manage packages →
+                    </button>
+                  </div>
+                  <div className="relative min-w-0">
+                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search packages by name, code, or test…"
+                      value={packageSearch}
+                      onChange={(e) => setPackageSearch(e.target.value)}
+                      className="pl-9 h-8 text-sm w-full"
+                    />
+                  </div>
+                  <div className="max-h-28 overflow-y-auto border border-card-border rounded-lg divide-y divide-card-border bg-background">
+                    {packages.length === 0 ? (
+                      <div className="px-3 py-3 text-xs text-muted-foreground text-center">
+                        No packages created yet.&nbsp;
+                        <button onClick={() => navigate("/packages")} className="text-primary hover:underline">Create one</button>
                       </div>
-                    </div>
-                    <div className="max-h-24 overflow-y-auto border border-card-border rounded-lg divide-y divide-card-border">
-                      {filteredPackages.map((pkg) => {
+                    ) : filteredPackages.length === 0 ? (
+                      <div className="px-3 py-3 text-xs text-muted-foreground text-center">No packages match "{packageSearch}"</div>
+                    ) : (
+                      filteredPackages.map((pkg) => {
                         const added = selectedPackages.some((p) => p.packageId === pkg.id);
                         const effective = pkg.price - (pkg.price * pkg.discountPct) / 100;
                         return (
@@ -1045,14 +1057,21 @@ export default function BillingDesk() {
                             <Package size={11} className="text-muted-foreground flex-shrink-0" />
                             <span className="flex-1 font-medium truncate">{pkg.name}</span>
                             <span className="text-xs text-muted-foreground">{pkg.tests.length} tests</span>
+                            {pkg.discountPct > 0 && (
+                              <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">{pkg.discountPct}% off</span>
+                            )}
                             <span className="text-xs font-semibold">{inr(effective)}</span>
                             {added ? <CheckCircle2 size={12} className="text-primary flex-shrink-0" /> : <Plus size={12} className="text-muted-foreground flex-shrink-0" />}
                           </button>
                         );
-                      })}
-                    </div>
+                      })
+                    )}
                   </div>
-                )}
+                </div>
+
+                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground pt-1">
+                  <FlaskConical size={11} /> Individual Tests
+                </div>
 
                 {/* Test list */}
                 <div className="max-h-32 overflow-y-auto border border-card-border rounded-lg divide-y divide-card-border">
@@ -1093,40 +1112,6 @@ export default function BillingDesk() {
                   )}
                 </div>
 
-                {/* Packages toggle */}
-                {packages.length > 0 && (
-                  <button
-                    className="w-full flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
-                    onClick={() => setShowPackages(!showPackages)}
-                  >
-                    <Package size={11} />
-                    <span>Quick-add from Packages</span>
-                    {showPackages ? <ChevronDown size={11} className="ml-auto" /> : <ChevronRight size={11} className="ml-auto" />}
-                  </button>
-                )}
-                {showPackages && (
-                  <div className="max-h-28 overflow-y-auto border border-card-border rounded-lg divide-y divide-card-border">
-                    {packages.map((pkg) => {
-                      const effective = pkg.price - (pkg.price * pkg.discountPct) / 100;
-                      return (
-                        <button
-                          key={pkg.id}
-                          onClick={() => addPackage(pkg)}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-muted/50 transition-colors"
-                        >
-                          <Package size={11} className="text-muted-foreground flex-shrink-0" />
-                          <span className="flex-1 font-medium">{pkg.name}</span>
-                          <span className="text-xs text-muted-foreground">{pkg.tests.length} tests</span>
-                          {pkg.discountPct > 0 && (
-                            <span className="text-xs bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded">{pkg.discountPct}% off</span>
-                          )}
-                          <span className="text-xs font-semibold">{inr(effective)}</span>
-                          <Plus size={12} className="text-muted-foreground flex-shrink-0" />
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
               </div>
             </div>
 
