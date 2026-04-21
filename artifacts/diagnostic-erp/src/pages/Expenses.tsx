@@ -124,7 +124,7 @@ export default function Expenses() {
 
   const createMut = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
-      api("/expenses", { method: "POST", body: JSON.stringify(body) }),
+      api("/expenses", { method: "POST", body: JSON.stringify({ data: body }) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["expenses"] });
       qc.invalidateQueries({ queryKey: ["expenses-summary"] });
@@ -137,7 +137,7 @@ export default function Expenses() {
 
   const updateMut = useMutation({
     mutationFn: ({ id, ...body }: Record<string, unknown>) =>
-      api(`/expenses/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+      api(`/expenses/${id}`, { method: "PATCH", body: JSON.stringify({ data: body }) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["expenses"] });
       qc.invalidateQueries({ queryKey: ["expenses-summary"] });
