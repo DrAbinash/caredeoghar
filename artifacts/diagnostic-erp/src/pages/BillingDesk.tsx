@@ -980,7 +980,7 @@ export default function BillingDesk() {
             RIGHT COLUMN — Tests + Bill + Payment
         ══════════════════════════════════════════════ */}
         <div className="w-full lg:flex-1 flex flex-col lg:overflow-hidden min-h-0">
-          <div className="lg:flex-1 flex flex-col lg:overflow-hidden min-h-0">
+          <div className="lg:flex-1 flex flex-col lg:overflow-hidden min-h-0 overflow-y-auto">
 
             {/* ── Test Search & Catalog ── */}
             <div className="flex-shrink-0 border-b border-card-border">
@@ -1120,7 +1120,7 @@ export default function BillingDesk() {
             </div>
 
             {/* ── Selected Tests ── */}
-            <div className="lg:flex-1 min-h-0 overflow-y-auto border-b border-card-border">
+            <div className="lg:flex-1 min-h-0 overflow-y-auto border-b border-card-border max-h-[34vh] lg:max-h-none">
               <div className="px-4 py-2 bg-muted/10 flex items-center justify-between">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Selected Tests ({selectedTests.length})
@@ -1283,7 +1283,7 @@ export default function BillingDesk() {
             </div>
 
             {/* ── Payment ── */}
-            <div className="flex-shrink-0 bg-card p-2 space-y-2 border-b border-card-border">
+            <div className="flex-shrink-0 bg-card p-2 space-y-2 border-b border-card-border max-h-[38vh] overflow-y-auto">
               {/* Toggle */}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <button
