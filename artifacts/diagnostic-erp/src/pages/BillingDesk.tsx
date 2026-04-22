@@ -1283,9 +1283,9 @@ export default function BillingDesk() {
             </div>
 
             {/* ── Payment ── */}
-            <div className="flex-shrink-0 bg-card p-2 space-y-1 border-b border-card-border">
+            <div className="flex-shrink-0 bg-card p-2 space-y-2 border-b border-card-border">
               {/* Toggle */}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <button
                   onClick={() => setPayNow(!payNow)}
                   className={`relative inline-flex h-4.5 w-8.5 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors
@@ -1293,13 +1293,17 @@ export default function BillingDesk() {
                 >
                   <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${payNow ? "translate-x-3.5" : "translate-x-0"}`} />
                 </button>
-                <span className="text-xs font-medium">Collect Payment Now</span>
+                <span className="text-xs font-medium flex-1 min-w-0">Collect Payment Now</span>
+                <div className="text-right">
+                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</div>
+                  <div className="text-sm font-bold text-primary">{inr(total)}</div>
+                </div>
               </div>
 
               {payNow && (
-                <div className="space-y-1">
+                <div className="space-y-2">
                   {/* Header row */}
-                  <div className="grid grid-cols-[1fr_1fr_16px] gap-1 px-0.5">
+                  <div className="grid grid-cols-[1fr_1fr_16px] gap-1 px-0.5 text-[10px] sm:text-[10px]">
                     <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Mode</span>
                     <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Amount (₹)</span>
                     <span />
@@ -1312,7 +1316,7 @@ export default function BillingDesk() {
                         value={split.mode}
                         onValueChange={(v) => setPaymentSplits((prev) => prev.map((s, i) => i === idx ? { ...s, mode: v } : s))}
                       >
-                        <SelectTrigger className="h-6.5 text-[11px]"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="h-8 sm:h-6.5 text-[11px]"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {PAYMENT_MODES.map((m) => (
                             <SelectItem key={m} value={m} className="capitalize">{m.toUpperCase()}</SelectItem>
@@ -1326,7 +1330,7 @@ export default function BillingDesk() {
                         placeholder={idx === 0 ? total.toFixed(2) : "0.00"}
                         value={split.amount}
                         onChange={(e) => setPaymentSplits((prev) => prev.map((s, i) => i === idx ? { ...s, amount: e.target.value } : s))}
-                        className="h-6.5 text-[11px]"
+                        className="h-8 sm:h-6.5 text-[11px]"
                       />
                       {paymentSplits.length > 1 ? (
                         <button
@@ -1350,7 +1354,7 @@ export default function BillingDesk() {
                   )}
 
                   {/* Balance / paid status */}
-                  <div className="pt-1 border-t border-card-border flex justify-between items-center text-[10px]">
+                  <div className="pt-1 border-t border-card-border flex flex-wrap justify-between items-center gap-2 text-[10px]">
                     {balance > 0 ? (
                       <>
                         <span className="text-muted-foreground">Balance due</span>
