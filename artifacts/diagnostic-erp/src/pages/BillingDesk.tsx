@@ -103,7 +103,7 @@ function useDebounce<T>(value: T, delay = 300) {
 // ──────────────────────────────────────────────────────
 // Component
 // ──────────────────────────────────────────────────────
-type ClinicLite = { name?: string; tagline?: string; address?: string; phone?: string; logoDataUrl?: string | null } | undefined;
+type ClinicLite = { name?: string; tagline?: string; address?: string; phone?: string; logoDataUrl?: string | null; footerNote?: string } | undefined;
 type PrinterCfg = { billPrinter?: string; barcodePrinter?: string; tokenPrinter?: string };
 
 function openPrintWindow(html: string) {
@@ -987,7 +987,7 @@ export default function BillingDesk() {
               <div className="px-4 py-2.5 bg-muted/20 border-b border-card-border flex items-center gap-2 text-sm font-semibold">
                 <FlaskConical size={14} className="text-primary" /> Add Tests
               </div>
-              <div className="p-2.5 space-y-1">
+              <div className="p-2.5 space-y-2">
                 <div className="grid grid-cols-[minmax(0,1fr)_118px] gap-1.5 items-center">
                   <div className="relative min-w-0">
                     <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -1010,10 +1010,9 @@ export default function BillingDesk() {
                   </Select>
                 </div>
 
-                {/* Add Package — always visible */}
-                <div className="space-y-1 bg-orange-50/40 dark:bg-orange-950/10 border border-orange-200/60 dark:border-orange-900/40 rounded-lg p-2">
-                  <div className="flex items-center justify-between gap-2 text-xs font-semibold">
-                    <div className="flex items-center gap-1.5 text-orange-700 dark:text-orange-300">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2 text-xs font-semibold text-rose-700 dark:text-rose-300">
+                    <div className="flex items-center gap-1.5">
                       <Package size={12} /> Add Package
                     </div>
                     <button
@@ -1021,19 +1020,28 @@ export default function BillingDesk() {
                       onClick={() => navigate("/packages")}
                       className="text-[11px] font-normal text-muted-foreground hover:text-foreground"
                     >
-                      Manage packages →
+                      Manage packages
                     </button>
                   </div>
-                  <div className="relative min-w-0">
-                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      placeholder="Search packages by name, code, or test…"
-                      value={packageSearch}
-                      onChange={(e) => setPackageSearch(e.target.value)}
-                      className="pl-9 h-8 text-sm w-full"
-                    />
+                  <div className="grid grid-cols-[minmax(0,1fr)_118px] gap-1.5 items-center">
+                    <div className="relative min-w-0">
+                      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        placeholder="Search packages by name, code, or test…"
+                        value={packageSearch}
+                        onChange={(e) => setPackageSearch(e.target.value)}
+                        className="pl-9 h-8 text-sm w-full"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/packages")}
+                      className="h-8 rounded-md border border-card-border px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    >
+                      All Categories
+                    </button>
                   </div>
-                  <div className="max-h-28 overflow-y-auto border border-card-border rounded-lg divide-y divide-card-border bg-background">
+                  <div className="border border-card-border rounded-lg overflow-hidden bg-background">
                     {packages.length === 0 ? (
                       <div className="px-3 py-3 text-xs text-muted-foreground text-center">
                         No packages created yet.&nbsp;
@@ -1042,74 +1050,70 @@ export default function BillingDesk() {
                     ) : filteredPackages.length === 0 ? (
                       <div className="px-3 py-3 text-xs text-muted-foreground text-center">No packages match "{packageSearch}"</div>
                     ) : (
-                      filteredPackages.map((pkg) => {
-                        const added = selectedPackages.some((p) => p.packageId === pkg.id);
-                        const effective = pkg.price - (pkg.price * pkg.discountPct) / 100;
-                        return (
-                          <button
-                            key={pkg.id}
-                            onClick={() => addPackage(pkg)}
-                            disabled={added}
-                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${
-                              added ? "bg-primary/5 text-muted-foreground cursor-default" : "hover:bg-muted/50"
-                            }`}
-                          >
-                            <Package size={11} className="text-muted-foreground flex-shrink-0" />
-                            <span className="flex-1 font-medium truncate">{pkg.name}</span>
-                            <span className="text-xs text-muted-foreground">{pkg.tests.length} tests</span>
-                            {pkg.discountPct > 0 && (
-                              <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">{pkg.discountPct}% off</span>
-                            )}
-                            <span className="text-xs font-semibold">{inr(effective)}</span>
-                            {added ? <CheckCircle2 size={12} className="text-primary flex-shrink-0" /> : <Plus size={12} className="text-muted-foreground flex-shrink-0" />}
-                          </button>
-                        );
-                      })
+                      <div className="max-h-24 overflow-y-auto divide-y divide-card-border">
+                        {filteredPackages.map((pkg) => {
+                          const added = selectedPackages.some((p) => p.packageId === pkg.id);
+                          const effective = pkg.price - (pkg.price * pkg.discountPct) / 100;
+                          return (
+                            <button
+                              key={pkg.id}
+                              onClick={() => addPackage(pkg)}
+                              disabled={added}
+                              className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${
+                                added ? "bg-primary/5 text-muted-foreground cursor-default" : "hover:bg-muted/50"
+                              }`}
+                            >
+                              <Package size={11} className="text-muted-foreground flex-shrink-0" />
+                              <span className="flex-1 font-medium truncate">{pkg.name}</span>
+                              <span className="text-xs text-muted-foreground">{pkg.tests.length} tests</span>
+                              <span className="text-xs font-semibold">{inr(effective)}</span>
+                              {added ? <CheckCircle2 size={12} className="text-primary flex-shrink-0" /> : <Plus size={12} className="text-muted-foreground flex-shrink-0" />}
+                            </button>
+                          );
+                        })}
+                      </div>
                     )}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground pt-0.5">
-                  <FlaskConical size={11} /> Individual Tests
-                </div>
-
-                {/* Test list */}
-                <div className="max-h-32 overflow-y-auto border border-card-border rounded-lg divide-y divide-card-border">
-                  {filteredTests.length === 0 ? (
-                    <div className="px-3 py-4 text-xs text-muted-foreground text-center">No tests found</div>
-                  ) : (
-                    filteredTests.slice(0, 50).map((t) => {
-                      const added   = !!selectedTests.find((s) => s.testId === t.id);
-                      const pinned  = pinnedTestIds.has(t.id);
-                      return (
-                        <div key={t.id} className={`flex items-center ${added ? "bg-primary/5" : ""}`}>
-                          {/* Pin star */}
-                          <button
-                            onClick={(e) => togglePin(t.id, e)}
-                            className={`pl-2 pr-1 py-2 flex-shrink-0 transition-colors ${pinned ? "text-amber-400 hover:text-amber-500" : "text-muted-foreground/30 hover:text-amber-400"}`}
-                          >
-                            <Star size={11} fill={pinned ? "currentColor" : "none"} />
-                          </button>
-                          {/* Add row */}
-                          <button
-                            onClick={() => addTest(t)}
-                            disabled={added}
-                            className={`flex-1 flex items-center gap-2 pr-3 py-2 text-left text-sm transition-colors
-                              ${added ? "text-muted-foreground cursor-default" : "hover:bg-muted/50"}`}
-                          >
-                            <FlaskConical size={11} className={added ? "text-primary" : "text-muted-foreground"} />
-                            <span className="text-[10px] font-mono font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded flex-shrink-0">#{t.id}</span>
-                            <span className="flex-1 font-medium truncate">{t.name}</span>
-                            <span className="text-xs text-muted-foreground font-mono flex-shrink-0">{t.code}</span>
-                            <span className={`text-xs font-semibold flex-shrink-0 ${added ? "text-primary" : ""}`}>{inr(t.price)}</span>
-                            {added
-                              ? <CheckCircle2 size={12} className="text-primary flex-shrink-0" />
-                              : <Plus size={12} className="text-muted-foreground flex-shrink-0" />}
-                          </button>
-                        </div>
-                      );
-                    })
-                  )}
+                <div className="pt-1">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                    <FlaskConical size={11} /> Individual Tests
+                  </div>
+                  <div className="mt-1 border border-card-border rounded-lg overflow-hidden">
+                    <div className="max-h-28 overflow-y-auto divide-y divide-card-border">
+                      {filteredTests.length === 0 ? (
+                        <div className="px-3 py-4 text-xs text-muted-foreground text-center">No tests found</div>
+                      ) : (
+                        filteredTests.slice(0, 50).map((t) => {
+                          const added = !!selectedTests.find((s) => s.testId === t.id);
+                          const pinned = pinnedTestIds.has(t.id);
+                          return (
+                            <div key={t.id} className={`flex items-center ${added ? "bg-primary/5" : ""}`}>
+                              <button
+                                onClick={(e) => togglePin(t.id, e)}
+                                className={`pl-2 pr-1 py-2 flex-shrink-0 transition-colors ${pinned ? "text-amber-400 hover:text-amber-500" : "text-muted-foreground/30 hover:text-amber-400"}`}
+                              >
+                                <Star size={11} fill={pinned ? "currentColor" : "none"} />
+                              </button>
+                              <button
+                                onClick={() => addTest(t)}
+                                disabled={added}
+                                className={`flex-1 flex items-center gap-2 pr-3 py-2 text-left text-sm transition-colors ${added ? "text-muted-foreground cursor-default" : "hover:bg-muted/50"}`}
+                              >
+                                <FlaskConical size={11} className={added ? "text-primary" : "text-muted-foreground"} />
+                                <span className="text-[10px] font-mono font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded flex-shrink-0">#{t.id}</span>
+                                <span className="flex-1 font-medium truncate">{t.name}</span>
+                                <span className="text-xs text-muted-foreground font-mono flex-shrink-0">{t.code}</span>
+                                <span className={`text-xs font-semibold flex-shrink-0 ${added ? "text-primary" : ""}`}>{inr(t.price)}</span>
+                                {added ? <CheckCircle2 size={12} className="text-primary flex-shrink-0" /> : <Plus size={12} className="text-muted-foreground flex-shrink-0" />}
+                              </button>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
                 </div>
 
               </div>
