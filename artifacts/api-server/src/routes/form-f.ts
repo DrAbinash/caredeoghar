@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, billsTable, patientsTable, formFRecordsTable } from "@workspace/db";
-import { eq, or, ilike } from "drizzle-orm";
+import { db, billsTable, patientsTable, formFRecordsTable, clinicSettingsTable } from "@workspace/db";
+import { eq, or, ilike, inArray, isNotNull, desc, and } from "drizzle-orm";
 import { ordersTable, orderTestsTable, testsTable, doctorsTable } from "@workspace/db";
 
 const formFRouter = Router();
@@ -174,6 +174,107 @@ formFRouter.post("/save", async (req, res) => {
     res.json(saved);
   } catch (err) {
     console.error("[form-f] save error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+formFRouter.get("/pending", async (req, res) => {
+  try {
+    const [settings] = await db.select().from(clinicSettingsTable).limit(1);
+    const formFTestIds: number[] = JSON.parse(settings?.formFTestIds ?? "[]");
+
+    if (formFTestIds.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    // Bills that have at least one Form-F-required test (distinct on bill)
+    const billsWithFormFTests = await db
+      .selectDistinct({
+        billId: billsTable.id,
+        billNumber: billsTable.billNumber,
+        patientId: billsTable.patientId,
+        orderId: billsTable.orderId,
+        createdAt: billsTable.createdAt,
+      })
+      .from(billsTable)
+      .innerJoin(ordersTable, eq(billsTable.orderId, ordersTable.id))
+      .innerJoin(orderTestsTable, eq(orderTestsTable.orderId, ordersTable.id))
+      .where(inArray(orderTestsTable.testId, formFTestIds))
+      .orderBy(desc(billsTable.createdAt));
+
+    if (billsWithFormFTests.length === 0) { res.json([]); return; }
+
+    // Bill IDs that already have Form F records
+    const savedRecords = await db
+      .select({ billId: formFRecordsTable.billId })
+      .from(formFRecordsTable)
+      .where(isNotNull(formFRecordsTable.billId));
+    const savedBillIdSet = new Set(savedRecords.map((r) => r.billId).filter(Boolean));
+
+    const pendingBills = billsWithFormFTests.filter((b) => !savedBillIdSet.has(b.billId));
+    if (pendingBills.length === 0) { res.json([]); return; }
+
+    // Patient details
+    const patientIds = [...new Set(pendingBills.map((b) => b.patientId).filter(Boolean))] as number[];
+    const patients = patientIds.length > 0
+      ? await db.select().from(patientsTable).where(inArray(patientsTable.id, patientIds))
+      : [];
+    const patientMap = new Map(patients.map((p) => [p.id, p]));
+
+    // Referring doctors per order
+    const orderIds = [...new Set(pendingBills.map((b) => b.orderId))] as number[];
+    const orders = orderIds.length > 0
+      ? await db.select().from(ordersTable).where(inArray(ordersTable.id, orderIds))
+      : [];
+    const orderMap = new Map(orders.map((o) => [o.id, o]));
+
+    const doctorIdSet = [...new Set(orders.map((o) => o.doctorId).filter(Boolean))] as number[];
+    const doctors = doctorIdSet.length > 0
+      ? await db.select().from(doctorsTable).where(inArray(doctorsTable.id, doctorIdSet))
+      : [];
+    const doctorMap = new Map(doctors.map((d) => [d.id, d]));
+
+    // Form-F tests per order
+    const allOrderTests = orderIds.length > 0
+      ? await db
+          .select({ orderId: orderTestsTable.orderId, testId: orderTestsTable.testId, testName: testsTable.name })
+          .from(orderTestsTable)
+          .leftJoin(testsTable, eq(orderTestsTable.testId, testsTable.id))
+          .where(inArray(orderTestsTable.orderId, orderIds))
+      : [];
+
+    const orderFormFTestsMap = new Map<number, string[]>();
+    for (const ot of allOrderTests) {
+      if (ot.testId && formFTestIds.includes(ot.testId) && ot.testName) {
+        if (!orderFormFTestsMap.has(ot.orderId)) orderFormFTestsMap.set(ot.orderId, []);
+        orderFormFTestsMap.get(ot.orderId)!.push(ot.testName);
+      }
+    }
+
+    const result = pendingBills.map((b) => {
+      const patient = patientMap.get(b.patientId!);
+      const order = orderMap.get(b.orderId);
+      const doctor = order?.doctorId ? doctorMap.get(order.doctorId) : null;
+      return {
+        billId: b.billId,
+        billNumber: b.billNumber,
+        billDate: b.createdAt ? new Date(b.createdAt).toISOString().slice(0, 10) : "",
+        patientName: patient ? `${patient.firstName} ${patient.lastName}`.trim() : "",
+        mobile: patient?.phone ?? "",
+        address: patient?.address ?? "",
+        age: patient?.dateOfBirth
+          ? String(new Date().getFullYear() - new Date(patient.dateOfBirth).getFullYear())
+          : "",
+        referredBy: doctor ? "Doctor" : "Self",
+        referredByName: doctor?.name ?? "",
+        formFTests: orderFormFTestsMap.get(b.orderId) ?? [],
+      };
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error("[form-f] pending error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });

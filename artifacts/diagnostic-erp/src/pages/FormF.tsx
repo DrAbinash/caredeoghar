@@ -416,15 +416,32 @@ type RecordRow = {
   createdAt?: string;
 };
 
+type PendingItem = {
+  billId: number;
+  billNumber: string;
+  billDate: string;
+  patientName: string;
+  mobile: string;
+  address: string;
+  age: string;
+  referredBy: string;
+  referredByName: string;
+  formFTests: string[];
+};
+
 export default function FormF() {
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"form" | "records">("form");
+  const [activeTab, setActiveTab] = useState<"pending" | "form" | "records">("pending");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [form, setForm] = useState<FormFData>(defaultForm());
   const printRef = useRef<HTMLDivElement>(null);
+
+  // Pending queue state
+  const [pendingQueue, setPendingQueue] = useState<PendingItem[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(false);
 
   // Records tab state
   const [listSearch, setListSearch] = useState("");
@@ -477,6 +494,18 @@ export default function FormF() {
     };
   }
 
+  const fetchPending = useCallback(async () => {
+    setPendingLoading(true);
+    try {
+      const data = await api.get<PendingItem[]>("/api/form-f/pending");
+      setPendingQueue(data);
+    } catch {
+      setPendingQueue([]);
+    } finally {
+      setPendingLoading(false);
+    }
+  }, []);
+
   const fetchRecords = useCallback(async (q?: string, by?: string) => {
     setListLoading(true);
     try {
@@ -493,7 +522,29 @@ export default function FormF() {
 
   useEffect(() => {
     if (activeTab === "records") fetchRecords();
-  }, [activeTab, fetchRecords]);
+    if (activeTab === "pending") fetchPending();
+  }, [activeTab, fetchRecords, fetchPending]);
+
+  useEffect(() => { fetchPending(); }, [fetchPending]);
+
+  function openFromQueue(item: PendingItem) {
+    setForm({
+      ...defaultForm(),
+      billNumber: item.billNumber,
+      patientName: item.patientName,
+      age: item.age,
+      address: item.address,
+      mobile: item.mobile,
+      referredBy: item.referredBy,
+      referredByName: item.referredByName,
+      procedurePurpose: item.formFTests.join(", ") || "Obstetric ultrasonography",
+      procedureDate: item.billDate,
+      date: item.billDate,
+    });
+    setLastSaved(null);
+    setActiveTab("form");
+    toast({ title: `Form F opened for ${item.patientName}`, description: "Fill remaining fields and print to save." });
+  }
 
   function loadRecord(r: RecordRow) {
     const ref = r.referredBy ?? "Self";
@@ -660,8 +711,20 @@ export default function FormF() {
         {/* Tab buttons */}
         <div className="flex rounded-lg border border-gray-200 overflow-hidden">
           <button
+            onClick={() => setActiveTab("pending")}
+            className={`px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors ${activeTab === "pending" ? "bg-orange-500 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+          >
+            <Users size={12} />
+            Pending Queue
+            {pendingQueue.length > 0 && (
+              <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${activeTab === "pending" ? "bg-white text-orange-600" : "bg-orange-500 text-white"}`}>
+                {pendingQueue.length}
+              </span>
+            )}
+          </button>
+          <button
             onClick={() => setActiveTab("form")}
-            className={`px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors ${activeTab === "form" ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+            className={`px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors border-l border-gray-200 ${activeTab === "form" ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
           >
             <FileText size={12} /> Fill Form
           </button>
@@ -674,17 +737,22 @@ export default function FormF() {
         </div>
 
         {activeTab === "form" && (
-          <div className="flex-1 flex items-center gap-2 max-w-md">
-            <Input
-              placeholder="Bill No / UHID / Name to auto-fill…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && fetchFromBilling()}
-              className="h-8 text-xs flex-1"
-            />
-            <Button size="sm" onClick={fetchFromBilling} disabled={loading} className="h-8 text-xs flex-shrink-0">
-              <Search size={12} className="mr-1" />{loading ? "…" : "Fetch"}
-            </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1">
+              <span className="text-[10px] text-amber-700 font-medium">Incidental finding?</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="Bill No / UHID / Name to fetch…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && fetchFromBilling()}
+                className="h-8 text-xs w-52"
+              />
+              <Button size="sm" onClick={fetchFromBilling} disabled={loading} className="h-8 text-xs flex-shrink-0">
+                <Search size={12} className="mr-1" />{loading ? "…" : "Fetch"}
+              </Button>
+            </div>
           </div>
         )}
 
@@ -704,6 +772,112 @@ export default function FormF() {
           </div>
         )}
       </div>
+
+      {/* ── PENDING QUEUE TAB ── */}
+      {activeTab === "pending" && (
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="max-w-4xl mx-auto space-y-4">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-gray-800">Pending Form F Queue</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Patients billed for PCPNDT-required tests who need a Form F filled. Click any row to open the form.
+                </p>
+              </div>
+              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={fetchPending} disabled={pendingLoading}>
+                <RefreshCcw size={12} className={`mr-1 ${pendingLoading ? "animate-spin" : ""}`} />
+                {pendingLoading ? "Refreshing…" : "Refresh"}
+              </Button>
+            </div>
+
+            {pendingLoading ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-sm text-gray-400">
+                Loading pending patients…
+              </div>
+            ) : pendingQueue.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <div className="text-4xl mb-3">✓</div>
+                <div className="font-semibold text-gray-700 text-sm">All caught up!</div>
+                <div className="text-xs text-gray-400 mt-1">No pending Form F patients found.</div>
+                <div className="text-xs text-gray-400 mt-1">
+                  Make sure PCPNDT tests are marked in Settings → Form F Tests.
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="bg-orange-50 border-b border-orange-100 px-4 py-2 flex items-center gap-2">
+                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-orange-500 text-white text-[10px] font-bold">{pendingQueue.length}</span>
+                  <span className="text-xs font-semibold text-orange-700">patients awaiting Form F</span>
+                </div>
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="text-left px-4 py-2.5 font-semibold text-gray-600">Billing Date</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-gray-600">Patient Name</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-gray-600">Mobile</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-gray-600">PCPNDT Test(s)</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-gray-600">Bill No.</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-gray-600">Referred By</th>
+                      <th className="px-4 py-2.5"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingQueue.map((item, i) => (
+                      <tr
+                        key={item.billId}
+                        onClick={() => openFromQueue(item)}
+                        className={`border-b border-gray-50 hover:bg-blue-50 cursor-pointer transition-colors group ${i % 2 === 0 ? "bg-white" : "bg-gray-50/40"}`}
+                      >
+                        <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                          {item.billDate ? new Date(item.billDate).toLocaleDateString("en-IN") : "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="font-semibold text-gray-800">{item.patientName || "—"}</div>
+                          {item.age && <div className="text-[10px] text-gray-400">Age: {item.age} yrs</div>}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">{item.mobile || "—"}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-1">
+                            {item.formFTests.map((t) => (
+                              <span key={t} className="bg-purple-100 text-purple-700 text-[10px] font-medium px-1.5 py-0.5 rounded-full border border-purple-200">
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-gray-500 font-mono text-[11px]">{item.billNumber}</td>
+                        <td className="px-4 py-3 text-gray-500">
+                          {item.referredBy === "Doctor" ? (
+                            <span className="bg-blue-50 text-blue-700 text-[10px] px-1.5 py-0.5 rounded border border-blue-100">Dr. {item.referredByName}</span>
+                          ) : (
+                            <span className="text-gray-400 text-[10px]">Self / Walk-in</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className="text-blue-600 font-semibold text-xs group-hover:underline whitespace-nowrap">Fill Form →</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Incidental finding notice */}
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
+              <span className="text-lg mt-0.5">💡</span>
+              <div>
+                <div className="text-xs font-semibold text-amber-800">Incidental pregnancy finding?</div>
+                <div className="text-xs text-amber-700 mt-0.5">
+                  If pregnancy was discovered during a routine test (e.g. USG Whole Abdomen) not in the list above,
+                  click <button onClick={() => setActiveTab("form")} className="underline font-semibold">Fill Form</button> and use the Fetch option to load the patient by bill number or name.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── RECORDS TAB ── */}
       {activeTab === "records" && (
