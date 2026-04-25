@@ -21,7 +21,8 @@ type FormFData = {
   billNumber: string;
   patientName: string;
   age: string;
-  childrenDetails: string;
+  boyCount: string;
+  girlCount: string;
   husbandFatherName: string;
   address: string;
   mobile: string;
@@ -64,7 +65,8 @@ function defaultForm(): FormFData {
     billNumber: "",
     patientName: "",
     age: "",
-    childrenDetails: "",
+    boyCount: "",
+    girlCount: "",
     husbandFatherName: "",
     address: "",
     mobile: "",
@@ -192,8 +194,19 @@ function FormFPrint({ form }: FormFPrintProps) {
               <BlankLine val={form.husbandFatherName} width={120} />
             </td>
             <td style={{ padding: "2px 4px", fontSize: 8 }}>
-              <span style={{ fontWeight: 600 }}>4. Children (sex): </span>
-              <BlankLine val={form.childrenDetails} width={80} />
+              <span style={{ fontWeight: 600 }}>4. Children:&nbsp;</span>
+              <span style={{ marginRight: 6 }}>
+                Boy:&nbsp;
+                <span style={{ display: "inline-block", border: "1px solid #333", width: 20, height: 12, textAlign: "center", fontSize: 9, lineHeight: "12px", verticalAlign: "middle" }}>
+                  {form.boyCount || ""}
+                </span>
+              </span>
+              <span>
+                Girl:&nbsp;
+                <span style={{ display: "inline-block", border: "1px solid #333", width: 20, height: 12, textAlign: "center", fontSize: 9, lineHeight: "12px", verticalAlign: "middle" }}>
+                  {form.girlCount || ""}
+                </span>
+              </span>
             </td>
           </tr>
 
@@ -394,6 +407,7 @@ export default function FormF() {
         address: data.address ?? prev.address,
         mobile: data.mobile ?? prev.mobile,
         referredBy: data.referredBy ?? prev.referredBy,
+        referredByName: data.referredByName ?? prev.referredByName,
         procedureDate: data.billDate ?? prev.procedureDate,
         date: data.billDate ?? prev.date,
         ultrasoundResult: data.ultrasoundResult ?? prev.ultrasoundResult,
@@ -428,7 +442,7 @@ export default function FormF() {
         registrationNo: form.registrationNo,
         patientName: form.patientName,
         age: form.age,
-        childrenDetails: form.childrenDetails,
+        childrenDetails: [form.boyCount ? `Boy: ${form.boyCount}` : "", form.girlCount ? `Girl: ${form.girlCount}` : ""].filter(Boolean).join(", ") || "Not specified",
         husbandFatherName: form.husbandFatherName,
         address: form.address,
         mobile: form.mobile,
@@ -582,7 +596,33 @@ export default function FormF() {
               <Input {...inp("address")} placeholder="Patient's full address" />
             </LabelRow>
             <LabelRow label="No. of children">
-              <Input {...inp("childrenDetails")} placeholder="e.g. 1 Boy, 1 Girl" />
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1">Boy</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={20}
+                    value={form.boyCount}
+                    onChange={(e) => set("boyCount", e.target.value)}
+                    className="h-8 text-sm w-16 text-center"
+                    placeholder="0"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-medium text-pink-700 bg-pink-50 border border-pink-200 rounded px-2 py-1">Girl</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={20}
+                    value={form.girlCount}
+                    onChange={(e) => set("girlCount", e.target.value)}
+                    className="h-8 text-sm w-16 text-center"
+                    placeholder="0"
+                  />
+                </div>
+                <span className="text-xs text-muted-foreground">(enter count per gender)</span>
+              </div>
             </LabelRow>
             <LabelRow label="Referred by">
               <div className="flex items-center gap-2 flex-wrap">

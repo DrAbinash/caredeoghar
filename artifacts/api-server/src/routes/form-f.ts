@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, billsTable, patientsTable, formFRecordsTable } from "@workspace/db";
 import { eq, or, ilike } from "drizzle-orm";
-import { ordersTable, orderTestsTable, testsTable } from "@workspace/db";
+import { ordersTable, orderTestsTable, testsTable, doctorsTable } from "@workspace/db";
 
 const formFRouter = Router();
 
@@ -59,6 +59,9 @@ formFRouter.get("/fetch-billing/:search", async (req, res) => {
       .where(eq(ordersTable.id, bill.orderId));
 
     let procedurePurpose = "";
+    let referredBy = "Self";
+    let referredByName = "";
+
     if (order) {
       const tests = await db
         .select({ test: testsTable })
@@ -70,6 +73,17 @@ formFRouter.get("/fetch-billing/:search", async (req, res) => {
         .map((t) => t.test?.name)
         .filter(Boolean)
         .join(", ");
+
+      if (order.doctorId) {
+        const [doctor] = await db
+          .select()
+          .from(doctorsTable)
+          .where(eq(doctorsTable.id, order.doctorId));
+        if (doctor) {
+          referredBy = "Doctor";
+          referredByName = doctor.name;
+        }
+      }
     }
 
     const dob = patient?.dateOfBirth ?? "";
@@ -90,7 +104,8 @@ formFRouter.get("/fetch-billing/:search", async (req, res) => {
       husbandFatherName: "",
       address: patient?.address ?? "",
       mobile: patient?.phone ?? "",
-      referredBy: "Self",
+      referredBy,
+      referredByName,
       procedurePurpose: procedurePurpose || "Obstetric ultrasonography",
       ultrasoundResult: "Normal",
     });
