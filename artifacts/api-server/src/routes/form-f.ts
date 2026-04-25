@@ -180,10 +180,30 @@ formFRouter.post("/save", async (req, res) => {
 
 formFRouter.get("/list", async (req, res) => {
   try {
-    const rows = await db
-      .select()
-      .from(formFRecordsTable)
-      .orderBy(formFRecordsTable.createdAt);
+    const { search, searchBy } = req.query as { search?: string; searchBy?: string };
+    const q = search?.trim();
+
+    let rows;
+    if (q) {
+      const pattern = `%${q}%`;
+      const field =
+        searchBy === "husbandFatherName" ? formFRecordsTable.husbandFatherName
+        : searchBy === "mobile"          ? formFRecordsTable.mobile
+        : searchBy === "referredBy"      ? formFRecordsTable.referredBy
+        : formFRecordsTable.patientName;
+
+      rows = await db
+        .select()
+        .from(formFRecordsTable)
+        .where(ilike(field, pattern))
+        .orderBy(formFRecordsTable.createdAt);
+    } else {
+      rows = await db
+        .select()
+        .from(formFRecordsTable)
+        .orderBy(formFRecordsTable.createdAt);
+    }
+
     res.json(rows);
   } catch (err) {
     console.error("[form-f] list error:", err);

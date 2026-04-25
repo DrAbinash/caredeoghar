@@ -1,9 +1,9 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { api } from "@/lib/fetchApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Save, Printer, RefreshCcw, FileText, Database } from "lucide-react";
+import { Search, Printer, RefreshCcw, FileText, List, User, Phone, Users, BookOpen } from "lucide-react";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -380,13 +380,57 @@ function FormFPrint({ form }: FormFPrintProps) {
   );
 }
 
+type RecordRow = {
+  id: number;
+  billNumber?: string;
+  patientName?: string;
+  husbandFatherName?: string;
+  mobile?: string;
+  referredBy?: string;
+  ultrasoundResult?: string;
+  procedureDate?: string;
+  date?: string;
+  age?: string;
+  address?: string;
+  childrenDetails?: string;
+  lmpWeeks?: string;
+  geneticHistory?: string;
+  basisDiagnosis?: string;
+  indicationOther?: string;
+  doctorName?: string;
+  procedure?: string;
+  procedurePurpose?: string;
+  invasiveProcedure?: string;
+  complication?: string;
+  labTests?: string;
+  prenatalResult?: string;
+  abnormality?: string;
+  consentDate?: string;
+  resultConveyed?: string;
+  mtpAdvised?: string;
+  mtpDate?: string;
+  place?: string;
+  centreName?: string;
+  registrationNo?: string;
+  previousChildIssue?: string;
+  createdAt?: string;
+};
+
 export default function FormF() {
   const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState<"form" | "records">("form");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [form, setForm] = useState<FormFData>(defaultForm());
   const printRef = useRef<HTMLDivElement>(null);
+
+  // Records tab state
+  const [listSearch, setListSearch] = useState("");
+  const [listSearchBy, setListSearchBy] = useState<"patientName"|"husbandFatherName"|"mobile"|"referredBy">("patientName");
+  const [records, setRecords] = useState<RecordRow[]>([]);
+  const [listLoading, setListLoading] = useState(false);
 
   async function fetchFromBilling() {
     if (!search.trim()) {
@@ -433,7 +477,72 @@ export default function FormF() {
     };
   }
 
-  async function saveFormF() {
+  const fetchRecords = useCallback(async (q?: string, by?: string) => {
+    setListLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (q) { params.set("search", q); params.set("searchBy", by ?? "patientName"); }
+      const data = await api.get<RecordRow[]>(`/api/form-f/list?${params.toString()}`);
+      setRecords(data);
+    } catch {
+      setRecords([]);
+    } finally {
+      setListLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "records") fetchRecords();
+  }, [activeTab, fetchRecords]);
+
+  function loadRecord(r: RecordRow) {
+    const ref = r.referredBy ?? "Self";
+    const isDoctor = ref.startsWith("Doctor");
+    const doctorName = isDoctor ? ref.replace(/^Doctor:\s*/, "") : "";
+    const children = r.childrenDetails ?? "";
+    const boyMatch = children.match(/Boy:\s*(\d+)/i);
+    const girlMatch = children.match(/Girl:\s*(\d+)/i);
+    setForm({
+      ...defaultForm(),
+      centreName: r.centreName ?? defaultForm().centreName,
+      registrationNo: r.registrationNo ?? defaultForm().registrationNo,
+      billNumber: r.billNumber ?? "",
+      patientName: r.patientName ?? "",
+      age: r.age ?? "",
+      boyCount: boyMatch ? boyMatch[1] : "",
+      girlCount: girlMatch ? girlMatch[1] : "",
+      husbandFatherName: r.husbandFatherName ?? "",
+      address: r.address ?? "",
+      mobile: r.mobile ?? "",
+      referredBy: isDoctor ? "Doctor" : "Self",
+      referredByName: doctorName,
+      lmpWeeks: r.lmpWeeks ?? "",
+      previousChildIssue: r.previousChildIssue ?? "",
+      doctorName: r.doctorName ?? "",
+      procedure: r.procedure ?? "",
+      procedurePurpose: r.procedurePurpose ?? "",
+      invasiveProcedure: r.invasiveProcedure === "Not done" ? "notdone" : "done",
+      invasiveProcedureDetail: r.invasiveProcedure !== "Not done" ? (r.invasiveProcedure ?? "") : "",
+      complication: r.complication === "Nil" ? "nil" : "specify",
+      complicationDetail: r.complication !== "Nil" ? (r.complication ?? "") : "",
+      labTests: r.labTests === "Not advised" ? "notadvised" : "advised",
+      labTestsDetail: r.labTests !== "Not advised" ? (r.labTests ?? "") : "",
+      prenatalResult: r.prenatalResult ?? "",
+      ultrasoundResult: r.ultrasoundResult?.startsWith("Abnormal") ? "abnormal" : "normal",
+      abnormality: r.abnormality ?? "",
+      procedureDate: r.procedureDate ?? "",
+      consentDate: r.consentDate ?? "",
+      resultConveyed: r.resultConveyed ?? "",
+      mtpAdvised: r.mtpAdvised === "Yes" ? "yes" : "no",
+      mtpDate: r.mtpDate ?? "",
+      date: r.date ?? "",
+      place: r.place ?? "",
+    });
+    setActiveTab("form");
+    toast({ title: "Record loaded into form" });
+  }
+
+  async function saveFormF(silent = false) {
     setSaving(true);
     try {
       const payload = {
@@ -470,12 +579,19 @@ export default function FormF() {
         place: form.place,
       };
       await api.post("/api/form-f/save", payload);
-      toast({ title: "Form F saved to database" });
+      const now = new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+      setLastSaved(now);
+      if (!silent) toast({ title: "Form F saved to database" });
     } catch {
-      toast({ title: "Failed to save Form F", variant: "destructive" });
+      if (!silent) toast({ title: "Failed to save Form F", variant: "destructive" });
     } finally {
       setSaving(false);
     }
+  }
+
+  async function printAndSave() {
+    await saveFormF(true);
+    printForm();
   }
 
   function printForm() {
@@ -540,32 +656,154 @@ export default function FormF() {
             <div className="text-[10px] text-gray-500">Record for Pregnant Woman (Ultrasound / Imaging Centre)</div>
           </div>
         </div>
-        <div className="flex-1 flex items-center gap-2 max-w-md">
-          <Input
-            placeholder="Bill No / UHID / Name to auto-fill…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && fetchFromBilling()}
-            className="h-8 text-xs flex-1"
-          />
-          <Button size="sm" onClick={fetchFromBilling} disabled={loading} className="h-8 text-xs flex-shrink-0">
-            <Search size={12} className="mr-1" />{loading ? "…" : "Fetch"}
-          </Button>
+
+        {/* Tab buttons */}
+        <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+          <button
+            onClick={() => setActiveTab("form")}
+            className={`px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors ${activeTab === "form" ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+          >
+            <FileText size={12} /> Fill Form
+          </button>
+          <button
+            onClick={() => setActiveTab("records")}
+            className={`px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors border-l border-gray-200 ${activeTab === "records" ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+          >
+            <List size={12} /> Saved Records
+          </button>
         </div>
-        <div className="ml-auto flex gap-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setForm(defaultForm())}>
-            <RefreshCcw size={12} className="mr-1" /> Reset
-          </Button>
-          <Button size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700" onClick={saveFormF} disabled={saving}>
-            <Database size={12} className="mr-1" />{saving ? "Saving…" : "Save to DB"}
-          </Button>
-          <Button size="sm" className="h-8 text-xs" onClick={printForm}>
-            <Printer size={12} className="mr-1" /> Print A4
-          </Button>
-        </div>
+
+        {activeTab === "form" && (
+          <div className="flex-1 flex items-center gap-2 max-w-md">
+            <Input
+              placeholder="Bill No / UHID / Name to auto-fill…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && fetchFromBilling()}
+              className="h-8 text-xs flex-1"
+            />
+            <Button size="sm" onClick={fetchFromBilling} disabled={loading} className="h-8 text-xs flex-shrink-0">
+              <Search size={12} className="mr-1" />{loading ? "…" : "Fetch"}
+            </Button>
+          </div>
+        )}
+
+        {activeTab === "form" && (
+          <div className="ml-auto flex items-center gap-2">
+            {lastSaved && (
+              <span className="text-[10px] text-green-600 bg-green-50 border border-green-200 rounded px-2 py-1">
+                ✓ Auto-saved {lastSaved}
+              </span>
+            )}
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => { setForm(defaultForm()); setLastSaved(null); }}>
+              <RefreshCcw size={12} className="mr-1" /> Reset
+            </Button>
+            <Button size="sm" className="h-8 text-xs" onClick={printAndSave} disabled={saving}>
+              <Printer size={12} className="mr-1" /> {saving ? "Saving…" : "Print A4"}
+            </Button>
+          </div>
+        )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      {/* ── RECORDS TAB ── */}
+      {activeTab === "records" && (
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="max-w-5xl mx-auto">
+            {/* Search bar */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm font-semibold text-gray-700">Search records by:</span>
+                <div className="flex gap-1">
+                  {([
+                    { val: "patientName",      label: "Patient",  icon: <User size={11} /> },
+                    { val: "husbandFatherName",label: "Husband",  icon: <Users size={11} /> },
+                    { val: "mobile",           label: "Mobile",   icon: <Phone size={11} /> },
+                    { val: "referredBy",       label: "Ref. By",  icon: <BookOpen size={11} /> },
+                  ] as const).map(({ val, label, icon }) => (
+                    <button
+                      key={val}
+                      onClick={() => setListSearchBy(val)}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${listSearchBy === val ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}
+                    >
+                      {icon} {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex-1 flex items-center gap-2 min-w-48">
+                  <Input
+                    placeholder={`Search by ${listSearchBy === "patientName" ? "patient name" : listSearchBy === "husbandFatherName" ? "husband/father name" : listSearchBy === "mobile" ? "mobile number" : "referred by"}…`}
+                    value={listSearch}
+                    onChange={(e) => setListSearch(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && fetchRecords(listSearch, listSearchBy)}
+                    className="h-8 text-xs"
+                  />
+                  <Button size="sm" className="h-8 text-xs" onClick={() => fetchRecords(listSearch, listSearchBy)} disabled={listLoading}>
+                    <Search size={12} className="mr-1" />{listLoading ? "…" : "Search"}
+                  </Button>
+                  {listSearch && (
+                    <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => { setListSearch(""); fetchRecords(); }}>
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                <span className="text-xs text-gray-400">{records.length} record{records.length !== 1 ? "s" : ""}</span>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              {listLoading ? (
+                <div className="p-8 text-center text-sm text-gray-400">Loading…</div>
+              ) : records.length === 0 ? (
+                <div className="p-8 text-center text-sm text-gray-400">No records found. {listSearch ? "Try a different search." : "Save a Form F to see it here."}</div>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="text-left px-3 py-2.5 font-semibold text-gray-600">Date</th>
+                      <th className="text-left px-3 py-2.5 font-semibold text-gray-600">Patient Name</th>
+                      <th className="text-left px-3 py-2.5 font-semibold text-gray-600">Husband/Father</th>
+                      <th className="text-left px-3 py-2.5 font-semibold text-gray-600">Mobile</th>
+                      <th className="text-left px-3 py-2.5 font-semibold text-gray-600">Bill No.</th>
+                      <th className="text-left px-3 py-2.5 font-semibold text-gray-600">USG Result</th>
+                      <th className="text-left px-3 py-2.5 font-semibold text-gray-600">Referred By</th>
+                      <th className="px-3 py-2.5"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {records.map((r, i) => (
+                      <tr
+                        key={r.id}
+                        className={`border-b border-gray-50 hover:bg-blue-50 cursor-pointer transition-colors ${i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
+                        onClick={() => loadRecord(r)}
+                      >
+                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
+                          {r.procedureDate ? new Date(r.procedureDate).toLocaleDateString("en-IN") : r.date ? new Date(r.date).toLocaleDateString("en-IN") : "—"}
+                        </td>
+                        <td className="px-3 py-2 font-medium text-gray-800">{r.patientName || "—"}</td>
+                        <td className="px-3 py-2 text-gray-600">{r.husbandFatherName || "—"}</td>
+                        <td className="px-3 py-2 text-gray-600">{r.mobile || "—"}</td>
+                        <td className="px-3 py-2 text-gray-500">{r.billNumber || "—"}</td>
+                        <td className="px-3 py-2">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${r.ultrasoundResult?.startsWith("Abnormal") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                            {r.ultrasoundResult || "Normal"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-gray-600">{r.referredBy || "Self"}</td>
+                        <td className="px-3 py-2 text-right">
+                          <span className="text-blue-600 font-medium hover:underline">Open →</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "form" && <div className="flex-1 overflow-y-auto p-4">
         <div className="flex gap-4 max-w-7xl mx-auto">
 
           {/* ── LEFT: Edit Form ── */}
@@ -746,17 +984,14 @@ export default function FormF() {
               <FormFPrint form={form} />
             </div>
             <div className="mt-3 flex gap-2 justify-center">
-              <Button className="h-8 text-xs" onClick={saveFormF} disabled={saving}>
-                <Database size={12} className="mr-1" />{saving ? "Saving…" : "Save to DB"}
-              </Button>
-              <Button variant="outline" className="h-8 text-xs" onClick={printForm}>
-                <Printer size={12} className="mr-1" /> Print this form
+              <Button className="h-8 text-xs" onClick={printAndSave} disabled={saving}>
+                <Printer size={12} className="mr-1" /> {saving ? "Saving…" : "Print A4 (auto-saves)"}
               </Button>
             </div>
           </div>
 
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
