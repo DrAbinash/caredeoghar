@@ -28,6 +28,7 @@ import Packages from "@/pages/Packages";
 import Expenses from "@/pages/Expenses";
 import Staff from "@/pages/Staff";
 import QueuePage from "@/pages/Queue";
+import FormF from "@/pages/FormF";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -74,6 +75,7 @@ function Router() {
         <Route path="/packages" component={Packages} />
         <Route path="/expenses" component={Expenses} />
         <Route path="/staff" component={Staff} />
+        <Route path="/form-f" component={FormF} />
         <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>

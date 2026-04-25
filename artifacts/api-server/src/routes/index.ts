@@ -28,6 +28,7 @@ import { staffRouter } from "./staff";
 import { bridgeRouter } from "./bridge";
 import { reportTemplatesRouter } from "./report-templates";
 import { abnormalFindingsRouter } from "./abnormal-findings";
+import formFRouter from "./form-f";
 
 const router: IRouter = Router();
 
@@ -61,5 +62,6 @@ router.use("/staff", staffRouter);
 router.use("/bridge", bridgeRouter);
 router.use("/report-templates", reportTemplatesRouter);
 router.use("/abnormal-findings", abnormalFindingsRouter);
+router.use("/form-f", formFRouter);
 
 export default router;

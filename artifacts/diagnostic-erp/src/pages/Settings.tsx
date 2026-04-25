@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
@@ -18,6 +18,7 @@ import {
   Users, Download, FileText, BookOpen, ClipboardList, CreditCard,
   FlaskConical, Boxes, ShieldCheck, FileDown, KeyRound, Eye, EyeOff,
   Tag, Building2, Image as ImageIcon, Upload, MessageCircle, Printer,
+  Search,
 } from "lucide-react";
 
 type AppUser = {
@@ -87,6 +88,7 @@ const DEFAULT_PERMISSIONS: Record<string, string[]> = {
 const TABS = [
   { id: "clinic", label: "Clinic Info", icon: Building2 },
   { id: "users", label: "Users", icon: Users },
+  { id: "form-f", label: "Form F Tests", icon: FileText },
   { id: "email", label: "Email Notifications", icon: Mail },
   { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
   { id: "printers", label: "Printers", icon: Printer },
@@ -167,6 +169,7 @@ export default function Settings() {
         </div>
         {tab === "clinic" && <ClinicInfoTab />}
         {tab === "users" && <UsersTab qc={qc} />}
+        {tab === "form-f" && <FormFTestsTab />}
         {tab === "email" && <EmailTab />}
         {tab === "whatsapp" && <WhatsappTab />}
         {tab === "printers" && <PrinterTab />}
@@ -784,6 +787,183 @@ function DiscountReasonsTab() {
           </table>
         )}
       </div>
+    </div>
+  );
+}
+
+type DiagnosticTest = { id: number; code: string; name: string; category: string; isActive: boolean };
+
+function FormFTestsTab() {
+  const qc = useQueryClient();
+  const [search, setSearch] = useState("");
+
+  const { data: tests = [], isLoading: testsLoading } = useQuery<DiagnosticTest[]>({
+    queryKey: ["tests-all-formf"],
+    queryFn: () => api.get<{ tests: DiagnosticTest[] }>("/api/tests?limit=500").then((d) => d.tests ?? []),
+  });
+
+  const { data: settings, isLoading: settingsLoading } = useQuery<{ formFTestIds?: string }>({
+    queryKey: ["clinic-settings"],
+    queryFn: () => api.get("/api/clinic-settings"),
+  });
+
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (!settingsLoading && settings !== undefined) {
+      try {
+        const ids: number[] = JSON.parse(settings?.formFTestIds ?? "[]");
+        setSelectedIds(new Set(ids));
+      } catch { /* ignore */ }
+    }
+  }, [settings, settingsLoading]);
+
+  const saveMut = useMutation({
+    mutationFn: () =>
+      api.put("/api/clinic-settings", { formFTestIds: JSON.stringify([...selectedIds]) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clinic-settings"] });
+    },
+  });
+
+  const toggleTest = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const activeTests = tests.filter((t) => t.isActive !== false);
+  const filteredTests = activeTests.filter((t) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return t.name.toLowerCase().includes(q) || t.code.toLowerCase().includes(q) || t.category.toLowerCase().includes(q);
+  });
+
+  const byCategory: Record<string, DiagnosticTest[]> = {};
+  for (const t of filteredTests) {
+    if (!byCategory[t.category]) byCategory[t.category] = [];
+    byCategory[t.category].push(t);
+  }
+
+  if (testsLoading || settingsLoading) {
+    return <div className="bg-card border border-card-border rounded-xl p-8 text-center text-muted-foreground animate-pulse">Loading tests…</div>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-card border border-card-border rounded-xl p-5">
+        <div className="flex items-center justify-between mb-1">
+          <div>
+            <h2 className="font-bold text-lg flex items-center gap-2">
+              <FileText size={16} className="text-primary" /> PCPNDT Form F — Required Tests
+            </h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Mark which tests require PCPNDT Form F. When these tests are added in Billing Desk,
+              Husband's Name and Address will become mandatory before generating the bill.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-primary">{selectedIds.size} test(s) selected</span>
+            <Button onClick={() => saveMut.mutate()} disabled={saveMut.isPending} size="sm">
+              {saveMut.isPending ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </div>
+
+        {saveMut.isSuccess && (
+          <div className="mt-2 text-xs text-green-600 font-medium">✓ Form F test settings saved successfully.</div>
+        )}
+      </div>
+
+      {/* Search */}
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Search tests by name, code or category…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
+      {/* Quick select USG category */}
+      <div className="flex gap-2 flex-wrap">
+        <span className="text-xs text-muted-foreground self-center">Quick select:</span>
+        {["Radiology", "Ultrasound", "USG", "Sonography"].map((cat) => {
+          const catTests = activeTests.filter((t) => t.category.toLowerCase().includes(cat.toLowerCase()));
+          if (catTests.length === 0) return null;
+          return (
+            <Button
+              key={cat}
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setSelectedIds((prev) => {
+                const next = new Set(prev);
+                catTests.forEach((t) => next.add(t.id));
+                return next;
+              })}
+            >
+              Select all {cat} ({catTests.length})
+            </Button>
+          );
+        })}
+        <Button variant="outline" size="sm" className="h-7 text-xs text-destructive" onClick={() => setSelectedIds(new Set())}>
+          Clear all
+        </Button>
+      </div>
+
+      {/* Test list by category */}
+      {Object.entries(byCategory).map(([cat, catTests]) => (
+        <div key={cat} className="bg-card border border-card-border rounded-xl overflow-hidden">
+          <div className="px-4 py-2 bg-muted/40 border-b border-card-border flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{cat}</span>
+            <button
+              className="text-xs text-primary hover:underline"
+              onClick={() => setSelectedIds((prev) => {
+                const next = new Set(prev);
+                const allSelected = catTests.every((t) => next.has(t.id));
+                catTests.forEach((t) => allSelected ? next.delete(t.id) : next.add(t.id));
+                return next;
+              })}
+            >
+              {catTests.every((t) => selectedIds.has(t.id)) ? "Deselect all" : "Select all"}
+            </button>
+          </div>
+          <div className="divide-y divide-card-border">
+            {catTests.map((t) => {
+              const checked = selectedIds.has(t.id);
+              return (
+                <label key={t.id} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${checked ? "bg-primary/5" : "hover:bg-muted/30"}`}>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleTest(t.id)}
+                    className="w-4 h-4 accent-primary"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium">{t.name}</div>
+                    <div className="text-xs text-muted-foreground font-mono">{t.code}</div>
+                  </div>
+                  {checked && (
+                    <span className="text-[10px] bg-primary/10 text-primary font-semibold px-2 py-0.5 rounded-full">
+                      Form F Required
+                    </span>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      {filteredTests.length === 0 && (
+        <div className="text-center py-10 text-muted-foreground text-sm">
+          No tests found{search ? ` for "${search}"` : ""}. Add tests in the Test Catalog first.
+        </div>
+      )}
     </div>
   );
 }

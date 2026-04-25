@@ -35,6 +35,7 @@ import {
   Star,
   Printer,
   ExternalLink,
+  AlertTriangle,
 } from "lucide-react";
 
 // ──────────────────────────────────────────────────────
@@ -428,10 +429,20 @@ export default function BillingDesk() {
   const { data: clinic } = useQuery<{
     name: string; tagline: string; address: string; email: string; phone: string;
     website: string; gstin: string; logoDataUrl: string | null; footerNote?: string;
+    formFTestIds?: string;
   }>({
     queryKey: ["clinic-settings"],
     queryFn: () => api.get("/api/clinic-settings"),
   });
+
+  // ── Form F ─────────────────────────────────────────
+  const formFTestIdSet: Set<number> = (() => {
+    try { return new Set(JSON.parse(clinic?.formFTestIds ?? "[]") as number[]); }
+    catch { return new Set(); }
+  })();
+  const needsFormF = selectedTests.some((t) => formFTestIdSet.has(t.testId));
+  const [husbandName, setHusbandName] = useState("");
+  const [patientAddress, setPatientAddress] = useState("");
 
   const { data: doctors = [] } = useQuery<Doctor[]>({
     queryKey: ["doctors-list"],
@@ -660,6 +671,8 @@ export default function BillingDesk() {
     setPaymentSplits([{ mode: "cash", amount: "" }]);
     setLastBill(null);
     setSuggestion(null);
+    setHusbandName("");
+    setPatientAddress("");
   }
 
   const canGenerate = !!selectedPatient && selectedTests.length > 0;
@@ -791,6 +804,41 @@ export default function BillingDesk() {
                 )}
               </div>
             </div>
+
+            {/* ── Form F Extra Fields (shown when a Form-F-required test is selected) ── */}
+            {selectedPatient && needsFormF && (
+              <div className="bg-orange-50 border border-orange-300 rounded-xl overflow-hidden">
+                <div className="px-4 py-2 border-b border-orange-200 bg-orange-100 flex items-center gap-2">
+                  <AlertTriangle size={13} className="text-orange-600 flex-shrink-0" />
+                  <span className="text-xs font-semibold text-orange-800">
+                    PCPNDT Form F Required — fill additional details before generating bill
+                  </span>
+                </div>
+                <div className="p-3 space-y-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Husband's / Father's Name <span className="text-red-500">*</span></Label>
+                    <Input
+                      value={husbandName}
+                      onChange={(e) => setHusbandName(e.target.value)}
+                      placeholder="Required for PCPNDT compliance"
+                      className="h-8 text-sm border-orange-300 focus:border-orange-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Full Address <span className="text-red-500">*</span></Label>
+                    <Input
+                      value={patientAddress}
+                      onChange={(e) => setPatientAddress(e.target.value)}
+                      placeholder="Patient's full residential address"
+                      className="h-8 text-sm border-orange-300 focus:border-orange-500"
+                    />
+                  </div>
+                  <p className="text-[10px] text-orange-600">
+                    These fields are mandatory for USG tests under the PCPNDT Act. Form F will be pre-filled with this data.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* ── Add New Patient ── */}
             {!selectedPatient && (
@@ -1380,17 +1428,19 @@ export default function BillingDesk() {
                 </Button>
                 <Button
                   onClick={() => { printAfterSaveRef.current = false; generateMut.mutate(); }}
-                  disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending}
+                  disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || (needsFormF && (!husbandName.trim() || !patientAddress.trim()))}
                   className="h-8 text-[11px] px-2"
                   variant="secondary"
+                  title={needsFormF && (!husbandName.trim() || !patientAddress.trim()) ? "Fill Husband Name & Address for PCPNDT Form F" : undefined}
                 >
                   <Receipt size={13} className="mr-1" />
                   {generateMut.isPending && !printAfterSaveRef.current ? "Generating…" : "Generate Bill"}
                 </Button>
                 <Button
                   onClick={() => { printAfterSaveRef.current = true; generateMut.mutate(); }}
-                  disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending}
+                  disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || (needsFormF && (!husbandName.trim() || !patientAddress.trim()))}
                   className="h-8 text-[11px] px-2"
+                  title={needsFormF && (!husbandName.trim() || !patientAddress.trim()) ? "Fill Husband Name & Address for PCPNDT Form F" : undefined}
                 >
                   <Printer size={13} className="mr-1" />
                   {generateMut.isPending && printAfterSaveRef.current ? "Saving…" : "Save & Print"}

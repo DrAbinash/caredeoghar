@@ -11,5 +11,6 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   gstin: text("gstin").notNull().default(""),
   logoDataUrl: text("logo_data_url"),
   footerNote: text("footer_note").notNull().default("Thank you for choosing our diagnostic services."),
+  formFTestIds: text("form_f_test_ids").notNull().default("[]"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
