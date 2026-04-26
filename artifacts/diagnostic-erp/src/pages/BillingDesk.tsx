@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import { useLocation } from "wouter";
@@ -13,6 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   Search,
@@ -36,6 +42,7 @@ import {
   Printer,
   ExternalLink,
   AlertTriangle,
+  Pencil,
 } from "lucide-react";
 
 // ──────────────────────────────────────────────────────
@@ -430,6 +437,7 @@ export default function BillingDesk() {
     name: string; tagline: string; address: string; email: string; phone: string;
     website: string; gstin: string; logoDataUrl: string | null; footerNote?: string;
     formFTestIds?: string;
+    quickTestIds?: string;
   }>({
     queryKey: ["clinic-settings"],
     queryFn: () => api.get("/api/clinic-settings"),
@@ -443,6 +451,20 @@ export default function BillingDesk() {
   const needsFormF = selectedTests.some((t) => formFTestIdSet.has(t.testId));
   const [husbandName, setHusbandName] = useState("");
   const [patientAddress, setPatientAddress] = useState("");
+
+  // ── Quick Test Tabs (6 customizable slots) ─────────
+  const quickTestIds: (number | null)[] = useMemo(() => {
+    try {
+      const arr = JSON.parse(clinic?.quickTestIds ?? "[null,null,null,null,null,null]");
+      const out: (number | null)[] = Array.isArray(arr)
+        ? arr.slice(0, 6).map((v: unknown) => (typeof v === "number" ? v : null))
+        : [];
+      while (out.length < 6) out.push(null);
+      return out;
+    } catch { return [null, null, null, null, null, null]; }
+  }, [clinic?.quickTestIds]);
+  const [quickPickerSlot, setQuickPickerSlot] = useState<number | null>(null);
+  const [quickPickerSearch, setQuickPickerSearch] = useState("");
 
   const { data: doctors = [] } = useQuery<Doctor[]>({
     queryKey: ["doctors-list"],
@@ -590,6 +612,44 @@ export default function BillingDesk() {
     }
     setSelectedTests((prev) => [...prev, { testId: t.id, name: t.name, price: t.price, category: t.category, source: "test" }]);
     setTestSearch("");
+  }
+
+  // ── Quick Test slot save / actions ──────────────────
+  const saveQuickTestsMut = useMutation({
+    mutationFn: (ids: (number | null)[]) =>
+      api.put("/api/clinic-settings", { quickTestIds: JSON.stringify(ids) }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["clinic-settings"] }),
+    onError: () => toast({ title: "Failed to save quick test", variant: "destructive" }),
+  });
+  function assignQuickSlot(slotIdx: number, testId: number | null) {
+    // Read latest cached settings to avoid clobbering concurrent updates
+    const latest = queryClient.getQueryData<{ quickTestIds?: string }>(["clinic-settings"]);
+    let current: (number | null)[];
+    try {
+      const arr = JSON.parse(latest?.quickTestIds ?? "[null,null,null,null,null,null]");
+      current = Array.isArray(arr)
+        ? arr.slice(0, 6).map((v: unknown) => (typeof v === "number" ? v : null))
+        : [null, null, null, null, null, null];
+      while (current.length < 6) current.push(null);
+    } catch {
+      current = [null, null, null, null, null, null];
+    }
+    const next = [...current];
+    next[slotIdx] = testId;
+    saveQuickTestsMut.mutate(next);
+  }
+  function handleQuickTabClick(slotIdx: number) {
+    const id = quickTestIds[slotIdx];
+    if (id == null) {
+      setQuickPickerSlot(slotIdx);
+      return;
+    }
+    const t = allTests.find((x) => x.id === id);
+    if (t) addTest(t);
+    else {
+      toast({ title: "Saved test no longer exists — please reassign" });
+      setQuickPickerSlot(slotIdx);
+    }
   }
 
   function addPackage(pkg: Pkg) {
@@ -1126,6 +1186,59 @@ export default function BillingDesk() {
                   </div>
                 </div>
 
+                {/* ── Quick Test Tabs (6 customizable slots) ── */}
+                <div className="pt-1">
+                  <div className="flex items-center justify-between gap-2 text-xs font-semibold text-violet-700 dark:text-violet-300 mb-1">
+                    <div className="flex items-center gap-1.5">
+                      <Zap size={12} /> Quick Tests
+                    </div>
+                    <span className="text-[10px] font-normal text-muted-foreground">Hover ✏️ to customize</span>
+                  </div>
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                    {quickTestIds.map((id, i) => {
+                      const t = id != null ? allTests.find((x) => x.id === id) : null;
+                      const added = t ? !!selectedTests.find((s) => s.testId === t.id) : false;
+                      return (
+                        <div key={i} className="relative group">
+                          <button
+                            type="button"
+                            onClick={() => handleQuickTabClick(i)}
+                            disabled={added}
+                            title={t ? `${t.name} · ${t.code} · ${inr(t.price)}` : `Slot ${i + 1} — click to assign a test`}
+                            className={`w-full h-12 rounded-md border text-[10px] leading-tight px-1 py-1 flex flex-col items-center justify-center text-center transition-colors overflow-hidden ${
+                              t
+                                ? added
+                                  ? "border-primary/40 bg-primary/10 text-primary cursor-default"
+                                  : "border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-900 dark:bg-violet-950/30 dark:border-violet-800 dark:text-violet-100"
+                                : "border-dashed border-card-border bg-muted/20 text-muted-foreground hover:bg-muted/40"
+                            }`}
+                          >
+                            {t ? (
+                              <>
+                                <span className="font-semibold w-full truncate leading-tight">{t.name}</span>
+                                <span className="text-[9px] font-mono opacity-70 w-full truncate">{t.code} · {inr(t.price)}</span>
+                              </>
+                            ) : (
+                              <>
+                                <Plus size={12} />
+                                <span className="opacity-70">Slot {i + 1}</span>
+                              </>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setQuickPickerSlot(i); setQuickPickerSearch(""); }}
+                            className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-card border border-card-border text-muted-foreground hover:text-foreground hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-sm"
+                            title="Customize this slot"
+                          >
+                            <Pencil size={8} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div className="pt-1">
                   <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
                     <FlaskConical size={11} /> Individual Tests
@@ -1639,6 +1752,77 @@ export default function BillingDesk() {
           </div>
         </div>
       )}
+
+      {/* ── Quick Test slot picker dialog ── */}
+      <Dialog
+        open={quickPickerSlot !== null}
+        onOpenChange={(o) => { if (!o) { setQuickPickerSlot(null); setQuickPickerSearch(""); } }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Assign test to Quick Slot {(quickPickerSlot ?? 0) + 1}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Pick a frequently used test for this slot. Click the slot tab in Billing Desk to add this test instantly.
+            </p>
+            <div className="relative">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                autoFocus
+                placeholder="Search tests by name or code…"
+                value={quickPickerSearch}
+                onChange={(e) => setQuickPickerSearch(e.target.value)}
+                className="pl-9 h-9 text-sm"
+              />
+            </div>
+            <div className="border border-card-border rounded-lg max-h-72 overflow-y-auto divide-y divide-card-border">
+              {(() => {
+                const q = quickPickerSearch.toLowerCase().trim();
+                const list = allTests
+                  .filter((t) => !q || t.name.toLowerCase().includes(q) || t.code.toLowerCase().includes(q))
+                  .slice(0, 100);
+                if (list.length === 0) {
+                  return <div className="px-3 py-4 text-xs text-muted-foreground text-center">No tests match "{quickPickerSearch}"</div>;
+                }
+                return list.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => {
+                      if (quickPickerSlot != null) assignQuickSlot(quickPickerSlot, t.id);
+                      setQuickPickerSlot(null);
+                      setQuickPickerSearch("");
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-muted/50"
+                  >
+                    <FlaskConical size={11} className="text-muted-foreground flex-shrink-0" />
+                    <span className="text-[10px] font-mono font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded flex-shrink-0">#{t.id}</span>
+                    <span className="flex-1 font-medium truncate">{t.name}</span>
+                    <span className="text-xs text-muted-foreground font-mono flex-shrink-0">{t.code}</span>
+                    <span className="text-xs font-semibold flex-shrink-0">{inr(t.price)}</span>
+                  </button>
+                ));
+              })()}
+            </div>
+            {quickPickerSlot != null && quickTestIds[quickPickerSlot] != null && (
+              <div className="flex justify-end pt-1">
+                <button
+                  onClick={() => {
+                    if (quickPickerSlot != null) assignQuickSlot(quickPickerSlot, null);
+                    setQuickPickerSlot(null);
+                    setQuickPickerSearch("");
+                  }}
+                  className="text-xs text-destructive hover:underline"
+                >
+                  Clear this slot
+                </button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
