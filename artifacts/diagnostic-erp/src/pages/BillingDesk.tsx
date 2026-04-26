@@ -1092,98 +1092,70 @@ export default function BillingDesk() {
 
             {/* ── Test Search & Catalog ── */}
             <div className="flex-shrink-0 border-b border-card-border">
-              <div className="px-4 py-2.5 bg-muted/20 border-b border-card-border flex items-center gap-2 text-sm font-semibold">
-                <FlaskConical size={14} className="text-primary" /> Add Tests
-              </div>
               <div className="p-2.5 space-y-2">
-                <div className="grid grid-cols-[minmax(0,1fr)_118px] gap-1.5 items-center">
-                  <div className="relative min-w-0">
+                {/* ── Add Package compact row (label + search + categories + manage) ── */}
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-700 dark:text-rose-300 flex-shrink-0">
+                    <Package size={13} /> Add Package
+                  </div>
+                  <div className="relative min-w-0 flex-1">
                     <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <Input
-                      placeholder="Search tests by name or code…"
-                      value={testSearch}
-                      onChange={(e) => setTestSearch(e.target.value)}
+                      placeholder="Search packages by name, code, or test…"
+                      value={packageSearch}
+                      onChange={(e) => setPackageSearch(e.target.value)}
                       className="pl-9 h-8 text-sm w-full"
                     />
                   </div>
-                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                    <SelectTrigger className="h-8 w-full text-xs">
-                      <SelectValue placeholder="Category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map((c) => (
-                        <SelectItem key={c} value={c} className="capitalize">{c === "all" ? "All Categories" : c}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <button
+                    type="button"
+                    onClick={() => navigate("/packages")}
+                    className="h-8 rounded-md border border-card-border px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 flex-shrink-0"
+                  >
+                    All Categories
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigate("/packages")}
+                    className="text-[11px] font-normal text-muted-foreground hover:text-foreground flex-shrink-0"
+                  >
+                    Manage packages
+                  </button>
                 </div>
 
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-rose-700 dark:text-rose-300">
-                    <Package size={12} /> Add Package
-                  </div>
-                  <div className="flex items-center justify-between gap-2 text-xs font-semibold text-rose-700 dark:text-rose-300">
-                    <div className="flex items-center gap-1.5">
+                {/* ── Package list ── */}
+                <div className="border border-card-border rounded-lg overflow-hidden bg-background">
+                  {packages.length === 0 ? (
+                    <div className="px-3 py-3 text-xs text-muted-foreground text-center">
+                      No packages created yet.&nbsp;
+                      <button onClick={() => navigate("/packages")} className="text-primary hover:underline">Create one</button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => navigate("/packages")}
-                      className="text-[11px] font-normal text-muted-foreground hover:text-foreground"
-                    >
-                      Manage packages
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-[minmax(0,1fr)_118px] gap-1.5 items-center">
-                    <div className="relative min-w-0">
-                      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        placeholder="Search packages by name, code, or test…"
-                        value={packageSearch}
-                        onChange={(e) => setPackageSearch(e.target.value)}
-                        className="pl-9 h-8 text-sm w-full"
-                      />
+                  ) : filteredPackages.length === 0 ? (
+                    <div className="px-3 py-3 text-xs text-muted-foreground text-center">No packages match "{packageSearch}"</div>
+                  ) : (
+                    <div className="max-h-24 overflow-y-auto divide-y divide-card-border">
+                      {filteredPackages.map((pkg) => {
+                        const added = selectedPackages.some((p) => p.packageId === pkg.id);
+                        const effective = pkg.price - (pkg.price * pkg.discountPct) / 100;
+                        return (
+                          <button
+                            key={pkg.id}
+                            onClick={() => addPackage(pkg)}
+                            disabled={added}
+                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${
+                              added ? "bg-primary/5 text-muted-foreground cursor-default" : "hover:bg-muted/50"
+                            }`}
+                          >
+                            <Package size={11} className="text-muted-foreground flex-shrink-0" />
+                            <span className="flex-1 font-medium truncate">{pkg.name}</span>
+                            <span className="text-xs text-muted-foreground">{pkg.tests.length} tests</span>
+                            <span className="text-xs font-semibold">{inr(effective)}</span>
+                            {added ? <CheckCircle2 size={12} className="text-primary flex-shrink-0" /> : <Plus size={12} className="text-muted-foreground flex-shrink-0" />}
+                          </button>
+                        );
+                      })}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => navigate("/packages")}
-                      className="h-8 rounded-md border border-card-border px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                    >
-                      All Categories
-                    </button>
-                  </div>
-                  <div className="border border-card-border rounded-lg overflow-hidden bg-background">
-                    {packages.length === 0 ? (
-                      <div className="px-3 py-3 text-xs text-muted-foreground text-center">
-                        No packages created yet.&nbsp;
-                        <button onClick={() => navigate("/packages")} className="text-primary hover:underline">Create one</button>
-                      </div>
-                    ) : filteredPackages.length === 0 ? (
-                      <div className="px-3 py-3 text-xs text-muted-foreground text-center">No packages match "{packageSearch}"</div>
-                    ) : (
-                      <div className="max-h-24 overflow-y-auto divide-y divide-card-border">
-                        {filteredPackages.map((pkg) => {
-                          const added = selectedPackages.some((p) => p.packageId === pkg.id);
-                          const effective = pkg.price - (pkg.price * pkg.discountPct) / 100;
-                          return (
-                            <button
-                              key={pkg.id}
-                              onClick={() => addPackage(pkg)}
-                              disabled={added}
-                              className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${
-                                added ? "bg-primary/5 text-muted-foreground cursor-default" : "hover:bg-muted/50"
-                              }`}
-                            >
-                              <Package size={11} className="text-muted-foreground flex-shrink-0" />
-                              <span className="flex-1 font-medium truncate">{pkg.name}</span>
-                              <span className="text-xs text-muted-foreground">{pkg.tests.length} tests</span>
-                              <span className="text-xs font-semibold">{inr(effective)}</span>
-                              {added ? <CheckCircle2 size={12} className="text-primary flex-shrink-0" /> : <Plus size={12} className="text-muted-foreground flex-shrink-0" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+                  )}
                 </div>
 
                 {/* ── Quick Test Tabs (6 customizable slots) ── */}
@@ -1237,6 +1209,32 @@ export default function BillingDesk() {
                       );
                     })}
                   </div>
+                </div>
+
+                {/* ── Add Tests compact row (label + search + category) ── */}
+                <div className="flex items-center gap-2 pt-1">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-primary flex-shrink-0">
+                    <FlaskConical size={13} /> Add Tests
+                  </div>
+                  <div className="relative min-w-0 flex-1">
+                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search tests by name or code…"
+                      value={testSearch}
+                      onChange={(e) => setTestSearch(e.target.value)}
+                      className="pl-9 h-8 text-sm w-full"
+                    />
+                  </div>
+                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                    <SelectTrigger className="h-8 w-32 text-xs flex-shrink-0">
+                      <SelectValue placeholder="Category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((c) => (
+                        <SelectItem key={c} value={c} className="capitalize">{c === "all" ? "All Categories" : c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="pt-1">
