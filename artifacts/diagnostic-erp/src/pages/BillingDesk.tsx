@@ -1059,9 +1059,11 @@ export default function BillingDesk() {
                 </div>
 
                 <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-rose-700 dark:text-rose-300">
+                    <Package size={12} /> Add Package
+                  </div>
                   <div className="flex items-center justify-between gap-2 text-xs font-semibold text-rose-700 dark:text-rose-300">
                     <div className="flex items-center gap-1.5">
-                      <Package size={12} /> Add Package
                     </div>
                     <button
                       type="button"
