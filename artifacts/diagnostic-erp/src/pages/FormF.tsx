@@ -442,6 +442,10 @@ export default function FormF() {
   // Pending queue state
   const [pendingQueue, setPendingQueue] = useState<PendingItem[]>([]);
   const [pendingLoading, setPendingLoading] = useState(false);
+  const [pendingTestSearch, setPendingTestSearch] = useState("");
+  const [pendingCategory, setPendingCategory] = useState("All Categories");
+  const [pendingTests, setPendingTests] = useState<Array<{ id: number; name: string; code?: string | null; category?: string | null }>>([]);
+  const [pendingTestsLoading, setPendingTestsLoading] = useState(false);
 
   // Records tab state
   const [listSearch, setListSearch] = useState("");
@@ -506,6 +510,24 @@ export default function FormF() {
     }
   }, []);
 
+  const fetchPendingTests = useCallback(async (q = "") => {
+    setPendingTestsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (q.trim()) params.set("q", q.trim());
+      const data = await api.get<Array<{ id: number; name: string; code?: string | null; category?: string | null }>>(`/api/form-f/pending-tests?${params.toString()}`);
+      setPendingTests(
+        pendingCategory === "All Categories"
+          ? data
+          : data.filter((t) => (t.category ?? "Uncategorized") === pendingCategory)
+      );
+    } catch {
+      setPendingTests([]);
+    } finally {
+      setPendingTestsLoading(false);
+    }
+  }, [pendingCategory]);
+
   const fetchRecords = useCallback(async (q?: string, by?: string) => {
     setListLoading(true);
     try {
@@ -526,6 +548,9 @@ export default function FormF() {
   }, [activeTab, fetchRecords, fetchPending]);
 
   useEffect(() => { fetchPending(); }, [fetchPending]);
+  useEffect(() => {
+    if (activeTab === "pending") fetchPendingTests(pendingTestSearch);
+  }, [activeTab, pendingTestSearch, fetchPendingTests]);
 
   function openFromQueue(item: PendingItem) {
     setForm({
@@ -778,22 +803,43 @@ export default function FormF() {
         <div className="flex-1 overflow-y-auto p-4">
           <div className="max-w-4xl mx-auto space-y-4">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-end gap-3 justify-between">
               <div>
                 <h2 className="text-base font-bold text-gray-800">Pending Form F Queue</h2>
                 <p className="text-xs text-gray-500 mt-0.5">
                   Patients billed for PCPNDT-required tests who need a Form F filled. Click any row to open the form.
                 </p>
               </div>
-              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={fetchPending} disabled={pendingLoading}>
-                <RefreshCcw size={12} className={`mr-1 ${pendingLoading ? "animate-spin" : ""}`} />
-                {pendingLoading ? "Refreshing…" : "Refresh"}
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  placeholder="Search tests by name or code…"
+                  value={pendingTestSearch}
+                  onChange={(e) => setPendingTestSearch(e.target.value)}
+                  className="h-8 text-xs w-56"
+                />
+                <Input
+                  value={pendingCategory}
+                  onChange={(e) => setPendingCategory(e.target.value)}
+                  className="h-8 text-xs w-40"
+                />
+                <Button size="sm" variant="outline" className="h-8 text-xs" onClick={fetchPending} disabled={pendingLoading}>
+                  <RefreshCcw size={12} className={`mr-1 ${pendingLoading ? "animate-spin" : ""}`} />
+                  {pendingLoading ? "Refreshing…" : "Refresh"}
+                </Button>
+              </div>
             </div>
 
             {pendingLoading ? (
               <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-sm text-gray-400">
                 Loading pending patients…
+              </div>
+            ) : pendingTestsLoading ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-sm text-gray-400">
+                Loading tests…
+              </div>
+            ) : pendingTests.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-sm text-gray-400">
+                No tests match.
               </div>
             ) : pendingQueue.length === 0 ? (
               <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
@@ -809,6 +855,17 @@ export default function FormF() {
                 <div className="bg-orange-50 border-b border-orange-100 px-4 py-2 flex items-center gap-2">
                   <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-orange-500 text-white text-[10px] font-bold">{pendingQueue.length}</span>
                   <span className="text-xs font-semibold text-orange-700">patients awaiting Form F</span>
+                </div>
+                <div className="border-b border-gray-100 px-4 py-3 flex flex-wrap gap-2">
+                  {pendingTests.map((t) => (
+                    <button
+                      key={t.id}
+                      className="px-3 py-1 rounded-full border border-gray-200 text-xs bg-white hover:bg-gray-50"
+                    >
+                      {t.code ? `${t.code} — ` : ""}
+                      {t.name}
+                    </button>
+                  ))}
                 </div>
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 border-b border-gray-100">

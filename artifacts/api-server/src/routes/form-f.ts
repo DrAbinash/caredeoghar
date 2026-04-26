@@ -279,6 +279,41 @@ formFRouter.get("/pending", async (req, res) => {
   }
 });
 
+formFRouter.get("/pending-tests", async (req, res) => {
+  try {
+    const q = String(req.query.q ?? "").trim();
+    const [settings] = await db.select().from(clinicSettingsTable).limit(1);
+    const formFTestIds: number[] = JSON.parse(settings?.formFTestIds ?? "[]");
+
+    if (formFTestIds.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    const tests = await db
+      .select({
+        id: testsTable.id,
+        name: testsTable.name,
+        code: testsTable.code,
+        category: testsTable.category,
+      })
+      .from(testsTable)
+      .where(inArray(testsTable.id, formFTestIds))
+      .orderBy(testsTable.name);
+
+    const result = q
+      ? tests.filter((t) =>
+          `${t.name ?? ""} ${t.code ?? ""} ${t.category ?? ""}`.toLowerCase().includes(q.toLowerCase())
+        )
+      : tests;
+
+    res.json(result);
+  } catch (err) {
+    console.error("[form-f] pending-tests error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 formFRouter.get("/list", async (req, res) => {
   try {
     const { search, searchBy } = req.query as { search?: string; searchBy?: string };
