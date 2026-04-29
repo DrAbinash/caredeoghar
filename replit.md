@@ -23,8 +23,23 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - `pnpm --filter @workspace/api-server run dev` — run API server locally
+- `pnpm dev` — run all 3 services (API + ERP web + Super Admin) in parallel via `concurrently` (used outside Replit; on Replit each artifact is run by its own workflow)
+- `pnpm db:push` — alias for `pnpm --filter @workspace/db run push`
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+
+## Cross-Platform / Local (Windows / macOS / Linux) Setup
+
+The project also runs outside Replit. See `README-WINDOWS.md` for the full step-by-step.
+Key changes that make local dev work:
+
+- Root `preinstall` is a Node script (`scripts/preinstall-check.cjs`) instead of a Unix `sh -c …` line, so `pnpm install` succeeds on Windows.
+- API server `dev` script uses `cross-env` instead of `export NODE_ENV=…`.
+- API server `src/index.ts` loads a workspace-root `.env` via `dotenv` (no override of existing env vars, so Replit's runtime always wins) and falls back to `PORT=8080` when unset.
+- `lib/db/drizzle.config.ts` is ESM-safe (`fileURLToPath` instead of `__dirname`) and also loads the root `.env` so `pnpm db:push` works locally.
+- Both web Vite configs default `PORT` (5173 for ERP, 5174 for Super Admin) and `BASE_PATH` ("/" and "/super-admin-portal/") when not provided.
+- `.env.example` documents `DATABASE_URL` plus all optional integration vars; `.env` files are gitignored.
+- Root `pnpm dev` orchestrates the 3 services with `concurrently`.
 
 ## Diagnostic ERP — Modules
 

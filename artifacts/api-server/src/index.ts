@@ -1,15 +1,22 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
+
+// Load a workspace-root .env file (if present) before anything reads
+// process.env. By default dotenv does NOT override variables that are
+// already set, so the values injected by Replit's runtime always win.
+const rootEnv = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../.env",
+);
+dotenv.config({ path: rootEnv });
+
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startCronScheduler } from "./cron";
 import { ensureDefaultLedger } from "./routes/ledgers";
 
-const rawPort = process.env["PORT"];
-
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
+const rawPort = process.env["PORT"] ?? "8080";
 
 const port = Number(rawPort);
 
