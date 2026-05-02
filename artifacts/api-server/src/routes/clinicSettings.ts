@@ -24,12 +24,29 @@ clinicSettingsRouter.put("/", async (req, res) => {
   for (const f of fields) {
     if (body[f] !== undefined) update[f] = body[f];
   }
-  if (body.patientPhotoEnabled !== undefined) {
-    if (typeof body.patientPhotoEnabled !== "boolean") {
-      res.status(400).json({ error: "patientPhotoEnabled must be a boolean" });
-      return;
+  const boolFields = ["patientPhotoEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit"] as const;
+  for (const f of boolFields) {
+    if (body[f] !== undefined) {
+      if (typeof body[f] !== "boolean") {
+        res.status(400).json({ error: `${f} must be a boolean` });
+        return;
+      }
+      update[f] = body[f];
     }
-    update.patientPhotoEnabled = body.patientPhotoEnabled;
+  }
+  const portalTextFields = ["portalHeading", "portalWelcomeMessage"] as const;
+  for (const f of portalTextFields) {
+    if (body[f] !== undefined) {
+      if (typeof body[f] !== "string") {
+        res.status(400).json({ error: `${f} must be a string` });
+        return;
+      }
+      if (body[f].length > 500) {
+        res.status(400).json({ error: `${f} too long (max 500 chars)` });
+        return;
+      }
+      update[f] = body[f];
+    }
   }
   if (typeof update.logoDataUrl === "string" && update.logoDataUrl.length > 2_000_000) {
     res.status(413).json({ error: "Logo too large (max ~1.5MB)" });

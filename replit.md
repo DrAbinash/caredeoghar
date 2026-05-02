@@ -167,3 +167,15 @@ Key changes that make local dev work:
 - Commission rules stored with JSON arrays for `categories` and `testIds` fields
 - Bill edits require editedBy + reason; stored in bill_audits table
 - Email settings include setup tips for Gmail, Outlook, Zoho
+
+### Patient Portal (artifacts/diagnostic-erp/src/pages/Portal.tsx + artifacts/api-server/src/routes/portal.ts)
+- Public, mobile-friendly portal at `/portal` (routes outside the ERP `Layout`).
+- **Patient login**: mobile number only (per-product UX choice — accepted weak-auth tradeoff).
+- **Staff login**: email + PIN against `users` table; redirects to main ERP root after success.
+- Sessions stored in `portal_sessions` table (random 24-byte hex token, 12h TTL); bearer auth via `Authorization: Bearer <token>`.
+- Patient endpoints (all scoped to `req.portalSession.subjectId`): `/me`, `/me/bills`, `/me/visits`, `/me/reports`, `/me/appointments` (GET + POST), `PUT /me`, `/logout`.
+- Public endpoints: `/api/portal/settings`, `/api/portal/doctors`, `/api/portal/patient-login`, `/api/portal/staff-login`.
+- Settings → Patient Portal tab manages: enable/disable, heading, welcome message, allow-booking, allow-profile-edit, copyable share URL.
+- New `clinic_settings` columns: `portalEnabled`, `portalHeading`, `portalWelcomeMessage`, `portalAllowAppointmentBooking`, `portalAllowProfileEdit`.
+- Patient-booked appointments are stored with `type = "portal"` (vs walk-in) so staff can distinguish them in the main appointments view.
+- Atomic appointment-id increment via SQL `counter + 1` to avoid race conditions when multiple patients book simultaneously.

@@ -14,5 +14,10 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   formFTestIds: text("form_f_test_ids").notNull().default("[]"),
   quickTestIds: text("quick_test_ids").notNull().default("[null,null,null,null,null,null]"),
   patientPhotoEnabled: boolean("patient_photo_enabled").notNull().default(false),
+  portalEnabled: boolean("portal_enabled").notNull().default(false),
+  portalHeading: text("portal_heading").notNull().default(""),
+  portalWelcomeMessage: text("portal_welcome_message").notNull().default(""),
+  portalAllowAppointmentBooking: boolean("portal_allow_appointment_booking").notNull().default(true),
+  portalAllowProfileEdit: boolean("portal_allow_profile_edit").notNull().default(true),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

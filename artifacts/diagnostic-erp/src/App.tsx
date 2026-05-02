@@ -29,6 +29,7 @@ import Expenses from "@/pages/Expenses";
 import Staff from "@/pages/Staff";
 import QueuePage from "@/pages/Queue";
 import FormF from "@/pages/FormF";
+import Portal from "@/pages/Portal";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -43,43 +44,49 @@ const queryClient = new QueryClient({
 
 function Router() {
   return (
-    <Layout>
-      <Switch>
-        <Route path="/" component={BillingDesk} />
-        <Route path="/dashboard" component={Dashboard} />
-        <Route path="/patients" component={Patients} />
-        <Route path="/patients/:id">
-          {(params) => <PatientDetail id={Number(params.id)} />}
-        </Route>
-        <Route path="/tests" component={Tests} />
-        <Route path="/orders" component={Orders} />
-        <Route path="/orders/:id">
-          {(params) => <OrderDetail id={Number(params.id)} />}
-        </Route>
-        <Route path="/billing" component={Billing} />
-        <Route path="/billing/:id">
-          {(params) => <BillDetail id={Number(params.id)} />}
-        </Route>
-        <Route path="/payments" component={Payments} />
-        <Route path="/doctors" component={Doctors} />
-        <Route path="/reports" component={Reports} />
-        <Route path="/report-generator" component={ReportGenerator} />
-        <Route path="/inventory" component={Inventory} />
-        <Route path="/referrals" component={Referrals} />
-        <Route path="/accounting" component={Accounting} />
-        <Route path="/register" component={Register} />
-        <Route path="/discounts" component={Discounts} />
-        <Route path="/pacs" component={PACS} />
-        <Route path="/appointments" component={Appointments} />
-        <Route path="/queue" component={QueuePage} />
-        <Route path="/packages" component={Packages} />
-        <Route path="/expenses" component={Expenses} />
-        <Route path="/staff" component={Staff} />
-        <Route path="/form-f" component={FormF} />
-        <Route path="/settings" component={Settings} />
-        <Route component={NotFound} />
-      </Switch>
-    </Layout>
+    <Switch>
+      <Route path="/portal" component={Portal} />
+      <Route path="/portal/:rest*" component={Portal} />
+      <Route>
+        <Layout>
+          <Switch>
+            <Route path="/" component={BillingDesk} />
+            <Route path="/dashboard" component={Dashboard} />
+            <Route path="/patients" component={Patients} />
+            <Route path="/patients/:id">
+              {(params) => <PatientDetail id={Number(params.id)} />}
+            </Route>
+            <Route path="/tests" component={Tests} />
+            <Route path="/orders" component={Orders} />
+            <Route path="/orders/:id">
+              {(params) => <OrderDetail id={Number(params.id)} />}
+            </Route>
+            <Route path="/billing" component={Billing} />
+            <Route path="/billing/:id">
+              {(params) => <BillDetail id={Number(params.id)} />}
+            </Route>
+            <Route path="/payments" component={Payments} />
+            <Route path="/doctors" component={Doctors} />
+            <Route path="/reports" component={Reports} />
+            <Route path="/report-generator" component={ReportGenerator} />
+            <Route path="/inventory" component={Inventory} />
+            <Route path="/referrals" component={Referrals} />
+            <Route path="/accounting" component={Accounting} />
+            <Route path="/register" component={Register} />
+            <Route path="/discounts" component={Discounts} />
+            <Route path="/pacs" component={PACS} />
+            <Route path="/appointments" component={Appointments} />
+            <Route path="/queue" component={QueuePage} />
+            <Route path="/packages" component={Packages} />
+            <Route path="/expenses" component={Expenses} />
+            <Route path="/staff" component={Staff} />
+            <Route path="/form-f" component={FormF} />
+            <Route path="/settings" component={Settings} />
+            <Route component={NotFound} />
+          </Switch>
+        </Layout>
+      </Route>
+    </Switch>
   );
 }
 

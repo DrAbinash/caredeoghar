@@ -23,3 +23,4 @@ export * from "./staff";
 export * from "./reportTemplates";
 export * from "./abnormalFindings";
 export * from "./formF";
+export * from "./portalSessions";

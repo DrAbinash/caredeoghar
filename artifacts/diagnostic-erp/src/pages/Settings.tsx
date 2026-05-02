@@ -18,7 +18,7 @@ import {
   Users, Download, FileText, BookOpen, ClipboardList, CreditCard,
   FlaskConical, Boxes, ShieldCheck, FileDown, KeyRound, Eye, EyeOff,
   Tag, Building2, Image as ImageIcon, Upload, MessageCircle, Printer,
-  Search,
+  Search, Globe, Copy, ExternalLink, Check,
 } from "lucide-react";
 
 type AppUser = {
@@ -88,6 +88,7 @@ const DEFAULT_PERMISSIONS: Record<string, string[]> = {
 const TABS = [
   { id: "clinic", label: "Clinic Info", icon: Building2 },
   { id: "users", label: "Users", icon: Users },
+  { id: "portal", label: "Patient Portal", icon: Globe },
   { id: "form-f", label: "Form F Tests", icon: FileText },
   { id: "email", label: "Email Notifications", icon: Mail },
   { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
@@ -169,6 +170,7 @@ export default function Settings() {
         </div>
         {tab === "clinic" && <ClinicInfoTab />}
         {tab === "users" && <UsersTab qc={qc} />}
+        {tab === "portal" && <PatientPortalTab />}
         {tab === "form-f" && <FormFTestsTab />}
         {tab === "email" && <EmailTab />}
         {tab === "whatsapp" && <WhatsappTab />}
@@ -354,6 +356,182 @@ function ClinicInfoTab() {
         <p className="text-[11px] text-muted-foreground leading-relaxed">
           Click <strong>Save Changes</strong> after selecting a logo.
         </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type PortalConfig = {
+  portalEnabled: boolean;
+  portalHeading: string;
+  portalWelcomeMessage: string;
+  portalAllowAppointmentBooking: boolean;
+  portalAllowProfileEdit: boolean;
+  name: string;
+};
+
+function PatientPortalTab() {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery<PortalConfig>({
+    queryKey: ["clinic-settings"],
+    queryFn: () => api.get("/api/clinic-settings"),
+  });
+  const [form, setForm] = useState<PortalConfig | null>(null);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => { if (data) setForm(data); }, [data]);
+
+  const save = useMutation({
+    mutationFn: (body: Partial<PortalConfig>) => api.put("/api/clinic-settings", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["clinic-settings"] }),
+  });
+
+  if (isLoading || !form) {
+    return <div className="bg-card border border-card-border rounded-xl p-8 text-center text-muted-foreground">Loading…</div>;
+  }
+
+  const portalUrl = `${window.location.origin}${import.meta.env.BASE_URL || "/"}portal`.replace(/\/+/g, "/").replace(":/", "://");
+
+  const Toggle = ({ value, onChange, label, hint }: { value: boolean; onChange: (v: boolean) => void; label: string; hint: string }) => (
+    <button
+      type="button"
+      onClick={() => onChange(!value)}
+      className={`w-full text-left flex items-start justify-between gap-3 px-4 py-3 rounded-lg border transition-colors ${value ? "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-800" : "bg-muted/30 border-card-border"}`}
+    >
+      <div>
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{hint}</p>
+      </div>
+      <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors mt-0.5 shrink-0 ${value ? "bg-green-500" : "bg-muted-foreground/40"}`}>
+        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${value ? "translate-x-5" : "translate-x-1"}`} />
+      </span>
+    </button>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border border-blue-200 dark:border-blue-900 rounded-xl p-5">
+        <div className="flex items-start gap-3">
+          <div className="h-10 w-10 rounded-lg bg-blue-500 flex items-center justify-center shrink-0">
+            <Globe size={20} className="text-white" />
+          </div>
+          <div className="flex-1">
+            <h2 className="font-bold text-lg">Public Patient Portal</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              A simple, mobile-friendly web page where your patients can sign in with their mobile number to view bills, lab reports, book appointments, and update their profile. Staff can also sign in to access the main system.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-4">
+        {/* Left: enable + URL */}
+        <div className="lg:col-span-1 space-y-4">
+          <div className="bg-card border border-card-border rounded-xl p-5 space-y-3">
+            <div>
+              <h3 className="font-bold">Status</h3>
+              <p className="text-xs text-muted-foreground">Turn the public portal on or off.</p>
+            </div>
+            <Toggle
+              value={form.portalEnabled}
+              onChange={(v) => setForm({ ...form, portalEnabled: v })}
+              label={form.portalEnabled ? "Portal is ON — visible to public" : "Portal is OFF — hidden"}
+              hint={form.portalEnabled ? "Anyone with the link can access the portal" : "Visiting the link will show 'Portal Not Available'"}
+            />
+          </div>
+
+          <div className="bg-card border border-card-border rounded-xl p-5 space-y-3">
+            <div>
+              <h3 className="font-bold">Share Link</h3>
+              <p className="text-xs text-muted-foreground">Give this link to your patients (print on bills, send via SMS / WhatsApp).</p>
+            </div>
+            <div className="flex items-center gap-2 bg-muted/50 border border-card-border rounded-lg p-2">
+              <code className="flex-1 text-xs truncate font-mono">{portalUrl}</code>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0"
+                onClick={() => { navigator.clipboard.writeText(portalUrl).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }}
+                title="Copy link"
+              >
+                {copied ? <Check size={13} className="text-green-600" /> : <Copy size={13} />}
+              </Button>
+            </div>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => window.open(portalUrl, "_blank")}
+            >
+              <ExternalLink size={14} className="mr-2" /> Open Portal in new tab
+            </Button>
+          </div>
+        </div>
+
+        {/* Right: customization */}
+        <div className="lg:col-span-2 space-y-4">
+          <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+            <div>
+              <h3 className="font-bold">Page Customization</h3>
+              <p className="text-xs text-muted-foreground">What patients see when they open the portal.</p>
+            </div>
+            <div>
+              <Label>Heading</Label>
+              <Input
+                value={form.portalHeading}
+                onChange={(e) => setForm({ ...form, portalHeading: e.target.value })}
+                placeholder={form.name || "e.g. CARE Diagnostics — Patient Portal"}
+                className="mt-1"
+                maxLength={120}
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">If left blank, your clinic name will be used.</p>
+            </div>
+            <div>
+              <Label>Welcome Message</Label>
+              <textarea
+                value={form.portalWelcomeMessage}
+                onChange={(e) => setForm({ ...form, portalWelcomeMessage: e.target.value })}
+                placeholder="e.g. Access your lab reports, bills and appointment bookings — anytime, anywhere."
+                rows={3}
+                maxLength={500}
+                className="w-full mt-1 rounded-md border border-card-border bg-background px-3 py-2 text-sm"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">{form.portalWelcomeMessage.length}/500 characters. Shown below the heading.</p>
+            </div>
+          </div>
+
+          <div className="bg-card border border-card-border rounded-xl p-5 space-y-3">
+            <div>
+              <h3 className="font-bold">Patient Permissions</h3>
+              <p className="text-xs text-muted-foreground">Control what logged-in patients can do.</p>
+            </div>
+            <Toggle
+              value={form.portalAllowAppointmentBooking}
+              onChange={(v) => setForm({ ...form, portalAllowAppointmentBooking: v })}
+              label="Allow appointment booking"
+              hint="Patients can self-book new appointments online."
+            />
+            <Toggle
+              value={form.portalAllowProfileEdit}
+              onChange={(v) => setForm({ ...form, portalAllowProfileEdit: v })}
+              label="Allow patients to edit their profile"
+              hint="Patients can update name, mobile, email, address, blood group themselves."
+            />
+          </div>
+
+          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-xl p-4 text-sm">
+            <p className="font-semibold text-amber-800 dark:text-amber-300 mb-1">Login methods</p>
+            <ul className="text-xs text-amber-700 dark:text-amber-400 space-y-1 list-disc pl-4">
+              <li><strong>Patients</strong> sign in with their <strong>registered mobile number</strong> only — make sure each patient's phone in your records is correct.</li>
+              <li><strong>Staff</strong> sign in with their <strong>work email + PIN</strong> (set under the Users tab). After login they're taken to the main system.</li>
+            </ul>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" type="button" onClick={() => data && setForm(data)} disabled={save.isPending}>Reset</Button>
+            <Button onClick={() => save.mutate(form)} disabled={save.isPending}>
+              {save.isPending ? "Saving…" : "Save Changes"}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

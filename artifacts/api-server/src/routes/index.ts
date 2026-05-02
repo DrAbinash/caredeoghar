@@ -30,6 +30,7 @@ import { bridgeRouter } from "./bridge";
 import { reportTemplatesRouter } from "./report-templates";
 import { abnormalFindingsRouter } from "./abnormal-findings";
 import formFRouter from "./form-f";
+import { portalRouter } from "./portal";
 
 const router: IRouter = Router();
 
@@ -65,5 +66,6 @@ router.use("/bridge", bridgeRouter);
 router.use("/report-templates", reportTemplatesRouter);
 router.use("/abnormal-findings", abnormalFindingsRouter);
 router.use("/form-f", formFRouter);
+router.use("/portal", portalRouter);
 
 export default router;
