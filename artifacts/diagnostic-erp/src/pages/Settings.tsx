@@ -18,8 +18,11 @@ import {
   Users, Download, FileText, BookOpen, ClipboardList, CreditCard,
   FlaskConical, Boxes, ShieldCheck, FileDown, KeyRound, Eye, EyeOff,
   Tag, Building2, Image as ImageIcon, Upload, MessageCircle, Printer,
-  Search, Globe, Copy, ExternalLink, Check,
+  Search, Globe, Copy, ExternalLink, Check, Network, MapPin, Database,
+  RefreshCcw, FileCode,
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
 
 type AppUser = {
   id: number; name: string; email: string; role: string;
@@ -88,12 +91,16 @@ const DEFAULT_PERMISSIONS: Record<string, string[]> = {
 const TABS = [
   { id: "clinic", label: "Clinic Info", icon: Building2 },
   { id: "users", label: "Users", icon: Users },
+  { id: "departments", label: "Departments", icon: Network },
+  { id: "branches", label: "Branches", icon: MapPin },
+  { id: "report-templates", label: "Report Templates", icon: FileCode },
   { id: "portal", label: "Patient Portal", icon: Globe },
   { id: "form-f", label: "Form F Tests", icon: FileText },
   { id: "email", label: "Email Notifications", icon: Mail },
   { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
   { id: "printers", label: "Printers", icon: Printer },
   { id: "discount-reasons", label: "Discount Reasons", icon: Tag },
+  { id: "backup", label: "Backup", icon: Database },
   { id: "manual", label: "User Manual", icon: FileDown },
   { id: "password", label: "Change Password", icon: KeyRound },
 ];
@@ -170,12 +177,16 @@ export default function Settings() {
         </div>
         {tab === "clinic" && <ClinicInfoTab />}
         {tab === "users" && <UsersTab qc={qc} />}
+        {tab === "departments" && <DepartmentsTab />}
+        {tab === "branches" && <BranchesTab />}
+        {tab === "report-templates" && <ReportTemplatesTab />}
         {tab === "portal" && <PatientPortalTab />}
         {tab === "form-f" && <FormFTestsTab />}
         {tab === "email" && <EmailTab />}
         {tab === "whatsapp" && <WhatsappTab />}
         {tab === "printers" && <PrinterTab />}
         {tab === "discount-reasons" && <DiscountReasonsTab />}
+        {tab === "backup" && <BackupTab />}
         {tab === "manual" && <ManualTab />}
         {tab === "password" && <ChangePasswordTab />}
       </div>
@@ -1197,4 +1208,560 @@ function ChangePasswordTab() {
   const { register, handleSubmit, watch, reset, setValue } = useForm<ChangePasswordForm>({ defaultValues: { userId: "", currentPin: "", newPin: "", confirmPin: "" } });
   const onSubmit = handleSubmit((d) => { if (!d.userId || d.newPin !== d.confirmPin) return; changePassword.mutate({ userId: Number(d.userId), currentPin: d.currentPin, newPin: d.newPin }, { onSuccess: () => reset({ userId: "", currentPin: "", newPin: "", confirmPin: "" }) }); });
   return (<div className="max-w-2xl space-y-4"><div className="bg-card border border-card-border rounded-xl p-5"><p className="text-sm text-muted-foreground">Change a user PIN/password for login and secure actions.</p></div><form onSubmit={onSubmit} className="space-y-4 bg-card border border-card-border rounded-xl p-5"><div><Label>User</Label><Select value={watch("userId")} onValueChange={(v) => setValue("userId", v)}><SelectTrigger className="mt-1"><SelectValue placeholder="Select user" /></SelectTrigger><SelectContent>{users.map((u) => <SelectItem key={u.id} value={String(u.id)}>{u.name} — {u.role}</SelectItem>)}</SelectContent></Select></div><div><Label>Current PIN</Label><Input {...register("currentPin", { required: true })} className="mt-1" type={visible ? "text" : "password"} /></div><div><Label>New PIN</Label><Input {...register("newPin", { required: true })} className="mt-1" type={visible ? "text" : "password"} /></div><div><Label>Confirm New PIN</Label><Input {...register("confirmPin", { required: true })} className="mt-1" type={visible ? "text" : "password"} /></div><div className="flex items-center justify-between"><button type="button" onClick={() => setVisible((v) => !v)} className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1">{visible ? <EyeOff size={14} /> : <Eye size={14} />} Toggle visibility</button><Button type="submit" disabled={changePassword.isPending}>Update PIN</Button></div>{changePassword.isError && <p className="text-sm text-destructive">Failed to update PIN.</p>}</form></div>);
+}
+
+// ============================================================
+// DEPARTMENTS TAB
+// ============================================================
+type Department = {
+  id: number; name: string; code: string | null; description: string | null;
+  headOfDepartment: string | null; contactPhone: string | null; contactEmail: string | null;
+  isActive: boolean; testCount: number; staffCount: number; machineCount: number;
+};
+
+function DepartmentsTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: rows = [], isLoading } = useQuery<Department[]>({
+    queryKey: ["departments"],
+    queryFn: () => api.get("/api/departments"),
+  });
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Department | null>(null);
+  const [form, setForm] = useState({ name: "", code: "", description: "", headOfDepartment: "", contactPhone: "", contactEmail: "", isActive: true });
+
+  const reset = () => { setEditing(null); setForm({ name: "", code: "", description: "", headOfDepartment: "", contactPhone: "", contactEmail: "", isActive: true }); };
+
+  const create = useMutation({
+    mutationFn: (b: typeof form) => api.post("/api/departments", b),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["departments"] }); setOpen(false); reset(); toast({ title: "Department added" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+  const update = useMutation({
+    mutationFn: ({ id, b }: { id: number; b: typeof form }) => api.patch(`/api/departments/${id}`, b),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["departments"] }); setOpen(false); reset(); toast({ title: "Department updated" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+  const remove = useMutation({
+    mutationFn: (id: number) => api.delete(`/api/departments/${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["departments"] }); toast({ title: "Department deleted" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+
+  const onEdit = (d: Department) => {
+    setEditing(d);
+    setForm({ name: d.name, code: d.code || "", description: d.description || "", headOfDepartment: d.headOfDepartment || "", contactPhone: d.contactPhone || "", contactEmail: d.contactEmail || "", isActive: d.isActive });
+    setOpen(true);
+  };
+  const onSubmit = () => { if (!form.name.trim()) return; if (editing) update.mutate({ id: editing.id, b: form }); else create.mutate(form); };
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-card border border-border rounded-xl p-4 flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h3 className="font-semibold flex items-center gap-2"><Network size={16} /> Departments</h3>
+          <p className="text-xs text-muted-foreground mt-1">Lab departments referenced by tests, staff and machines.</p>
+        </div>
+        <Button onClick={() => { reset(); setOpen(true); }}><Plus size={14} className="mr-1" /> Add Department</Button>
+      </div>
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40">
+            <tr className="text-left">
+              <th className="px-3 py-2 font-medium text-xs">Name</th>
+              <th className="px-3 py-2 font-medium text-xs">Code</th>
+              <th className="px-3 py-2 font-medium text-xs">Head</th>
+              <th className="px-3 py-2 font-medium text-xs">Contact</th>
+              <th className="px-3 py-2 font-medium text-xs text-right">Tests</th>
+              <th className="px-3 py-2 font-medium text-xs text-right">Staff</th>
+              <th className="px-3 py-2 font-medium text-xs text-right">Machines</th>
+              <th className="px-3 py-2 font-medium text-xs">Status</th>
+              <th className="px-3 py-2 font-medium text-xs text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading
+              ? <tr><td colSpan={9} className="px-3 py-8 text-center text-xs text-muted-foreground">Loading…</td></tr>
+              : rows.length === 0
+                ? <tr><td colSpan={9} className="px-3 py-8 text-center text-xs text-muted-foreground">No departments yet — add common ones like Pathology, Radiology, Cardiology</td></tr>
+                : rows.map(d => (
+                  <tr key={d.id} className="border-t border-border/50 hover:bg-muted/20">
+                    <td className="px-3 py-2 font-medium">{d.name}</td>
+                    <td className="px-3 py-2 text-xs font-mono">{d.code || "—"}</td>
+                    <td className="px-3 py-2 text-xs">{d.headOfDepartment || "—"}</td>
+                    <td className="px-3 py-2 text-xs">{d.contactPhone || d.contactEmail || "—"}</td>
+                    <td className="px-3 py-2 text-xs text-right">{d.testCount}</td>
+                    <td className="px-3 py-2 text-xs text-right">{d.staffCount}</td>
+                    <td className="px-3 py-2 text-xs text-right">{d.machineCount}</td>
+                    <td className="px-3 py-2"><Badge className={d.isActive ? "bg-emerald-100 text-emerald-700" : "bg-zinc-200 text-zinc-700"}>{d.isActive ? "active" : "inactive"}</Badge></td>
+                    <td className="px-3 py-2">
+                      <div className="flex justify-end gap-1">
+                        <Button size="sm" variant="outline" onClick={() => onEdit(d)}><Pencil size={13} /></Button>
+                        <Button size="sm" variant="outline" onClick={() => { if (confirm(`Delete ${d.name}?`)) remove.mutate(d.id); }}><Trash2 size={13} className="text-rose-500" /></Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+          </tbody>
+        </table>
+      </div>
+
+      <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{editing ? "Edit Department" : "Add Department"}</DialogTitle></DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2"><Label className="text-xs">Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+            <div><Label className="text-xs">Code</Label><Input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="PATH" /></div>
+            <div><Label className="text-xs">Head of Dept</Label><Input value={form.headOfDepartment} onChange={(e) => setForm({ ...form, headOfDepartment: e.target.value })} /></div>
+            <div><Label className="text-xs">Contact Phone</Label><Input value={form.contactPhone} onChange={(e) => setForm({ ...form, contactPhone: e.target.value })} /></div>
+            <div><Label className="text-xs">Contact Email</Label><Input value={form.contactEmail} onChange={(e) => setForm({ ...form, contactEmail: e.target.value })} /></div>
+            <div className="col-span-2"><Label className="text-xs">Description</Label><Textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
+            <label className="flex items-center gap-2 col-span-2 text-sm">
+              <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />
+              Active
+            </label>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => { setOpen(false); reset(); }}>Cancel</Button>
+            <Button onClick={onSubmit} disabled={!form.name.trim()}>{editing ? "Save" : "Add"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ============================================================
+// BRANCHES TAB
+// ============================================================
+type Branch = {
+  id: number; code: string; name: string; address: string | null;
+  city: string | null; state: string | null; pincode: string | null;
+  phone: string | null; email: string | null; gstin: string | null;
+  manager: string | null; isMain: boolean; isActive: boolean; notes: string | null;
+};
+
+function BranchesTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: rows = [], isLoading } = useQuery<Branch[]>({
+    queryKey: ["branches"],
+    queryFn: () => api.get("/api/branches"),
+  });
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Branch | null>(null);
+  const [form, setForm] = useState({ code: "", name: "", address: "", city: "", state: "", pincode: "", phone: "", email: "", gstin: "", manager: "", isMain: false, isActive: true, notes: "" });
+
+  const reset = () => { setEditing(null); setForm({ code: "", name: "", address: "", city: "", state: "", pincode: "", phone: "", email: "", gstin: "", manager: "", isMain: false, isActive: true, notes: "" }); };
+
+  const create = useMutation({
+    mutationFn: (b: typeof form) => api.post("/api/branches", b),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["branches"] }); setOpen(false); reset(); toast({ title: "Branch added" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+  const update = useMutation({
+    mutationFn: ({ id, b }: { id: number; b: typeof form }) => api.patch(`/api/branches/${id}`, b),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["branches"] }); setOpen(false); reset(); toast({ title: "Branch updated" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+  const remove = useMutation({
+    mutationFn: (id: number) => api.delete(`/api/branches/${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["branches"] }); toast({ title: "Branch deleted" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+
+  const onEdit = (b: Branch) => {
+    setEditing(b);
+    setForm({ code: b.code, name: b.name, address: b.address || "", city: b.city || "", state: b.state || "", pincode: b.pincode || "", phone: b.phone || "", email: b.email || "", gstin: b.gstin || "", manager: b.manager || "", isMain: b.isMain, isActive: b.isActive, notes: b.notes || "" });
+    setOpen(true);
+  };
+  const onSubmit = () => { if (!form.code.trim() || !form.name.trim()) return; if (editing) update.mutate({ id: editing.id, b: form }); else create.mutate(form); };
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-card border border-border rounded-xl p-4 flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h3 className="font-semibold flex items-center gap-2"><MapPin size={16} /> Branches</h3>
+          <p className="text-xs text-muted-foreground mt-1">Multi-branch / multi-location setup. Mark one as the main branch.</p>
+        </div>
+        <Button onClick={() => { reset(); setOpen(true); }}><Plus size={14} className="mr-1" /> Add Branch</Button>
+      </div>
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40">
+            <tr className="text-left">
+              <th className="px-3 py-2 font-medium text-xs">Code</th>
+              <th className="px-3 py-2 font-medium text-xs">Name</th>
+              <th className="px-3 py-2 font-medium text-xs">Address</th>
+              <th className="px-3 py-2 font-medium text-xs">Phone / Email</th>
+              <th className="px-3 py-2 font-medium text-xs">GSTIN</th>
+              <th className="px-3 py-2 font-medium text-xs">Manager</th>
+              <th className="px-3 py-2 font-medium text-xs">Status</th>
+              <th className="px-3 py-2 font-medium text-xs text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading
+              ? <tr><td colSpan={8} className="px-3 py-8 text-center text-xs text-muted-foreground">Loading…</td></tr>
+              : rows.length === 0
+                ? <tr><td colSpan={8} className="px-3 py-8 text-center text-xs text-muted-foreground">No branches yet — add your main branch first</td></tr>
+                : rows.map(b => (
+                  <tr key={b.id} className="border-t border-border/50 hover:bg-muted/20">
+                    <td className="px-3 py-2 font-mono text-xs">{b.code}</td>
+                    <td className="px-3 py-2 font-medium">
+                      {b.name}
+                      {b.isMain && <Badge className="ml-2 bg-violet-100 text-violet-700">Main</Badge>}
+                    </td>
+                    <td className="px-3 py-2 text-xs">{[b.address, b.city, b.state, b.pincode].filter(Boolean).join(", ") || "—"}</td>
+                    <td className="px-3 py-2 text-xs">{b.phone || "—"}<div className="text-[10px] text-muted-foreground">{b.email || ""}</div></td>
+                    <td className="px-3 py-2 text-xs font-mono">{b.gstin || "—"}</td>
+                    <td className="px-3 py-2 text-xs">{b.manager || "—"}</td>
+                    <td className="px-3 py-2"><Badge className={b.isActive ? "bg-emerald-100 text-emerald-700" : "bg-zinc-200 text-zinc-700"}>{b.isActive ? "active" : "inactive"}</Badge></td>
+                    <td className="px-3 py-2">
+                      <div className="flex justify-end gap-1">
+                        <Button size="sm" variant="outline" onClick={() => onEdit(b)}><Pencil size={13} /></Button>
+                        <Button size="sm" variant="outline" onClick={() => { if (confirm(`Delete ${b.name}?`)) remove.mutate(b.id); }}><Trash2 size={13} className="text-rose-500" /></Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+          </tbody>
+        </table>
+      </div>
+
+      <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader><DialogTitle>{editing ? "Edit Branch" : "Add Branch"}</DialogTitle></DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div><Label className="text-xs">Code *</Label><Input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} disabled={!!editing} /></div>
+            <div><Label className="text-xs">Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+            <div className="col-span-2"><Label className="text-xs">Address</Label><Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
+            <div><Label className="text-xs">City</Label><Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} /></div>
+            <div><Label className="text-xs">State</Label><Input value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} /></div>
+            <div><Label className="text-xs">Pincode</Label><Input value={form.pincode} onChange={(e) => setForm({ ...form, pincode: e.target.value })} /></div>
+            <div><Label className="text-xs">Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+            <div><Label className="text-xs">Email</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+            <div><Label className="text-xs">GSTIN</Label><Input value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} /></div>
+            <div><Label className="text-xs">Manager</Label><Input value={form.manager} onChange={(e) => setForm({ ...form, manager: e.target.value })} /></div>
+            <div className="col-span-2"><Label className="text-xs">Notes</Label><Textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={form.isMain} onChange={(e) => setForm({ ...form, isMain: e.target.checked })} />
+              Main branch
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />
+              Active
+            </label>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => { setOpen(false); reset(); }}>Cancel</Button>
+            <Button onClick={onSubmit} disabled={!form.code.trim() || !form.name.trim()}>{editing ? "Save" : "Add"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ============================================================
+// REPORT TEMPLATES TAB
+// ============================================================
+type ReportTemplate = {
+  id: number; testId: number; name: string; format: string;
+  content: string; isDefault: boolean; tags: string | null; modality: string | null;
+};
+type LiteTest = { id: number; code: string; name: string; category: string };
+
+function ReportTemplatesTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: templates = [], isLoading } = useQuery<ReportTemplate[]>({
+    queryKey: ["report-templates"],
+    queryFn: () => api.get("/api/report-templates"),
+  });
+  const { data: tests = [] } = useQuery<LiteTest[]>({
+    queryKey: ["report-templates-tests"],
+    queryFn: async () => {
+      const r = await api.get<{ tests: LiteTest[]; total: number } | LiteTest[]>("/api/tests");
+      return Array.isArray(r) ? r : (r?.tests ?? []);
+    },
+  });
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<ReportTemplate | null>(null);
+  const [search, setSearch] = useState("");
+  const [filterTest, setFilterTest] = useState<string>("");
+  const [form, setForm] = useState({ testId: "", name: "", format: "text", content: "", isDefault: false, tags: "", modality: "" });
+
+  const testMap = new Map(tests.map(t => [t.id, t]));
+
+  const reset = () => { setEditing(null); setForm({ testId: "", name: "", format: "text", content: "", isDefault: false, tags: "", modality: "" }); };
+
+  const create = useMutation({
+    mutationFn: (b: typeof form) => api.post("/api/report-templates", { ...b, testId: Number(b.testId) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["report-templates"] }); setOpen(false); reset(); toast({ title: "Template created" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+  const update = useMutation({
+    mutationFn: ({ id, b }: { id: number; b: typeof form }) => api.patch(`/api/report-templates/${id}`, { ...b, testId: Number(b.testId) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["report-templates"] }); setOpen(false); reset(); toast({ title: "Template updated" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+  const remove = useMutation({
+    mutationFn: (id: number) => api.delete(`/api/report-templates/${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["report-templates"] }); toast({ title: "Template deleted" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+
+  const onEdit = (t: ReportTemplate) => {
+    setEditing(t);
+    setForm({ testId: String(t.testId), name: t.name, format: t.format, content: t.content, isDefault: t.isDefault, tags: t.tags || "", modality: t.modality || "" });
+    setOpen(true);
+  };
+  const onSubmit = () => {
+    if (!form.testId || !form.name.trim() || !form.content.trim()) {
+      toast({ title: "Test, name and content are required", variant: "destructive" });
+      return;
+    }
+    if (editing) update.mutate({ id: editing.id, b: form });
+    else create.mutate(form);
+  };
+
+  const filtered = templates.filter(t => {
+    if (filterTest && String(t.testId) !== filterTest) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      const test = testMap.get(t.testId);
+      if (!t.name.toLowerCase().includes(q) && !(test?.name.toLowerCase().includes(q)) && !(t.tags || "").toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-card border border-border rounded-xl p-4 flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h3 className="font-semibold flex items-center gap-2"><FileCode size={16} /> Report Templates</h3>
+          <p className="text-xs text-muted-foreground mt-1">Per-test report templates used by Report Generator. Mark one default per test for auto-load.</p>
+        </div>
+        <Button onClick={() => { reset(); setOpen(true); }}><Plus size={14} className="mr-1" /> New Template</Button>
+      </div>
+
+      <div className="bg-card border border-border rounded-xl p-3 flex flex-wrap items-end gap-3">
+        <div className="flex-1 min-w-[180px]">
+          <Label className="text-xs">Search</Label>
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Template name, test or tag" className="h-9" />
+        </div>
+        <div className="min-w-[200px]">
+          <Label className="text-xs">Filter by Test</Label>
+          <Select value={filterTest || "__all__"} onValueChange={(v) => setFilterTest(v === "__all__" ? "" : v)}>
+            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+            <SelectContent className="max-h-72">
+              <SelectItem value="__all__">All tests</SelectItem>
+              {tests.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.code} — {t.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40">
+            <tr className="text-left">
+              <th className="px-3 py-2 font-medium text-xs">Test</th>
+              <th className="px-3 py-2 font-medium text-xs">Template Name</th>
+              <th className="px-3 py-2 font-medium text-xs">Format</th>
+              <th className="px-3 py-2 font-medium text-xs">Modality</th>
+              <th className="px-3 py-2 font-medium text-xs">Tags</th>
+              <th className="px-3 py-2 font-medium text-xs text-center">Default</th>
+              <th className="px-3 py-2 font-medium text-xs text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading
+              ? <tr><td colSpan={7} className="px-3 py-8 text-center text-xs text-muted-foreground">Loading…</td></tr>
+              : filtered.length === 0
+                ? <tr><td colSpan={7} className="px-3 py-8 text-center text-xs text-muted-foreground">No templates {templates.length > 0 ? "matching filters" : "yet — create your first template"}</td></tr>
+                : filtered.map(t => {
+                  const test = testMap.get(t.testId);
+                  return (
+                    <tr key={t.id} className="border-t border-border/50 hover:bg-muted/20">
+                      <td className="px-3 py-2 text-xs">{test ? <span><span className="font-mono">{test.code}</span> — {test.name}</span> : `Test #${t.testId}`}</td>
+                      <td className="px-3 py-2 font-medium">{t.name}</td>
+                      <td className="px-3 py-2"><Badge variant="outline">{t.format}</Badge></td>
+                      <td className="px-3 py-2 text-xs">{t.modality || "—"}</td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground max-w-xs truncate" title={t.tags || ""}>{t.tags || "—"}</td>
+                      <td className="px-3 py-2 text-center">{t.isDefault ? <Badge className="bg-violet-100 text-violet-700">Default</Badge> : <span className="text-muted-foreground text-xs">—</span>}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex justify-end gap-1">
+                          <Button size="sm" variant="outline" onClick={() => onEdit(t)}><Pencil size={13} /></Button>
+                          <Button size="sm" variant="outline" onClick={() => { if (confirm(`Delete "${t.name}"?`)) remove.mutate(t.id); }}><Trash2 size={13} className="text-rose-500" /></Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+          </tbody>
+        </table>
+      </div>
+
+      <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>{editing ? "Edit Template" : "New Report Template"}</DialogTitle></DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <Label className="text-xs">Test *</Label>
+              <Select value={form.testId} onValueChange={(v) => setForm({ ...form, testId: v })}>
+                <SelectTrigger><SelectValue placeholder="Select test" /></SelectTrigger>
+                <SelectContent className="max-h-72">{tests.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.code} — {t.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div><Label className="text-xs">Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Standard PA View" /></div>
+            <div><Label className="text-xs">Format</Label>
+              <Select value={form.format} onValueChange={(v) => setForm({ ...form, format: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="text">text</SelectItem><SelectItem value="html">html</SelectItem></SelectContent>
+              </Select>
+            </div>
+            <div><Label className="text-xs">Modality</Label><Input value={form.modality} onChange={(e) => setForm({ ...form, modality: e.target.value })} placeholder="USG, CT, MRI, X-RAY, LAB, ECG…" /></div>
+            <div><Label className="text-xs">Tags (comma-separated)</Label><Input value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="fatty liver, hepatomegaly" /></div>
+            <div className="col-span-2">
+              <Label className="text-xs">Content (use [PLACEHOLDERS]) *</Label>
+              <Textarea rows={10} value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} className="font-mono text-xs" placeholder="Patient: [PATIENT_NAME]&#10;Age: [AGE]&#10;..." />
+            </div>
+            <label className="flex items-center gap-2 col-span-2 text-sm">
+              <input type="checkbox" checked={form.isDefault} onChange={(e) => setForm({ ...form, isDefault: e.target.checked })} />
+              Mark as default for this test (auto-loaded by Report Generator)
+            </label>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => { setOpen(false); reset(); }}>Cancel</Button>
+            <Button onClick={onSubmit}>{editing ? "Save" : "Create"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ============================================================
+// BACKUP TAB
+// ============================================================
+type BackupLog = {
+  id: number; backupType: string; status: string; format: string;
+  rowCount: number | null; sizeBytes: number | null; errorMessage: string | null;
+  performedBy: string | null; createdAt: string;
+};
+
+function BackupTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: logs = [] } = useQuery<BackupLog[]>({
+    queryKey: ["backup-logs"],
+    queryFn: () => api.get("/api/backup/logs"),
+    refetchInterval: 5000,
+  });
+  const { data: info } = useQuery<{ tables: string[] }>({
+    queryKey: ["backup-info"],
+    queryFn: () => api.get("/api/backup/info"),
+  });
+  const [running, setRunning] = useState(false);
+
+  const fmtSize = (bytes: number | null) => {
+    if (!bytes) return "—";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1_048_576) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1_048_576).toFixed(2)} MB`;
+  };
+
+  const runBackup = async () => {
+    setRunning(true);
+    try {
+      const res = await fetch("/api/backup/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ performedBy: "user" }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || "Backup failed");
+      }
+      const blob = await res.blob();
+      const filename = res.headers.get("Content-Disposition")?.match(/filename="?([^"]+)"?/)?.[1] || `backup-${new Date().toISOString()}.json`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast({ title: "Backup downloaded", description: filename });
+      qc.invalidateQueries({ queryKey: ["backup-logs"] });
+    } catch (err) {
+      toast({ title: "Backup failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-card border border-border rounded-xl p-4">
+        <h3 className="font-semibold flex items-center gap-2"><Database size={16} /> Master Data Backup</h3>
+        <p className="text-xs text-muted-foreground mt-1">
+          Download a JSON snapshot of master data and configuration (settings, users, doctors, tests, templates, departments, branches, machines, AMC contracts, etc.).
+          For full Postgres-level backups (including transactional data like patients/orders/bills), use <code className="bg-muted px-1 rounded">pg_dump</code> against your DATABASE_URL.
+        </p>
+        <div className="mt-3 flex items-center gap-3">
+          <Button onClick={runBackup} disabled={running}>
+            {running ? <RefreshCcw size={14} className="mr-1 animate-spin" /> : <Download size={14} className="mr-1" />}
+            {running ? "Generating…" : "Run Backup & Download"}
+          </Button>
+          <Button variant="outline" onClick={() => qc.invalidateQueries({ queryKey: ["backup-logs"] })}>
+            <RefreshCcw size={14} className="mr-1" /> Refresh log
+          </Button>
+        </div>
+        {info && (
+          <div className="mt-3 text-[11px] text-muted-foreground">
+            <span className="font-medium">Included tables ({info.tables.length}):</span> {info.tables.join(" · ")}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+          <h4 className="font-medium text-sm">Backup History</h4>
+          <span className="text-[11px] text-muted-foreground">last 50 runs</span>
+        </div>
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40">
+            <tr className="text-left">
+              <th className="px-3 py-2 font-medium text-xs">When</th>
+              <th className="px-3 py-2 font-medium text-xs">Type</th>
+              <th className="px-3 py-2 font-medium text-xs">Status</th>
+              <th className="px-3 py-2 font-medium text-xs">By</th>
+              <th className="px-3 py-2 font-medium text-xs text-right">Rows</th>
+              <th className="px-3 py-2 font-medium text-xs text-right">Size</th>
+              <th className="px-3 py-2 font-medium text-xs">Error</th>
+            </tr>
+          </thead>
+          <tbody>
+            {logs.length === 0
+              ? <tr><td colSpan={7} className="px-3 py-8 text-center text-xs text-muted-foreground">No backups yet — click "Run Backup" above</td></tr>
+              : logs.map(l => (
+                <tr key={l.id} className="border-t border-border/50 hover:bg-muted/20">
+                  <td className="px-3 py-2 text-xs whitespace-nowrap">{new Date(l.createdAt).toLocaleString()}</td>
+                  <td className="px-3 py-2 text-xs"><Badge variant="outline">{l.backupType}</Badge></td>
+                  <td className="px-3 py-2"><Badge className={l.status === "success" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}>{l.status}</Badge></td>
+                  <td className="px-3 py-2 text-xs">{l.performedBy || "—"}</td>
+                  <td className="px-3 py-2 text-xs text-right">{l.rowCount ?? "—"}</td>
+                  <td className="px-3 py-2 text-xs text-right">{fmtSize(l.sizeBytes)}</td>
+                  <td className="px-3 py-2 text-xs text-rose-600 max-w-xs truncate" title={l.errorMessage || ""}>{l.errorMessage || ""}</td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }

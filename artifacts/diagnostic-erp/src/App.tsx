@@ -33,6 +33,7 @@ import QueuePage from "@/pages/Queue";
 import Radiology from "@/pages/Radiology";
 import ReportHub from "@/pages/ReportHub";
 import DoctorLedger from "@/pages/DoctorLedger";
+import Machines from "@/pages/Machines";
 import FormF from "@/pages/FormF";
 import Portal from "@/pages/Portal";
 import Display from "@/pages/Display";
@@ -54,7 +55,7 @@ const ERP_NAV_ORDER = [
   "/", "/dashboard", "/patients", "/appointments", "/queue", "/radiology", "/orders",
   "/tests", "/packages", "/billing", "/payments", "/reports",
   "/report-generator", "/report-hub", "/inventory", "/expenses", "/staff", "/referrals", "/doctor-ledger",
-  "/accounting", "/discounts", "/form-f", "/pacs", "/settings",
+  "/accounting", "/discounts", "/form-f", "/pacs", "/machines", "/settings",
 ];
 
 // Soft route guard: if a portal staff session exists and the user navigates
@@ -123,6 +124,7 @@ function Router() {
             <Route path="/expenses" component={Expenses} />
             <Route path="/staff" component={Staff} />
             <Route path="/form-f" component={FormF} />
+            <Route path="/machines" component={Machines} />
             <Route path="/settings" component={Settings} />
             <Route component={NotFound} />
           </Switch>

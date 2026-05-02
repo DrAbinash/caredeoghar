@@ -34,6 +34,7 @@ import {
   AlertCircle,
   Server,
   Radio,
+  Wrench,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -66,6 +67,7 @@ const navItems = [
   { path: "/form-f", icon: FileText, label: "Form F (PCPNDT)" },
   { path: "/pacs", icon: Monitor, label: "PACS Viewer" },
   { path: "/dicom-nodes", icon: Server, label: "DICOM Nodes" },
+  { path: "/machines", icon: Wrench, label: "Machines" },
   { path: "/settings", icon: Settings2, label: "Settings" },
 ];
 

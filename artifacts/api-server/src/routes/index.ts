@@ -38,6 +38,10 @@ import formFRouter from "./form-f";
 import { portalRouter } from "./portal";
 import { patientReportsRouter, signaturesRouter } from "./patient-reports";
 import { doctorLedgerRouter } from "./doctor-ledger";
+import { machinesRouter } from "./machines";
+import { departmentsRouter } from "./departments";
+import { branchesRouter } from "./branches";
+import { backupRouter } from "./backup";
 
 const router: IRouter = Router();
 
@@ -82,5 +86,9 @@ router.use("/portal", portalRouter);
 router.use("/patient-reports", patientReportsRouter);
 router.use("/signatures", signaturesRouter);
 router.use("/doctor-ledger", doctorLedgerRouter);
+router.use("/machines", machinesRouter);
+router.use("/departments", departmentsRouter);
+router.use("/branches", branchesRouter);
+router.use("/backup", backupRouter);
 
 export default router;
