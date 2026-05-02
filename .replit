@@ -17,6 +17,26 @@ env = { "CI" = "true" }
 [workflows]
 runButton = "Project"
 
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Windows Build"
+
+[[workflows.workflow]]
+name = "Windows Build"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "rm -f /tmp/wb-logs/done.flag && mkdir -p /tmp/wb-logs && pnpm --filter @workspace/windows-build run build:all 2>&1 | tee /tmp/wb-logs/build-all.log && pnpm --filter @workspace/windows-build run build:super-admin 2>&1 | tee /tmp/wb-logs/build-sa.log && date -Iseconds > /tmp/wb-logs/done.flag && echo BUILD_COMPLETE"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = true

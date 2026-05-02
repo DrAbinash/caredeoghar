@@ -882,11 +882,19 @@ export default function Inventory() {
                   // Send vendor / invoice fields alongside qty/reason etc.
                   // The vendor select stores its value in `stockInVendorId` (controlled);
                   // the date / invoice / cost fields go through react-hook-form.
+                  // If user never touched the select, fall back to the item's
+                  // preferred vendor (matches the visual pre-fill behavior).
+                  const effectiveVendorId =
+                    stockInVendorId !== ""
+                      ? stockInVendorId
+                      : stockDialog.item.preferredVendorId
+                        ? String(stockDialog.item.preferredVendorId)
+                        : "__none__";
                   stockIn.mutate({
                     id,
                     body: {
                       ...d,
-                      vendorId: stockInVendorId && stockInVendorId !== "__none__" ? Number(stockInVendorId) : null,
+                      vendorId: effectiveVendorId && effectiveVendorId !== "__none__" ? Number(effectiveVendorId) : null,
                       invoiceNumber: d.invoiceNumber || null,
                       invoiceDate: d.invoiceDate || null,
                       unitCost: d.unitCost ? Number(d.unitCost) : null,
