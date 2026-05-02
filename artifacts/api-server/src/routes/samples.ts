@@ -1,0 +1,378 @@
+import { Router, type IRouter } from "express";
+import {
+  db, samplesTable, sampleTestAssignmentsTable, insertSampleSchema,
+  ordersTable, patientsTable, orderTestsTable, testsTable,
+} from "@workspace/db";
+import { and, eq, gte, lte, sql, inArray, desc, like } from "drizzle-orm";
+import { z } from "zod/v4";
+
+const router: IRouter = Router();
+
+// ─── Constants & helpers ────────────────────────────────────────────────────
+
+// Lifecycle:  collected → received → in_processing → completed → reported
+//             rejected (terminal)
+//             pending = expected but not yet collected
+export const SAMPLE_STATUSES = [
+  "pending", "collected", "received", "in_processing", "completed", "reported", "rejected",
+] as const;
+type SampleStatus = typeof SAMPLE_STATUSES[number];
+
+const SAMPLE_TYPES = [
+  "Blood", "Serum", "Plasma", "Whole Blood", "Urine", "Stool", "Sputum",
+  "Swab", "Tissue", "CSF", "Pus", "Body Fluid", "Semen", "Other",
+];
+const CONTAINER_TYPES = [
+  "EDTA (Purple)", "SST (Yellow/Gold)", "Plain (Red)", "Sodium Fluoride (Grey)",
+  "Citrate (Blue)", "Lithium Heparin (Green)", "Sterile Container", "Urine Cup",
+  "Stool Container", "Swab Tube", "Other",
+];
+const COLLECTION_SITES = ["Center", "Home", "Camp", "External"];
+
+function isUniqueViolation(err: unknown): boolean {
+  let cur: unknown = err;
+  for (let i = 0; i < 5 && cur && typeof cur === "object"; i++) {
+    if ("code" in cur && (cur as { code: unknown }).code === "23505") return true;
+    cur = (cur as { cause?: unknown }).cause;
+  }
+  const msg = err instanceof Error ? err.message : String(err);
+  return /duplicate key value|violates unique constraint/i.test(msg);
+}
+
+// Barcode generator: SMP-YYMMDD-NNNN  (NNNN resets daily, zero-padded).
+// Race-safe via UNIQUE(barcode) + retry-on-collision.
+async function nextBarcode(): Promise<string> {
+  const d = new Date();
+  const yy = String(d.getFullYear()).slice(-2);
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const prefix = `SMP-${yy}${mm}${dd}-`;
+
+  // Find max existing daily counter.
+  const rows = await db
+    .select({ barcode: samplesTable.barcode })
+    .from(samplesTable)
+    .where(like(samplesTable.barcode, `${prefix}%`));
+  let max = 0;
+  for (const r of rows) {
+    const m = /-(\d{4,})$/.exec(r.barcode);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return `${prefix}${String(max + 1).padStart(4, "0")}`;
+}
+
+// Build response with patient + tests joined in.
+async function expandSample(s: typeof samplesTable.$inferSelect) {
+  const [patient] = await db
+    .select({
+      id: patientsTable.id, patientId: patientsTable.patientId,
+      firstName: patientsTable.firstName, lastName: patientsTable.lastName,
+      phone: patientsTable.phone, gender: patientsTable.gender,
+      dateOfBirth: patientsTable.dateOfBirth,
+    })
+    .from(patientsTable).where(eq(patientsTable.id, s.patientId));
+
+  const [order] = await db
+    .select({ id: ordersTable.id, orderNumber: ordersTable.orderNumber })
+    .from(ordersTable).where(eq(ordersTable.id, s.orderId));
+
+  const tests = await db
+    .select({
+      orderTestId: orderTestsTable.id,
+      testId: testsTable.id,
+      testCode: testsTable.code,
+      testName: testsTable.name,
+      category: testsTable.category,
+      resultStatus: orderTestsTable.resultStatus,
+    })
+    .from(sampleTestAssignmentsTable)
+    .innerJoin(orderTestsTable, eq(orderTestsTable.id, sampleTestAssignmentsTable.orderTestId))
+    .innerJoin(testsTable, eq(testsTable.id, orderTestsTable.testId))
+    .where(eq(sampleTestAssignmentsTable.sampleId, s.id));
+
+  return { ...s, patient: patient ?? null, order: order ?? null, tests };
+}
+
+// ─── Listing ────────────────────────────────────────────────────────────────
+
+router.get("/", async (req, res) => {
+  const status = typeof req.query.status === "string" ? req.query.status : null;
+  const dateFrom = typeof req.query.dateFrom === "string" ? req.query.dateFrom : null;
+  const dateTo = typeof req.query.dateTo === "string" ? req.query.dateTo : null;
+  const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+  const outsourcedOnly = req.query.outsourcedOnly === "true";
+
+  const conds = [];
+  if (status && status !== "all" && (SAMPLE_STATUSES as readonly string[]).includes(status)) {
+    conds.push(eq(samplesTable.status, status));
+  }
+  if (dateFrom) conds.push(gte(samplesTable.collectedAt, new Date(`${dateFrom}T00:00:00`)));
+  if (dateTo)   conds.push(lte(samplesTable.collectedAt, new Date(`${dateTo}T23:59:59.999`)));
+  if (outsourcedOnly) conds.push(eq(samplesTable.isOutsourced, true));
+  if (search) {
+    conds.push(like(samplesTable.barcode, `%${search}%`));
+  }
+
+  const where = conds.length ? and(...conds) : undefined;
+
+  const rows = await db.select().from(samplesTable).where(where).orderBy(desc(samplesTable.collectedAt)).limit(500);
+
+  // Status counters across the SAME filters (minus status itself).
+  const counterConds = conds.filter((c) => c !== conds.find((x) => x === conds[0] && status));
+  const baseFilters = [];
+  if (dateFrom) baseFilters.push(gte(samplesTable.collectedAt, new Date(`${dateFrom}T00:00:00`)));
+  if (dateTo)   baseFilters.push(lte(samplesTable.collectedAt, new Date(`${dateTo}T23:59:59.999`)));
+  if (outsourcedOnly) baseFilters.push(eq(samplesTable.isOutsourced, true));
+  const counters: Record<string, number> = {};
+  const grouped = await db
+    .select({ status: samplesTable.status, count: sql<number>`count(*)::int` })
+    .from(samplesTable)
+    .where(baseFilters.length ? and(...baseFilters) : undefined)
+    .groupBy(samplesTable.status);
+  for (const g of grouped) counters[g.status] = g.count;
+  for (const s of SAMPLE_STATUSES) if (!(s in counters)) counters[s] = 0;
+
+  const expanded = await Promise.all(rows.map(expandSample));
+  void counterConds;
+  res.json({ samples: expanded, counters });
+});
+
+router.get("/options", (_req, res) => {
+  res.json({
+    sampleTypes: SAMPLE_TYPES,
+    containerTypes: CONTAINER_TYPES,
+    collectionSites: COLLECTION_SITES,
+    statuses: SAMPLE_STATUSES,
+  });
+});
+
+router.get("/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [row] = await db.select().from(samplesTable).where(eq(samplesTable.id, id));
+  if (!row) { res.status(404).json({ error: "Sample not found" }); return; }
+  res.json(await expandSample(row));
+});
+
+// ─── Create (collection entry) ──────────────────────────────────────────────
+
+const createBody = insertSampleSchema.extend({
+  orderId: z.number().int().positive(),
+  patientId: z.number().int().positive(),
+  sampleType: z.string().refine((v) => SAMPLE_TYPES.includes(v), { message: "Invalid sampleType" }),
+  containerType: z.string().refine((v) => CONTAINER_TYPES.includes(v), { message: "Invalid containerType" }),
+  collectionSite: z.string().refine((v) => COLLECTION_SITES.includes(v), { message: "Invalid collectionSite" }),
+  status: z.enum(["pending", "collected"]).default("collected"),
+  orderTestIds: z.array(z.number().int().positive()).default([]),
+  collectedByName: z.string().default(""),
+  volume: z.string().default(""),
+  notes: z.string().default(""),
+}).strip();
+
+router.post("/", async (req, res) => {
+  const parsed = createBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
+    return;
+  }
+  const { orderTestIds, ...sample } = parsed.data;
+
+  // Verify order exists & belongs to patient.
+  const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, sample.orderId));
+  if (!order) { res.status(400).json({ error: "Order not found" }); return; }
+  if (order.patientId !== sample.patientId) {
+    res.status(400).json({ error: "patientId does not match the order" });
+    return;
+  }
+
+  // Verify orderTestIds belong to this order.
+  if (orderTestIds.length > 0) {
+    const valid = await db
+      .select({ id: orderTestsTable.id })
+      .from(orderTestsTable)
+      .where(and(eq(orderTestsTable.orderId, sample.orderId), inArray(orderTestsTable.id, orderTestIds)));
+    if (valid.length !== orderTestIds.length) {
+      res.status(400).json({ error: "One or more orderTestIds do not belong to this order" });
+      return;
+    }
+  }
+
+  // Insert sample with retry-on-barcode-collision.
+  let created: typeof samplesTable.$inferSelect | null = null;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const barcode = await nextBarcode();
+    try {
+      [created] = await db.insert(samplesTable).values({ ...sample, barcode }).returning();
+      break;
+    } catch (err) {
+      if (isUniqueViolation(err) && attempt < 4) continue;
+      throw err;
+    }
+  }
+  if (!created) { res.status(500).json({ error: "Failed to allocate barcode" }); return; }
+
+  // Insert test assignments.
+  if (orderTestIds.length > 0) {
+    await db.insert(sampleTestAssignmentsTable)
+      .values(orderTestIds.map((otId) => ({ sampleId: created.id, orderTestId: otId })));
+  }
+
+  // Stamp the order as "collected" if it was still pending.
+  if (order.status === "pending") {
+    await db.update(ordersTable).set({ status: "collected", collectedAt: new Date() }).where(eq(ordersTable.id, order.id));
+  }
+
+  res.status(201).json(await expandSample(created));
+});
+
+// ─── Status transitions ─────────────────────────────────────────────────────
+
+const VALID_TRANSITIONS: Record<SampleStatus, SampleStatus[]> = {
+  pending:        ["collected", "rejected"],
+  collected:      ["received", "rejected"],
+  received:       ["in_processing", "rejected"],
+  in_processing:  ["completed", "rejected"],
+  completed:      ["reported", "rejected"],
+  reported:       [],
+  rejected:       [],
+};
+
+router.post("/:id/status", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const body = z.object({
+    status: z.enum(SAMPLE_STATUSES),
+    rejectionReason: z.string().optional(),
+    actorName: z.string().optional(),
+  }).safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: "Invalid body", details: body.error.issues }); return; }
+
+  const [sample] = await db.select().from(samplesTable).where(eq(samplesTable.id, id));
+  if (!sample) { res.status(404).json({ error: "Sample not found" }); return; }
+
+  const current = sample.status as SampleStatus;
+  const next = body.data.status;
+  if (current === next) { res.status(400).json({ error: `Sample is already ${current}` }); return; }
+  const allowed = VALID_TRANSITIONS[current] ?? [];
+  if (!allowed.includes(next)) {
+    res.status(400).json({
+      error: `Cannot move sample from "${current}" to "${next}". Allowed transitions: ${allowed.join(", ") || "(none — terminal state)"}`,
+    });
+    return;
+  }
+  if (next === "rejected" && !body.data.rejectionReason?.trim()) {
+    res.status(400).json({ error: "rejectionReason is required when rejecting a sample" });
+    return;
+  }
+
+  const updates: Partial<typeof samplesTable.$inferInsert> = { status: next };
+  const now = new Date();
+  if (next === "received") updates.receivedAt = now;
+  if (next === "in_processing") updates.processingStartedAt = now;
+  if (next === "completed") updates.completedAt = now;
+  if (next === "reported") updates.reportedAt = now;
+  if (next === "rejected") {
+    updates.rejectedAt = now;
+    updates.rejectionReason = body.data.rejectionReason?.trim() ?? null;
+  }
+
+  const [updated] = await db.update(samplesTable).set(updates).where(eq(samplesTable.id, id)).returning();
+  res.json(await expandSample(updated));
+});
+
+// ─── Outsourced handling ────────────────────────────────────────────────────
+
+const outsourceBody = z.object({
+  outsourceLab: z.string().min(1, "Lab name is required"),
+  outsourceExpectedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal("")),
+  outsourceTrackingId: z.string().optional(),
+});
+
+router.post("/:id/outsource", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const body = outsourceBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: "Invalid body", details: body.error.issues }); return; }
+
+  const [sample] = await db.select().from(samplesTable).where(eq(samplesTable.id, id));
+  if (!sample) { res.status(404).json({ error: "Sample not found" }); return; }
+  if (sample.status === "rejected" || sample.status === "reported") {
+    res.status(400).json({ error: `Cannot outsource a ${sample.status} sample` });
+    return;
+  }
+
+  const [updated] = await db.update(samplesTable).set({
+    isOutsourced: true,
+    outsourceLab: body.data.outsourceLab.trim(),
+    outsourceExpectedAt: body.data.outsourceExpectedAt || null,
+    outsourceTrackingId: body.data.outsourceTrackingId?.trim() || null,
+    outsourceSentAt: new Date(),
+  }).where(eq(samplesTable.id, id)).returning();
+  res.json(await expandSample(updated));
+});
+
+router.post("/:id/outsource/receive", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [sample] = await db.select().from(samplesTable).where(eq(samplesTable.id, id));
+  if (!sample) { res.status(404).json({ error: "Sample not found" }); return; }
+  if (!sample.isOutsourced) { res.status(400).json({ error: "Sample is not marked as outsourced" }); return; }
+
+  const [updated] = await db.update(samplesTable)
+    .set({ outsourceReceivedAt: new Date() })
+    .where(eq(samplesTable.id, id)).returning();
+  res.json(await expandSample(updated));
+});
+
+router.delete("/:id/outsource", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [sample] = await db.select().from(samplesTable).where(eq(samplesTable.id, id));
+  if (!sample) { res.status(404).json({ error: "Sample not found" }); return; }
+
+  const [updated] = await db.update(samplesTable).set({
+    isOutsourced: false,
+    outsourceLab: null,
+    outsourceExpectedAt: null,
+    outsourceTrackingId: null,
+    outsourceSentAt: null,
+    outsourceReceivedAt: null,
+  }).where(eq(samplesTable.id, id)).returning();
+  res.json(await expandSample(updated));
+});
+
+// ─── Notes / metadata edit ──────────────────────────────────────────────────
+
+router.patch("/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const body = z.object({
+    notes: z.string().optional(),
+    volume: z.string().optional(),
+    sampleType: z.string().refine((v) => SAMPLE_TYPES.includes(v)).optional(),
+    containerType: z.string().refine((v) => CONTAINER_TYPES.includes(v)).optional(),
+    collectionSite: z.string().refine((v) => COLLECTION_SITES.includes(v)).optional(),
+    collectedByName: z.string().optional(),
+  }).safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: "Invalid body", details: body.error.issues }); return; }
+
+  const [sample] = await db.select().from(samplesTable).where(eq(samplesTable.id, id));
+  if (!sample) { res.status(404).json({ error: "Sample not found" }); return; }
+
+  const [updated] = await db.update(samplesTable).set(body.data).where(eq(samplesTable.id, id)).returning();
+  res.json(await expandSample(updated));
+});
+
+// ─── Delete ─────────────────────────────────────────────────────────────────
+
+router.delete("/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [sample] = await db.select().from(samplesTable).where(eq(samplesTable.id, id));
+  if (!sample) { res.status(404).json({ error: "Sample not found" }); return; }
+  // ON DELETE CASCADE on sample_test_assignments removes the junction rows.
+  await db.delete(samplesTable).where(eq(samplesTable.id, id));
+  res.status(204).send();
+});
+
+export default router;

@@ -25,3 +25,4 @@ export * from "./abnormalFindings";
 export * from "./formF";
 export * from "./portalSessions";
 export * from "./dicom";
+export * from "./samples";
