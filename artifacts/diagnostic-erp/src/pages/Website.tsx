@@ -688,7 +688,7 @@ function PublishTab({ settings }: { settings: SiteSettings }) {
         <div className="rounded-lg border border-border p-5">
           <div className="flex items-center gap-2 mb-2 font-semibold"><Eye size={16} /> Preview</div>
           <p className="text-sm text-muted-foreground mb-3">Open the public website in a new tab to see the latest unpublished changes.</p>
-          <a href="/site/preview" target="_blank" rel="noreferrer">
+          <a href="/site/?preview=1" target="_blank" rel="noreferrer">
             <Button variant="outline"><ExternalLink size={14} className="mr-1" /> Open preview</Button>
           </a>
         </div>
