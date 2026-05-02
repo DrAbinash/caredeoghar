@@ -398,6 +398,201 @@ billsRouter.get("/:id/audits", async (req, res) => {
   res.json(audits);
 });
 
+// ── Cancel a bill ─────────────────────────────────────────────────────────────
+// Marks a bill as cancelled with mandatory reason + actor. Audit-logged.
+// Available to any staff (no super-admin token); same trust model as Edit Bill.
+billsRouter.post("/:id/cancel", async (req, res) => {
+  const id = Number(req.params.id);
+  const performedBy = String(req.body?.performedBy || "").trim();
+  const reason = String(req.body?.reason || "").trim();
+
+  if (!id || !performedBy || !reason) {
+    res.status(400).json({ error: "performedBy and reason are required" });
+    return;
+  }
+  if (reason.length < 3) {
+    res.status(400).json({ error: "Please provide a clear reason (at least 3 characters)" });
+    return;
+  }
+
+  // Serialize concurrent cancel/refund attempts on this bill via row-level lock.
+  const txResult = await db.transaction(async (tx) => {
+    const [bill] = await tx.select().from(billsTable).where(eq(billsTable.id, id)).for("update");
+    if (!bill) throw Object.assign(new Error("Bill not found"), { httpStatus: 404 });
+    if (bill.status === "cancelled") {
+      throw Object.assign(new Error("Bill is already cancelled"), { httpStatus: 409 });
+    }
+
+    const [updated] = await tx.update(billsTable).set({
+      status: "cancelled",
+      cancelledAt: new Date(),
+      cancelledByName: performedBy,
+      cancellationReason: reason,
+    }).where(eq(billsTable.id, id)).returning();
+
+    await tx.insert(billAuditsTable).values({
+      billId: id,
+      editedBy: performedBy,
+      reason,
+      changeType: "cancelled",
+      oldValue: bill.status,
+      newValue: "cancelled",
+    });
+
+    return { updated, oldStatus: bill.status };
+  }).catch((err: Error & { httpStatus?: number }) => {
+    if (err.httpStatus) {
+      res.status(err.httpStatus).json({ error: err.message });
+      return null;
+    }
+    throw err;
+  });
+  if (!txResult) return;
+  const { updated, oldStatus } = txResult;
+
+  // Best-effort email notification (re-use the bill-edit template)
+  try {
+    const billForEmail = await buildBill(updated);
+    const patientName = billForEmail.patient
+      ? `${billForEmail.patient.firstName} ${billForEmail.patient.lastName}`
+      : "Unknown Patient";
+    sendBillEditEmail({
+      billNumber: updated.billNumber,
+      patientName,
+      editedBy: performedBy,
+      reason: `[CANCELLED] ${reason}`,
+      changes: [{ field: "Status", from: oldStatus, to: "cancelled" }],
+    }).catch((err) => console.error("[email] bill cancel notification failed:", err));
+  } catch (err) {
+    req.log?.warn?.({ err }, "Cancel email send failed");
+  }
+
+  res.json(await buildBill(updated));
+});
+
+// ── Refund a payment against a bill ───────────────────────────────────────────
+// Records a refund of `amount`. Inserts a negative-amount payment row so the
+// payment history shows it, decrements paidAmount, increments refundAmount,
+// recomputes balanceAmount + status, audits, and emails.
+billsRouter.post("/:id/refund", async (req, res) => {
+  const id = Number(req.params.id);
+  const performedBy = String(req.body?.performedBy || "").trim();
+  const reason = String(req.body?.reason || "").trim();
+  const rawAmount = Number(req.body?.amount);
+  const method = String(req.body?.method || "cash").trim().toLowerCase();
+  const allowedMethods = new Set(["cash", "card", "upi", "insurance", "cheque"]);
+
+  if (!id || !performedBy || !reason || !Number.isFinite(rawAmount)) {
+    res.status(400).json({ error: "performedBy, reason and amount are required" });
+    return;
+  }
+  if (reason.length < 3) {
+    res.status(400).json({ error: "Please provide a clear reason (at least 3 characters)" });
+    return;
+  }
+  if (rawAmount <= 0) {
+    res.status(400).json({ error: "Refund amount must be greater than zero" });
+    return;
+  }
+  if (!allowedMethods.has(method)) {
+    res.status(400).json({ error: "Invalid refund method" });
+    return;
+  }
+
+  // Round to 2 decimals to avoid float comparison surprises (₹).
+  const amount = Math.round(rawAmount * 100) / 100;
+
+  // Serialize concurrent refunds against this bill: lock the row, re-read latest
+  // values inside the transaction, then validate + write atomically. This
+  // prevents two simultaneous refund requests from each reading the same
+  // paidAmount and over-refunding the bill.
+  const result = await db.transaction(async (tx) => {
+    const [bill] = await tx.select().from(billsTable).where(eq(billsTable.id, id)).for("update");
+    if (!bill) throw Object.assign(new Error("Bill not found"), { httpStatus: 404 });
+
+    const currentPaid = Number(bill.paidAmount);
+    const currentTotal = Number(bill.totalAmount);
+    const currentRefund = Number(bill.refundAmount);
+
+    if (amount > currentPaid + 0.0001) {
+      throw Object.assign(
+        new Error(`Refund (₹${amount.toFixed(2)}) cannot exceed amount currently paid (₹${currentPaid.toFixed(2)})`),
+        { httpStatus: 400 },
+      );
+    }
+
+    const newPaid = Math.max(0, Math.round((currentPaid - amount) * 100) / 100);
+    const newRefund = Math.round((currentRefund + amount) * 100) / 100;
+    const newBalance = Math.max(0, Math.round((currentTotal - newPaid) * 100) / 100);
+    // Don't auto-flip away from "cancelled" — once cancelled, stays cancelled.
+    const newStatus = bill.status === "cancelled"
+      ? "cancelled"
+      : newPaid <= 0
+        ? "pending"
+        : newPaid < currentTotal
+          ? "partial"
+          : "paid";
+
+    // Insert the refund as a negative-amount payment row so it shows up inline
+    // in the payment history alongside regular payments.
+    await tx.insert(paymentsTable).values({
+      billId: id,
+      amount: String(-amount),
+      method,
+      referenceNumber: null,
+      notes: `REFUND: ${reason}`,
+      recordedByName: performedBy,
+    });
+
+    const [updated] = await tx.update(billsTable).set({
+      paidAmount: String(newPaid),
+      refundAmount: String(newRefund),
+      balanceAmount: String(newBalance),
+      status: newStatus,
+    }).where(eq(billsTable.id, id)).returning();
+
+    await tx.insert(billAuditsTable).values({
+      billId: id,
+      editedBy: performedBy,
+      reason,
+      changeType: "refund",
+      oldValue: `paid=₹${currentPaid.toFixed(2)}, refunded=₹${currentRefund.toFixed(2)}`,
+      newValue: `refund=₹${amount.toFixed(2)} via ${method}; paid=₹${newPaid.toFixed(2)}, refunded=₹${newRefund.toFixed(2)}`,
+    });
+
+    return { updated, currentPaid, currentRefund, newPaid, newRefund };
+  }).catch((err: Error & { httpStatus?: number }) => {
+    if (err.httpStatus) {
+      res.status(err.httpStatus).json({ error: err.message });
+      return null;
+    }
+    throw err;
+  });
+  if (!result) return;
+  const { updated, currentPaid, currentRefund, newPaid, newRefund } = result;
+
+  try {
+    const billForEmail = await buildBill(updated);
+    const patientName = billForEmail.patient
+      ? `${billForEmail.patient.firstName} ${billForEmail.patient.lastName}`
+      : "Unknown Patient";
+    sendBillEditEmail({
+      billNumber: updated.billNumber,
+      patientName,
+      editedBy: performedBy,
+      reason: `[REFUND] ${reason}`,
+      changes: [
+        { field: "Refund (₹)", from: currentRefund.toFixed(2), to: newRefund.toFixed(2) },
+        { field: "Paid (₹)", from: currentPaid.toFixed(2), to: newPaid.toFixed(2) },
+      ],
+    }).catch((err) => console.error("[email] refund notification failed:", err));
+  } catch (err) {
+    req.log?.warn?.({ err }, "Refund email send failed");
+  }
+
+  res.json(await buildBill(updated));
+});
+
 // Helper: verify super admin session token
 async function verifySuperAdminToken(token: string): Promise<{ valid: boolean; userName: string }> {
   if (!token) return { valid: false, userName: "" };
