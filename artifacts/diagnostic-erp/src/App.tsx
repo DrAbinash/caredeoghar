@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -31,6 +31,8 @@ import QueuePage from "@/pages/Queue";
 import FormF from "@/pages/FormF";
 import Portal from "@/pages/Portal";
 import NotFound from "@/pages/not-found";
+import { readStaffSession, canAccess, firstPermissionedPath, firstAllowedPath, longestMatchingNavPath } from "@/lib/staffSession";
+import { useEffect } from "react";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,12 +44,40 @@ const queryClient = new QueryClient({
   },
 });
 
+const ERP_NAV_ORDER = [
+  "/", "/dashboard", "/patients", "/appointments", "/queue", "/orders",
+  "/tests", "/packages", "/billing", "/payments", "/reports",
+  "/report-generator", "/inventory", "/expenses", "/staff", "/referrals",
+  "/accounting", "/discounts", "/form-f", "/pacs", "/settings",
+];
+
+// Soft route guard: if a portal staff session exists and the user navigates
+// to a permissioned path they don't have rights to, bounce them to the first
+// page they CAN see. No-op when there's no session (open ERP, backwards compat).
+function PermissionGuard() {
+  const [location, navigate] = useLocation();
+  useEffect(() => {
+    const session = readStaffSession();
+    if (!session) return;
+    // Use the LONGEST matching prefix so e.g. "/orders/123/edit" maps to "/orders"
+    // and "/" only matches the exact root.
+    const matched = longestMatchingNavPath(location, ERP_NAV_ORDER);
+    const pathToCheck = matched ?? location;
+    if (!canAccess(session, pathToCheck)) {
+      const target = firstPermissionedPath(session, ERP_NAV_ORDER) ?? firstAllowedPath(session, ERP_NAV_ORDER);
+      navigate(target, { replace: true });
+    }
+  }, [location, navigate]);
+  return null;
+}
+
 function Router() {
   return (
     <Switch>
       <Route path="/portal" component={Portal} />
       <Route path="/portal/:rest*" component={Portal} />
       <Route>
+        <PermissionGuard />
         <Layout>
           <Switch>
             <Route path="/" component={BillingDesk} />

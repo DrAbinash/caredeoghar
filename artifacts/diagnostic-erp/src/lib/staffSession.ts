@@ -1,0 +1,114 @@
+// Shared helper for the staff session that the patient portal sets in
+// localStorage when a staff member signs in. Read by Layout.tsx and App.tsx
+// to filter the sidebar nav and to redirect to the first page the user is
+// permitted to access.
+//
+// If no session is present (e.g. the user opened the ERP directly without
+// going through the portal), all menu items remain visible — backwards
+// compatibility with the existing "open" ERP behaviour.
+
+export const ERP_SESSION_KEY = "erp_session";
+
+export type StaffUser = {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  permissions: string[];
+  maxDiscount: number | null;
+};
+
+export type StaffSession = {
+  token: string;
+  user: StaffUser;
+};
+
+export function readStaffSession(): StaffSession | null {
+  try {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(ERP_SESSION_KEY) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StaffSession;
+    if (!parsed?.user || !Array.isArray(parsed.user.permissions)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function writeStaffSession(s: StaffSession) {
+  try { window.localStorage.setItem(ERP_SESSION_KEY, JSON.stringify(s)); } catch { /* ignore */ }
+}
+
+export function clearStaffSession() {
+  try { window.localStorage.removeItem(ERP_SESSION_KEY); } catch { /* ignore */ }
+}
+
+// Paths recognized by the user-management permission system. Any path NOT in
+// this set is considered "unrestricted" — visible to every signed-in user
+// regardless of their permissions array. This mirrors how the existing
+// Settings → Users tab presents permissions: only these paths are toggleable.
+export const PERMISSIONED_PATHS: ReadonlySet<string> = new Set([
+  "/",
+  "/patients",
+  "/register",
+  "/orders",
+  "/tests",
+  "/billing",
+  "/payments",
+  "/doctors",
+  "/reports",
+  "/report-generator",
+  "/inventory",
+  "/referrals",
+  "/accounting",
+  "/discounts",
+  "/settings",
+]);
+
+// Roles that always get full access regardless of stored permissions.
+export const FULL_ACCESS_ROLES = new Set(["admin", "super_admin"]);
+
+export function canAccess(session: StaffSession | null, path: string): boolean {
+  // No session → don't gate anything (open ERP, backwards compat).
+  if (!session) return true;
+  // Path isn't part of the permission system → always allowed.
+  if (!PERMISSIONED_PATHS.has(path)) return true;
+  if (FULL_ACCESS_ROLES.has(session.user.role)) return true;
+  return session.user.permissions.includes(path);
+}
+
+// Given a session and an ordered list of candidate paths, return the first
+// one the user is permitted to view. Falls back to "/" when nothing matches.
+export function firstAllowedPath(session: StaffSession | null, candidates: readonly string[]): string {
+  for (const p of candidates) {
+    if (canAccess(session, p)) return p;
+  }
+  return "/";
+}
+
+// Stricter than firstAllowedPath: returns the first candidate that is BOTH
+// in the permissioned set AND explicitly granted to this user (or the user
+// is admin/super_admin). Used to pick a meaningful landing page after login —
+// e.g. a lab user lands on /orders, not on the unrestricted /dashboard that
+// happens to be earlier in the nav order.
+export function firstPermissionedPath(session: StaffSession | null, candidates: readonly string[]): string | null {
+  if (!session) return null;
+  const isFull = FULL_ACCESS_ROLES.has(session.user.role);
+  for (const p of candidates) {
+    if (!PERMISSIONED_PATHS.has(p)) continue;
+    if (isFull || session.user.permissions.includes(p)) return p;
+  }
+  return null;
+}
+
+// Returns the longest path in `candidates` that is a prefix of `pathname`.
+// Used by the route guard so that e.g. "/orders/123/edit" resolves to "/orders"
+// rather than the first candidate that happens to match.
+export function longestMatchingNavPath(pathname: string, candidates: readonly string[]): string | null {
+  let best: string | null = null;
+  for (const p of candidates) {
+    const matches = p === "/" ? pathname === "/" : (pathname === p || pathname.startsWith(p + "/"));
+    if (matches && (best === null || p.length > best.length)) best = p;
+  }
+  return best;
+}

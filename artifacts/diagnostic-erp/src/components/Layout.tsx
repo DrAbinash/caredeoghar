@@ -30,10 +30,12 @@ import {
   Maximize2,
   Minimize2,
   FileText,
+  LogOut,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { readStaffSession, clearStaffSession, canAccess } from "@/lib/staffSession";
 
 const navItems = [
   { path: "/", icon: Zap, label: "Billing Desk" },
@@ -108,6 +110,33 @@ function FullscreenToggle() {
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const session = readStaffSession();
+
+  // Filter nav by permissions when a staff session exists.
+  const visibleNav = navItems.filter((n) => canAccess(session, n.path));
+
+  const onLogout = async () => {
+    // Best-effort: tell the server to invalidate the portal session, and clear
+    // BOTH the legacy portal-staff key and the new ERP session key.
+    try {
+      const token = session?.token;
+      if (token) {
+        await fetch("/api/portal/logout", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => { /* network errors ignored — local cleanup still proceeds */ });
+      }
+    } catch { /* ignore */ }
+    try { window.localStorage.removeItem("portal_staff_session"); } catch { /* ignore */ }
+    clearStaffSession();
+    // Land back on the public portal landing page.
+    const base = (import.meta as { env: { BASE_URL: string } }).env.BASE_URL || "/";
+    window.location.href = `${base}portal`.replace(/\/+/g, "/").replace(":/", "://");
+  };
+
+  const initials = session?.user.name
+    ? session.user.name.split(/\s+/).map((p) => p.charAt(0)).slice(0, 2).join("").toUpperCase()
+    : "";
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -142,7 +171,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {navItems.map(({ path, icon: Icon, label }) => {
+          {visibleNav.map(({ path, icon: Icon, label }) => {
             const isActive = path === "/" ? location === "/" : location.startsWith(path);
             return (
               <Link
@@ -162,6 +191,28 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
+
+        {/* Signed-in user (only shown when a portal staff session exists) */}
+        {session && (
+          <div className="px-3 py-3 border-t border-sidebar-border">
+            <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg bg-sidebar-accent/40">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                {initials}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-sidebar-foreground truncate">{session.user.name}</p>
+                <p className="text-[10px] text-sidebar-foreground/60 capitalize truncate">{session.user.role.replace("_", " ")}</p>
+              </div>
+              <button
+                onClick={onLogout}
+                title="Sign out"
+                className="p-1.5 rounded-md text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors shrink-0"
+              >
+                <LogOut size={14} />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Footer */}
         <div className="px-4 py-3 border-t border-sidebar-border flex items-center justify-between">
@@ -189,10 +240,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <Activity size={14} className="text-white" />
             </div>
             <span className="font-semibold text-sm truncate">
-              {navItems.find(n => n.path === "/" ? location === "/" : location.startsWith(n.path))?.label ?? "DiagnoCenter"}
+              {visibleNav.find(n => n.path === "/" ? location === "/" : location.startsWith(n.path))?.label ?? "DiagnoCenter"}
             </span>
           </div>
           <div className="ml-auto flex items-center gap-1">
+            {session && (
+              <button onClick={onLogout} title="Sign out" className="p-2 rounded-md text-foreground hover:bg-muted transition-colors">
+                <LogOut size={16} />
+              </button>
+            )}
             <FullscreenToggle />
             <ThemeToggle />
           </div>

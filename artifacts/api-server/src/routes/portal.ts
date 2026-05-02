@@ -144,6 +144,15 @@ portalRouter.post("/staff-login", async (req, res) => {
     return;
   }
 
+  // Parse permissions JSON safely (stored as string in users.permissions)
+  let permissions: string[] = [];
+  try {
+    if (user.permissions) {
+      const parsed = JSON.parse(user.permissions);
+      if (Array.isArray(parsed)) permissions = parsed.filter((p) => typeof p === "string");
+    }
+  } catch { /* ignore — empty permissions */ }
+
   await pruneExpiredSessions();
   const token = crypto.randomBytes(24).toString("hex");
   await db.insert(portalSessionsTable).values({
@@ -156,7 +165,14 @@ portalRouter.post("/staff-login", async (req, res) => {
 
   res.json({
     token,
-    user: { id: user.id, name: user.name, email: user.email, role: user.role },
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      permissions,
+      maxDiscount: user.maxDiscount ?? null,
+    },
   });
 });
 

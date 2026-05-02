@@ -13,6 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { fetchApi, api } from "@/lib/fetchApi";
+import { writeStaffSession, firstPermissionedPath, firstAllowedPath, type StaffSession as ErpStaffSession } from "@/lib/staffSession";
 
 // =====================================================================
 // Types
@@ -47,8 +48,24 @@ type PatientSession = {
 
 type StaffSession = {
   token: string;
-  user: { id: number; name: string; email: string; role: string };
+  user: {
+    id: number;
+    name: string;
+    email: string;
+    role: string;
+    permissions: string[];
+    maxDiscount: number | null;
+  };
 };
+
+// Same order the sidebar uses — the user lands on the first one they have
+// permission to view.
+const ERP_NAV_ORDER = [
+  "/", "/dashboard", "/patients", "/appointments", "/queue", "/orders",
+  "/tests", "/packages", "/billing", "/payments", "/reports",
+  "/report-generator", "/inventory", "/expenses", "/staff", "/referrals",
+  "/accounting", "/discounts", "/form-f", "/pacs", "/settings",
+];
 
 type Patient = {
   id: number;
@@ -380,10 +397,19 @@ function StaffLogin() {
   const login = useMutation({
     mutationFn: (body: { email: string; pin: string }) => api.post<StaffSession>("/api/portal/staff-login", body),
     onSuccess: (s) => {
+      // Keep the legacy portal-staff key (for portal logout / future use)…
       localStorage.setItem(STAFF_KEY, JSON.stringify(s));
-      // Redirect to main ERP root
+      // …and also write the ERP-readable session, which Layout/route guard
+      // use to filter the sidebar to only the pages this user is allowed to see.
+      const erp: ErpStaffSession = { token: s.token, user: s.user };
+      writeStaffSession(erp);
+      // Land them on the first PERMISSIONED page they have rights to — that's
+      // a real role-relevant landing (e.g. lab user → /orders, billing → /,
+      // accountant → /accounting). Falls back to firstAllowedPath if nothing
+      // matches (defensive — every staff role has at least one perm).
+      const target = firstPermissionedPath(erp, ERP_NAV_ORDER) ?? firstAllowedPath(erp, ERP_NAV_ORDER);
       const base = (import.meta as { env: { BASE_URL: string } }).env.BASE_URL || "/";
-      window.location.href = base;
+      window.location.href = `${base}${target}`.replace(/\/+/g, "/").replace(":/", "://");
     },
     onError: (e: Error) => setError(e.message),
   });
