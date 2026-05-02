@@ -5,7 +5,8 @@ import {
   useCreatePatient,
   getListPatientsQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, ChevronRight } from "lucide-react";
+import { Plus, Search, ChevronRight, Upload, X, User } from "lucide-react";
 import { useForm } from "react-hook-form";
 
 type PatientForm = {
@@ -37,11 +38,21 @@ type PatientForm = {
   bloodGroup?: string;
 };
 
+type ClinicSettingsLite = { patientPhotoEnabled?: boolean };
+
 export default function Patients() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
+  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  const [photoErr, setPhotoErr] = useState("");
   const queryClient = useQueryClient();
+
+  const { data: clinicSettings } = useQuery<ClinicSettingsLite>({
+    queryKey: ["clinic-settings"],
+    queryFn: () => api.get("/api/clinic-settings"),
+  });
+  const photoEnabled = !!clinicSettings?.patientPhotoEnabled;
 
   const { data, isLoading } = useListPatients({ search: search || undefined, page, limit: 20 });
   const createPatient = useCreatePatient({
@@ -49,6 +60,8 @@ export default function Patients() {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListPatientsQueryKey() });
         setOpen(false);
+        setPhotoDataUrl(null);
+        setPhotoErr("");
         reset();
       },
     },
@@ -58,11 +71,23 @@ export default function Patients() {
     defaultValues: { gender: "male" },
   });
 
+  const onPhotoChange = (file: File | null) => {
+    setPhotoErr("");
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { setPhotoErr("Please upload an image file"); return; }
+    if (file.size > 1_500_000) { setPhotoErr("Image too large (max 1.5 MB)"); return; }
+    const reader = new FileReader();
+    reader.onload = () => setPhotoDataUrl(String(reader.result));
+    reader.readAsDataURL(file);
+  };
+
   const onSubmit = (data: PatientForm) => {
     const birthYear = new Date().getFullYear() - Number(data.age);
     const dateOfBirth = `${birthYear}-01-01`;
     const { age, ...rest } = data;
-    createPatient.mutate({ data: { ...rest, dateOfBirth } });
+    const payload: Record<string, unknown> = { ...rest, dateOfBirth };
+    if (photoEnabled && photoDataUrl) payload.photoDataUrl = photoDataUrl;
+    createPatient.mutate({ data: payload as unknown as Parameters<typeof createPatient.mutate>[0]["data"] });
   };
 
   const bloodGroups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
@@ -97,6 +122,7 @@ export default function Patients() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-muted-foreground border-b border-border bg-muted/30">
+                  {photoEnabled && <th className="px-4 py-3 font-medium w-12"></th>}
                   <th className="px-4 py-3 font-medium">Patient ID</th>
                   <th className="px-4 py-3 font-medium">Name</th>
                   <th className="px-4 py-3 font-medium">Age</th>
@@ -110,18 +136,30 @@ export default function Patients() {
                 {isLoading ? (
                   [...Array(5)].map((_, i) => (
                     <tr key={i} className="border-b border-border/50 animate-pulse">
-                      {[...Array(7)].map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 bg-muted rounded w-24" /></td>)}
+                      {[...Array(photoEnabled ? 8 : 7)].map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 bg-muted rounded w-24" /></td>)}
                     </tr>
                   ))
                 ) : data?.patients?.length === 0 ? (
-                  <tr><td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">No patients found</td></tr>
+                  <tr><td colSpan={photoEnabled ? 8 : 7} className="px-4 py-12 text-center text-muted-foreground">No patients found</td></tr>
                 ) : (
                   data?.patients?.map((p) => {
                     const age = p.dateOfBirth
                       ? new Date().getFullYear() - new Date(p.dateOfBirth).getFullYear()
                       : null;
+                    const photo = (p as { photoDataUrl?: string | null }).photoDataUrl;
                     return (
                       <tr key={p.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
+                        {photoEnabled && (
+                          <td className="px-4 py-2">
+                            {photo ? (
+                              <img src={photo} alt="" className="w-9 h-9 rounded-full object-cover border border-border" />
+                            ) : (
+                              <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
+                                <User size={14} />
+                              </div>
+                            )}
+                          </td>
+                        )}
                         <td className="px-4 py-3 font-mono text-xs font-medium text-primary">{p.patientId}</td>
                         <td className="px-4 py-3 font-medium text-foreground">{p.firstName} {p.lastName}</td>
                         <td className="px-4 py-3 text-muted-foreground">{age !== null ? `${age} yrs` : "—"}</td>
@@ -230,6 +268,54 @@ export default function Patients() {
               <Label>Address</Label>
               <Input {...register("address")} className="mt-1" />
             </div>
+            {photoEnabled && (
+              <div>
+                <Label>Patient Photo</Label>
+                <div className="mt-1 flex items-center gap-3">
+                  <div className="w-16 h-16 rounded-lg border border-border bg-muted/30 flex items-center justify-center overflow-hidden shrink-0">
+                    {photoDataUrl ? (
+                      <img src={photoDataUrl} alt="Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <User size={22} className="text-muted-foreground/60" />
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="user"
+                        id="patient-photo-input"
+                        className="hidden"
+                        onChange={(e) => onPhotoChange(e.target.files?.[0] ?? null)}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => document.getElementById("patient-photo-input")?.click()}
+                      >
+                        <Upload size={13} className="mr-1.5" />
+                        {photoDataUrl ? "Change" : "Upload Photo"}
+                      </Button>
+                      {photoDataUrl && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => { setPhotoDataUrl(null); setPhotoErr(""); }}
+                        >
+                          <X size={13} className="mr-1" /> Remove
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">JPG/PNG, &lt; 1.5 MB. Optional.</p>
+                    {photoErr && <p className="text-xs text-destructive">{photoErr}</p>}
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={createPatient.isPending}>

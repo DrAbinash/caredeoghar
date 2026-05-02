@@ -24,6 +24,13 @@ clinicSettingsRouter.put("/", async (req, res) => {
   for (const f of fields) {
     if (body[f] !== undefined) update[f] = body[f];
   }
+  if (body.patientPhotoEnabled !== undefined) {
+    if (typeof body.patientPhotoEnabled !== "boolean") {
+      res.status(400).json({ error: "patientPhotoEnabled must be a boolean" });
+      return;
+    }
+    update.patientPhotoEnabled = body.patientPhotoEnabled;
+  }
   if (typeof update.logoDataUrl === "string" && update.logoDataUrl.length > 2_000_000) {
     res.status(413).json({ error: "Logo too large (max ~1.5MB)" });
     return;

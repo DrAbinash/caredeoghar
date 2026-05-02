@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, boolean } from "drizzle-orm/pg-core";
 
 export const clinicSettingsTable = pgTable("clinic_settings", {
   id: serial("id").primaryKey(),
@@ -13,5 +13,6 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   footerNote: text("footer_note").notNull().default("Thank you for choosing our diagnostic services."),
   formFTestIds: text("form_f_test_ids").notNull().default("[]"),
   quickTestIds: text("quick_test_ids").notNull().default("[null,null,null,null,null,null]"),
+  patientPhotoEnabled: boolean("patient_photo_enabled").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

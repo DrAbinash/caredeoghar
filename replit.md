@@ -76,7 +76,7 @@ Key changes that make local dev work:
 - **Billing Desk** (`/`) — **Home page on login**; unified single-page billing workflow: live patient search + inline new patient registration, referral doctor, test catalog with category filter + package quick-add, **6 customizable Quick Test slot tabs** (one-click add for the user's most-used individual tests; hover the slot for ✏️ to assign/clear; persisted in `clinic_settings.quickTestIds`), running bill summary, ₹/% discount toggle, payment collection, auto date + auto bill number preview, "Generate Bill" creates order + bill + payment in one click
 - **Dashboard** (`/dashboard`) — KPI cards, recent transactions, quick actions, alerts
 - **Quick Register** (`/register`) — 3-step patient registration + test selection + billing/payment workflow
-- **Patients** — list with search, patient registration, detail view
+- **Patients** — list with search, patient registration, detail view; optional **Patient Photo** (toggle in Settings → Clinic Info → "Patient Photo Capture"; base64 stored in `patients.photo_data_url`, ≤1.5 MB; when enabled the patients table shows an avatar column, the Register dialog gains a photo upload field, and PatientDetail displays the photo with Change/Remove controls)
 - **Orders** — test order management with status flow
 - **Test Catalog** — diagnostic tests with categories and pricing
 - **Billing** — bill generation and management; bill edit with audit trail; audit history viewer

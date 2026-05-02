@@ -201,6 +201,7 @@ type ClinicSettings = {
   id?: number;
   name: string; tagline: string; address: string; email: string; phone: string;
   website: string; gstin: string; logoDataUrl: string | null; footerNote: string;
+  patientPhotoEnabled?: boolean;
 };
 
 function ClinicInfoTab() {
@@ -290,6 +291,26 @@ function ClinicInfoTab() {
       </div>
 
       <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="font-bold text-lg flex items-center gap-2"><User2 size={16} /> Patient Photo Capture</h2>
+          <p className="text-sm text-muted-foreground">Allow uploading a photograph for each patient (stored in DB, &lt; 1.5 MB each).</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setForm({ ...current, patientPhotoEnabled: !current.patientPhotoEnabled })}
+          className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors ${current.patientPhotoEnabled ? "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-800" : "bg-muted/30 border-card-border"}`}
+        >
+          <span className="text-sm font-medium">{current.patientPhotoEnabled ? "Enabled" : "Disabled"}</span>
+          <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${current.patientPhotoEnabled ? "bg-green-500" : "bg-muted-foreground/40"}`}>
+            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${current.patientPhotoEnabled ? "translate-x-5" : "translate-x-1"}`} />
+          </span>
+        </button>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          When enabled, the New Patient form shows a photo upload field and the patient profile displays the photograph. Click <strong>Save Changes</strong> to apply.
+        </p>
+      </div>
+
+      <div className="lg:col-span-3 bg-card border border-card-border rounded-xl p-5 space-y-4">
         <div>
           <h2 className="font-bold text-lg flex items-center gap-2"><ImageIcon size={16} /> Logo</h2>
           <p className="text-sm text-muted-foreground">Recommended: square or wide PNG/JPG, &lt; 1.5 MB.</p>

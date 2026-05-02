@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { useGetPatient, useGetPatientHistory } from "@workspace/api-client-react";
+import { useGetPatient, useGetPatientHistory, getGetPatientQueryKey } from "@workspace/api-client-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
@@ -11,21 +12,53 @@ import {
 } from "@/components/ui/dialog";
 import {
   ArrowLeft, User, Phone, MapPin, Droplet, Sparkles,
-  Copy, CheckCheck, MessageSquare, FileText,
+  Copy, CheckCheck, MessageSquare, FileText, Upload, X,
 } from "lucide-react";
 
 type AIType = "clinical-note" | "patient-message";
 type MessageType = "followup" | "results" | "payment";
+type ClinicSettingsLite = { patientPhotoEnabled?: boolean };
 
 export default function PatientDetail({ id }: { id: number }) {
+  const qc = useQueryClient();
   const { data: patient, isLoading } = useGetPatient(id);
   const { data: history } = useGetPatientHistory(id);
+  const { data: clinicSettings } = useQuery<ClinicSettingsLite>({
+    queryKey: ["clinic-settings"],
+    queryFn: () => api.get("/api/clinic-settings"),
+  });
+  const photoEnabled = !!clinicSettings?.patientPhotoEnabled;
   const [aiOpen, setAiOpen] = useState(false);
   const [aiType, setAiType] = useState<AIType>("clinical-note");
   const [msgType, setMsgType] = useState<MessageType>("followup");
   const [aiResult, setAiResult] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [photoSaving, setPhotoSaving] = useState(false);
+  const [photoErr, setPhotoErr] = useState("");
+
+  const savePhoto = async (dataUrl: string | null) => {
+    setPhotoErr("");
+    setPhotoSaving(true);
+    try {
+      await api.put(`/api/patients/${id}`, { photoDataUrl: dataUrl });
+      qc.invalidateQueries({ queryKey: getGetPatientQueryKey(id) });
+    } catch (e) {
+      setPhotoErr(e instanceof Error ? e.message : "Failed to save photo");
+    } finally {
+      setPhotoSaving(false);
+    }
+  };
+
+  const onPhotoChange = (file: File | null) => {
+    setPhotoErr("");
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { setPhotoErr("Please upload an image file"); return; }
+    if (file.size > 1_500_000) { setPhotoErr("Image too large (max 1.5 MB)"); return; }
+    const reader = new FileReader();
+    reader.onload = () => { void savePhoto(String(reader.result)); };
+    reader.readAsDataURL(file);
+  };
 
   const generateAI = async (type: AIType, mtype?: MessageType) => {
     setAiType(type);
@@ -91,7 +124,58 @@ export default function PatientDetail({ id }: { id: number }) {
       <div className="px-6 space-y-5">
         {/* Patient info card */}
         <div className="bg-card border border-card-border rounded-xl p-5 shadow-sm">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+          <div className="flex flex-col md:flex-row gap-5">
+            {photoEnabled && (
+              <div className="flex flex-col items-center md:items-start gap-2 shrink-0">
+                {(patient as { photoDataUrl?: string | null }).photoDataUrl ? (
+                  <img
+                    src={(patient as { photoDataUrl?: string | null }).photoDataUrl ?? ""}
+                    alt={`${patient.firstName} ${patient.lastName}`}
+                    className="w-28 h-28 rounded-xl object-cover border border-border shadow-sm"
+                  />
+                ) : (
+                  <div className="w-28 h-28 rounded-xl bg-muted flex items-center justify-center border border-border">
+                    <User size={42} className="text-muted-foreground/50" />
+                  </div>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="user"
+                  id="patient-detail-photo-input"
+                  className="hidden"
+                  onChange={(e) => onPhotoChange(e.target.files?.[0] ?? null)}
+                />
+                <div className="flex gap-1.5 w-28 justify-center md:justify-start">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs px-2"
+                    disabled={photoSaving}
+                    onClick={() => document.getElementById("patient-detail-photo-input")?.click()}
+                  >
+                    <Upload size={11} className="mr-1" />
+                    {(patient as { photoDataUrl?: string | null }).photoDataUrl ? "Change" : "Upload"}
+                  </Button>
+                  {(patient as { photoDataUrl?: string | null }).photoDataUrl && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs px-2 text-destructive hover:text-destructive"
+                      disabled={photoSaving}
+                      onClick={() => void savePhoto(null)}
+                    >
+                      <X size={11} />
+                    </Button>
+                  )}
+                </div>
+                {photoSaving && <p className="text-[10px] text-muted-foreground">Saving…</p>}
+                {photoErr && <p className="text-[10px] text-destructive max-w-[112px] text-center">{photoErr}</p>}
+              </div>
+            )}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-5 flex-1">
             <div>
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Date of Birth</p>
               <p className="mt-1 text-sm font-medium">{patient.dateOfBirth} <span className="text-muted-foreground">({age}y)</span></p>
@@ -122,6 +206,7 @@ export default function PatientDetail({ id }: { id: number }) {
                 <p className="mt-1 text-sm font-medium">{patient.address}</p>
               </div>
             )}
+            </div>
           </div>
         </div>
 

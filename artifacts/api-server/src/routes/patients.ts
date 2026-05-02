@@ -56,16 +56,39 @@ patientsRouter.get("/", async (req, res) => {
   });
 });
 
+// Photo data URL size cap — same ~1.5 MB practical limit we apply to the
+// clinic logo. The data URL is base64-encoded so the actual binary is ~75% of
+// the string length.
+const PHOTO_MAX_BYTES = 2_000_000;
+
+function extractPhotoDataUrl(body: unknown): { ok: true; value: string | null | undefined } | { ok: false; error: string } {
+  if (!body || typeof body !== "object") return { ok: true, value: undefined };
+  const raw = (body as Record<string, unknown>).photoDataUrl;
+  if (raw === undefined) return { ok: true, value: undefined };
+  if (raw === null || raw === "") return { ok: true, value: null };
+  if (typeof raw !== "string") return { ok: false, error: "photoDataUrl must be a string, null, or omitted" };
+  if (!raw.startsWith("data:image/")) return { ok: false, error: "photoDataUrl must be an image data URL" };
+  if (raw.length > PHOTO_MAX_BYTES) return { ok: false, error: "Patient photo too large (max ~1.5 MB)" };
+  return { ok: true, value: raw };
+}
+
 patientsRouter.post("/", async (req, res) => {
   const parsed = CreatePatientBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
     return;
   }
+  const photo = extractPhotoDataUrl(req.body);
+  if (!photo.ok) {
+    res.status(400).json({ error: photo.error });
+    return;
+  }
   const patientId = await generatePatientId();
+  const insertValues: Record<string, unknown> = { ...parsed.data, patientId };
+  if (photo.value !== undefined) insertValues.photoDataUrl = photo.value;
   const [patient] = await db
     .insert(patientsTable)
-    .values({ ...parsed.data, patientId })
+    .values(insertValues as typeof patientsTable.$inferInsert)
     .returning();
   res.status(201).json(patient);
 });
@@ -89,14 +112,28 @@ patientsRouter.get("/:id", async (req, res) => {
 
 patientsRouter.put("/:id", async (req, res) => {
   const paramsParsed = UpdatePatientParams.safeParse({ id: Number(req.params.id) });
-  const bodyParsed = UpdatePatientBody.safeParse(req.body);
+  // Use a partial schema so PATCH-style updates (e.g., setting only the
+  // photoDataUrl from the patient detail page) are accepted without requiring
+  // the full patient body. Drizzle .set() only writes the provided fields.
+  const bodyParsed = UpdatePatientBody.partial().safeParse(req.body);
   if (!paramsParsed.success || !bodyParsed.success) {
     res.status(400).json({ error: "Invalid request" });
     return;
   }
+  const photo = extractPhotoDataUrl(req.body);
+  if (!photo.ok) {
+    res.status(400).json({ error: photo.error });
+    return;
+  }
+  const updateValues: Record<string, unknown> = { ...bodyParsed.data };
+  if (photo.value !== undefined) updateValues.photoDataUrl = photo.value;
+  if (Object.keys(updateValues).length === 0) {
+    res.status(400).json({ error: "No fields to update" });
+    return;
+  }
   const [updated] = await db
     .update(patientsTable)
-    .set(bodyParsed.data)
+    .set(updateValues)
     .where(eq(patientsTable.id, paramsParsed.data.id))
     .returning();
   if (!updated) {

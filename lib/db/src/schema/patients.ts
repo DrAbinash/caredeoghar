@@ -13,6 +13,7 @@ export const patientsTable = pgTable("patients", {
   email: text("email"),
   address: text("address"),
   bloodGroup: text("blood_group"),
+  photoDataUrl: text("photo_data_url"),
   ledgerId: integer("ledger_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
