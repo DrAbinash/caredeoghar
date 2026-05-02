@@ -1,0 +1,85 @@
+# =============================================================================
+# Diagnostic Center Billing ERP — docker-compose stack
+#
+# Quick start (Windows / macOS / Linux / Synology):
+#   1. Copy .env.docker.example to .env  (or just rely on the defaults below)
+#   2. docker compose up -d --build
+#   3. docker compose run --rm migrate           # one-time, creates DB tables
+#   4. Open  http://localhost:8888
+#
+# Services:
+#   db       – PostgreSQL 16 (data persists in the "db_data" volume)
+#   api      – Express API server, internal only, port 8080
+#   web      – nginx serving both SPAs + reverse-proxy to /api,
+#              published on the host at $HOST_PORT (default 8888)
+#   migrate  – on-demand drizzle-kit push runner (no auto-start)
+# =============================================================================
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    # ⚠️ The default DB_PASSWORD is "changeme". Override it in .env before
+    # exposing this stack to anything other than yourself. The db port is NOT
+    # published to the host below, but anything that joins this Docker network
+    # (or breaks out of the api container) can still reach Postgres.
+    environment:
+      POSTGRES_USER: ${DB_USER:-erp}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: ${DB_NAME:-diagnostic_erp}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-erp} -d ${DB_NAME:-diagnostic_erp}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${DB_USER:-erp}:${DB_PASSWORD:-changeme}@db:5432/${DB_NAME:-diagnostic_erp}
+      NODE_ENV: production
+      PORT: "8080"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Optional integrations — uncomment in your .env to enable:
+      # AI_INTEGRATIONS_GEMINI_API_KEY: ${AI_INTEGRATIONS_GEMINI_API_KEY:-}
+      # ORTHANC_URL:                    ${ORTHANC_URL:-}
+      # ORTHANC_USERNAME:               ${ORTHANC_USERNAME:-}
+      # ORTHANC_PASSWORD:               ${ORTHANC_PASSWORD:-}
+      # OHIF_URL:                       ${OHIF_URL:-}
+      # FINGERPRINT_BRIDGE_SECRET:      ${FINGERPRINT_BRIDGE_SECRET:-}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-8888}:80"
+    depends_on:
+      - api
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrate
+    environment:
+      DATABASE_URL: postgres://${DB_USER:-erp}:${DB_PASSWORD:-changeme}@db:5432/${DB_NAME:-diagnostic_erp}
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: ["tools"]
+    restart: "no"
+
+volumes:
+  db_data:

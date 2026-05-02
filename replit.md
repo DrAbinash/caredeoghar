@@ -30,7 +30,8 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 
 ## Cross-Platform / Local (Windows / macOS / Linux) Setup
 
-The project also runs outside Replit. See `README-WINDOWS.md` for the full step-by-step.
+The project also runs outside Replit. See `README-WINDOWS.md` for the no-Docker
+setup and `DEPLOY.md` for the Docker setup (Windows, Linux, macOS, Synology NAS).
 Key changes that make local dev work:
 
 - Root `preinstall` is a Node script (`scripts/preinstall-check.cjs`) instead of a Unix `sh -c …` line, so `pnpm install` succeeds on Windows.
@@ -40,6 +41,15 @@ Key changes that make local dev work:
 - Both web Vite configs default `PORT` (5173 for ERP, 5174 for Super Admin) and `BASE_PATH` ("/" and "/super-admin-portal/") when not provided.
 - `.env.example` documents `DATABASE_URL` plus all optional integration vars; `.env` files are gitignored.
 - Root `pnpm dev` orchestrates the 3 services with `concurrently`.
+
+### Docker / docker-compose
+
+- Multi-stage `Dockerfile` with targets `api`, `web`, `migrate` (also a shared `base` and `api-build`/`web-build` stages).
+- `docker-compose.yml` orchestrates `db` (postgres:16-alpine), `api`, `web` (nginx serving both SPAs + reverse-proxying `/api`), and a `migrate` service under the `tools` profile.
+- `docker/nginx.conf` routes `/super-admin-portal/` to that build, `/api/` to the api container, and everything else to the diagnostic-erp build.
+- `.env.docker.example` documents `HOST_PORT`, `DB_USER/DB_PASSWORD/DB_NAME`, `LOG_LEVEL` plus the optional integration vars.
+- API runtime uses `pnpm --filter @workspace/api-server --prod --legacy deploy` to produce a self-contained node_modules tree (validated locally; the bundled server starts and resolves `pg`/`nodemailer`/`drizzle-orm` correctly from the deploy folder).
+- Frontends are built with `BASE_PATH=/` (diagnostic-erp) and `BASE_PATH=/super-admin-portal/` (super-admin-portal) baked into the Vite build, so nginx can serve both side-by-side.
 
 ## Diagnostic ERP — Modules
 
