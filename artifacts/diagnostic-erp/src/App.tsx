@@ -21,6 +21,7 @@ import Referrals from "@/pages/Referrals";
 import Accounting from "@/pages/Accounting";
 import Register from "@/pages/Register";
 import Settings from "@/pages/Settings";
+import Dues from "@/pages/Dues";
 import Discounts from "@/pages/Discounts";
 import PACS from "@/pages/PACS";
 import Appointments from "@/pages/Appointments";
@@ -96,6 +97,7 @@ function Router() {
               {(params) => <BillDetail id={Number(params.id)} />}
             </Route>
             <Route path="/payments" component={Payments} />
+            <Route path="/dues" component={Dues} />
             <Route path="/doctors" component={Doctors} />
             <Route path="/reports" component={Reports} />
             <Route path="/report-generator" component={ReportGenerator} />

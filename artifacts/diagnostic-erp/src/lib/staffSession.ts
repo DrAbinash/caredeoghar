@@ -54,6 +54,7 @@ export const PERMISSIONED_PATHS: ReadonlySet<string> = new Set([
   "/orders",
   "/tests",
   "/billing",
+  "/dues",
   "/payments",
   "/doctors",
   "/reports",

@@ -31,6 +31,7 @@ import {
   Minimize2,
   FileText,
   LogOut,
+  AlertCircle,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
