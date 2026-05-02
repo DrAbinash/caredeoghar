@@ -28,6 +28,25 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
 
+## Windows .exe Distributions
+
+`windows-build/` is a workspace package that produces three self-contained
+Windows distributions (portable .zip, NSIS installer, Electron desktop app)
+fully cross-built from this Linux container. See `BUILD-EXE.md` for usage.
+Each output bundles portable Node + portable PostgreSQL + the API + both
+React frontends — no prerequisites on the target Windows PC.
+
+```
+pnpm --filter @workspace/windows-build run build:all
+# → windows-build/dist/DiagnosticERP-Portable.zip       (264 MB)
+# → windows-build/dist/DiagnosticERP-Setup.exe          (264 MB)
+# → windows-build/dist/electron/DiagnosticERP-Desktop-Setup.exe  (421 MB)
+```
+
+The api-server gained a `SERVE_STATIC_DIR` mode: when set, the same Node
+process serves both built frontends in addition to `/api/*`. This is what lets
+the Windows builds ship as a single Node process instead of needing nginx.
+
 ## Cross-Platform / Local (Windows / macOS / Linux) Setup
 
 The project also runs outside Replit. See `README-WINDOWS.md` for the no-Docker

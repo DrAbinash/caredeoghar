@@ -1,0 +1,49 @@
+{
+  "name": "@workspace/diagnostic-erp-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Native Windows desktop app for the Diagnostic Center Billing ERP.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win nsis --x64"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.diagnosticerp.desktop",
+    "productName": "Diagnostic ERP Desktop",
+    "directories": {
+      "output": "../dist/electron"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../dist/payload",
+        "to": "payload",
+        "filter": ["**/*"]
+      }
+    ],
+    "asar": true,
+    "compression": "store",
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "artifactName": "DiagnosticERP-Desktop-Setup-${version}.${ext}",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Diagnostic ERP Desktop"
+    }
+  }
+}
