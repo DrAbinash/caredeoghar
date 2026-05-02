@@ -34,6 +34,7 @@ import {
   Server,
   Radio,
   Wrench,
+  Globe,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -65,6 +66,7 @@ const navItems = [
   { path: "/accounting", icon: BookOpen, label: "Accounting" },
   { path: "/discounts", icon: Tag, label: "Discounts" },
   { path: "/form-f", icon: FileText, label: "Form F (PCPNDT)" },
+  { path: "/website", icon: Globe, label: "Website Builder" },
   { path: "/pacs", icon: Monitor, label: "PACS Viewer" },
   { path: "/dicom-nodes", icon: Server, label: "DICOM Nodes" },
   { path: "/machines", icon: Wrench, label: "Machines" },

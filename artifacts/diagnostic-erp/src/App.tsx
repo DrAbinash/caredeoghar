@@ -34,6 +34,7 @@ import Radiology from "@/pages/Radiology";
 import ReportHub from "@/pages/ReportHub";
 import Machines from "@/pages/Machines";
 import FormF from "@/pages/FormF";
+import Website from "@/pages/Website";
 import Portal from "@/pages/Portal";
 import Display from "@/pages/Display";
 import NotFound from "@/pages/not-found";
@@ -123,6 +124,7 @@ function Router() {
             <Route path="/staff" component={Staff} />
             <Route path="/form-f" component={FormF} />
             <Route path="/machines" component={Machines} />
+            <Route path="/website" component={Website} />
             <Route path="/settings" component={Settings} />
             <Route component={NotFound} />
           </Switch>

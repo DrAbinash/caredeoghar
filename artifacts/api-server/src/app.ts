@@ -33,6 +33,10 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
 
+// Serve user-uploaded site assets (favicon, photos, hero images, etc.)
+// from data/uploads. Path matches what /api/website/photos returns.
+app.use("/uploads", express.static(path.resolve(process.cwd(), "data/uploads")));
+
 // =============================================================================
 // Production single-port static serving (Windows .exe / portable build)
 //
