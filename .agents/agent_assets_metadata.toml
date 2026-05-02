@@ -5,4 +5,16 @@ generated = []
 id = "oRd0cMLyeXJ02-c6LyANS"
 uri = "file://windows-build/dist/DiagnosticERP-Portable.zip"
 type = "unspecified"
-title = "DiagnosticERP-Portable.zip (264 MB) — unzip on Windows, double-click DiagnosticERP.exe"
+title = "DiagnosticERP-Portable — Portable folder, no install needed (264 MB)"
+
+[[outputs]]
+id = "bKz3kVPnHAUHmF36aG-Vy"
+uri = "file://windows-build/dist/DiagnosticERP-Setup.zip"
+type = "unspecified"
+title = "DiagnosticERP-Setup.exe (zipped) — Windows installer, recommended (239 MB zip)"
+
+[[outputs]]
+id = "8AMMDF15p_kYYgtDnoLPV"
+uri = "file://windows-build/dist/DiagnosticERP-Desktop-Setup.zip"
+type = "unspecified"
+title = "DiagnosticERP-Desktop-Setup.exe (zipped) — Electron desktop app installer (394 MB zip)"
