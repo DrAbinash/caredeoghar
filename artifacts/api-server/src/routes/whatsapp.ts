@@ -107,4 +107,82 @@ export async function sendBillWhatsapp(params: {
   }
 }
 
+// Send a report-ready notification via WhatsApp. Uses the same configured
+// template as bills (4 body parameters: name, code, amount, token slot) since
+// the typical clinic template is a single 4-slot interpolation. We map the
+// fields semantically: patientName / reportNumber / testName / "READY".
+// Falls back to a plain-text message if the template send fails because the
+// template wasn't configured.
+export async function sendReportWhatsapp(params: {
+  phone: string;
+  patientName: string;
+  reportNumber: string;
+  testName: string;
+  reportUrl: string;
+}): Promise<{ ok: boolean; skipped?: boolean; error?: string; messageId?: string }> {
+  const s = await getOrCreateSettings();
+  if (!s.enabled) return { ok: false, skipped: true };
+  if (!s.accessToken || !s.phoneNumberId) {
+    return { ok: false, error: "WhatsApp settings incomplete" };
+  }
+  const to = normalizePhone(params.phone, s.defaultCountryCode);
+  if (!to) return { ok: false, error: "Invalid phone" };
+
+  const url = `https://graph.facebook.com/v20.0/${encodeURIComponent(s.phoneNumberId)}/messages`;
+
+  // Try template first if configured.
+  if (s.templateName) {
+    const tplPayload = {
+      messaging_product: "whatsapp",
+      to,
+      type: "template",
+      template: {
+        name: s.templateName,
+        language: { code: s.templateLang || "en" },
+        components: [
+          {
+            type: "body",
+            parameters: [
+              { type: "text", text: params.patientName },
+              { type: "text", text: params.reportNumber },
+              { type: "text", text: params.testName },
+              { type: "text", text: "READY" },
+            ],
+          },
+        ],
+      },
+    };
+    try {
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${s.accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify(tplPayload),
+      });
+      const data = (await resp.json().catch(() => ({}))) as { messages?: { id: string }[]; error?: { message?: string } };
+      if (resp.ok) return { ok: true, messageId: data.messages?.[0]?.id };
+      // fall through to text fallback
+    } catch { /* fall through to text fallback */ }
+  }
+
+  // Plain-text fallback (works when templates aren't approved yet).
+  const textPayload = {
+    messaging_product: "whatsapp",
+    to,
+    type: "text",
+    text: { body: `Hello ${params.patientName}, your ${params.testName} report (${params.reportNumber}) is ready. View: ${params.reportUrl}` },
+  };
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${s.accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify(textPayload),
+    });
+    const data = (await resp.json().catch(() => ({}))) as { messages?: { id: string }[]; error?: { message?: string } };
+    if (!resp.ok) return { ok: false, error: data.error?.message || `HTTP ${resp.status}` };
+    return { ok: true, messageId: data.messages?.[0]?.id };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Send failed" };
+  }
+}
+
 export default whatsappRouter;

@@ -28,3 +28,5 @@ export * from "./dicom";
 export * from "./samples";
 export * from "./testTokens";
 export * from "./radiology";
+export * from "./signatures";
+export * from "./patientReports";

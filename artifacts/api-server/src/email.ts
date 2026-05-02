@@ -268,3 +268,29 @@ export async function sendDailySummaryEmail(params: {
     html,
   });
 }
+
+// Send a finalized patient report by email. Returns ok/error so the caller
+// can persist a report_share row with the right status.
+export async function sendReportEmail(params: {
+  to: string;
+  subject: string;
+  html: string;
+  patientName: string;
+  reportNumber: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const s = await getEmailSettings();
+  if (!s) return { ok: false, error: "Email settings not configured" };
+  const transport = await getTransporter();
+  if (!transport) return { ok: false, error: "SMTP transport unavailable" };
+  try {
+    await transport.sendMail({
+      from: `"${s.fromName}" <${s.fromAddress}>`,
+      to: params.to,
+      subject: params.subject,
+      html: params.html || `<p>Hello ${params.patientName}, your report ${params.reportNumber} is ready.</p>`,
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Send failed" };
+  }
+}

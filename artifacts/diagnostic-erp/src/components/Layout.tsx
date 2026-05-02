@@ -55,6 +55,7 @@ const navItems = [
   { path: "/payments", icon: CreditCard, label: "Payments" },
   { path: "/reports", icon: BarChart3, label: "Reports" },
   { path: "/report-generator", icon: FilePen, label: "Report Generator" },
+  { path: "/report-hub", icon: FileText, label: "Report Hub" },
   { path: "/inventory", icon: Package, label: "Inventory" },
   { path: "/expenses", icon: TrendingDown, label: "Expenses" },
   { path: "/staff", icon: Fingerprint, label: "Staff" },
