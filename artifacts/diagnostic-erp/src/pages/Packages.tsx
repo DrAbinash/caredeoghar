@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
@@ -25,6 +25,8 @@ import {
   Percent,
   X,
   CheckSquare,
+  Wand2,
+  Calculator,
 } from "lucide-react";
 
 const inr = (n: number) =>
@@ -59,6 +61,11 @@ export default function Packages() {
   const [showForm, setShowForm] = useState(false);
   const [editPkg, setEditPkg] = useState<PackageItem | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  // When true, the MRP field tracks the sum of selected tests' prices. Flips
+  // to false the moment the user edits MRP by hand, or when the user opens
+  // an existing package for edit (we don't want to silently rewrite their
+  // saved price). The user can re-enable it via the "Auto" button.
+  const [mrpAuto, setMrpAuto] = useState(true);
 
   const { data: packages = [], isLoading } = useQuery<PackageItem[]>({
     queryKey: ["packages"],
@@ -103,6 +110,7 @@ export default function Packages() {
 
   function openCreate() {
     setForm({ ...EMPTY_FORM });
+    setMrpAuto(true);
     setShowForm(true);
   }
 
@@ -117,6 +125,10 @@ export default function Packages() {
       testIds: pkg.tests.map((t) => t.id),
       testSearch: "",
     });
+    // Don't override the saved MRP on edit — but if it happens to match the
+    // current sum of test prices, treat it as still auto-tracking.
+    const sum = pkg.tests.reduce((acc, t) => acc + Number(t.price ?? 0), 0);
+    setMrpAuto(Math.abs(sum - Number(pkg.price)) < 0.005);
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -144,6 +156,42 @@ export default function Packages() {
         : [...prev.testIds, testId],
     }));
   }
+
+  // Build a quick lookup so we don't scan the full tests list on every render.
+  const testById = useMemo(() => {
+    const m = new Map<number, Test>();
+    for (const t of allTests) m.set(t.id, t);
+    return m;
+  }, [allTests]);
+
+  const selectedTests = useMemo(
+    () =>
+      form.testIds
+        .map((id) => testById.get(id))
+        .filter((t): t is Test => Boolean(t)),
+    [form.testIds, testById]
+  );
+
+  const sumOfTestPrices = useMemo(
+    () => selectedTests.reduce((acc, t) => acc + Number(t.price ?? 0), 0),
+    [selectedTests]
+  );
+
+  // When MRP is in auto mode, mirror the sum of selected tests into the price
+  // field (rounded to 2 decimals to play nicely with the numeric input).
+  // Skip the very first render when allTests hasn't loaded yet — otherwise
+  // we'd flicker the field to "0".
+  const prevSumRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!mrpAuto) {
+      prevSumRef.current = sumOfTestPrices;
+      return;
+    }
+    if (prevSumRef.current === sumOfTestPrices) return;
+    prevSumRef.current = sumOfTestPrices;
+    const formatted = sumOfTestPrices > 0 ? sumOfTestPrices.toFixed(2) : "";
+    setForm((prev) => (prev.price === formatted ? prev : { ...prev, price: formatted }));
+  }, [sumOfTestPrices, mrpAuto]);
 
   const filtered = packages.filter(
     (p) =>
@@ -309,7 +357,26 @@ export default function Packages() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>MRP (₹) *</Label>
+                <div className="flex items-center justify-between gap-2">
+                  <Label>MRP (₹) *</Label>
+                  <button
+                    type="button"
+                    onClick={() => setMrpAuto((v) => !v)}
+                    className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded transition-colors ${
+                      mrpAuto
+                        ? "bg-primary/10 text-primary"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                    title={
+                      mrpAuto
+                        ? "MRP auto-tracks the sum of selected test prices. Click to enter a custom MRP."
+                        : "Click to auto-fill MRP from the sum of selected test prices."
+                    }
+                  >
+                    <Wand2 size={10} />
+                    {mrpAuto ? "Auto" : "Manual"}
+                  </button>
+                </div>
                 <div className="relative">
                   <IndianRupee size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <Input
@@ -317,12 +384,35 @@ export default function Packages() {
                     min="0"
                     step="0.01"
                     value={form.price}
-                    onChange={(e) => setForm({ ...form, price: e.target.value })}
-                    className="pl-8"
+                    onChange={(e) => {
+                      // Any manual edit drops out of auto mode.
+                      if (mrpAuto) setMrpAuto(false);
+                      setForm({ ...form, price: e.target.value });
+                    }}
+                    className={`pl-8 ${mrpAuto ? "bg-primary/5" : ""}`}
                     placeholder="0"
                     required
                   />
                 </div>
+                {selectedTests.length > 0 && (
+                  <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                    <Calculator size={10} />
+                    Sum of {selectedTests.length} test
+                    {selectedTests.length === 1 ? "" : "s"}: {inr(sumOfTestPrices)}
+                    {!mrpAuto && Math.abs(sumOfTestPrices - Number(form.price || 0)) >= 0.005 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMrpAuto(true);
+                          setForm((p) => ({ ...p, price: sumOfTestPrices.toFixed(2) }));
+                        }}
+                        className="ml-1 text-primary hover:underline"
+                      >
+                        use this
+                      </button>
+                    )}
+                  </p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>Discount %</Label>
@@ -350,15 +440,31 @@ export default function Packages() {
               </div>
             </div>
 
-            {/* Effective price preview */}
-            {form.price && (
-              <div className="bg-muted/30 rounded-lg p-3 text-sm">
-                <span className="text-muted-foreground">Effective price: </span>
-                <span className="font-bold text-primary">
-                  {inr(Number(form.price) - (Number(form.price) * Number(form.discountPct || 0)) / 100)}
-                </span>
-              </div>
-            )}
+            {/* Effective price preview + savings vs sum-of-tests */}
+            {form.price && (() => {
+              const mrp = Number(form.price);
+              const effective = mrp - (mrp * Number(form.discountPct || 0)) / 100;
+              const savings = sumOfTestPrices - effective;
+              const savingsPct = sumOfTestPrices > 0 ? (savings / sumOfTestPrices) * 100 : 0;
+              return (
+                <div className="bg-muted/30 rounded-lg p-3 text-sm flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <div>
+                    <span className="text-muted-foreground">Effective price: </span>
+                    <span className="font-bold text-primary">{inr(effective)}</span>
+                  </div>
+                  {sumOfTestPrices > 0 && savings > 0.005 && (
+                    <div className="text-xs text-emerald-700 dark:text-emerald-400">
+                      Customer saves {inr(savings)} ({savingsPct.toFixed(0)}%) vs buying tests individually
+                    </div>
+                  )}
+                  {sumOfTestPrices > 0 && savings < -0.005 && (
+                    <div className="text-xs text-orange-600">
+                      Heads up: priced {inr(-savings)} above the sum of individual tests
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Test selection */}
             <div className="space-y-2">

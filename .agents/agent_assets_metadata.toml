@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "oRd0cMLyeXJ02-c6LyANS"
+uri = "file://windows-build/dist/DiagnosticERP-Portable.zip"
+type = "unspecified"
+title = "DiagnosticERP-Portable.zip (264 MB) — unzip on Windows, double-click DiagnosticERP.exe"
