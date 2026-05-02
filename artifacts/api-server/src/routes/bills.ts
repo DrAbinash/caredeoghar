@@ -4,6 +4,7 @@ import { billAuditsTable, superAdminSessionsTable } from "@workspace/db/schema";
 import { sendBillEditEmail, sendBillReprintEmail } from "../email";
 import { generateTokenForBill } from "./tokens";
 import { generateTestTokensForOrder } from "./test-tokens";
+import { generateStudiesForOrder } from "./radiology";
 import { sendBillWhatsapp } from "./whatsapp";
 import { eq, and, sql, desc, like, or, gt } from "drizzle-orm";
 import {
@@ -298,6 +299,18 @@ billsRouter.post("/", async (req, res) => {
     console.warn("Per-test token generation failed:", err);
   }
 
+  // Auto-create radiology studies for radiology-department tests on the order
+  // (X-Ray / USG / MRI / CT / Mammography / DEXA). Idempotent per orderTest.
+  // Failure is logged but never blocks bill creation.
+  let studies: Array<{ orderTestId: number; testName: string; modality: string; accessionNumber: string }> = [];
+  try {
+    studies = await generateStudiesForOrder({
+      billId: bill.id, orderId: order.id, patientId: order.patientId,
+    });
+  } catch (err) {
+    console.warn("Radiology study fan-out failed:", err);
+  }
+
   // Fire WhatsApp send asynchronously — don't block the response
   if (pat?.phone && tokenInfo) {
     sendBillWhatsapp({
@@ -310,7 +323,7 @@ billsRouter.post("/", async (req, res) => {
   }
 
   const built = await buildBill(bill);
-  res.status(201).json({ ...built, token: tokenInfo, testTokens });
+  res.status(201).json({ ...built, token: tokenInfo, testTokens, studies });
 });
 
 billsRouter.get("/:id", async (req, res) => {

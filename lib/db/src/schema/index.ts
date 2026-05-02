@@ -27,3 +27,4 @@ export * from "./portalSessions";
 export * from "./dicom";
 export * from "./samples";
 export * from "./testTokens";
+export * from "./radiology";

@@ -30,6 +30,7 @@ import Packages from "@/pages/Packages";
 import Expenses from "@/pages/Expenses";
 import Staff from "@/pages/Staff";
 import QueuePage from "@/pages/Queue";
+import Radiology from "@/pages/Radiology";
 import FormF from "@/pages/FormF";
 import Portal from "@/pages/Portal";
 import Display from "@/pages/Display";
@@ -48,7 +49,7 @@ const queryClient = new QueryClient({
 });
 
 const ERP_NAV_ORDER = [
-  "/", "/dashboard", "/patients", "/appointments", "/queue", "/orders",
+  "/", "/dashboard", "/patients", "/appointments", "/queue", "/radiology", "/orders",
   "/tests", "/packages", "/billing", "/payments", "/reports",
   "/report-generator", "/inventory", "/expenses", "/staff", "/referrals",
   "/accounting", "/discounts", "/form-f", "/pacs", "/settings",
@@ -113,6 +114,7 @@ function Router() {
             <Route path="/dicom-nodes" component={DicomNodes} />
             <Route path="/appointments" component={Appointments} />
             <Route path="/queue" component={QueuePage} />
+            <Route path="/radiology" component={Radiology} />
             <Route path="/packages" component={Packages} />
             <Route path="/expenses" component={Expenses} />
             <Route path="/staff" component={Staff} />

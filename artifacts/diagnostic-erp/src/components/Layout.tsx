@@ -33,6 +33,7 @@ import {
   LogOut,
   AlertCircle,
   Server,
+  Radio,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -45,6 +46,7 @@ const navItems = [
   { path: "/patients", icon: Users, label: "Patients" },
   { path: "/appointments", icon: CalendarDays, label: "Appointments" },
   { path: "/queue", icon: Ticket, label: "Queue Tokens" },
+  { path: "/radiology", icon: Radio, label: "Radiology" },
   { path: "/orders", icon: ClipboardList, label: "Orders" },
   { path: "/tests", icon: FlaskConical, label: "Test Catalog" },
   { path: "/packages", icon: Boxes, label: "Test Packages" },
