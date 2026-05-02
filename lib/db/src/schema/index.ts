@@ -24,3 +24,4 @@ export * from "./reportTemplates";
 export * from "./abnormalFindings";
 export * from "./formF";
 export * from "./portalSessions";
+export * from "./dicom";

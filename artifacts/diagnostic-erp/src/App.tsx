@@ -22,6 +22,7 @@ import Accounting from "@/pages/Accounting";
 import Register from "@/pages/Register";
 import Settings from "@/pages/Settings";
 import Dues from "@/pages/Dues";
+import DicomNodes from "@/pages/DicomNodes";
 import Discounts from "@/pages/Discounts";
 import PACS from "@/pages/PACS";
 import Appointments from "@/pages/Appointments";
@@ -107,6 +108,7 @@ function Router() {
             <Route path="/register" component={Register} />
             <Route path="/discounts" component={Discounts} />
             <Route path="/pacs" component={PACS} />
+            <Route path="/dicom-nodes" component={DicomNodes} />
             <Route path="/appointments" component={Appointments} />
             <Route path="/queue" component={QueuePage} />
             <Route path="/packages" component={Packages} />

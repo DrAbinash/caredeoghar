@@ -88,6 +88,7 @@ Key changes that make local dev work:
 - **Referrals** — doctor commission rules (percentage/fixed, per-test/category/all scope, exclusive rules) + payout report
 - **Accounting** — chart of accounts with Tally groups + opening balances + GST/PAN; vouchers (Payment/Receipt/Contra/Journal/Sales/Purchase); ledger; Trial Balance; Profit & Loss; Balance Sheet; TallyPrime XML export
 - **PACS Viewer** (`/pacs`) — Orthanc DICOM server integration; study/series browser with instance thumbnails; Weasis desktop launcher; OHIF web viewer link; WADO proxy
+- **DICOM Nodes** (`/dicom-nodes`) — modality registry (CT/MR/CR/DX/US/MG/NM/PT/XA/RF/ECG/ES/OT) with AE Title (UNIQUE), host:port, location, description, active toggle, and TCP-reachability test button. Pluggable PACS provider abstraction (`artifacts/api-server/src/lib/pacs/providers.ts`) supports Orthanc (REST), Conquest (HTTP CGI on port 5678), and "none". Provider chosen via `PACS_PROVIDER=orthanc|conquest` env var (auto-detects from `ORTHANC_URL`/`CONQUEST_URL`). SSRF-guarded `tcpProbe` blocks cloud metadata IPs. Connection-test results persisted to `dicom_nodes.last_test_*` columns.
 - **Discounts** (`/discounts`) — discount rules: percentage/fixed, scope (all/category/test), expiry date, active/inactive toggle
 - **Appointments** (`/appointments`) — day-view appointment scheduler; status flow (scheduled/confirmed/completed/cancelled/no-show); stats row; date navigator; patient/doctor assignment; type (walk-in/scheduled/emergency/follow-up)
 - **Test Packages** (`/packages`) — bundle multiple tests into priced packages; MRP + discount%; effective price preview; card grid with test list; create/edit/delete
@@ -161,7 +162,7 @@ Key changes that make local dev work:
 - New frontend pages use direct fetch via `src/lib/fetchApi.ts` (put/patch/post/delete helpers)
 - Currency: Indian Rupee (₹), `en-IN` locale
 - Voucher numbering: PV (payment), RV (receipt), BT (contra), JV (journal), SV (sales), PUR (purchase) — all YYYYMM-XXXX
-- PACS uses env vars: ORTHANC_URL, ORTHANC_USERNAME, ORTHANC_PASSWORD, PACS_VIEWER_TYPE, OHIF_URL, WADO_URL
+- PACS uses env vars: ORTHANC_URL, ORTHANC_USERNAME, ORTHANC_PASSWORD, PACS_VIEWER_TYPE, OHIF_URL, WADO_URL, CONQUEST_URL, PACS_PROVIDER (orthanc|conquest)
 - Accounting accounts have: tallyGroup (TALLY_GROUPS list), openingBalance/openingBalanceType, gstNumber, pan
 - Tally export maps account types to groups: cash→Cash-in-Hand, bank→Bank Accounts, income→Direct Income, etc.
 - Commission rules stored with JSON arrays for `categories` and `testIds` fields
