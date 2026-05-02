@@ -163,17 +163,66 @@ billsRouter.get("/", async (req, res) => {
   const { status, patientId, page = 1, limit = 20 } = parsed.data;
   const offset = (page - 1) * limit;
 
-  const conditions: ReturnType<typeof eq>[] = [];
+  // Extra filters not in the strict zod schema: dues-only + date range. These
+  // are read directly from req.query so we don't have to round-trip OpenAPI
+  // codegen. Powers the Dues report page.
+  const dueOnly = req.query.dueOnly === "1" || req.query.dueOnly === "true";
+  const dateFrom = typeof req.query.dateFrom === "string" && req.query.dateFrom ? req.query.dateFrom : null;
+  const dateTo = typeof req.query.dateTo === "string" && req.query.dateTo ? req.query.dateTo : null;
+  const dateField = req.query.dateField === "due" ? "due" : "created";
+
+  // ISO date strings only — basic guard against SQL injection via the raw fragments.
+  const isoDateRe = /^\d{4}-\d{2}-\d{2}$/;
+  if (dateFrom && !isoDateRe.test(dateFrom)) {
+    res.status(400).json({ error: "dateFrom must be YYYY-MM-DD" });
+    return;
+  }
+  if (dateTo && !isoDateRe.test(dateTo)) {
+    res.status(400).json({ error: "dateTo must be YYYY-MM-DD" });
+    return;
+  }
+
+  const conditions: (ReturnType<typeof eq> | ReturnType<typeof gt>)[] = [];
   if (status) conditions.push(eq(billsTable.status, status));
   if (patientId) conditions.push(eq(billsTable.patientId, patientId));
+  if (dueOnly) conditions.push(gt(sql`${billsTable.balanceAmount}::numeric`, sql`0`));
+  if (dateFrom || dateTo) {
+    if (dateField === "due") {
+      // Bills only have a due date when one was set; bills with NULL dueDate are excluded by this filter.
+      if (dateFrom) conditions.push(sql`${billsTable.dueDate} >= ${dateFrom}` as unknown as ReturnType<typeof eq>);
+      if (dateTo) conditions.push(sql`${billsTable.dueDate} <= ${dateTo}` as unknown as ReturnType<typeof eq>);
+    } else {
+      // Compare on the date portion of created_at, in the server's local timezone.
+      if (dateFrom) conditions.push(sql`(${billsTable.createdAt})::date >= ${dateFrom}::date` as unknown as ReturnType<typeof eq>);
+      if (dateTo) conditions.push(sql`(${billsTable.createdAt})::date <= ${dateTo}::date` as unknown as ReturnType<typeof eq>);
+    }
+  }
 
-  const [bills, countResult] = await Promise.all([
-    db.select().from(billsTable).where(conditions.length > 0 ? and(...conditions) : undefined).orderBy(desc(billsTable.createdAt)).limit(limit).offset(offset),
-    db.select({ count: sql<number>`count(*)` }).from(billsTable).where(conditions.length > 0 ? and(...conditions) : undefined),
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const [bills, countResult, totalsResult] = await Promise.all([
+    db.select().from(billsTable).where(where).orderBy(desc(billsTable.createdAt)).limit(limit).offset(offset),
+    db.select({ count: sql<number>`count(*)` }).from(billsTable).where(where),
+    // Aggregate totals across the FULL filtered set (not just the current page) — used by the Dues card.
+    db.select({
+      totalAmount: sql<string>`COALESCE(SUM(${billsTable.totalAmount}::numeric), 0)`,
+      paidAmount: sql<string>`COALESCE(SUM(${billsTable.paidAmount}::numeric), 0)`,
+      balanceAmount: sql<string>`COALESCE(SUM(${billsTable.balanceAmount}::numeric), 0)`,
+    }).from(billsTable).where(where),
   ]);
 
   const billsWithDetails = await Promise.all(bills.map(buildBill));
-  res.json({ bills: billsWithDetails, total: Number(countResult[0]?.count ?? 0), page, limit });
+  res.json({
+    bills: billsWithDetails,
+    total: Number(countResult[0]?.count ?? 0),
+    page,
+    limit,
+    totals: {
+      totalAmount: Number(totalsResult[0]?.totalAmount ?? 0),
+      paidAmount: Number(totalsResult[0]?.paidAmount ?? 0),
+      balanceAmount: Number(totalsResult[0]?.balanceAmount ?? 0),
+    },
+  });
 });
 
 billsRouter.post("/", async (req, res) => {

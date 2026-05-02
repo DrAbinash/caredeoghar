@@ -47,6 +47,7 @@ const navItems = [
   { path: "/tests", icon: FlaskConical, label: "Test Catalog" },
   { path: "/packages", icon: Boxes, label: "Test Packages" },
   { path: "/billing", icon: Receipt, label: "Billing" },
+  { path: "/dues", icon: AlertCircle, label: "Due Payments" },
   { path: "/payments", icon: CreditCard, label: "Payments" },
   { path: "/reports", icon: BarChart3, label: "Reports" },
   { path: "/report-generator", icon: FilePen, label: "Report Generator" },
