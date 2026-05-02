@@ -62,7 +62,14 @@ export default function Inventory() {
   const [stockDialog, setStockDialog] = useState<{ item: Item; mode: "in" | "out" | "adjust" } | null>(null);
   const [historyItem, setHistoryItem] = useState<Item | null>(null);
   const [editItem, setEditItem] = useState<Item | null>(null);
-  const [ruleOpen, setRuleOpen] = useState(false);
+  // Multi-item rule editor state. When non-null, the dialog is open and is
+  // editing this test's full rule set. `testId === ""` means "Add new" — the
+  // user picks a test inside the dialog. Otherwise the test is locked
+  // (you cannot retarget an existing rule group to a different test).
+  const [ruleEditor, setRuleEditor] = useState<
+    | { testId: string; rows: { itemId: string; quantity: string }[]; mode: "add" | "edit" }
+    | null
+  >(null);
   const [view, setView] = useState<"cards" | "table">("cards");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [stockFilter, setStockFilter] = useState<"all" | "low" | "out">("all");
@@ -106,18 +113,112 @@ export default function Inventory() {
     mutationFn: (d: { id: number; body: Record<string, unknown> }) => api.post(`/api/inventory/${d.id}/adjust`, d.body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["inventory"] }); qc.invalidateQueries({ queryKey: ["inventory-low"] }); setStockDialog(null); resetStock(); },
   });
-  const deleteRule = useMutation({
-    mutationFn: (id: number) => api.delete(`/api/inventory/consumption-rules/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["consumption-rules"] }),
+  // Replace ALL consumption rules for a test in one atomic call.
+  const saveTestRules = useMutation({
+    mutationFn: (d: { testId: number; items: { itemId: number; quantity: number }[] }) =>
+      api.put(`/api/inventory/consumption-rules/by-test/${d.testId}`, { items: d.items }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["consumption-rules"] });
+      setRuleEditor(null);
+      toast({ title: "Consumption rule saved" });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Could not save rule";
+      toast({ title: "Save failed", description: msg, variant: "destructive" });
+    },
   });
-  const addRule = useMutation({
-    mutationFn: (body: Record<string, unknown>) => api.post("/api/inventory/consumption-rules", body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["consumption-rules"] }); setRuleOpen(false); resetRule(); },
+  // Delete EVERY rule for a given test (the per-test card-level Delete button).
+  const deleteTestRules = useMutation({
+    mutationFn: (testId: number) =>
+      api.delete(`/api/inventory/consumption-rules/by-test/${testId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["consumption-rules"] });
+      toast({ title: "Consumption rule removed" });
+    },
   });
 
   const { register: regAdd, handleSubmit: subAdd, reset: resetAdd, setValue: setAddVal } = useForm<Record<string, string>>();
   const { register: regStock, handleSubmit: subStock, reset: resetStock } = useForm<Record<string, string>>();
-  const { register: regRule, handleSubmit: subRule, reset: resetRule, setValue: setRuleVal } = useForm<Record<string, string>>();
+
+  // Group flat rule rows by testId so the UI shows one row per test with all
+  // consumed items listed under it (matching the user's mockup).
+  const rulesByTest = (() => {
+    const map = new Map<number, { testId: number; testName: string; items: ConsumptionRule[] }>();
+    for (const r of rules) {
+      const key = r.testId;
+      const existing = map.get(key);
+      if (existing) {
+        existing.items.push(r);
+      } else {
+        map.set(key, {
+          testId: r.testId,
+          testName: r.testName || `Test #${r.testId}`,
+          items: [r],
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.testName.localeCompare(b.testName));
+  })();
+
+  function openAddRule() {
+    setRuleEditor({ testId: "", rows: [{ itemId: "", quantity: "1" }], mode: "add" });
+  }
+  function openEditRule(testId: number) {
+    const group = rulesByTest.find((g) => g.testId === testId);
+    if (!group) return;
+    setRuleEditor({
+      testId: String(testId),
+      mode: "edit",
+      rows: group.items.map((it) => ({ itemId: String(it.itemId), quantity: String(it.quantity) })),
+    });
+  }
+  function updateRow(idx: number, patch: Partial<{ itemId: string; quantity: string }>) {
+    setRuleEditor((cur) => {
+      if (!cur) return cur;
+      const rows = cur.rows.map((r, i) => (i === idx ? { ...r, ...patch } : r));
+      return { ...cur, rows };
+    });
+  }
+  function addRow() {
+    setRuleEditor((cur) => (cur ? { ...cur, rows: [...cur.rows, { itemId: "", quantity: "1" }] } : cur));
+  }
+  function removeRow(idx: number) {
+    setRuleEditor((cur) => {
+      if (!cur) return cur;
+      const rows = cur.rows.filter((_, i) => i !== idx);
+      // Always keep at least one row so the user can edit something.
+      return { ...cur, rows: rows.length ? rows : [{ itemId: "", quantity: "1" }] };
+    });
+  }
+  function saveRuleEditor() {
+    if (!ruleEditor) return;
+    const testId = Number(ruleEditor.testId);
+    if (!Number.isFinite(testId) || testId <= 0) {
+      toast({ title: "Pick a test", variant: "destructive" });
+      return;
+    }
+    // Reject empty/invalid rows and tell the user which one is bad.
+    const items: { itemId: number; quantity: number }[] = [];
+    for (let i = 0; i < ruleEditor.rows.length; i++) {
+      const row = ruleEditor.rows[i];
+      const itemId = Number(row.itemId);
+      const qty = Number(row.quantity);
+      if (!Number.isFinite(itemId) || itemId <= 0) {
+        toast({ title: `Row ${i + 1}: pick an item`, variant: "destructive" });
+        return;
+      }
+      if (!Number.isFinite(qty) || qty <= 0) {
+        toast({ title: `Row ${i + 1}: quantity must be > 0`, variant: "destructive" });
+        return;
+      }
+      items.push({ itemId, quantity: qty });
+    }
+    if (items.length === 0) {
+      toast({ title: "Add at least one item", variant: "destructive" });
+      return;
+    }
+    saveTestRules.mutate({ testId, items });
+  }
 
   const filtered = items.filter((i) => {
     if (search) {
@@ -478,33 +579,63 @@ export default function Inventory() {
           {/* ── Consumption Rules Tab ── */}
           <TabsContent value="rules" className="space-y-4">
             <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">Define which consumables are used per test</p>
-              <Button size="sm" onClick={() => { setRuleOpen(true); resetRule(); }}>
+              <p className="text-sm text-muted-foreground">
+                Define which consumables are used per test. A single test can consume multiple items
+                (e.g. X-Ray Chest = 1 film + 1 polybag + 1 reporting page + 1 envelope).
+              </p>
+              <Button size="sm" onClick={openAddRule}>
                 <Plus size={14} className="mr-1" /> Add Rule
               </Button>
             </div>
 
-            {rules.length === 0 ? (
+            {rulesByTest.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">No consumption rules defined yet</div>
             ) : (
               <div className="bg-card border border-card-border rounded-xl overflow-hidden">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50 border-b border-card-border">
                     <tr>
-                      <th className="text-left px-4 py-3 font-semibold text-xs uppercase text-muted-foreground">Test</th>
-                      <th className="text-left px-4 py-3 font-semibold text-xs uppercase text-muted-foreground">Item</th>
-                      <th className="text-right px-4 py-3 font-semibold text-xs uppercase text-muted-foreground">Qty / Order</th>
-                      <th className="px-4 py-3" />
+                      <th className="text-left px-4 py-3 font-semibold text-xs uppercase text-muted-foreground">Test Name</th>
+                      <th className="text-left px-4 py-3 font-semibold text-xs uppercase text-muted-foreground">Consumed Items</th>
+                      <th className="px-4 py-3 text-right font-semibold text-xs uppercase text-muted-foreground">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rules.map((r) => (
-                      <tr key={r.id} className="border-b border-card-border last:border-0 hover:bg-muted/20">
-                        <td className="px-4 py-3 font-medium">{r.testName || r.testId}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{r.itemName || r.itemId}</td>
-                        <td className="px-4 py-3 text-right">{r.quantity} {r.itemUnit}</td>
-                        <td className="px-4 py-3 text-right">
-                          <Button size="sm" variant="ghost" className="h-7 text-destructive hover:text-destructive" onClick={() => deleteRule.mutate(r.id)}>
+                    {rulesByTest.map((g) => (
+                      <tr key={g.testId} className="border-b border-card-border last:border-0 hover:bg-muted/20 align-top">
+                        <td className="px-4 py-3 font-medium">{g.testName}</td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          <ul className="space-y-0.5">
+                            {g.items.map((it) => (
+                              <li key={it.id}>
+                                {it.itemName || `Item #${it.itemId}`}{" "}
+                                <span className="text-foreground/80">({Number(it.quantity)})</span>
+                                {it.itemUnit ? <span className="text-muted-foreground/70"> {it.itemUnit}</span> : null}
+                              </li>
+                            ))}
+                          </ul>
+                        </td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2"
+                            title="Edit consumed items"
+                            onClick={() => openEditRule(g.testId)}
+                          >
+                            <Pencil size={13} />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-destructive hover:text-destructive"
+                            title="Remove all rules for this test"
+                            onClick={() => {
+                              if (confirm(`Remove all consumption rules for "${g.testName}"?`)) {
+                                deleteTestRules.mutate(g.testId);
+                              }
+                            }}
+                          >
                             <Trash2 size={13} />
                           </Button>
                         </td>
@@ -679,37 +810,128 @@ export default function Inventory() {
         </Dialog>
       )}
 
-      {/* Add Consumption Rule */}
-      <Dialog open={ruleOpen} onOpenChange={setRuleOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Add Consumption Rule</DialogTitle></DialogHeader>
-          <form onSubmit={subRule((d) => addRule.mutate({ ...d, quantity: d.quantity || "1" }))} className="space-y-4">
-            <div>
-              <Label>Test *</Label>
-              <Select onValueChange={(v) => setRuleVal("testId", v)}>
-                <SelectTrigger className="mt-1"><SelectValue placeholder="Select test…" /></SelectTrigger>
-                <SelectContent>
-                  {testsData?.tests?.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+      {/* ── Multi-item Consumption Rule editor ──
+          Lets the user pick a test, then add as many (item, quantity) rows
+          as needed. Save calls the bulk PUT endpoint which atomically
+          replaces every rule that exists for the chosen test. */}
+      {ruleEditor && (
+        <Dialog open onOpenChange={(o) => { if (!o) setRuleEditor(null); }}>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                {ruleEditor.mode === "edit" ? "Edit Consumption Rule" : "Add Consumption Rule"}
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div>
+                <Label>Test *</Label>
+                {ruleEditor.mode === "edit" ? (
+                  // Test is locked when editing — switching tests is the same
+                  // as deleting these rules and creating brand-new ones for
+                  // a different test, which is confusing as a single action.
+                  <div className="mt-1 px-3 py-2 rounded-md bg-muted/50 text-sm font-medium">
+                    {testsData?.tests?.find((t) => t.id === Number(ruleEditor.testId))?.name
+                      ?? `Test #${ruleEditor.testId}`}
+                  </div>
+                ) : (
+                  <Select
+                    value={ruleEditor.testId || undefined}
+                    onValueChange={(v) => setRuleEditor((cur) => (cur ? { ...cur, testId: v } : cur))}
+                  >
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="Select test…" /></SelectTrigger>
+                    <SelectContent>
+                      {testsData?.tests
+                        // Hide tests that already have a rule group — those use Edit, not Add,
+                        // to avoid silently overwriting an existing rule on save.
+                        ?.filter((t) => !rulesByTest.some((g) => g.testId === t.id))
+                        .map((t) => (
+                          <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <Label>Consumed Items *</Label>
+                  <Button type="button" size="sm" variant="outline" onClick={addRow}>
+                    <Plus size={12} className="mr-1" /> Add Item
+                  </Button>
+                </div>
+                <div className="space-y-2 border border-card-border rounded-md p-2 bg-muted/20">
+                  {ruleEditor.rows.map((row, idx) => {
+                    const selectedItem = items.find((i) => i.id === Number(row.itemId));
+                    return (
+                      <div key={idx} className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground w-5 text-right">{idx + 1}.</span>
+                        <Select
+                          value={row.itemId || undefined}
+                          onValueChange={(v) => updateRow(idx, { itemId: v })}
+                        >
+                          <SelectTrigger className="flex-1"><SelectValue placeholder="Pick inventory item…" /></SelectTrigger>
+                          <SelectContent>
+                            {items
+                              // Prevent duplicates within the SAME dialog session — the
+                              // backend de-dupes by summing qty, but the UI is clearer
+                              // if each item appears at most once.
+                              .filter(
+                                (i) =>
+                                  String(i.id) === row.itemId ||
+                                  !ruleEditor.rows.some((r, j) => j !== idx && r.itemId === String(i.id)),
+                              )
+                              .map((i) => (
+                                <SelectItem key={i.id} value={String(i.id)}>
+                                  {i.name} ({i.unit})
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number"
+                          step="any"
+                          min="0.01"
+                          value={row.quantity}
+                          onChange={(e) => updateRow(idx, { quantity: e.target.value })}
+                          className="w-24"
+                          placeholder="Qty"
+                        />
+                        <span className="text-xs text-muted-foreground w-12 truncate">
+                          {selectedItem?.unit ?? ""}
+                        </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                          onClick={() => removeRow(idx)}
+                          disabled={ruleEditor.rows.length === 1}
+                          title="Remove this item"
+                        >
+                          <Trash2 size={13} />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Each item listed here is automatically deducted from stock when this test is ordered.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={() => setRuleEditor(null)}>
+                  Cancel
+                </Button>
+                <Button onClick={saveRuleEditor} disabled={saveTestRules.isPending}>
+                  {saveTestRules.isPending ? "Saving…" : "Save Rule"}
+                </Button>
+              </div>
             </div>
-            <div>
-              <Label>Inventory Item *</Label>
-              <Select onValueChange={(v) => setRuleVal("itemId", v)}>
-                <SelectTrigger className="mt-1"><SelectValue placeholder="Select item…" /></SelectTrigger>
-                <SelectContent>
-                  {items.map(i => <SelectItem key={i.id} value={String(i.id)}>{i.name} ({i.unit})</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div><Label>Quantity per Order</Label><Input type="number" step="any" {...regRule("quantity")} className="mt-1" defaultValue="1" /></div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setRuleOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={addRule.isPending}>Add Rule</Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

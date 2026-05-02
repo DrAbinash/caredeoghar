@@ -6,7 +6,7 @@ import {
   inventoryConsumptionRulesTable,
   testsTable,
 } from "@workspace/db/schema";
-import { eq, desc, lt, and } from "drizzle-orm";
+import { eq, desc, lt, and, inArray } from "drizzle-orm";
 
 const router = Router();
 
@@ -145,6 +145,111 @@ router.post("/consumption-rules", async (req, res) => {
     .values({ testId: Number(testId), itemId: Number(itemId), quantity: quantity?.toString() || "1" })
     .returning();
   res.status(201).json(rule);
+});
+
+// Replace ALL consumption rules for a single test in one atomic operation.
+// Body shape:  { items: [ { itemId: number, quantity: number|string }, ... ] }
+// An empty `items` array effectively clears the test's rules.
+//
+// We deliberately delete-then-insert inside a transaction (instead of trying
+// to diff/upsert) because:
+//   1. The dialog always sends the FULL desired list (it is a multi-item
+//      editor, not a partial-patch endpoint), so a wholesale replace is
+//      both simpler and matches the user's mental model.
+//   2. The composite (testId,itemId) is not enforced as unique at the DB
+//      level, so there is no `ON CONFLICT` shortcut available.
+router.put("/consumption-rules/by-test/:testId", async (req, res) => {
+  const testId = Number(req.params.testId);
+  if (!Number.isFinite(testId) || testId <= 0) {
+    return res.status(400).json({ error: "Invalid testId" });
+  }
+
+  // STRICT contract: `items` must be explicitly present AND an array.
+  // We never coerce missing/null to []; that would let a malformed client
+  // payload (e.g. `{}` or `{ items: null }`) silently wipe out every rule
+  // for the test. The dialog always sends a real array, so a missing
+  // field is always a client bug worth surfacing as a 400.
+  if (!Object.prototype.hasOwnProperty.call(req.body ?? {}, "items")) {
+    return res.status(400).json({ error: "Missing required field: items" });
+  }
+  const rawItems = req.body.items;
+  if (!Array.isArray(rawItems)) {
+    return res.status(400).json({ error: "Field 'items' must be an array" });
+  }
+
+  // Validate / normalise input BEFORE touching the DB so a bad payload
+  // can never leave a test with zero rules by mistake.
+  const normalised: { itemId: number; quantity: string }[] = [];
+  const seen = new Set<number>();
+  for (const it of rawItems) {
+    const itemId = Number(it?.itemId);
+    const qty = Number(it?.quantity);
+    if (!Number.isFinite(itemId) || itemId <= 0) {
+      return res.status(400).json({ error: `Invalid itemId: ${it?.itemId}` });
+    }
+    if (!Number.isFinite(qty) || qty <= 0) {
+      return res.status(400).json({ error: `Quantity for item ${itemId} must be > 0` });
+    }
+    // Dedupe — if the user added the same item twice in the dialog, sum the
+    // quantities rather than inserting two conflicting rows for the same test.
+    if (seen.has(itemId)) {
+      const existing = normalised.find((n) => n.itemId === itemId)!;
+      existing.quantity = (Number(existing.quantity) + qty).toString();
+    } else {
+      seen.add(itemId);
+      normalised.push({ itemId, quantity: qty.toString() });
+    }
+  }
+
+  // Pre-check that the test and every item actually exist. This turns what
+  // would otherwise be an opaque 500 (raw FK violation) into a clean 400
+  // with a useful message — and avoids wasting a transaction round-trip.
+  const [testExists] = await db
+    .select({ id: testsTable.id })
+    .from(testsTable)
+    .where(eq(testsTable.id, testId))
+    .limit(1);
+  if (!testExists) return res.status(404).json({ error: `Test ${testId} not found` });
+
+  if (normalised.length > 0) {
+    const itemIds = normalised.map((n) => n.itemId);
+    const found = await db
+      .select({ id: inventoryItemsTable.id })
+      .from(inventoryItemsTable)
+      .where(inArray(inventoryItemsTable.id, itemIds));
+    const foundSet = new Set(found.map((r) => r.id));
+    const missing = itemIds.filter((id) => !foundSet.has(id));
+    if (missing.length > 0) {
+      return res
+        .status(400)
+        .json({ error: `Inventory item(s) not found: ${missing.join(", ")}` });
+    }
+  }
+
+  const inserted = await db.transaction(async (tx) => {
+    await tx
+      .delete(inventoryConsumptionRulesTable)
+      .where(eq(inventoryConsumptionRulesTable.testId, testId));
+    if (normalised.length === 0) return [];
+    return tx
+      .insert(inventoryConsumptionRulesTable)
+      .values(normalised.map((n) => ({ testId, itemId: n.itemId, quantity: n.quantity })))
+      .returning();
+  });
+
+  res.json({ ok: true, count: inserted.length, rules: inserted });
+});
+
+// Delete every consumption rule for a given test.
+router.delete("/consumption-rules/by-test/:testId", async (req, res) => {
+  const testId = Number(req.params.testId);
+  if (!Number.isFinite(testId) || testId <= 0) {
+    return res.status(400).json({ error: "Invalid testId" });
+  }
+  await db
+    .delete(inventoryConsumptionRulesTable)
+    .where(eq(inventoryConsumptionRulesTable.testId, testId));
+  res.json({ ok: true });
 });
 
 router.delete("/consumption-rules/:id", async (req, res) => {
