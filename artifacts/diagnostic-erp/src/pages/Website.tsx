@@ -11,8 +11,9 @@ import { Switch } from "@/components/ui/switch";
 import {
   Globe, Palette, Type as TypeIcon, MousePointer, FileText, Layers,
   Link as LinkIcon, User, BarChart, Tag, Bell, HelpCircle, Image as ImageIcon,
-  Eye, MessageCircle, ExternalLink, Save, Plus, Trash2, Check,
+  Eye, MessageCircle, ExternalLink, Save, Plus, Trash2, Check, Pencil,
 } from "lucide-react";
+import { SectionsEditor } from "./website/SectionsEditor";
 
 type SiteSettings = {
   id: number;
@@ -430,9 +431,15 @@ function PagesTab() {
   const pagesQ = useQuery<{ pages: Page[] }>({ queryKey: ["website", "pages"], queryFn: () => api.get<{ pages: Page[] }>("/api/website/pages") });
   const [newSlug, setNewSlug] = useState("");
   const [newTitle, setNewTitle] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
   const create = useMutation({
-    mutationFn: () => api.post("/api/website/pages", { slug: newSlug, title: newTitle }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["website", "pages"] }); setNewSlug(""); setNewTitle(""); toast({ title: "Page created" }); },
+    mutationFn: () => api.post<Page>("/api/website/pages", { slug: newSlug, title: newTitle }),
+    onSuccess: (created) => {
+      qc.invalidateQueries({ queryKey: ["website", "pages"] });
+      setNewSlug(""); setNewTitle("");
+      toast({ title: "Page created" });
+      setEditingId(created.id);
+    },
     onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
   const togglePub = useMutation({
@@ -443,6 +450,11 @@ function PagesTab() {
     mutationFn: (id: number) => api.delete(`/api/website/pages/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["website", "pages"] }),
   });
+
+  if (editingId !== null) {
+    return <SectionsEditor pageId={editingId} onBack={() => setEditingId(null)} />;
+  }
+
   return (
     <Card title="Pages">
       <div className="rounded-lg border border-border p-3 bg-muted/30">
@@ -459,16 +471,19 @@ function PagesTab() {
           <tbody>
             {pagesQ.data?.pages.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">No pages yet — create your first one above.</td></tr>}
             {pagesQ.data?.pages.map((p) => (
-              <tr key={p.id} className="border-t border-border">
+              <tr key={p.id} className="border-t border-border hover:bg-muted/30 cursor-pointer" onClick={() => setEditingId(p.id)}>
                 <td className="p-3 font-medium">{p.title}</td>
                 <td className="p-3 font-mono text-xs">/{p.slug}</td>
-                <td className="p-3">
+                <td className="p-3" onClick={(e) => e.stopPropagation()}>
                   <button onClick={() => togglePub.mutate(p)} className={`px-2 py-0.5 rounded-full text-xs font-semibold ${p.status === "published" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
                     {p.status}
                   </button>
                 </td>
                 <td className="p-3">{p.showInNav ? "Yes" : "No"}</td>
-                <td className="p-3 text-right"><Button size="icon" variant="ghost" onClick={() => remove.mutate(p.id)}><Trash2 size={13} /></Button></td>
+                <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
+                  <Button size="icon" variant="ghost" onClick={() => setEditingId(p.id)} title="Edit sections"><Pencil size={13} /></Button>
+                  <Button size="icon" variant="ghost" onClick={() => remove.mutate(p.id)} title="Delete page"><Trash2 size={13} /></Button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -479,17 +494,27 @@ function PagesTab() {
 }
 
 function SectionsTab() {
+  const pagesQ = useQuery<{ pages: Page[] }>({ queryKey: ["website", "pages"], queryFn: () => api.get<{ pages: Page[] }>("/api/website/pages") });
+  const [editingId, setEditingId] = useState<number | null>(null);
+  if (editingId !== null) {
+    return <SectionsEditor pageId={editingId} onBack={() => setEditingId(null)} />;
+  }
   return (
     <Card title="Sections">
-      <p className="text-sm text-muted-foreground">
-        Open a page from the <span className="font-semibold">Pages</span> tab to manage its sections (Header, Services, Online Appointment,
-        Reviews, Contact Us, Connect With Us, Subscribe, Footer, FAQ, Gallery, Custom HTML). Section editing UI ships in the next iteration —
-        the data model and API already accept and persist <code className="px-1 py-0.5 rounded bg-muted">sections</code> JSON per page.
-      </p>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mt-2">
-        {["Header", "Hero", "Our Services", "Online Appointment", "Reviews", "Contact Us", "Connect With Us", "Subscribe", "FAQ", "Gallery", "Custom HTML", "Footer"].map((n) => (
-          <div key={n} className="rounded-lg border border-border p-3 text-sm font-medium text-center bg-muted/30">{n}</div>
-        ))}
+      <p className="text-sm text-muted-foreground">Pick a page to edit its sections (Header, Hero, Services, Appointment, Reviews, Contact, Connect, Subscribe, FAQ, Gallery, Custom HTML, Footer).</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+        {pagesQ.data?.pages.length === 0 && <div className="text-sm text-muted-foreground italic">No pages yet — create one in the Pages tab.</div>}
+        {pagesQ.data?.pages.map((p) => {
+          let count = 0;
+          try { const arr = JSON.parse(p.sections || "[]"); if (Array.isArray(arr)) count = arr.length; } catch { /* noop */ }
+          return (
+            <button key={p.id} onClick={() => setEditingId(p.id)} className="text-left rounded-lg border border-border hover:border-primary p-3 transition">
+              <div className="font-semibold text-sm">{p.title}</div>
+              <div className="text-xs text-muted-foreground font-mono">/{p.slug}</div>
+              <div className="text-xs mt-1 text-muted-foreground">{count} section{count === 1 ? "" : "s"}</div>
+            </button>
+          );
+        })}
       </div>
     </Card>
   );
