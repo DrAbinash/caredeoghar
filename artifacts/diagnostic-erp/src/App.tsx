@@ -32,6 +32,7 @@ import Staff from "@/pages/Staff";
 import QueuePage from "@/pages/Queue";
 import Radiology from "@/pages/Radiology";
 import ReportHub from "@/pages/ReportHub";
+import DoctorLedger from "@/pages/DoctorLedger";
 import FormF from "@/pages/FormF";
 import Portal from "@/pages/Portal";
 import Display from "@/pages/Display";
@@ -52,7 +53,7 @@ const queryClient = new QueryClient({
 const ERP_NAV_ORDER = [
   "/", "/dashboard", "/patients", "/appointments", "/queue", "/radiology", "/orders",
   "/tests", "/packages", "/billing", "/payments", "/reports",
-  "/report-generator", "/report-hub", "/inventory", "/expenses", "/staff", "/referrals",
+  "/report-generator", "/report-hub", "/inventory", "/expenses", "/staff", "/referrals", "/doctor-ledger",
   "/accounting", "/discounts", "/form-f", "/pacs", "/settings",
 ];
 
@@ -104,6 +105,7 @@ function Router() {
             <Route path="/payments" component={Payments} />
             <Route path="/dues" component={Dues} />
             <Route path="/doctors" component={Doctors} />
+            <Route path="/doctor-ledger" component={DoctorLedger} />
             <Route path="/reports" component={Reports} />
             <Route path="/report-generator" component={ReportGenerator} />
             <Route path="/report-hub" component={ReportHub} />

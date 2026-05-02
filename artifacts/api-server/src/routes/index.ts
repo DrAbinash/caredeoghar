@@ -37,6 +37,7 @@ import { abnormalFindingsRouter } from "./abnormal-findings";
 import formFRouter from "./form-f";
 import { portalRouter } from "./portal";
 import { patientReportsRouter, signaturesRouter } from "./patient-reports";
+import { doctorLedgerRouter } from "./doctor-ledger";
 
 const router: IRouter = Router();
 
@@ -80,5 +81,6 @@ router.use("/form-f", formFRouter);
 router.use("/portal", portalRouter);
 router.use("/patient-reports", patientReportsRouter);
 router.use("/signatures", signaturesRouter);
+router.use("/doctor-ledger", doctorLedgerRouter);
 
 export default router;

@@ -60,6 +60,7 @@ const navItems = [
   { path: "/expenses", icon: TrendingDown, label: "Expenses" },
   { path: "/staff", icon: Fingerprint, label: "Staff" },
   { path: "/referrals", icon: HandCoins, label: "Referrals" },
+  { path: "/doctor-ledger", icon: HandCoins, label: "Doctor Ledger" },
   { path: "/accounting", icon: BookOpen, label: "Accounting" },
   { path: "/discounts", icon: Tag, label: "Discounts" },
   { path: "/form-f", icon: FileText, label: "Form F (PCPNDT)" },
