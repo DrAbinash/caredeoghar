@@ -147,7 +147,14 @@ export const GetPatientHistoryResponse = zod.object({
           name: zod.string(),
           specialization: zod.string(),
           phone: zod.string().nullish(),
+          email: zod.string().nullish(),
           hospitalAffiliation: zod.string().nullish(),
+          registrationNumber: zod
+            .string()
+            .nullish()
+            .describe(
+              "State medical council registration number — printed on PCPNDT Form F.",
+            ),
           createdAt: zod.string(),
         })
         .nullish(),
@@ -319,7 +326,14 @@ export const ListOrdersResponse = zod.object({
           name: zod.string(),
           specialization: zod.string(),
           phone: zod.string().nullish(),
+          email: zod.string().nullish(),
           hospitalAffiliation: zod.string().nullish(),
+          registrationNumber: zod
+            .string()
+            .nullish()
+            .describe(
+              "State medical council registration number — printed on PCPNDT Form F.",
+            ),
           createdAt: zod.string(),
         })
         .nullish(),
@@ -368,8 +382,7 @@ export const ListOrdersResponse = zod.object({
 export const CreateOrderBody = zod.object({
   patientId: zod.number(),
   doctorId: zod.number().nullish(),
-  testIds: zod.array(zod.number()).optional(),
-  tests: zod.array(zod.object({ testId: zod.number(), price: zod.number() })).optional(),
+  testIds: zod.array(zod.number()),
   notes: zod.string().nullish(),
 });
 
@@ -404,7 +417,14 @@ export const GetOrderResponse = zod.object({
       name: zod.string(),
       specialization: zod.string(),
       phone: zod.string().nullish(),
+      email: zod.string().nullish(),
       hospitalAffiliation: zod.string().nullish(),
+      registrationNumber: zod
+        .string()
+        .nullish()
+        .describe(
+          "State medical council registration number — printed on PCPNDT Form F.",
+        ),
       createdAt: zod.string(),
     })
     .nullish(),
@@ -484,7 +504,14 @@ export const UpdateOrderResponse = zod.object({
       name: zod.string(),
       specialization: zod.string(),
       phone: zod.string().nullish(),
+      email: zod.string().nullish(),
       hospitalAffiliation: zod.string().nullish(),
+      registrationNumber: zod
+        .string()
+        .nullish()
+        .describe(
+          "State medical council registration number — printed on PCPNDT Form F.",
+        ),
       createdAt: zod.string(),
     })
     .nullish(),
@@ -535,6 +562,18 @@ export const ListBillsQueryParams = zod.object({
   patientId: zod.coerce.number().optional(),
   page: zod.coerce.number().default(listBillsQueryPageDefault),
   limit: zod.coerce.number().default(listBillsQueryLimitDefault),
+  dateFrom: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "Inclusive start date (YYYY-MM-DD). Filters by created date by default.",
+    ),
+  dateTo: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "Inclusive end date (YYYY-MM-DD). Filters by created date by default.",
+    ),
 });
 
 export const ListBillsResponse = zod.object({
@@ -567,7 +606,14 @@ export const ListBillsResponse = zod.object({
             name: zod.string(),
             specialization: zod.string(),
             phone: zod.string().nullish(),
+            email: zod.string().nullish(),
             hospitalAffiliation: zod.string().nullish(),
+            registrationNumber: zod
+              .string()
+              .nullish()
+              .describe(
+                "State medical council registration number — printed on PCPNDT Form F.",
+              ),
             createdAt: zod.string(),
           })
           .nullish(),
@@ -689,7 +735,14 @@ export const GetBillResponse = zod.object({
         name: zod.string(),
         specialization: zod.string(),
         phone: zod.string().nullish(),
+        email: zod.string().nullish(),
         hospitalAffiliation: zod.string().nullish(),
+        registrationNumber: zod
+          .string()
+          .nullish()
+          .describe(
+            "State medical council registration number — printed on PCPNDT Form F.",
+          ),
         createdAt: zod.string(),
       })
       .nullish(),
@@ -805,7 +858,14 @@ export const UpdateBillResponse = zod.object({
         name: zod.string(),
         specialization: zod.string(),
         phone: zod.string().nullish(),
+        email: zod.string().nullish(),
         hospitalAffiliation: zod.string().nullish(),
+        registrationNumber: zod
+          .string()
+          .nullish()
+          .describe(
+            "State medical council registration number — printed on PCPNDT Form F.",
+          ),
         createdAt: zod.string(),
       })
       .nullish(),
@@ -932,7 +992,14 @@ export const ListDoctorsResponse = zod.object({
       name: zod.string(),
       specialization: zod.string(),
       phone: zod.string().nullish(),
+      email: zod.string().nullish(),
       hospitalAffiliation: zod.string().nullish(),
+      registrationNumber: zod
+        .string()
+        .nullish()
+        .describe(
+          "State medical council registration number — printed on PCPNDT Form F.",
+        ),
       createdAt: zod.string(),
     }),
   ),
@@ -946,7 +1013,9 @@ export const CreateDoctorBody = zod.object({
   name: zod.string(),
   specialization: zod.string(),
   phone: zod.string().nullish(),
+  email: zod.string().nullish(),
   hospitalAffiliation: zod.string().nullish(),
+  registrationNumber: zod.string().nullish(),
 });
 
 /**

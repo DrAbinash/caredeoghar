@@ -9,6 +9,9 @@ export const doctorsTable = pgTable("doctors", {
   phone: text("phone"),
   email: text("email"),
   hospitalAffiliation: text("hospital_affiliation"),
+  // Module B: doctor registration / council number — required on PCPNDT Form F prints
+  // and on referral receipts to satisfy state medical council audits.
+  registrationNumber: text("registration_number"),
   defaultCommissionType: text("default_commission_type").notNull().default("percentage"),
   defaultCommission: numeric("default_commission", { precision: 10, scale: 2 }).notNull().default("0"),
   ledgerId: integer("ledger_id"),

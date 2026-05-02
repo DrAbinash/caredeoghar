@@ -6,8 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useForm } from "react-hook-form";
-import { ShieldAlert, LogOut, ExternalLink, Copy, CheckCheck, Eye, EyeOff, Lock, BookOpen } from "lucide-react";
+import { ShieldAlert, LogOut, ExternalLink, Copy, CheckCheck, Eye, EyeOff, Lock, BookOpen, HandCoins, ListChecks, Wallet } from "lucide-react";
 import BooksManager from "./pages/Books";
+import CommissionRules from "./pages/CommissionRules";
+import CommissionReport from "./pages/CommissionReport";
+import DoctorLedger from "./pages/DoctorLedger";
+import { setSaToken } from "./lib/saApi";
 
 const queryClient = new QueryClient();
 
@@ -164,7 +168,16 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
   );
 }
 
-function ActiveSessionScreen({ session, onEject, onManageBooks }: { session: Session; onEject: () => void; onManageBooks: () => void }) {
+function ActiveSessionScreen({
+  session, onEject, onManageBooks, onCommissionReport, onCommissionRules, onDoctorLedger,
+}: {
+  session: Session;
+  onEject: () => void;
+  onManageBooks: () => void;
+  onCommissionReport: () => void;
+  onCommissionRules: () => void;
+  onDoctorLedger: () => void;
+}) {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
   const erpLink = getErpLinkWithToken(session.token);
@@ -256,6 +269,30 @@ function ActiveSessionScreen({ session, onEject, onManageBooks }: { session: Ses
             </p>
           </div>
 
+          {/* Compliance — Referral commission */}
+          <div className="border-t border-border pt-5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+              Referral Commission (Compliance)
+            </p>
+            <div className="grid grid-cols-1 gap-2">
+              <Button variant="outline" className="w-full justify-start" onClick={onCommissionReport}>
+                <HandCoins size={14} className="mr-2" />
+                Commission Report
+              </Button>
+              <Button variant="outline" className="w-full justify-start" onClick={onCommissionRules}>
+                <ListChecks size={14} className="mr-2" />
+                Commission Rules
+              </Button>
+              <Button variant="outline" className="w-full justify-start" onClick={onDoctorLedger}>
+                <Wallet size={14} className="mr-2" />
+                Doctor Due / Payment Ledger
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              All referral-fee data is restricted to super admins per medical practice regulations.
+            </p>
+          </div>
+
           {/* Books / Ledgers */}
           <div className="border-t border-border pt-5">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
@@ -292,7 +329,14 @@ function ActiveSessionScreen({ session, onEject, onManageBooks }: { session: Ses
 
 function App() {
   const [session, setSession] = useState<Session | null>(null);
-  const [view, setView] = useState<"home" | "books">("home");
+  const [view, setView] = useState<"home" | "books" | "commission-report" | "commission-rules" | "doctor-ledger">("home");
+
+  // Keep the saApi helper in sync with the active super-admin token so all
+  // gated requests (commission, doctor-ledger) automatically include the
+  // X-SA-Token header.
+  useEffect(() => {
+    setSaToken(session?.token ?? null);
+  }, [session]);
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -300,11 +344,20 @@ function App() {
         <LoginScreen onLogin={(s) => { setSession(s); setView("home"); }} />
       ) : view === "books" ? (
         <BooksManager token={session.token} onBack={() => setView("home")} />
+      ) : view === "commission-report" ? (
+        <CommissionReport onBack={() => setView("home")} />
+      ) : view === "commission-rules" ? (
+        <CommissionRules onBack={() => setView("home")} />
+      ) : view === "doctor-ledger" ? (
+        <DoctorLedger onBack={() => setView("home")} />
       ) : (
         <ActiveSessionScreen
           session={session}
           onEject={() => { setSession(null); setView("home"); }}
           onManageBooks={() => setView("books")}
+          onCommissionReport={() => setView("commission-report")}
+          onCommissionRules={() => setView("commission-rules")}
+          onDoctorLedger={() => setView("doctor-ledger")}
         />
       )}
       <Toaster />

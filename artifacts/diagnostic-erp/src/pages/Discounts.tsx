@@ -270,7 +270,7 @@ export default function Discounts() {
                 <Label>Select Tests</Label>
                 <Input value={testInput} onChange={e => setTestInput(e.target.value)} className="mt-1" placeholder="Search tests…" />
                 <div className="mt-2 max-h-40 overflow-y-auto space-y-1 border border-border rounded-lg p-2">
-                  {tests.filter(t => !testInput || t.name.toLowerCase().includes(testInput.toLowerCase()) || t.code.toLowerCase().includes(testInput.toLowerCase())).slice(0, 20).map(t => {
+                  {tests.filter(t => !testInput || t.name.toLowerCase().includes(testInput.toLowerCase()) || t.code.toLowerCase().includes(testInput.toLowerCase())).slice(0, 100).map(t => {
                     const sel = selectedTestIds.includes(String(t.id));
                     return (
                       <button key={t.id} type="button"

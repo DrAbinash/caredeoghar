@@ -5,7 +5,7 @@ import { api } from "@/lib/fetchApi";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "lucide-react";
+import { Calendar, AlertCircle } from "lucide-react";
 import {
   useGetDashboardStats,
   useGetRevenueReport,
@@ -25,7 +25,6 @@ import {
   BarChart3,
   Package,
   ChevronRight,
-  Stethoscope,
 } from "lucide-react";
 import {
   BarChart,
@@ -45,6 +44,7 @@ function KpiCard({
   sub,
   iconBg,
   trend,
+  cardClass,
 }: {
   icon: React.ElementType;
   label: string;
@@ -52,9 +52,10 @@ function KpiCard({
   sub?: string;
   iconBg: string;
   trend?: { label: string; positive: boolean };
+  cardClass?: string;
 }) {
   return (
-    <div className="bg-card border border-card-border rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+    <div className={`bg-card border border-card-border rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow ${cardClass ?? ""}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
@@ -198,7 +199,6 @@ export default function Dashboard() {
   const recentBills = (stats as any)?.recentBills ?? [];
   const overdueAlerts = (stats as any)?.overdueAlerts ?? [];
   const totalBills = (stats as any)?.totalBills ?? 0;
-  const referralPayouts = (stats as any)?.referralPayouts ?? 0;
   const pendingReports = (stats as any)?.pendingReports ?? 0;
 
   return (
@@ -220,15 +220,28 @@ export default function Dashboard() {
             icon={FileText}
             label="Total Bills"
             value={totalBills}
-            sub={`${fmt(stats?.pendingPayments ?? 0)} outstanding`}
+            sub={`${(stats as any)?.todayBillCount ?? "—"} today`}
             iconBg="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
           />
+          {/* Module B: Pending Dues tile pulses red whenever outstanding balance > 0
+              so the front desk can never miss it. Replaces the prior "Referral Payouts"
+              tile (which was also a Module A compliance leak — referral fees are now
+              super-admin-only). */}
           <KpiCard
-            icon={Stethoscope}
-            label="Referral Payouts"
-            value={fmt(referralPayouts)}
-            sub="Revenue via referrals"
-            iconBg="bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400"
+            icon={AlertCircle}
+            label="Pending Dues"
+            value={fmt(stats?.pendingPayments ?? 0)}
+            sub={Number(stats?.pendingPayments ?? 0) > 0 ? "Action required — collect today" : "All clear ✓"}
+            iconBg={
+              Number(stats?.pendingPayments ?? 0) > 0
+                ? "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400 animate-pulse"
+                : "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"
+            }
+            cardClass={
+              Number(stats?.pendingPayments ?? 0) > 0
+                ? "ring-2 ring-red-300 dark:ring-red-900/60 shadow-red-200/40 dark:shadow-red-900/30"
+                : ""
+            }
           />
           <KpiCard
             icon={ClipboardList}

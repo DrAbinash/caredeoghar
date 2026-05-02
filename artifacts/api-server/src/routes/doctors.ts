@@ -43,7 +43,7 @@ doctorsRouter.post("/", async (req, res) => {
 
 doctorsRouter.patch("/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const { name, specialization, phone, email, hospitalAffiliation, defaultCommission, defaultCommissionType, ledgerId } = req.body;
+  const { name, specialization, phone, email, hospitalAffiliation, registrationNumber, defaultCommission, defaultCommissionType, ledgerId } = req.body;
 
   const updates: Record<string, unknown> = {};
   if (name !== undefined) updates.name = name;
@@ -51,6 +51,8 @@ doctorsRouter.patch("/:id", async (req, res) => {
   if (phone !== undefined) updates.phone = phone || null;
   if (email !== undefined) updates.email = email || null;
   if (hospitalAffiliation !== undefined) updates.hospitalAffiliation = hospitalAffiliation || null;
+  // Module B: registrationNumber persists from the Doctors form so PCPNDT Form F can auto-fill it.
+  if (registrationNumber !== undefined) updates.registrationNumber = registrationNumber || null;
   if (defaultCommission !== undefined) updates.defaultCommission = String(defaultCommission);
   if (defaultCommissionType !== undefined) updates.defaultCommissionType = defaultCommissionType;
   if (ledgerId !== undefined) updates.ledgerId = ledgerId === null ? null : Number(ledgerId);

@@ -17,9 +17,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -29,17 +26,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Search, Stethoscope, Phone, Building2, Mail, IndianRupee, Percent, Pencil, Trash2 } from "lucide-react";
+import { Plus, Search, Stethoscope, Phone, Building2, Mail, Pencil, Trash2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 
+// Module A (compliance): commission fields removed from staff-facing UI.
+// Referral commission is configured exclusively in the Super Admin Portal.
 type DoctorForm = {
   name: string;
   specialization: string;
   phone?: string;
   email?: string;
   hospitalAffiliation?: string;
-  defaultCommissionType: string;
-  defaultCommission: string;
+  registrationNumber?: string;
 };
 
 type Doctor = {
@@ -49,11 +47,8 @@ type Doctor = {
   phone?: string | null;
   email?: string | null;
   hospitalAffiliation?: string | null;
-  defaultCommission?: string | number | null;
-  defaultCommissionType?: string | null;
+  registrationNumber?: string | null;
 };
-
-const inr = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
 
 export default function Doctors() {
   const [search, setSearch] = useState("");
@@ -83,20 +78,13 @@ export default function Doctors() {
     onSuccess: () => { invalidate(); setDeletingDoctor(null); },
   });
 
-  const { register, handleSubmit, reset, setValue, watch } = useForm<DoctorForm>({
-    defaultValues: { defaultCommissionType: "percentage", defaultCommission: "0" },
-  });
+  const { register, handleSubmit, reset } = useForm<DoctorForm>();
 
-  const { register: regEdit, handleSubmit: handleEditSubmit, reset: resetEdit, setValue: setEditVal, watch: watchEdit } = useForm<DoctorForm>({
-    defaultValues: { defaultCommissionType: "percentage", defaultCommission: "0" },
-  });
-
-  const commType = watch("defaultCommissionType");
-  const editCommType = watchEdit("defaultCommissionType");
+  const { register: regEdit, handleSubmit: handleEditSubmit, reset: resetEdit } = useForm<DoctorForm>();
 
   const onSubmit = (data: DoctorForm) => {
     createDoctor.mutate({
-      data: { ...data, defaultCommission: data.defaultCommission || "0" } as Parameters<typeof createDoctor.mutate>[0]["data"],
+      data: data as Parameters<typeof createDoctor.mutate>[0]["data"],
     });
   };
 
@@ -108,8 +96,7 @@ export default function Doctors() {
       phone: doc.phone ?? "",
       email: doc.email ?? "",
       hospitalAffiliation: doc.hospitalAffiliation ?? "",
-      defaultCommissionType: (doc.defaultCommissionType as string) ?? "percentage",
-      defaultCommission: doc.defaultCommission != null ? String(doc.defaultCommission) : "0",
+      registrationNumber: doc.registrationNumber ?? "",
     });
   };
 
@@ -146,8 +133,6 @@ export default function Doctors() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {data?.doctors?.map((d) => {
               const doc = d as unknown as Doctor;
-              const defComm = Number(doc.defaultCommission ?? 0);
-              const defType = doc.defaultCommissionType ?? "percentage";
               return (
                 <div key={doc.id} className="bg-card border border-card-border rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
                   <div className="flex items-start gap-3">
@@ -172,10 +157,9 @@ export default function Doctors() {
                           <Building2 size={11} /> {doc.hospitalAffiliation}
                         </div>
                       )}
-                      {defComm > 0 && (
-                        <div className="flex items-center gap-1.5 mt-1 text-xs text-amber-600 font-medium">
-                          {defType === "percentage" ? <Percent size={11} /> : <IndianRupee size={11} />}
-                          Default: {defType === "percentage" ? `${defComm}%` : inr(defComm)}
+                      {doc.registrationNumber && (
+                        <div className="mt-1 text-[11px] text-muted-foreground font-mono">
+                          Reg. No: {doc.registrationNumber}
                         </div>
                       )}
                     </div>
@@ -224,24 +208,10 @@ export default function Doctors() {
               <Label>Hospital / Clinic Affiliation</Label>
               <Input {...register("hospitalAffiliation")} className="mt-1" />
             </div>
-            <div className="border border-dashed border-input rounded-lg p-3 space-y-3">
-              <p className="text-xs font-semibold text-muted-foreground uppercase">Default Commission</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs">Type</Label>
-                  <Select defaultValue="percentage" onValueChange={(v) => setValue("defaultCommissionType", v)}>
-                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="percentage">Percentage (%)</SelectItem>
-                      <SelectItem value="fixed">Fixed Amount (₹)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs">{commType === "percentage" ? "%" : "₹"} Value</Label>
-                  <Input type="number" step="any" min="0" {...register("defaultCommission")} className="mt-1" defaultValue="0" />
-                </div>
-              </div>
+            <div>
+              <Label>Medical Council Registration No.</Label>
+              <Input {...register("registrationNumber")} className="mt-1" placeholder="e.g. MCI-12345 or BMC/2018/4567" />
+              <p className="mt-1 text-[11px] text-muted-foreground">Required on PCPNDT Form F prints and audit records.</p>
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
@@ -282,24 +252,9 @@ export default function Doctors() {
               <Label>Hospital / Clinic Affiliation</Label>
               <Input {...regEdit("hospitalAffiliation")} className="mt-1" />
             </div>
-            <div className="border border-dashed border-input rounded-lg p-3 space-y-3">
-              <p className="text-xs font-semibold text-muted-foreground uppercase">Default Commission</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs">Type</Label>
-                  <Select value={editCommType} onValueChange={(v) => setEditVal("defaultCommissionType", v)}>
-                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="percentage">Percentage (%)</SelectItem>
-                      <SelectItem value="fixed">Fixed Amount (₹)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs">{editCommType === "percentage" ? "%" : "₹"} Value</Label>
-                  <Input type="number" step="any" min="0" {...regEdit("defaultCommission")} className="mt-1" />
-                </div>
-              </div>
+            <div>
+              <Label>Medical Council Registration No.</Label>
+              <Input {...regEdit("registrationNumber")} className="mt-1" placeholder="e.g. MCI-12345" />
             </div>
             {updateDoctor.isError && (
               <p className="text-xs text-red-600">{(updateDoctor.error as Error)?.message ?? "Failed to update"}</p>

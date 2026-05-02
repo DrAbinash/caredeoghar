@@ -15,7 +15,6 @@ import {
   Activity,
   FilePen,
   Package,
-  HandCoins,
   BookOpen,
   UserPlus,
   Settings2,
@@ -37,6 +36,8 @@ import {
   Wrench,
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/fetchApi";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { readStaffSession, clearStaffSession, canAccess } from "@/lib/staffSession";
@@ -60,8 +61,7 @@ const navItems = [
   { path: "/inventory", icon: Package, label: "Inventory" },
   { path: "/expenses", icon: TrendingDown, label: "Expenses" },
   { path: "/staff", icon: Fingerprint, label: "Staff" },
-  { path: "/referrals", icon: HandCoins, label: "Referrals" },
-  { path: "/doctor-ledger", icon: HandCoins, label: "Doctor Ledger" },
+  { path: "/referrals", icon: Stethoscope, label: "Doctors" },
   { path: "/accounting", icon: BookOpen, label: "Accounting" },
   { path: "/discounts", icon: Tag, label: "Discounts" },
   { path: "/form-f", icon: FileText, label: "Form F (PCPNDT)" },
@@ -118,6 +118,13 @@ function FullscreenToggle() {
 }
 
 export default function Layout({ children }: { children: React.ReactNode }) {
+  // Module B: clinic name centralization — pull from /api/clinic-settings so the
+  // sidebar branding matches every other clinic-aware surface (BillDetail, Display, FormF).
+  const { data: clinic } = useQuery<{ name?: string; tagline?: string }>({
+    queryKey: ["clinic-settings-public"],
+    queryFn: () => api.get("/api/clinic-settings"),
+    staleTime: 60_000,
+  });
   const [location] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const session = readStaffSession();
@@ -171,8 +178,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <Activity size={20} className="text-white" />
           </div>
           <div>
-            <div className="text-base font-bold text-sidebar-foreground leading-tight tracking-tight">DiagnoCenter</div>
-            <div className="text-[11px] uppercase tracking-wider text-sidebar-foreground/60 font-medium">Billing ERP</div>
+            <div className="text-base font-bold text-sidebar-foreground leading-tight tracking-tight">{clinic?.name || "DiagnoCenter"}</div>
+            <div className="text-[11px] uppercase tracking-wider text-sidebar-foreground/60 font-medium">{clinic?.tagline || "Billing ERP"}</div>
           </div>
           <button className="ml-auto lg:hidden text-sidebar-foreground" onClick={() => setSidebarOpen(false)}>
             <X size={16} />

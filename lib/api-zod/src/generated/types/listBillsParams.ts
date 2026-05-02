@@ -12,4 +12,12 @@ export type ListBillsParams = {
   patientId?: number;
   page?: number;
   limit?: number;
+  /**
+   * Inclusive start date (YYYY-MM-DD). Filters by created date by default.
+   */
+  dateFrom?: string;
+  /**
+   * Inclusive end date (YYYY-MM-DD). Filters by created date by default.
+   */
+  dateTo?: string;
 };

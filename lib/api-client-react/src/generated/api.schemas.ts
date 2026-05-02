@@ -100,7 +100,10 @@ export interface Doctor {
   name: string;
   specialization: string;
   phone?: string | null;
+  email?: string | null;
   hospitalAffiliation?: string | null;
+  /** State medical council registration number — printed on PCPNDT Form F. */
+  registrationNumber?: string | null;
   createdAt: string;
 }
 
@@ -273,7 +276,9 @@ export interface CreateDoctorBody {
   name: string;
   specialization: string;
   phone?: string | null;
+  email?: string | null;
   hospitalAffiliation?: string | null;
+  registrationNumber?: string | null;
 }
 
 export type DashboardStatsOrdersByStatusItem = {
@@ -377,6 +382,14 @@ export type ListBillsParams = {
   patientId?: number;
   page?: number;
   limit?: number;
+  /**
+   * Inclusive start date (YYYY-MM-DD). Filters by created date by default.
+   */
+  dateFrom?: string;
+  /**
+   * Inclusive end date (YYYY-MM-DD). Filters by created date by default.
+   */
+  dateTo?: string;
 };
 
 export type ListBillsStatus =

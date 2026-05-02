@@ -1,9 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Search, Printer, RefreshCcw, FileText, List, User, Phone, Users, BookOpen } from "lucide-react";
+
+type DoctorOption = { id: number; name: string; registrationNumber: string | null };
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -38,6 +41,7 @@ type FormFData = {
   indicationDetail: string;
   previousChildIssue: string;
   doctorName: string;
+  doctorRegNo: string;
   procedure: string;
   procedurePurpose: string;
   invasiveProcedure: string;  // "notdone" | "done"
@@ -82,6 +86,7 @@ function defaultForm(): FormFData {
     indicationDetail: "",
     previousChildIssue: "",
     doctorName: "Dr. Sugandha Priyadarshini",
+    doctorRegNo: "",
     procedure: "Ultrasound - ULTRASONOGRAPHY",
     procedurePurpose: "Obstetric ultrasonography",
     invasiveProcedure: "notdone",
@@ -335,7 +340,10 @@ function FormFPrint({ form }: FormFPrintProps) {
         <div><span style={{ fontWeight: 600 }}>Place: </span><BlankLine val={form.place} width={80} /></div>
         <div style={{ flex: 1, textAlign: "right" }}>
           <span style={{ fontWeight: 600 }}>Signature &amp; Reg. No. of Doctor: </span>
-          <BlankLine val={form.doctorName} width={100} />
+          <BlankLine
+            val={form.doctorRegNo ? `${form.doctorName} (Reg. ${form.doctorRegNo})` : form.doctorName}
+            width={140}
+          />
         </div>
       </div>
 
@@ -437,6 +445,16 @@ export default function FormF() {
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [form, setForm] = useState<FormFData>(defaultForm());
+
+  // Module B: PCPNDT Form F now auto-fills the conducting doctor's medical-council
+  // registration number. We fetch the small doctor list once and expose it via a
+  // <datalist> so staff can pick a saved doctor and have the reg no fill itself.
+  const { data: doctorList } = useQuery<{ doctors: DoctorOption[]; total: number }>({
+    queryKey: ["formf-doctors"],
+    queryFn: () => api.get("/api/doctors?limit=200"),
+    staleTime: 60_000,
+  });
+  const doctorsForPick = doctorList?.doctors ?? [];
   const printRef = useRef<HTMLDivElement>(null);
 
   // Pending queue state
@@ -1147,7 +1165,31 @@ export default function FormF() {
               <Input {...inp("procedurePurpose")} placeholder="e.g. Obstetric ultrasonography" />
             </LabelRow>
             <LabelRow label="Doctor name">
-              <Input {...inp("doctorName")} />
+              <Input
+                value={form.doctorName}
+                list="formf-doctor-options"
+                onChange={(e) => {
+                  const name = e.target.value;
+                  const match = doctorsForPick.find((d) => d.name === name);
+                  setForm((prev) => ({
+                    ...prev,
+                    doctorName: name,
+                    // Auto-fill reg no whenever the typed name exactly matches a saved doctor.
+                    doctorRegNo: match?.registrationNumber ?? prev.doctorRegNo,
+                  }));
+                }}
+                placeholder="Type or pick a doctor"
+              />
+              <datalist id="formf-doctor-options">
+                {doctorsForPick.map((d) => (
+                  <option key={d.id} value={d.name}>
+                    {d.registrationNumber ? `Reg. ${d.registrationNumber}` : "No reg. no on file"}
+                  </option>
+                ))}
+              </datalist>
+            </LabelRow>
+            <LabelRow label="Doctor Reg. No.">
+              <Input {...inp("doctorRegNo")} placeholder="Auto-filled from selected doctor; editable" />
             </LabelRow>
             <LabelRow label="Invasive procedure">
               <Radio name="invasiveProcedure" val="notdone" label="Not done" />

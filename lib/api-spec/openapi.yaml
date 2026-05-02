@@ -354,6 +354,16 @@ paths:
           schema:
             type: integer
             default: 20
+        - name: dateFrom
+          in: query
+          description: Inclusive start date (YYYY-MM-DD). Filters by created date by default.
+          schema:
+            type: string
+        - name: dateTo
+          in: query
+          description: Inclusive end date (YYYY-MM-DD). Filters by created date by default.
+          schema:
+            type: string
       responses:
         "200":
           description: Bills list
@@ -946,9 +956,16 @@ components:
         phone:
           type: string
           nullable: true
+        email:
+          type: string
+          nullable: true
         hospitalAffiliation:
           type: string
           nullable: true
+        registrationNumber:
+          type: string
+          nullable: true
+          description: State medical council registration number — printed on PCPNDT Form F.
         createdAt:
           type: string
       required: [id, name, specialization, createdAt]
@@ -974,7 +991,13 @@ components:
         phone:
           type: string
           nullable: true
+        email:
+          type: string
+          nullable: true
         hospitalAffiliation:
+          type: string
+          nullable: true
+        registrationNumber:
           type: string
           nullable: true
       required: [name, specialization]

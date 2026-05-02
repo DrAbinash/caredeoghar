@@ -1,52 +1,33 @@
 import { useState, useMemo, useEffect } from "react";
-import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  Search, RefreshCw, Download, IndianRupee, AlertCircle,
+  ArrowLeft, Search, RefreshCw, Download, IndianRupee, AlertCircle,
   TrendingUp, Users, Wallet, Receipt, Trash2, Plus, X, BookOpen,
 } from "lucide-react";
-import { api } from "@/lib/fetchApi";
-import { toast } from "@/hooks/use-toast";
+import { useToast } from "@/hooks/use-toast";
+import { saApi, saAuthHeaders } from "@/lib/saApi";
 
 const inr = (n: number) =>
   `₹${(Number.isFinite(n) ? n : 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 type Row = {
-  doctorId: number;
-  doctorName: string;
-  specialization: string;
-  phone: string | null;
-  email: string | null;
-  orderCount: number;
-  revenueWindow: number;
-  earnedWindow: number;
-  paidWindow: number;
-  dueWindow: number;
-  earnedLifetime: number;
-  paidLifetime: number;
-  outstanding: number;
+  doctorId: number; doctorName: string; specialization: string;
+  phone: string | null; email: string | null;
+  orderCount: number; revenueWindow: number;
+  earnedWindow: number; paidWindow: number; dueWindow: number;
+  earnedLifetime: number; paidLifetime: number; outstanding: number;
 };
 
 type SummaryResponse = {
@@ -56,41 +37,25 @@ type SummaryResponse = {
 };
 
 type LedgerEntry = {
-  kind: "earned" | "paid";
-  date: string;
-  particular: string;
-  credit: number;
-  debit: number;
-  balance: number;
-  ref?: string | null;
-  id?: number;
+  kind: "earned" | "paid"; date: string; particular: string;
+  credit: number; debit: number; balance: number;
+  ref?: string | null; id?: number;
 };
 
 type Payout = {
-  id: number;
-  doctorId: number;
-  amount: number;
-  paymentDate: string;
-  paymentMethod: string;
-  reference: string | null;
-  notes: string | null;
-  periodFrom: string | null;
-  periodTo: string | null;
+  id: number; doctorId: number; amount: number;
+  paymentDate: string; paymentMethod: string;
+  reference: string | null; notes: string | null;
+  periodFrom: string | null; periodTo: string | null;
 };
 
 type DetailResponse = {
   doctor: { id: number; name: string; specialization: string; phone: string | null; email: string | null };
   window: { from: string | null; to: string | null };
   summary: {
-    totalRevenue: number;
-    totalEarned: number;
-    totalPaid: number;
-    dueWindow: number;
-    lifetimeEarned: number;
-    lifetimePaid: number;
-    outstanding: number;
-    orderCount: number;
-    payoutCount: number;
+    totalRevenue: number; totalEarned: number; totalPaid: number;
+    dueWindow: number; lifetimeEarned: number; lifetimePaid: number;
+    outstanding: number; orderCount: number; payoutCount: number;
   };
   payouts: Payout[];
   ledger: LedgerEntry[];
@@ -109,7 +74,8 @@ const PRESETS = [
   { label: "All time", from: "", to: "" },
 ];
 
-export default function DoctorLedger() {
+export default function DoctorLedger({ onBack }: { onBack: () => void }) {
+  const { toast } = useToast();
   const [from, setFrom] = useState<string>("");
   const [to, setTo] = useState<string>("");
   const [search, setSearch] = useState("");
@@ -123,13 +89,8 @@ export default function DoctorLedger() {
   const [payDialogOpen, setPayDialogOpen] = useState(false);
   const [pendingPayDialog, setPendingPayDialog] = useState(false);
   const [payForm, setPayForm] = useState({
-    amount: "",
-    paymentDate: todayStr(),
-    paymentMethod: "cash",
-    reference: "",
-    notes: "",
-    periodFrom: "",
-    periodTo: "",
+    amount: "", paymentDate: todayStr(), paymentMethod: "cash",
+    reference: "", notes: "", periodFrom: "", periodTo: "",
   });
   const [submitting, setSubmitting] = useState(false);
   const [deletingPayout, setDeletingPayout] = useState<Payout | null>(null);
@@ -141,7 +102,7 @@ export default function DoctorLedger() {
       if (from) params.set("from", from);
       if (to) params.set("to", to);
       if (search.trim()) params.set("search", search.trim());
-      const resp = await api.get<SummaryResponse>(`/api/doctor-ledger?${params.toString()}`);
+      const resp = await saApi.get<SummaryResponse>(`/doctor-ledger?${params.toString()}`);
       setData(resp);
     } catch (err) {
       toast({ title: "Failed to load doctor ledger", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
@@ -156,7 +117,7 @@ export default function DoctorLedger() {
       const params = new URLSearchParams();
       if (from) params.set("from", from);
       if (to) params.set("to", to);
-      const resp = await api.get<DetailResponse>(`/api/doctor-ledger/${doctorId}?${params.toString()}`);
+      const resp = await saApi.get<DetailResponse>(`/doctor-ledger/${doctorId}?${params.toString()}`);
       setDetail(resp);
     } catch (err) {
       toast({ title: "Failed to load ledger", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
@@ -172,7 +133,6 @@ export default function DoctorLedger() {
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [openDoctorId, from, to]);
 
-  // Open the Pay dialog only after detail for the *correct* doctor has loaded.
   useEffect(() => {
     if (pendingPayDialog && detail && detail.doctor.id === openDoctorId && !detailLoading) {
       setPayDialogOpen(true);
@@ -199,7 +159,7 @@ export default function DoctorLedger() {
     }
     setSubmitting(true);
     try {
-      await api.post(`/api/doctor-ledger/${detail.doctor.id}/payouts`, {
+      await saApi.post(`/doctor-ledger/${detail.doctor.id}/payouts`, {
         amount: amt,
         paymentDate: payForm.paymentDate,
         paymentMethod: payForm.paymentMethod,
@@ -225,7 +185,7 @@ export default function DoctorLedger() {
   const confirmDeletePayout = async () => {
     if (!deletingPayout || !detail) return;
     try {
-      await api.delete(`/api/doctor-ledger/payouts/${deletingPayout.id}`);
+      await saApi.delete(`/doctor-ledger/payouts/${deletingPayout.id}`);
       toast({ title: "Payout deleted" });
       setDeletingPayout(null);
       await Promise.all([loadDetail(detail.doctor.id), loadSummary()]);
@@ -241,7 +201,7 @@ export default function DoctorLedger() {
       if (from) params.set("from", from);
       if (to) params.set("to", to);
       const url = `/api/doctor-ledger/${detail.doctor.id}/export?${params.toString()}`;
-      const res = await fetch(url);
+      const res = await fetch(url, { headers: saAuthHeaders() });
       if (!res.ok) throw new Error(`Export failed: ${res.status} ${res.statusText}`);
       const blob = await res.blob();
       const dlUrl = URL.createObjectURL(blob);
@@ -266,10 +226,18 @@ export default function DoctorLedger() {
   const totals = data?.totals ?? { doctors: 0, earnedWindow: 0, paidWindow: 0, dueWindow: 0, outstanding: 0 };
 
   return (
-    <div className="pb-8">
-      <PageHeader title="Doctor Due / Payment Ledger" subtitle="Commission earned, paid and outstanding per doctor" />
+    <div className="min-h-screen w-full bg-background">
+      <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-4">
+        <div>
+          <Button variant="ghost" size="sm" onClick={onBack} className="mb-2 -ml-2">
+            <ArrowLeft size={14} className="mr-1" /> Back
+          </Button>
+          <h1 className="text-2xl font-bold">Doctor Due / Payment Ledger</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Commission earned, paid and outstanding per doctor
+          </p>
+        </div>
 
-      <div className="px-6 space-y-4">
         {/* KPI strip */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <KpiCard icon={<Users size={16} />} label="Doctors" value={String(totals.doctors)} />
@@ -280,7 +248,7 @@ export default function DoctorLedger() {
         </div>
 
         {/* Filters */}
-        <div className="bg-card border border-card-border rounded-xl p-3 flex flex-wrap items-end gap-3">
+        <div className="bg-card border border-border rounded-xl p-3 flex flex-wrap items-end gap-3">
           <div className="flex-1 min-w-[200px]">
             <Label className="text-xs">Search</Label>
             <div className="relative">
@@ -319,7 +287,7 @@ export default function DoctorLedger() {
         </div>
 
         {/* Doctor table */}
-        <div className="bg-card border border-card-border rounded-xl shadow-sm overflow-hidden">
+        <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -378,7 +346,7 @@ export default function DoctorLedger() {
         </div>
       </div>
 
-      {/* Per-doctor ledger drawer (Dialog as wide modal) */}
+      {/* Per-doctor ledger drawer */}
       <Dialog open={openDoctorId !== null} onOpenChange={(v) => !v && setOpenDoctorId(null)}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -397,7 +365,6 @@ export default function DoctorLedger() {
             <div className="py-12 text-center text-muted-foreground">Loading ledger…</div>
           ) : !detail ? null : (
             <div className="space-y-4">
-              {/* Summary tiles */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <SummaryTile label="Earned (window)" value={inr(detail.summary.totalEarned)} />
                 <SummaryTile label="Paid (window)" value={inr(detail.summary.totalPaid)} tone="ok" />
@@ -418,7 +385,6 @@ export default function DoctorLedger() {
                 </span>
               </div>
 
-              {/* Combined ledger table */}
               <div className="border border-border rounded-lg overflow-hidden">
                 <div className="px-3 py-2 bg-muted/40 text-xs font-medium uppercase tracking-wide flex items-center gap-2">
                   <Receipt size={14} /> Ledger entries
@@ -603,7 +569,7 @@ function KpiCard({ icon, label, value, tone }: { icon: React.ReactNode; label: s
     tone === "ok"     ? "border-emerald-200 bg-emerald-50/30 dark:bg-emerald-900/10 dark:border-emerald-900/30" :
     "";
   return (
-    <div className={`bg-card border border-card-border rounded-xl p-3 shadow-sm ${toneClass}`}>
+    <div className={`bg-card border border-border rounded-xl p-3 shadow-sm ${toneClass}`}>
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground uppercase tracking-wide">
         {icon} {label}
       </div>
@@ -619,9 +585,9 @@ function SummaryTile({ label, value, tone }: { label: string; value: string; ton
     tone === "ok"     ? "text-emerald-600" :
     "";
   return (
-    <div className="border border-border rounded-lg p-3">
+    <div className="bg-muted/30 border border-border rounded-lg p-3">
       <div className="text-xs text-muted-foreground uppercase tracking-wide">{label}</div>
-      <div className={`text-lg font-semibold font-mono mt-1 ${toneClass}`}>{value}</div>
+      <div className={`text-lg font-semibold mt-1 font-mono ${toneClass}`}>{value}</div>
     </div>
   );
 }

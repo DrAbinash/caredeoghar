@@ -11,6 +11,9 @@ export interface Doctor {
   name: string;
   specialization: string;
   phone?: string | null;
+  email?: string | null;
   hospitalAffiliation?: string | null;
+  /** State medical council registration number — printed on PCPNDT Form F. */
+  registrationNumber?: string | null;
   createdAt: string;
 }

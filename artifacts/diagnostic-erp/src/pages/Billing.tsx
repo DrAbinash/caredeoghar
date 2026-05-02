@@ -40,9 +40,24 @@ export default function Billing() {
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
+  // Module B: billing date filter — defaults to "this month" so heavy clinics don't
+  // load every bill on first paint. Operators can clear or widen the window.
+  const [dateFrom, setDateFrom] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d.toISOString().slice(0, 10);
+  });
+  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useListBills({ status: (status || undefined) as typeof status, page, limit: 20 });
+  const { data, isLoading } = useListBills({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    status: (status || undefined) as any,
+    page,
+    limit: 20,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+  });
   const { data: orders } = useListOrders({ status: "completed", limit: 100 });
 
   const createBill = useCreateBill({
@@ -77,16 +92,37 @@ export default function Billing() {
       />
 
       <div className="px-6 space-y-4">
-        <div className="flex gap-3">
-          <Select value={status || "all"} onValueChange={(v) => setStatus(v === "all" ? "" : v)}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="All Statuses" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              {STATUSES.map((s) => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
-            </SelectContent>
-          </Select>
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <Label className="text-xs text-muted-foreground">Status</Label>
+            <Select value={status || "all"} onValueChange={(v) => { setPage(1); setStatus(v === "all" ? "" : v); }}>
+              <SelectTrigger className="w-40 mt-1">
+                <SelectValue placeholder="All Statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                {STATUSES.map((s) => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground">From</Label>
+            <Input type="date" value={dateFrom} onChange={(e) => { setPage(1); setDateFrom(e.target.value); }} className="w-40 mt-1" />
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground">To</Label>
+            <Input type="date" value={dateTo} onChange={(e) => { setPage(1); setDateTo(e.target.value); }} className="w-40 mt-1" />
+          </div>
+          {(dateFrom || dateTo) && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-5"
+              onClick={() => { setPage(1); setDateFrom(""); setDateTo(""); }}
+            >
+              Clear dates
+            </Button>
+          )}
         </div>
 
         <div className="bg-card border border-card-border rounded-xl shadow-sm overflow-hidden">

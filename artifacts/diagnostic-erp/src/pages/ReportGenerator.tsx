@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useListPatients, useListOrders, useGetOrder } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -303,6 +305,14 @@ export default function ReportGenerator() {
   const [orderId, setOrderId] = useState<number | null>(null);
   const [findings, setFindings] = useState<TestFinding[]>([]);
   const [labDirector, setLabDirector] = useState("Dr. Laboratory Director");
+  // Module B: clinic name centralization — derive lab/clinic name from settings so
+  // exports and printed reports match the configured branding across the app.
+  const { data: clinic } = useQuery<{ name?: string }>({
+    queryKey: ["clinic-settings-public"],
+    queryFn: () => api.get("/api/clinic-settings"),
+    staleTime: 60_000,
+  });
+  const labName = clinic?.name ? `${clinic.name} Laboratory` : "DiagnoCenter Laboratory";
   const [reportDate, setReportDate] = useState(new Date().toISOString().slice(0, 10));
   const [outputFormat, setOutputFormat] = useState<"print" | "html" | "text">("print");
   const [speaking, setSpeaking] = useState(false);
@@ -703,7 +713,7 @@ export default function ReportGenerator() {
       "=".repeat(60),
       "",
       `Authorized By: ${labDirector}`,
-      "DiagnoCenter Laboratory",
+      labName,
       `Report Date  : ${new Date(reportDate).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })}`,
     ].filter((l) => l !== undefined);
     const blob = new Blob([lines.join("\n")], { type: "text/plain" });
@@ -1050,7 +1060,7 @@ export default function ReportGenerator() {
                     {/* Header */}
                     <div className="text-center border-b-2 border-gray-800 dark:border-gray-300 pb-4">
                       <h1 className="text-xl font-black uppercase tracking-widest text-gray-900 dark:text-foreground">
-                        DiagnoCenter Laboratory
+                        {labName}
                       </h1>
                       <p className="text-xs text-gray-500 dark:text-muted-foreground mt-0.5">
                         Pathology · Biochemistry · Haematology · Microbiology
@@ -1214,7 +1224,7 @@ export default function ReportGenerator() {
                           <div className="border-t border-gray-500 dark:border-gray-400 pt-1 mt-8 w-44">
                             <p className="font-bold text-gray-800 dark:text-foreground">{labDirector}</p>
                             <p className="text-gray-500 dark:text-muted-foreground">Laboratory Director</p>
-                            <p className="text-gray-500 dark:text-muted-foreground">DiagnoCenter Laboratory</p>
+                            <p className="text-gray-500 dark:text-muted-foreground">{labName}</p>
                           </div>
                         </div>
                       </div>

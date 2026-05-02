@@ -43,6 +43,7 @@ import { departmentsRouter } from "./departments";
 import { branchesRouter } from "./branches";
 import { backupRouter } from "./backup";
 import { vendorsRouter } from "./vendors";
+import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
 
 const router: IRouter = Router();
 
@@ -56,7 +57,7 @@ router.use("/payments", paymentsRouter);
 router.use("/reports", reportsRouter);
 router.use("/inventory", inventoryRouter);
 router.use("/accounting", accountingRouter);
-router.use("/commission", commissionRouter);
+router.use("/commission", requireSuperAdmin, commissionRouter);
 router.use("/users", usersRouter);
 router.use("/email-settings", emailSettingsRouter);
 router.use("/discounts", discountsRouter);
@@ -86,7 +87,7 @@ router.use("/form-f", formFRouter);
 router.use("/portal", portalRouter);
 router.use("/patient-reports", patientReportsRouter);
 router.use("/signatures", signaturesRouter);
-router.use("/doctor-ledger", doctorLedgerRouter);
+router.use("/doctor-ledger", requireSuperAdmin, doctorLedgerRouter);
 router.use("/machines", machinesRouter);
 router.use("/departments", departmentsRouter);
 router.use("/branches", branchesRouter);

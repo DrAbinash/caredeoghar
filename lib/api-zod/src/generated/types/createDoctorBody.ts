@@ -10,5 +10,7 @@ export interface CreateDoctorBody {
   name: string;
   specialization: string;
   phone?: string | null;
+  email?: string | null;
   hospitalAffiliation?: string | null;
+  registrationNumber?: string | null;
 }

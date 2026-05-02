@@ -6,6 +6,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
+// Module A (compliance): commission report query removed — moved to Super Admin Portal.
 import PageHeader from "@/components/PageHeader";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -17,35 +18,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { TrendingUp, FlaskConical, Users2, Sparkles, RefreshCw, CalendarDays, ArrowUpDown, CreditCard, ChevronDown, ChevronUp, Download } from "lucide-react";
+import { TrendingUp, FlaskConical, Sparkles, RefreshCw, CalendarDays, ArrowUpDown, CreditCard, ChevronDown, ChevronUp, Download } from "lucide-react";
 
-type CommissionReport = {
-  doctorId: number;
-  doctorName: string;
-  specialization: string;
-  totalOrders: number;
-  totalBilled: number;
-  commissionAmount: number;
-  commissionType: string;
-  commissionValue: number;
-  ordersFullPrice: number;
-  ordersDiscounted: number;
-  testsFullPrice: number;
-  testsDiscounted: number;
-  revenueFullPrice: number;
-  revenueDiscounted: number;
-  commissionFullPrice: number;
-  commissionDiscounted: number;
-};
-
+// Module A (compliance): Commission tab removed — moved to Super Admin Portal.
 const TABS = [
   { id: "overview",         label: "Overview",        icon: TrendingUp },
   { id: "tests",            label: "Test Analysis",    icon: FlaskConical },
   { id: "daily",            label: "Daily Report",     icon: CalendarDays },
   { id: "income-expense",   label: "Income / Expense", icon: ArrowUpDown },
   { id: "payment-methods",  label: "Payment Methods",  icon: CreditCard },
-  { id: "commission",       label: "Commission",       icon: Users2 },
   { id: "ai",               label: "AI Insights",      icon: Sparkles },
 ];
 
@@ -84,17 +65,10 @@ export default function Reports() {
 
   const [dailyDate, setDailyDate] = useState(new Date().toISOString().split("T")[0]);
   const [expandedMethod, setExpandedMethod] = useState<string | null>(null);
-  const [excludeDiscounted, setExcludeDiscounted] = useState(true);
 
   const { data: revenue } = useGetRevenueReport({ period });
   const { data: popular } = useGetPopularTests();
   const { data: stats } = useGetDashboardStats();
-
-  const { data: commissionData, isLoading: loadingComm } = useQuery<CommissionReport[]>({
-    queryKey: ["commission-report", dateFrom, dateTo],
-    queryFn: () => api.get(`/api/commission/report?from=${dateFrom}&to=${dateTo}`),
-    enabled: activeTab === "commission",
-  });
 
   const { data: incomeExpenseData, isLoading: loadingIE } = useQuery<IncomeExpenseData>({
     queryKey: ["income-expense", dateFrom, dateTo],
@@ -117,10 +91,6 @@ export default function Reports() {
   const formatCurrency = (n: number) =>
     new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
   const inr2 = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-  const effectiveCommission = (d: CommissionReport) =>
-    excludeDiscounted ? d.commissionFullPrice : d.commissionAmount;
-  const totalCommission = commissionData?.reduce((s, r) => s + effectiveCommission(r), 0) ?? 0;
 
   const METHOD_COLORS: Record<string, string> = {
     cash: "#16a34a", upi: "#2563eb", card: "#7c3aed",
@@ -266,126 +236,6 @@ export default function Reports() {
           </div>
         )}
 
-        {/* Commission Report Tab */}
-        {activeTab === "commission" && (
-          <div className="space-y-5">
-            <div className="flex flex-wrap gap-3 items-end bg-card border border-card-border rounded-xl p-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">From</p>
-                <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-40" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">To</p>
-                <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-40" />
-              </div>
-              <div className="ml-auto flex items-center gap-3 bg-muted/40 rounded-lg px-4 py-2 border border-card-border">
-                <Switch id="exclude-disc" checked={excludeDiscounted} onCheckedChange={setExcludeDiscounted} />
-                <Label htmlFor="exclude-disc" className="cursor-pointer text-sm">
-                  Exclude discounted tests from commission
-                </Label>
-              </div>
-            </div>
-
-            {totalCommission > 0 && (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <div className="bg-card border border-card-border rounded-xl p-4 shadow-sm">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Commission</p>
-                  <p className="text-xl font-bold text-primary mt-1">{formatCurrency(totalCommission)}</p>
-                </div>
-                <div className="bg-card border border-card-border rounded-xl p-4 shadow-sm">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Active Doctors</p>
-                  <p className="text-xl font-bold mt-1">{commissionData?.filter(d => d.commissionAmount > 0).length ?? 0}</p>
-                </div>
-                <div className="bg-card border border-card-border rounded-xl p-4 shadow-sm">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Referrals</p>
-                  <p className="text-xl font-bold mt-1">{commissionData?.reduce((s, d) => s + d.totalOrders, 0) ?? 0}</p>
-                </div>
-              </div>
-            )}
-
-            <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
-              {loadingComm ? (
-                <div className="p-8 space-y-3">
-                  {[...Array(5)].map((_, i) => <div key={i} className="h-10 bg-muted rounded animate-pulse" />)}
-                </div>
-              ) : !commissionData?.length ? (
-                <div className="py-16 text-center text-muted-foreground text-sm">
-                  <Users2 size={32} className="mx-auto mb-2 opacity-30" />
-                  No commission data for this period
-                </div>
-              ) : (
-                <>
-                <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[900px]">
-                  <thead className="bg-muted/50 border-b border-card-border">
-                    <tr>
-                      <th rowSpan={2} className="text-left px-3 py-2 text-xs font-semibold uppercase text-muted-foreground align-bottom">Doctor</th>
-                      <th rowSpan={2} className="text-left px-3 py-2 text-xs font-semibold uppercase text-muted-foreground align-bottom">Rate</th>
-                      <th colSpan={3} className="text-center px-3 py-2 text-xs font-semibold uppercase text-emerald-700 border-l border-card-border">Full Price</th>
-                      <th colSpan={3} className="text-center px-3 py-2 text-xs font-semibold uppercase text-amber-700 border-l border-card-border">Discounted</th>
-                      <th rowSpan={2} className="text-right px-3 py-2 text-xs font-semibold uppercase text-muted-foreground align-bottom border-l border-card-border">Total Commission</th>
-                    </tr>
-                    <tr className="border-t border-card-border/60">
-                      <th className="text-center px-3 py-2 text-[11px] font-medium text-muted-foreground border-l border-card-border">Tests</th>
-                      <th className="text-right px-3 py-2 text-[11px] font-medium text-muted-foreground">Revenue</th>
-                      <th className="text-right px-3 py-2 text-[11px] font-medium text-muted-foreground">Comm.</th>
-                      <th className="text-center px-3 py-2 text-[11px] font-medium text-muted-foreground border-l border-card-border">Tests</th>
-                      <th className="text-right px-3 py-2 text-[11px] font-medium text-muted-foreground">Revenue</th>
-                      <th className="text-right px-3 py-2 text-[11px] font-medium text-muted-foreground">Comm.</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {commissionData.map(d => (
-                      <tr key={d.doctorId} className="border-b border-card-border last:border-0 hover:bg-muted/20">
-                        <td className="px-3 py-3">
-                          <p className="font-medium">{d.doctorName}</p>
-                          <p className="text-xs text-muted-foreground">{d.specialization}</p>
-                        </td>
-                        <td className="px-3 py-3 text-muted-foreground text-xs">
-                          {d.commissionType === "percentage"
-                            ? `${d.commissionValue}%`
-                            : d.commissionType === "fixed"
-                            ? `₹${d.commissionValue} flat`
-                            : `₹${d.commissionValue}/test`}
-                        </td>
-                        <td className="px-3 py-3 text-center border-l border-card-border">{d.testsFullPrice}</td>
-                        <td className="px-3 py-3 text-right">{formatCurrency(d.revenueFullPrice)}</td>
-                        <td className="px-3 py-3 text-right text-emerald-700">{formatCurrency(d.commissionFullPrice)}</td>
-                        <td className="px-3 py-3 text-center border-l border-card-border">
-                          {d.testsDiscounted > 0 ? <span className="text-amber-700 font-medium">{d.testsDiscounted}</span> : <span className="text-muted-foreground">0</span>}
-                        </td>
-                        <td className="px-3 py-3 text-right">{d.revenueDiscounted > 0 ? formatCurrency(d.revenueDiscounted) : "—"}</td>
-                        <td className={`px-3 py-3 text-right ${excludeDiscounted ? "text-muted-foreground line-through" : "text-amber-700"}`}>
-                          {d.commissionDiscounted > 0 ? formatCurrency(d.commissionDiscounted) : "—"}
-                        </td>
-                        <td className="px-3 py-3 text-right font-bold text-green-600 border-l border-card-border">{formatCurrency(effectiveCommission(d))}</td>
-                      </tr>
-                    ))}
-                    <tr className="bg-muted/30 font-bold text-sm">
-                      <td className="px-3 py-3" colSpan={2}>Total</td>
-                      <td className="px-3 py-3 text-center border-l border-card-border">{commissionData.reduce((s, d) => s + d.testsFullPrice, 0)}</td>
-                      <td className="px-3 py-3 text-right">{formatCurrency(commissionData.reduce((s, d) => s + d.revenueFullPrice, 0))}</td>
-                      <td className="px-3 py-3 text-right text-emerald-700">{formatCurrency(commissionData.reduce((s, d) => s + d.commissionFullPrice, 0))}</td>
-                      <td className="px-3 py-3 text-center border-l border-card-border">{commissionData.reduce((s, d) => s + d.testsDiscounted, 0)}</td>
-                      <td className="px-3 py-3 text-right">{formatCurrency(commissionData.reduce((s, d) => s + d.revenueDiscounted, 0))}</td>
-                      <td className={`px-3 py-3 text-right ${excludeDiscounted ? "text-muted-foreground line-through" : "text-amber-700"}`}>
-                        {formatCurrency(commissionData.reduce((s, d) => s + d.commissionDiscounted, 0))}
-                      </td>
-                      <td className="px-3 py-3 text-right text-green-600 border-l border-card-border">{formatCurrency(totalCommission)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-                </div>
-                <p className="text-xs text-muted-foreground px-4 py-2 border-t border-card-border bg-muted/10">
-                  {excludeDiscounted
-                    ? "Discounted-bill tests are excluded from commission totals (shown above for reference only)."
-                    : "Discounted-bill tests are included in commission totals. Toggle above to exclude them."}
-                </p>
-                </>
-              )}
-            </div>
-          </div>
-        )}
         {/* ── Daily Report Tab ─────────────────────────────────────────────── */}
         {activeTab === "daily" && (
           <div className="space-y-5">
