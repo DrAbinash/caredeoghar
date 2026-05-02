@@ -1,4 +1,11 @@
 import { useNavigate } from "wouter";
+import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/fetchApi";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "lucide-react";
 import {
   useGetDashboardStats,
   useGetRevenueReport,
@@ -98,10 +105,70 @@ function QuickActionCard({
   );
 }
 
+function todayISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function daysAgoISO(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Backend payload shape from /api/reports/income-expense — `income`/`expense`
+// are nested objects, not flat numbers. We flatten them in `chartRows` below.
+type IncomeExpenseApiRow = {
+  date: string;
+  income: { total: number; cash: number; upi: number; card: number; bank: number; insurance: number; cheque: number };
+  expense: { amount: number; count: number };
+  net: number;
+};
+type IncomeExpensePayload = {
+  rows: IncomeExpenseApiRow[];
+  totals: { income: number; expense: number; net: number; cash: number; upi: number; card: number; bank: number; insurance: number; cheque: number };
+};
+
 export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useGetDashboardStats();
   const { data: revenue } = useGetRevenueReport({ period: "monthly" });
   const { data: popular } = useGetPopularTests();
+
+  // Filterable revenue/expense band — supplements the always-on KPI cards
+  // above with an arbitrary date window the user can tune.
+  const [from, setFrom] = useState<string>(daysAgoISO(7));
+  const [to, setTo] = useState<string>(todayISO());
+
+  const { data: rangeData, isFetching: rangeLoading } = useQuery<IncomeExpensePayload>({
+    queryKey: ["dashboard-income-expense", from, to],
+    queryFn: () => api.get(`/api/reports/income-expense?from=${from}&to=${to}`),
+  });
+
+  const rangeTotals = useMemo(() => {
+    if (!rangeData) return { income: 0, expense: 0, net: 0, days: 0 };
+    const t = rangeData.totals ?? { income: 0, expense: 0, net: 0 };
+    return {
+      income: t.income ?? 0,
+      expense: t.expense ?? 0,
+      net: t.net ?? (t.income - t.expense),
+      days: rangeData.rows?.length ?? 0,
+    };
+  }, [rangeData]);
+
+  // Recharts needs flat numeric props — derive them from the nested API rows.
+  const chartRows = useMemo(
+    () =>
+      (rangeData?.rows ?? []).map((r) => ({
+        date: r.date,
+        income: r.income?.total ?? 0,
+        expense: r.expense?.amount ?? 0,
+      })),
+    [rangeData],
+  );
+
+  const setPreset = (days: number) => {
+    setFrom(daysAgoISO(days - 1));
+    setTo(todayISO());
+  };
 
   const fmt = (n: number) =>
     new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
@@ -170,6 +237,63 @@ export default function Dashboard() {
             sub="Orders awaiting completion"
             iconBg="bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400"
           />
+        </div>
+
+        {/* ── Date Range Snapshot ── */}
+        <div className="bg-card border border-card-border rounded-xl p-4 space-y-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex items-center gap-2 mr-2">
+              <Calendar size={16} className="text-primary" />
+              <h3 className="font-semibold text-base">Custom Date Range</h3>
+            </div>
+            <div>
+              <Label className="text-xs">From</Label>
+              <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="mt-1 h-9 w-44" />
+            </div>
+            <div>
+              <Label className="text-xs">To</Label>
+              <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="mt-1 h-9 w-44" />
+            </div>
+            <div className="flex gap-1 ml-auto">
+              <Button size="sm" variant="outline" onClick={() => setPreset(1)}>Today</Button>
+              <Button size="sm" variant="outline" onClick={() => setPreset(7)}>7 days</Button>
+              <Button size="sm" variant="outline" onClick={() => setPreset(30)}>30 days</Button>
+              <Button size="sm" variant="outline" onClick={() => setPreset(90)}>90 days</Button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+              <div className="text-[11px] uppercase tracking-wider text-emerald-700 dark:text-emerald-300 font-semibold">Income</div>
+              <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-200">{fmt(rangeTotals.income)}</div>
+            </div>
+            <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800">
+              <div className="text-[11px] uppercase tracking-wider text-rose-700 dark:text-rose-300 font-semibold">Expenses</div>
+              <div className="text-2xl font-bold text-rose-700 dark:text-rose-200">{fmt(rangeTotals.expense)}</div>
+            </div>
+            <div className={`p-3 rounded-lg border ${rangeTotals.net >= 0 ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800" : "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800"}`}>
+              <div className={`text-[11px] uppercase tracking-wider font-semibold ${rangeTotals.net >= 0 ? "text-blue-700 dark:text-blue-300" : "text-amber-700 dark:text-amber-300"}`}>Net</div>
+              <div className={`text-2xl font-bold ${rangeTotals.net >= 0 ? "text-blue-700 dark:text-blue-200" : "text-amber-700 dark:text-amber-200"}`}>{fmt(rangeTotals.net)}</div>
+            </div>
+            <div className="p-3 rounded-lg bg-muted/40 border border-card-border">
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Days</div>
+              <div className="text-2xl font-bold">{rangeTotals.days}</div>
+              <div className="text-[10px] text-muted-foreground mt-0.5">{rangeLoading ? "Loading…" : `${from} → ${to}`}</div>
+            </div>
+          </div>
+          {chartRows.length > 0 && (
+            <div className="h-48 -mx-1">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartRows}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(v: number) => fmt(v)} />
+                  <Bar dataKey="income" fill="#10b981" name="Income" />
+                  <Bar dataKey="expense" fill="#f43f5e" name="Expense" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </div>
 
         {/* ── Secondary KPIs ── */}

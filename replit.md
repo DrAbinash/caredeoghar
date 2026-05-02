@@ -1,8 +1,24 @@
-# Workspace
+# Overview
 
-## Overview
+This is a pnpm workspace monorepo using TypeScript, designed to build a comprehensive Diagnostic ERP system. The project aims to provide a robust, scalable, and user-friendly platform for managing various aspects of a diagnostic center, including patient management, billing, lab operations, inventory, accounting, and advanced AI-powered insights. It supports both web-based and self-contained Windows desktop applications, offering flexibility in deployment and usage.
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+**Key Capabilities:**
+- Integrated billing and patient registration workflows.
+- Comprehensive management of diagnostic tests, orders, and reports.
+- Advanced accounting features with TallyPrime XML export.
+- Inventory and staff management, including biometric attendance.
+- DICOM PACS integration for medical imaging.
+- AI-powered clinical note generation, billing insights, and patient communication.
+- Multi-platform deployment, including self-contained Windows executables.
+- Patient and staff portals for enhanced accessibility.
+
+The business vision is to modernize diagnostic center operations, improve efficiency, and provide better patient care through intelligent automation and integrated workflows.
+
+# User Preferences
+
+I prefer iterative development. I want to be asked before you make any major changes to the codebase. I prefer clear and concise explanations.
+
+# System Architecture
 
 ## Stack
 
@@ -16,167 +32,56 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
 
-## Key Commands
+## Monorepo Structure
 
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- `pnpm --filter @workspace/api-server run dev` — run API server locally
-- `pnpm dev` — run all 3 services (API + ERP web + Super Admin) in parallel via `concurrently` (used outside Replit; on Replit each artifact is run by its own workflow)
-- `pnpm db:push` — alias for `pnpm --filter @workspace/db run push`
+The project is structured as a pnpm monorepo, with each package managing its own dependencies. This allows for modular development and clear separation of concerns.
 
-See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+## UI/UX Decisions
 
-## Windows .exe Distributions
+The Diagnostic ERP system features a unified single-page billing workflow, customizable quick test slots, and a modern dashboard. Key UI/UX elements include:
+- **Patient Photo Capture**: Optional patient photo upload with base64 storage.
+- **Report Generator**: Per-test template library, auto-flagging of results based on reference ranges, and PDF/HTML/text export with voice readout.
+- **PACS Viewer**: Integration with Orthanc DICOM server, study/series browser, and links to external viewers (Weasis, OHIF).
+- **Appointments**: Day-view scheduler with status flow and date navigator.
+- **Staff Management**: WebAuthn-powered Fingerprint Kiosk for attendance.
+- **Patient Portal**: Mobile-friendly public portal with patient login and appointment booking.
 
-`windows-build/` is a workspace package that produces three self-contained
-Windows distributions (portable .zip, NSIS installer, Electron desktop app)
-fully cross-built from this Linux container. See `BUILD-EXE.md` for usage.
-Each output bundles portable Node + portable PostgreSQL + the API + both
-React frontends — no prerequisites on the target Windows PC.
+## Technical Implementations
 
-```
-pnpm --filter @workspace/windows-build run build:all
-# → windows-build/dist/DiagnosticERP-Portable.zip       (264 MB)
-# → windows-build/dist/DiagnosticERP-Setup.exe          (264 MB)
-# → windows-build/dist/electron/DiagnosticERP-Desktop-Setup.exe  (421 MB)
-```
+- **API Server**: Express 5 server, capable of serving static frontends (ERP and Super Admin) in `SERVE_STATIC_DIR` mode, eliminating the need for a separate web server like Nginx in certain deployments (e.g., Windows executables).
+- **Database Schema**: Managed with Drizzle ORM, including tables for inventory, commissions, accounting, users, bills, discount rules, appointments, packages, and expenses.
+- **AI Integration**: Direct fetch to Gemini REST API for clinical note generation, billing insights, and patient message drafting.
+- **Email Notifications**: Powered by Nodemailer (SMTP) and `node-cron` for bill edit notifications and daily summaries, configurable via the database.
+- **Cross-Platform Compatibility**: Designed to run outside Replit on Windows, macOS, and Linux, with adjustments for environment variables and script execution.
+- **Dockerization**: Multi-stage `Dockerfile` and `docker-compose.yml` for containerized deployment, orchestrating `db` (PostgreSQL), `api`, `web` (Nginx serving SPAs and reverse-proxying API), and `migrate` services.
+- **Security**: SSRF-guarded `tcpProbe` for DICOM nodes, and bearer token authentication for portal sessions.
 
-The api-server gained a `SERVE_STATIC_DIR` mode: when set, the same Node
-process serves both built frontends in addition to `/api/*`. This is what lets
-the Windows builds ship as a single Node process instead of needing nginx.
+## Feature Specifications
 
-## Cross-Platform / Local (Windows / macOS / Linux) Setup
+- **Billing Desk**: Unified workflow for patient search, registration, test catalog, package quick-add, discount application, payment collection, and bill generation.
+- **Diagnostic ERP Modules**: Includes Dashboard, Quick Register, Patients, Orders, Test Catalog, Billing, Payments, Doctors, Reports (with AI Insights), Inventory, Referrals, Accounting (with TallyPrime XML export), PACS Viewer, DICOM Nodes, Discounts, Appointments, Test Packages, Expenses, Staff Management, and Settings (user roles, permissions, max discount).
+- **Per-Test Queue Tokens**: Every billed test gets its own queue number scoped to (ledger, date, department), backed by `test_tokens` table with a UNIQUE index that protects against concurrent allocation; the allocator retries on collision. Bills auto-fan-out tokens via `generateTestTokensForOrder` when posted. The Queue page (`/queue`) supports search, department filter, VIP priority toggle (priority 0↔5, ordered DESC then by tokenNo), and live status counters.
+- **Public LCD/TV Display**: A full-screen, sidebar-less route `/display` (registered outside the app Layout) polls `/api/display/queue` every 4s, announces "Now serving" via the browser's SpeechSynthesis API, and shows privacy-trimmed patient labels (first name + last initial only). Optional `?department=USG` query param scopes the display to a single counter.
+- **Tests with Department + Room**: The test catalog form exposes a Department dropdown (Pathology, X-Ray, USG, MRI, CT, ECG, Endoscopy, Mammography, Cardiology, Dental, Other) and a Room Number text input; values flow into per-test tokens for routing.
+- **Configurable TAT on Bill**: `clinic_settings.showTatOnBill` toggle (Settings → Clinic Info) controls whether the printed bill shows a Turn-Around-Time column for each test.
+- **Dashboard Custom Date Range**: Income / Expense / Net KPIs and a daily bar chart driven by `/api/reports/income-expense?from=&to=` (`{rows: [{date, income:{total,...}, expense:{amount,...}, net}], totals}`), with Today / 7 / 30 / 90-day presets.
+- **AI Features**: Clinical note generation, billing insights analysis, and patient communication drafting.
+- **Patient Portal**: Public-facing portal for patient login, viewing bills, visits, reports, and booking appointments.
+- **Staff Portal**: Staff login with email and PIN, redirecting to the main ERP.
 
-The project also runs outside Replit. See `README-WINDOWS.md` for the no-Docker
-setup and `DEPLOY.md` for the Docker setup (Windows, Linux, macOS, Synology NAS).
-Key changes that make local dev work:
+# External Dependencies
 
-- Root `preinstall` is a Node script (`scripts/preinstall-check.cjs`) instead of a Unix `sh -c …` line, so `pnpm install` succeeds on Windows.
-- API server `dev` script uses `cross-env` instead of `export NODE_ENV=…`.
-- API server `src/index.ts` loads a workspace-root `.env` via `dotenv` (no override of existing env vars, so Replit's runtime always wins) and falls back to `PORT=8080` when unset.
-- `lib/db/drizzle.config.ts` is ESM-safe (`fileURLToPath` instead of `__dirname`) and also loads the root `.env` so `pnpm db:push` works locally.
-- Both web Vite configs default `PORT` (5173 for ERP, 5174 for Super Admin) and `BASE_PATH` ("/" and "/super-admin-portal/") when not provided.
-- `.env.example` documents `DATABASE_URL` plus all optional integration vars; `.env` files are gitignored.
-- Root `pnpm dev` orchestrates the 3 services with `concurrently`.
-
-### Docker / docker-compose
-
-- Multi-stage `Dockerfile` with targets `api`, `web`, `migrate` (also a shared `base` and `api-build`/`web-build` stages).
-- `docker-compose.yml` orchestrates `db` (postgres:16-alpine), `api`, `web` (nginx serving both SPAs + reverse-proxying `/api`), and a `migrate` service under the `tools` profile.
-- `docker/nginx.conf` routes `/super-admin-portal/` to that build, `/api/` to the api container, and everything else to the diagnostic-erp build.
-- `.env.docker.example` documents `HOST_PORT`, `DB_USER/DB_PASSWORD/DB_NAME`, `LOG_LEVEL` plus the optional integration vars.
-- API runtime uses `pnpm --filter @workspace/api-server --prod --legacy deploy` to produce a self-contained node_modules tree (validated locally; the bundled server starts and resolves `pg`/`nodemailer`/`drizzle-orm` correctly from the deploy folder).
-- Frontends are built with `BASE_PATH=/` (diagnostic-erp) and `BASE_PATH=/super-admin-portal/` (super-admin-portal) baked into the Vite build, so nginx can serve both side-by-side.
-
-## Diagnostic ERP — Modules
-
-### Implemented Pages (artifacts/diagnostic-erp)
-- **Billing Desk** (`/`) — **Home page on login**; unified single-page billing workflow: live patient search + inline new patient registration, referral doctor, test catalog with category filter + package quick-add, **6 customizable Quick Test slot tabs** (one-click add for the user's most-used individual tests; hover the slot for ✏️ to assign/clear; persisted in `clinic_settings.quickTestIds`), running bill summary, ₹/% discount toggle, payment collection, auto date + auto bill number preview, "Generate Bill" creates order + bill + payment in one click
-- **Dashboard** (`/dashboard`) — KPI cards, recent transactions, quick actions, alerts
-- **Quick Register** (`/register`) — 3-step patient registration + test selection + billing/payment workflow
-- **Patients** — list with search, patient registration, detail view; optional **Patient Photo** (toggle in Settings → Clinic Info → "Patient Photo Capture"; base64 stored in `patients.photo_data_url`, ≤1.5 MB; when enabled the patients table shows an avatar column, the Register dialog gains a photo upload field, and PatientDetail displays the photo with Change/Remove controls)
-- **Orders** — test order management with status flow
-- **Test Catalog** — diagnostic tests with categories and pricing
-- **Billing** — bill generation and management; bill edit with audit trail; audit history viewer
-- **Payments** — payment recording (cash/card/UPI/insurance/cheque)
-- **Doctors** — referring doctor management (name, specialization, phone, email, hospital, default commission)
-- **Reports** — analytics with 4 tabs: Overview, Test Analysis, Commission Report, **AI Insights** (Gemini-powered billing trend analysis)
-- **Report Generator** — formatted diagnostic report creation with PDF/HTML/text export and voice readout. **Per-test template library** (`report_templates` table) lets you upload formats tagged to specific tests (e.g. USG WHOLE ABDOMEN, X-RAY CHEST PA, MRI BRAIN); the default template auto-loads when an order is opened. **Auto-flag** (Normal/Low/High/Critical) is computed from the reference range and entered value (handles `a–b` ranges, `<X` / `>X` / `≥X` limits, gendered ranges, multi-tier HbA1c-style ranges, and qualitative `Negative` / `Nil` ranges); manual override still available.
-- **Inventory** — stock management (items, stock in/out/adjust, history, low-stock alerts, consumption rules per test)
-- **Referrals** — doctor commission rules (percentage/fixed, per-test/category/all scope, exclusive rules) + payout report
-- **Accounting** — chart of accounts with Tally groups + opening balances + GST/PAN; vouchers (Payment/Receipt/Contra/Journal/Sales/Purchase); ledger; Trial Balance; Profit & Loss; Balance Sheet; TallyPrime XML export
-- **PACS Viewer** (`/pacs`) — Orthanc DICOM server integration; study/series browser with instance thumbnails; Weasis desktop launcher; OHIF web viewer link; WADO proxy
-- **DICOM Nodes** (`/dicom-nodes`) — modality registry (CT/MR/CR/DX/US/MG/NM/PT/XA/RF/ECG/ES/OT) with AE Title (UNIQUE), host:port, location, description, active toggle, and TCP-reachability test button. Pluggable PACS provider abstraction (`artifacts/api-server/src/lib/pacs/providers.ts`) supports Orthanc (REST), Conquest (HTTP CGI on port 5678), and "none". Provider chosen via `PACS_PROVIDER=orthanc|conquest` env var (auto-detects from `ORTHANC_URL`/`CONQUEST_URL`). SSRF-guarded `tcpProbe` blocks cloud metadata IPs. Connection-test results persisted to `dicom_nodes.last_test_*` columns.
-- **Discounts** (`/discounts`) — discount rules: percentage/fixed, scope (all/category/test), expiry date, active/inactive toggle
-- **Appointments** (`/appointments`) — day-view appointment scheduler; status flow (scheduled/confirmed/completed/cancelled/no-show); stats row; date navigator; patient/doctor assignment; type (walk-in/scheduled/emergency/follow-up)
-- **Test Packages** (`/packages`) — bundle multiple tests into priced packages; MRP + discount%; effective price preview; card grid with test list; create/edit/delete
-- **Expenses** (`/expenses`) — operational expense tracking; 9 categories; list + Category Summary tabs; date-range + payment-mode filters; auto-generated EXP-YYMM-XXXX IDs
-- **Staff Management** (`/staff`) — employees (EMP-XXXX), salary, advances with FIFO recovery (capped to outstanding, transactional), attendance with `(staff_id, date)` unique constraint, manual punch-in/out, Fingerprint Kiosk powered by WebAuthn (full server-side verification via `@simplewebauthn/server`, requires platform authenticator + user verification)
-- **Settings** (`/settings`) — User management with roles (admin/manager/accountant/billing/lab/receptionist), per-module permissions, per-user max discount % cap
-- **PatientDetail** — AI Clinical Note generation + AI patient message drafting (follow-up/results/payment) via Gemini
-
-### AI Features (Gemini via Replit AI Integrations)
-- Clinical note generation for patients (POST /api/ai/clinical-note)
-- Billing insights analysis (POST /api/ai/billing-insights)
-- Patient communication drafting (POST /api/ai/patient-message)
-- Uses direct fetch to Gemini REST API with AI_INTEGRATIONS_GEMINI_BASE_URL + AI_INTEGRATIONS_GEMINI_API_KEY
-
-### Quick Register — Discount Integration
-- When proceeding to billing step, auto-fetches applicable discount rules
-- Shows suggestion card with "Apply" button if a matching rule is found
-- Shows discount reason field when a discount is applied
-
-### DB Tables
-- `inventory_items`, `inventory_transactions`, `inventory_consumption_rules`
-- `commission_rules`
-- `accounts`, `vouchers`, `voucher_audits`
-- `users` — name, email, role, permissions (JSON), PIN, isActive, maxDiscount (numeric)
-- `bill_audits` — audit trail for bill edits (who changed what, when, why)
-- `discount_rules` — name, type (percentage/fixed), value, scope, categories (JSON), testIds (JSON), expiresAt, isActive
-- Extended `doctors` with: `email`, `default_commission`, `default_commission_type`
-- `appointments`, `appointment_counter` — APT-YYMM-XXXX IDs, status, timeSlot, type, patientId/doctorId FKs
-- `packages`, `package_tests`, `package_counter` — PKG-XXXX codes; junction table links packages to tests
-- `expenses`, `expense_counter` — EXP-YYMM-XXXX IDs; category, paymentMode, paidTo, approvedBy
-
-### API Routes
-- `GET/POST /api/inventory` — inventory items
-- `POST /api/inventory/:id/stock-in|stock-out|adjust` — stock operations
-- `GET /api/inventory/:id/history` — transaction history
-- `GET /api/inventory/low-stock` — items below threshold
-- `GET/POST/DELETE /api/inventory/consumption-rules` — per-test consumption rules
-- `GET/POST/DELETE /api/commission/rules` — commission rules
-- `GET /api/commission/report` — payout report with date/doctor filters
-- `GET/POST /api/accounting/accounts` — accounts
-- `GET/POST/DELETE /api/accounting/vouchers` — vouchers with filters
-- `GET /api/accounting/ledger` — running ledger per account with opening balances
-- `GET /api/accounting/trial-balance` — trial balance with Dr/Cr totals
-- `GET /api/accounting/profit-loss` — income vs expenses P&L summary
-- `GET /api/accounting/balance-sheet` — assets vs liabilities balance sheet
-- `GET /api/accounting/export/tally` — TallyPrime XML with ledger masters + vouchers (date range optional)
-- `GET /api/pacs/config` — PACS server config info
-- `GET /api/pacs/health` — Orthanc connection health check
-- `GET /api/pacs/studies` — list all DICOM studies (expanded)
-- `GET /api/pacs/studies/:id/series` — series in a study
-- `GET /api/pacs/instances/:id/preview` — DICOM instance thumbnail (proxied)
-- `GET /api/pacs/wado` — WADO-URI proxy
-- `GET /api/pacs/search?q=` — patient name/ID search across studies
-- `GET /api/pacs/studies/:id/weasis-url` — Weasis/OHIF viewer URLs
-- `GET/POST/PATCH/DELETE /api/users` — user management
-- `GET /api/users/default-permissions` — default permissions per role
-- `GET /api/bills/:id/audits` — bill edit audit trail
-- `PUT /api/bills/:id` — supports editedBy + reason for audit logging + email notification
-- `GET/POST /api/email-settings` — email notification settings (SMTP, recipients, triggers)
-- `POST /api/email-settings/test` — send test email
-- `POST /api/email-settings/send-summary` — trigger daily summary manually
-
-### Email Notifications (artifacts/api-server/src/email.ts + cron.ts)
-- Powered by nodemailer (SMTP) + node-cron
-- **Bill edit notifications**: fires email immediately on every bill edit (async, non-blocking)
-- **Daily summary**: cron checks every minute; fires at configured time (default 17:00) with today's stats
-- Settings stored in `email_settings` DB table (SMTP credentials, from, recipients, toggles, time)
-- Recipients: admin email + extra recipients list (managed from Settings → Email Notifications tab)
-
-### Notes
-- New frontend pages use direct fetch via `src/lib/fetchApi.ts` (put/patch/post/delete helpers)
-- Currency: Indian Rupee (₹), `en-IN` locale
-- Voucher numbering: PV (payment), RV (receipt), BT (contra), JV (journal), SV (sales), PUR (purchase) — all YYYYMM-XXXX
-- PACS uses env vars: ORTHANC_URL, ORTHANC_USERNAME, ORTHANC_PASSWORD, PACS_VIEWER_TYPE, OHIF_URL, WADO_URL, CONQUEST_URL, PACS_PROVIDER (orthanc|conquest)
-- Accounting accounts have: tallyGroup (TALLY_GROUPS list), openingBalance/openingBalanceType, gstNumber, pan
-- Tally export maps account types to groups: cash→Cash-in-Hand, bank→Bank Accounts, income→Direct Income, etc.
-- Commission rules stored with JSON arrays for `categories` and `testIds` fields
-- Bill edits require editedBy + reason; stored in bill_audits table
-- Email settings include setup tips for Gmail, Outlook, Zoho
-
-### Patient Portal (artifacts/diagnostic-erp/src/pages/Portal.tsx + artifacts/api-server/src/routes/portal.ts)
-- Public, mobile-friendly portal at `/portal` (routes outside the ERP `Layout`).
-- **Patient login**: mobile number only (per-product UX choice — accepted weak-auth tradeoff).
-- **Staff login**: email + PIN against `users` table; redirects to main ERP root after success.
-- Sessions stored in `portal_sessions` table (random 24-byte hex token, 12h TTL); bearer auth via `Authorization: Bearer <token>`.
-- Patient endpoints (all scoped to `req.portalSession.subjectId`): `/me`, `/me/bills`, `/me/visits`, `/me/reports`, `/me/appointments` (GET + POST), `PUT /me`, `/logout`.
-- Public endpoints: `/api/portal/settings`, `/api/portal/doctors`, `/api/portal/patient-login`, `/api/portal/staff-login`.
-- Settings → Patient Portal tab manages: enable/disable, heading, welcome message, allow-booking, allow-profile-edit, copyable share URL.
-- New `clinic_settings` columns: `portalEnabled`, `portalHeading`, `portalWelcomeMessage`, `portalAllowAppointmentBooking`, `portalAllowProfileEdit`.
-- Patient-booked appointments are stored with `type = "portal"` (vs walk-in) so staff can distinguish them in the main appointments view.
-- Atomic appointment-id increment via SQL `counter + 1` to avoid race conditions when multiple patients book simultaneously.
+- **PostgreSQL**: Primary database for all application data.
+- **Drizzle ORM**: Object-relational mapper for database interactions.
+- **Orval**: API codegen tool for generating hooks and Zod schemas from OpenAPI specifications.
+- **Zod**: Schema declaration and validation library.
+- **Gemini API (via Replit AI Integrations)**: For AI-powered features like clinical note generation, billing insights, and patient message drafting.
+- **Nodemailer**: For sending email notifications.
+- **node-cron**: For scheduling recurring tasks like daily summary emails.
+- **Orthanc DICOM server**: For PACS integration and DICOM study management.
+- **Conquest DICOM server**: Alternative PACS provider.
+- **Weasis / OHIF**: External viewers for DICOM studies.
+- **@simplewebauthn/server**: For server-side verification of WebAuthn credentials in the Fingerprint Kiosk feature.
+- **concurrently**: Used for running multiple services in parallel during local development.
+- **cross-env**: For setting environment variables in a cross-platform manner.
+- **dotenv**: For loading environment variables from `.env` files.

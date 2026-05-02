@@ -24,7 +24,7 @@ clinicSettingsRouter.put("/", async (req, res) => {
   for (const f of fields) {
     if (body[f] !== undefined) update[f] = body[f];
   }
-  const boolFields = ["patientPhotoEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit"] as const;
+  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit"] as const;
   for (const f of boolFields) {
     if (body[f] !== undefined) {
       if (typeof body[f] !== "boolean") {

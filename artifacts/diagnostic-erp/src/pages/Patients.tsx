@@ -24,8 +24,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, ChevronRight, Upload, X, User } from "lucide-react";
+import { Plus, Search, ChevronRight, Upload, X, User, Pencil } from "lucide-react";
 import { useForm } from "react-hook-form";
+import { useMutation } from "@tanstack/react-query";
+import { readStaffSession, FULL_ACCESS_ROLES } from "@/lib/staffSession";
 
 type PatientForm = {
   firstName: string;
@@ -40,13 +42,20 @@ type PatientForm = {
 
 type ClinicSettingsLite = { patientPhotoEnabled?: boolean };
 
+const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+
 export default function Patients() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [photoErr, setPhotoErr] = useState("");
+  const [editPatient, setEditPatient] = useState<{ id: number; firstName: string; lastName: string; age: number | null; gender: string; phone: string; email: string | null; address: string | null; bloodGroup: string | null } | null>(null);
   const queryClient = useQueryClient();
+
+  // Edit access: open ERP (no session) OR admin/super_admin role.
+  const session = readStaffSession();
+  const canEdit = !session || FULL_ACCESS_ROLES.has(session.user.role);
 
   const { data: clinicSettings } = useQuery<ClinicSettingsLite>({
     queryKey: ["clinic-settings"],
@@ -90,7 +99,7 @@ export default function Patients() {
     createPatient.mutate({ data: payload as unknown as Parameters<typeof createPatient.mutate>[0]["data"] });
   };
 
-  const bloodGroups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+  const bloodGroups = BLOOD_GROUPS;
 
   return (
     <div className="pb-8">
@@ -173,9 +182,35 @@ export default function Patients() {
                           )}
                         </td>
                         <td className="px-4 py-3">
-                        <Link href={`/patients/${p.id}`} className="text-muted-foreground hover:text-foreground inline-flex">
-                          <ChevronRight size={16} />
-                        </Link>
+                          <div className="flex items-center justify-end gap-1">
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  // Codegen Patient may expose age via DOB only; fall back to derived `age` if no direct field.
+                                  const px = p as typeof p & { age?: number };
+                                  setEditPatient({
+                                    id: p.id,
+                                    firstName: p.firstName,
+                                    lastName: p.lastName,
+                                    age: typeof px.age === "number" ? px.age : (age ?? null),
+                                    gender: p.gender,
+                                    phone: p.phone,
+                                    email: p.email ?? null,
+                                    address: p.address ?? null,
+                                    bloodGroup: p.bloodGroup ?? null,
+                                  });
+                                }}
+                                className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-primary"
+                                title="Edit patient"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                            )}
+                            <Link href={`/patients/${p.id}`} className="text-muted-foreground hover:text-foreground inline-flex p-1.5 rounded hover:bg-muted">
+                              <ChevronRight size={16} />
+                            </Link>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -325,6 +360,116 @@ export default function Patients() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {editPatient && (
+        <EditPatientDialog
+          patient={editPatient}
+          onClose={() => setEditPatient(null)}
+          onSaved={() => {
+            queryClient.invalidateQueries({ queryKey: getListPatientsQueryKey() });
+            setEditPatient(null);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+type EditForm = {
+  firstName: string;
+  lastName: string;
+  age: number;
+  gender: "male" | "female" | "other";
+  phone: string;
+  email?: string;
+  address?: string;
+  bloodGroup?: string;
+};
+
+function EditPatientDialog({
+  patient, onClose, onSaved,
+}: {
+  patient: { id: number; firstName: string; lastName: string; age: number | null; gender: string; phone: string; email: string | null; address: string | null; bloodGroup: string | null };
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { register, handleSubmit, setValue, watch } = useForm<EditForm>({
+    defaultValues: {
+      firstName: patient.firstName,
+      lastName: patient.lastName,
+      age: patient.age ?? 0,
+      gender: (patient.gender as EditForm["gender"]) || "male",
+      phone: patient.phone,
+      email: patient.email ?? "",
+      address: patient.address ?? "",
+      bloodGroup: patient.bloodGroup ?? "",
+    },
+  });
+  const [err, setErr] = useState<string | null>(null);
+
+  const save = useMutation({
+    mutationFn: (data: EditForm) =>
+      api.put(`/api/patients/${patient.id}`, {
+        ...data,
+        email: data.email || null,
+        address: data.address || null,
+        bloodGroup: data.bloodGroup || null,
+      }),
+    onSuccess: onSaved,
+    onError: (e: Error) => setErr(e.message),
+  });
+
+  return (
+    <Dialog open={true} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit Patient — {patient.firstName} {patient.lastName}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit((d) => save.mutate(d))} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div><Label>First Name *</Label><Input {...register("firstName", { required: true })} className="mt-1" /></div>
+            <div><Label>Last Name *</Label><Input {...register("lastName", { required: true })} className="mt-1" /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Age (years) *</Label>
+              <Input type="number" min={0} max={150} {...register("age", { required: true, min: 0, max: 150, valueAsNumber: true })} className="mt-1" />
+            </div>
+            <div>
+              <Label>Gender *</Label>
+              <Select value={watch("gender")} onValueChange={(v) => setValue("gender", v as EditForm["gender"])}>
+                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="male">Male</SelectItem>
+                  <SelectItem value="female">Female</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div><Label>Phone *</Label><Input {...register("phone", { required: true })} className="mt-1" /></div>
+            <div>
+              <Label>Blood Group</Label>
+              <Select value={watch("bloodGroup") || undefined} onValueChange={(v) => setValue("bloodGroup", v)}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Select..." /></SelectTrigger>
+                <SelectContent>
+                  {BLOOD_GROUPS.map((bg) => <SelectItem key={bg} value={bg}>{bg}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div><Label>Email</Label><Input type="email" {...register("email")} className="mt-1" /></div>
+          <div><Label>Address</Label><Input {...register("address")} className="mt-1" /></div>
+          {err && <p className="text-xs text-destructive">{err}</p>}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={save.isPending}>
+              {save.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

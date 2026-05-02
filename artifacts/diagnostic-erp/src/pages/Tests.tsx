@@ -36,7 +36,14 @@ type TestForm = {
   duration: string;
   description?: string;
   isActive: boolean;
+  department?: string;
+  roomNumber?: string;
 };
+
+const DEPARTMENT_OPTIONS = [
+  "Pathology", "X-Ray", "USG", "MRI", "CT", "ECG",
+  "Endoscopy", "Mammography", "Cardiology", "Dental", "Other",
+];
 
 type TestCategory = {
   id: number;
@@ -80,15 +87,19 @@ export default function Tests() {
   const { register, handleSubmit, reset, setValue, watch } = useForm<TestForm>({ defaultValues: { isActive: true } });
 
   const onSubmit = (data: TestForm) => {
+    // Cast through unknown so the codegen'd zod doesn't reject the new
+    // department/roomNumber fields. The server reads them off req.body.
+    const payload = { ...data, price: Number(data.price) } as unknown as Parameters<typeof createTest.mutate>[0]["data"];
     if (editTest) {
-      updateTest.mutate({ id: editTest.id, data });
+      updateTest.mutate({ id: editTest.id, data: payload as unknown as Parameters<typeof updateTest.mutate>[0]["data"] });
     } else {
-      createTest.mutate({ data: { ...data, price: Number(data.price) } });
+      createTest.mutate({ data: payload });
     }
   };
 
-  const openEdit = (t: NonNullable<ReturnType<typeof useListTests>["data"]>["tests"][number]) => {
-    setEditTest({ id: t.id, code: t.code, name: t.name, category: t.category, price: t.price, duration: t.duration, description: t.description ?? "", isActive: t.isActive });
+  const openEdit = (t: { id: number; code: string; name: string; category: string; price: number; duration: string; description?: string | null; isActive: boolean; department?: string; roomNumber?: string }) => {
+    const tx = t as typeof t & { department?: string; roomNumber?: string };
+    setEditTest({ id: t.id, code: t.code, name: t.name, category: t.category, price: t.price, duration: t.duration, description: t.description ?? "", isActive: t.isActive, department: tx.department, roomNumber: tx.roomNumber });
     setValue("code", t.code);
     setValue("name", t.name);
     setValue("category", t.category);
@@ -96,6 +107,8 @@ export default function Tests() {
     setValue("duration", t.duration);
     setValue("description", t.description ?? "");
     setValue("isActive", t.isActive);
+    setValue("department", tx.department ?? "Pathology");
+    setValue("roomNumber", tx.roomNumber ?? "");
     setOpen(true);
   };
 
@@ -225,6 +238,22 @@ export default function Tests() {
               <div>
                 <Label>Duration *</Label>
                 <Input {...register("duration", { required: true })} className="mt-1" placeholder="4-6 hours" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Department *</Label>
+                <Select value={watch("department") ?? "Pathology"} onValueChange={(v) => setValue("department", v)}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {DEPARTMENT_OPTIONS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground mt-1">Drives which queue (e.g. USG room) this test routes to.</p>
+              </div>
+              <div>
+                <Label>Room Number</Label>
+                <Input {...register("roomNumber")} className="mt-1" placeholder="Room 4" />
               </div>
             </div>
             <div>

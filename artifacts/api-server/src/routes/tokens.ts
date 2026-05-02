@@ -66,24 +66,41 @@ tokensRouter.get("/today", async (req, res) => {
       patientId: tokensTable.patientId,
       patientName: sql<string>`${patientsTable.firstName} || ' ' || ${patientsTable.lastName}`,
       patientCode: patientsTable.patientId,
+      priority: tokensTable.priority,
       createdAt: tokensTable.createdAt,
     })
     .from(tokensTable)
     .leftJoin(patientsTable, eq(patientsTable.id, tokensTable.patientId))
     .where(and(eq(tokensTable.tokenDate, date), ledgerScope(ledgerId)))
-    .orderBy(desc(tokensTable.tokenNo));
+    .orderBy(desc(tokensTable.priority), desc(tokensTable.tokenNo));
   res.json(rows);
 });
 
-// PATCH /api/tokens/:id  { status }
+// PATCH /api/tokens/:id  { status?, priority? }
 tokensRouter.patch("/:id", async (req, res): Promise<void> => {
   const id = Number(req.params.id);
-  const { status } = req.body as { status?: string };
-  if (!status || !["waiting", "serving", "done", "skipped"].includes(status)) {
-    res.status(400).json({ error: "Invalid status" });
+  const { status, priority } = req.body as { status?: string; priority?: number };
+  const updates: Partial<typeof tokensTable.$inferInsert> = {};
+  if (status !== undefined) {
+    if (!["waiting", "serving", "done", "skipped"].includes(status)) {
+      res.status(400).json({ error: "Invalid status" });
+      return;
+    }
+    updates.status = status;
+  }
+  if (priority !== undefined) {
+    const p = Number(priority);
+    if (!Number.isFinite(p) || p < 0 || p > 9) {
+      res.status(400).json({ error: "priority must be 0-9" });
+      return;
+    }
+    updates.priority = p;
+  }
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "Nothing to update" });
     return;
   }
-  const [row] = await db.update(tokensTable).set({ status }).where(eq(tokensTable.id, id)).returning();
+  const [row] = await db.update(tokensTable).set(updates).where(eq(tokensTable.id, id)).returning();
   if (!row) {
     res.status(404).json({ error: "Token not found" });
     return;

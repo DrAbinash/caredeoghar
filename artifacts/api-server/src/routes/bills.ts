@@ -3,6 +3,7 @@ import { db, billsTable, paymentsTable, ordersTable, patientsTable } from "@work
 import { billAuditsTable, superAdminSessionsTable } from "@workspace/db/schema";
 import { sendBillEditEmail, sendBillReprintEmail } from "../email";
 import { generateTokenForBill } from "./tokens";
+import { generateTestTokensForOrder } from "./test-tokens";
 import { sendBillWhatsapp } from "./whatsapp";
 import { eq, and, sql, desc, like, or, gt } from "drizzle-orm";
 import {
@@ -285,6 +286,18 @@ billsRouter.post("/", async (req, res) => {
     console.warn("Token generation failed:", err);
   }
 
+  // Auto-generate per-test queue tokens — one per ordered test, sequenced by
+  // department. A bill with USG + X-Ray + MRI ends up with three department
+  // tokens. Failure is logged but never blocks bill creation.
+  let testTokens: Array<{ orderTestId: number; testName: string; department: string; roomNumber: string; tokenNo: number }> = [];
+  try {
+    testTokens = await generateTestTokensForOrder({
+      ledgerId, billId: bill.id, orderId: order.id, patientId: order.patientId,
+    });
+  } catch (err) {
+    console.warn("Per-test token generation failed:", err);
+  }
+
   // Fire WhatsApp send asynchronously — don't block the response
   if (pat?.phone && tokenInfo) {
     sendBillWhatsapp({
@@ -297,7 +310,7 @@ billsRouter.post("/", async (req, res) => {
   }
 
   const built = await buildBill(bill);
-  res.status(201).json({ ...built, token: tokenInfo });
+  res.status(201).json({ ...built, token: tokenInfo, testTokens });
 });
 
 billsRouter.get("/:id", async (req, res) => {

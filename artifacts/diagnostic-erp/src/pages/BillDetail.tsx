@@ -96,6 +96,7 @@ export default function BillDetail({ id }: { id: number }) {
   const { data: clinic } = useQuery<{
     name: string; tagline: string; address: string; email: string; phone: string;
     website: string; gstin: string; logoDataUrl: string | null; footerNote?: string;
+    showTatOnBill?: boolean;
   }>({
     queryKey: ["clinic-settings"],
     queryFn: () => api.get("/api/clinic-settings"),
@@ -696,6 +697,9 @@ export default function BillDetail({ id }: { id: number }) {
                   <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: "600" }}>Code</th>
                   <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: "600" }}>Test / Service</th>
                   <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: "600" }}>Category</th>
+                  {clinic?.showTatOnBill && (
+                    <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: "600" }}>TAT</th>
+                  )}
                   <th style={{ padding: "7px 10px", textAlign: "right", fontWeight: "600" }}>Amount (₹)</th>
                 </tr>
               </thead>
@@ -705,6 +709,9 @@ export default function BillDetail({ id }: { id: number }) {
                     <td style={{ padding: "6px 10px", fontFamily: "monospace", fontWeight: "700", color: "#1e40af" }}>{ot.test?.code}</td>
                     <td style={{ padding: "6px 10px", fontWeight: "500" }}>{ot.test?.name}</td>
                     <td style={{ padding: "6px 10px", color: "#666" }}>{ot.test?.category}</td>
+                    {clinic?.showTatOnBill && (
+                      <td style={{ padding: "6px 10px", color: "#444" }}>{ot.test?.duration || "—"}</td>
+                    )}
                     <td style={{ padding: "6px 10px", textAlign: "right", fontWeight: "600" }}>{Number(ot.price).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                   </tr>
                 ))}

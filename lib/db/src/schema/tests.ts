@@ -11,6 +11,12 @@ export const testsTable = pgTable("diagnostic_tests", {
   duration: text("duration").notNull(),
   description: text("description"),
   isActive: boolean("is_active").notNull().default(true),
+  // Department this test belongs to — drives per-test queue routing.
+  // Free text so users can add their own (Pathology, X-Ray, USG, MRI, CT,
+  // ECG, Endoscopy, Mammography, Cardiology, etc.).
+  department: text("department").notNull().default("Pathology"),
+  // Room/counter where this test is performed (e.g. "Room 4").
+  roomNumber: text("room_number").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

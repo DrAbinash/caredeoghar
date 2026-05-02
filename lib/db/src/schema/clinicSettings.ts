@@ -14,6 +14,9 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   formFTestIds: text("form_f_test_ids").notNull().default("[]"),
   quickTestIds: text("quick_test_ids").notNull().default("[null,null,null,null,null,null]"),
   patientPhotoEnabled: boolean("patient_photo_enabled").notNull().default(false),
+  // When true, bill receipts print each test's expected turn-around time
+  // (sourced from the test's "duration" field).
+  showTatOnBill: boolean("show_tat_on_bill").notNull().default(false),
   portalEnabled: boolean("portal_enabled").notNull().default(false),
   portalHeading: text("portal_heading").notNull().default(""),
   portalWelcomeMessage: text("portal_welcome_message").notNull().default(""),

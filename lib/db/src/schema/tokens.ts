@@ -11,6 +11,9 @@ export const tokensTable = pgTable(
     tokenNo: integer("token_no").notNull(),
     tokenDate: date("token_date").notNull(),
     status: text("status").notNull().default("waiting"),
+    // VIP / family / referred-friend flag — surfaces them at the top of the
+    // queue UI and the public display.
+    priority: integer("priority").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({

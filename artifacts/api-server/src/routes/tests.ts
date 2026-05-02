@@ -64,16 +64,30 @@ testsRouter.get("/", async (req, res) => {
   return res.json({ tests: tests.map(t => ({ ...t, price: Number(t.price) })), total: tests.length });
 });
 
+// Sourced from req.body separately because the codegen'd CreateTestBody zod
+// strips unknown keys. Falls back to safe defaults so old callers keep working.
+function extractDeptRoom(body: unknown): { department?: string; roomNumber?: string } {
+  if (!body || typeof body !== "object") return {};
+  const b = body as Record<string, unknown>;
+  const out: { department?: string; roomNumber?: string } = {};
+  if (typeof b.department === "string" && b.department.trim()) out.department = b.department.trim();
+  if (typeof b.roomNumber === "string") out.roomNumber = b.roomNumber.trim();
+  return out;
+}
+
 testsRouter.post("/", async (req, res) => {
   const parsed = CreateTestBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
     return;
   }
+  const extra = extractDeptRoom(req.body);
   const [test] = await db.insert(testsTable).values({
     ...parsed.data,
     price: String(parsed.data.price),
     isActive: parsed.data.isActive ?? true,
+    ...(extra.department !== undefined ? { department: extra.department } : {}),
+    ...(extra.roomNumber !== undefined ? { roomNumber: extra.roomNumber } : {}),
   }).returning();
   res.status(201).json({ ...test, price: Number(test.price) });
 });
@@ -103,6 +117,9 @@ testsRouter.put("/:id", async (req, res) => {
   if (updateData.price !== undefined) {
     updateData.price = String(updateData.price);
   }
+  const extra = extractDeptRoom(req.body);
+  if (extra.department !== undefined) updateData.department = extra.department;
+  if (extra.roomNumber !== undefined) updateData.roomNumber = extra.roomNumber;
   const [updated] = await db
     .update(testsTable)
     .set(updateData)

@@ -32,6 +32,7 @@ import Staff from "@/pages/Staff";
 import QueuePage from "@/pages/Queue";
 import FormF from "@/pages/FormF";
 import Portal from "@/pages/Portal";
+import Display from "@/pages/Display";
 import NotFound from "@/pages/not-found";
 import { readStaffSession, canAccess, firstPermissionedPath, firstAllowedPath, longestMatchingNavPath } from "@/lib/staffSession";
 import { useEffect } from "react";
@@ -78,6 +79,7 @@ function Router() {
     <Switch>
       <Route path="/portal" component={Portal} />
       <Route path="/portal/:rest*" component={Portal} />
+      <Route path="/display" component={Display} />
       <Route>
         <PermissionGuard />
         <Layout>
