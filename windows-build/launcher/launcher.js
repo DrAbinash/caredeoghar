@@ -42,16 +42,48 @@ const crypto = require("node:crypto");
 const os = require("node:os");
 
 // -------- Locate the portable folder ---------------------------------------
-// When running as a SEA .exe, process.execPath is DiagnosticERP.exe and the
-// real file is alongside it. When running with `node launcher.js` for testing,
-// the layout is the same relative to __dirname (inside the dist/portable tree).
+// When running as a SEA .exe, process.execPath is the bundled launcher exe
+// (DiagnosticERP.exe, SuperAdmin.exe, …) and the real files are alongside it.
+// When running with `node launcher.js` for testing, the layout is the same
+// relative to __dirname (inside the dist/portable tree).
 const ROOT = (() => {
-  const sea = process.execPath && path.basename(process.execPath).toLowerCase().startsWith("diagnostic")
-    ? path.dirname(process.execPath)
-    : null;
-  if (sea && fs.existsSync(path.join(sea, "runtime"))) return sea;
-  // dev fallback
+  // Prefer the directory next to the running executable IF it has runtime/ —
+  // works for any exe name (variant-friendly).
+  if (process.execPath) {
+    const cand = path.dirname(process.execPath);
+    if (fs.existsSync(path.join(cand, "runtime"))) return cand;
+  }
+  // dev fallbacks: try Diagnostic ERP first, then Super Admin
+  for (const name of ["DiagnosticERP", "SuperAdmin"]) {
+    const cand = path.resolve(__dirname, "../dist/portable", name);
+    if (fs.existsSync(path.join(cand, "runtime"))) return cand;
+  }
   return path.resolve(__dirname, "../dist/portable/DiagnosticERP");
+})();
+
+// -------- Variant config ----------------------------------------------------
+// Optional file `app/launcher-config.json` lets a build customise branding,
+// the URL the browser opens to, the database name, and the data directory
+// without forking this launcher. Defaults match the original Diagnostic ERP
+// behaviour so existing builds are unaffected.
+const VARIANT = (() => {
+  const defaults = {
+    appName:         "Diagnostic Center Billing ERP",
+    openPath:        "/",
+    dbName:          "diagnostic_erp",
+    dbUser:          "erp",
+    dataDirName:     "data",
+    defaultHttpPort: 8888,
+    defaultPgPort:   55432,
+  };
+  try {
+    const cfg = path.join(ROOT, "app/launcher-config.json");
+    if (fs.existsSync(cfg)) {
+      const raw = JSON.parse(fs.readFileSync(cfg, "utf8"));
+      return { ...defaults, ...raw };
+    }
+  } catch { /* ignore — fall back to defaults */ }
+  return defaults;
 })();
 
 const NODE_EXE   = path.join(ROOT, "runtime/node/node.exe");
@@ -62,15 +94,16 @@ const PG_POSTGRES = path.join(PG_BIN, "postgres.exe");
 const SERVER_ENTRY = path.join(ROOT, "app/server/dist/index.mjs");
 const STATIC_DIR = path.join(ROOT, "app/web");
 const MIGRATE_SCRIPT = path.join(ROOT, "app/db-migrate/run.mjs");
-const DATA_DIR   = path.join(ROOT, "data");
+const DATA_DIR   = path.join(ROOT, VARIANT.dataDirName);
 const PG_DATA    = path.join(DATA_DIR, "pgsql");
 const PASS_FILE  = path.join(DATA_DIR, ".pgpass");
 const PORT_FILE  = path.join(DATA_DIR, ".ports.json");
 const LOG_DIR    = path.join(ROOT, "logs");
 
-const DEFAULT_HTTP_PORT = Number(process.env.PORT || 8888);
-const DB_USER = "erp";
-const DB_NAME = "diagnostic_erp";
+const DEFAULT_HTTP_PORT = Number(process.env.PORT || VARIANT.defaultHttpPort);
+const DEFAULT_PG_PORT   = Number(process.env.PG_PORT || VARIANT.defaultPgPort);
+const DB_USER = VARIANT.dbUser;
+const DB_NAME = VARIANT.dbName;
 
 // -------- Logging -----------------------------------------------------------
 fs.mkdirSync(LOG_DIR, { recursive: true });
@@ -271,7 +304,7 @@ process.on("uncaughtException", (e) => { log(`uncaught: ${e.stack || e}`); clean
 // -------- Main --------------------------------------------------------------
 async function main() {
   log("=".repeat(60));
-  log("Diagnostic Center Billing ERP — portable launcher");
+  log(`${VARIANT.appName} — portable launcher`);
   log(`Install root: ${ROOT}`);
   log("=".repeat(60));
 
@@ -282,7 +315,7 @@ async function main() {
   preflight();
 
   // Reuse ports across runs so users always hit the same URL.
-  let ports = { http: DEFAULT_HTTP_PORT, pg: 55432 };
+  let ports = { http: DEFAULT_HTTP_PORT, pg: DEFAULT_PG_PORT };
   if (fs.existsSync(PORT_FILE)) {
     try { ports = { ...ports, ...JSON.parse(fs.readFileSync(PORT_FILE, "utf8")) }; } catch { /* ignore */ }
   }
@@ -301,9 +334,10 @@ async function main() {
   startServer(ports.http, databaseUrl);
 
   // Give the server a moment to bind, then open the browser.
-  setTimeout(() => openBrowser(`http://localhost:${ports.http}/`), 1500);
+  const openPath = VARIANT.openPath.startsWith("/") ? VARIANT.openPath : `/${VARIANT.openPath}`;
+  setTimeout(() => openBrowser(`http://localhost:${ports.http}${openPath}`), 1500);
 
-  log("Launcher ready. Close this window (or press Ctrl+C) to stop the ERP.");
+  log(`Launcher ready. Close this window (or press Ctrl+C) to stop ${VARIANT.appName}.`);
 }
 
 main().catch((err) => fatal(err.stack || String(err)));

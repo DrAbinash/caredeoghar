@@ -18,3 +18,9 @@ id = "8AMMDF15p_kYYgtDnoLPV"
 uri = "file://windows-build/dist/DiagnosticERP-Desktop-Setup.zip"
 type = "unspecified"
 title = "DiagnosticERP-Desktop-Setup.exe (zipped) — Electron desktop app installer (394 MB zip)"
+
+[[outputs]]
+id = "EzvVTSNiNKuKLbahMpunQ"
+uri = "file://windows-build/dist/SuperAdmin-Portable.zip"
+type = "unspecified"
+title = "SuperAdmin-Portable.zip — Standalone Super Admin Portal for Windows / pen drive (297 MB)"
