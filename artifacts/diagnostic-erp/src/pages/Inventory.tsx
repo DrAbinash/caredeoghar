@@ -18,7 +18,18 @@ import { useForm } from "react-hook-form";
 import {
   Plus, AlertTriangle, ArrowDown, ArrowUp, Settings2,
   Package, Trash2, History, SlidersHorizontal, Pencil,
+  LayoutGrid, Table as TableIcon, Download, FileSpreadsheet,
+  FileText, FileType,
 } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import {
+  exportInventoryExcel,
+  exportInventoryPDF,
+  exportInventoryWord,
+} from "@/lib/inventoryExports";
+import { useToast } from "@/hooks/use-toast";
 
 type Item = {
   id: number; name: string; unit: string; category: string;
@@ -37,16 +48,24 @@ type ConsumptionRule = {
 const CATEGORIES = ["consumable", "reagent", "equipment", "stationery", "other"];
 
 function fmt(n: number) { return n.toLocaleString("en-IN"); }
-function isLow(item: Item) { return item.currentStock <= item.minStock; }
+// Mutually-exclusive states. An item is OUT, LOW, or IN — never both LOW and OUT.
+function isOut(item: Item) { return Number(item.currentStock) <= 0; }
+function isLow(item: Item) {
+  return !isOut(item) && Number(item.currentStock) <= Number(item.minStock);
+}
 
 export default function Inventory() {
   const qc = useQueryClient();
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [stockDialog, setStockDialog] = useState<{ item: Item; mode: "in" | "out" | "adjust" } | null>(null);
   const [historyItem, setHistoryItem] = useState<Item | null>(null);
   const [editItem, setEditItem] = useState<Item | null>(null);
   const [ruleOpen, setRuleOpen] = useState(false);
+  const [view, setView] = useState<"cards" | "table">("cards");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [stockFilter, setStockFilter] = useState<"all" | "low" | "out">("all");
 
   const { data: items = [], isLoading } = useQuery<Item[]>({
     queryKey: ["inventory"],
@@ -100,9 +119,75 @@ export default function Inventory() {
   const { register: regStock, handleSubmit: subStock, reset: resetStock } = useForm<Record<string, string>>();
   const { register: regRule, handleSubmit: subRule, reset: resetRule, setValue: setRuleVal } = useForm<Record<string, string>>();
 
-  const filtered = items.filter(i =>
-    i.name.toLowerCase().includes(search.toLowerCase()) || i.category.toLowerCase().includes(search.toLowerCase())
+  const filtered = items.filter((i) => {
+    if (search) {
+      const s = search.toLowerCase();
+      if (!i.name.toLowerCase().includes(s) && !i.category.toLowerCase().includes(s)) return false;
+    }
+    if (categoryFilter !== "all" && i.category !== categoryFilter) return false;
+    if (stockFilter === "low" && !isLow(i)) return false;
+    if (stockFilter === "out" && i.currentStock > 0) return false;
+    return true;
+  });
+
+  // Aggregates for the table-view summary bar. Guard every read with Number()
+  // and a NaN-safe fallback so a malformed numeric column can never propagate
+  // a NaN into the summary or the totals row of the export.
+  const safeNum = (v: unknown) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const totalStockValue = filtered.reduce(
+    (acc, i) => acc + safeNum(i.currentStock) * safeNum(i.costPrice),
+    0,
   );
+  const outOfStockCount = filtered.filter(isOut).length;
+  const lowStockCount = filtered.filter(isLow).length;
+
+  // Build the meta line for exports based on the current filters so the
+  // downloaded file matches what the user is looking at on screen.
+  function buildExportMeta() {
+    const parts: string[] = [];
+    if (categoryFilter !== "all") parts.push(`Category: ${categoryFilter}`);
+    if (stockFilter === "low") parts.push("Low stock only");
+    if (stockFilter === "out") parts.push("Out of stock only");
+    if (search) parts.push(`Search: "${search}"`);
+    return {
+      title: "Inventory Stock Report",
+      subtitle: "Diagnostic Center Billing ERP",
+      filterLabel: parts.length ? parts.join(" · ") : "All items",
+      generatedAt: new Date().toLocaleString("en-IN", {
+        day: "2-digit", month: "short", year: "numeric",
+        hour: "2-digit", minute: "2-digit",
+      }),
+    };
+  }
+
+  async function handleExport(kind: "excel" | "pdf" | "word") {
+    if (filtered.length === 0) {
+      toast({ title: "Nothing to export", description: "Adjust filters so at least one item is shown.", variant: "destructive" });
+      return;
+    }
+    try {
+      const meta = buildExportMeta();
+      const rows = filtered.map((i) => ({
+        name: i.name,
+        category: i.category,
+        currentStock: Number(i.currentStock),
+        unit: i.unit,
+        minStock: Number(i.minStock),
+        costPrice: Number(i.costPrice),
+        isActive: i.isActive,
+      }));
+      if (kind === "excel") await exportInventoryExcel(rows, meta);
+      else if (kind === "pdf") await exportInventoryPDF(rows, meta);
+      else await exportInventoryWord(rows, meta);
+      toast({ title: `Downloaded ${rows.length} item${rows.length === 1 ? "" : "s"}`, description: `Format: ${kind.toUpperCase()}` });
+    } catch (err) {
+      console.error(err);
+      toast({ title: "Export failed", description: String(err), variant: "destructive" });
+    }
+  }
 
   const typeBadge = (type: string) => {
     if (type === "in") return <Badge className="bg-green-100 text-green-700 text-xs">Stock In</Badge>;
@@ -116,9 +201,32 @@ export default function Inventory() {
         title="Inventory"
         subtitle={`${items.length} items · ${lowStock.length} low stock`}
         actions={
-          <Button size="sm" onClick={() => { setAddOpen(true); resetAdd(); }}>
-            <Plus size={14} className="mr-1" /> Add Item
-          </Button>
+          <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" disabled={items.length === 0}>
+                  <Download size={14} className="mr-1.5" /> Download
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem onClick={() => handleExport("excel")}>
+                  <FileSpreadsheet size={14} className="mr-2 text-emerald-600" />
+                  Excel (.xlsx)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExport("pdf")}>
+                  <FileText size={14} className="mr-2 text-red-600" />
+                  PDF (.pdf)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExport("word")}>
+                  <FileType size={14} className="mr-2 text-blue-600" />
+                  Word (.docx)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button size="sm" onClick={() => { setAddOpen(true); resetAdd(); }}>
+              <Plus size={14} className="mr-1" /> Add Item
+            </Button>
+          </div>
         }
       />
 
@@ -148,12 +256,83 @@ export default function Inventory() {
               </div>
             )}
 
-            <Input
-              placeholder="Search items..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="max-w-sm"
-            />
+            {/* Filters + view toggle */}
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                placeholder="Search items..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="max-w-xs"
+              />
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All categories</SelectItem>
+                  {CATEGORIES.map(c => <SelectItem key={c} value={c} className="capitalize">{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={stockFilter} onValueChange={(v) => setStockFilter(v as typeof stockFilter)}>
+                <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All stock</SelectItem>
+                  <SelectItem value="low">Low stock</SelectItem>
+                  <SelectItem value="out">Out of stock</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <div
+                className="ml-auto inline-flex border border-card-border rounded-md overflow-hidden"
+                role="group"
+                aria-label="Inventory view"
+              >
+                <button
+                  type="button"
+                  onClick={() => setView("cards")}
+                  aria-pressed={view === "cards"}
+                  className={`px-2.5 py-1.5 text-xs flex items-center gap-1 transition-colors ${
+                    view === "cards" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
+                  }`}
+                  title="Card view"
+                >
+                  <LayoutGrid size={12} /> Cards
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setView("table")}
+                  aria-pressed={view === "table"}
+                  className={`px-2.5 py-1.5 text-xs flex items-center gap-1 transition-colors ${
+                    view === "table" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
+                  }`}
+                  title="Table view (all stock levels)"
+                >
+                  <TableIcon size={12} /> Table
+                </button>
+              </div>
+            </div>
+
+            {/* Summary bar — visible whenever there are results */}
+            {!isLoading && filtered.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div className="bg-card border border-card-border rounded-lg p-2.5">
+                  <p className="text-muted-foreground">Items shown</p>
+                  <p className="font-bold text-base mt-0.5">{filtered.length}</p>
+                </div>
+                <div className="bg-card border border-card-border rounded-lg p-2.5">
+                  <p className="text-muted-foreground">Low stock</p>
+                  <p className="font-bold text-base mt-0.5 text-amber-600">{lowStockCount}</p>
+                </div>
+                <div className="bg-card border border-card-border rounded-lg p-2.5">
+                  <p className="text-muted-foreground">Out of stock</p>
+                  <p className="font-bold text-base mt-0.5 text-red-600">{outOfStockCount}</p>
+                </div>
+                <div className="bg-card border border-card-border rounded-lg p-2.5">
+                  <p className="text-muted-foreground">Total stock value</p>
+                  <p className="font-bold text-base mt-0.5">
+                    ₹{totalStockValue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {isLoading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -161,6 +340,88 @@ export default function Inventory() {
               </div>
             ) : filtered.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">No items found</div>
+            ) : view === "table" ? (
+              <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 border-b border-card-border">
+                      <tr className="text-xs uppercase text-muted-foreground">
+                        <th className="text-left px-4 py-3 font-semibold">#</th>
+                        <th className="text-left px-4 py-3 font-semibold">Item</th>
+                        <th className="text-left px-4 py-3 font-semibold">Category</th>
+                        <th className="text-right px-4 py-3 font-semibold">Current</th>
+                        <th className="text-left px-2 py-3 font-semibold">Unit</th>
+                        <th className="text-right px-4 py-3 font-semibold">Min</th>
+                        <th className="text-center px-4 py-3 font-semibold">Status</th>
+                        <th className="text-right px-4 py-3 font-semibold">Cost (₹)</th>
+                        <th className="text-right px-4 py-3 font-semibold">Value (₹)</th>
+                        <th className="px-2 py-3" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map((item, idx) => {
+                        const value = safeNum(item.currentStock) * safeNum(item.costPrice);
+                        const out = isOut(item);
+                        const low = isLow(item);
+                        return (
+                          <tr key={item.id} className="border-b border-card-border last:border-0 hover:bg-muted/20">
+                            <td className="px-4 py-2.5 text-muted-foreground">{idx + 1}</td>
+                            <td className="px-4 py-2.5 font-medium">{item.name}</td>
+                            <td className="px-4 py-2.5 text-muted-foreground capitalize">{item.category}</td>
+                            <td className={`px-4 py-2.5 text-right font-semibold ${low ? "text-amber-600" : out ? "text-red-600" : ""}`}>
+                              {fmt(item.currentStock)}
+                            </td>
+                            <td className="px-2 py-2.5 text-muted-foreground">{item.unit}</td>
+                            <td className="px-4 py-2.5 text-right text-muted-foreground">{fmt(item.minStock)}</td>
+                            <td className="px-4 py-2.5 text-center">
+                              {out ? (
+                                <Badge className="bg-red-100 text-red-700 text-xs">Out of Stock</Badge>
+                              ) : low ? (
+                                <Badge className="bg-amber-100 text-amber-700 text-xs">Low Stock</Badge>
+                              ) : (
+                                <Badge className="bg-green-100 text-green-700 text-xs">In Stock</Badge>
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 text-right text-muted-foreground">{Number(item.costPrice).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            <td className="px-4 py-2.5 text-right font-medium">{value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            <td className="px-2 py-2.5">
+                              <div className="flex justify-end gap-0.5">
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Stock In" onClick={() => { setStockDialog({ item, mode: "in" }); resetStock(); }}>
+                                  <ArrowDown size={12} className="text-green-600" />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Stock Out" onClick={() => { setStockDialog({ item, mode: "out" }); resetStock(); }}>
+                                  <ArrowUp size={12} className="text-red-500" />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Adjust" onClick={() => { setStockDialog({ item, mode: "adjust" }); resetStock(); }}>
+                                  <SlidersHorizontal size={12} />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="History" onClick={() => setHistoryItem(item)}>
+                                  <History size={12} />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Edit" onClick={() => setEditItem(item)}>
+                                  <Pencil size={12} />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot className="bg-muted/30 border-t-2 border-card-border">
+                      <tr className="text-xs">
+                        <td colSpan={3} className="px-4 py-2.5 font-semibold">TOTAL ({filtered.length} items)</td>
+                        <td className="px-4 py-2.5 text-right font-semibold">—</td>
+                        <td colSpan={3} className="px-4 py-2.5" />
+                        <td className="px-4 py-2.5 text-right font-semibold text-muted-foreground">Total Value:</td>
+                        <td className="px-4 py-2.5 text-right font-bold text-primary">
+                          ₹{totalStockValue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td />
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filtered.map((item) => (
