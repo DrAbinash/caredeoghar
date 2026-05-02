@@ -1,6 +1,7 @@
 export * from "./patients";
 export * from "./doctors";
 export * from "./tests";
+export * from "./testCategories";
 export * from "./orders";
 export * from "./bills";
 export * from "./inventory";
