@@ -26,6 +26,7 @@ const BACKUP_TABLES: Array<{ key: string; table: Table }> = [
   { key: "commission_rules", table: schema.commissionRulesTable },
   { key: "discount_reasons", table: schema.discountReasonsTable },
   { key: "signatures", table: schema.signaturesTable },
+  { key: "vendors", table: schema.vendorsTable },
 ];
 
 // GET /api/backup/logs — recent backup history

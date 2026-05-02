@@ -19,7 +19,7 @@ import {
   Plus, AlertTriangle, ArrowDown, ArrowUp, Settings2,
   Package, Trash2, History, SlidersHorizontal, Pencil,
   LayoutGrid, Table as TableIcon, Download, FileSpreadsheet,
-  FileText, FileType,
+  FileText, FileType, Truck, Phone, Mail, MapPin, Eye,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
@@ -34,15 +34,39 @@ import { useToast } from "@/hooks/use-toast";
 type Item = {
   id: number; name: string; unit: string; category: string;
   currentStock: number; minStock: number; costPrice: number; isActive: boolean;
+  preferredVendorId?: number | null;
 };
 type TxnRow = {
   id: number; type: string; quantity: string; stockBefore: string;
   stockAfter: string; reason?: string; reference?: string; performedBy?: string;
+  vendorId?: number | null; vendorName?: string | null;
+  invoiceNumber?: string | null; invoiceDate?: string | null; unitCost?: string | null;
   createdAt: string;
 };
 type ConsumptionRule = {
   id: number; testId: number; itemId: number; quantity: string;
   testName?: string; itemName?: string; itemUnit?: string;
+};
+type Vendor = {
+  id: number; code: string; name: string;
+  contactPerson?: string | null; phone?: string | null; email?: string | null;
+  address?: string | null; city?: string | null; state?: string | null; pincode?: string | null;
+  gstin?: string | null; paymentTerms?: string | null; category?: string | null;
+  openingBalance: number; notes?: string | null; isActive: boolean;
+  itemCount: number; purchaseCount: number; totalPurchaseQty: number;
+  totalPurchaseCost: number; lastPurchaseAt: string | null;
+};
+type VendorDetail = {
+  vendor: Vendor;
+  items: Item[];
+  purchases: Array<{
+    id: number; itemId: number; itemName?: string | null; itemUnit?: string | null;
+    quantity: number; unitCost: number | null;
+    invoiceNumber?: string | null; invoiceDate?: string | null;
+    reference?: string | null; reason?: string | null;
+    performedBy?: string | null; createdAt: string;
+  }>;
+  summary: { itemCount: number; purchaseCount: number; totalPurchaseQty: number; totalPurchaseCost: number };
 };
 
 const CATEGORIES = ["consumable", "reagent", "equipment", "stationery", "other"];
@@ -62,6 +86,13 @@ export default function Inventory() {
   const [stockDialog, setStockDialog] = useState<{ item: Item; mode: "in" | "out" | "adjust" } | null>(null);
   const [historyItem, setHistoryItem] = useState<Item | null>(null);
   const [editItem, setEditItem] = useState<Item | null>(null);
+  // Vendor management state
+  const [vendorDialog, setVendorDialog] = useState<{ mode: "add" | "edit"; vendor?: Vendor } | null>(null);
+  const [vendorDetailId, setVendorDetailId] = useState<number | null>(null);
+  const [vendorSearch, setVendorSearch] = useState("");
+  // Local state for stock-in vendor/invoice fields (kept outside react-hook-form
+  // because the Select component is uncontrolled-style here).
+  const [stockInVendorId, setStockInVendorId] = useState<string>("");
   // Multi-item rule editor state. When non-null, the dialog is open and is
   // editing this test's full rule set. `testId === ""` means "Add new" — the
   // user picks a test inside the dialog. Otherwise the test is locked
@@ -92,6 +123,41 @@ export default function Inventory() {
     enabled: !!historyItem,
   });
   const { data: testsData } = useListTests({});
+  const { data: vendors = [] } = useQuery<Vendor[]>({
+    queryKey: ["vendors"],
+    queryFn: () => api.get("/api/vendors"),
+  });
+  const { data: vendorDetail } = useQuery<VendorDetail>({
+    queryKey: ["vendor-detail", vendorDetailId],
+    queryFn: () => api.get(`/api/vendors/${vendorDetailId}`),
+    enabled: !!vendorDetailId,
+  });
+
+  const saveVendor = useMutation({
+    mutationFn: (d: { id?: number; body: Record<string, unknown> }) =>
+      d.id ? api.patch(`/api/vendors/${d.id}`, d.body) : api.post("/api/vendors", d.body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["vendors"] });
+      qc.invalidateQueries({ queryKey: ["vendor-detail"] });
+      setVendorDialog(null);
+      toast({ title: "Vendor saved" });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Could not save vendor";
+      toast({ title: "Save failed", description: msg, variant: "destructive" });
+    },
+  });
+  const deleteVendor = useMutation({
+    mutationFn: (id: number) => api.delete(`/api/vendors/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["vendors"] });
+      toast({ title: "Vendor deleted" });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Could not delete vendor";
+      toast({ title: "Delete failed", description: msg, variant: "destructive" });
+    },
+  });
 
   const addItem = useMutation({
     mutationFn: (body: Record<string, unknown>) => api.post("/api/inventory", body),
@@ -341,6 +407,10 @@ export default function Inventory() {
               )}
             </TabsTrigger>
             <TabsTrigger value="rules">Consumption Rules</TabsTrigger>
+            <TabsTrigger value="vendors">
+              Vendors
+              <span className="ml-2 bg-muted text-muted-foreground rounded-full text-xs px-1.5 py-0.5">{vendors.length}</span>
+            </TabsTrigger>
           </TabsList>
 
           {/* ── Items Tab ── */}
@@ -646,6 +716,110 @@ export default function Inventory() {
               </div>
             )}
           </TabsContent>
+
+          {/* ── Vendors Tab ── */}
+          <TabsContent value="vendors" className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                placeholder="Search vendors by name or code..."
+                value={vendorSearch}
+                onChange={(e) => setVendorSearch(e.target.value)}
+                className="max-w-xs"
+              />
+              <Button
+                size="sm"
+                className="ml-auto"
+                onClick={() => setVendorDialog({ mode: "add" })}
+              >
+                <Plus size={14} className="mr-1" /> Add Vendor
+              </Button>
+            </div>
+
+            {vendors.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <Truck size={32} className="mx-auto mb-2 opacity-40" />
+                <p className="text-sm">No vendors yet. Add your first supplier to start tracking purchases.</p>
+              </div>
+            ) : (
+              <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 border-b border-card-border">
+                      <tr className="text-xs uppercase text-muted-foreground">
+                        <th className="text-left px-4 py-3 font-semibold">Code</th>
+                        <th className="text-left px-4 py-3 font-semibold">Vendor</th>
+                        <th className="text-left px-4 py-3 font-semibold">Contact</th>
+                        <th className="text-left px-4 py-3 font-semibold">GSTIN</th>
+                        <th className="text-right px-4 py-3 font-semibold">Items</th>
+                        <th className="text-right px-4 py-3 font-semibold">Purchases</th>
+                        <th className="text-right px-4 py-3 font-semibold">Total Cost</th>
+                        <th className="text-center px-4 py-3 font-semibold">Status</th>
+                        <th className="px-2 py-3" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {vendors
+                        .filter((v) => {
+                          if (!vendorSearch) return true;
+                          const s = vendorSearch.toLowerCase();
+                          return v.name.toLowerCase().includes(s) || v.code.toLowerCase().includes(s);
+                        })
+                        .map((v) => (
+                          <tr key={v.id} className="border-b border-card-border last:border-0 hover:bg-muted/20">
+                            <td className="px-4 py-2.5 font-mono text-xs">{v.code}</td>
+                            <td className="px-4 py-2.5">
+                              <div className="font-medium">{v.name}</div>
+                              {v.contactPerson && <div className="text-xs text-muted-foreground">{v.contactPerson}</div>}
+                            </td>
+                            <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                              {v.phone && <div className="flex items-center gap-1"><Phone size={10} /> {v.phone}</div>}
+                              {v.email && <div className="flex items-center gap-1"><Mail size={10} /> {v.email}</div>}
+                              {!v.phone && !v.email && <span>—</span>}
+                            </td>
+                            <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{v.gstin || "—"}</td>
+                            <td className="px-4 py-2.5 text-right">{v.itemCount}</td>
+                            <td className="px-4 py-2.5 text-right">{v.purchaseCount}</td>
+                            <td className="px-4 py-2.5 text-right font-medium">
+                              {v.totalPurchaseCost > 0 ? `₹${v.totalPurchaseCost.toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "—"}
+                            </td>
+                            <td className="px-4 py-2.5 text-center">
+                              {v.isActive ? (
+                                <Badge className="bg-green-100 text-green-700 text-xs">Active</Badge>
+                              ) : (
+                                <Badge className="bg-gray-100 text-gray-600 text-xs">Inactive</Badge>
+                              )}
+                            </td>
+                            <td className="px-2 py-2.5">
+                              <div className="flex justify-end gap-0.5">
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="View details" onClick={() => setVendorDetailId(v.id)}>
+                                  <Eye size={12} />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Edit" onClick={() => setVendorDialog({ mode: "edit", vendor: v })}>
+                                  <Pencil size={12} />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                                  title="Delete"
+                                  onClick={() => {
+                                    if (confirm(`Delete vendor "${v.name}"?\n\nThis is only allowed if no items or purchases reference this vendor.`)) {
+                                      deleteVendor.mutate(v.id);
+                                    }
+                                  }}
+                                >
+                                  <Trash2 size={12} />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </TabsContent>
         </Tabs>
       </div>
 
@@ -672,6 +846,18 @@ export default function Inventory() {
               <div><Label>Min Stock</Label><Input type="number" step="any" {...regAdd("minStock")} className="mt-1" defaultValue="0" /></div>
               <div><Label>Cost (₹)</Label><Input type="number" step="any" {...regAdd("costPrice")} className="mt-1" defaultValue="0" /></div>
             </div>
+            <div>
+              <Label>Preferred Vendor</Label>
+              <Select onValueChange={(v) => setAddVal("preferredVendorId", v === "__none__" ? "" : v)}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="None" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  {vendors.filter(v => v.isActive).map(v => (
+                    <SelectItem key={v.id} value={String(v.id)}>{v.name} ({v.code})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={addItem.isPending}>{addItem.isPending ? "Saving…" : "Add Item"}</Button>
@@ -682,8 +868,8 @@ export default function Inventory() {
 
       {/* Stock In / Out / Adjust Dialog */}
       {stockDialog && (
-        <Dialog open onOpenChange={() => setStockDialog(null)}>
-          <DialogContent className="max-w-sm">
+        <Dialog open onOpenChange={() => { setStockDialog(null); setStockInVendorId(""); }}>
+          <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {stockDialog.mode === "in" ? "Stock In" : stockDialog.mode === "out" ? "Stock Out" : "Adjust Stock"} — {stockDialog.item.name}
@@ -692,9 +878,26 @@ export default function Inventory() {
             <form
               onSubmit={subStock((d) => {
                 const id = stockDialog.item.id;
-                if (stockDialog.mode === "in") stockIn.mutate({ id, body: d });
-                else if (stockDialog.mode === "out") stockOut.mutate({ id, body: d });
-                else adjust.mutate({ id, body: { newQuantity: d.newQuantity, reason: d.reason, performedBy: d.performedBy } });
+                if (stockDialog.mode === "in") {
+                  // Send vendor / invoice fields alongside qty/reason etc.
+                  // The vendor select stores its value in `stockInVendorId` (controlled);
+                  // the date / invoice / cost fields go through react-hook-form.
+                  stockIn.mutate({
+                    id,
+                    body: {
+                      ...d,
+                      vendorId: stockInVendorId && stockInVendorId !== "__none__" ? Number(stockInVendorId) : null,
+                      invoiceNumber: d.invoiceNumber || null,
+                      invoiceDate: d.invoiceDate || null,
+                      unitCost: d.unitCost ? Number(d.unitCost) : null,
+                    },
+                  });
+                  setStockInVendorId("");
+                } else if (stockDialog.mode === "out") {
+                  stockOut.mutate({ id, body: d });
+                } else {
+                  adjust.mutate({ id, body: { newQuantity: d.newQuantity, reason: d.reason, performedBy: d.performedBy } });
+                }
               })}
               className="space-y-4"
             >
@@ -712,11 +915,43 @@ export default function Inventory() {
                   <Input type="number" step="any" min="0.01" {...regStock("quantity", { required: true })} className="mt-1" />
                 </div>
               )}
+
+              {stockDialog.mode === "in" && (
+                <div className="space-y-3 border border-card-border rounded-md p-3 bg-muted/10">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase">Purchase / Vendor Info (optional)</p>
+                  <div>
+                    <Label>Vendor</Label>
+                    <Select
+                      value={stockInVendorId || (stockDialog.item.preferredVendorId ? String(stockDialog.item.preferredVendorId) : undefined)}
+                      onValueChange={(v) => setStockInVendorId(v)}
+                    >
+                      <SelectTrigger className="mt-1"><SelectValue placeholder="None" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {vendors.filter(v => v.isActive).map(v => (
+                          <SelectItem key={v.id} value={String(v.id)}>{v.name} ({v.code})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {stockDialog.item.preferredVendorId && !stockInVendorId && (
+                      <p className="text-xs text-muted-foreground mt-1">Pre-filled with preferred vendor.</p>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>Invoice #</Label><Input {...regStock("invoiceNumber")} className="mt-1" /></div>
+                    <div><Label>Invoice Date</Label><Input type="date" {...regStock("invoiceDate")} className="mt-1" /></div>
+                  </div>
+                  <div><Label>Unit Cost (₹)</Label><Input type="number" step="any" {...regStock("unitCost")} className="mt-1" placeholder={String(stockDialog.item.costPrice || "")} /></div>
+                </div>
+              )}
+
               <div><Label>Reason</Label><Input {...regStock("reason")} className="mt-1" /></div>
-              <div><Label>Reference (Order#, Bill#)</Label><Input {...regStock("reference")} className="mt-1" /></div>
+              {stockDialog.mode !== "in" && (
+                <div><Label>Reference (Order#, Bill#)</Label><Input {...regStock("reference")} className="mt-1" /></div>
+              )}
               <div><Label>Performed By</Label><Input {...regStock("performedBy")} className="mt-1" /></div>
               <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={() => setStockDialog(null)}>Cancel</Button>
+                <Button type="button" variant="outline" onClick={() => { setStockDialog(null); setStockInVendorId(""); }}>Cancel</Button>
                 <Button type="submit">{stockDialog.mode === "adjust" ? "Adjust" : stockDialog.mode === "in" ? "Add Stock" : "Deduct Stock"}</Button>
               </div>
             </form>
@@ -727,7 +962,7 @@ export default function Inventory() {
       {/* Transaction History Dialog */}
       {historyItem && (
         <Dialog open onOpenChange={() => setHistoryItem(null)}>
-          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Stock History — {historyItem.name}</DialogTitle></DialogHeader>
             {history.length === 0 ? (
               <p className="text-center py-8 text-muted-foreground text-sm">No transactions yet</p>
@@ -739,23 +974,241 @@ export default function Inventory() {
                     <th className="text-left py-2">Type</th>
                     <th className="text-right py-2">Qty</th>
                     <th className="text-right py-2">After</th>
+                    <th className="text-left py-2 pl-4">Vendor</th>
+                    <th className="text-left py-2 pl-4">Invoice</th>
                     <th className="text-left py-2 pl-4">Reason</th>
                   </tr>
                 </thead>
                 <tbody>
                   {history.map((h) => (
                     <tr key={h.id} className="border-b border-card-border last:border-0">
-                      <td className="py-2 text-muted-foreground">{new Date(h.createdAt).toLocaleDateString("en-IN")}</td>
+                      <td className="py-2 text-muted-foreground whitespace-nowrap">{new Date(h.createdAt).toLocaleDateString("en-IN")}</td>
                       <td className="py-2">{typeBadge(h.type)}</td>
                       <td className={`py-2 text-right font-medium ${h.type === "in" ? "text-green-600" : h.type === "out" ? "text-red-500" : "text-blue-600"}`}>
                         {h.type === "out" ? "-" : h.type === "in" ? "+" : "→"}{Math.abs(Number(h.quantity))} {historyItem.unit}
                       </td>
                       <td className="py-2 text-right">{Number(h.stockAfter).toLocaleString("en-IN")}</td>
+                      <td className="py-2 pl-4 text-muted-foreground">{h.vendorName || "—"}</td>
+                      <td className="py-2 pl-4 text-muted-foreground text-xs">
+                        {h.invoiceNumber ? <div>{h.invoiceNumber}</div> : null}
+                        {h.invoiceDate ? <div className="text-muted-foreground/70">{new Date(h.invoiceDate).toLocaleDateString("en-IN")}</div> : null}
+                        {!h.invoiceNumber && !h.invoiceDate && "—"}
+                      </td>
                       <td className="py-2 pl-4 text-muted-foreground">{h.reason || "—"}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Vendor Add / Edit Dialog */}
+      {vendorDialog && (
+        <Dialog open onOpenChange={(o) => { if (!o) setVendorDialog(null); }}>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{vendorDialog.mode === "add" ? "Add Vendor" : `Edit Vendor — ${vendorDialog.vendor?.name}`}</DialogTitle>
+            </DialogHeader>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                const code = String(fd.get("code") || "").trim();
+                const name = String(fd.get("name") || "").trim();
+                if (!code || !name) {
+                  toast({ title: "Code and name are required", variant: "destructive" });
+                  return;
+                }
+                const body: Record<string, unknown> = {
+                  code,
+                  name,
+                  contactPerson: String(fd.get("contactPerson") || "").trim() || null,
+                  phone: String(fd.get("phone") || "").trim() || null,
+                  email: String(fd.get("email") || "").trim() || null,
+                  address: String(fd.get("address") || "").trim() || null,
+                  city: String(fd.get("city") || "").trim() || null,
+                  state: String(fd.get("state") || "").trim() || null,
+                  pincode: String(fd.get("pincode") || "").trim() || null,
+                  gstin: String(fd.get("gstin") || "").trim() || null,
+                  paymentTerms: String(fd.get("paymentTerms") || "").trim() || null,
+                  category: String(fd.get("category") || "").trim() || null,
+                  openingBalance: Number(fd.get("openingBalance") || 0),
+                  notes: String(fd.get("notes") || "").trim() || null,
+                  isActive: fd.get("isActive") === "on",
+                };
+                saveVendor.mutate({ id: vendorDialog.vendor?.id, body });
+              }}
+              className="space-y-4"
+            >
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Code *</Label>
+                  <Input name="code" defaultValue={vendorDialog.vendor?.code} required className="mt-1" placeholder="e.g. SUP-001" />
+                </div>
+                <div>
+                  <Label>Vendor Name *</Label>
+                  <Input name="name" defaultValue={vendorDialog.vendor?.name} required className="mt-1" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>Contact Person</Label><Input name="contactPerson" defaultValue={vendorDialog.vendor?.contactPerson ?? ""} className="mt-1" /></div>
+                <div><Label>Category</Label><Input name="category" defaultValue={vendorDialog.vendor?.category ?? ""} className="mt-1" placeholder="e.g. Reagents, Equipment" /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>Phone</Label><Input name="phone" defaultValue={vendorDialog.vendor?.phone ?? ""} className="mt-1" /></div>
+                <div><Label>Email</Label><Input type="email" name="email" defaultValue={vendorDialog.vendor?.email ?? ""} className="mt-1" /></div>
+              </div>
+              <div><Label>Address</Label><Input name="address" defaultValue={vendorDialog.vendor?.address ?? ""} className="mt-1" /></div>
+              <div className="grid grid-cols-3 gap-3">
+                <div><Label>City</Label><Input name="city" defaultValue={vendorDialog.vendor?.city ?? ""} className="mt-1" /></div>
+                <div><Label>State</Label><Input name="state" defaultValue={vendorDialog.vendor?.state ?? ""} className="mt-1" /></div>
+                <div><Label>Pincode</Label><Input name="pincode" defaultValue={vendorDialog.vendor?.pincode ?? ""} className="mt-1" /></div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div><Label>GSTIN</Label><Input name="gstin" defaultValue={vendorDialog.vendor?.gstin ?? ""} className="mt-1" placeholder="22AAAAA0000A1Z5" /></div>
+                <div><Label>Payment Terms</Label><Input name="paymentTerms" defaultValue={vendorDialog.vendor?.paymentTerms ?? ""} className="mt-1" placeholder="Net 30" /></div>
+                <div><Label>Opening Balance (₹)</Label><Input type="number" step="any" name="openingBalance" defaultValue={vendorDialog.vendor?.openingBalance ?? 0} className="mt-1" /></div>
+              </div>
+              <div><Label>Notes</Label><Input name="notes" defaultValue={vendorDialog.vendor?.notes ?? ""} className="mt-1" /></div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="vendor-isActive"
+                  name="isActive"
+                  defaultChecked={vendorDialog.vendor?.isActive ?? true}
+                  className="h-4 w-4"
+                />
+                <Label htmlFor="vendor-isActive" className="text-sm font-normal cursor-pointer">Active</Label>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={() => setVendorDialog(null)}>Cancel</Button>
+                <Button type="submit" disabled={saveVendor.isPending}>{saveVendor.isPending ? "Saving…" : "Save Vendor"}</Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Vendor Detail Dialog */}
+      {vendorDetailId && (
+        <Dialog open onOpenChange={(o) => { if (!o) setVendorDetailId(null); }}>
+          <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                {vendorDetail?.vendor.name ?? "Vendor"}
+                {vendorDetail?.vendor.code ? <span className="ml-2 text-sm text-muted-foreground font-normal">({vendorDetail.vendor.code})</span> : null}
+              </DialogTitle>
+            </DialogHeader>
+            {!vendorDetail ? (
+              <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
+            ) : (
+              <div className="space-y-4">
+                {/* Info card */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                  <div className="bg-card border border-card-border rounded-lg p-3">
+                    <p className="text-muted-foreground">Items supplied</p>
+                    <p className="font-bold text-base mt-0.5">{vendorDetail.summary.itemCount}</p>
+                  </div>
+                  <div className="bg-card border border-card-border rounded-lg p-3">
+                    <p className="text-muted-foreground">Purchases</p>
+                    <p className="font-bold text-base mt-0.5">{vendorDetail.summary.purchaseCount}</p>
+                  </div>
+                  <div className="bg-card border border-card-border rounded-lg p-3">
+                    <p className="text-muted-foreground">Total qty</p>
+                    <p className="font-bold text-base mt-0.5">{vendorDetail.summary.totalPurchaseQty.toLocaleString("en-IN")}</p>
+                  </div>
+                  <div className="bg-card border border-card-border rounded-lg p-3">
+                    <p className="text-muted-foreground">Total cost</p>
+                    <p className="font-bold text-base mt-0.5">₹{vendorDetail.summary.totalPurchaseCost.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</p>
+                  </div>
+                </div>
+
+                {/* Contact strip */}
+                <div className="bg-muted/30 rounded-lg p-3 text-sm flex flex-wrap gap-x-6 gap-y-2">
+                  {vendorDetail.vendor.contactPerson && <div><span className="text-muted-foreground">Contact:</span> <strong>{vendorDetail.vendor.contactPerson}</strong></div>}
+                  {vendorDetail.vendor.phone && <div className="flex items-center gap-1"><Phone size={12} /> {vendorDetail.vendor.phone}</div>}
+                  {vendorDetail.vendor.email && <div className="flex items-center gap-1"><Mail size={12} /> {vendorDetail.vendor.email}</div>}
+                  {vendorDetail.vendor.gstin && <div><span className="text-muted-foreground">GSTIN:</span> <span className="font-mono text-xs">{vendorDetail.vendor.gstin}</span></div>}
+                  {vendorDetail.vendor.paymentTerms && <div><span className="text-muted-foreground">Terms:</span> {vendorDetail.vendor.paymentTerms}</div>}
+                  {(vendorDetail.vendor.address || vendorDetail.vendor.city) && (
+                    <div className="flex items-center gap-1 w-full"><MapPin size={12} className="flex-shrink-0" /> {[vendorDetail.vendor.address, vendorDetail.vendor.city, vendorDetail.vendor.state, vendorDetail.vendor.pincode].filter(Boolean).join(", ")}</div>
+                  )}
+                </div>
+
+                {/* Linked items */}
+                <div>
+                  <h3 className="font-semibold text-sm mb-2">Items Supplied ({vendorDetail.items.length})</h3>
+                  {vendorDetail.items.length === 0 ? (
+                    <p className="text-xs text-muted-foreground py-3">No items have this vendor as their preferred supplier.</p>
+                  ) : (
+                    <div className="border border-card-border rounded-md overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/30 text-xs uppercase text-muted-foreground">
+                          <tr><th className="text-left px-3 py-2">Item</th><th className="text-left px-3 py-2">Category</th><th className="text-right px-3 py-2">Stock</th><th className="text-right px-3 py-2">Cost</th></tr>
+                        </thead>
+                        <tbody>
+                          {vendorDetail.items.map((it) => (
+                            <tr key={it.id} className="border-t border-card-border">
+                              <td className="px-3 py-2 font-medium">{it.name}</td>
+                              <td className="px-3 py-2 text-muted-foreground capitalize">{it.category}</td>
+                              <td className="px-3 py-2 text-right">{Number(it.currentStock)} {it.unit}</td>
+                              <td className="px-3 py-2 text-right">₹{Number(it.costPrice).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Purchase history */}
+                <div>
+                  <h3 className="font-semibold text-sm mb-2">Purchase History ({vendorDetail.purchases.length})</h3>
+                  {vendorDetail.purchases.length === 0 ? (
+                    <p className="text-xs text-muted-foreground py-3">No purchases recorded yet. Use Stock-In on an item and pick this vendor.</p>
+                  ) : (
+                    <div className="border border-card-border rounded-md overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/30 text-xs uppercase text-muted-foreground">
+                          <tr>
+                            <th className="text-left px-3 py-2">Date</th>
+                            <th className="text-left px-3 py-2">Item</th>
+                            <th className="text-right px-3 py-2">Qty</th>
+                            <th className="text-right px-3 py-2">Unit Cost</th>
+                            <th className="text-right px-3 py-2">Line Total</th>
+                            <th className="text-left px-3 py-2">Invoice</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {vendorDetail.purchases.map((p) => {
+                            const lineTotal = p.unitCost == null ? null : p.quantity * p.unitCost;
+                            return (
+                              <tr key={p.id} className="border-t border-card-border">
+                                <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{new Date(p.createdAt).toLocaleDateString("en-IN")}</td>
+                                <td className="px-3 py-2">{p.itemName ?? `Item #${p.itemId}`}</td>
+                                <td className="px-3 py-2 text-right">{p.quantity} {p.itemUnit ?? ""}</td>
+                                <td className="px-3 py-2 text-right">{p.unitCost == null ? "—" : `₹${p.unitCost.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`}</td>
+                                <td className="px-3 py-2 text-right font-medium">{lineTotal == null ? "—" : `₹${lineTotal.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`}</td>
+                                <td className="px-3 py-2 text-xs text-muted-foreground">
+                                  {p.invoiceNumber ? <div>{p.invoiceNumber}</div> : null}
+                                  {p.invoiceDate ? <div className="text-muted-foreground/70">{new Date(p.invoiceDate).toLocaleDateString("en-IN")}</div> : null}
+                                  {!p.invoiceNumber && !p.invoiceDate && "—"}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <Button variant="outline" onClick={() => setVendorDetailId(null)}>Close</Button>
+                </div>
+              </div>
             )}
           </DialogContent>
         </Dialog>
@@ -770,6 +1223,7 @@ export default function Inventory() {
               onSubmit={(e) => {
                 e.preventDefault();
                 const fd = new FormData(e.currentTarget);
+                const rawVendor = String(fd.get("preferredVendorId") || "");
                 updateItem.mutate({
                   id: editItem.id,
                   body: {
@@ -778,6 +1232,7 @@ export default function Inventory() {
                     category: String(fd.get("category") || editItem.category),
                     minStock: Number(fd.get("minStock") || 0),
                     costPrice: Number(fd.get("costPrice") || 0),
+                    preferredVendorId: rawVendor && rawVendor !== "__none__" ? Number(rawVendor) : null,
                   },
                 });
               }}
@@ -799,6 +1254,21 @@ export default function Inventory() {
               <div className="grid grid-cols-2 gap-3">
                 <div><Label>Min Stock</Label><Input type="number" step="any" name="minStock" defaultValue={editItem.minStock} className="mt-1" /></div>
                 <div><Label>Cost Price (₹)</Label><Input type="number" step="any" name="costPrice" defaultValue={editItem.costPrice} className="mt-1" /></div>
+              </div>
+              <div>
+                <Label>Preferred Vendor</Label>
+                <Select
+                  name="preferredVendorId"
+                  defaultValue={editItem.preferredVendorId ? String(editItem.preferredVendorId) : "__none__"}
+                >
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {vendors.filter(v => v.isActive || v.id === editItem.preferredVendorId).map(v => (
+                      <SelectItem key={v.id} value={String(v.id)}>{v.name} ({v.code})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <p className="text-xs text-muted-foreground">Current stock can only be changed via Stock In / Out / Adjust.</p>
               <div className="flex justify-end gap-2 pt-2">

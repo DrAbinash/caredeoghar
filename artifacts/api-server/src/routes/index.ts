@@ -42,6 +42,7 @@ import { machinesRouter } from "./machines";
 import { departmentsRouter } from "./departments";
 import { branchesRouter } from "./branches";
 import { backupRouter } from "./backup";
+import { vendorsRouter } from "./vendors";
 
 const router: IRouter = Router();
 
@@ -90,5 +91,6 @@ router.use("/machines", machinesRouter);
 router.use("/departments", departmentsRouter);
 router.use("/branches", branchesRouter);
 router.use("/backup", backupRouter);
+router.use("/vendors", vendorsRouter);
 
 export default router;

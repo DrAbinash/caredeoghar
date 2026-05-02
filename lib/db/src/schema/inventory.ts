@@ -1,7 +1,8 @@
-import { pgTable, text, serial, timestamp, integer, numeric, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, numeric, boolean, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { testsTable } from "./tests";
+import { vendorsTable } from "./vendors";
 
 export const inventoryItemsTable = pgTable("inventory_items", {
   id: serial("id").primaryKey(),
@@ -11,6 +12,7 @@ export const inventoryItemsTable = pgTable("inventory_items", {
   currentStock: numeric("current_stock", { precision: 10, scale: 2 }).notNull().default("0"),
   minStock: numeric("min_stock", { precision: 10, scale: 2 }).notNull().default("0"),
   costPrice: numeric("cost_price", { precision: 10, scale: 2 }).notNull().default("0"),
+  preferredVendorId: integer("preferred_vendor_id").references(() => vendorsTable.id, { onDelete: "set null" }),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
@@ -26,6 +28,11 @@ export const inventoryTransactionsTable = pgTable("inventory_transactions", {
   reason: text("reason"),
   reference: text("reference"), // e.g. ORD-2024-0001
   performedBy: text("performed_by"),
+  // Vendor / invoice details for stock-in (purchase) transactions
+  vendorId: integer("vendor_id").references(() => vendorsTable.id, { onDelete: "set null" }),
+  invoiceNumber: text("invoice_number"),
+  invoiceDate: date("invoice_date"),
+  unitCost: numeric("unit_cost", { precision: 12, scale: 2 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

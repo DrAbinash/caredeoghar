@@ -5,6 +5,7 @@ import {
   inventoryTransactionsTable,
   inventoryConsumptionRulesTable,
   testsTable,
+  vendorsTable,
 } from "@workspace/db/schema";
 import { eq, desc, lt, and, inArray } from "drizzle-orm";
 
@@ -15,6 +16,19 @@ router.get("/", async (_req, res) => {
   const items = await db
     .select()
     .from(inventoryItemsTable)
+    .orderBy(inventoryItemsTable.name);
+  res.json(items.map(toNum));
+});
+
+// Vendor master is now exposed under /api/vendors. We deliberately keep
+// /api/inventory/items-by-vendor as a thin convenience for the inventory page.
+router.get("/items-by-vendor/:vendorId", async (req, res) => {
+  const vendorId = Number(req.params.vendorId);
+  if (!Number.isFinite(vendorId)) return res.status(400).json({ error: "Invalid vendorId" });
+  const items = await db
+    .select()
+    .from(inventoryItemsTable)
+    .where(eq(inventoryItemsTable.preferredVendorId, vendorId))
     .orderBy(inventoryItemsTable.name);
   res.json(items.map(toNum));
 });
@@ -35,10 +49,19 @@ router.get("/low-stock", async (_req, res) => {
 
 // Create item
 router.post("/", async (req, res) => {
-  const { name, unit, category, currentStock, minStock, costPrice } = req.body;
+  const { name, unit, category, currentStock, minStock, costPrice, preferredVendorId } = req.body;
+  const vid = preferredVendorId == null || preferredVendorId === "" ? null : Number(preferredVendorId);
   const [item] = await db
     .insert(inventoryItemsTable)
-    .values({ name, unit, category: category || "consumable", currentStock: currentStock?.toString() || "0", minStock: minStock?.toString() || "0", costPrice: costPrice?.toString() || "0" })
+    .values({
+      name,
+      unit,
+      category: category || "consumable",
+      currentStock: currentStock?.toString() || "0",
+      minStock: minStock?.toString() || "0",
+      costPrice: costPrice?.toString() || "0",
+      preferredVendorId: Number.isFinite(vid as number) ? (vid as number) : null,
+    })
     .returning();
   res.status(201).json(toNum(item));
 });
@@ -53,6 +76,15 @@ router.patch("/:id", async (req, res) => {
       updates[k] = ["minStock", "costPrice"].includes(k) ? req.body[k].toString() : req.body[k];
     }
   }
+  if ("preferredVendorId" in req.body) {
+    const v = req.body.preferredVendorId;
+    if (v == null || v === "") {
+      updates.preferredVendorId = null;
+    } else {
+      const n = Number(v);
+      updates.preferredVendorId = Number.isFinite(n) ? n : null;
+    }
+  }
   const [item] = await db.update(inventoryItemsTable).set(updates).where(eq(inventoryItemsTable.id, id)).returning();
   if (!item) return res.status(404).json({ error: "Item not found" });
   res.json(toNum(item));
@@ -61,17 +93,32 @@ router.patch("/:id", async (req, res) => {
 // Stock in
 router.post("/:id/stock-in", async (req, res) => {
   const id = Number(req.params.id);
-  const { quantity, reason, reference, performedBy } = req.body;
+  const { quantity, reason, reference, performedBy, vendorId, invoiceNumber, invoiceDate, unitCost } = req.body;
   const qty = Number(quantity);
+  if (!Number.isFinite(qty) || qty <= 0) return res.status(400).json({ error: "quantity must be > 0" });
   const [existing] = await db.select().from(inventoryItemsTable).where(eq(inventoryItemsTable.id, id));
   if (!existing) return res.status(404).json({ error: "Item not found" });
+
+  const vid = vendorId == null || vendorId === "" ? null : Number(vendorId);
+  const uc = unitCost == null || unitCost === "" ? null : Number(unitCost);
+  const idate = typeof invoiceDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(invoiceDate) ? invoiceDate : null;
+
   const before = Number(existing.currentStock);
   const after = before + qty;
-  await db.update(inventoryItemsTable).set({ currentStock: after.toString() }).where(eq(inventoryItemsTable.id, id));
-  const [txn] = await db.insert(inventoryTransactionsTable).values({
-    itemId: id, type: "in", quantity: qty.toString(), stockBefore: before.toString(), stockAfter: after.toString(),
-    reason, reference, performedBy,
-  }).returning();
+  // Wrap stock update + transaction insert in one tx so we never log a purchase
+  // that didn't actually adjust stock (or vice versa) under errors.
+  const txn = await db.transaction(async (tx) => {
+    await tx.update(inventoryItemsTable).set({ currentStock: after.toString() }).where(eq(inventoryItemsTable.id, id));
+    const [inserted] = await tx.insert(inventoryTransactionsTable).values({
+      itemId: id, type: "in", quantity: qty.toString(), stockBefore: before.toString(), stockAfter: after.toString(),
+      reason, reference, performedBy,
+      vendorId: Number.isFinite(vid as number) ? (vid as number) : null,
+      invoiceNumber: typeof invoiceNumber === "string" && invoiceNumber.trim() ? invoiceNumber.trim() : null,
+      invoiceDate: idate,
+      unitCost: Number.isFinite(uc as number) ? (uc as number).toString() : null,
+    }).returning();
+    return inserted;
+  });
   res.status(201).json({ transaction: txn, newStock: after });
 });
 
@@ -109,12 +156,29 @@ router.post("/:id/adjust", async (req, res) => {
   res.json({ newStock: target });
 });
 
-// Transaction history for an item
+// Transaction history for an item (joins vendor name when available)
 router.get("/:id/history", async (req, res) => {
   const id = Number(req.params.id);
   const rows = await db
-    .select()
+    .select({
+      id: inventoryTransactionsTable.id,
+      itemId: inventoryTransactionsTable.itemId,
+      type: inventoryTransactionsTable.type,
+      quantity: inventoryTransactionsTable.quantity,
+      stockBefore: inventoryTransactionsTable.stockBefore,
+      stockAfter: inventoryTransactionsTable.stockAfter,
+      reason: inventoryTransactionsTable.reason,
+      reference: inventoryTransactionsTable.reference,
+      performedBy: inventoryTransactionsTable.performedBy,
+      vendorId: inventoryTransactionsTable.vendorId,
+      vendorName: vendorsTable.name,
+      invoiceNumber: inventoryTransactionsTable.invoiceNumber,
+      invoiceDate: inventoryTransactionsTable.invoiceDate,
+      unitCost: inventoryTransactionsTable.unitCost,
+      createdAt: inventoryTransactionsTable.createdAt,
+    })
     .from(inventoryTransactionsTable)
+    .leftJoin(vendorsTable, eq(vendorsTable.id, inventoryTransactionsTable.vendorId))
     .where(eq(inventoryTransactionsTable.itemId, id))
     .orderBy(desc(inventoryTransactionsTable.createdAt));
   res.json(rows);

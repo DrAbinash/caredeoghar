@@ -4,6 +4,7 @@ export * from "./tests";
 export * from "./testCategories";
 export * from "./orders";
 export * from "./bills";
+export * from "./vendors";
 export * from "./inventory";
 export * from "./accounting";
 export * from "./commission";
