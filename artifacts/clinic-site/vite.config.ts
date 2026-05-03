@@ -4,27 +4,20 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
+// PORT and BASE_PATH are required for the Replit dev workflow but optional
+// for portable production builds (static hosting on Synology / Apache /
+// nginx / Netlify / Vercel etc). When unset we fall back to sensible defaults
+// so `vite build` works out-of-the-box on any machine.
 const rawPort = process.env.PORT;
+const port = rawPort ? Number(rawPort) : 5173;
 
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
-
-const port = Number(rawPort);
-
-if (Number.isNaN(port) || port <= 0) {
+if (rawPort && (Number.isNaN(port) || port <= 0)) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-const basePath = process.env.BASE_PATH;
-
-if (!basePath) {
-  throw new Error(
-    "BASE_PATH environment variable is required but was not provided.",
-  );
-}
+// BASE_PATH controls the URL prefix the SPA is served from. Replit uses
+// "/site/"; portable static hosts typically serve from "/" (root).
+const basePath = process.env.BASE_PATH ?? "/";
 
 export default defineConfig({
   base: basePath,

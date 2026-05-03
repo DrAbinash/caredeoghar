@@ -1,7 +1,11 @@
 import type { SiteSettings, Page, Faq, Photo, Popup } from "./types";
+import { API_BASE } from "./config";
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(path, { credentials: "same-origin" });
+  const url = API_BASE ? `${API_BASE}${path}` : path;
+  // Cross-origin (when API_BASE is set) sends no cookies; same-origin keeps them.
+  const credentials: RequestCredentials = API_BASE ? "omit" : "same-origin";
+  const res = await fetch(url, { credentials });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json() as Promise<T>;
 }

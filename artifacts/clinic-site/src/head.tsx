@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import type { SiteSettings, Page } from "./types";
+import { resolveAssetUrl } from "./config";
 
 function setOrCreate(selector: string, create: () => HTMLElement) {
   let el = document.head.querySelector<HTMLElement>(selector);
@@ -36,7 +37,7 @@ export function HeadManager({ settings, page }: { settings: SiteSettings; page: 
     // Open Graph
     setMeta("og:title", pageTitle || settings.seoMetaTitle || settings.siteTitle, "property");
     setMeta("og:description", desc, "property");
-    if (settings.seoOgImage) setMeta("og:image", settings.seoOgImage, "property");
+    if (settings.seoOgImage) setMeta("og:image", resolveAssetUrl(settings.seoOgImage), "property");
     setMeta("og:type", "website", "property");
 
     // Verification meta tags
@@ -52,7 +53,7 @@ export function HeadManager({ settings, page }: { settings: SiteSettings; page: 
         link.rel = "icon";
         document.head.appendChild(link);
       }
-      link.href = settings.faviconUrl;
+      link.href = resolveAssetUrl(settings.faviconUrl);
     }
 
     // Custom + analytics scripts (managed wrapper, replaced on each change)

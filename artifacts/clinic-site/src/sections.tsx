@@ -7,6 +7,7 @@ import type { Section, SiteSettings, Page, Faq, Photo } from "./types";
 import { parseSocial } from "./types";
 import { buttonClass } from "./theme";
 import { api } from "./api";
+import { resolveAssetUrl } from "./config";
 
 function get(c: Record<string, unknown>, k: string, fb = ""): string {
   return typeof c[k] === "string" ? (c[k] as string) : fb;
@@ -32,7 +33,7 @@ export function HeaderSection({ section, settings, pages, basePath }: { section:
       <div className="container-narrow site-header-row">
         <Link to="/" className="flex items-center gap-2 font-bold" style={{ fontSize: "1.05rem", minWidth: 0 }}>
           {showLogo && settings.logoUrl
-            ? <img src={settings.logoUrl} alt={settings.siteTitle} style={{ height: 36, maxWidth: 160, objectFit: "contain" }} />
+            ? <img src={resolveAssetUrl(settings.logoUrl)} alt={settings.siteTitle} style={{ height: 36, maxWidth: 160, objectFit: "contain" }} />
             : <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{settings.siteTitle || "Clinic"}</span>}
         </Link>
         <nav className="nav-desktop">
@@ -80,7 +81,7 @@ export function HeroSection({ section, settings, basePath }: { section: Section;
   return (
     <section className="section" style={{
       background: imageUrl
-        ? `linear-gradient(rgba(0,0,0,.45),rgba(0,0,0,.55)), url(${imageUrl}) center/cover`
+        ? `linear-gradient(rgba(0,0,0,.45),rgba(0,0,0,.55)), url(${resolveAssetUrl(imageUrl)}) center/cover`
         : `linear-gradient(135deg, hsl(var(--site-primary)) 0%, hsl(var(--site-primary) / 0.75) 100%)`,
       color: imageUrl ? "white" : "hsl(var(--site-primary-fg))",
       minHeight: "55vh",
@@ -328,7 +329,7 @@ export function GallerySection({ section }: { section: Section }) {
           <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))" }}>
             {photos.map((p) => (
               <div key={p.id} style={{ aspectRatio: "1 / 1", overflow: "hidden", borderRadius: "var(--site-radius)", background: "hsl(var(--site-muted))" }}>
-                <img src={p.url} alt={p.alt} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                <img src={resolveAssetUrl(p.url)} alt={p.alt} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               </div>
             ))}
           </div>
