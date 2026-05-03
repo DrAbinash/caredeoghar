@@ -11,6 +11,7 @@ import { eq, asc, desc } from "drizzle-orm";
 import path from "node:path";
 import fs from "node:fs/promises";
 import multer from "multer";
+import { requireStaffAuth } from "../middleware/requireStaffAuth";
 
 export const websiteRouter = Router();
 
@@ -24,12 +25,15 @@ async function getOrCreateSettings() {
   return created;
 }
 
+// Public: the clinic-site frontend reads settings, pages, FAQs, photos, and
+// popups without credentials to render the public-facing website.
 websiteRouter.get("/settings", async (_req, res) => {
   const s = await getOrCreateSettings();
   res.json(s);
 });
 
-websiteRouter.patch("/settings", async (req, res) => {
+// Mutating: require authenticated staff session for all writes.
+websiteRouter.patch("/settings", requireStaffAuth, async (req, res) => {
   await getOrCreateSettings();
   // Whitelist editable fields. We never trust id, createdAt, etc.
   const allowed: (keyof typeof siteSettingsTable.$inferInsert)[] = [
@@ -56,7 +60,7 @@ websiteRouter.patch("/settings", async (req, res) => {
   res.json(updated);
 });
 
-websiteRouter.post("/publish", async (_req, res) => {
+websiteRouter.post("/publish", requireStaffAuth, async (_req, res) => {
   const s = await getOrCreateSettings();
   const [updated] = await db
     .update(siteSettingsTable)
@@ -71,7 +75,7 @@ websiteRouter.post("/publish", async (_req, res) => {
   res.json(updated);
 });
 
-websiteRouter.post("/unpublish", async (_req, res) => {
+websiteRouter.post("/unpublish", requireStaffAuth, async (_req, res) => {
   const [updated] = await db
     .update(siteSettingsTable)
     .set({ isPublished: false, updatedAt: new Date() })
@@ -94,7 +98,7 @@ websiteRouter.get("/pages/:id", async (req, res) => {
   res.json(p);
 });
 
-websiteRouter.post("/pages", async (req, res) => {
+websiteRouter.post("/pages", requireStaffAuth, async (req, res) => {
   const { slug, title } = req.body ?? {};
   if (!slug || !title) return res.status(400).json({ error: "slug and title required" });
   const dup = await db.select().from(sitePagesTable).where(eq(sitePagesTable.slug, slug));
@@ -112,7 +116,7 @@ websiteRouter.post("/pages", async (req, res) => {
   res.status(201).json(created);
 });
 
-websiteRouter.patch("/pages/:id", async (req, res) => {
+websiteRouter.patch("/pages/:id", requireStaffAuth, async (req, res) => {
   const id = Number(req.params.id);
   const allowed = ["slug", "title", "status", "orderIndex", "showInNav", "sections", "seoMetaTitle", "seoMetaDescription"];
   const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -122,7 +126,7 @@ websiteRouter.patch("/pages/:id", async (req, res) => {
   res.json(updated);
 });
 
-websiteRouter.delete("/pages/:id", async (req, res) => {
+websiteRouter.delete("/pages/:id", requireStaffAuth, async (req, res) => {
   await db.delete(sitePagesTable).where(eq(sitePagesTable.id, Number(req.params.id)));
   res.json({ ok: true });
 });
@@ -135,7 +139,7 @@ websiteRouter.get("/popups", async (_req, res) => {
   res.json({ popups });
 });
 
-websiteRouter.post("/popups", async (req, res) => {
+websiteRouter.post("/popups", requireStaffAuth, async (req, res) => {
   const [p] = await db.insert(sitePopupsTable).values({
     title: req.body.title ?? "",
     body: req.body.body ?? "",
@@ -149,7 +153,7 @@ websiteRouter.post("/popups", async (req, res) => {
   res.status(201).json(p);
 });
 
-websiteRouter.patch("/popups/:id", async (req, res) => {
+websiteRouter.patch("/popups/:id", requireStaffAuth, async (req, res) => {
   const id = Number(req.params.id);
   const allowed = ["title", "body", "ctaLabel", "ctaUrl", "imageUrl", "triggerType", "triggerValue", "enabled"];
   const updates: Record<string, unknown> = {};
@@ -159,7 +163,7 @@ websiteRouter.patch("/popups/:id", async (req, res) => {
   res.json(u);
 });
 
-websiteRouter.delete("/popups/:id", async (req, res) => {
+websiteRouter.delete("/popups/:id", requireStaffAuth, async (req, res) => {
   await db.delete(sitePopupsTable).where(eq(sitePopupsTable.id, Number(req.params.id)));
   res.json({ ok: true });
 });
@@ -172,7 +176,7 @@ websiteRouter.get("/faqs", async (_req, res) => {
   res.json({ faqs });
 });
 
-websiteRouter.post("/faqs", async (req, res) => {
+websiteRouter.post("/faqs", requireStaffAuth, async (req, res) => {
   const { question, answer } = req.body ?? {};
   if (!question || !answer) return res.status(400).json({ error: "question and answer required" });
   const [f] = await db.insert(siteFaqsTable).values({
@@ -184,7 +188,7 @@ websiteRouter.post("/faqs", async (req, res) => {
   res.status(201).json(f);
 });
 
-websiteRouter.patch("/faqs/:id", async (req, res) => {
+websiteRouter.patch("/faqs/:id", requireStaffAuth, async (req, res) => {
   const id = Number(req.params.id);
   const allowed = ["question", "answer", "orderIndex", "enabled"];
   const updates: Record<string, unknown> = {};
@@ -194,7 +198,7 @@ websiteRouter.patch("/faqs/:id", async (req, res) => {
   res.json(u);
 });
 
-websiteRouter.delete("/faqs/:id", async (req, res) => {
+websiteRouter.delete("/faqs/:id", requireStaffAuth, async (req, res) => {
   await db.delete(siteFaqsTable).where(eq(siteFaqsTable.id, Number(req.params.id)));
   res.json({ ok: true });
 });
@@ -203,7 +207,34 @@ websiteRouter.delete("/faqs/:id", async (req, res) => {
 // Photos — local filesystem upload (data/uploads/site)
 // ─────────────────────────────────────────────────────────────────────────────
 const UPLOAD_DIR = path.resolve(process.cwd(), "data/uploads/site");
-const ALLOWED_MIME = new Set(["image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml", "image/x-icon", "image/vnd.microsoft.icon"]);
+
+// SVG is intentionally excluded: SVG documents can contain <script> elements
+// and execute JavaScript when opened directly in a browser, making them
+// equivalent to active content. Only passive raster image formats that cannot
+// carry executable scripts are permitted.
+const ALLOWED_MIME = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+  "image/x-icon",
+  "image/vnd.microsoft.icon",
+]);
+
+// Derive the stored file extension from the server-validated MIME type, NOT
+// from the original filename supplied by the client. This prevents an attacker
+// from uploading a file with a spoofed MIME type (e.g. Content-Type: image/png)
+// and a dangerous extension (e.g. payload.html) — the server always persists a
+// safe extension so express.static will never serve the file as HTML or script.
+const MIME_TO_EXT: Record<string, string> = {
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+  "image/webp": ".webp",
+  "image/gif": ".gif",
+  "image/x-icon": ".ico",
+  "image/vnd.microsoft.icon": ".ico",
+};
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: async (_req, _file, cb) => {
@@ -211,8 +242,9 @@ const upload = multer({
       catch (e) { cb(e as Error, UPLOAD_DIR); }
     },
     filename: (_req, file, cb) => {
-      const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
-      cb(null, `${Date.now()}_${safe}`);
+      // Force extension from MIME type — never trust the client-supplied filename extension.
+      const ext = MIME_TO_EXT[file.mimetype] ?? ".bin";
+      cb(null, `${Date.now()}${ext}`);
     },
   }),
   fileFilter: (_req, file, cb) => {
@@ -222,12 +254,14 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
+// Public: the clinic-site frontend fetches photos to render galleries.
 websiteRouter.get("/photos", async (_req, res) => {
   const photos = await db.select().from(sitePhotosTable).orderBy(desc(sitePhotosTable.uploadedAt));
   res.json({ photos });
 });
 
-websiteRouter.post("/photos", upload.single("photo"), async (req, res) => {
+// Mutating: photo upload and deletion require authenticated staff session.
+websiteRouter.post("/photos", requireStaffAuth, upload.single("photo"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file" });
   const url = `/uploads/site/${req.file.filename}`;
   const [p] = await db.insert(sitePhotosTable).values({
@@ -238,7 +272,7 @@ websiteRouter.post("/photos", upload.single("photo"), async (req, res) => {
   res.status(201).json(p);
 });
 
-websiteRouter.delete("/photos/:id", async (req, res) => {
+websiteRouter.delete("/photos/:id", requireStaffAuth, async (req, res) => {
   const id = Number(req.params.id);
   const [p] = await db.select().from(sitePhotosTable).where(eq(sitePhotosTable.id, id));
   // Guard against path traversal: only delete files inside UPLOAD_DIR. We

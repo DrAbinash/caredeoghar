@@ -95,7 +95,10 @@ router.use("/machines", requireStaffAuth, machinesRouter);
 router.use("/departments", requireStaffAuth, departmentsRouter);
 router.use("/branches", requireStaffAuth, branchesRouter);
 router.use("/vendors", requireStaffAuth, vendorsRouter);
-router.use("/website", requireStaffAuth, websiteRouter);
+// Website router: GET endpoints are intentionally public so the clinic-site
+// frontend can fetch settings/pages/faqs/photos/popups without credentials.
+// Mutating endpoints inside websiteRouter each apply requireStaffAuth directly.
+router.use("/website", websiteRouter);
 
 // ─── Super-admin-only sensitive operational routes ────────────────────────────
 router.use("/backup", requireSuperAdmin, backupRouter);

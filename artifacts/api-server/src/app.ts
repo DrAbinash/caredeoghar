@@ -35,7 +35,17 @@ app.use("/api", router);
 
 // Serve user-uploaded site assets (favicon, photos, hero images, etc.)
 // from data/uploads. Path matches what /api/website/photos returns.
-app.use("/uploads", express.static(path.resolve(process.cwd(), "data/uploads")));
+//
+// X-Content-Type-Options: nosniff prevents browsers from MIME-sniffing a
+// response away from the declared Content-Type. Combined with the upload
+// handler enforcing a safe extension derived from the validated MIME type
+// (never from the client-supplied filename), this ensures uploaded files
+// cannot be served as HTML or JavaScript even if an attacker tried to
+// smuggle active content through the photo upload endpoint.
+app.use("/uploads", (_req: Request, res: Response, next: NextFunction) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  next();
+}, express.static(path.resolve(process.cwd(), "data/uploads")));
 
 // =============================================================================
 // Production single-port static serving (Windows .exe / portable build)
