@@ -15,14 +15,31 @@
 .vscode
 .cursor
 
-# Build outputs that the deploy image rebuilds itself
+# Build outputs that the deploy image rebuilds itself.
+# NOTE: dockerignore-style patterns: bare names match root, **/foo matches any depth.
+# We list both forms so root-level `node_modules`, `dist`, etc. are always excluded.
+node_modules
 **/node_modules
+dist
 **/dist
+.turbo
 **/.turbo
+.expo
 **/.expo
+.expo-shared
 **/.expo-shared
+.replit-artifact
 **/.replit-artifact
+*.tsbuildinfo
 **/*.tsbuildinfo
+.pnpm-store
+**/.pnpm-store
+.next
+**/.next
+.svelte-kit
+**/.svelte-kit
+.parcel-cache
+**/.parcel-cache
 
 # Logs and tmp
 *.log

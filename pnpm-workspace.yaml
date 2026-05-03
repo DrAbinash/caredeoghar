@@ -3,8 +3,11 @@ packages:
   - lib/*
   - lib/integrations/*
   - scripts
-  - windows-build
-  - windows-build/electron-app
+  # NOTE: windows-build and windows-build/electron-app are intentionally NOT
+  # listed here. They pull in Electron (~200 MB) + electron-builder (~150 MB)
+  # which would push the cloud deploy image past the 8 GiB Cloud Run limit.
+  # The Windows Build workflow installs deps directly inside windows-build/
+  # via its own package.json (run `pnpm install` inside windows-build first).
 
 autoInstallPeers: false
 
