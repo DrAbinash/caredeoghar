@@ -30,12 +30,12 @@ args = "Windows Build"
 name = "Windows Build"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "rm -f /tmp/wb-logs/done.flag && mkdir -p /tmp/wb-logs && pnpm --filter @workspace/windows-build run build:all 2>&1 | tee /tmp/wb-logs/build-all.log && pnpm --filter @workspace/windows-build run build:super-admin 2>&1 | tee /tmp/wb-logs/build-sa.log && date -Iseconds > /tmp/wb-logs/done.flag && echo BUILD_COMPLETE"
-
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "rm -f /tmp/wb-logs/done.flag && mkdir -p /tmp/wb-logs && pnpm -C windows-build run build:all 2>&1 | tee /tmp/wb-logs/build-all.log && pnpm -C windows-build run build:super-admin 2>&1 | tee /tmp/wb-logs/build-sa.log && date -Iseconds > /tmp/wb-logs/done.flag && echo BUILD_COMPLETE"
 
 [agent]
 stack = "PNPM_WORKSPACE"
