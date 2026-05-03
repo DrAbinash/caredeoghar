@@ -33,13 +33,13 @@ BRIDGE_MOCK_FINGER=alice ERP_BASE_URL=http://localhost:8080 npm start
 
 ## Configuration (env vars)
 
-| Variable               | Default            | Description                                       |
-|------------------------|--------------------|---------------------------------------------------|
-| `BRIDGE_PORT`          | `8765`             | Port the bridge listens on (localhost only).      |
-| `BRIDGE_VENDOR`        | `mock`             | `mock` \| `zkteco` \| `mantra` \| `morpho`        |
-| `ERP_BASE_URL`         | _(required)_       | Where the ERP API lives, e.g. `https://erp.local` |
-| `ERP_BRIDGE_SECRET`    | _(empty)_          | Must match `FINGERPRINT_BRIDGE_SECRET` on server. |
-| `BRIDGE_ALLOW_ORIGINS` | `*`                | Comma-separated CORS allow list.                  |
+| Variable               | Default                        | Description                                                                                                   |
+|------------------------|--------------------------------|---------------------------------------------------------------------------------------------------------------|
+| `BRIDGE_PORT`          | `8765`                         | Port the bridge listens on (localhost only).                                                                  |
+| `BRIDGE_VENDOR`        | `mock`                         | `mock` \| `zkteco` \| `mantra` \| `morpho`                                                                    |
+| `ERP_BASE_URL`         | _(required)_                   | Where the ERP API lives, e.g. `https://erp.local`                                                             |
+| `ERP_BRIDGE_SECRET`    | _(required)_                   | Must match `FINGERPRINT_BRIDGE_SECRET` on server. The server rejects requests when this is not set.           |
+| `BRIDGE_ALLOW_ORIGINS` | ERP origin from `ERP_BASE_URL` | Comma-separated CORS allowlist. Defaults to the origin of `ERP_BASE_URL`. Set explicitly to override. Do NOT use `*` — this would let any website on the workstation invoke biometric endpoints. |
 
 ## Endpoints (consumed by the ERP frontend)
 
@@ -64,10 +64,17 @@ the workstation, fill in the function bodies, and restart the bridge with
 
 ## Security notes
 
-- The bridge binds to `127.0.0.1` only; nothing on the network can talk to it.
+- The bridge binds to `127.0.0.1` only; nothing on the network can talk to it
+  directly.
 - Raw fingerprint images never leave the workstation — only vendor-specific
   templates do. Templates are not reversible to fingerprints.
-- Set `ERP_BRIDGE_SECRET` in production so a rogue process on the workstation
-  can't enroll fingerprints into your ERP.
+- `ERP_BRIDGE_SECRET` **must** be set. The Windows launcher generates and
+  persists a random secret automatically (`data/.bridge-secret`). Without it,
+  the ERP server rejects all bridge requests. Set the same value in
+  `ERP_BRIDGE_SECRET` so the bridge service can authenticate to the server.
+- `BRIDGE_ALLOW_ORIGINS` must be set to the ERP web origin (e.g.
+  `https://erp.yourdomain.com`). The default already derives this from
+  `ERP_BASE_URL`. Never set it to `*` — any website the user visits could
+  otherwise invoke biometric endpoints via the browser.
 - The ERP sees only matched template IDs; the live image stays in RAM in the
   bridge process for the duration of one capture.

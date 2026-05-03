@@ -94,10 +94,12 @@ router.use("/signatures", requireStaffAuth, signaturesRouter);
 router.use("/machines", requireStaffAuth, machinesRouter);
 router.use("/departments", requireStaffAuth, departmentsRouter);
 router.use("/branches", requireStaffAuth, branchesRouter);
-router.use("/backup", requireStaffAuth, backupRouter);
 router.use("/vendors", requireStaffAuth, vendorsRouter);
 router.use("/website", requireStaffAuth, websiteRouter);
-router.use("/system", requireStaffAuth, systemRouter);
+
+// ─── Super-admin-only sensitive operational routes ────────────────────────────
+router.use("/backup", requireSuperAdmin, backupRouter);
+router.use("/system", requireSuperAdmin, systemRouter);
 
 // ─── Super-admin-only routes ──────────────────────────────────────────────────
 router.use("/users", requireSuperAdmin, usersRouter);

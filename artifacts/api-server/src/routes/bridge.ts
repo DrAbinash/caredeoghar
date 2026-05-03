@@ -17,11 +17,14 @@ export const bridgeRouter = Router();
 
 const SESSION_HOURS = 8;
 
-// Bridge can optionally present a shared secret so random clients can't enroll
+// Bridge MUST present a shared secret. If the env var is not set the server
+// refuses all authenticated bridge requests so the service is never left open.
 const BRIDGE_SECRET = process.env["FINGERPRINT_BRIDGE_SECRET"] ?? "";
 
 function requireBridgeAuth(req: Parameters<Parameters<typeof bridgeRouter.use>[0]>[0], res: Parameters<Parameters<typeof bridgeRouter.use>[0]>[1], next: () => void) {
-  if (!BRIDGE_SECRET) return next(); // dev mode: no auth
+  if (!BRIDGE_SECRET) {
+    return res.status(503).json({ error: "Bridge authentication is not configured on this server. Set FINGERPRINT_BRIDGE_SECRET." });
+  }
   const provided = String(req.headers["x-bridge-secret"] ?? "");
   if (provided !== BRIDGE_SECRET) return res.status(401).json({ error: "Bridge auth failed" });
   next();
@@ -87,7 +90,7 @@ bridgeRouter.get("/templates", requireBridgeAuth, async (req, res) => {
 });
 
 // List enrolled fingers for a single subject (frontend uses this to show count)
-bridgeRouter.get("/templates/list", async (req, res) => {
+bridgeRouter.get("/templates/list", requireBridgeAuth, async (req, res) => {
   const scope = req.query.scope === "user" ? "user" : "staff";
   const scopeId = Number(req.query.scopeId);
   if (!scopeId) return res.status(400).json({ error: "scopeId required" });
@@ -104,7 +107,7 @@ bridgeRouter.get("/templates/list", async (req, res) => {
   res.json(rows);
 });
 
-bridgeRouter.delete("/templates/:id", async (req, res) => {
+bridgeRouter.delete("/templates/:id", requireBridgeAuth, async (req, res) => {
   await db.delete(bridgeFingerprintTemplatesTable).where(eq(bridgeFingerprintTemplatesTable.id, Number(req.params.id)));
   res.json({ ok: true });
 });

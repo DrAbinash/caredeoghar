@@ -251,7 +251,21 @@ function runMigrations(databaseUrl) {
 // -------- API server lifecycle ----------------------------------------------
 let serverProc = null;
 
+const BRIDGE_SECRET_FILE = path.join(DATA_DIR, ".bridge-secret");
+
+function ensureBridgeSecret() {
+  if (fs.existsSync(BRIDGE_SECRET_FILE)) {
+    return fs.readFileSync(BRIDGE_SECRET_FILE, "utf8").trim();
+  }
+  const secret = crypto.randomBytes(32).toString("base64url");
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(BRIDGE_SECRET_FILE, secret, { encoding: "utf8", mode: 0o600 });
+  log("Generated new FINGERPRINT_BRIDGE_SECRET and stored in data/.bridge-secret");
+  return secret;
+}
+
 function startServer(httpPort, databaseUrl) {
+  const bridgeSecret = ensureBridgeSecret();
   const env = {
     ...process.env,
     NODE_ENV: "production",
@@ -263,6 +277,7 @@ function startServer(httpPort, databaseUrl) {
     APP_MANIFEST_PATH: path.join(ROOT, "MANIFEST.json"),
     UPDATE_STAGING_DIR: STAGING_DIR,
     UPDATE_MARKER_FILE: MARKER_FILE,
+    FINGERPRINT_BRIDGE_SECRET: bridgeSecret,
   };
   log(`Starting API server on http://127.0.0.1:${httpPort} …`);
   serverProc = spawn(NODE_EXE, ["--enable-source-maps", SERVER_ENTRY], {

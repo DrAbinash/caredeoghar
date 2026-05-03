@@ -21,14 +21,45 @@ const PORT = Number(process.env.BRIDGE_PORT ?? 8765);
 const VENDOR = process.env.BRIDGE_VENDOR ?? "mock";
 const ERP_BASE = (process.env.ERP_BASE_URL ?? "").replace(/\/$/, "");
 const ERP_SECRET = process.env.ERP_BRIDGE_SECRET ?? "";
-const ALLOW = (process.env.BRIDGE_ALLOW_ORIGINS ?? "*").split(",").map((s) => s.trim());
+
+// Startup-time security validation
+if (!ERP_SECRET) {
+  console.error("[bridge] FATAL: ERP_BRIDGE_SECRET is not set. The ERP server will reject all bridge requests without it. Set ERP_BRIDGE_SECRET to the same value as FINGERPRINT_BRIDGE_SECRET on the server.");
+  process.exit(1);
+}
+
+// BRIDGE_ALLOW_ORIGINS must be explicitly configured. Defaults to the ERP
+// origin when ERP_BASE_URL is set, or denies all cross-origin requests.
+// Using "*" would let any website on the workstation invoke biometric endpoints
+// via the browser — it is explicitly rejected.
+const _rawAllow = process.env.BRIDGE_ALLOW_ORIGINS ?? "";
+if (_rawAllow.trim() === "*") {
+  console.error("[bridge] FATAL: BRIDGE_ALLOW_ORIGINS=\"*\" is not permitted. It would allow any website on this workstation to access biometric endpoints. Set it to the specific ERP origin, e.g. https://erp.yourdomain.com");
+  process.exit(1);
+}
+
+let ALLOW;
+if (_rawAllow.trim()) {
+  ALLOW = _rawAllow.split(",").map((s) => s.trim()).filter(Boolean);
+} else if (ERP_BASE) {
+  try {
+    ALLOW = [new URL(ERP_BASE).origin];
+  } catch {
+    ALLOW = [];
+  }
+} else {
+  ALLOW = [];
+}
 
 const adapter = await loadAdapter(VENDOR);
 console.log(`[bridge] Loaded adapter: ${VENDOR}`);
+if (ALLOW.length === 0) {
+  console.warn("[bridge] WARNING: No BRIDGE_ALLOW_ORIGINS configured and ERP_BASE_URL is not set. All cross-origin browser requests will be blocked.");
+}
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
-app.use(cors({ origin: ALLOW.includes("*") ? true : ALLOW, credentials: false }));
+app.use(cors({ origin: ALLOW.length > 0 ? ALLOW : false, credentials: false }));
 
 function erp(path, init = {}) {
   if (!ERP_BASE) throw new Error("ERP_BASE_URL not configured");
