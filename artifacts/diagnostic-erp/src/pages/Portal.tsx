@@ -308,6 +308,7 @@ function PortalLanding() {
 function PatientLogin() {
   const [, navigate] = useLocation();
   const [phone, setPhone] = useState("");
+  const [dob, setDob] = useState("");
   const [error, setError] = useState("");
   const { data: settings } = useQuery<PortalSettings>({
     queryKey: ["portal-settings"],
@@ -315,13 +316,16 @@ function PatientLogin() {
   });
 
   const login = useMutation({
-    mutationFn: (phoneNum: string) => api.post<PatientSession>("/api/portal/patient-login", { phone: phoneNum }),
+    mutationFn: (body: { phone: string; dateOfBirth: string }) =>
+      api.post<PatientSession>("/api/portal/patient-login", body),
     onSuccess: (s) => {
       localStorage.setItem(PATIENT_KEY, JSON.stringify(s));
       navigate("/portal/patient");
     },
     onError: (e: Error) => setError(e.message),
   });
+
+  const canSubmit = phone.trim().length > 0 && dob.trim().length > 0;
 
   return (
     <>
@@ -340,11 +344,15 @@ function PatientLogin() {
           </div>
           <h1 className="text-2xl font-bold text-center mb-2">Patient Login</h1>
           <p className="text-muted-foreground text-sm text-center mb-6">
-            Enter the mobile number registered with us.
+            Enter your registered mobile number and date of birth to continue.
           </p>
 
           <form
-            onSubmit={(e) => { e.preventDefault(); setError(""); login.mutate(phone.trim()); }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              setError("");
+              login.mutate({ phone: phone.trim(), dateOfBirth: dob.trim() });
+            }}
             className="space-y-4"
           >
             <div>
@@ -360,13 +368,24 @@ function PatientLogin() {
               />
             </div>
 
+            <div>
+              <Label htmlFor="dob">Date of Birth</Label>
+              <Input
+                id="dob"
+                type="date"
+                value={dob}
+                onChange={(e) => setDob(e.target.value)}
+                className="mt-1.5 h-12"
+              />
+            </div>
+
             {error && (
               <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg p-3 text-sm text-red-700 dark:text-red-400 flex items-start gap-2">
                 <AlertCircle size={16} className="mt-0.5 shrink-0" /> {error}
               </div>
             )}
 
-            <Button type="submit" className="w-full h-12 text-base" disabled={login.isPending || !phone.trim()}>
+            <Button type="submit" className="w-full h-12 text-base" disabled={login.isPending || !canSubmit}>
               {login.isPending ? <><Loader2 size={16} className="mr-2 animate-spin" /> Signing in…</> : <>Continue <ArrowRight size={16} className="ml-2" /></>}
             </Button>
           </form>

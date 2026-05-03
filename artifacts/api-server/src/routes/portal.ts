@@ -1,5 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import crypto from "node:crypto";
+import rateLimit from "express-rate-limit";
+import bcrypt from "bcryptjs";
 import { db } from "@workspace/db";
 import {
   clinicSettingsTable,
@@ -21,6 +23,23 @@ export const portalRouter = Router();
 
 // Session lifetime: 12 hours
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+
+// Rate limiters for login endpoints — keyed by IP address
+const patientLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many login attempts. Please try again in 15 minutes." },
+});
+
+const staffLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many login attempts. Please try again in 15 minutes." },
+});
 
 // Cleanup helper — best-effort prune of expired sessions
 async function pruneExpiredSessions() {
@@ -69,39 +88,63 @@ portalRouter.get("/settings", async (_req, res) => {
   });
 });
 
-// Patient login — phone number lookup. NOTE: per requested UX, no extra
-// factor (DOB / OTP) is checked. Phone alone is sufficient.
-portalRouter.post("/patient-login", async (req, res) => {
+// Patient login — phone + date of birth verification.
+// Both factors must match; errors are deliberately generic to prevent
+// phone-number enumeration by a remote attacker.
+portalRouter.post("/patient-login", patientLoginLimiter, async (req, res) => {
   if (!(await requirePortalEnabled(res))) return;
 
   const phone = String(req.body?.phone ?? "").trim();
-  if (!phone) {
-    res.status(400).json({ error: "Mobile number is required" });
+  const dob = String(req.body?.dateOfBirth ?? "").trim();
+
+  if (!phone || !dob) {
+    res.status(400).json({ error: "Mobile number and date of birth are required" });
     return;
   }
-  // Strip all non-digits for comparison; also keep raw to match either format
+
   const digits = phone.replace(/\D/g, "");
   if (digits.length < 6) {
     res.status(400).json({ error: "Please enter a valid mobile number" });
     return;
   }
 
-  // Look up by exact match OR by "ends with last 10 digits" (handles +91 etc.)
+  // Normalize DOB to YYYY-MM-DD (accept YYYY-MM-DD or DD/MM/YYYY or DD-MM-YYYY)
+  let normalizedDob = dob;
+  if (/^\d{2}[\/\-]\d{2}[\/\-]\d{4}$/.test(dob)) {
+    const parts = dob.split(/[\/\-]/);
+    normalizedDob = `${parts[2]}-${parts[1]}-${parts[0]}`;
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDob)) {
+    res.status(400).json({ error: "Please enter a valid date of birth (DD/MM/YYYY)" });
+    return;
+  }
+
+  // Look up by phone (last-10-digits match to handle +91 etc.)
   const last10 = digits.slice(-10);
   const matches = await db
     .select()
     .from(patientsTable)
     .where(sql`regexp_replace(${patientsTable.phone}, '\\D', '', 'g') LIKE ${"%" + last10}`);
 
+  // Use a generic 401 for both "unknown phone" and "wrong DOB" to prevent
+  // patient enumeration via the API.
+  const genericError = "We could not verify your identity. Please check your mobile number and date of birth, or contact reception.";
+
   if (matches.length === 0) {
-    res.status(404).json({ error: "No patient registered with this number. Please visit reception to register first." });
+    res.status(401).json({ error: genericError });
     return;
   }
+
   if (matches.length > 1) {
-    // Should be rare — return first by createdAt desc to prefer the latest record
     matches.sort((a, b) => (b.createdAt?.getTime?.() ?? 0) - (a.createdAt?.getTime?.() ?? 0));
   }
   const patient = matches[0];
+
+  // Second factor: date of birth must match (case-insensitive string compare)
+  if (!patient.dateOfBirth || patient.dateOfBirth.trim() !== normalizedDob) {
+    res.status(401).json({ error: genericError });
+    return;
+  }
 
   await pruneExpiredSessions();
   const token = crypto.randomBytes(24).toString("hex");
@@ -128,7 +171,9 @@ portalRouter.post("/patient-login", async (req, res) => {
 });
 
 // Staff login — email + PIN against existing users table.
-portalRouter.post("/staff-login", async (req, res) => {
+// PINs are stored as bcrypt hashes; plaintext legacy values are migrated
+// transparently on the first successful login.
+portalRouter.post("/staff-login", staffLoginLimiter, async (req, res) => {
   if (!(await requirePortalEnabled(res))) return;
 
   const email = String(req.body?.email ?? "").trim().toLowerCase();
@@ -139,9 +184,21 @@ portalRouter.post("/staff-login", async (req, res) => {
   }
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
-  if (!user || !user.isActive || !user.pin || user.pin !== pin) {
+  if (!user || !user.isActive || !user.pin) {
     res.status(401).json({ error: "Invalid email or PIN" });
     return;
+  }
+
+  const pinMatches = await verifyPin(pin, user.pin);
+  if (!pinMatches) {
+    res.status(401).json({ error: "Invalid email or PIN" });
+    return;
+  }
+
+  // Transparently upgrade plaintext legacy PINs to bcrypt on first successful login
+  if (!isBcryptHash(user.pin)) {
+    const hashed = await bcrypt.hash(pin, 12);
+    await db.update(usersTable).set({ pin: hashed }).where(eq(usersTable.id, user.id));
   }
 
   // Parse permissions JSON safely (stored as string in users.permissions)
@@ -175,6 +232,26 @@ portalRouter.post("/staff-login", async (req, res) => {
     },
   });
 });
+
+// =====================================================================
+// PIN helpers
+// =====================================================================
+
+function isBcryptHash(value: string): boolean {
+  return value.startsWith("$2a$") || value.startsWith("$2b$") || value.startsWith("$2y$");
+}
+
+// Constant-time PIN verification with plaintext legacy fallback
+async function verifyPin(plain: string, stored: string): Promise<boolean> {
+  if (isBcryptHash(stored)) {
+    return bcrypt.compare(plain, stored);
+  }
+  // Legacy plaintext — constant-time compare using crypto.timingSafeEqual
+  const a = Buffer.from(plain);
+  const b = Buffer.from(stored);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
 
 // =====================================================================
 // Authenticated middleware — patient scope

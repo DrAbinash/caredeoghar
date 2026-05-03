@@ -1,17 +1,44 @@
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { db } from "@workspace/db";
 import { usersTable, superAdminSessionsTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
-import crypto from "crypto";
 
 export const superAdminRouter = Router();
+
+// Rate limiter: max 5 attempts per IP per 15 minutes
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many login attempts. Please try again in 15 minutes." },
+});
 
 function generateToken(): string {
   return crypto.randomBytes(48).toString("hex");
 }
 
+function isBcryptHash(value: string): boolean {
+  return value.startsWith("$2a$") || value.startsWith("$2b$") || value.startsWith("$2y$");
+}
+
+// Constant-time PIN verification with plaintext legacy fallback
+async function verifyPin(plain: string, stored: string): Promise<boolean> {
+  if (isBcryptHash(stored)) {
+    return bcrypt.compare(plain, stored);
+  }
+  // Legacy plaintext — constant-time compare
+  const a = Buffer.from(plain);
+  const b = Buffer.from(stored);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
 // POST /api/super-admin/login — validates name + PIN, creates session token
-superAdminRouter.post("/login", async (req, res) => {
+superAdminRouter.post("/login", loginLimiter, async (req, res) => {
   const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
   const pin = typeof req.body.pin === "string" ? req.body.pin.trim() : "";
   if (!name || !pin) {
@@ -24,7 +51,15 @@ superAdminRouter.post("/login", async (req, res) => {
   if (!user) return res.status(401).json({ error: "Invalid credentials" });
   if (user.role !== "super_admin") return res.status(403).json({ error: "Access denied — not a super admin" });
   if (!user.pin) return res.status(401).json({ error: "No PIN configured for this user" });
-  if (user.pin !== pin) return res.status(401).json({ error: "Invalid PIN" });
+
+  const pinMatches = await verifyPin(pin, user.pin);
+  if (!pinMatches) return res.status(401).json({ error: "Invalid credentials" });
+
+  // Transparently upgrade plaintext legacy PINs to bcrypt on first successful login
+  if (!isBcryptHash(user.pin)) {
+    const hashed = await bcrypt.hash(pin, 12);
+    await db.update(usersTable).set({ pin: hashed }).where(eq(usersTable.id, user.id));
+  }
 
   const token = generateToken();
   const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000); // 8-hour session
