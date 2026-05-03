@@ -9,9 +9,9 @@ import { db } from "@workspace/db";
 import {
   staffTable, staffAttendanceTable,
   bridgeFingerprintTemplatesTable, userSessionsTable,
-  usersTable,
+  usersTable, portalSessionsTable,
 } from "@workspace/db/schema";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, sql, desc, gt } from "drizzle-orm";
 
 export const bridgeRouter = Router();
 
@@ -30,6 +30,67 @@ function requireBridgeAuth(req: Parameters<Parameters<typeof bridgeRouter.use>[0
   next();
 }
 
+// ── Challenge token stores ────────────────────────
+// All sensitive bridge operations require a short-lived, single-use challenge
+// token obtained from the ERP server before the bridge is permitted to act.
+// This ensures that raw fetch() calls from arbitrary scripts cannot trigger
+// biometric operations without going through the proper ERP authorization flow.
+
+interface SimpleChallenge {
+  expiresAt: number;
+  used: boolean;
+}
+
+interface EnrollChallenge extends SimpleChallenge {
+  scope: "staff" | "user";
+  scopeId: number;
+}
+
+const ENROLL_CHALLENGE_TTL_MS = 5 * 60 * 1000;
+const PUNCH_CHALLENGE_TTL_MS = 2 * 60 * 1000;
+const LOGIN_CHALLENGE_TTL_MS = 2 * 60 * 1000;
+
+const enrollChallenges = new Map<string, EnrollChallenge>();
+const punchChallenges = new Map<string, SimpleChallenge>();
+const loginChallenges = new Map<string, SimpleChallenge>();
+
+// Purge stale challenge tokens periodically so the maps do not grow unbounded.
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, ch] of enrollChallenges) {
+    if (ch.used || ch.expiresAt < now) enrollChallenges.delete(token);
+  }
+  for (const [token, ch] of punchChallenges) {
+    if (ch.used || ch.expiresAt < now) punchChallenges.delete(token);
+  }
+  for (const [token, ch] of loginChallenges) {
+    if (ch.used || ch.expiresAt < now) loginChallenges.delete(token);
+  }
+}, 60_000);
+
+/** Validates a simple challenge map entry: exists, unused, not expired. Marks it used on success. */
+function consumeChallenge(map: Map<string, SimpleChallenge>, token: string): { ok: true } | { ok: false; status: number; error: string } {
+  if (!token) return { ok: false, status: 401, error: "Challenge token required" };
+  const ch = map.get(token);
+  if (!ch) return { ok: false, status: 401, error: "Invalid challenge token" };
+  if (ch.used) return { ok: false, status: 401, error: "Challenge token has already been used" };
+  if (Date.now() > ch.expiresAt) { map.delete(token); return { ok: false, status: 401, error: "Challenge token has expired" }; }
+  ch.used = true;
+  return { ok: true };
+}
+
+/** Validates a staff Bearer token and returns the session row, or null if invalid/expired. */
+async function validateStaffToken(authHeader: string) {
+  const raw = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+  if (!raw) return null;
+  const [session] = await db
+    .select()
+    .from(portalSessionsTable)
+    .where(and(eq(portalSessionsTable.token, raw), eq(portalSessionsTable.scope, "staff"), gt(portalSessionsTable.expiresAt, new Date())))
+    .limit(1);
+  return session ?? null;
+}
+
 // ── Health & configuration ────────────────────────
 bridgeRouter.get("/info", (_req, res) => {
   res.json({
@@ -40,9 +101,91 @@ bridgeRouter.get("/info", (_req, res) => {
   });
 });
 
+// ── Issue an enrollment challenge token ──────────
+// Requires a valid staff session (Authorization: Bearer <token>).
+// Returns a short-lived one-time token that authorises exactly one enrollment
+// of the requested scope/scopeId through the bridge. The bridge must present
+// this token as x-enroll-token when it calls /api/bridge/enroll.
+bridgeRouter.post("/enroll-challenge", async (req, res) => {
+  const session = await validateStaffToken(String(req.headers.authorization ?? ""));
+  if (!session) {
+    return res.status(401).json({ error: "Staff session required to initiate fingerprint enrollment" });
+  }
+
+  const body = req.body as { scope?: string; scopeId?: number };
+  const scope = body.scope === "user" ? "user" : "staff";
+  const scopeId = Number(body.scopeId);
+  if (!scopeId) return res.status(400).json({ error: "scopeId required" });
+
+  // Verify that the subject being enrolled actually exists
+  if (scope === "staff") {
+    const [s] = await db.select({ id: staffTable.id }).from(staffTable).where(eq(staffTable.id, scopeId));
+    if (!s) return res.status(404).json({ error: "Staff not found" });
+  } else {
+    const [u] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.id, scopeId));
+    if (!u) return res.status(404).json({ error: "User not found" });
+  }
+
+  const challengeToken = crypto.randomBytes(32).toString("hex");
+  enrollChallenges.set(challengeToken, {
+    scope,
+    scopeId,
+    expiresAt: Date.now() + ENROLL_CHALLENGE_TTL_MS,
+    used: false,
+  });
+
+  res.json({ enrollToken: challengeToken, expiresInSeconds: ENROLL_CHALLENGE_TTL_MS / 1000 });
+});
+
+// ── Issue a punch challenge token ─────────────────
+// Requires a valid staff session. The ERP UI must call this before asking the
+// bridge to capture and record an attendance punch, ensuring only an
+// authenticated ERP user (e.g. receptionist, HR) can initiate punch sessions.
+bridgeRouter.post("/punch-challenge", async (req, res) => {
+  const session = await validateStaffToken(String(req.headers.authorization ?? ""));
+  if (!session) {
+    return res.status(401).json({ error: "Staff session required to initiate attendance punch" });
+  }
+
+  const punchToken = crypto.randomBytes(32).toString("hex");
+  punchChallenges.set(punchToken, { expiresAt: Date.now() + PUNCH_CHALLENGE_TTL_MS, used: false });
+  res.json({ punchToken, expiresInSeconds: PUNCH_CHALLENGE_TTL_MS / 1000 });
+});
+
+// ── Issue a login challenge token ─────────────────
+// No session required — this is part of the fingerprint login flow itself.
+// The token is short-lived and single-use; requiring it means that calling
+// /api/bridge/user-login demands a proper two-step flow rather than a raw
+// single fetch(), which breaks simple scripted automation.
+bridgeRouter.post("/login-challenge", (_req, res) => {
+  const loginToken = crypto.randomBytes(32).toString("hex");
+  loginChallenges.set(loginToken, { expiresAt: Date.now() + LOGIN_CHALLENGE_TTL_MS, used: false });
+  res.json({ loginToken, expiresInSeconds: LOGIN_CHALLENGE_TTL_MS / 1000 });
+});
+
 // ── Enroll a fingerprint template ─────────────────
 // Bridge captures the print using vendor SDK and POSTs the resulting template here.
+// In addition to the bridge secret, the bridge must supply an x-enroll-token
+// that was previously issued by POST /api/bridge/enroll-challenge to an
+// authenticated staff session. The token is single-use and expires in 5 minutes.
 bridgeRouter.post("/enroll", requireBridgeAuth, async (req, res) => {
+  const enrollToken = String(req.headers["x-enroll-token"] ?? "");
+  if (!enrollToken) {
+    return res.status(401).json({ error: "x-enroll-token is required. Obtain one via POST /api/bridge/enroll-challenge with a valid staff session." });
+  }
+
+  const challenge = enrollChallenges.get(enrollToken);
+  if (!challenge) {
+    return res.status(401).json({ error: "Invalid enrollment token" });
+  }
+  if (challenge.used) {
+    return res.status(401).json({ error: "Enrollment token has already been used" });
+  }
+  if (Date.now() > challenge.expiresAt) {
+    enrollChallenges.delete(enrollToken);
+    return res.status(401).json({ error: "Enrollment token has expired" });
+  }
+
   const body = req.body as { scope?: string; scopeId?: number; vendor?: string; template?: string; fingerName?: string; quality?: number };
   const scope = body.scope === "user" ? "user" : "staff";
   const scopeId = Number(body.scopeId);
@@ -50,6 +193,14 @@ bridgeRouter.post("/enroll", requireBridgeAuth, async (req, res) => {
   if (!scopeId || !template || template.length < 8) {
     return res.status(400).json({ error: "scopeId and template required" });
   }
+
+  // Enforce that the token authorises exactly the scope/scopeId being enrolled.
+  if (challenge.scope !== scope || challenge.scopeId !== scopeId) {
+    return res.status(403).json({ error: "Enrollment token is not valid for this scope/scopeId" });
+  }
+
+  // Mark as used before the DB write so a concurrent duplicate request is rejected.
+  challenge.used = true;
 
   // Sanity check the scopeId exists
   if (scope === "staff") {
@@ -114,7 +265,13 @@ bridgeRouter.delete("/templates/:id", requireBridgeAuth, async (req, res) => {
 
 // ── Identify staff and punch attendance ───────────
 // Bridge has already done the matching and posts the matched template id.
+// Requires x-punch-token issued by POST /api/bridge/punch-challenge, which in
+// turn requires a valid staff session — so only authenticated ERP users can
+// trigger an attendance punch.
 bridgeRouter.post("/staff-punch", requireBridgeAuth, async (req, res) => {
+  const punchCheck = consumeChallenge(punchChallenges, String(req.headers["x-punch-token"] ?? ""));
+  if (!punchCheck.ok) return res.status(punchCheck.status).json({ error: punchCheck.error });
+
   const body = req.body as { templateId?: number; action?: string };
   const templateId = Number(body.templateId);
   if (!templateId) return res.status(400).json({ error: "templateId required" });
@@ -172,7 +329,13 @@ bridgeRouter.post("/staff-punch", requireBridgeAuth, async (req, res) => {
 });
 
 // ── Identify user and create login session ────────
+// Requires x-login-token issued by POST /api/bridge/login-challenge. No session
+// is needed to obtain the login-challenge token (fingerprint IS the auth), but
+// the two-step flow prevents a single raw fetch() from triggering logins.
 bridgeRouter.post("/user-login", requireBridgeAuth, async (req, res) => {
+  const loginCheck = consumeChallenge(loginChallenges, String(req.headers["x-login-token"] ?? ""));
+  if (!loginCheck.ok) return res.status(loginCheck.status).json({ error: loginCheck.error });
+
   const body = req.body as { templateId?: number };
   const templateId = Number(body.templateId);
   if (!templateId) return res.status(400).json({ error: "templateId required" });

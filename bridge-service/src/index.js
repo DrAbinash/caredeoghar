@@ -97,13 +97,18 @@ app.post("/capture", async (_req, res) => {
 });
 
 // ── Enroll: capture → POST to ERP ──────────────────────
+// Requires an enrollToken obtained from POST /api/bridge/enroll-challenge by an
+// authenticated staff session. Without this token the ERP server will reject
+// the enrollment, preventing unauthorised fingerprint registration.
 app.post("/enroll", async (req, res) => {
   try {
-    const { scope, scopeId, fingerName } = req.body ?? {};
+    const { scope, scopeId, fingerName, enrollToken } = req.body ?? {};
     if (!scope || !scopeId) return res.status(400).json({ error: "scope and scopeId required" });
+    if (!enrollToken) return res.status(400).json({ error: "enrollToken is required. The ERP client must obtain one via POST /api/bridge/enroll-challenge before calling /enroll." });
     const { template, quality } = await adapter.capture();
     const stored = await erp("/api/bridge/enroll", {
       method: "POST",
+      headers: { "x-enroll-token": enrollToken },
       body: JSON.stringify({ scope, scopeId, vendor: VENDOR, template, quality, fingerName }),
     });
     res.json({ ok: true, template: stored });
@@ -137,9 +142,12 @@ app.post("/identify", async (req, res) => {
 });
 
 // ── Punch attendance: identify staff + tell ERP ────────
+// Requires punchToken obtained from POST /api/bridge/punch-challenge by an
+// authenticated staff session. Without it the ERP server rejects the punch.
 app.post("/staff-punch", async (req, res) => {
   try {
-    const { action } = req.body ?? {};
+    const { action, punchToken } = req.body ?? {};
+    if (!punchToken) return res.status(400).json({ error: "punchToken is required. The ERP client must obtain one via POST /api/bridge/punch-challenge before calling /staff-punch." });
     const { template: live } = await adapter.capture();
     const candidates = await erp(`/api/bridge/templates?scope=staff`);
     if (!candidates.length) return res.status(404).json({ error: "No staff fingerprints enrolled" });
@@ -151,6 +159,7 @@ app.post("/staff-punch", async (req, res) => {
     if (!best || best.score < adapter.threshold) return res.status(404).json({ error: "Not recognised" });
     const result = await erp("/api/bridge/staff-punch", {
       method: "POST",
+      headers: { "x-punch-token": punchToken },
       body: JSON.stringify({ templateId: best.id, action: action ?? "in" }),
     });
     res.json({ ...result, score: best.score });
@@ -160,8 +169,13 @@ app.post("/staff-punch", async (req, res) => {
 });
 
 // ── User login: identify user + get a session token ────
-app.post("/user-login", async (_req, res) => {
+// Requires loginToken obtained from POST /api/bridge/login-challenge. No staff
+// session is needed to get the login-challenge (fingerprint IS the auth), but
+// requiring the two-step flow prevents raw single-fetch scripted login attempts.
+app.post("/user-login", async (req, res) => {
   try {
+    const { loginToken } = req.body ?? {};
+    if (!loginToken) return res.status(400).json({ error: "loginToken is required. Obtain one via POST /api/bridge/login-challenge before calling /user-login." });
     const { template: live } = await adapter.capture();
     const candidates = await erp(`/api/bridge/templates?scope=user`);
     if (!candidates.length) return res.status(404).json({ error: "No users enrolled" });
@@ -173,6 +187,7 @@ app.post("/user-login", async (_req, res) => {
     if (!best || best.score < adapter.threshold) return res.status(404).json({ error: "Not recognised" });
     const session = await erp("/api/bridge/user-login", {
       method: "POST",
+      headers: { "x-login-token": loginToken },
       body: JSON.stringify({ templateId: best.id }),
     });
     res.json({ ...session, score: best.score });
