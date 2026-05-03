@@ -1,6 +1,13 @@
 import { Router } from "express";
+import { requireStaffAuth } from "../middleware/requireStaffAuth";
 
 const router = Router();
+
+// Defense-in-depth: enforce staff authentication at the router level.
+// These endpoints proxy requests to the PACS/Orthanc backend using stored
+// credentials and return patient imaging data — unauthenticated access would
+// expose DICOM patient records and internal PACS configuration.
+router.use(requireStaffAuth);
 
 function getOrthancConfig() {
   const url = (process.env.ORTHANC_URL || "").replace(/\/$/, "");

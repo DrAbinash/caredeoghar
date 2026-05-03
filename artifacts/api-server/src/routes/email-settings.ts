@@ -2,8 +2,16 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { emailSettingsTable } from "@workspace/db/schema";
 import { sendDailySummaryEmail, sendBillEditEmail } from "../email";
+import { resolveAndCheckHost } from "../lib/pacs/providers";
+import { requireStaffAuth } from "../middleware/requireStaffAuth";
 
 const router = Router();
+
+// Defense-in-depth: enforce staff authentication at the router level.
+// These endpoints read/write SMTP credentials and can trigger outbound
+// email/network connections — they must never be reachable without a
+// valid staff session.
+router.use(requireStaffAuth);
 
 router.get("/", async (_req, res) => {
   const [settings] = await db.select().from(emailSettingsTable).limit(1);
@@ -17,6 +25,14 @@ router.get("/", async (_req, res) => {
 router.post("/", async (req, res) => {
   const { smtpHost, smtpPort, smtpUser, smtpPassword, smtpSecure, fromAddress, fromName,
     adminEmail, extraRecipients, billEditEnabled, dailySummaryEnabled, dailySummaryTime } = req.body;
+
+  if (smtpHost) {
+    const check = await resolveAndCheckHost(String(smtpHost));
+    if (!check.ok) {
+      res.status(400).json({ error: `Invalid SMTP host: ${check.error}` });
+      return;
+    }
+  }
 
   const [existing] = await db.select().from(emailSettingsTable).limit(1);
 

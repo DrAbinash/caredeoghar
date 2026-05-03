@@ -116,20 +116,98 @@ export function getPacsProvider(): PacsProvider {
 
 // Block obviously dangerous targets to limit SSRF abuse. The tcpProbe is
 // reachable from any authenticated session, so we refuse cloud metadata
-// services and other well-known hostile destinations even though most ERP
-// installs are firewalled to a LAN.
+// services, loopback, and private/link-local network ranges.
 const SSRF_BLOCK_LITERAL = new Set([
   "169.254.169.254",   // AWS / GCP / Azure / DigitalOcean metadata
   "100.100.100.200",   // Alibaba Cloud metadata
   "fd00:ec2::254",     // AWS IPv6 metadata
+  "localhost",
+  "::1",               // IPv6 loopback
+  "0.0.0.0",
 ]);
-function isBlockedHost(host: string): string | null {
+
+function parseIPv4Parts(h: string): number[] | null {
+  const parts = h.split(".");
+  if (parts.length !== 4) return null;
+  const nums = parts.map(Number);
+  if (nums.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+  return nums;
+}
+
+function isPrivateIPv4(h: string): boolean {
+  const p = parseIPv4Parts(h);
+  if (!p) return false;
+  const [a, b] = p;
+  // 127.0.0.0/8 — loopback
+  if (a === 127) return true;
+  // 10.0.0.0/8 — private
+  if (a === 10) return true;
+  // 172.16.0.0/12 — private
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  // 192.168.0.0/16 — private
+  if (a === 192 && b === 168) return true;
+  // 169.254.0.0/16 — link-local (covers all, not just 169.254.169.x)
+  if (a === 169 && b === 254) return true;
+  // 100.64.0.0/10 — CGNAT / shared address space
+  if (a === 100 && b >= 64 && b <= 127) return true;
+  // 0.0.0.0/8
+  if (a === 0) return true;
+  return false;
+}
+
+function isPrivateIPv6(h: string): boolean {
+  // Strip brackets like [::1]
+  const bare = h.startsWith("[") && h.endsWith("]") ? h.slice(1, -1) : h;
+  if (bare === "::1") return true;
+  const lower = bare.toLowerCase();
+  // fe80::/10 — link-local
+  if (/^fe[89ab][0-9a-f]:/i.test(lower)) return true;
+  // fc00::/7 — ULA (fc and fd)
+  if (/^f[cd]/i.test(lower)) return true;
+  return false;
+}
+
+export function isBlockedHost(host: string): string | null {
   const h = host.trim().toLowerCase();
   if (!h) return "host is empty";
-  if (SSRF_BLOCK_LITERAL.has(h)) return `${h} is a cloud metadata endpoint and is blocked`;
-  // Block AWS metadata range 169.254.169.x just in case.
-  if (/^169\.254\.169\.\d+$/.test(h)) return "169.254.169.0/24 is blocked (cloud metadata range)";
+  if (SSRF_BLOCK_LITERAL.has(h)) return `${h} is a blocked address`;
+  if (isPrivateIPv4(h)) return `${h} is a private/loopback address and is blocked`;
+  if (isPrivateIPv6(h)) return `${h} is a private/loopback IPv6 address and is blocked`;
   return null;
+}
+
+// Resolve a hostname to its IP addresses and check every resolved address
+// against the private-range blocklist. Returns either a blocking error string
+// or the first safe resolved IP to connect to. By returning the IP, callers
+// avoid a second DNS lookup that could be exploited by DNS rebinding.
+type HostCheckResult =
+  | { ok: false; error: string }
+  | { ok: true; resolvedIp: string };
+
+export async function resolveAndCheckHost(host: string): Promise<HostCheckResult> {
+  // Check literal string first (catches bare IPs and "localhost").
+  const literalBlocked = isBlockedHost(host);
+  if (literalBlocked) return { ok: false, error: literalBlocked };
+
+  const dns = await import("node:dns/promises");
+  let addresses: { address: string }[];
+  try {
+    addresses = await dns.lookup(host, { all: true, verbatim: true });
+  } catch {
+    return { ok: false, error: `Could not resolve host: ${host}` };
+  }
+  if (!addresses || addresses.length === 0) {
+    return { ok: false, error: `No addresses resolved for: ${host}` };
+  }
+  for (const { address } of addresses) {
+    const blocked = isBlockedHost(address);
+    if (blocked) {
+      return { ok: false, error: `${host} resolves to a blocked address (${address}): ${blocked}` };
+    }
+  }
+  // Return the first resolved IP so callers can connect to it directly,
+  // eliminating the second OS-level DNS lookup and the rebinding race window.
+  return { ok: true, resolvedIp: addresses[0].address };
 }
 
 // TCP reachability check used by the DICOM Node "Test" button. Real C-ECHO
@@ -138,19 +216,23 @@ function isBlockedHost(host: string): string | null {
 export async function tcpProbe(host: string, port: number, timeoutMs = 3000): Promise<{
   ok: boolean; latencyMs: number; message: string;
 }> {
-  const blocked = isBlockedHost(host);
-  if (blocked) return { ok: false, latencyMs: 0, message: blocked };
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     return { ok: false, latencyMs: 0, message: `Invalid port ${port}` };
   }
+  // Resolve the hostname once, check all resolved IPs against the blocklist,
+  // then connect to the returned IP directly — no second lookup, no rebinding race.
+  const check = await resolveAndCheckHost(host);
+  if (!check.ok) return { ok: false, latencyMs: 0, message: check.error };
+  const connectIp = check.resolvedIp;
+
   const net = await import("node:net");
   const start = Date.now();
   return await new Promise((resolve) => {
     const sock = new net.Socket();
-    let resolved = false;
+    let didResolve = false;
     const finish = (ok: boolean, msg: string) => {
-      if (resolved) return;
-      resolved = true;
+      if (didResolve) return;
+      didResolve = true;
       try { sock.destroy(); } catch { /* noop */ }
       resolve({ ok, latencyMs: Date.now() - start, message: msg });
     };
@@ -159,7 +241,7 @@ export async function tcpProbe(host: string, port: number, timeoutMs = 3000): Pr
     sock.once("timeout", () => finish(false, `Timed out after ${timeoutMs}ms`));
     sock.once("error", (err) => finish(false, err.message));
     try {
-      sock.connect(port, host);
+      sock.connect(port, connectIp);
     } catch (err) {
       finish(false, err instanceof Error ? err.message : "connect threw");
     }

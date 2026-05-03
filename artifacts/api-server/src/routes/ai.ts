@@ -3,8 +3,14 @@ import { db } from "@workspace/db";
 import { patientsTable, ordersTable } from "@workspace/db";
 import { orderTestsTable, testsTable, billsTable, paymentsTable } from "@workspace/db";
 import { eq, desc, gte, lte, and } from "drizzle-orm";
+import { requireStaffAuth } from "../middleware/requireStaffAuth";
 
 const router = Router();
+
+// Defense-in-depth: enforce staff authentication at the router level.
+// These endpoints load patient PHI and billing data and send it to an external
+// AI provider — they must never be reachable without a valid staff session.
+router.use(requireStaffAuth);
 
 const BASE_URL = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com";
 const API_KEY = process.env.AI_INTEGRATIONS_GEMINI_API_KEY ?? "";

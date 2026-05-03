@@ -13,9 +13,17 @@ import {
 import { eq, and, desc, sql, ilike, or } from "drizzle-orm";
 import { sendReportWhatsapp } from "./whatsapp";
 import { sendReportEmail } from "../email";
+import { requireStaffAuth } from "../middleware/requireStaffAuth";
 
 export const patientReportsRouter: IRouter = Router();
 export const signaturesRouter: IRouter = Router();
+
+// Defense-in-depth: enforce staff authentication at the router level.
+// The print/pdf/share endpoints render patient PHI into HTML; the create/patch
+// endpoints store parameters whose flag values are interpolated into HTML.
+// Neither must be reachable without a valid staff session.
+patientReportsRouter.use(requireStaffAuth);
+signaturesRouter.use(requireStaffAuth);
 
 // ────────────────────────────────────────────────────────────────────────────
 // Signatures CRUD
@@ -496,10 +504,13 @@ async function buildReportHtml(reportId: number, autoPrint: boolean): Promise<st
               ${arr.map((p) => {
                 const result = String(p.result ?? p.value ?? "");
                 const flag = String(p.flag ?? "normal").toLowerCase();
-                const flagged = flag !== "normal" && flag !== "";
+                // Restrict flag to a safe CSS class suffix: only lowercase letters,
+                // digits, and hyphens. This prevents attribute injection.
+                const safeFlag = flag.replace(/[^a-z0-9-]/g, "");
+                const flagged = safeFlag !== "normal" && safeFlag !== "";
                 return `<tr class="${flagged ? "abnormal" : ""}">
                   <td>${escapeHtml(p.name)}</td>
-                  <td><strong>${escapeHtml(result)}</strong>${flagged ? ` <span class="flag flag-${flag}">${escapeHtml(flag.toUpperCase())}</span>` : ""}</td>
+                  <td><strong>${escapeHtml(result)}</strong>${flagged ? ` <span class="flag flag-${safeFlag}">${escapeHtml(safeFlag.toUpperCase())}</span>` : ""}</td>
                   <td>${escapeHtml(p.unit ?? "")}</td>
                   <td>${escapeHtml(p.refRange ?? "")}</td>
                 </tr>`;

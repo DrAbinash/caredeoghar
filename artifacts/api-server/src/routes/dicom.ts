@@ -3,8 +3,14 @@ import { db, dicomNodesTable, insertDicomNodeSchema } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { z } from "zod/v4";
 import { getPacsProvider, tcpProbe } from "../lib/pacs/providers";
+import { requireStaffAuth } from "../middleware/requireStaffAuth";
 
 const router: IRouter = Router();
+
+// Defense-in-depth: enforce staff authentication at the router level.
+// The /test-connection endpoint performs server-side TCP probes; without auth
+// it could be used as an unauthenticated internal network scanner.
+router.use(requireStaffAuth);
 
 // Drizzle/node-postgres wraps the underlying PG error, so the SQLSTATE code may
 // live on `err`, `err.cause`, or deeper. Walk the chain.
