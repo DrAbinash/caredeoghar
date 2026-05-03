@@ -45,16 +45,15 @@ README-WINDOWS.md
 DEPLOY.md
 replit.md
 
-# === HEAVY: Windows offline distributables (4 GB+) ===
-# These are end-user installer zips/exes for on-prem Windows deployments.
-# The cloud deployment runs the same source code directly and does NOT need them.
-windows-build/dist
-windows-build/.cache
-windows-build/payload-cache
-windows-build/node_modules
-windows-build/dist/payload
-windows-build/dist/portable
-windows-build/dist/electron
+# === HEAVY: Entire Windows offline distributables package ===
+# windows-build is a build-only package that produces .exe / .zip files for
+# on-prem Windows installs. The cloud deployment runs the source apps directly
+# (api-server, clinic-site, diagnostic-erp, super-admin-portal) and does NOT
+# need any of windows-build's source, scripts, runtimes, electron, or outputs.
+# Excluding the whole tree avoids ~250 MB of electron deps + multi-GB outputs
+# from ever entering the deploy image.
+windows-build
+windows-build/**
 
 # Mockup sandbox is a dev-only design tool, not a production artifact
 artifacts/mockup-sandbox
