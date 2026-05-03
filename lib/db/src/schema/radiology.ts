@@ -24,6 +24,14 @@ export const radiologyStudiesTable = pgTable(
     roomNumber: text("room_number").notNull().default(""),
     technicianId: integer("technician_id"),
     technicianName: text("technician_name"),
+    // Tele-radiology: a study may be claimed by a remote radiologist for
+    // night/back-up reading. Cleared when the study is unclaimed or final.
+    assignedRadiologistId: integer("assigned_radiologist_id"),
+    assignedRadiologistName: text("assigned_radiologist_name"),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    // Optional clinical context entered by reception/technician — used as
+    // input to the AI findings/impression assistants.
+    clinicalHistory: text("clinical_history"),
     status: text("status").notNull().default("scheduled"),
     scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull().defaultNow(),
     startedAt: timestamp("started_at", { withTimezone: true }),

@@ -36,6 +36,47 @@ async function geminiGenerate(prompt: string, maxTokens = 512): Promise<string> 
   return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
 }
 
+// Multimodal generate: sends an inline audio part for transcription. The Gemini
+// AI-integrations proxy supports inline data up to ~8 MB — callers must chunk
+// long recordings before invoking this. Returns transcribed plain text.
+async function geminiTranscribe(audioBase64: string, mimeType: string): Promise<string> {
+  const url = `${BASE_URL}/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
+  const prompt = "Transcribe the radiologist's dictation verbatim. Return only the spoken text — no headings, no commentary, no timestamps. Preserve medical terminology exactly as spoken.";
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{
+        role: "user",
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType, data: audioBase64 } },
+        ],
+      }],
+      generationConfig: { maxOutputTokens: 8192 },
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Gemini transcription error: ${res.status} ${err}`);
+  }
+  const data = await res.json() as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  };
+  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+}
+
+// Modality → human-readable expansion used in radiology prompts.
+const MODALITY_NAMES: Record<string, string> = {
+  MR: "MRI",
+  CT: "CT",
+  CR: "X-Ray",
+  US: "Ultrasound",
+  MG: "Mammography",
+  BMD: "DEXA bone density",
+  OT: "Imaging study",
+};
+
 // Generate AI clinical notes for a patient
 router.post("/clinical-note", async (req, res) => {
   const { patientId } = req.body;
@@ -154,6 +195,95 @@ Keep it brief, friendly, and professional. Include the center name. Do not inclu
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     res.status(500).json({ error: msg });
+  }
+});
+
+// ── Radiology AI assistants ─────────────────────────────────────────────────
+// Generate structured findings for a radiology study.
+// Body: { modality: string, testName?: string, clinicalHistory?: string, dictation?: string }
+// Returns: { findings: string }
+router.post("/radiology-findings", async (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const modality = String(b.modality ?? "").trim();
+  const testName = String(b.testName ?? "").trim();
+  const clinicalHistory = String(b.clinicalHistory ?? "").trim();
+  const dictation = String(b.dictation ?? "").trim();
+  if (!modality && !testName) {
+    res.status(400).json({ error: "modality or testName required" }); return;
+  }
+  const modalityName = MODALITY_NAMES[modality] ?? modality ?? "Imaging";
+  const prompt = `You are a senior radiologist drafting the FINDINGS section of a ${modalityName} report.
+
+Study: ${testName || modalityName}
+Clinical history: ${clinicalHistory || "(none provided)"}
+Radiologist dictation / observations: ${dictation || "(none provided — produce a clean structured template the radiologist can fill in)"}
+
+Write a professional FINDINGS section organised by anatomical region in short clear paragraphs.
+- Use formal medical language and standard radiology phrasing.
+- Quantify measurements where the dictation gives numbers (mm, cm).
+- Use "No abnormality" or "Within normal limits" where the dictation is silent or explicitly normal — do NOT invent pathology.
+- Do NOT include the IMPRESSION section. Do NOT include patient demographics. Do NOT include any disclaimer.
+- Output only the findings narrative, ready to paste into the report.`;
+
+  try {
+    const findings = await geminiGenerate(prompt, 8192);
+    res.json({ findings });
+  } catch (err: unknown) {
+    req.log?.error({ err }, "ai radiology-findings failed");
+    res.status(502).json({ error: "AI service unavailable. Please try again or write the findings manually." });
+  }
+});
+
+// Generate a 1–4 line impression bullet list from a findings narrative.
+// Body: { findings: string, modality?: string, testName?: string }
+router.post("/radiology-impression", async (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const findings = String(b.findings ?? "").trim();
+  const modality = String(b.modality ?? "").trim();
+  const testName = String(b.testName ?? "").trim();
+  if (!findings) { res.status(400).json({ error: "findings required" }); return; }
+  const modalityName = MODALITY_NAMES[modality] ?? modality ?? "imaging study";
+  const prompt = `You are a senior radiologist. Read the FINDINGS below from a ${modalityName} ${testName ? `(${testName}) ` : ""}and write a concise IMPRESSION.
+
+FINDINGS:
+${findings}
+
+Rules:
+- 1 to 4 numbered bullet points.
+- Each bullet ≤ 25 words, plain medical language.
+- Order by clinical significance (most important first).
+- Suggest follow-up imaging or clinical correlation only if findings warrant it.
+- Output only the numbered impression list. No heading, no preamble, no disclaimer.`;
+  try {
+    const impression = await geminiGenerate(prompt, 1024);
+    res.json({ impression });
+  } catch (err: unknown) {
+    req.log?.error({ err }, "ai radiology-impression failed");
+    res.status(502).json({ error: "AI service unavailable. Please try again or write the impression manually." });
+  }
+});
+
+// Transcribe a short voice dictation. Body: { audioBase64, mimeType }
+// Browsers' built-in Web Speech API does the live transcription on the client;
+// this endpoint is the server-side fallback for browsers that lack it (Firefox,
+// Safari on some devices) or when the radiologist uploads a recorded clip.
+router.post("/transcribe", async (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const audioBase64 = typeof b.audioBase64 === "string" ? b.audioBase64 : "";
+  const mimeType = typeof b.mimeType === "string" && b.mimeType ? b.mimeType : "audio/webm";
+  if (!audioBase64) { res.status(400).json({ error: "audioBase64 required" }); return; }
+  // Reject anything > ~7.5 MB after base64 expansion to stay under Gemini's 8 MB inline cap.
+  const approxBytes = Math.floor((audioBase64.length * 3) / 4);
+  if (approxBytes > 7_500_000) {
+    res.status(413).json({ error: "Audio chunk too large (max ~7.5 MB). Split into shorter clips." });
+    return;
+  }
+  try {
+    const text = await geminiTranscribe(audioBase64, mimeType);
+    res.json({ text });
+  } catch (err: unknown) {
+    req.log?.error({ err }, "ai transcribe failed");
+    res.status(502).json({ error: "Voice transcription is temporarily unavailable. Please try again." });
   }
 });
 

@@ -11,12 +11,32 @@ import {
   radiologyStudiesTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, sql, ilike, or } from "drizzle-orm";
-import { sendReportWhatsapp } from "./whatsapp";
+import { sendReportWhatsapp, sendReportDelivery } from "./whatsapp";
+import crypto from "node:crypto";
+import {
+  whatsappSettingsTable,
+  radiologyShareLinksTable,
+} from "@workspace/db/schema";
 import { sendReportEmail } from "../email";
 import { requireStaffAuth } from "../middleware/requireStaffAuth";
 
 export const patientReportsRouter: IRouter = Router();
 export const signaturesRouter: IRouter = Router();
+// Public — no auth. Mounted at /api/p/r in routes/index.ts. Used by patient
+// WhatsApp links to download a verified report PDF without staff sign-in.
+export const publicReportsRouter: IRouter = Router();
+
+async function ensurePublicToken(reportId: number): Promise<string | null> {
+  const [row] = await db.select().from(patientReportsTable).where(eq(patientReportsTable.id, reportId));
+  if (!row) return null;
+  if (row.publicToken) return row.publicToken;
+  const token = crypto.randomBytes(24).toString("base64url");
+  const [updated] = await db.update(patientReportsTable)
+    .set({ publicToken: token })
+    .where(eq(patientReportsTable.id, reportId))
+    .returning();
+  return updated?.publicToken ?? token;
+}
 
 // Defense-in-depth: enforce staff authentication at the router level.
 // The print/pdf/share endpoints render patient PHI into HTML; the create/patch
@@ -428,7 +448,100 @@ patientReportsRouter.post("/:id/verify", async (req, res) => {
     verifierNotes: typeof b.verifierNotes === "string" ? b.verifierNotes : null,
     status: "verified",
   }).where(eq(patientReportsTable.id, id)).returning();
+
+  // Auto-WhatsApp delivery on verify (Feature 3) — best-effort, never blocks
+  // the verify response. Honours whatsapp_settings.autoSendOnVerify.
+  void (async () => {
+    try {
+      const [wa] = await db.select().from(whatsappSettingsTable).limit(1);
+      if (!wa || !wa.enabled || !wa.autoSendOnVerify) return;
+      const [info] = await db
+        .select({
+          phone: patientsTable.phone,
+          firstName: patientsTable.firstName,
+          lastName: patientsTable.lastName,
+          testName: testsTable.name,
+        })
+        .from(patientReportsTable)
+        .leftJoin(patientsTable, eq(patientReportsTable.patientId, patientsTable.id))
+        .leftJoin(testsTable, eq(patientReportsTable.testId, testsTable.id))
+        .where(eq(patientReportsTable.id, id));
+      if (!info?.phone) return;
+      const token = await ensurePublicToken(id);
+      const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
+      const host = req.headers["x-forwarded-host"] || req.headers.host || "";
+      const reportUrl = `${proto}://${host}/api/p/r/${token}/pdf`;
+      // Image viewer: only for radiology reports linked to a study.
+      let viewerUrl: string | null = null;
+      if (row.studyId && wa.includeViewerLink !== false) {
+        // Reuse / mint a "patient" share link for the study viewer.
+        const [existing] = await db
+          .select()
+          .from(radiologyShareLinksTable)
+          .where(and(
+            eq(radiologyShareLinksTable.studyId, row.studyId),
+            eq(radiologyShareLinksTable.audience, "patient"),
+          ))
+          .orderBy(desc(radiologyShareLinksTable.createdAt))
+          .limit(1);
+        let viewerToken = existing && !existing.revokedAt && (!existing.expiresAt || existing.expiresAt.getTime() > Date.now())
+          ? existing.token
+          : null;
+        if (!viewerToken) {
+          viewerToken = crypto.randomBytes(24).toString("base64url");
+          await db.insert(radiologyShareLinksTable).values({
+            token: viewerToken,
+            studyId: row.studyId,
+            audience: "patient",
+            expiresAt: new Date(Date.now() + 168 * 3600 * 1000),
+          });
+        }
+        viewerUrl = `${proto}://${host}/api/teleradiology/share/${viewerToken}`;
+      }
+      const result = await sendReportDelivery({
+        phone: info.phone,
+        patientName: [info.firstName, info.lastName].filter(Boolean).join(" "),
+        reportNumber: row.reportNumber,
+        testName: info.testName ?? "Report",
+        reportUrl,
+        viewerUrl,
+      });
+      const status = result.ok ? "sent" : "failed";
+      await db.insert(reportSharesTable).values({
+        reportId: id, channel: "whatsapp", recipient: info.phone,
+        sharedBy: "auto-on-verify", status, errorMessage: result.error ?? null,
+      }).catch(() => undefined);
+      if (result.ok) {
+        await db.update(patientReportsTable)
+          .set({ status: "delivered", deliveredAt: new Date() })
+          .where(eq(patientReportsTable.id, id))
+          .catch(() => undefined);
+      }
+    } catch (err) {
+      req.log?.error({ err }, "auto-whatsapp-on-verify failed");
+    }
+  })();
+
   res.json(row);
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Tokenized PDF / public download — staff endpoint that mints a token.
+// POST /api/patient-reports/:id/public-link → { url, token }
+// ────────────────────────────────────────────────────────────────────────────
+patientReportsRouter.post("/:id/public-link", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [row] = await db.select().from(patientReportsTable).where(eq(patientReportsTable.id, id));
+  if (!row) { res.status(404).json({ error: "Report not found" }); return; }
+  if (row.status !== "verified" && row.status !== "delivered") {
+    res.status(409).json({ error: "Report must be verified before generating a public link" }); return;
+  }
+  const token = await ensurePublicToken(id);
+  if (!token) { res.status(500).json({ error: "Could not allocate token" }); return; }
+  const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
+  const host = req.headers["x-forwarded-host"] || req.headers.host || "";
+  res.json({ token, url: `${proto}://${host}/api/p/r/${token}/pdf` });
 });
 
 // Acknowledge a critical alert (silences the dashboard counter).
@@ -652,6 +765,28 @@ patientReportsRouter.get("/:id/pdf", async (req, res) => {
   res.send(html);
 });
 
+// PUBLIC tokenized PDF — no staff auth. Looked up by random token, only
+// returns reports that are already verified (no drafts leak to patients).
+publicReportsRouter.get("/:token/pdf", async (req, res) => {
+  const token = req.params.token;
+  if (!token || token.length < 16) { res.status(404).send("Not found"); return; }
+  const [row] = await db.select().from(patientReportsTable).where(eq(patientReportsTable.publicToken, token));
+  if (!row) { res.status(404).send("Not found"); return; }
+  if (row.status !== "verified" && row.status !== "delivered") {
+    res.status(403).send("Report not yet finalized"); return;
+  }
+  const html = await buildReportHtml(row.id, false);
+  if (!html) { res.status(404).send("Not found"); return; }
+  await db.insert(reportSharesTable).values({
+    reportId: row.id, channel: "pdf", recipient: "public-link",
+    sharedBy: "patient-link", status: "sent",
+  }).catch(() => undefined);
+  await markDeliveredIfVerified(row.id).catch(() => undefined);
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  res.send(html);
+});
+
 async function markDeliveredIfVerified(id: number) {
   const [row] = await db.select().from(patientReportsTable).where(eq(patientReportsTable.id, id));
   if (!row) return;
@@ -752,7 +887,7 @@ patientReportsRouter.get("/from-study/:studyId", async (req, res) => {
     studyId: study.id,
     type: "radiology" as const,
     title: `${study.modality} Report — ${study.accessionNumber}`,
-    body: study.finalReport ?? study.preliminaryReport ?? "",
+    body: study.finalReport ?? study.prelimReport ?? "",
   });
 });
 

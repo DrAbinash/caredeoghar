@@ -38,7 +38,8 @@ import { reportTemplatesRouter } from "./report-templates";
 import { abnormalFindingsRouter } from "./abnormal-findings";
 import formFRouter from "./form-f";
 import { portalRouter } from "./portal";
-import { patientReportsRouter, signaturesRouter } from "./patient-reports";
+import { patientReportsRouter, signaturesRouter, publicReportsRouter } from "./patient-reports";
+import { teleradiologyRouter } from "./teleradiology";
 import { doctorLedgerRouter } from "./doctor-ledger";
 import { machinesRouter } from "./machines";
 import { departmentsRouter } from "./departments";
@@ -58,6 +59,10 @@ router.use("/super-admin", superAdminRouter);
 router.use("/portal", portalRouter);
 router.use("/display", displayRouter);
 router.use("/bridge", bridgeRouter);
+// Public tokenized PDF download for patient WhatsApp links — no staff auth.
+router.use("/p/r", publicReportsRouter);
+// Public tele-radiology share viewer (token-gated) — no staff auth.
+router.use("/teleradiology", teleradiologyRouter);
 
 // ─── Staff-authenticated ERP routes ──────────────────────────────────────────
 // Each route requiring a module permission is gated with requireStaffPermission

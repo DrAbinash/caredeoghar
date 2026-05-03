@@ -19,7 +19,7 @@ import {
   FlaskConical, Boxes, ShieldCheck, FileDown, KeyRound, Eye, EyeOff,
   Tag, Building2, Image as ImageIcon, Upload, MessageCircle, Printer,
   Search, Globe, Copy, ExternalLink, Check, Network, MapPin, Database,
-  RefreshCcw, FileCode,
+  RefreshCcw, FileCode, Send,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -578,7 +578,15 @@ function ManualTab() { const manualText = buildManualText(); return (<div classN
 
 type DiscountReason = { id: number; label: string; isActive: boolean };
 
-type WhatsappCfg = { id?: number; enabled: boolean; phoneNumberId: string; accessToken: string; templateName: string; templateLang: string; defaultCountryCode: string };
+type WhatsappCfg = {
+  id?: number; enabled: boolean;
+  phoneNumberId: string; accessToken: string;
+  templateName: string; templateLang: string;
+  defaultCountryCode: string;
+  autoSendOnVerify?: boolean;
+  includeViewerLink?: boolean;
+  reportMessageTemplate?: string;
+};
 type PrinterCfg = { id?: number; billPrinter: string; barcodePrinter: string; tokenPrinter: string };
 
 const PRINTER_TABS: { key: keyof Omit<PrinterCfg, "id">; label: string; description: string }[] = [
@@ -884,6 +892,52 @@ function WhatsappTab() {
         <div className="flex justify-end gap-2 pt-2 border-t border-card-border">
           <Button variant="outline" type="button" onClick={() => setForm(cfg ?? null)}>Reset</Button>
           <Button onClick={() => save.mutate(cur)} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
+        </div>
+      </div>
+
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div>
+          <h3 className="font-semibold flex items-center gap-2"><Send size={14} /> Patient Report Auto-Delivery</h3>
+          <p className="text-xs text-muted-foreground mt-1">When a verifier finalises a patient report, automatically send the patient a WhatsApp message with the PDF download link (and, for radiology, a tokenised image-viewer link).</p>
+        </div>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <Label className="font-medium">Auto-send on verify</Label>
+            <p className="text-[11px] text-muted-foreground">Off by default — turn on once your delivery template is approved.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => update("autoSendOnVerify", !cur.autoSendOnVerify)}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${cur.autoSendOnVerify ? "bg-primary" : "bg-muted"}`}
+            aria-label="Toggle auto-send"
+          >
+            <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${cur.autoSendOnVerify ? "translate-x-5" : "translate-x-0"}`} />
+          </button>
+        </div>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <Label className="font-medium">Include image-viewer link (radiology)</Label>
+            <p className="text-[11px] text-muted-foreground">Adds a tokenised tele-radiology viewer URL (7-day expiry) for radiology reports.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => update("includeViewerLink", cur.includeViewerLink === false)}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${cur.includeViewerLink !== false ? "bg-primary" : "bg-muted"}`}
+            aria-label="Toggle viewer link"
+          >
+            <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${cur.includeViewerLink !== false ? "translate-x-5" : "translate-x-0"}`} />
+          </button>
+        </div>
+        <div>
+          <Label>Custom delivery message (optional)</Label>
+          <Textarea
+            value={cur.reportMessageTemplate ?? ""}
+            onChange={(e) => update("reportMessageTemplate", e.target.value)}
+            rows={4}
+            className="mt-1 font-mono text-xs"
+            placeholder={`Leave empty to use the default. Placeholders:\n  {{name}} {{reportNumber}} {{testName}} {{reportUrl}} {{viewerUrl}}`}
+          />
+          <p className="text-[11px] text-muted-foreground mt-1">Sent as a plain WhatsApp text (not a template). Requires the patient to have messaged you within 24h, or for your number to be approved for proactive utility messages.</p>
         </div>
       </div>
 

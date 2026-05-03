@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
+import { readStaffSession } from "@/lib/staffSession";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Radio, Search, RefreshCw, UserCircle2, FileText, Disc, Printer, Image,
   CheckCircle2, PlayCircle, Hourglass, Camera, ClipboardEdit, Send,
+  Mic, MicOff, Sparkles, Link2, Hand, X, Copy as CopyIcon,
 } from "lucide-react";
 
 type Study = {
@@ -32,6 +34,9 @@ type Study = {
   numImages: number;
   technicianId: number | null;
   technicianName: string | null;
+  assignedRadiologistId: number | null;
+  assignedRadiologistName: string | null;
+  claimedAt: string | null;
   studyDate: string;
   prelimReportedAt: string | null;
   finalReportedAt: string | null;
@@ -57,7 +62,78 @@ type StudyDetail = Study & {
   notes: string | null;
   studyInstanceUid: string | null;
   templateId: number | null;
+  clinicalHistory: string | null;
 };
+
+// Built-in fallback templates for the most common neuro/spine cases. These
+// load instantly when no test-specific report template exists, so radiologists
+// always have a structured starting point to dictate over.
+const MODALITY_PRESETS: Array<{ key: string; label: string; modality: string; body: string }> = [
+  {
+    key: "mri-brain", modality: "MR", label: "MRI Brain (routine)",
+    body: `TECHNIQUE: Multiplanar, multisequence MRI of the brain (T1, T2, FLAIR, DWI, GRE/SWI, T1 post-contrast as indicated).
+
+FINDINGS:
+- Cerebral hemispheres: Grey-white matter differentiation is preserved. No acute infarct, mass, or abnormal signal.
+- Ventricles & sulci: Normal in size and configuration.
+- Posterior fossa: Cerebellum and brainstem appear normal.
+- Cerebellopontine angles: No mass.
+- Sella & pituitary: Normal.
+- Vascular flow voids: Preserved in the visualised intracranial vessels.
+- Paranasal sinuses, mastoids, and orbits: Clear.
+
+IMPRESSION:
+1. No acute intracranial abnormality.`,
+  },
+  {
+    key: "mri-spine", modality: "MR", label: "MRI Spine (lumbar)",
+    body: `TECHNIQUE: Sagittal T1 and T2, axial T2 of the lumbar spine.
+
+FINDINGS:
+- Vertebral alignment: Maintained. No listhesis or compression fracture.
+- Marrow signal: Normal.
+- Conus medullaris: Terminates at L1. Normal in signal.
+- Disc levels:
+   • L1-L2: Normal disc height/signal. No herniation. Canal & foramina patent.
+   • L2-L3: Normal disc height/signal. No herniation. Canal & foramina patent.
+   • L3-L4: Normal disc height/signal. No herniation. Canal & foramina patent.
+   • L4-L5: Normal disc height/signal. No herniation. Canal & foramina patent.
+   • L5-S1: Normal disc height/signal. No herniation. Canal & foramina patent.
+- Paraspinal soft tissues: Unremarkable.
+
+IMPRESSION:
+1. No significant disc herniation, canal or foraminal stenosis at the levels imaged.`,
+  },
+  {
+    key: "ct-trauma", modality: "CT", label: "CT Brain (trauma)",
+    body: `TECHNIQUE: Non-contrast axial CT of the brain with multiplanar reformats and bone-window reconstruction.
+
+FINDINGS:
+- Extra-axial space: No epidural, subdural, or subarachnoid haemorrhage.
+- Brain parenchyma: No focal hypodensity to suggest infarct. No intra-axial haemorrhage or contusion. Grey-white differentiation is preserved.
+- Ventricles & midline: Ventricles symmetric. No midline shift. Basal cisterns are patent.
+- Calvarium & skull base: No fracture identified on bone windows.
+- Visualised paranasal sinuses, mastoids, soft tissues: Unremarkable.
+
+IMPRESSION:
+1. No acute intracranial haemorrhage, mass effect, or skull fracture.`,
+  },
+  {
+    key: "ct-stroke", modality: "CT", label: "CT Brain (stroke protocol)",
+    body: `TECHNIQUE: Non-contrast CT of the brain. (CT angiography / perfusion as separately indicated.)
+
+FINDINGS:
+- No intracranial haemorrhage.
+- No established hypoattenuating cortical or deep grey-matter territory of acute infarct (ASPECTS = 10).
+- Hyperdense vessel sign: not identified.
+- Grey-white differentiation: Preserved bilaterally.
+- Ventricles, midline structures, and basal cisterns: Within normal limits.
+- Skull and extra-cranial soft tissues: Unremarkable.
+
+IMPRESSION:
+1. No CT evidence of acute infarct or haemorrhage. If clinical suspicion remains high, MRI / CTA recommended for further evaluation.`,
+  },
+];
 
 type Technician = { id: number; name: string; role: string | null; department: string | null; isRadiology: boolean };
 type Template = { id: number; testId: number; name: string; format: string; content: string; isDefault: boolean; modality: string | null };
@@ -98,6 +174,10 @@ export default function Radiology() {
   const [modality, setModality] = useState("all");
   const [status, setStatus] = useState("all");
   const [search, setSearch] = useState("");
+  // assignment filter chip — drives ?assigned= on the worklist call.
+  // "all"=no filter, "unclaimed"=studies with no radiologist yet, "mine"=studies
+  // claimed by the current staff member (via /api/users/me).
+  const [assigned, setAssigned] = useState<"all" | "unclaimed" | "mine">("all");
   const [tab, setTab] = useState<"worklist" | "reporting" | "films">("worklist");
 
   const [studyModalId, setStudyModalId] = useState<number | null>(null);
@@ -114,17 +194,44 @@ export default function Radiology() {
     queryFn: () => api.get("/api/radiology/technicians"),
   });
 
+  // Current signed-in staff (from the staff session in localStorage). Used to
+  // drive the "Mine" filter and to attribute claim/unclaim actions.
+  const me = useMemo(() => {
+    const s = readStaffSession();
+    return s?.user ? { id: s.user.id, name: s.user.name } : null;
+  }, []);
+
   const { data: studies = [], isFetching, refetch } = useQuery<Study[]>({
-    queryKey: ["radiology-worklist", date, modality, status, search],
+    queryKey: ["radiology-worklist", date, modality, status, search, assigned, me?.id ?? 0],
     queryFn: () => {
       const p = new URLSearchParams();
       p.set("date", date);
       if (modality !== "all") p.set("modality", modality);
       if (status !== "all") p.set("status", status);
       if (search.trim()) p.set("search", search.trim());
+      if (assigned === "unclaimed") p.set("assigned", "unclaimed");
+      else if (assigned === "mine" && me?.id) {
+        p.set("assigned", "mine"); p.set("staffId", String(me.id));
+      }
       return api.get(`/api/radiology/worklist?${p.toString()}`);
     },
     refetchInterval: 8_000,
+  });
+
+  // Claim/unclaim use the authenticated staff identity on the server — no need
+  // to send staffId from the client.
+  const claim = useMutation({
+    mutationFn: ({ id }: { id: number }) => api.post(`/api/radiology/${id}/claim`, {}),
+    onSuccess: () => {
+      toast({ title: "Study claimed" });
+      qc.invalidateQueries({ queryKey: ["radiology-worklist"] });
+    },
+    onError: (e: Error) => toast({ title: "Could not claim", description: e.message, variant: "destructive" }),
+  });
+  const unclaim = useMutation({
+    mutationFn: ({ id }: { id: number }) => api.post(`/api/radiology/${id}/unclaim`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["radiology-worklist"] }),
+    onError: (e: Error) => toast({ title: "Could not release", description: e.message, variant: "destructive" }),
   });
 
   const reportingQueue = useMemo(
@@ -203,6 +310,20 @@ export default function Radiology() {
           <RefreshCw size={14} className={isFetching ? "animate-spin" : ""} />
           <span className="ml-1">Refresh</span>
         </Button>
+        {/* Assignment chips — tele-radiology workflow */}
+        <div className="ml-auto inline-flex rounded-md border bg-background overflow-hidden">
+          {(["all","unclaimed","mine"] as const).map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setAssigned(k)}
+              disabled={k === "mine" && !me?.id}
+              className={`px-3 py-1 text-xs ${assigned === k ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+            >
+              {k === "all" ? "All" : k === "unclaimed" ? "Unclaimed" : "Mine"}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Tabs */}
@@ -217,11 +338,14 @@ export default function Radiology() {
           <WorklistTable
             rows={studies}
             technicians={technicians}
+            meId={me?.id ?? null}
             onOpen={(id) => setStudyModalId(id)}
             onReport={(id) => setReportModalId(id)}
             onFilm={(id) => setFilmModalId(id)}
             onStatus={(id, s) => setStudyStatus.mutate({ id, status: s })}
             onAssign={(id, techId) => assignTech.mutate({ id, technicianId: techId })}
+            onClaim={(id) => claim.mutate({ id })}
+            onUnclaim={(id) => unclaim.mutate({ id })}
           />
         </TabsContent>
 
@@ -229,11 +353,14 @@ export default function Radiology() {
           <WorklistTable
             rows={reportingQueue}
             technicians={technicians}
+            meId={me?.id ?? null}
             onOpen={(id) => setStudyModalId(id)}
             onReport={(id) => setReportModalId(id)}
             onFilm={(id) => setFilmModalId(id)}
             onStatus={(id, s) => setStudyStatus.mutate({ id, status: s })}
             onAssign={(id, techId) => assignTech.mutate({ id, technicianId: techId })}
+            onClaim={(id) => claim.mutate({ id })}
+            onUnclaim={(id) => unclaim.mutate({ id })}
             emptyMsg="No acquired studies waiting for a report. Mark a study as Acquired from the Worklist tab to queue it here."
           />
         </TabsContent>
@@ -242,11 +369,14 @@ export default function Radiology() {
           <WorklistTable
             rows={allFilmEligible}
             technicians={technicians}
+            meId={me?.id ?? null}
             onOpen={(id) => setStudyModalId(id)}
             onReport={(id) => setReportModalId(id)}
             onFilm={(id) => setFilmModalId(id)}
             onStatus={(id, s) => setStudyStatus.mutate({ id, status: s })}
             onAssign={(id, techId) => assignTech.mutate({ id, technicianId: techId })}
+            onClaim={(id) => claim.mutate({ id })}
+            onUnclaim={(id) => unclaim.mutate({ id })}
             emptyMsg="No final reports ready for film/CD/print issuance yet."
           />
         </TabsContent>
@@ -268,14 +398,17 @@ export default function Radiology() {
 function WorklistTable(props: {
   rows: Study[];
   technicians: Technician[];
+  meId: number | null;
   onOpen: (id: number) => void;
   onReport: (id: number) => void;
   onFilm: (id: number) => void;
   onStatus: (id: number, status: string) => void;
   onAssign: (id: number, techId: number | null) => void;
+  onClaim: (id: number) => void;
+  onUnclaim: (id: number) => void;
   emptyMsg?: string;
 }) {
-  const { rows, technicians, onOpen, onReport, onFilm, onStatus, onAssign, emptyMsg } = props;
+  const { rows, technicians, meId, onOpen, onReport, onFilm, onStatus, onAssign, onClaim, onUnclaim, emptyMsg } = props;
   if (rows.length === 0) {
     return (
       <div className="border rounded-lg p-8 text-center text-sm text-muted-foreground">
@@ -295,6 +428,7 @@ function WorklistTable(props: {
             <th className="text-left p-2">Room</th>
             <th className="text-left p-2">Tech</th>
             <th className="text-left p-2">Status</th>
+            <th className="text-left p-2">Radiologist</th>
             <th className="text-left p-2">Images</th>
             <th className="text-left p-2">Reported</th>
             <th className="text-right p-2">Actions</th>
@@ -339,6 +473,29 @@ function WorklistTable(props: {
                 </Select>
               </td>
               <td className="p-2"><StatusPill status={s.status} /></td>
+              <td className="p-2 text-xs">
+                {s.assignedRadiologistName ? (
+                  <div className="inline-flex items-center gap-1">
+                    <span className="font-medium">{s.assignedRadiologistName}</span>
+                    {s.assignedRadiologistId === meId && (
+                      <button
+                        title="Release claim"
+                        onClick={() => onUnclaim(s.id)}
+                        className="text-muted-foreground hover:text-destructive"
+                      ><X size={11} /></button>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onClaim(s.id)}
+                    disabled={!meId}
+                    className="inline-flex items-center gap-1 text-primary hover:underline disabled:text-muted-foreground"
+                  >
+                    <Hand size={11} /> Claim
+                  </button>
+                )}
+              </td>
               <td className="p-2 text-center">
                 <div className="inline-flex items-center gap-1">
                   <Image size={12} className="text-muted-foreground" />
@@ -457,7 +614,9 @@ function StudyDetailModal({ id, onClose }: { id: number; onClose: () => void }) 
   );
 }
 
-// ── Reporting modal — pulls test-wise templates and saves prelim/final ─────
+// ── Reporting modal — voice dictation, AI findings/impression, modality presets
+// and tele-radiology share-link generation. Patient-side delivery is handled
+// upstream when the report is verified (Settings → WhatsApp → Auto-send).
 function ReportModal({ id, onClose }: { id: number; onClose: () => void }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -475,17 +634,32 @@ function ReportModal({ id, onClose }: { id: number; onClose: () => void }) {
   const [reportedBy, setReportedBy] = useState("");
   const [stage, setStage] = useState<"preliminary" | "final">("preliminary");
   const [templateId, setTemplateId] = useState<number | null>(null);
+  const [clinicalHistory, setClinicalHistory] = useState("");
+  const [shareLink, setShareLink] = useState<string | null>(null);
 
-  // Load existing prelim/final if present, otherwise blank for the chosen stage.
+  // Load existing prelim/final + clinical history when the study loads.
   useEffect(() => {
     if (!study) return;
     if (stage === "final") setBody(study.finalReport ?? study.prelimReport ?? "");
     else setBody(study.prelimReport ?? "");
   }, [study, stage]);
+  useEffect(() => {
+    if (study) setClinicalHistory(study.clinicalHistory ?? "");
+  }, [study]);
 
   const save = useMutation({
-    mutationFn: () =>
-      api.post(`/api/radiology/${id}/report`, { stage, body, reportedBy: reportedBy || undefined, templateId: templateId ?? undefined }),
+    mutationFn: async () => {
+      // Persist clinical history alongside the report so subsequent AI calls
+      // (and the radiologist viewer) keep their context.
+      if (clinicalHistory !== (study?.clinicalHistory ?? "")) {
+        await api.patch(`/api/radiology/${id}`, { clinicalHistory });
+      }
+      return api.post(`/api/radiology/${id}/report`, {
+        stage, body,
+        reportedBy: reportedBy || undefined,
+        templateId: templateId ?? undefined,
+      });
+    },
     onSuccess: () => {
       toast({ title: stage === "final" ? "Final report saved" : "Preliminary report saved" });
       qc.invalidateQueries({ queryKey: ["radiology-worklist"] });
@@ -502,23 +676,132 @@ function ReportModal({ id, onClose }: { id: number; onClose: () => void }) {
     setBody((prev) => (prev?.trim() ? prev : tpl.content));
   }
 
+  function applyPreset(key: string) {
+    const p = MODALITY_PRESETS.find((m) => m.key === key);
+    if (!p) return;
+    setBody((prev) => (prev?.trim() ? `${prev}\n\n${p.body}` : p.body));
+  }
+
+  // ── Voice dictation (Web Speech API, on-device when supported) ───────────
+  // Falls back gracefully when SpeechRecognition is unavailable. The voice
+  // feature is opt-in and never auto-starts. We hold the live recognition
+  // handle in a ref so we can tear it down on unmount.
+  type SR = {
+    start: () => void; stop: () => void; abort?: () => void;
+    onresult: (e: { results: { isFinal: boolean; 0: { transcript: string } }[] }) => void;
+    onerror: (e: { error: string }) => void;
+    onend: () => void;
+  };
+  const recognitionRef = useRef<{ rec: SR | null }>({ rec: null });
+  const [listening, setListening] = useState(false);
+  // Stop any active recognition when the modal closes — leaving it running
+  // would keep the microphone hot in some browsers.
+  useEffect(() => {
+    return () => {
+      try { recognitionRef.current.rec?.abort?.(); } catch { /* ignore */ }
+      try { recognitionRef.current.rec?.stop(); } catch { /* ignore */ }
+      recognitionRef.current.rec = null;
+    };
+  }, []);
+  const speechSupported = typeof window !== "undefined" && (
+    "SpeechRecognition" in window || "webkitSpeechRecognition" in window
+  );
+
+  const toggleMic = () => {
+    if (!speechSupported) {
+      toast({ title: "Voice dictation unavailable", description: "This browser does not support live transcription.", variant: "destructive" });
+      return;
+    }
+    if (listening) {
+      recognitionRef.current.rec?.stop();
+      return;
+    }
+    const w = window as unknown as { SpeechRecognition?: new () => SR; webkitSpeechRecognition?: new () => SR };
+    const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+    if (!Ctor) return;
+    const rec = new Ctor() as SR & { continuous: boolean; interimResults: boolean; lang: string };
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.lang = "en-IN";
+    rec.onresult = (e) => {
+      const results = e.results as unknown as Array<{ isFinal: boolean; 0: { transcript: string } }>;
+      const last = results[results.length - 1];
+      if (last?.isFinal) {
+        const text = last[0].transcript.trim();
+        if (text) setBody((prev) => prev + (prev && !prev.endsWith("\n") ? " " : "") + text);
+      }
+    };
+    rec.onerror = (e) => { toast({ title: "Mic error", description: e.error, variant: "destructive" }); setListening(false); };
+    rec.onend = () => setListening(false);
+    recognitionRef.current.rec = rec;
+    rec.start();
+    setListening(true);
+  };
+
+  // ── AI helpers ────────────────────────────────────────────────────────────
+  const aiFindings = useMutation({
+    mutationFn: () =>
+      api.post<{ findings: string }>("/api/ai/radiology-findings", {
+        modality: study?.modality,
+        testName: study?.testName ?? undefined,
+        clinicalHistory,
+        dictation: body,
+      }),
+    onSuccess: (res) => {
+      if (!res?.findings) return;
+      setBody((prev) => (prev?.trim() ? `${prev}\n\n${res.findings}` : res.findings));
+      toast({ title: "AI findings generated" });
+    },
+    onError: (e: Error) => toast({ title: "AI findings failed", description: e.message, variant: "destructive" }),
+  });
+
+  const aiImpression = useMutation({
+    mutationFn: () =>
+      api.post<{ impression: string }>("/api/ai/radiology-impression", {
+        findings: body,
+        modality: study?.modality,
+        testName: study?.testName ?? undefined,
+      }),
+    onSuccess: (res) => {
+      if (!res?.impression) return;
+      const sep = body.toUpperCase().includes("IMPRESSION")
+        ? "\n\n— AI suggested impression —\n"
+        : "\n\nIMPRESSION:\n";
+      setBody((prev) => prev + sep + res.impression);
+      toast({ title: "Impression suggested" });
+    },
+    onError: (e: Error) => toast({ title: "AI impression failed", description: e.message, variant: "destructive" }),
+  });
+
+  // ── Tele-radiology share link (radiologist audience) ─────────────────────
+  const makeShare = useMutation({
+    mutationFn: () => api.post<{ url: string }>(`/api/radiology/${id}/share-link`, { audience: "radiologist", expiresInHours: 24 }),
+    onSuccess: (res) => {
+      if (!res?.url) return;
+      setShareLink(res.url);
+      navigator.clipboard?.writeText(res.url).catch(() => undefined);
+      toast({ title: "Tele-radiology link copied", description: "Valid for 24 hours" });
+    },
+    onError: (e: Error) => toast({ title: "Share-link failed", description: e.message, variant: "destructive" }),
+  });
+
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-4xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText size={16} />
             Report — {study?.accessionNumber ?? ""}
           </DialogTitle>
           <DialogDescription>
-            {study?.testName ?? ""} · {study?.patientName ?? ""}
+            {study?.testName ?? ""} · {study?.patientName ?? ""} · {study?.modality}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <Select value={stage} onValueChange={(v) => setStage(v as typeof stage)}>
-              <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="preliminary">Preliminary</SelectItem>
                 <SelectItem value="final">Final</SelectItem>
@@ -526,8 +809,8 @@ function ReportModal({ id, onClose }: { id: number; onClose: () => void }) {
             </Select>
 
             <Select value={templateId ? String(templateId) : ""} onValueChange={applyTemplate}>
-              <SelectTrigger className="w-72">
-                <SelectValue placeholder={templates.length ? "Insert template…" : "No templates for this test"} />
+              <SelectTrigger className="w-56">
+                <SelectValue placeholder={templates.length ? "Test template…" : "No saved template"} />
               </SelectTrigger>
               <SelectContent>
                 {templates.map((t) => (
@@ -535,6 +818,19 @@ function ReportModal({ id, onClose }: { id: number; onClose: () => void }) {
                     {t.isDefault ? "★ " : ""}{t.name}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+
+            <Select value="" onValueChange={applyPreset}>
+              <SelectTrigger className="w-56">
+                <SelectValue placeholder="Modality preset…" />
+              </SelectTrigger>
+              <SelectContent>
+                {MODALITY_PRESETS
+                  .filter((p) => !study?.modality || p.modality === study.modality)
+                  .map((p) => (
+                    <SelectItem key={p.key} value={p.key}>{p.label}</SelectItem>
+                  ))}
               </SelectContent>
             </Select>
 
@@ -546,19 +842,92 @@ function ReportModal({ id, onClose }: { id: number; onClose: () => void }) {
             />
           </div>
 
+          <div>
+            <label className="text-xs text-muted-foreground">Clinical history (used by AI for context)</label>
+            <Textarea
+              value={clinicalHistory}
+              onChange={(e) => setClinicalHistory(e.target.value)}
+              rows={2}
+              placeholder="e.g. 45F, headache 3 days, no trauma, on antihypertensives. Rule out SAH."
+              className="text-sm"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button" size="sm"
+              variant={listening ? "destructive" : "outline"}
+              onClick={toggleMic}
+              title={speechSupported ? "Toggle voice dictation" : "Voice dictation not supported in this browser"}
+            >
+              {listening ? <MicOff size={14} className="mr-1" /> : <Mic size={14} className="mr-1" />}
+              {listening ? "Stop" : "Dictate"}
+            </Button>
+            <Button
+              type="button" size="sm" variant="outline"
+              onClick={() => aiFindings.mutate()}
+              disabled={aiFindings.isPending || !study}
+            >
+              <Sparkles size={14} className="mr-1" />
+              {aiFindings.isPending ? "Drafting…" : "AI Suggest Findings"}
+            </Button>
+            <Button
+              type="button" size="sm" variant="outline"
+              onClick={() => aiImpression.mutate()}
+              disabled={aiImpression.isPending || !body.trim()}
+            >
+              <Sparkles size={14} className="mr-1" />
+              {aiImpression.isPending ? "Thinking…" : "AI Suggest Impression"}
+            </Button>
+            <div className="ml-auto inline-flex items-center gap-2">
+              <Button
+                type="button" size="sm" variant="outline"
+                onClick={() => makeShare.mutate()}
+                disabled={makeShare.isPending}
+                title="Generate a 24-hour tele-radiology link to read this study from anywhere"
+              >
+                <Link2 size={14} className="mr-1" />
+                Tele-radiology link
+              </Button>
+              {shareLink && (
+                <button
+                  type="button"
+                  onClick={() => { navigator.clipboard?.writeText(shareLink); toast({ title: "Copied" }); }}
+                  className="text-xs text-muted-foreground hover:text-primary inline-flex items-center gap-1"
+                >
+                  <CopyIcon size={11} /> Copy again
+                </button>
+              )}
+            </div>
+          </div>
+
           <Textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            rows={14}
+            rows={16}
             className="font-mono text-sm"
-            placeholder="Type the report here, or insert a test-wise template above."
+            placeholder="Dictate, type, or use the AI / preset buttons above."
           />
+
+          {listening && (
+            <div className="text-xs text-emerald-600 inline-flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+              Listening — finalised phrases will be appended to the report.
+            </div>
+          )}
 
           {study?.hasFinal && stage === "preliminary" && (
             <div className="text-xs text-amber-700 dark:text-amber-400">
               A final report is already on file. Saving a preliminary will keep the existing final intact and won&rsquo;t change the study status.
             </div>
           )}
+
+          <p className="text-[11px] text-muted-foreground">
+            AI suggestions are drafts only. The radiologist remains responsible for the final report content and sign-off.
+          </p>
         </div>
 
         <DialogFooter>

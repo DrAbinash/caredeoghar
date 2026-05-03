@@ -1,11 +1,25 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import {
-  radiologyStudiesTable, radiologyFilmIssuesTable,
+  radiologyStudiesTable, radiologyFilmIssuesTable, radiologyShareLinksTable,
   testsTable, patientsTable, ordersTable, orderTestsTable,
   billsTable, reportTemplatesTable, staffTable,
 } from "@workspace/db/schema";
-import { and, asc, desc, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, isNull, lte, or, sql } from "drizzle-orm";
+import crypto from "node:crypto";
+import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
+
+// Build an absolute https URL for share-link composition. Trusts the standard
+// reverse-proxy headers `x-forwarded-proto` / `x-forwarded-host`. The proxy
+// terminates TLS so we don't need a host allowlist for the dev environment;
+// production deployments behind Replit's edge already canonicalise these.
+function absoluteBase(req: { headers: Record<string, string | string[] | undefined>; protocol?: string }): string {
+  const protoHdr = req.headers["x-forwarded-proto"];
+  const hostHdr = req.headers["x-forwarded-host"] || req.headers.host;
+  const proto = (Array.isArray(protoHdr) ? protoHdr[0] : protoHdr) || req.protocol || "https";
+  const host = (Array.isArray(hostHdr) ? hostHdr[0] : hostHdr) || "";
+  return `${proto}://${host}`;
+}
 
 export const radiologyRouter: IRouter = Router();
 
@@ -114,16 +128,25 @@ export async function generateStudiesForOrder(opts: {
 }
 
 // ── Worklist ────────────────────────────────────────────────────────────────
-// GET /api/radiology/worklist?date=&status=&modality=&search=
+// GET /api/radiology/worklist?date=&status=&modality=&search=&assigned=
+//   assigned=unclaimed → studies awaiting a radiologist (acquired/in-prelim, no claim)
+//   assigned=mine&staffId=NN → studies claimed by the given staff
 radiologyRouter.get("/worklist", async (req, res) => {
   const date = (req.query.date as string) || todayISO();
   const status = (req.query.status as string) || "";
   const modality = (req.query.modality as string) || "";
   const search = (req.query.search as string)?.trim() || "";
+  const assigned = (req.query.assigned as string) || "";
+  const staffId = Number(req.query.staffId) || 0;
 
   const conds = [eq(radiologyStudiesTable.studyDate, date)];
   if (status && status !== "all") conds.push(eq(radiologyStudiesTable.status, status));
   if (modality && modality !== "all") conds.push(eq(radiologyStudiesTable.modality, modality));
+  if (assigned === "unclaimed") {
+    conds.push(isNull(radiologyStudiesTable.assignedRadiologistId));
+  } else if (assigned === "mine" && staffId) {
+    conds.push(eq(radiologyStudiesTable.assignedRadiologistId, staffId));
+  }
 
   const rows = await db
     .select({
@@ -140,6 +163,9 @@ radiologyRouter.get("/worklist", async (req, res) => {
       numImages: radiologyStudiesTable.numImages,
       technicianId: radiologyStudiesTable.technicianId,
       technicianName: radiologyStudiesTable.technicianName,
+      assignedRadiologistId: radiologyStudiesTable.assignedRadiologistId,
+      assignedRadiologistName: radiologyStudiesTable.assignedRadiologistName,
+      claimedAt: radiologyStudiesTable.claimedAt,
       studyDate: radiologyStudiesTable.studyDate,
       prelimReportedAt: radiologyStudiesTable.prelimReportedAt,
       finalReportedAt: radiologyStudiesTable.finalReportedAt,
@@ -291,6 +317,7 @@ radiologyRouter.patch("/:id", async (req, res) => {
     numImages?: number;
     notes?: string;
     studyInstanceUid?: string;
+    clinicalHistory?: string | null;
   };
 
   const updates: Partial<typeof radiologyStudiesTable.$inferInsert> = {};
@@ -320,6 +347,7 @@ radiologyRouter.patch("/:id", async (req, res) => {
   }
   if (body.notes !== undefined) updates.notes = body.notes;
   if (body.studyInstanceUid !== undefined) updates.studyInstanceUid = body.studyInstanceUid;
+  if ("clinicalHistory" in body) updates.clinicalHistory = (body as { clinicalHistory?: string }).clinicalHistory ?? null;
 
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "Nothing to update" }); return;
@@ -364,10 +392,109 @@ radiologyRouter.post("/:id/report", async (req, res) => {
     updates.finalReportedBy = body.reportedBy ?? null;
     updates.finalReportedAt = new Date();
     if (existing.status !== "delivered") updates.status = "reported_final";
+    // Saving the final report closes out the tele-radiology claim — the study
+    // moves into the QC/verification pipeline and another radiologist should
+    // not need to "release" it manually.
+    updates.assignedRadiologistId = null;
+    updates.assignedRadiologistName = null;
+    updates.claimedAt = null;
   }
 
   const [row] = await db.update(radiologyStudiesTable).set(updates).where(eq(radiologyStudiesTable.id, id)).returning();
   res.json(row);
+});
+
+// ── Tele-radiology: claim / unclaim / assign ────────────────────────────────
+// POST /api/radiology/:id/claim
+// Claims a study for remote/night reading using the *authenticated* staff
+// identity — the request body is no longer trusted for identity. Cleared
+// automatically when a final report is saved or by explicit unclaim.
+radiologyRouter.post("/:id/claim", async (req: StaffAuthRequest, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const session = req.staffSession;
+  if (!session) { res.status(401).json({ error: "Staff session required" }); return; }
+
+  const [existing] = await db.select().from(radiologyStudiesTable).where(eq(radiologyStudiesTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Study not found" }); return; }
+  if (existing.assignedRadiologistId && existing.assignedRadiologistId !== session.subjectId) {
+    res.status(409).json({ error: `Already claimed by ${existing.assignedRadiologistName ?? "another radiologist"}` });
+    return;
+  }
+  const [row] = await db.update(radiologyStudiesTable).set({
+    assignedRadiologistId: session.subjectId,
+    assignedRadiologistName: session.subjectName,
+    claimedAt: existing.claimedAt ?? new Date(),
+  }).where(eq(radiologyStudiesTable.id, id)).returning();
+  res.json(row);
+});
+
+// POST /api/radiology/:id/unclaim — release a claim. Only the radiologist who
+// holds the claim (or admin/super_admin) may release it.
+radiologyRouter.post("/:id/unclaim", async (req: StaffAuthRequest, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const session = req.staffSession;
+  if (!session) { res.status(401).json({ error: "Staff session required" }); return; }
+
+  const [existing] = await db.select().from(radiologyStudiesTable).where(eq(radiologyStudiesTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Study not found" }); return; }
+  const isPrivileged = session.role === "admin" || session.role === "super_admin";
+  if (existing.assignedRadiologistId && existing.assignedRadiologistId !== session.subjectId && !isPrivileged) {
+    res.status(403).json({ error: "Only the assigned radiologist or an admin can release this claim." });
+    return;
+  }
+  const [row] = await db.update(radiologyStudiesTable).set({
+    assignedRadiologistId: null,
+    assignedRadiologistName: null,
+    claimedAt: null,
+  }).where(eq(radiologyStudiesTable.id, id)).returning();
+  res.json(row);
+});
+
+// POST /api/radiology/:id/share-link  { audience?: "patient"|"radiologist", expiresInHours?: number }
+// Returns a tokenised URL that opens the public study viewer. Only one active
+// link per (study, audience) — older active ones are revoked. The "radiologist"
+// audience exposes the draft report and is restricted to the assigned
+// radiologist or to admin/super_admin staff.
+radiologyRouter.post("/:id/share-link", async (req: StaffAuthRequest, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const session = req.staffSession;
+  if (!session) { res.status(401).json({ error: "Staff session required" }); return; }
+  const b = (req.body ?? {}) as { audience?: string; expiresInHours?: number };
+  const audience = b.audience === "radiologist" ? "radiologist" : "patient";
+  const hours = Math.min(Math.max(Number(b.expiresInHours) || (audience === "radiologist" ? 24 : 168), 1), 24 * 90);
+  const [study] = await db.select().from(radiologyStudiesTable).where(eq(radiologyStudiesTable.id, id));
+  if (!study) { res.status(404).json({ error: "Study not found" }); return; }
+
+  if (audience === "radiologist") {
+    const isPrivileged = session.role === "admin" || session.role === "super_admin";
+    const isAssigned = study.assignedRadiologistId === session.subjectId;
+    if (!isPrivileged && !isAssigned) {
+      res.status(403).json({ error: "Only the assigned radiologist (or an admin) can mint a tele-radiology link. Claim the study first." });
+      return;
+    }
+  }
+
+  // Revoke prior active links for the same (study, audience).
+  await db.update(radiologyShareLinksTable)
+    .set({ revokedAt: new Date() })
+    .where(and(
+      eq(radiologyShareLinksTable.studyId, id),
+      eq(radiologyShareLinksTable.audience, audience),
+      isNull(radiologyShareLinksTable.revokedAt),
+    ));
+
+  const token = crypto.randomBytes(24).toString("base64url");
+  const expiresAt = new Date(Date.now() + hours * 3600 * 1000);
+  await db.insert(radiologyShareLinksTable).values({
+    token, studyId: id, audience,
+    createdBy: session.subjectName,
+    expiresAt,
+  });
+  const url = `${absoluteBase(req)}/api/teleradiology/share/${token}`;
+  res.json({ token, url, audience, expiresAt });
 });
 
 // ── Film / CD / Print Issuance ──────────────────────────────────────────────

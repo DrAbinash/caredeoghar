@@ -29,6 +29,9 @@ whatsappRouter.put("/settings", async (req, res) => {
   if (typeof body.accessToken === "string" && body.accessToken && body.accessToken !== "••••••••") {
     updates.accessToken = body.accessToken.trim();
   }
+  if (body.autoSendOnVerify !== undefined) updates.autoSendOnVerify = !!body.autoSendOnVerify;
+  if (body.includeViewerLink !== undefined) updates.includeViewerLink = !!body.includeViewerLink;
+  if (typeof body.reportMessageTemplate === "string") updates.reportMessageTemplate = body.reportMessageTemplate;
   const [row] = await db.update(whatsappSettingsTable).set(updates).where(eq(whatsappSettingsTable.id, current.id)).returning();
   res.json({ ...row, accessToken: row.accessToken ? "••••••••" : "" });
 });
@@ -176,6 +179,52 @@ export async function sendReportWhatsapp(params: {
       method: "POST",
       headers: { Authorization: `Bearer ${s.accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify(textPayload),
+    });
+    const data = (await resp.json().catch(() => ({}))) as { messages?: { id: string }[]; error?: { message?: string } };
+    if (!resp.ok) return { ok: false, error: data.error?.message || `HTTP ${resp.status}` };
+    return { ok: true, messageId: data.messages?.[0]?.id };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Send failed" };
+  }
+}
+
+// Auto-delivery helper used by patient-reports verify hook. Sends a friendly
+// plain-text message containing the PDF link and (optionally) a tokenized
+// image-viewer link. Honours `reportMessageTemplate` placeholders.
+export async function sendReportDelivery(params: {
+  phone: string;
+  patientName: string;
+  reportNumber: string;
+  testName: string;
+  reportUrl: string;
+  viewerUrl?: string | null;
+}): Promise<{ ok: boolean; skipped?: boolean; error?: string; messageId?: string }> {
+  const s = await getOrCreateSettings();
+  if (!s.enabled) return { ok: false, skipped: true };
+  if (!s.accessToken || !s.phoneNumberId) return { ok: false, error: "WhatsApp settings incomplete" };
+  const to = normalizePhone(params.phone, s.defaultCountryCode);
+  if (!to) return { ok: false, error: "Invalid phone" };
+
+  const tpl = (s.reportMessageTemplate || "").trim();
+  const viewerLine = params.viewerUrl && s.includeViewerLink !== false
+    ? `\nView images: ${params.viewerUrl}`
+    : "";
+  const defaultBody = `Hello ${params.patientName}, your ${params.testName} report (${params.reportNumber}) is ready.\nDownload: ${params.reportUrl}${viewerLine}\n— DiagnoCenter`;
+  const body = tpl
+    ? tpl
+        .replace(/\{\{name\}\}/g, params.patientName)
+        .replace(/\{\{reportNumber\}\}/g, params.reportNumber)
+        .replace(/\{\{testName\}\}/g, params.testName)
+        .replace(/\{\{reportUrl\}\}/g, params.reportUrl)
+        .replace(/\{\{viewerUrl\}\}/g, params.viewerUrl ?? "")
+    : defaultBody;
+
+  const url = `https://graph.facebook.com/v20.0/${encodeURIComponent(s.phoneNumberId)}/messages`;
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${s.accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body } }),
     });
     const data = (await resp.json().catch(() => ({}))) as { messages?: { id: string }[]; error?: { message?: string } };
     if (!resp.ok) return { ok: false, error: data.error?.message || `HTTP ${resp.status}` };
