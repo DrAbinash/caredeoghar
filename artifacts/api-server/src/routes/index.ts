@@ -46,7 +46,7 @@ import { vendorsRouter } from "./vendors";
 import { websiteRouter } from "./website";
 import { systemRouter } from "./system";
 import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
-import { requireStaffAuth } from "../middleware/requireStaffAuth";
+import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
 
 const router: IRouter = Router();
 
@@ -58,43 +58,87 @@ router.use("/display", displayRouter);
 router.use("/bridge", bridgeRouter);
 
 // ─── Staff-authenticated ERP routes ──────────────────────────────────────────
-router.use("/patients", requireStaffAuth, patientsRouter);
-router.use("/doctors", requireStaffAuth, doctorsRouter);
-router.use("/tests", requireStaffAuth, testsRouter);
-router.use("/orders", requireStaffAuth, ordersRouter);
-router.use("/bills", requireStaffAuth, billsRouter);
-router.use("/payments", requireStaffAuth, paymentsRouter);
-router.use("/reports", requireStaffAuth, reportsRouter);
-router.use("/inventory", requireStaffAuth, inventoryRouter);
-router.use("/accounting", requireStaffAuth, accountingRouter);
-router.use("/email-settings", requireStaffAuth, emailSettingsRouter);
-router.use("/discounts", requireStaffAuth, discountsRouter);
+// Each route requiring a module permission is gated with requireStaffPermission
+// immediately after requireStaffAuth so that low-privilege staff cannot access
+// modules they have not been granted, even by calling the API directly.
+
+// Patient data — /patients permission
+router.use("/patients", requireStaffAuth, requireStaffPermission("/patients"), patientsRouter);
+
+// Doctor management — /doctors permission
+router.use("/doctors", requireStaffAuth, requireStaffPermission("/doctors"), doctorsRouter);
+
+// Test catalogue — /tests permission
+router.use("/tests", requireStaffAuth, requireStaffPermission("/tests"), testsRouter);
+
+// Order management — /orders permission
+router.use("/orders", requireStaffAuth, requireStaffPermission("/orders"), ordersRouter);
+
+// Billing — /billing permission (covers bill creation, edits, refunds, cancels)
+router.use("/bills", requireStaffAuth, requireStaffPermission("/billing"), billsRouter);
+
+// Payments — /payments permission
+router.use("/payments", requireStaffAuth, requireStaffPermission("/payments"), paymentsRouter);
+
+// Reports — /reports permission (covers dashboard, revenue, print reports)
+router.use("/reports", requireStaffAuth, requireStaffPermission("/reports"), reportsRouter);
+
+// Inventory — /inventory permission
+router.use("/inventory", requireStaffAuth, requireStaffPermission("/inventory"), inventoryRouter);
+
+// Accounting — /accounting permission (vouchers, accounts, ledger entries)
+router.use("/accounting", requireStaffAuth, requireStaffPermission("/accounting"), accountingRouter);
+
+// Discounts — /discounts permission
+router.use("/discounts", requireStaffAuth, requireStaffPermission("/discounts"), discountsRouter);
+
+// Discount reasons — /discounts permission (configuration for the discounts module)
+router.use("/discount-reasons", requireStaffAuth, requireStaffPermission("/discounts"), discountReasonsRouter);
+
+// Expenses — /accounting permission (financial records)
+router.use("/expenses", requireStaffAuth, requireStaffPermission("/accounting"), expensesRouter);
+
+// Ledgers — /accounting permission (multi-ledger configuration)
+router.use("/ledgers", requireStaffAuth, requireStaffPermission("/accounting"), ledgersRouter);
+
+// Staff HR & payroll — /settings permission (only settings-level users may
+// read salary/bank details or post salary and advance records)
+router.use("/staff", requireStaffAuth, requireStaffPermission("/settings"), staffRouter);
+
+// Clinic configuration — /settings permission
+router.use("/clinic-settings", requireStaffAuth, requireStaffPermission("/settings"), clinicSettingsRouter);
+router.use("/email-settings", requireStaffAuth, requireStaffPermission("/settings"), emailSettingsRouter);
+router.use("/test-categories", requireStaffAuth, requireStaffPermission("/settings"), testCategoriesRouter);
+router.use("/report-templates", requireStaffAuth, requireStaffPermission("/settings"), reportTemplatesRouter);
+router.use("/abnormal-findings", requireStaffAuth, requireStaffPermission("/settings"), abnormalFindingsRouter);
+router.use("/machines", requireStaffAuth, requireStaffPermission("/settings"), machinesRouter);
+router.use("/departments", requireStaffAuth, requireStaffPermission("/settings"), departmentsRouter);
+router.use("/branches", requireStaffAuth, requireStaffPermission("/settings"), branchesRouter);
+router.use("/printers", requireStaffAuth, requireStaffPermission("/settings"), printersRouter);
+router.use("/vendors", requireStaffAuth, requireStaffPermission("/settings"), vendorsRouter);
+
+// DICOM / PACS — /dicom-nodes permission
+router.use("/pacs", requireStaffAuth, requireStaffPermission("/dicom-nodes"), pacsRouter);
+router.use("/dicom", requireStaffAuth, requireStaffPermission("/dicom-nodes"), dicomRouter);
+
+// Radiology studies are tied to the orders workflow — /orders permission
+router.use("/radiology", requireStaffAuth, requireStaffPermission("/orders"), radiologyRouter);
+
+// ─── Unrestricted staff-authenticated routes ──────────────────────────────────
+// These routes serve operational functions not covered by the permission toggle
+// system (matching frontend PERMISSIONED_PATHS behaviour: paths not in the set
+// are accessible to every signed-in staff member).
 router.use("/ai", requireStaffAuth, aiRouter);
-router.use("/pacs", requireStaffAuth, pacsRouter);
-router.use("/dicom", requireStaffAuth, dicomRouter);
 router.use("/samples", requireStaffAuth, samplesRouter);
 router.use("/appointments", requireStaffAuth, appointmentsRouter);
 router.use("/packages", requireStaffAuth, packagesRouter);
-router.use("/expenses", requireStaffAuth, expensesRouter);
-router.use("/discount-reasons", requireStaffAuth, discountReasonsRouter);
-router.use("/test-categories", requireStaffAuth, testCategoriesRouter);
-router.use("/clinic-settings", requireStaffAuth, clinicSettingsRouter);
-router.use("/ledgers", requireStaffAuth, ledgersRouter);
-router.use("/tokens", requireStaffAuth, tokensRouter);
-router.use("/test-tokens", requireStaffAuth, testTokensRouter);
-router.use("/radiology", requireStaffAuth, radiologyRouter);
-router.use("/whatsapp", requireStaffAuth, whatsappRouter);
-router.use("/printers", requireStaffAuth, printersRouter);
-router.use("/staff", requireStaffAuth, staffRouter);
-router.use("/report-templates", requireStaffAuth, reportTemplatesRouter);
-router.use("/abnormal-findings", requireStaffAuth, abnormalFindingsRouter);
 router.use("/form-f", requireStaffAuth, formFRouter);
 router.use("/patient-reports", requireStaffAuth, patientReportsRouter);
 router.use("/signatures", requireStaffAuth, signaturesRouter);
-router.use("/machines", requireStaffAuth, machinesRouter);
-router.use("/departments", requireStaffAuth, departmentsRouter);
-router.use("/branches", requireStaffAuth, branchesRouter);
-router.use("/vendors", requireStaffAuth, vendorsRouter);
+router.use("/whatsapp", requireStaffAuth, whatsappRouter);
+router.use("/tokens", requireStaffAuth, tokensRouter);
+router.use("/test-tokens", requireStaffAuth, testTokensRouter);
+
 // Website router: GET endpoints are intentionally public so the clinic-site
 // frontend can fetch settings/pages/faqs/photos/popups without credentials.
 // Mutating endpoints inside websiteRouter each apply requireStaffAuth directly.
