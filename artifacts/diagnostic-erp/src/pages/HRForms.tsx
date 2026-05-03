@@ -409,6 +409,14 @@ function FormEditorDialog(props: EditorProps) {
     set("salaryStructure", next as SalaryStructure);
   };
 
+  // Used so list views (global /hr-forms page AND per-staff panel inside the
+  // Staff detail dialog) both refresh after mutations complete.
+  const invalidateLists = () => {
+    qc.invalidateQueries({ queryKey: ["hr-forms"] });
+    const sid = isEdit ? form.staffId : (props as { staffId?: number }).staffId;
+    if (sid) qc.invalidateQueries({ queryKey: ["hr-forms-staff", sid] });
+  };
+
   const save = useMutation({
     mutationFn: () => {
       if (isEdit) {
@@ -417,7 +425,7 @@ function FormEditorDialog(props: EditorProps) {
       return api.post<HRForm>("/api/hr-forms", { ...form, staffId: (props as { staffId: number }).staffId });
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["hr-forms"] });
+      invalidateLists();
       toast({ title: isEdit ? "HR form updated" : "HR form created" });
       props.onClose();
     },
@@ -427,17 +435,18 @@ function FormEditorDialog(props: EditorProps) {
   const approve = useMutation({
     mutationFn: () => api.post<HRForm>(`/api/hr-forms/${(props as { formId: number }).formId}/approve`, {}),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["hr-forms"] });
+      invalidateLists();
       qc.invalidateQueries({ queryKey: ["staff"] });
       toast({ title: "Form approved", description: "Staff base salary updated." });
       props.onClose();
     },
     onError: (e: Error) => toast({ title: "Approve failed", description: e.message, variant: "destructive" }),
   });
+  const [confirmApproveOpen, setConfirmApproveOpen] = useState(false);
   const reject = useMutation({
     mutationFn: () => api.post<HRForm>(`/api/hr-forms/${(props as { formId: number }).formId}/reject`, {}),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["hr-forms"] });
+      invalidateLists();
       toast({ title: "Form rejected" });
       props.onClose();
     },
@@ -752,11 +761,35 @@ function FormEditorDialog(props: EditorProps) {
               <Button variant="destructive" onClick={() => reject.mutate()} disabled={reject.isPending}>
                 <XCircle size={14} className="mr-1.5" />Reject
               </Button>
-              <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => approve.mutate()} disabled={approve.isPending}>
+              <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => setConfirmApproveOpen(true)} disabled={approve.isPending}>
                 <CheckCircle2 size={14} className="mr-1.5" />Approve & Update Salary
               </Button>
             </>
           )}
+          <Dialog open={confirmApproveOpen} onOpenChange={setConfirmApproveOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Approve and update salary?</DialogTitle>
+              </DialogHeader>
+              <div className="text-sm space-y-2">
+                <p>
+                  This will mark form <span className="font-mono">{form.formNumber}</span> as <b>approved</b> and
+                  immediately overwrite <b>{form.employeeName}</b>'s base salary to <b>{inr(Number(form.fixedSalary || 0))}</b>.
+                </p>
+                <p className="text-muted-foreground">Approved forms cannot be edited or deleted afterwards.</p>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setConfirmApproveOpen(false)}>Cancel</Button>
+                <Button
+                  className="bg-emerald-600 hover:bg-emerald-700"
+                  disabled={approve.isPending}
+                  onClick={() => { setConfirmApproveOpen(false); approve.mutate(); }}
+                >
+                  <CheckCircle2 size={14} className="mr-1.5" />Confirm Approval
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
           {!isApproved && (
             <Button onClick={() => save.mutate()} disabled={save.isPending}>
               {save.isPending ? "Saving…" : isEdit ? "Save Changes" : "Create Form"}
