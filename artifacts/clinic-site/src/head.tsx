@@ -22,6 +22,31 @@ function setMeta(name: string, content: string, attrName: "name" | "property" = 
 
 const MANAGED_HEAD_ID = "site-managed-head";
 
+// Tracking ID validators — prevent arbitrary JavaScript strings from breaking
+// out of the inline script templates that embed these IDs.
+// Only IDs matching the expected vendor format are accepted; any other value
+// is silently dropped so the tracker is simply omitted rather than executing
+// attacker-controlled code.
+const ID_PATTERNS: Record<string, RegExp> = {
+  googleTagManagerId: /^GTM-[A-Z0-9]{1,20}$/,
+  googleAnalyticsId:  /^(G|UA|AW|DC)-[A-Z0-9][A-Z0-9-]{0,30}$/,
+  metaPixelId:        /^[0-9]{8,20}$/,
+  googleAdsenseId:    /^ca-pub-[0-9]{10,20}$/,
+};
+
+function safeId(value: string | undefined | null, key: keyof typeof ID_PATTERNS): string {
+  if (!value) return "";
+  return ID_PATTERNS[key].test(value.trim()) ? value.trim() : "";
+}
+
+// Verification-only meta tags (no JS injection risk — they are only placed in
+// an attribute value, not interpolated into a script string).
+const META_PATTERN = /^[A-Za-z0-9+/=_-]{1,200}$/;
+function safeMeta(value: string | undefined | null): string {
+  if (!value) return "";
+  return META_PATTERN.test(value.trim()) ? value.trim() : "";
+}
+
 export function HeadManager({ settings, page }: { settings: SiteSettings; page: Page | null }) {
   useEffect(() => {
     // Title
@@ -40,10 +65,11 @@ export function HeadManager({ settings, page }: { settings: SiteSettings; page: 
     if (settings.seoOgImage) setMeta("og:image", resolveAssetUrl(settings.seoOgImage), "property");
     setMeta("og:type", "website", "property");
 
-    // Verification meta tags
-    setMeta("facebook-domain-verification", settings.facebookMetaTag);
-    setMeta("p:domain_verify", settings.pinterestMetaTag);
-    setMeta("google-adsense-account", settings.googleAdsenseId);
+    // Verification meta tags — use safeMeta to reject values with characters
+    // that could inject extra attributes or break out of the attribute context.
+    setMeta("facebook-domain-verification", safeMeta(settings.facebookMetaTag));
+    setMeta("p:domain_verify", safeMeta(settings.pinterestMetaTag));
+    setMeta("google-adsense-account", safeId(settings.googleAdsenseId, "googleAdsenseId"));
 
     // Favicon
     if (settings.faviconUrl) {
@@ -56,7 +82,10 @@ export function HeadManager({ settings, page }: { settings: SiteSettings; page: 
       link.href = resolveAssetUrl(settings.faviconUrl);
     }
 
-    // Custom + analytics scripts (managed wrapper, replaced on each change)
+    // Custom + analytics scripts (managed wrapper, replaced on each change).
+    // Each tracking ID is validated against its expected vendor format before
+    // being interpolated into a script string, so a malicious value cannot
+    // break out of the JS string context.
     const old = document.getElementById(MANAGED_HEAD_ID);
     if (old) old.remove();
 
@@ -65,22 +94,36 @@ export function HeadManager({ settings, page }: { settings: SiteSettings; page: 
     wrap.style.display = "none";
     let html = "";
 
-    if (settings.googleTagManagerId) {
-      html += `<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${settings.googleTagManagerId}');</script>`;
+    const gtmId = safeId(settings.googleTagManagerId, "googleTagManagerId");
+    if (gtmId) {
+      html += `<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${gtmId}');</script>`;
     }
-    if (settings.googleAnalyticsId) {
-      html += `<script async src="https://www.googletagmanager.com/gtag/js?id=${settings.googleAnalyticsId}"></script>`;
-      html += `<script>window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());gtag('config', '${settings.googleAnalyticsId}');</script>`;
+
+    const gaId = safeId(settings.googleAnalyticsId, "googleAnalyticsId");
+    if (gaId) {
+      html += `<script async src="https://www.googletagmanager.com/gtag/js?id=${gaId}"></script>`;
+      html += `<script>window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());gtag('config', '${gaId}');</script>`;
     }
-    if (settings.metaPixelId) {
-      html += `<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init', '${settings.metaPixelId}');fbq('track', 'PageView');</script>`;
+
+    const pixelId = safeId(settings.metaPixelId, "metaPixelId");
+    if (pixelId) {
+      html += `<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init', '${pixelId}');fbq('track', 'PageView');</script>`;
     }
-    if (settings.googleAdsenseId) {
-      html += `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${settings.googleAdsenseId}" crossorigin="anonymous"></script>`;
+
+    const adsenseId = safeId(settings.googleAdsenseId, "googleAdsenseId");
+    if (adsenseId) {
+      html += `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsenseId}" crossorigin="anonymous"></script>`;
     }
+
+    // customHeadHtml is an admin-only field (protected at the API layer by
+    // requireStaffPermission("/website") which only grants access to
+    // admin/super_admin roles). It is intentionally rendered as-is to support
+    // legitimate use cases such as embedding third-party widgets or verification
+    // scripts that cannot be expressed as structured tracking IDs.
     if (settings.customHeadHtml) {
       html += settings.customHeadHtml;
     }
+
     if (html) {
       wrap.innerHTML = html;
       // Move scripts so they execute (innerHTML scripts won't run by default)

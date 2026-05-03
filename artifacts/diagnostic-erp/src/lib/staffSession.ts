@@ -65,6 +65,7 @@ export const PERMISSIONED_PATHS: ReadonlySet<string> = new Set([
   "/discounts",
   "/settings",
   "/dicom-nodes",
+  "/website",
 ]);
 
 // Permission aliases — paths whose access is granted by another permission.

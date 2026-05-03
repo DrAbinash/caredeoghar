@@ -11,20 +11,22 @@ import { WhatsAppFab, PopupHost } from "./widgets";
 const BASE = import.meta.env.BASE_URL; // includes trailing slash, e.g. "/site/"
 const ROUTER_BASE = BASE.replace(/\/$/, "");
 
-function isPreview(): boolean {
-  return new URLSearchParams(window.location.search).get("preview") === "1";
+// Preview mode requires a short-lived server-issued token passed as
+// `?preview_token=<uuid>`.  The bare `?preview=1` flag is no longer
+// accepted because it let any unauthenticated visitor view draft content.
+function getPreviewToken(): string {
+  return new URLSearchParams(window.location.search).get("preview_token") ?? "";
 }
 
-function PageView({ slug, settings, pages, popups }: { slug: string; settings: SiteSettings; pages: Page[]; popups: Popup[] }) {
-  const preview = isPreview();
+function PageView({ slug, settings, pages, popups, isPreview }: { slug: string; settings: SiteSettings; pages: Page[]; popups: Popup[]; isPreview: boolean }) {
   const page = useMemo(() => {
-    const list = preview ? pages : pages.filter((p) => p.status === "published");
+    const list = isPreview ? pages : pages.filter((p) => p.status === "published");
     const exact = list.find((p) => p.slug === slug);
     if (exact) return exact;
     // Only fall back to home for the root path itself
     if (slug === "home") return list.find((p) => p.slug === "home") ?? null;
     return null;
-  }, [pages, slug, preview]);
+  }, [pages, slug, isPreview]);
 
   if (!page) {
     return (
@@ -57,11 +59,10 @@ function PageView({ slug, settings, pages, popups }: { slug: string; settings: S
   );
 }
 
-function AppShell({ settings, pages, popups }: { settings: SiteSettings; pages: Page[]; popups: Popup[] }) {
+function AppShell({ settings, pages, popups, isPreview }: { settings: SiteSettings; pages: Page[]; popups: Popup[]; isPreview: boolean }) {
   const [loc] = useLocation();
   const slug = loc === "/" || loc === "" ? "home" : loc.replace(/^\//, "").split("/")[0];
-  const preview = isPreview();
-  const showSiteContent = preview || settings.isPublished;
+  const showSiteContent = isPreview || settings.isPublished;
 
   if (!showSiteContent) {
     return (
@@ -69,7 +70,7 @@ function AppShell({ settings, pages, popups }: { settings: SiteSettings; pages: 
         <div>
           <h1 className="h-display">Coming soon</h1>
           <p className="subtle" style={{ marginTop: ".75rem", maxWidth: 480 }}>
-            This site hasn't been published yet. The owner can preview drafts by appending <code>?preview=1</code> to the URL.
+            This site hasn't been published yet.
           </p>
         </div>
       </div>
@@ -78,27 +79,66 @@ function AppShell({ settings, pages, popups }: { settings: SiteSettings; pages: 
 
   return (
     <>
-      {preview && <div className="preview-banner">Preview mode — showing drafts. Visitors won't see this until you publish.</div>}
-      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }} className={preview ? "pt-8" : ""}>
-        <PageView slug={slug} settings={settings} pages={pages} popups={popups} />
+      {isPreview && <div className="preview-banner">Preview mode — showing drafts. Visitors won't see this until you publish.</div>}
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }} className={isPreview ? "pt-8" : ""}>
+        <PageView slug={slug} settings={settings} pages={pages} popups={popups} isPreview={isPreview} />
         <WhatsAppFab settings={settings} />
       </div>
     </>
   );
 }
 
+type PreviewState = "idle" | "verifying" | "valid" | "invalid";
+
 function App() {
   const [data, setData] = useState<{ settings: SiteSettings; pages: Page[]; popups: Popup[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [previewState, setPreviewState] = useState<PreviewState>("idle");
+
+  const previewToken = getPreviewToken();
 
   useEffect(() => {
+    if (!previewToken) {
+      setPreviewState("idle");
+      return;
+    }
+    setPreviewState("verifying");
+    api.verifyPreview(previewToken)
+      .then((r) => setPreviewState(r.valid ? "valid" : "invalid"))
+      .catch(() => setPreviewState("invalid"));
+  }, [previewToken]);
+
+  useEffect(() => {
+    // Wait for preview verification to finish before fetching site data, so
+    // we can correctly decide whether to show drafts.
+    if (previewToken && previewState === "verifying") return;
+
     Promise.all([api.settings(), api.pages(), api.popups().catch(() => ({ popups: [] }))])
       .then(([settings, pageRes, popupRes]) => {
         applyTheme(settings);
         setData({ settings, pages: pageRes.pages || [], popups: popupRes.popups || [] });
       })
       .catch((e: Error) => setError(e.message));
-  }, []);
+  }, [previewToken, previewState]);
+
+  const isPreview = previewState === "valid";
+
+  if (previewToken && previewState === "verifying") {
+    return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}><div className="subtle">Verifying preview access…</div></div>;
+  }
+
+  if (previewToken && previewState === "invalid") {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem", textAlign: "center" }}>
+        <div>
+          <h1 className="h-section">Preview link expired</h1>
+          <p className="subtle" style={{ marginTop: ".5rem", maxWidth: 420, margin: ".5rem auto 0" }}>
+            This preview link is invalid or has expired. Please generate a new one from the Website Builder.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (error) {
     return <div style={{ padding: "3rem", textAlign: "center" }}><h1 className="h-section">Site unavailable</h1><p className="subtle">{error}</p></div>;
@@ -109,7 +149,7 @@ function App() {
 
   return (
     <WouterRouter base={ROUTER_BASE}>
-      <AppShell settings={data.settings} pages={data.pages} popups={data.popups} />
+      <AppShell settings={data.settings} pages={data.pages} popups={data.popups} isPreview={isPreview} />
     </WouterRouter>
   );
 }

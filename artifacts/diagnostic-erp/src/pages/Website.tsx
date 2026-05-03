@@ -682,15 +682,23 @@ function PublishTab({ settings }: { settings: SiteSettings }) {
     mutationFn: () => api.post("/api/website/unpublish", {}),
     onSuccess: (s: SiteSettings) => { qc.setQueryData(["website", "settings"], s); toast({ title: "Site unpublished" }); },
   });
+  const openPreview = useMutation({
+    mutationFn: () => api.post<{ token: string }>("/api/website/preview-token", {}),
+    onSuccess: ({ token }) => {
+      window.open(`/site/?preview_token=${encodeURIComponent(token)}`, "_blank", "noreferrer");
+    },
+    onError: () => { toast({ title: "Could not open preview", description: "Make sure you are signed in as a website admin.", variant: "destructive" }); },
+  });
+
   return (
     <Card title="Preview & Publish">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="rounded-lg border border-border p-5">
           <div className="flex items-center gap-2 mb-2 font-semibold"><Eye size={16} /> Preview</div>
           <p className="text-sm text-muted-foreground mb-3">Open the public website in a new tab to see the latest unpublished changes.</p>
-          <a href="/site/?preview=1" target="_blank" rel="noreferrer">
-            <Button variant="outline"><ExternalLink size={14} className="mr-1" /> Open preview</Button>
-          </a>
+          <Button variant="outline" onClick={() => openPreview.mutate()} disabled={openPreview.isPending}>
+            <ExternalLink size={14} className="mr-1" /> {openPreview.isPending ? "Opening…" : "Open preview"}
+          </Button>
         </div>
         <div className="rounded-lg border border-border p-5">
           <div className="flex items-center gap-2 mb-2 font-semibold"><Globe size={16} /> Publish</div>

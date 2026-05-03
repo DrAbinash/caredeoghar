@@ -57,7 +57,7 @@ const ERP_NAV_ORDER = [
   "/", "/dashboard", "/patients", "/appointments", "/queue", "/radiology", "/orders",
   "/tests", "/packages", "/billing", "/payments", "/reports",
   "/report-generator", "/report-hub", "/inventory", "/expenses", "/staff", "/referrals",
-  "/accounting", "/discounts", "/form-f", "/pacs", "/machines", "/hr-forms", "/settings",
+  "/accounting", "/discounts", "/form-f", "/pacs", "/machines", "/hr-forms", "/website", "/settings",
 ];
 
 // Route guard: if no staff session exists, redirect to the portal login.

@@ -11,10 +11,11 @@ async function get<T>(path: string): Promise<T> {
 }
 
 export const api = {
-  settings: () => get<SiteSettings>("/api/website/settings"),
-  pages:    () => get<{ pages: Page[] }>("/api/website/pages"),
-  page:     (id: number) => get<Page>(`/api/website/pages/${id}`),
-  faqs:     () => get<{ faqs: Faq[] }>("/api/website/faqs"),
-  photos:   (category?: string) => get<{ photos: Photo[] }>(`/api/website/photos${category && category !== "general" ? `?category=${encodeURIComponent(category)}` : ""}`),
-  popups:   () => get<{ popups: Popup[] }>("/api/website/popups"),
+  settings:      () => get<SiteSettings>("/api/website/settings"),
+  pages:         () => get<{ pages: Page[] }>("/api/website/pages"),
+  page:          (id: number) => get<Page>(`/api/website/pages/${id}`),
+  faqs:          () => get<{ faqs: Faq[] }>("/api/website/faqs"),
+  photos:        (category?: string) => get<{ photos: Photo[] }>(`/api/website/photos${category && category !== "general" ? `?category=${encodeURIComponent(category)}` : ""}`),
+  popups:        () => get<{ popups: Popup[] }>("/api/website/popups"),
+  verifyPreview: (token: string) => get<{ valid: boolean }>(`/api/website/verify-preview?token=${encodeURIComponent(token)}`),
 };
