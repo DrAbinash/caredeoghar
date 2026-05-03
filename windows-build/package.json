@@ -11,6 +11,7 @@
     "build:installer": "node scripts/build-installer.mjs",
     "build:electron": "node scripts/build-electron.mjs",
     "build:super-admin": "node scripts/build-super-admin.mjs",
+    "build:update-zip": "node scripts/build-update-zip.mjs",
     "build:all": "node scripts/build-all.mjs",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
   },

@@ -19,11 +19,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPTS = __dirname;
 
 const STEPS = [
-  ["1/5 payload",   path.join(SCRIPTS, "build-payload.mjs")],
-  ["2/5 launcher",  path.join(SCRIPTS, "build-launcher.mjs")],
-  ["3/5 portable",  path.join(SCRIPTS, "build-portable-zip.mjs")],
-  ["4/5 installer", path.join(SCRIPTS, "build-installer.mjs")],
-  ["5/5 electron",  path.join(SCRIPTS, "build-electron.mjs")],
+  ["1/6 payload",    path.join(SCRIPTS, "build-payload.mjs")],
+  ["2/6 launcher",   path.join(SCRIPTS, "build-launcher.mjs")],
+  ["3/6 portable",   path.join(SCRIPTS, "build-portable-zip.mjs")],
+  ["4/6 installer",  path.join(SCRIPTS, "build-installer.mjs")],
+  ["5/6 electron",   path.join(SCRIPTS, "build-electron.mjs")],
+  ["6/6 update-zip", path.join(SCRIPTS, "build-update-zip.mjs")],
 ];
 
 function run(cmd, args) {

@@ -35,6 +35,7 @@ import {
   Radio,
   Wrench,
   Globe,
+  Download,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -71,6 +72,7 @@ const navItems = [
   { path: "/dicom-nodes", icon: Server, label: "DICOM Nodes" },
   { path: "/machines", icon: Wrench, label: "Machines" },
   { path: "/settings", icon: Settings2, label: "Settings" },
+  { path: "/system-update", icon: Download, label: "System Update" },
 ];
 
 function ThemeToggle() {

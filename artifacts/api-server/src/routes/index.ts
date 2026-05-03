@@ -44,6 +44,7 @@ import { branchesRouter } from "./branches";
 import { backupRouter } from "./backup";
 import { vendorsRouter } from "./vendors";
 import { websiteRouter } from "./website";
+import { systemRouter } from "./system";
 import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
 
 const router: IRouter = Router();
@@ -95,5 +96,6 @@ router.use("/branches", branchesRouter);
 router.use("/backup", backupRouter);
 router.use("/vendors", vendorsRouter);
 router.use("/website", websiteRouter);
+router.use("/system", systemRouter);
 
 export default router;

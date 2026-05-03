@@ -26,20 +26,40 @@ const PAYLOAD_ROOT = (() => {
   return path.resolve(__dirname, "../dist/payload");
 })();
 
+// Updates can swap in a per-user override for app/. Once an update has been
+// applied we read the bundled binaries (Node, Postgres) from PAYLOAD_ROOT but
+// the server / web / migrate code from APP_DIR.
 const NODE_EXE   = path.join(PAYLOAD_ROOT, "runtime/node/node.exe");
 const PG_BIN     = path.join(PAYLOAD_ROOT, "runtime/pgsql/bin");
 const PG_CTL     = path.join(PG_BIN, "pg_ctl.exe");
 const PG_INITDB  = path.join(PG_BIN, "initdb.exe");
 const PSQL       = path.join(PG_BIN, "psql.exe");
-const SERVER_ENTRY = path.join(PAYLOAD_ROOT, "app/server/dist/index.mjs");
-const STATIC_DIR = path.join(PAYLOAD_ROOT, "app/web");
-const MIGRATE_SCRIPT = path.join(PAYLOAD_ROOT, "app/db-migrate/run.mjs");
 
 const USER_DIR = path.join(app.getPath("userData"), "diagnostic-erp");
 const PG_DATA  = path.join(USER_DIR, "pgsql");
 const PASS_FILE = path.join(USER_DIR, ".pgpass");
 const PORT_FILE = path.join(USER_DIR, ".ports.json");
 const LOG_DIR   = path.join(USER_DIR, "logs");
+const APP_OVERRIDE = path.join(USER_DIR, "app");
+const STAGING_DIR  = path.join(USER_DIR, "staging-update");
+const MARKER_FILE  = path.join(USER_DIR, ".pending-update");
+
+// Pick the app tree: override (if a previous update placed one) else bundled.
+function currentAppDir() {
+  return fs.existsSync(path.join(APP_OVERRIDE, "server/dist/index.mjs"))
+    ? APP_OVERRIDE
+    : path.join(PAYLOAD_ROOT, "app");
+}
+let APP_DIR = currentAppDir();
+let SERVER_ENTRY = path.join(APP_DIR, "server/dist/index.mjs");
+let STATIC_DIR   = path.join(APP_DIR, "web");
+let MIGRATE_SCRIPT = path.join(APP_DIR, "db-migrate/run.mjs");
+function refreshAppPaths() {
+  APP_DIR = currentAppDir();
+  SERVER_ENTRY = path.join(APP_DIR, "server/dist/index.mjs");
+  STATIC_DIR   = path.join(APP_DIR, "web");
+  MIGRATE_SCRIPT = path.join(APP_DIR, "db-migrate/run.mjs");
+}
 
 const DB_USER = "erp";
 const DB_NAME = "diagnostic_erp";
@@ -171,8 +191,12 @@ function startServer(databaseUrl) {
       DATABASE_URL: databaseUrl,
       SERVE_STATIC_DIR: STATIC_DIR,
       LOG_LEVEL: process.env.LOG_LEVEL || "info",
+      APP_INSTALL_ROOT: USER_DIR,
+      APP_MANIFEST_PATH: path.join(PAYLOAD_ROOT, "MANIFEST.json"),
+      UPDATE_STAGING_DIR: STAGING_DIR,
+      UPDATE_MARKER_FILE: MARKER_FILE,
     },
-    cwd: path.join(PAYLOAD_ROOT, "app/server"),
+    cwd: path.join(APP_DIR, "server"),
     stdio: ["ignore", "pipe", "pipe"],
   });
   const apiLog = fs.createWriteStream(path.join(LOG_DIR, "api.log"), { flags: "a" });
@@ -180,11 +204,55 @@ function startServer(databaseUrl) {
   serverProc.stderr.pipe(apiLog);
   serverProc.on("exit", (code, sig) => {
     log(`API server exited (code=${code}, signal=${sig})`);
-    if (!shuttingDown) {
-      dialog.showErrorBox("Server stopped", `The API server exited unexpectedly (code ${code}). The app will close.`);
-      cleanupAndQuit(1);
+    if (shuttingDown) return;
+    if (fs.existsSync(MARKER_FILE)) {
+      try {
+        applyStagedUpdate();
+        refreshAppPaths();
+        log("Restarting API server after update swap…");
+        startServer(databaseUrl);
+        if (mainWindow) mainWindow.webContents.reload();
+        return;
+      } catch (e) {
+        log(`Update swap failed: ${e.stack || e}`);
+      }
     }
+    dialog.showErrorBox("Server stopped", `The API server exited unexpectedly (code ${code}). The app will close.`);
+    cleanupAndQuit(1);
   });
+}
+
+function applyStagedUpdate() {
+  if (!fs.existsSync(MARKER_FILE)) return;
+  let marker;
+  try { marker = JSON.parse(fs.readFileSync(MARKER_FILE, "utf8")); }
+  catch { marker = { stagingDir: STAGING_DIR }; }
+  const newAppParent = marker.stagingDir || STAGING_DIR;
+  const newAppDir = path.join(newAppParent, "app");
+  if (!fs.existsSync(newAppDir)) {
+    try { fs.unlinkSync(MARKER_FILE); } catch {}
+    try { fs.rmSync(STAGING_DIR, { recursive: true, force: true }); } catch {}
+    return;
+  }
+  log(`Applying staged update from ${newAppDir}`);
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  if (fs.existsSync(APP_OVERRIDE)) {
+    fs.renameSync(APP_OVERRIDE, path.join(USER_DIR, `app.bak-${ts}`));
+  }
+  fs.mkdirSync(path.dirname(APP_OVERRIDE), { recursive: true });
+  fs.renameSync(newAppDir, APP_OVERRIDE);
+  try { fs.rmSync(STAGING_DIR, { recursive: true, force: true }); } catch {}
+  try { fs.unlinkSync(MARKER_FILE); } catch {}
+  // Prune old backups, keep last 3.
+  try {
+    const olds = fs.readdirSync(USER_DIR)
+      .filter((n) => n.startsWith("app.bak-"))
+      .map((n) => path.join(USER_DIR, n)).sort();
+    while (olds.length > 3) {
+      const v = olds.shift();
+      try { fs.rmSync(v, { recursive: true, force: true }); } catch {}
+    }
+  } catch { /* ignore */ }
 }
 
 async function waitForHttp(url, timeoutMs = 20000) {
@@ -272,6 +340,9 @@ app.whenReady().then(async () => {
     if (process.platform !== "win32" && !process.env.DIAG_ERP_FORCE_RUN) {
       throw new Error("Diagnostic ERP Desktop runs on Windows only.");
     }
+
+    // Apply any update staged by the previous run BEFORE we touch app paths.
+    try { applyStagedUpdate(); refreshAppPaths(); } catch (e) { log(`Boot update swap failed: ${e.stack || e}`); }
 
     let ports = { http: httpPort, pg: pgPort };
     if (fs.existsSync(PORT_FILE)) {

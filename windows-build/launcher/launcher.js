@@ -91,14 +91,17 @@ const PG_BIN     = path.join(ROOT, "runtime/pgsql/bin");
 const PG_INITDB  = path.join(PG_BIN, "initdb.exe");
 const PG_CTL     = path.join(PG_BIN, "pg_ctl.exe");
 const PG_POSTGRES = path.join(PG_BIN, "postgres.exe");
-const SERVER_ENTRY = path.join(ROOT, "app/server/dist/index.mjs");
-const STATIC_DIR = path.join(ROOT, "app/web");
-const MIGRATE_SCRIPT = path.join(ROOT, "app/db-migrate/run.mjs");
+const APP_DIR    = path.join(ROOT, "app");
+const SERVER_ENTRY = path.join(APP_DIR, "server/dist/index.mjs");
+const STATIC_DIR = path.join(APP_DIR, "web");
+const MIGRATE_SCRIPT = path.join(APP_DIR, "db-migrate/run.mjs");
 const DATA_DIR   = path.join(ROOT, VARIANT.dataDirName);
 const PG_DATA    = path.join(DATA_DIR, "pgsql");
 const PASS_FILE  = path.join(DATA_DIR, ".pgpass");
 const PORT_FILE  = path.join(DATA_DIR, ".ports.json");
 const LOG_DIR    = path.join(ROOT, "logs");
+const STAGING_DIR  = path.join(ROOT, "staging-update");
+const MARKER_FILE  = path.join(DATA_DIR, ".pending-update");
 
 const DEFAULT_HTTP_PORT = Number(process.env.PORT || VARIANT.defaultHttpPort);
 const DEFAULT_PG_PORT   = Number(process.env.PG_PORT || VARIANT.defaultPgPort);
@@ -256,11 +259,15 @@ function startServer(httpPort, databaseUrl) {
     DATABASE_URL: databaseUrl,
     SERVE_STATIC_DIR: STATIC_DIR,
     LOG_LEVEL: process.env.LOG_LEVEL || "info",
+    APP_INSTALL_ROOT: ROOT,
+    APP_MANIFEST_PATH: path.join(ROOT, "MANIFEST.json"),
+    UPDATE_STAGING_DIR: STAGING_DIR,
+    UPDATE_MARKER_FILE: MARKER_FILE,
   };
   log(`Starting API server on http://127.0.0.1:${httpPort} …`);
   serverProc = spawn(NODE_EXE, ["--enable-source-maps", SERVER_ENTRY], {
     env,
-    cwd: path.join(ROOT, "app/server"),
+    cwd: path.join(APP_DIR, "server"),
     stdio: ["ignore", "pipe", "pipe"],
   });
   const apiLog = fs.createWriteStream(path.join(LOG_DIR, "api.log"), { flags: "a" });
@@ -270,8 +277,70 @@ function startServer(httpPort, databaseUrl) {
   serverProc.stderr.pipe(process.stderr);
   serverProc.on("exit", (code, sig) => {
     log(`API server exited (code=${code}, signal=${sig})`);
+    // If the server staged an update before exiting, swap files and restart
+    // instead of shutting the launcher down. Pending requests are flushed by
+    // the API before it calls process.exit(0).
+    if (!shuttingDown && fs.existsSync(MARKER_FILE)) {
+      try {
+        applyStagedUpdate();
+        log("Restarting API server with updated app/…");
+        startServer(httpPort, databaseUrl);
+        return;
+      } catch (e) {
+        log(`Update swap failed: ${e.stack || e}`);
+        // Fall through to exit.
+      }
+    }
     cleanupAndExit(code ?? 0);
   });
+}
+
+// -------- In-place update swap ---------------------------------------------
+// Called BEFORE startServer() on boot (covers the initial restart) and also
+// after the server self-exits with a marker (covers the live restart). Either
+// way we move the new app/ tree from staging-update/ into place, and snapshot
+// the previous app/ into app.bak-<ts>/ so the user can roll back if needed.
+function applyStagedUpdate() {
+  if (!fs.existsSync(MARKER_FILE)) return;
+
+  let marker;
+  try { marker = JSON.parse(fs.readFileSync(MARKER_FILE, "utf8")); }
+  catch { marker = { stagingDir: STAGING_DIR }; }
+  const newAppParent = marker.stagingDir || STAGING_DIR;
+  const newAppDir = path.join(newAppParent, "app");
+  if (!fs.existsSync(newAppDir)) {
+    log(`Staged update missing app/ directory at ${newAppDir} — clearing marker.`);
+    try { fs.unlinkSync(MARKER_FILE); } catch {}
+    try { fs.rmSync(STAGING_DIR, { recursive: true, force: true }); } catch {}
+    return;
+  }
+
+  log(`Applying staged update from ${newAppDir}`);
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const backup = path.join(ROOT, `app.bak-${ts}`);
+  if (fs.existsSync(APP_DIR)) {
+    fs.renameSync(APP_DIR, backup);
+    log(`  previous app/ → ${path.basename(backup)}`);
+  }
+  fs.renameSync(newAppDir, APP_DIR);
+  log(`  new app/ in place`);
+
+  // Clean up staging area + marker
+  try { fs.rmSync(STAGING_DIR, { recursive: true, force: true }); } catch {}
+  try { fs.unlinkSync(MARKER_FILE); } catch {}
+
+  // Optional: prune backups older than the most recent 3 to avoid disk bloat
+  try {
+    const olds = fs.readdirSync(ROOT)
+      .filter((n) => n.startsWith("app.bak-"))
+      .map((n) => path.join(ROOT, n))
+      .sort();
+    while (olds.length > 3) {
+      const victim = olds.shift();
+      try { fs.rmSync(victim, { recursive: true, force: true }); } catch {}
+      log(`  pruned old backup ${path.basename(victim)}`);
+    }
+  } catch { /* ignore */ }
 }
 
 function openBrowser(url) {
@@ -311,6 +380,10 @@ async function main() {
   if (process.platform !== "win32" && !process.env.DIAG_ERP_FORCE_RUN) {
     fatal("This launcher is for Windows. Set DIAG_ERP_FORCE_RUN=1 to override (testing only).");
   }
+
+  // If the previous run staged an update before exiting, swap it in now —
+  // BEFORE preflight, since preflight requires app/server/dist/index.mjs.
+  try { applyStagedUpdate(); } catch (e) { log(`Update swap on boot failed: ${e.stack || e}`); }
 
   preflight();
 

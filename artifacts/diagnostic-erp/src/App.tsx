@@ -21,6 +21,7 @@ import Referrals from "@/pages/Referrals";
 import Accounting from "@/pages/Accounting";
 import Register from "@/pages/Register";
 import Settings from "@/pages/Settings";
+import SystemUpdate from "@/pages/SystemUpdate";
 import Dues from "@/pages/Dues";
 import DicomNodes from "@/pages/DicomNodes";
 import Discounts from "@/pages/Discounts";
@@ -126,6 +127,7 @@ function Router() {
             <Route path="/machines" component={Machines} />
             <Route path="/website" component={Website} />
             <Route path="/settings" component={Settings} />
+            <Route path="/system-update" component={SystemUpdate} />
             <Route component={NotFound} />
           </Switch>
         </Layout>
