@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
-  Phone, Mail, MapPin, Star, ChevronDown, Facebook, Instagram, Twitter, Youtube, Linkedin,
+  Phone, Mail, MapPin, Star, ChevronDown, Facebook, Instagram, Twitter, Youtube, Linkedin, Menu, X as XIcon,
 } from "lucide-react";
 import type { Section, SiteSettings, Page, Faq, Photo } from "./types";
 import { parseSocial } from "./types";
@@ -22,28 +22,49 @@ export function HeaderSection({ section, settings, pages, basePath }: { section:
   const ctaLabel = get(c, "ctaLabel", "Book Appointment");
   const ctaUrl = get(c, "ctaUrl", "/appointment");
   const [loc] = useLocation();
+  const [open, setOpen] = useState(false);
   const navPages = pages.filter((p) => p.showInNav && p.status === "published");
+  useEffect(() => { setOpen(false); }, [loc]);
+  const ctaHref = ctaUrl.startsWith("/") ? `${basePath}${ctaUrl.replace(/^\//, "")}` : ctaUrl;
+  const isActive = (slug: string) => (loc === "/" && slug === "home") || loc === `/${slug}`;
   return (
-    <header style={{ background: "hsl(var(--site-bg))", borderBottom: "1px solid hsl(var(--site-border))", position: "sticky", top: 0, zIndex: 40 }}>
-      <div className="container-narrow flex items-center justify-between gap-4 py-3 px-5">
-        <Link to="/" className="flex items-center gap-2 font-bold text-lg">
+    <header className="site-header">
+      <div className="container-narrow site-header-row">
+        <Link to="/" className="flex items-center gap-2 font-bold" style={{ fontSize: "1.05rem", minWidth: 0 }}>
           {showLogo && settings.logoUrl
-            ? <img src={settings.logoUrl} alt={settings.siteTitle} style={{ height: 36 }} />
-            : <span>{settings.siteTitle || "Clinic"}</span>}
+            ? <img src={settings.logoUrl} alt={settings.siteTitle} style={{ height: 36, maxWidth: 160, objectFit: "contain" }} />
+            : <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{settings.siteTitle || "Clinic"}</span>}
         </Link>
-        <nav className="hidden md:flex items-center gap-1">
+        <nav className="nav-desktop">
           {navPages.map((p) => (
-            <Link key={p.id} to={p.slug === "home" ? "/" : `/${p.slug}`} className={`nav-link ${(loc === "/" && p.slug === "home") || loc === `/${p.slug}` ? "active" : ""}`}>
+            <Link key={p.id} to={p.slug === "home" ? "/" : `/${p.slug}`} className={`nav-link ${isActive(p.slug) ? "active" : ""}`}>
               {p.title}
             </Link>
           ))}
         </nav>
-        {ctaLabel && (
-          <a href={ctaUrl.startsWith("/") ? `${basePath}${ctaUrl.replace(/^\//, "")}` : ctaUrl} className={buttonClass(settings, "primary")}>
-            {ctaLabel}
-          </a>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: ".5rem" }}>
+          {ctaLabel && (
+            <a href={ctaHref} className={`${buttonClass(settings, "primary")} header-cta-desktop`}>{ctaLabel}</a>
+          )}
+          {navPages.length > 0 && (
+            <button className="nav-toggle" aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+              {open ? <XIcon size={20} /> : <Menu size={20} />}
+            </button>
+          )}
+        </div>
       </div>
+      {open && navPages.length > 0 && (
+        <nav className="nav-mobile" style={{ display: "flex" }}>
+          {navPages.map((p) => (
+            <Link key={p.id} to={p.slug === "home" ? "/" : `/${p.slug}`} className={`nav-link ${isActive(p.slug) ? "active" : ""}`}>
+              {p.title}
+            </Link>
+          ))}
+          {ctaLabel && (
+            <a href={ctaHref} className={buttonClass(settings, "primary")} style={{ justifyContent: "center", marginTop: ".5rem" }}>{ctaLabel}</a>
+          )}
+        </nav>
+      )}
     </header>
   );
 }
