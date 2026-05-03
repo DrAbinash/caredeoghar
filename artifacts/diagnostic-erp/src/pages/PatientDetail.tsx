@@ -1,18 +1,20 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useGetPatient, useGetPatientHistory, getGetPatientQueryKey } from "@workspace/api-client-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
   ArrowLeft, User, Phone, MapPin, Droplet, Sparkles,
-  Copy, CheckCheck, MessageSquare, FileText, Upload, X,
+  Copy, CheckCheck, MessageSquare, FileText, Upload, X, ShieldCheck, ShieldOff,
 } from "lucide-react";
 
 type AIType = "clinical-note" | "patient-message";
@@ -36,6 +38,30 @@ export default function PatientDetail({ id }: { id: number }) {
   const [copied, setCopied] = useState(false);
   const [photoSaving, setPhotoSaving] = useState(false);
   const [photoErr, setPhotoErr] = useState("");
+
+  // Portal access code management
+  const [portalPinOpen, setPortalPinOpen] = useState(false);
+  const [newPortalPin, setNewPortalPin] = useState("");
+  const [portalPinMsg, setPortalPinMsg] = useState("");
+  const [portalPinErr, setPortalPinErr] = useState("");
+
+  const { data: portalStatus, refetch: refetchPortalStatus } = useQuery<{ hasPortalAccess: boolean }>({
+    queryKey: ["portal-status", id],
+    queryFn: () => api.get(`/api/portal/admin/patient-portal-status/${id}`),
+    retry: false,
+  });
+
+  const setPortalPin = useMutation({
+    mutationFn: (accessCode: string | null) =>
+      api.post("/api/portal/admin/set-patient-portal-code", { patientId: id, accessCode }),
+    onSuccess: () => {
+      void refetchPortalStatus();
+      setPortalPinMsg(newPortalPin ? "Portal access code set successfully." : "Portal access revoked.");
+      setNewPortalPin("");
+      setPortalPinErr("");
+    },
+    onError: (e: Error) => setPortalPinErr(e.message),
+  });
 
   const savePhoto = async (dataUrl: string | null) => {
     setPhotoErr("");
@@ -210,6 +236,43 @@ export default function PatientDetail({ id }: { id: number }) {
           </div>
         </div>
 
+        {/* Portal Access Management */}
+        <div className="bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-950/30 dark:to-blue-950/20 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              {portalStatus?.hasPortalAccess ? (
+                <ShieldCheck size={15} className="text-green-600 dark:text-green-400" />
+              ) : (
+                <ShieldOff size={15} className="text-amber-500" />
+              )}
+              <p className="text-sm font-semibold">
+                Patient Portal Access:{" "}
+                <span className={portalStatus?.hasPortalAccess ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}>
+                  {portalStatus === undefined ? "Loading…" : portalStatus.hasPortalAccess ? "Active" : "Not activated"}
+                </span>
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => { setPortalPinMsg(""); setPortalPinErr(""); setNewPortalPin(""); setPortalPinOpen(true); }}>
+                {portalStatus?.hasPortalAccess ? "Reset Access Code" : "Set Access Code"}
+              </Button>
+              {portalStatus?.hasPortalAccess && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive"
+                  disabled={setPortalPin.isPending}
+                  onClick={() => { setPortalPinMsg(""); setPortalPinErr(""); setPortalPin.mutate(null); }}
+                >
+                  Revoke
+                </Button>
+              )}
+            </div>
+          </div>
+          {portalPinMsg && <p className="text-xs text-green-600 dark:text-green-400 mt-2">{portalPinMsg}</p>}
+          {portalPinErr && <p className="text-xs text-destructive mt-2">{portalPinErr}</p>}
+        </div>
+
         {/* AI Message quick buttons */}
         <div className="bg-gradient-to-r from-violet-50 to-blue-50 dark:from-violet-950/20 dark:to-blue-950/20 border border-violet-200 dark:border-violet-800 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-3">
@@ -268,6 +331,46 @@ export default function PatientDetail({ id }: { id: number }) {
           </div>
         </div>
       </div>
+
+      {/* Portal Access Code Dialog */}
+      <Dialog open={portalPinOpen} onOpenChange={(open) => { setPortalPinOpen(open); if (!open) { setNewPortalPin(""); setPortalPinErr(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldCheck size={16} className="text-blue-500" />
+              Set Portal Access Code
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <p className="text-sm text-muted-foreground">
+              Set a portal access code for this patient. They will need this code, along with their mobile number and date of birth, to log in to the patient portal.
+            </p>
+            <div>
+              <Label htmlFor="portal-pin-input">New Access Code (4–20 characters)</Label>
+              <Input
+                id="portal-pin-input"
+                type="text"
+                placeholder="e.g. Abc12345"
+                value={newPortalPin}
+                onChange={(e) => setNewPortalPin(e.target.value)}
+                className="mt-1.5"
+                autoFocus
+                maxLength={20}
+              />
+            </div>
+            {portalPinErr && <p className="text-sm text-destructive">{portalPinErr}</p>}
+            <div className="flex gap-2 justify-end pt-1">
+              <Button variant="outline" onClick={() => setPortalPinOpen(false)}>Cancel</Button>
+              <Button
+                disabled={newPortalPin.trim().length < 4 || setPortalPin.isPending}
+                onClick={() => setPortalPin.mutate(newPortalPin.trim(), { onSuccess: () => setPortalPinOpen(false) })}
+              >
+                {setPortalPin.isPending ? "Saving…" : "Save Code"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* AI Result Dialog */}
       <Dialog open={aiOpen} onOpenChange={setAiOpen}>

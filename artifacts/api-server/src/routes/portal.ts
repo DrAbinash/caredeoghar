@@ -17,14 +17,33 @@ import {
   appointmentCounterTable,
   doctorsTable,
 } from "@workspace/db/schema";
-import { eq, and, desc, gt, sql } from "drizzle-orm";
+import { eq, and, desc, gt, sql, count } from "drizzle-orm";
 
 export const portalRouter = Router();
 
 // Session lifetime: 12 hours
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
-// Rate limiters for login endpoints — keyed by IP address
+// Allowed appointment time slots — matches the UI's fixed list.
+// The server enforces this so callers cannot inject arbitrary slot strings.
+const ALLOWED_SLOTS = new Set([
+  "09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM",
+  "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM",
+]);
+
+// Maximum active (scheduled) appointments a single patient may hold at once.
+const MAX_ACTIVE_APPOINTMENTS = 5;
+
+// Per-patient login failure tracking (in-memory).
+// Key: patient DB id. Value: { attempts, lockedUntil }
+const patientLoginFailures = new Map<number, { attempts: number; lockedUntil: number }>();
+const MAX_PATIENT_LOGIN_ATTEMPTS = 5;
+const PATIENT_LOCKOUT_MS = 30 * 60 * 1000; // 30 minutes
+
+// =====================================================================
+// Rate limiters — keyed by IP address
+// =====================================================================
+
 const patientLoginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -41,7 +60,19 @@ const staffLoginLimiter = rateLimit({
   message: { error: "Too many login attempts. Please try again in 15 minutes." },
 });
 
-// Cleanup helper — best-effort prune of expired sessions
+// Throttle appointment creation: max 10 per hour per IP.
+const appointmentBookingLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many booking requests. Please try again later." },
+});
+
+// =====================================================================
+// Helpers
+// =====================================================================
+
 async function pruneExpiredSessions() {
   try {
     await db.delete(portalSessionsTable).where(sql`${portalSessionsTable.expiresAt} < now()`);
@@ -88,17 +119,30 @@ portalRouter.get("/settings", async (_req, res) => {
   });
 });
 
-// Patient login — phone + date of birth verification.
-// Both factors must match; errors are deliberately generic to prevent
-// phone-number enumeration by a remote attacker.
+// Patient login — phone + date of birth + staff-issued portal access code.
+//
+// Three factors are required:
+//   1. Registered phone number (last-10-digit match)
+//   2. Date of birth (exact string match)
+//   3. Portal access code — a PIN set by reception staff; stored as a bcrypt
+//      hash in patients.portal_pin_hash. Without this code a caller who knows
+//      a patient's demographics cannot log in.
+//
+// Per-patient lockout: after 5 wrong access-code attempts the patient account
+// is locked for 30 minutes, limiting brute-force attacks on the PIN.
 portalRouter.post("/patient-login", patientLoginLimiter, async (req, res) => {
   if (!(await requirePortalEnabled(res))) return;
 
   const phone = String(req.body?.phone ?? "").trim();
   const dob = String(req.body?.dateOfBirth ?? "").trim();
+  const accessCode = String(req.body?.accessCode ?? "").trim();
 
   if (!phone || !dob) {
     res.status(400).json({ error: "Mobile number and date of birth are required" });
+    return;
+  }
+  if (!accessCode) {
+    res.status(400).json({ error: "Portal access code is required. Please contact reception if you have not received one." });
     return;
   }
 
@@ -128,7 +172,7 @@ portalRouter.post("/patient-login", patientLoginLimiter, async (req, res) => {
 
   // Use a generic 401 for both "unknown phone" and "wrong DOB" to prevent
   // patient enumeration via the API.
-  const genericError = "We could not verify your identity. Please check your mobile number and date of birth, or contact reception.";
+  const genericError = "We could not verify your identity. Please check your mobile number, date of birth, and portal access code, or contact reception.";
 
   if (matches.length === 0) {
     res.status(401).json({ error: genericError });
@@ -140,11 +184,48 @@ portalRouter.post("/patient-login", patientLoginLimiter, async (req, res) => {
   }
   const patient = matches[0];
 
-  // Second factor: date of birth must match (case-insensitive string compare)
+  // Factor 2: date of birth must match
   if (!patient.dateOfBirth || patient.dateOfBirth.trim() !== normalizedDob) {
     res.status(401).json({ error: genericError });
     return;
   }
+
+  // Factor 3: portal access code must be set and match.
+  // If no access code has been issued for this patient, login is not possible.
+  if (!patient.portalPinHash) {
+    res.status(401).json({
+      error: "Your portal access has not been activated. Please visit reception to receive your portal access code.",
+    });
+    return;
+  }
+
+  // Per-patient lockout check
+  const now = Date.now();
+  const failure = patientLoginFailures.get(patient.id);
+  if (failure && failure.lockedUntil > now) {
+    const minutesLeft = Math.ceil((failure.lockedUntil - now) / 60_000);
+    res.status(429).json({
+      error: `Too many incorrect access code attempts. Please try again in ${minutesLeft} minute${minutesLeft !== 1 ? "s" : ""} or contact reception.`,
+    });
+    return;
+  }
+
+  const codeMatches = await bcrypt.compare(accessCode, patient.portalPinHash);
+  if (!codeMatches) {
+    // Increment failure counter
+    const prev = patientLoginFailures.get(patient.id) ?? { attempts: 0, lockedUntil: 0 };
+    const newAttempts = prev.attempts + 1;
+    if (newAttempts >= MAX_PATIENT_LOGIN_ATTEMPTS) {
+      patientLoginFailures.set(patient.id, { attempts: newAttempts, lockedUntil: now + PATIENT_LOCKOUT_MS });
+    } else {
+      patientLoginFailures.set(patient.id, { attempts: newAttempts, lockedUntil: 0 });
+    }
+    res.status(401).json({ error: genericError });
+    return;
+  }
+
+  // Successful login — clear failure record
+  patientLoginFailures.delete(patient.id);
 
   await pruneExpiredSessions();
   const token = crypto.randomBytes(24).toString("hex");
@@ -285,6 +366,100 @@ async function requirePatientAuth(req: PortalAuthRequest, res: Response, next: N
   req.portalSession = session;
   next();
 }
+
+async function requireStaffAuth(req: PortalAuthRequest, res: Response, next: NextFunction) {
+  const auth = req.headers.authorization || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  if (!token) {
+    res.status(401).json({ error: "Staff login required" });
+    return;
+  }
+
+  const [session] = await db
+    .select()
+    .from(portalSessionsTable)
+    .where(and(eq(portalSessionsTable.token, token), gt(portalSessionsTable.expiresAt, new Date())))
+    .limit(1);
+
+  if (!session || session.scope !== "staff") {
+    res.status(401).json({ error: "Staff session expired. Please log in again." });
+    return;
+  }
+
+  req.portalSession = session;
+  next();
+}
+
+// =====================================================================
+// Staff-only admin endpoints
+// =====================================================================
+
+// Set or reset a patient's portal access code.
+// Staff must be authenticated. The code is bcrypt-hashed before storage.
+// Send { patientId: number, accessCode: string } to set a new code, or
+// { patientId: number, accessCode: null } to revoke portal access.
+portalRouter.post("/admin/set-patient-portal-code", requireStaffAuth, async (req: PortalAuthRequest, res) => {
+  const patientId = req.body?.patientId == null ? null : Number(req.body.patientId);
+  if (!Number.isInteger(patientId) || (patientId as number) <= 0) {
+    res.status(400).json({ error: "patientId must be a positive integer" });
+    return;
+  }
+
+  const raw = req.body?.accessCode;
+
+  if (raw === null || raw === undefined || String(raw).trim() === "") {
+    // Revoke access
+    await db
+      .update(patientsTable)
+      .set({ portalPinHash: null, updatedAt: new Date() })
+      .where(eq(patientsTable.id, patientId as number));
+    // Clear any failure tracking
+    patientLoginFailures.delete(patientId as number);
+    res.json({ ok: true, message: "Portal access revoked for patient" });
+    return;
+  }
+
+  const code = String(raw).trim();
+  if (code.length < 4 || code.length > 20) {
+    res.status(400).json({ error: "Access code must be 4–20 characters" });
+    return;
+  }
+
+  const hash = await bcrypt.hash(code, 12);
+  const [updated] = await db
+    .update(patientsTable)
+    .set({ portalPinHash: hash, updatedAt: new Date() })
+    .where(eq(patientsTable.id, patientId as number))
+    .returning({ id: patientsTable.id });
+
+  if (!updated) {
+    res.status(404).json({ error: "Patient not found" });
+    return;
+  }
+
+  // Clear any existing lockout when staff resets the code
+  patientLoginFailures.delete(patientId as number);
+  res.json({ ok: true, message: "Portal access code updated" });
+});
+
+// Check whether a patient has a portal access code set (without revealing the hash).
+portalRouter.get("/admin/patient-portal-status/:patientId", requireStaffAuth, async (req: PortalAuthRequest, res) => {
+  const patientId = Number(req.params.patientId);
+  if (!Number.isInteger(patientId) || patientId <= 0) {
+    res.status(400).json({ error: "Invalid patient ID" });
+    return;
+  }
+  const [p] = await db
+    .select({ id: patientsTable.id, portalPinHash: patientsTable.portalPinHash })
+    .from(patientsTable)
+    .where(eq(patientsTable.id, patientId))
+    .limit(1);
+  if (!p) {
+    res.status(404).json({ error: "Patient not found" });
+    return;
+  }
+  res.json({ hasPortalAccess: p.portalPinHash !== null });
+});
 
 // =====================================================================
 // Patient self-service endpoints
@@ -443,69 +618,127 @@ portalRouter.get("/me/appointments", requirePatientAuth, async (req: PortalAuthR
   res.json(rows.map((r) => ({ ...r.appointment, doctor: r.doctor })));
 });
 
-portalRouter.post("/me/appointments", requirePatientAuth, async (req: PortalAuthRequest, res) => {
-  const s = await getSettings();
-  if (!s.portalAllowAppointmentBooking) {
-    res.status(403).json({ error: "Appointment booking is disabled by the clinic" });
-    return;
-  }
+portalRouter.post(
+  "/me/appointments",
+  appointmentBookingLimiter,
+  requirePatientAuth,
+  async (req: PortalAuthRequest, res) => {
+    const s = await getSettings();
+    if (!s.portalAllowAppointmentBooking) {
+      res.status(403).json({ error: "Appointment booking is disabled by the clinic" });
+      return;
+    }
 
-  const id = req.portalSession!.subjectId;
-  const date = String(req.body?.appointmentDate ?? "").trim();
-  const slot = String(req.body?.timeSlot ?? "").trim();
-  const doctorId = req.body?.doctorId == null ? null : Number(req.body.doctorId);
-  const notes = req.body?.notes ? String(req.body.notes).slice(0, 500) : null;
+    const id = req.portalSession!.subjectId;
+    const date = String(req.body?.appointmentDate ?? "").trim();
+    const slot = String(req.body?.timeSlot ?? "").trim();
+    const doctorId = req.body?.doctorId == null ? null : Number(req.body.doctorId);
+    const notes = req.body?.notes ? String(req.body.notes).slice(0, 500) : null;
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    res.status(400).json({ error: "Please pick a valid date" });
-    return;
-  }
-  if (!slot) {
-    res.status(400).json({ error: "Please pick a time slot" });
-    return;
-  }
-  // Reject past dates
-  if (new Date(date + "T23:59:59").getTime() < Date.now() - 24 * 3600_000) {
-    res.status(400).json({ error: "Date is in the past" });
-    return;
-  }
-  if (doctorId != null && (!Number.isInteger(doctorId) || doctorId <= 0)) {
-    res.status(400).json({ error: "Invalid doctor" });
-    return;
-  }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      res.status(400).json({ error: "Please pick a valid date" });
+      return;
+    }
+    if (!slot) {
+      res.status(400).json({ error: "Please pick a time slot" });
+      return;
+    }
+    // Reject slots not in the clinic's allowed list
+    if (!ALLOWED_SLOTS.has(slot)) {
+      res.status(400).json({ error: "Please select a valid time slot" });
+      return;
+    }
+    // Reject past dates
+    if (new Date(date + "T23:59:59").getTime() < Date.now() - 24 * 3600_000) {
+      res.status(400).json({ error: "Date is in the past" });
+      return;
+    }
+    if (doctorId != null && (!Number.isInteger(doctorId) || doctorId <= 0)) {
+      res.status(400).json({ error: "Invalid doctor" });
+      return;
+    }
 
-  // Generate appointment ID — atomic increment to avoid race conditions
-  // when multiple patients book simultaneously.
-  let seq: number;
-  const updated = await db
-    .update(appointmentCounterTable)
-    .set({ counter: sql`${appointmentCounterTable.counter} + 1` })
-    .returning({ counter: appointmentCounterTable.counter });
-  if (updated.length > 0) {
-    seq = updated[0].counter;
-  } else {
-    const [created] = await db.insert(appointmentCounterTable).values({ counter: 1 }).returning();
-    seq = created.counter;
-  }
-  const now = new Date();
-  const yymm = `${String(now.getFullYear()).slice(2)}${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const apptId = `APT-${yymm}-${String(seq).padStart(4, "0")}`;
+    // Validate doctor exists if specified
+    if (doctorId != null) {
+      const [doc] = await db
+        .select({ id: doctorsTable.id })
+        .from(doctorsTable)
+        .where(eq(doctorsTable.id, doctorId))
+        .limit(1);
+      if (!doc) {
+        res.status(400).json({ error: "Selected doctor not found" });
+        return;
+      }
+    }
 
-  const [created] = await db
-    .insert(appointmentsTable)
-    .values({
-      appointmentId: apptId,
-      patientId: id,
-      doctorId,
-      appointmentDate: date,
-      timeSlot: slot,
-      status: "scheduled",
-      type: "portal",
-      notes,
-    })
-    .returning();
-  res.status(201).json(created);
-});
+    // Enforce maximum active appointments per patient
+    const [{ activeCount }] = await db
+      .select({ activeCount: count() })
+      .from(appointmentsTable)
+      .where(
+        and(
+          eq(appointmentsTable.patientId, id),
+          eq(appointmentsTable.status, "scheduled"),
+        ),
+      );
+    if (Number(activeCount) >= MAX_ACTIVE_APPOINTMENTS) {
+      res.status(422).json({
+        error: `You already have ${MAX_ACTIVE_APPOINTMENTS} scheduled appointments. Please cancel an existing appointment before booking a new one.`,
+      });
+      return;
+    }
+
+    // Prevent duplicate bookings (same patient + date + slot)
+    const [duplicate] = await db
+      .select({ id: appointmentsTable.id })
+      .from(appointmentsTable)
+      .where(
+        and(
+          eq(appointmentsTable.patientId, id),
+          eq(appointmentsTable.appointmentDate, date),
+          eq(appointmentsTable.timeSlot, slot),
+          eq(appointmentsTable.status, "scheduled"),
+        ),
+      )
+      .limit(1);
+    if (duplicate) {
+      res.status(409).json({ error: "You already have an appointment booked for that date and time slot" });
+      return;
+    }
+
+    // Generate appointment ID — atomic increment to avoid race conditions
+    // when multiple patients book simultaneously.
+    let seq: number;
+    const updated = await db
+      .update(appointmentCounterTable)
+      .set({ counter: sql`${appointmentCounterTable.counter} + 1` })
+      .returning({ counter: appointmentCounterTable.counter });
+    if (updated.length > 0) {
+      seq = updated[0].counter;
+    } else {
+      const [created] = await db.insert(appointmentCounterTable).values({ counter: 1 }).returning();
+      seq = created.counter;
+    }
+    const now = new Date();
+    const yymm = `${String(now.getFullYear()).slice(2)}${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const apptId = `APT-${yymm}-${String(seq).padStart(4, "0")}`;
+
+    const [created] = await db
+      .insert(appointmentsTable)
+      .values({
+        appointmentId: apptId,
+        patientId: id,
+        doctorId,
+        appointmentDate: date,
+        timeSlot: slot,
+        status: "scheduled",
+        type: "portal",
+        notes,
+      })
+      .returning();
+    res.status(201).json(created);
+  },
+);
 
 // Public list of doctors (for booking dropdown). No PII beyond name.
 portalRouter.get("/doctors", async (_req, res) => {
