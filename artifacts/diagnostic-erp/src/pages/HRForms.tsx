@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import {
-  FileText, Plus, Search, Edit2, Printer, CheckCircle2, XCircle, Trash2, Eye,
+  FileText, Plus, Search, Edit2, Printer, CheckCircle2, XCircle, Trash2, Eye, Download,
 } from "lucide-react";
 
 const inr = (n: number) =>
@@ -100,6 +100,84 @@ type Staff = {
   joiningDate: string | null; baseSalary: number; address: string | null;
   emergencyContact: string | null; bankAccount: string | null; ifsc: string | null;
 };
+
+// ── PDF generation via jspdf + html2canvas (lazy-loaded) ────────────────────
+async function downloadFormPdf(node: HTMLElement, filename: string) {
+  const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+    import("jspdf"),
+    import("html2canvas"),
+  ]);
+  const canvas = await html2canvas(node, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+  const imgData = canvas.toDataURL("image/png");
+  const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+  const pageW = pdf.internal.pageSize.getWidth();
+  const pageH = pdf.internal.pageSize.getHeight();
+  const imgW = pageW;
+  const imgH = (canvas.height * imgW) / canvas.width;
+  // Multi-page: paint the same image with a negative Y offset for each page slice.
+  let heightLeft = imgH;
+  let position = 0;
+  pdf.addImage(imgData, "PNG", 0, position, imgW, imgH, undefined, "FAST");
+  heightLeft -= pageH;
+  while (heightLeft > 0) {
+    position = heightLeft - imgH;
+    pdf.addPage();
+    pdf.addImage(imgData, "PNG", 0, position, imgW, imgH, undefined, "FAST");
+    heightLeft -= pageH;
+  }
+  pdf.save(filename);
+}
+
+// ── Embeddable per-staff panel (used inside the Staff detail dialog) ─────────
+export function StaffHRFormsPanel({ staffId }: { staffId: number }) {
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [viewingId, setViewingId] = useState<number | null>(null);
+  const { data: forms = [], isLoading } = useQuery<HRForm[]>({
+    queryKey: ["hr-forms-staff", staffId],
+    queryFn: () => api.get<HRForm[]>(`/api/staff/${staffId}/hr-forms`),
+  });
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-muted-foreground">All re-joining / salary-revision forms for this employee.</div>
+        <Button size="sm" onClick={() => setCreateOpen(true)}><Plus size={14} className="mr-1" />New Form</Button>
+      </div>
+      <div className="rounded-lg border max-h-72 overflow-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40 text-xs uppercase text-muted-foreground"><tr>
+            <th className="text-left px-3 py-2">Form #</th>
+            <th className="text-left px-3 py-2">Created</th>
+            <th className="text-right px-3 py-2">Fixed Salary</th>
+            <th className="px-3 py-2">Status</th>
+            <th className="px-3 py-2 w-[1%]"></th>
+          </tr></thead>
+          <tbody>
+            {isLoading && <tr><td colSpan={5} className="text-center py-4 text-muted-foreground">Loading…</td></tr>}
+            {!isLoading && forms.length === 0 && <tr><td colSpan={5} className="text-center py-4 text-muted-foreground">No HR forms yet</td></tr>}
+            {forms.map((f) => (
+              <tr key={f.id} className="border-t hover:bg-muted/30">
+                <td className="px-3 py-2 font-mono text-xs">{f.formNumber}</td>
+                <td className="px-3 py-2 text-xs">{new Date(f.createdAt).toLocaleDateString("en-IN")}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{inr(Number(f.fixedSalary))}</td>
+                <td className="px-3 py-2 text-center"><StatusBadge status={f.managementStatus} /></td>
+                <td className="px-3 py-2 text-right whitespace-nowrap">
+                  <Button size="sm" variant="ghost" onClick={() => setViewingId(f.id)} title="Print preview"><Eye size={14} /></Button>
+                  {f.managementStatus !== "approved" && (
+                    <Button size="sm" variant="ghost" onClick={() => setEditingId(f.id)} title="Edit"><Edit2 size={14} /></Button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {createOpen && <FormEditorDialog mode="create" staffId={staffId} onClose={() => setCreateOpen(false)} />}
+      {editingId !== null && <FormEditorDialog mode="edit" formId={editingId} onClose={() => setEditingId(null)} />}
+      {viewingId !== null && <PrintPreviewDialog id={viewingId} onClose={() => setViewingId(null)} />}
+    </div>
+  );
+}
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 export default function HRFormsPage() {
@@ -705,6 +783,9 @@ function PrintPreviewDialog({ id, onClose }: { id: number; onClose: () => void }
     queryFn: () => api.get("/api/clinic-settings"),
     staleTime: 60_000,
   });
+  const printAreaRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+  const [downloading, setDownloading] = useState(false);
   if (!form) return null;
   const sal = form.salaryStructure ?? {};
   const fam = form.familyDetails ?? {};
@@ -716,11 +797,31 @@ function PrintPreviewDialog({ id, onClose }: { id: number; onClose: () => void }
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between gap-3">
             <span className="flex items-center gap-2"><FileText size={18} />HR Form {form.formNumber} — Print Preview</span>
-            <Button size="sm" onClick={() => window.print()}><Printer size={14} className="mr-1.5" />Print / Save PDF</Button>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => window.print()}><Printer size={14} className="mr-1.5" />Print</Button>
+              <Button
+                size="sm"
+                disabled={downloading}
+                onClick={async () => {
+                  if (!printAreaRef.current) return;
+                  setDownloading(true);
+                  try {
+                    await downloadFormPdf(printAreaRef.current, `${form.formNumber}-${form.employeeName.replace(/\s+/g, "_")}.pdf`);
+                    toast({ title: "PDF downloaded" });
+                  } catch (e) {
+                    toast({ title: "PDF generation failed", description: e instanceof Error ? e.message : "", variant: "destructive" });
+                  } finally {
+                    setDownloading(false);
+                  }
+                }}
+              >
+                <Download size={14} className="mr-1.5" />{downloading ? "Generating…" : "Download PDF"}
+              </Button>
+            </div>
           </DialogTitle>
         </DialogHeader>
         <div className="flex-1 overflow-y-auto bg-muted/30 p-4">
-          <div id="hr-print-area" className="bg-white text-black mx-auto shadow-md" style={{ width: "210mm", minHeight: "297mm", padding: "12mm" }}>
+          <div id="hr-print-area" ref={printAreaRef} className="bg-white text-black mx-auto shadow-md" style={{ width: "210mm", minHeight: "297mm", padding: "12mm" }}>
             {/* Header */}
             <div className="flex items-start gap-4 border-b-2 border-black pb-3">
               <div className="flex-1">

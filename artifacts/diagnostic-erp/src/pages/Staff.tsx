@@ -17,8 +17,9 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import {
   Users, Plus, Search, Edit2, Trash2, Fingerprint, Wallet,
-  HandCoins, CalendarCheck, IndianRupee, X, LogIn, LogOut, ShieldAlert,
+  HandCoins, CalendarCheck, IndianRupee, X, LogIn, LogOut, ShieldAlert, FilePen,
 } from "lucide-react";
+import { StaffHRFormsPanel } from "@/pages/HRForms";
 
 const inr = (n: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
@@ -258,11 +259,13 @@ function StaffDetailDialog({ id, onClose }: { id: number; onClose: () => void })
               <TabsTrigger value="advances"><HandCoins size={14} className="mr-1.5" />Advances</TabsTrigger>
               <TabsTrigger value="salary"><Wallet size={14} className="mr-1.5" />Salary</TabsTrigger>
               <TabsTrigger value="biometric"><Fingerprint size={14} className="mr-1.5" />Fingerprint</TabsTrigger>
+              <TabsTrigger value="hr-forms"><FilePen size={14} className="mr-1.5" />HR Forms</TabsTrigger>
             </TabsList>
             <TabsContent value="profile" className="mt-3"><ProfilePanel staff={staff} /></TabsContent>
             <TabsContent value="advances" className="mt-3"><AdvancesPanel staffId={id} /></TabsContent>
             <TabsContent value="salary" className="mt-3"><SalaryPanel staff={staff} /></TabsContent>
             <TabsContent value="biometric" className="mt-3"><BiometricPanel staff={staff} /></TabsContent>
+            <TabsContent value="hr-forms" className="mt-3"><StaffHRFormsPanel staffId={id} /></TabsContent>
           </Tabs>
         )}
       </DialogContent>

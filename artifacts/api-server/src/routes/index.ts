@@ -31,7 +31,7 @@ import displayRouter from "./display";
 import { whatsappRouter } from "./whatsapp";
 import { printersRouter } from "./printers";
 import { staffRouter } from "./staff";
-import hrFormsRouter from "./hr-forms";
+import hrFormsRouter, { staffScopedHrFormsHandler } from "./hr-forms";
 import { bridgeRouter } from "./bridge";
 import { reportTemplatesRouter } from "./report-templates";
 import { abnormalFindingsRouter } from "./abnormal-findings";
@@ -108,6 +108,14 @@ router.use("/staff", requireStaffAuth, requireStaffPermission("/settings"), staf
 
 // HR re-joining / update forms — same /settings permission as staff records
 router.use("/hr-forms", requireStaffAuth, requireStaffPermission("/settings"), hrFormsRouter);
+// Staff-scoped HR forms listing (mounted on the /staff path so the StaffDetail
+// dialog can fetch all forms for a single employee).
+router.get(
+  "/staff/:staffId/hr-forms",
+  requireStaffAuth,
+  requireStaffPermission("/settings"),
+  staffScopedHrFormsHandler,
+);
 
 // Clinic configuration — /settings permission
 router.use("/clinic-settings", requireStaffAuth, requireStaffPermission("/settings"), clinicSettingsRouter);

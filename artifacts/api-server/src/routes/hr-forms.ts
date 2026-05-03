@@ -71,6 +71,19 @@ router.get("/", async (req, res) => {
   return res.json(rows.map((r) => toFormJson(r as Record<string, unknown>)));
 });
 
+// Staff-scoped list — used from the Staff detail dialog to show all HR forms
+// for a single employee. Mounted at /api/staff/:staffId/hr-forms (see index.ts).
+export const staffScopedHrFormsHandler = async (req: import("express").Request, res: import("express").Response) => {
+  const staffId = Number(req.params.staffId);
+  if (!staffId) return res.status(400).json({ error: "staffId required" });
+  const rows = await db
+    .select()
+    .from(hrRejoiningFormsTable)
+    .where(eq(hrRejoiningFormsTable.staffId, staffId))
+    .orderBy(desc(hrRejoiningFormsTable.createdAt));
+  return res.json(rows.map((r) => toFormJson(r as Record<string, unknown>)));
+};
+
 router.get("/:id", async (req, res) => {
   const id = Number(req.params.id);
   const [row] = await db.select().from(hrRejoiningFormsTable).where(eq(hrRejoiningFormsTable.id, id));
