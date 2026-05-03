@@ -1,6 +1,26 @@
+import { ERP_SESSION_KEY, type StaffSession } from "./staffSession";
+
+function getStaffToken(): string | null {
+  try {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(ERP_SESSION_KEY) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StaffSession;
+    return parsed?.token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function buildHeaders(init?: RequestInit): Record<string, string> {
+  const base: Record<string, string> = { "Content-Type": "application/json" };
+  const token = getStaffToken();
+  if (token) base["Authorization"] = `Bearer ${token}`;
+  return { ...base, ...(init?.headers as Record<string, string> | undefined) };
+}
+
 export async function fetchApi<T = unknown>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: buildHeaders(init),
     ...init,
   });
   if (!res.ok) {

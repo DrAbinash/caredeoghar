@@ -71,8 +71,8 @@ export const PERMISSIONED_PATHS: ReadonlySet<string> = new Set([
 export const FULL_ACCESS_ROLES = new Set(["admin", "super_admin"]);
 
 export function canAccess(session: StaffSession | null, path: string): boolean {
-  // No session → don't gate anything (open ERP, backwards compat).
-  if (!session) return true;
+  // No session → deny access to all permissioned paths.
+  if (!session) return !PERMISSIONED_PATHS.has(path);
   // Path isn't part of the permission system → always allowed.
   if (!PERMISSIONED_PATHS.has(path)) return true;
   if (FULL_ACCESS_ROLES.has(session.user.role)) return true;

@@ -59,14 +59,17 @@ const ERP_NAV_ORDER = [
   "/accounting", "/discounts", "/form-f", "/pacs", "/machines", "/settings",
 ];
 
-// Soft route guard: if a portal staff session exists and the user navigates
-// to a permissioned path they don't have rights to, bounce them to the first
-// page they CAN see. No-op when there's no session (open ERP, backwards compat).
+// Route guard: if no staff session exists, redirect to the portal login.
+// If a session exists but the user navigates to a permissioned path they
+// don't have rights to, bounce them to the first page they CAN see.
 function PermissionGuard() {
   const [location, navigate] = useLocation();
   useEffect(() => {
     const session = readStaffSession();
-    if (!session) return;
+    if (!session) {
+      navigate("/portal", { replace: true });
+      return;
+    }
     // Use the LONGEST matching prefix so e.g. "/orders/123/edit" maps to "/orders"
     // and "/" only matches the exact root.
     const matched = longestMatchingNavPath(location, ERP_NAV_ORDER);
