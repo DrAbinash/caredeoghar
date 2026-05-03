@@ -155,7 +155,13 @@ export const hrRejoiningFormsTable = pgTable("hr_rejoining_forms", {
   formNumber: text("form_number").notNull().unique(),
 
   // Section 1 — Employee details
+  // photoDataUrl: legacy inline base64 (kept for backward compatibility with
+  // any forms created before the object-storage upload flow was wired up).
+  // photoStorageKey: object storage path (e.g. "/objects/uploads/<uuid>") for
+  // forms created via the presigned URL upload endpoint. Front-end prefers
+  // photoStorageKey when present and falls back to photoDataUrl.
   photoDataUrl: text("photo_data_url"),
+  photoStorageKey: text("photo_storage_key"),
   employeeName: text("employee_name").notNull(),
   fatherSpouseName: text("father_spouse_name"),
   dateOfBirth: date("date_of_birth"),

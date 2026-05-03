@@ -73,7 +73,7 @@ type SalaryStructure = {
 };
 type HRForm = {
   id: number; staffId: number; formNumber: string;
-  photoDataUrl: string | null; employeeName: string; fatherSpouseName: string | null;
+  photoDataUrl: string | null; photoStorageKey: string | null; employeeName: string; fatherSpouseName: string | null;
   dateOfBirth: string | null; gender: string | null; bloodGroup: string | null;
   qualification: string | null; aadhaarNumber: string | null; panNumber: string | null;
   address: string | null; mobile: string | null; alternateMobile: string | null; email: string | null;
@@ -453,16 +453,42 @@ function FormEditorDialog(props: EditorProps) {
     onError: (e: Error) => toast({ title: "Reject failed", description: e.message, variant: "destructive" }),
   });
 
-  const onPhotoFile = (file: File | null) => {
+  const [photoUploading, setPhotoUploading] = useState(false);
+  // Photo upload — two-step presigned URL flow against object storage:
+  //   1) POST /api/storage/uploads/request-url → { uploadURL, objectPath }
+  //   2) PUT the file bytes directly to uploadURL (GCS)
+  // Only the objectPath ("/objects/<uuid>") is persisted on the form row;
+  // the bytes never hit our API server.
+  const onPhotoFile = async (file: File | null) => {
     if (!file) return;
-    if (file.size > 1_500_000) {
-      toast({ title: "Photo too large", description: "Max 1.5 MB", variant: "destructive" });
+    if (file.size > 5_000_000) {
+      toast({ title: "Photo too large", description: "Max 5 MB", variant: "destructive" });
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => set("photoDataUrl", String(reader.result));
-    reader.readAsDataURL(file);
+    setPhotoUploading(true);
+    try {
+      const { uploadURL, objectPath } = await api.post<{ uploadURL: string; objectPath: string }>(
+        "/api/storage/uploads/request-url",
+        { name: file.name, size: file.size, contentType: file.type || "application/octet-stream" },
+      );
+      const putRes = await fetch(uploadURL, {
+        method: "PUT",
+        headers: { "Content-Type": file.type || "application/octet-stream" },
+        body: file,
+      });
+      if (!putRes.ok) throw new Error(`Upload failed (${putRes.status})`);
+      set("photoStorageKey", objectPath);
+      set("photoDataUrl", null); // prefer the new storage-backed copy
+      toast({ title: "Photo uploaded" });
+    } catch (e) {
+      toast({ title: "Photo upload failed", description: e instanceof Error ? e.message : "", variant: "destructive" });
+    } finally {
+      setPhotoUploading(false);
+    }
   };
+  // Resolve the right <img src> regardless of whether the photo was uploaded
+  // via the new object storage flow or stored inline (legacy rows).
+  const photoSrc = form.photoStorageKey ? `/api/storage${form.photoStorageKey}` : form.photoDataUrl ?? null;
 
   const isApproved = form.managementStatus === "approved";
   const fam = form.familyDetails ?? {};
@@ -498,10 +524,11 @@ function FormEditorDialog(props: EditorProps) {
             <div className="grid grid-cols-3 gap-3">
               <div className="row-span-3 flex flex-col items-center gap-2">
                 <Label className="text-xs">Passport Photo</Label>
-                {form.photoDataUrl
-                  ? <img src={form.photoDataUrl} alt="" className="w-32 h-40 object-cover border rounded" />
+                {photoSrc
+                  ? <img src={photoSrc} alt="" className="w-32 h-40 object-cover border rounded" />
                   : <div className="w-32 h-40 border border-dashed rounded flex items-center justify-center text-xs text-muted-foreground">No photo</div>}
-                <Input type="file" accept="image/*" disabled={isApproved} onChange={(e) => onPhotoFile(e.target.files?.[0] ?? null)} className="text-xs" />
+                <Input type="file" accept="image/*" disabled={isApproved || photoUploading} onChange={(e) => onPhotoFile(e.target.files?.[0] ?? null)} className="text-xs" />
+                {photoUploading && <div className="text-xs text-muted-foreground">Uploading…</div>}
               </div>
               <Field label="Employee Name *"><Input value={form.employeeName ?? ""} onChange={(e) => set("employeeName", e.target.value)} disabled={isApproved} /></Field>
               <Field label="Father / Spouse Name"><Input value={form.fatherSpouseName ?? ""} onChange={(e) => set("fatherSpouseName", e.target.value)} disabled={isApproved} /></Field>
@@ -863,7 +890,14 @@ function PrintPreviewDialog({ id, onClose }: { id: number; onClose: () => void }
                 <div className="text-xs">{clinic?.address ?? ""}{clinic?.phone ? ` · Tel: ${clinic.phone}` : ""}</div>
                 <div className="mt-2 text-base font-bold uppercase">Employee Re-Joining / Update Form</div>
               </div>
-              {form.photoDataUrl && <img src={form.photoDataUrl} alt="" className="w-24 h-32 object-cover border border-black" />}
+              {(form.photoStorageKey || form.photoDataUrl) && (
+                <img
+                  src={form.photoStorageKey ? `/api/storage${form.photoStorageKey}` : form.photoDataUrl!}
+                  alt=""
+                  className="w-24 h-32 object-cover border border-black"
+                  crossOrigin="anonymous"
+                />
+              )}
             </div>
             <div className="flex justify-between text-xs mt-2">
               <div>Form #: <span className="font-mono font-semibold">{form.formNumber}</span></div>

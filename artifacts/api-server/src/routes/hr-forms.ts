@@ -28,7 +28,7 @@ function toFormJson<T extends Record<string, unknown>>(row: T): T {
 }
 
 const ALLOWED_FIELDS = [
-  "photoDataUrl", "employeeName", "fatherSpouseName", "dateOfBirth", "gender",
+  "photoDataUrl", "photoStorageKey", "employeeName", "fatherSpouseName", "dateOfBirth", "gender",
   "bloodGroup", "qualification", "aadhaarNumber", "panNumber", "address",
   "mobile", "alternateMobile", "email", "designation", "department",
   "joiningDate", "rejoiningDate",

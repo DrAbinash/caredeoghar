@@ -32,6 +32,7 @@ import { whatsappRouter } from "./whatsapp";
 import { printersRouter } from "./printers";
 import { staffRouter } from "./staff";
 import hrFormsRouter, { staffScopedHrFormsHandler } from "./hr-forms";
+import storageRouter from "./storage";
 import { bridgeRouter } from "./bridge";
 import { reportTemplatesRouter } from "./report-templates";
 import { abnormalFindingsRouter } from "./abnormal-findings";
@@ -108,6 +109,13 @@ router.use("/staff", requireStaffAuth, requireStaffPermission("/settings"), staf
 
 // HR re-joining / update forms — same /settings permission as staff records
 router.use("/hr-forms", requireStaffAuth, requireStaffPermission("/settings"), hrFormsRouter);
+
+// Object storage (presigned URL request + object serving). Both endpoints sit
+// behind requireStaffAuth — the HR re-joining form photo uploader is the
+// only consumer today, and read access requires the same auth as the form
+// itself. We deliberately do not gate behind a single module permission so
+// other modules can adopt it later.
+router.use(requireStaffAuth, storageRouter);
 // Staff-scoped HR forms listing (mounted on the /staff path so the StaffDetail
 // dialog can fetch all forms for a single employee).
 router.get(

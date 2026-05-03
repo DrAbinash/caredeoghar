@@ -65,19 +65,29 @@ export const PERMISSIONED_PATHS: ReadonlySet<string> = new Set([
   "/discounts",
   "/settings",
   "/dicom-nodes",
-  "/hr-forms",
 ]);
+
+// Permission aliases — paths whose access is granted by another permission.
+// HR Forms intentionally piggybacks on the /settings permission (per task
+// spec): "visible only to roles whose permissions include /settings or
+// admin/super_admin". Adding /hr-forms as a separate toggle would require
+// every clinic to re-grant it; aliasing keeps existing /settings users
+// flowing through unchanged.
+const PERMISSION_ALIASES: Readonly<Record<string, string>> = {
+  "/hr-forms": "/settings",
+};
 
 // Roles that always get full access regardless of stored permissions.
 export const FULL_ACCESS_ROLES = new Set(["admin", "super_admin"]);
 
 export function canAccess(session: StaffSession | null, path: string): boolean {
+  const required = PERMISSION_ALIASES[path] ?? path;
   // No session → deny access to all permissioned paths.
-  if (!session) return !PERMISSIONED_PATHS.has(path);
+  if (!session) return !PERMISSIONED_PATHS.has(required);
   // Path isn't part of the permission system → always allowed.
-  if (!PERMISSIONED_PATHS.has(path)) return true;
+  if (!PERMISSIONED_PATHS.has(required)) return true;
   if (FULL_ACCESS_ROLES.has(session.user.role)) return true;
-  return session.user.permissions.includes(path);
+  return session.user.permissions.includes(required);
 }
 
 // Given a session and an ordered list of candidate paths, return the first
