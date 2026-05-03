@@ -65,6 +65,7 @@ export const PERMISSIONED_PATHS: ReadonlySet<string> = new Set([
   "/discounts",
   "/settings",
   "/dicom-nodes",
+  "/hr-forms",
 ]);
 
 // Roles that always get full access regardless of stored permissions.

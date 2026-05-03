@@ -63,6 +63,7 @@ const navItems = [
   { path: "/inventory", icon: Package, label: "Inventory" },
   { path: "/expenses", icon: TrendingDown, label: "Expenses" },
   { path: "/staff", icon: Fingerprint, label: "Staff" },
+  { path: "/hr-forms", icon: FilePen, label: "HR Forms" },
   { path: "/referrals", icon: Stethoscope, label: "Doctors" },
   { path: "/accounting", icon: BookOpen, label: "Accounting" },
   { path: "/discounts", icon: Tag, label: "Discounts" },

@@ -31,6 +31,7 @@ import displayRouter from "./display";
 import { whatsappRouter } from "./whatsapp";
 import { printersRouter } from "./printers";
 import { staffRouter } from "./staff";
+import hrFormsRouter from "./hr-forms";
 import { bridgeRouter } from "./bridge";
 import { reportTemplatesRouter } from "./report-templates";
 import { abnormalFindingsRouter } from "./abnormal-findings";
@@ -104,6 +105,9 @@ router.use("/ledgers", requireStaffAuth, requireStaffPermission("/accounting"), 
 // Staff HR & payroll — /settings permission (only settings-level users may
 // read salary/bank details or post salary and advance records)
 router.use("/staff", requireStaffAuth, requireStaffPermission("/settings"), staffRouter);
+
+// HR re-joining / update forms — same /settings permission as staff records
+router.use("/hr-forms", requireStaffAuth, requireStaffPermission("/settings"), hrFormsRouter);
 
 // Clinic configuration — /settings permission
 router.use("/clinic-settings", requireStaffAuth, requireStaffPermission("/settings"), clinicSettingsRouter);

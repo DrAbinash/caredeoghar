@@ -30,6 +30,7 @@ import Appointments from "@/pages/Appointments";
 import Packages from "@/pages/Packages";
 import Expenses from "@/pages/Expenses";
 import Staff from "@/pages/Staff";
+import HRForms from "@/pages/HRForms";
 import QueuePage from "@/pages/Queue";
 import Radiology from "@/pages/Radiology";
 import ReportHub from "@/pages/ReportHub";
@@ -56,7 +57,7 @@ const ERP_NAV_ORDER = [
   "/", "/dashboard", "/patients", "/appointments", "/queue", "/radiology", "/orders",
   "/tests", "/packages", "/billing", "/payments", "/reports",
   "/report-generator", "/report-hub", "/inventory", "/expenses", "/staff", "/referrals",
-  "/accounting", "/discounts", "/form-f", "/pacs", "/machines", "/settings",
+  "/accounting", "/discounts", "/form-f", "/pacs", "/machines", "/hr-forms", "/settings",
 ];
 
 // Route guard: if no staff session exists, redirect to the portal login.
@@ -126,6 +127,7 @@ function Router() {
             <Route path="/packages" component={Packages} />
             <Route path="/expenses" component={Expenses} />
             <Route path="/staff" component={Staff} />
+            <Route path="/hr-forms" component={HRForms} />
             <Route path="/form-f" component={FormF} />
             <Route path="/machines" component={Machines} />
             <Route path="/website" component={Website} />
