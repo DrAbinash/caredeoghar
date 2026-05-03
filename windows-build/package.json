@@ -16,7 +16,7 @@
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
   },
   "devDependencies": {
-    "electron": "^33.4.11",
+    "electron": "^39.8.5",
     "electron-builder": "^25.1.8"
   }
 }
