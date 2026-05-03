@@ -10,7 +10,11 @@
   },
   "devDependencies": {
     "electron": "^39.8.5",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^26.0.0"
+  },
+  "overrides": {
+    "tar": "^7.4.3",
+    "@tootallnate/once": "npm:@tootallnate/once@^3.0.1"
   },
   "build": {
     "appId": "com.diagnosticerp.desktop",
