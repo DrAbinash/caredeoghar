@@ -38,12 +38,20 @@ function PageView({ slug, settings, pages, popups }: { slug: string; settings: S
     );
   }
   const sections = parseSections(page.sections).filter((s) => s.enabled);
+  const hasHeader = sections.some((s) => s.type === "header");
+  const hasFooter = sections.some((s) => s.type === "footer");
+  const defaultHeader = { id: "__auto_header", type: "header", enabled: true, config: {} } as const;
+  const defaultFooter = { id: "__auto_footer", type: "footer", enabled: true, config: {} } as const;
   return (
     <>
       <HeadManager settings={settings} page={page} />
-      {sections.map((s) => (
-        <SectionRenderer key={s.id} section={s} settings={settings} pages={pages} basePath={BASE} />
-      ))}
+      {!hasHeader && <SectionRenderer section={defaultHeader} settings={settings} pages={pages} basePath={BASE} />}
+      <main style={{ flex: "1 1 auto" }}>
+        {sections.map((s) => (
+          <SectionRenderer key={s.id} section={s} settings={settings} pages={pages} basePath={BASE} />
+        ))}
+      </main>
+      {!hasFooter && <SectionRenderer section={defaultFooter} settings={settings} pages={pages} basePath={BASE} />}
       <PopupHost popups={popups} currentSlug={page.slug} basePath={BASE} />
     </>
   );
