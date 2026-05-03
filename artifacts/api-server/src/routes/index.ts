@@ -110,12 +110,12 @@ router.use("/staff", requireStaffAuth, requireStaffPermission("/settings"), staf
 // HR re-joining / update forms — same /settings permission as staff records
 router.use("/hr-forms", requireStaffAuth, requireStaffPermission("/settings"), hrFormsRouter);
 
-// Object storage (presigned URL request + object serving). Both endpoints sit
-// behind requireStaffAuth — the HR re-joining form photo uploader is the
-// only consumer today, and read access requires the same auth as the form
-// itself. We deliberately do not gate behind a single module permission so
-// other modules can adopt it later.
-router.use(requireStaffAuth, storageRouter);
+// Object storage (presigned URL request + object serving). Today the only
+// consumer is the HR re-joining form photo uploader, which contains PII
+// (passport-sized employee photo). Gate both endpoints behind the same
+// /settings permission as the HR form and staff records so a regular biller
+// with an object URL cannot fetch employee photos.
+router.use(requireStaffAuth, requireStaffPermission("/settings"), storageRouter);
 // Staff-scoped HR forms listing (mounted on the /staff path so the StaffDetail
 // dialog can fetch all forms for a single employee).
 router.get(
