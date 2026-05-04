@@ -123,6 +123,15 @@ websiteRouter.get("/settings", async (req, res) => {
       id: s.id,
       siteTitle: s.siteTitle,
       isPublished: false,
+      primaryColor: s.primaryColor,
+      secondaryColor: s.secondaryColor,
+      accentColor: s.accentColor,
+      backgroundColor: s.backgroundColor,
+      fontHeading: s.fontHeading,
+      fontBody: s.fontBody,
+      buttonStyle: s.buttonStyle,
+      logoUrl: s.logoUrl,
+      faviconUrl: s.faviconUrl,
     });
     return;
   }
