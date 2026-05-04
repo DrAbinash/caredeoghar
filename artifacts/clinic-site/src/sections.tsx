@@ -48,6 +48,7 @@ export function HeaderSection({ section, settings, pages, basePath }: { section:
   return (
     <header className="site-header">
       <div className="container-narrow site-header-row">
+        <a href="/" className={`${buttonClass(settings, "primary")} header-cta-desktop`} style={{ flexShrink: 0 }}>Staff Login</a>
         <Link to="/" className="flex items-center gap-2 font-bold" style={{ fontSize: "1.05rem", minWidth: 0 }}>
           {showLogo && settings.logoUrl
             ? <img src={resolveAssetUrl(settings.logoUrl)} alt={settings.siteTitle} style={{ height: 36, maxWidth: 160, objectFit: "contain" }} />
@@ -61,7 +62,6 @@ export function HeaderSection({ section, settings, pages, basePath }: { section:
           ))}
         </nav>
         <div style={{ display: "flex", alignItems: "center", gap: ".5rem" }}>
-          <a href="/" className={`${buttonClass(settings, "secondary")} header-cta-desktop`} style={{ opacity: 0.85 }}>Staff Login</a>
           {ctaLabel && (
             <a href={ctaHref} className={`${buttonClass(settings, "primary")} header-cta-desktop`}>{ctaLabel}</a>
           )}
@@ -82,7 +82,7 @@ export function HeaderSection({ section, settings, pages, basePath }: { section:
           {ctaLabel && (
             <a href={ctaHref} className={buttonClass(settings, "primary")} style={{ justifyContent: "center", marginTop: ".5rem" }}>{ctaLabel}</a>
           )}
-          <a href="/" className={buttonClass(settings, "secondary")} style={{ justifyContent: "center", marginTop: ".25rem", opacity: 0.85 }}>Staff Login</a>
+          <a href="/" className={buttonClass(settings, "primary")} style={{ justifyContent: "center", marginTop: ".25rem" }}>Staff Login</a>
         </nav>
       )}
     </header>
