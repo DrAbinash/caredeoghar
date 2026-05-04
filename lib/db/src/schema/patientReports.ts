@@ -42,10 +42,12 @@ export const patientReportsTable = pgTable(
     verifierNotes: text("verifier_notes"),
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
     templateId: integer("template_id"),             // last template used (for audit)
-    // Tokenized public download. Generated on first auto-share / explicit
-    // public-link request. Lets us send WhatsApp/SMS PDF links to patients
-    // without requiring them to authenticate as staff.
+    // Tokenized public download. Rotated on every explicit public-link request.
+    // Lets us send WhatsApp/SMS PDF links to patients without requiring them
+    // to authenticate as staff. Tokens are time-limited and must be checked
+    // against publicTokenExpiresAt before serving any content.
     publicToken: text("public_token"),
+    publicTokenExpiresAt: timestamp("public_token_expires_at", { withTimezone: true }),
     createdBy: text("created_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

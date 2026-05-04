@@ -29,9 +29,8 @@ type Session = {
   expiresAt: string;
 };
 
-function getErpLinkWithToken(token: string): string {
-  const base = window.location.origin;
-  return `${base}/?sa_token=${token}`;
+function getErpBaseUrl(): string {
+  return `${window.location.origin}/`;
 }
 
 function formatExpiry(iso: string): string {
@@ -180,17 +179,32 @@ function ActiveSessionScreen({
 }) {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
-  const erpLink = getErpLinkWithToken(session.token);
+  const erpBaseUrl = getErpBaseUrl();
 
   const copyLink = async () => {
-    await navigator.clipboard.writeText(erpLink);
+    await navigator.clipboard.writeText(erpBaseUrl);
     setCopied(true);
-    toast({ title: "Link copied!", description: "Open the ERP link to activate super admin mode." });
+    toast({ title: "Link copied!", description: "Use the Open ERP button to activate super admin mode — the session is transferred securely." });
     setTimeout(() => setCopied(false), 3000);
   };
 
   const openERP = () => {
-    window.open(erpLink, "_blank", "noopener,noreferrer");
+    const win = window.open(erpBaseUrl, "_blank");
+    if (!win) {
+      toast({ title: "Pop-up blocked", description: "Please allow pop-ups for this site and try again.", variant: "destructive" });
+      return;
+    }
+    const token = session.token;
+    const origin = window.location.origin;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 20;
+    const send = () => {
+      if (win.closed || attempts >= MAX_ATTEMPTS) return;
+      attempts++;
+      win.postMessage({ type: "sa_token", token }, origin);
+      setTimeout(send, 500);
+    };
+    setTimeout(send, 300);
   };
 
   const handleEject = async () => {
@@ -246,18 +260,18 @@ function ActiveSessionScreen({
             </div>
           </div>
 
-          {/* ERP link section */}
+          {/* ERP access section */}
           <div className="border-t border-border pt-5">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
               Open ERP with Super Admin Mode
             </p>
-            <div className="bg-muted/40 rounded-lg px-3 py-2.5 font-mono text-xs text-muted-foreground break-all mb-3 select-all border border-border">
-              {erpLink}
+            <div className="bg-muted/40 rounded-lg px-3 py-2.5 text-xs text-muted-foreground break-all mb-3 border border-border">
+              {erpBaseUrl}
             </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={copyLink} className="flex-1">
                 {copied ? <CheckCheck size={13} className="mr-1.5 text-green-500" /> : <Copy size={13} className="mr-1.5" />}
-                {copied ? "Copied!" : "Copy Link"}
+                {copied ? "Copied!" : "Copy URL"}
               </Button>
               <Button size="sm" onClick={openERP} className="flex-1">
                 <ExternalLink size={13} className="mr-1.5" />
@@ -265,7 +279,7 @@ function ActiveSessionScreen({
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-3">
-              The link embeds your session token. In the ERP, this unlocks super-admin actions like edit amounts and delete bills.
+              Click <strong>Open ERP</strong> to launch the ERP with super-admin mode active. The session is transferred securely — no token appears in the URL.
             </p>
           </div>
 

@@ -10,7 +10,7 @@ import {
   reportTemplatesTable,
   radiologyStudiesTable,
 } from "@workspace/db/schema";
-import { eq, and, desc, sql, ilike, or } from "drizzle-orm";
+import { eq, and, desc, sql, ilike, or, isNull, isNotNull } from "drizzle-orm";
 import { sendReportWhatsapp, sendReportDelivery } from "./whatsapp";
 import crypto from "node:crypto";
 import {
@@ -26,16 +26,60 @@ export const signaturesRouter: IRouter = Router();
 // WhatsApp links to download a verified report PDF without staff sign-in.
 export const publicReportsRouter: IRouter = Router();
 
+// One-time startup backfill: clear any publicToken values that were minted
+// before the publicTokenExpiresAt column existed. Those tokens have no expiry
+// and the public download route now treats NULL expiry as expired, so clearing
+// the token field simply makes the rejection explicit and immediate.
+export async function backfillExpirePublicTokens(): Promise<void> {
+  // Only target rows that already have a token but lack an expiry — rows that
+  // never had a public token need no change and should not be touched.
+  const result = await db.update(patientReportsTable)
+    .set({ publicToken: null, publicTokenExpiresAt: null })
+    .where(and(isNotNull(patientReportsTable.publicToken), isNull(patientReportsTable.publicTokenExpiresAt)));
+  // result.rowCount may or may not be defined depending on driver version
+  const count = (result as unknown as { rowCount?: number }).rowCount ?? 0;
+  if (count > 0) {
+    // Use process.stdout to avoid circular import with logger
+    process.stdout.write(`[startup] Cleared ${count} legacy public token(s) without expiry\n`);
+  }
+}
+
+// AUTO_SHARE_TTL_MS: links minted automatically (e.g. on WhatsApp delivery) last
+// 72 hours. Explicit /public-link requests always rotate immediately.
+const AUTO_SHARE_TTL_MS = 72 * 60 * 60 * 1000;
+
+// ensurePublicToken — used by auto-share paths (WhatsApp on verify).
+// Reuses an existing token only if it is still valid; otherwise rotates.
 async function ensurePublicToken(reportId: number): Promise<string | null> {
   const [row] = await db.select().from(patientReportsTable).where(eq(patientReportsTable.id, reportId));
   if (!row) return null;
-  if (row.publicToken) return row.publicToken;
+  const now = new Date();
+  const tokenStillValid =
+    row.publicToken &&
+    row.publicTokenExpiresAt &&
+    row.publicTokenExpiresAt > now;
+  if (tokenStillValid) return row.publicToken!;
   const token = crypto.randomBytes(24).toString("base64url");
+  const expiresAt = new Date(now.getTime() + AUTO_SHARE_TTL_MS);
   const [updated] = await db.update(patientReportsTable)
-    .set({ publicToken: token })
+    .set({ publicToken: token, publicTokenExpiresAt: expiresAt })
     .where(eq(patientReportsTable.id, reportId))
     .returning();
   return updated?.publicToken ?? token;
+}
+
+// rotatePublicToken — always issues a fresh token with a new expiry.
+// Called by the explicit POST /patient-reports/:id/public-link endpoint so
+// that every share request invalidates the previous link.
+async function rotatePublicToken(reportId: number): Promise<{ token: string; expiresAt: Date } | null> {
+  const [row] = await db.select().from(patientReportsTable).where(eq(patientReportsTable.id, reportId));
+  if (!row) return null;
+  const token = crypto.randomBytes(24).toString("base64url");
+  const expiresAt = new Date(Date.now() + AUTO_SHARE_TTL_MS);
+  await db.update(patientReportsTable)
+    .set({ publicToken: token, publicTokenExpiresAt: expiresAt })
+    .where(eq(patientReportsTable.id, reportId));
+  return { token, expiresAt };
 }
 
 // Defense-in-depth: enforce staff authentication at the router level.
@@ -537,11 +581,11 @@ patientReportsRouter.post("/:id/public-link", async (req, res) => {
   if (row.status !== "verified" && row.status !== "delivered") {
     res.status(409).json({ error: "Report must be verified before generating a public link" }); return;
   }
-  const token = await ensurePublicToken(id);
-  if (!token) { res.status(500).json({ error: "Could not allocate token" }); return; }
+  const rotated = await rotatePublicToken(id);
+  if (!rotated) { res.status(500).json({ error: "Could not allocate token" }); return; }
   const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
   const host = req.headers["x-forwarded-host"] || req.headers.host || "";
-  res.json({ token, url: `${proto}://${host}/api/p/r/${token}/pdf` });
+  res.json({ token: rotated.token, expiresAt: rotated.expiresAt.toISOString(), url: `${proto}://${host}/api/p/r/${rotated.token}/pdf` });
 });
 
 // Acknowledge a critical alert (silences the dashboard counter).
@@ -767,11 +811,18 @@ patientReportsRouter.get("/:id/pdf", async (req, res) => {
 
 // PUBLIC tokenized PDF — no staff auth. Looked up by random token, only
 // returns reports that are already verified (no drafts leak to patients).
+// Tokens are time-limited: requests after publicTokenExpiresAt are rejected.
 publicReportsRouter.get("/:token/pdf", async (req, res) => {
   const token = req.params.token;
   if (!token || token.length < 16) { res.status(404).send("Not found"); return; }
   const [row] = await db.select().from(patientReportsTable).where(eq(patientReportsTable.publicToken, token));
   if (!row) { res.status(404).send("Not found"); return; }
+  // Reject tokens that have no expiry (legacy pre-migration tokens) or that
+  // have passed their expiry. NULL expiry is treated as expired so that any
+  // link minted before this expiry system was introduced cannot be replayed.
+  if (!row.publicTokenExpiresAt || row.publicTokenExpiresAt < new Date()) {
+    res.status(410).send("This link has expired. Please contact the clinic for a new report link."); return;
+  }
   if (row.status !== "verified" && row.status !== "delivered") {
     res.status(403).send("Report not yet finalized"); return;
   }

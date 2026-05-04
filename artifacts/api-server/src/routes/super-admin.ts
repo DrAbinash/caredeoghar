@@ -87,9 +87,11 @@ superAdminRouter.post("/logout", async (req, res) => {
   res.json({ ok: true });
 });
 
-// GET /api/super-admin/verify?token=xxx — check if token is active
-superAdminRouter.get("/verify", async (req, res) => {
-  const token = req.query.token as string;
+// POST /api/super-admin/verify — check if token is active.
+// Token is accepted in the request body (never in the query string to avoid
+// exposure in logs, browser history, and reverse-proxy access logs).
+superAdminRouter.post("/verify", async (req, res) => {
+  const token = typeof req.body?.token === "string" ? req.body.token : null;
   if (!token) return res.json({ active: false, userName: null });
 
   const [session] = await db.select().from(superAdminSessionsTable)

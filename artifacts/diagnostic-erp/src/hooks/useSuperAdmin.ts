@@ -12,7 +12,11 @@ export type SuperAdminState = {
 
 async function verifyToken(token: string): Promise<{ active: boolean; userName: string | null }> {
   try {
-    const res = await fetch(`/api/super-admin/verify?token=${encodeURIComponent(token)}`);
+    const res = await fetch("/api/super-admin/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
     if (!res.ok) return { active: false, userName: null };
     return res.json();
   } catch {
@@ -22,18 +26,7 @@ async function verifyToken(token: string): Promise<{ active: boolean; userName: 
 
 export function useSuperAdmin(): SuperAdminState {
   const [token, setToken] = useState<string | null>(() => {
-    // On first render, also capture token from URL if present
     if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const urlToken = params.get("sa_token");
-      if (urlToken) {
-        localStorage.setItem(STORAGE_KEY, urlToken);
-        // Clean the token from the URL without page reload
-        const newUrl = new URL(window.location.href);
-        newUrl.searchParams.delete("sa_token");
-        window.history.replaceState({}, "", newUrl.toString());
-        return urlToken;
-      }
       return localStorage.getItem(STORAGE_KEY);
     }
     return null;
@@ -72,6 +65,26 @@ export function useSuperAdmin(): SuperAdminState {
     const interval = setInterval(() => check(token), POLL_INTERVAL);
     return () => clearInterval(interval);
   }, [token, check]);
+
+  // Accept token from the super-admin portal via postMessage.
+  // Only messages from the same origin are trusted.
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (
+        event.data &&
+        event.data.type === "sa_token" &&
+        typeof event.data.token === "string" &&
+        event.data.token.length > 16
+      ) {
+        const newToken = event.data.token as string;
+        localStorage.setItem(STORAGE_KEY, newToken);
+        setToken(newToken);
+      }
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
 
   // Listen for storage changes (if another tab logs out)
   useEffect(() => {

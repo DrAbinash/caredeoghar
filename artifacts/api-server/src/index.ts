@@ -15,6 +15,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { startCronScheduler } from "./cron";
 import { ensureDefaultLedger } from "./routes/ledgers";
+import { backfillExpirePublicTokens } from "./routes/patient-reports";
 
 const rawPort = process.env["PORT"] ?? "8080";
 
@@ -33,4 +34,5 @@ app.listen(port, (err) => {
   logger.info({ port }, "Server listening");
   startCronScheduler();
   ensureDefaultLedger().catch((e) => logger.error({ err: e }, "Failed to seed default ledger"));
+  backfillExpirePublicTokens().catch((e) => logger.error({ err: e }, "Failed to backfill public token expiry"));
 });
