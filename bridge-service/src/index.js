@@ -87,8 +87,22 @@ app.get("/health", async (_req, res) => {
 });
 
 // ── Live capture (used during enrollment) ──────────────
-app.post("/capture", async (_req, res) => {
+// Requires a captureToken obtained from POST /api/bridge/capture-challenge by an
+// authenticated staff session. Without this token the raw biometric template
+// is never exposed, preventing exfiltration by malicious scripts on the ERP origin.
+app.post("/capture", async (req, res) => {
   try {
+    const { captureToken } = req.body ?? {};
+    if (!captureToken) {
+      return res.status(400).json({ error: "captureToken is required. The ERP client must obtain one via POST /api/bridge/capture-challenge before calling /capture." });
+    }
+    const validation = await erp("/api/bridge/validate-capture-token", {
+      method: "POST",
+      body: JSON.stringify({ captureToken }),
+    });
+    if (!validation.ok) {
+      return res.status(401).json({ error: validation.error || "Invalid capture token" });
+    }
     const { template, quality } = await adapter.capture();
     res.json({ vendor: VENDOR, template, quality });
   } catch (e) {

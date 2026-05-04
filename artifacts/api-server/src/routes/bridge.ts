@@ -49,12 +49,13 @@ interface EnrollChallenge extends SimpleChallenge {
 const ENROLL_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const PUNCH_CHALLENGE_TTL_MS = 2 * 60 * 1000;
 const LOGIN_CHALLENGE_TTL_MS = 2 * 60 * 1000;
+const CAPTURE_CHALLENGE_TTL_MS = 2 * 60 * 1000;
 
 const enrollChallenges = new Map<string, EnrollChallenge>();
 const punchChallenges = new Map<string, SimpleChallenge>();
 const loginChallenges = new Map<string, SimpleChallenge>();
+const captureChallenges = new Map<string, SimpleChallenge>();
 
-// Purge stale challenge tokens periodically so the maps do not grow unbounded.
 setInterval(() => {
   const now = Date.now();
   for (const [token, ch] of enrollChallenges) {
@@ -65,6 +66,9 @@ setInterval(() => {
   }
   for (const [token, ch] of loginChallenges) {
     if (ch.used || ch.expiresAt < now) loginChallenges.delete(token);
+  }
+  for (const [token, ch] of captureChallenges) {
+    if (ch.used || ch.expiresAt < now) captureChallenges.delete(token);
   }
 }, 60_000);
 
@@ -101,8 +105,23 @@ bridgeRouter.get("/info", (_req, res) => {
   });
 });
 
+// ── Issue a capture challenge token ───────────────
+// Requires a valid staff session. The ERP UI must call this before asking the
+// bridge to perform a raw fingerprint capture, ensuring that biometric template
+// data is never exposed without going through a proper authorization flow.
+bridgeRouter.post("/capture-challenge", async (req, res) => {
+  const session = await validateStaffToken(String(req.headers.authorization ?? ""));
+  if (!session) {
+    return res.status(401).json({ error: "Staff session required to initiate fingerprint capture" });
+  }
+
+  const captureToken = crypto.randomBytes(32).toString("hex");
+  captureChallenges.set(captureToken, { expiresAt: Date.now() + CAPTURE_CHALLENGE_TTL_MS, used: false });
+  res.json({ captureToken, expiresInSeconds: CAPTURE_CHALLENGE_TTL_MS / 1000 });
+});
+
 // ── Issue an enrollment challenge token ──────────
-// Requires a valid staff session (Authorization: Bearer <token>).
+// Requires a valid staff session with admin/settings permission.
 // Returns a short-lived one-time token that authorises exactly one enrollment
 // of the requested scope/scopeId through the bridge. The bridge must present
 // this token as x-enroll-token when it calls /api/bridge/enroll.
@@ -112,10 +131,29 @@ bridgeRouter.post("/enroll-challenge", async (req, res) => {
     return res.status(401).json({ error: "Staff session required to initiate fingerprint enrollment" });
   }
 
+  const [caller] = await db.select({ id: usersTable.id, role: usersTable.role, permissions: usersTable.permissions })
+    .from(usersTable).where(eq(usersTable.id, session.subjectId)).limit(1);
+
   const body = req.body as { scope?: string; scopeId?: number };
   const scope = body.scope === "user" ? "user" : "staff";
   const scopeId = Number(body.scopeId);
   if (!scopeId) return res.status(400).json({ error: "scopeId required" });
+
+  const ADMIN_ROLES = new Set(["admin", "super_admin"]);
+  const isAdmin = caller && ADMIN_ROLES.has(caller.role);
+  let parsedPerms: string[] = [];
+  try {
+    if (caller?.permissions) {
+      const p = JSON.parse(caller.permissions);
+      if (Array.isArray(p)) parsedPerms = p.filter((v: unknown) => typeof v === "string");
+    }
+  } catch { /* leave empty */ }
+  const hasSettingsPerm = parsedPerms.includes("/settings");
+  const isSelfEnrollUser = scope === "user" && caller && scopeId === caller.id;
+
+  if (!isAdmin && !hasSettingsPerm && !isSelfEnrollUser) {
+    return res.status(403).json({ error: "Only administrators or settings-level staff can enroll fingerprints for other accounts. You may only enroll your own fingerprint." });
+  }
 
   // Verify that the subject being enrolled actually exists
   if (scope === "staff") {
@@ -150,6 +188,19 @@ bridgeRouter.post("/punch-challenge", async (req, res) => {
   const punchToken = crypto.randomBytes(32).toString("hex");
   punchChallenges.set(punchToken, { expiresAt: Date.now() + PUNCH_CHALLENGE_TTL_MS, used: false });
   res.json({ punchToken, expiresInSeconds: PUNCH_CHALLENGE_TTL_MS / 1000 });
+});
+
+// ── Validate a capture challenge token ────────────
+// Called by the bridge service to verify a captureToken before returning raw
+// biometric template data. Uses the bridge secret for authentication.
+bridgeRouter.post("/validate-capture-token", requireBridgeAuth, (req, res) => {
+  const { captureToken } = req.body as { captureToken?: string };
+  const check = consumeChallenge(captureChallenges, captureToken ?? "");
+  if (!check.ok) {
+    res.status(check.status).json({ ok: false, error: check.error });
+    return;
+  }
+  res.json({ ok: true });
 });
 
 // ── Issue a login challenge token ─────────────────

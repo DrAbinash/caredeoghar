@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { whatsappSettingsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
+import { requireStaffPermission } from "../middleware/requireStaffAuth";
 
 export const whatsappRouter: IRouter = Router();
 
@@ -17,7 +18,7 @@ whatsappRouter.get("/settings", async (_req, res) => {
   res.json({ ...s, accessToken: s.accessToken ? "••••••••" : "" });
 });
 
-whatsappRouter.put("/settings", async (req, res) => {
+whatsappRouter.put("/settings", requireStaffPermission("/settings"), async (req, res) => {
   const current = await getOrCreateSettings();
   const body = req.body ?? {};
   const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -36,8 +37,7 @@ whatsappRouter.put("/settings", async (req, res) => {
   res.json({ ...row, accessToken: row.accessToken ? "••••••••" : "" });
 });
 
-// POST /api/whatsapp/test  { phone }
-whatsappRouter.post("/test", async (req, res): Promise<void> => {
+whatsappRouter.post("/test", requireStaffPermission("/settings"), async (req, res): Promise<void> => {
   const { phone } = req.body as { phone?: string };
   if (!phone) {
     res.status(400).json({ error: "phone required" });

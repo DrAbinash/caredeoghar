@@ -155,6 +155,45 @@ function isPrivateIPv4(h: string): boolean {
   return false;
 }
 
+function expandIPv6(addr: string): string | null {
+  const halves = addr.split("::");
+  if (halves.length > 2) return null;
+  const left = halves[0] ? halves[0].split(":") : [];
+  const right = halves.length === 2 ? (halves[1] ? halves[1].split(":") : []) : [];
+  if (halves.length === 1 && left.length !== 8) return null;
+  const missing = 8 - left.length - right.length;
+  if (missing < 0) return null;
+  const full = [...left, ...Array(missing).fill("0"), ...right];
+  return full.map((g) => g.padStart(4, "0")).join(":");
+}
+
+function extractMappedIPv4(h: string): string | null {
+  const bare = h.startsWith("[") && h.endsWith("]") ? h.slice(1, -1) : h;
+  const lower = bare.toLowerCase();
+
+  const dottedRe = /^(.*):(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/;
+  const dottedMatch = lower.match(dottedRe);
+  if (dottedMatch) {
+    const prefix = dottedMatch[1];
+    const ipv4 = dottedMatch[2];
+    const expanded = expandIPv6(prefix + ":0:0");
+    if (expanded && expanded.startsWith("0000:0000:0000:0000:0000:ffff:")) return ipv4;
+  }
+
+  const expanded = expandIPv6(lower);
+  if (!expanded) return null;
+  const groups = expanded.split(":");
+  if (
+    groups[0] === "0000" && groups[1] === "0000" && groups[2] === "0000" &&
+    groups[3] === "0000" && groups[4] === "0000" && groups[5] === "ffff"
+  ) {
+    const hi = parseInt(groups[6], 16);
+    const lo = parseInt(groups[7], 16);
+    return `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+  }
+  return null;
+}
+
 function isPrivateIPv6(h: string): boolean {
   // Strip brackets like [::1]
   const bare = h.startsWith("[") && h.endsWith("]") ? h.slice(1, -1) : h;
@@ -173,6 +212,11 @@ export function isBlockedHost(host: string): string | null {
   if (SSRF_BLOCK_LITERAL.has(h)) return `${h} is a blocked address`;
   if (isPrivateIPv4(h)) return `${h} is a private/loopback address and is blocked`;
   if (isPrivateIPv6(h)) return `${h} is a private/loopback IPv6 address and is blocked`;
+  const mappedV4 = extractMappedIPv4(h);
+  if (mappedV4) {
+    if (SSRF_BLOCK_LITERAL.has(mappedV4)) return `${h} maps to blocked address ${mappedV4}`;
+    if (isPrivateIPv4(mappedV4)) return `${h} maps to private/loopback address ${mappedV4} and is blocked`;
+  }
   return null;
 }
 
