@@ -4,7 +4,7 @@ import { testTokensTable, patientsTable, testsTable } from "@workspace/db/schema
 import { and, asc, desc, eq, isNull, or, sql, inArray } from "drizzle-orm";
 import { requireStaffAuth } from "../middleware/requireStaffAuth";
 
-// Public-readable display feed for waiting-room LCDs.
+// Staff-authenticated display feed for waiting-room LCDs.
 // Returns minimal patient info (first name + last initial) for privacy.
 export const displayRouter: IRouter = Router();
 

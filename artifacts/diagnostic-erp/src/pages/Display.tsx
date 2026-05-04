@@ -14,8 +14,8 @@ type DeptCard = {
 type DisplayPayload = { date: string; departments: DeptCard[] };
 type Clinic = { name?: string; logoDataUrl?: string | null };
 
-// Public-readable waiting-room display. Designed for an LCD/LED TV in
-// portrait or landscape orientation. Auto-refreshes every 4s.
+// Waiting-room display for staff-authenticated sessions. Designed for an
+// LCD/LED TV in portrait or landscape orientation. Auto-refreshes every 4s.
 export default function Display() {
   const params = new URLSearchParams(window.location.search);
   const ledgerId = Number(params.get("ledgerId") ?? 1);
