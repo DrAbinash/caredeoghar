@@ -277,6 +277,19 @@ websiteRouter.get("/pages/:id", async (req, res) => {
 });
 
 websiteRouter.post("/pages", requireStaffAuth, requireStaffPermission("/website"), async (req, res) => {
+  if (typeof req.body.slug !== "string" || !req.body.slug.trim()) {
+    res.status(400).json({ error: "slug required" });
+    return;
+  }
+  if (typeof req.body.title !== "string" || !req.body.title.trim()) {
+    res.status(400).json({ error: "title required" });
+    return;
+  }
+  const [duplicate] = await db.select({ id: sitePagesTable.id }).from(sitePagesTable).where(eq(sitePagesTable.slug, req.body.slug)).limit(1);
+  if (duplicate) {
+    res.status(409).json({ error: "slug already exists" });
+    return;
+  }
   const sections = req.body.sections !== undefined
     ? isAdminRole(req)
       ? req.body.sections
@@ -305,6 +318,14 @@ websiteRouter.patch("/pages/:id", requireStaffAuth, requireStaffPermission("/web
     updates.sections = isAdminRole(req)
       ? req.body.sections
       : stripCustomHtmlSections(String(req.body.sections), existing.sections);
+  }
+  const nextSlug = typeof req.body.slug === "string" ? req.body.slug.trim() : "";
+  if (nextSlug && nextSlug !== existing.slug) {
+    const [duplicate] = await db.select({ id: sitePagesTable.id }).from(sitePagesTable).where(eq(sitePagesTable.slug, nextSlug)).limit(1);
+    if (duplicate) {
+      res.status(409).json({ error: "slug already exists" });
+      return;
+    }
   }
   const [page] = await db.update(sitePagesTable).set(updates).where(eq(sitePagesTable.id, id)).returning();
   res.json(page);
@@ -341,11 +362,9 @@ websiteRouter.get("/popups", async (req, res) => {
     return;
   }
 
-  const popups = await db
-    .select()
-    .from(sitePopupsTable)
-    .where(eq(sitePopupsTable.enabled, true))
-    .orderBy(asc(sitePopupsTable.id));
+  const popups = draftsAllowed
+    ? await db.select().from(sitePopupsTable).orderBy(asc(sitePopupsTable.id))
+    : await db.select().from(sitePopupsTable).where(eq(sitePopupsTable.enabled, true)).orderBy(asc(sitePopupsTable.id));
   res.json({ popups });
 });
 
@@ -390,7 +409,9 @@ websiteRouter.get("/faqs", async (req, res) => {
     return;
   }
 
-  const faqs = await db.select().from(siteFaqsTable).orderBy(asc(siteFaqsTable.orderIndex), asc(siteFaqsTable.id));
+  const faqs = draftsAllowed
+    ? await db.select().from(siteFaqsTable).orderBy(asc(siteFaqsTable.orderIndex), asc(siteFaqsTable.id))
+    : await db.select().from(siteFaqsTable).where(eq(siteFaqsTable.enabled, true)).orderBy(asc(siteFaqsTable.orderIndex), asc(siteFaqsTable.id));
   res.json({ faqs });
 });
 
