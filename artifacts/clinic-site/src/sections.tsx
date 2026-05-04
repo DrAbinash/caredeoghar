@@ -48,11 +48,11 @@ export function HeaderSection({ section, settings, pages, basePath }: { section:
   return (
     <header className="site-header">
       <div className="container-narrow site-header-row">
-        {/* Far left — Staff Login */}
-        <a href="/" className={`${buttonClass(settings, "primary")} header-cta-desktop`} style={{ flexShrink: 0 }}>Staff Login</a>
+        {/* Far left — Staff Login (always visible, compact on mobile) */}
+        <a href="/" className={`${buttonClass(settings, "primary")} header-staff-login`} style={{ flexShrink: 0 }}>Staff Login</a>
 
-        {/* Far right — Clinic name + nav links + CTA, all equally spaced */}
-        <div className="header-cta-desktop" style={{ display: "flex", alignItems: "center", gap: "1rem", marginLeft: "auto" }}>
+        {/* Far right — Clinic name + nav links + CTA, hidden on mobile (in hamburger instead) */}
+        <div className="header-right">
           <Link to="/" className={buttonClass(settings, "primary")}>
             {showLogo && settings.logoUrl
               ? <img src={resolveAssetUrl(settings.logoUrl)} alt={settings.siteTitle} style={{ height: 28, maxWidth: 120, objectFit: "contain" }} />

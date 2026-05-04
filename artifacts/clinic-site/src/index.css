@@ -113,12 +113,18 @@ a.nav-link.active { color: hsl(var(--site-primary)); }
 .nav-mobile a.nav-link { padding: .65rem .75rem; }
 .header-cta-desktop { display: none; }
 .header-cta-mobile { display: inline-flex; }
+/* Right group (Clinic + nav + CTA) — hidden on mobile, flex on desktop */
+.header-right { display: none; align-items: center; gap: 1rem; margin-left: auto; }
+/* Staff login — always visible, compact on mobile */
+.header-staff-login { font-size: .8rem !important; padding: .35rem .65rem !important; }
 
 @media (min-width: 768px) {
   .nav-desktop { display: inline-flex; }
   .nav-toggle { display: none; }
   .header-cta-desktop { display: inline-flex; }
   .header-cta-mobile { display: none; }
+  .header-right { display: flex; }
+  .header-staff-login { font-size: inherit !important; padding: .65rem 1.15rem !important; }
 }
 
 .popup-backdrop {
