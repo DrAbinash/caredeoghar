@@ -30,8 +30,8 @@ export const websiteRouter = Router();
 // without the bearer token appearing in the URL or being accessible to
 // unauthenticated visitors.
 // ─────────────────────────────────────────────────────────────────────────────
-const previewTokens = new Map<string, number>(); // token → expiry (epoch ms)
-const PREVIEW_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+const previewTokens = new Map<string, number>();
+const PREVIEW_TOKEN_TTL_MS = 60 * 60 * 1000;
 
 function isValidPreviewToken(req: Request): boolean {
   const token = typeof req.query.preview_token === "string" ? req.query.preview_token : "";
@@ -89,7 +89,7 @@ const SANITIZE_OPTS: sanitizeHtml.IOptions = {
     audio: ["src", "controls"],
     source: ["src", "type"],
     time: ["datetime"],
-    "*": ["class", "id", "style"],
+    "*": ["class", "id"],
   },
   allowedSchemes: ["http", "https", "mailto", "tel"],
   disallowedTagsMode: "discard",
@@ -105,16 +105,30 @@ function sanitizePageSectionsForPublic<T extends { sections?: string | null }>(p
   try {
     const sections: unknown[] = JSON.parse(page.sections);
     if (!Array.isArray(sections)) return page;
-    const cleaned = sections.map((s: any) => {
-      if (s?.type === "custom_html" && typeof s.config?.html === "string") {
-        return { ...s, config: { ...s.config, html: serverSanitizeHtml(s.config.html) } };
-      }
-      return s;
+    const cleaned = sections.map((section) => {
+      if (!isCustomHtmlSection(section)) return section;
+      return {
+        ...section,
+        config: {
+          ...section.config,
+          html: serverSanitizeHtml(section.config.html),
+        },
+      };
     });
     return { ...page, sections: JSON.stringify(cleaned) };
   } catch {
     return page;
   }
+}
+
+function isCustomHtmlSection(
+  section: unknown,
+): section is { type: "custom_html"; config: { html: string; [key: string]: unknown }; [key: string]: unknown } {
+  if (!section || typeof section !== "object") return false;
+  const typed = section as { type?: unknown; config?: unknown };
+  if (typed.type !== "custom_html" || !typed.config || typeof typed.config !== "object") return false;
+  const cfg = typed.config as { html?: unknown };
+  return typeof cfg.html === "string";
 }
 
 function stripCustomHtmlSections(sectionsJson: string, existingSectionsJson?: string): string {
@@ -257,67 +271,67 @@ websiteRouter.get("/pages/:id", async (req, res) => {
   if (!p) { res.status(404).json({ error: "Page not found" }); return; }
 
   const draftsAllowed = await canViewDrafts(req);
+  const settings = await getOrCreateSettings();
 
-  if (!draftsAllowed) {
-    const settings = await getOrCreateSettings();
-    if (!settings.isPublished || p.status !== "published") {
-      res.status(404).json({ error: "Page not found" });
-      return;
-    }
+  if (!draftsAllowed && !settings.isPublished) {
+    res.status(404).json({ error: "Page not found" });
+    return;
+  }
+
+  if (!draftsAllowed && p.status !== "published") {
+    res.status(404).json({ error: "Page not found" });
+    return;
   }
 
   res.json(draftsAllowed ? p : sanitizePageSectionsForPublic(p));
 });
 
 websiteRouter.post("/pages", requireStaffAuth, requireStaffPermission("/website"), async (req, res) => {
-  const { slug, title } = req.body ?? {};
-  if (!slug || !title) { res.status(400).json({ error: "slug and title required" }); return; }
-  const dup = await db.select().from(sitePagesTable).where(eq(sitePagesTable.slug, slug));
-  if (dup.length > 0) { res.status(409).json({ error: "Slug already in use" }); return; }
-
-  let sections = req.body.sections ?? "[]";
-  if (!isAdminRole(req)) {
-    sections = stripCustomHtmlSections(sections);
-  }
-
-  const [created] = await db.insert(sitePagesTable).values({
-    slug,
-    title,
+  const [page] = await db.insert(sitePagesTable).values({
+    slug: req.body.slug,
+    title: req.body.title,
     status: req.body.status ?? "draft",
     orderIndex: Number(req.body.orderIndex ?? 0),
     showInNav: req.body.showInNav ?? true,
-    sections,
-    seoMetaTitle: req.body.seoMetaTitle ?? "",
-    seoMetaDescription: req.body.seoMetaDescription ?? "",
+    sections: req.body.sections ?? "[]",
   }).returning();
-  res.status(201).json(created);
+  res.status(201).json(page);
 });
 
 websiteRouter.patch("/pages/:id", requireStaffAuth, requireStaffPermission("/website"), async (req, res) => {
   const id = Number(req.params.id);
-  const allowed = ["slug", "title", "status", "orderIndex", "showInNav", "sections", "seoMetaTitle", "seoMetaDescription"];
-  const updates: Record<string, unknown> = { updatedAt: new Date() };
+  const [existing] = await db.select().from(sitePagesTable).where(eq(sitePagesTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Page not found" }); return; }
+
+  const updates: Record<string, unknown> = {};
+  const allowed = ["slug", "title", "status", "orderIndex", "showInNav"];
   for (const k of allowed) if (req.body[k] !== undefined) updates[k] = req.body[k];
-
-  if (typeof updates.sections === "string" && !isAdminRole(req)) {
-    const [existing] = await db
-      .select({ sections: sitePagesTable.sections })
-      .from(sitePagesTable)
-      .where(eq(sitePagesTable.id, id));
-    updates.sections = stripCustomHtmlSections(
-      updates.sections as string,
-      existing?.sections,
-    );
+  if (req.body.sections !== undefined) {
+    updates.sections = isAdminRole(req)
+      ? req.body.sections
+      : stripCustomHtmlSections(String(req.body.sections), existing.sections);
   }
-
-  const [updated] = await db.update(sitePagesTable).set(updates).where(eq(sitePagesTable.id, id)).returning();
-  if (!updated) { res.status(404).json({ error: "Page not found" }); return; }
-  res.json(updated);
+  const [page] = await db.update(sitePagesTable).set(updates).where(eq(sitePagesTable.id, id)).returning();
+  res.json(page);
 });
 
 websiteRouter.delete("/pages/:id", requireStaffAuth, requireStaffPermission("/website"), async (req, res) => {
   await db.delete(sitePagesTable).where(eq(sitePagesTable.id, Number(req.params.id)));
   res.json({ ok: true });
+});
+
+websiteRouter.post("/pages/:id/duplicate", requireStaffAuth, requireStaffPermission("/website"), async (req, res) => {
+  const [p] = await db.select().from(sitePagesTable).where(eq(sitePagesTable.id, Number(req.params.id)));
+  if (!p) { res.status(404).json({ error: "Page not found" }); return; }
+  const [copy] = await db.insert(sitePagesTable).values({
+    slug: `${p.slug}-copy-${Date.now()}`,
+    title: `${p.title} Copy`,
+    status: "draft",
+    orderIndex: p.orderIndex + 1,
+    showInNav: p.showInNav,
+    sections: p.sections,
+  }).returning();
+  res.status(201).json(copy);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -332,40 +346,24 @@ websiteRouter.get("/popups", async (req, res) => {
     return;
   }
 
-  if (draftsAllowed) {
-    const popups = await db.select().from(sitePopupsTable).orderBy(desc(sitePopupsTable.id));
-    res.json({ popups });
-    return;
-  }
-
-  const popups = await db
-    .select()
-    .from(sitePopupsTable)
-    .where(eq(sitePopupsTable.enabled, true))
-    .orderBy(desc(sitePopupsTable.id));
+  const popups = await db.select().from(sitePopupsTable).orderBy(desc(sitePopupsTable.priority), asc(sitePopupsTable.id));
   res.json({ popups });
 });
 
 websiteRouter.post("/popups", requireStaffAuth, requireStaffPermission("/website"), async (req, res) => {
-  const [p] = await db.insert(sitePopupsTable).values({
-    title: req.body.title ?? "",
-    body: req.body.body ?? "",
-    ctaLabel: req.body.ctaLabel ?? "",
-    ctaUrl: req.body.ctaUrl ?? "",
-    imageUrl: req.body.imageUrl ?? "",
-    triggerType: req.body.triggerType ?? "time_delay",
-    triggerValue: Number(req.body.triggerValue ?? 5),
+  const [popup] = await db.insert(sitePopupsTable).values({
+    name: req.body.name,
     enabled: req.body.enabled ?? true,
+    trigger: req.body.trigger ?? "manual",
+    config: req.body.config ?? {},
+    priority: Number(req.body.priority ?? 0),
   }).returning();
-  res.status(201).json(p);
+  res.status(201).json(popup);
 });
 
 websiteRouter.patch("/popups/:id", requireStaffAuth, requireStaffPermission("/website"), async (req, res) => {
   const id = Number(req.params.id);
-  const allowed = ["title", "body", "ctaLabel", "ctaUrl", "imageUrl", "triggerType", "triggerValue", "enabled"];
-  const updates: Record<string, unknown> = {};
-  for (const k of allowed) if (req.body[k] !== undefined) updates[k] = req.body[k];
-  const [u] = await db.update(sitePopupsTable).set(updates).where(eq(sitePopupsTable.id, id)).returning();
+  const [u] = await db.update(sitePopupsTable).set(req.body).where(eq(sitePopupsTable.id, id)).returning();
   if (!u) { res.status(404).json({ error: "Popup not found" }); return; }
   res.json(u);
 });
@@ -387,17 +385,7 @@ websiteRouter.get("/faqs", async (req, res) => {
     return;
   }
 
-  if (draftsAllowed) {
-    const faqs = await db.select().from(siteFaqsTable).orderBy(asc(siteFaqsTable.orderIndex), asc(siteFaqsTable.id));
-    res.json({ faqs });
-    return;
-  }
-
-  const faqs = await db
-    .select()
-    .from(siteFaqsTable)
-    .where(eq(siteFaqsTable.enabled, true))
-    .orderBy(asc(siteFaqsTable.orderIndex), asc(siteFaqsTable.id));
+  const faqs = await db.select().from(siteFaqsTable).orderBy(asc(siteFaqsTable.orderIndex), asc(siteFaqsTable.id));
   res.json({ faqs });
 });
 
@@ -431,10 +419,8 @@ websiteRouter.delete("/faqs/:id", requireStaffAuth, requireStaffPermission("/web
 // ─────────────────────────────────────────────────────────────────────────────
 // Photos — local filesystem upload (data/uploads/site)
 // ─────────────────────────────────────────────────────────────────────────────
-const UPLOAD_DIR = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../data/uploads/site",
-);
+const ARTIFACT_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const UPLOAD_DIR = path.resolve(ARTIFACT_ROOT, "data/uploads/site");
 
 const ALLOWED_MIME = new Set([
   "image/png",
