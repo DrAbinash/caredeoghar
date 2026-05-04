@@ -29,9 +29,11 @@ Production assumptions for scans: mockup sandbox code is dev-only; `NODE_ENV` is
 
 - Production API entry points: `artifacts/api-server/src/index.ts`, `artifacts/api-server/src/app.ts`, and `artifacts/api-server/src/routes/index.ts`.
 - High-risk API routes: `routes/users.ts`, `routes/portal.ts`, `routes/backup.ts`, `routes/bridge.ts`, `routes/system.ts`, `routes/website.ts`, billing/orders/reports/patients routes, and `middleware/requireSuperAdmin.ts`.
+- Authorization hot spots: the "Unrestricted staff-authenticated routes" block in `artifacts/api-server/src/routes/index.ts`, especially `/ai`, `/form-f`, `/patient-reports`, `/signatures`, and other routers not covered by `PERMISSIONED_PATHS`.
 - Frontend/public site XSS surfaces: `artifacts/clinic-site/src/head.tsx`, `artifacts/clinic-site/src/sections.tsx`, `artifacts/diagnostic-erp/src/pages/Website.tsx`, report/print HTML generation, and any `dangerouslySetInnerHTML` or `innerHTML` use.
 - File/upload/static surfaces: `/uploads` static middleware in `app.ts`, `routes/website.ts` photo upload/delete, `routes/system.ts` update upload, and backup endpoints.
 - Bridge/biometric surface: `bridge-service/src/index.js` and API `/api/bridge/*` implementation.
+- Tokenized sharing/session surfaces: `routes/patient-reports.ts`, `routes/teleradiology.ts`, `routes/super-admin.ts`, and any frontend code that transports bearer tokens via URLs or long-lived public links.
 - Dev-only areas normally ignored: `artifacts/mockup-sandbox`, `.cache`, and attached design assets unless reachable through production routes.
 
 ## Threat Categories
