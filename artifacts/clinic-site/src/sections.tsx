@@ -61,6 +61,7 @@ export function HeaderSection({ section, settings, pages, basePath }: { section:
           ))}
         </nav>
         <div style={{ display: "flex", alignItems: "center", gap: ".5rem" }}>
+          <a href="/" className={`${buttonClass(settings, "secondary")} header-cta-desktop`} style={{ opacity: 0.85 }}>Staff Login</a>
           {ctaLabel && (
             <a href={ctaHref} className={`${buttonClass(settings, "primary")} header-cta-desktop`}>{ctaLabel}</a>
           )}
@@ -81,6 +82,7 @@ export function HeaderSection({ section, settings, pages, basePath }: { section:
           {ctaLabel && (
             <a href={ctaHref} className={buttonClass(settings, "primary")} style={{ justifyContent: "center", marginTop: ".5rem" }}>{ctaLabel}</a>
           )}
+          <a href="/" className={buttonClass(settings, "secondary")} style={{ justifyContent: "center", marginTop: ".25rem", opacity: 0.85 }}>Staff Login</a>
         </nav>
       )}
     </header>
