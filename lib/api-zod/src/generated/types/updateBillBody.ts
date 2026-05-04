@@ -8,6 +8,7 @@
 import type { UpdateBillBodyStatus } from "./updateBillBodyStatus";
 
 export interface UpdateBillBody {
+  /** @minimum 0 */
   discount?: number;
   status?: UpdateBillBodyStatus;
   dueDate?: string | null;

@@ -9,6 +9,7 @@ import type { CreatePaymentBodyMethod } from "./createPaymentBodyMethod";
 
 export interface CreatePaymentBody {
   billId: number;
+  /** @exclusiveMinimum 0 */
   amount: number;
   method: CreatePaymentBodyMethod;
   referenceNumber?: string | null;

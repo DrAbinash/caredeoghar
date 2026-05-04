@@ -694,9 +694,11 @@ export const ListBillsResponse = zod.object({
 /**
  * @summary Create bill for order
  */
+export const createBillBodyDiscountMin = 0;
+
 export const CreateBillBody = zod.object({
   orderId: zod.number(),
-  discount: zod.number().optional(),
+  discount: zod.number().min(createBillBodyDiscountMin).optional(),
   dueDate: zod.string().nullish(),
 });
 
@@ -822,8 +824,10 @@ export const UpdateBillParams = zod.object({
   id: zod.coerce.number(),
 });
 
+export const updateBillBodyDiscountMin = 0;
+
 export const UpdateBillBody = zod.object({
-  discount: zod.number().optional(),
+  discount: zod.number().min(updateBillBodyDiscountMin).optional(),
   status: zod
     .enum(["draft", "pending", "partial", "paid", "cancelled"])
     .optional(),
@@ -970,9 +974,11 @@ export const ListPaymentsResponse = zod.object({
 /**
  * @summary Record payment
  */
+export const createPaymentBodyAmountExclusiveMin = 0;
+
 export const CreatePaymentBody = zod.object({
   billId: zod.number(),
-  amount: zod.number(),
+  amount: zod.number().gt(createPaymentBodyAmountExclusiveMin),
   method: zod.enum(["cash", "card", "upi", "insurance", "cheque"]),
   referenceNumber: zod.string().nullish(),
   notes: zod.string().nullish(),

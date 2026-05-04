@@ -872,6 +872,7 @@ components:
           type: integer
         discount:
           type: number
+          minimum: 0
         dueDate:
           type: string
           nullable: true
@@ -882,6 +883,7 @@ components:
       properties:
         discount:
           type: number
+          minimum: 0
         status:
           type: string
           enum: [draft, pending, partial, paid, cancelled]
@@ -933,6 +935,7 @@ components:
           type: integer
         amount:
           type: number
+          exclusiveMinimum: 0
         method:
           type: string
           enum: [cash, card, upi, insurance, cheque]

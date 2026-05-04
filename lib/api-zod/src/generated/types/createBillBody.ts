@@ -8,6 +8,7 @@
 
 export interface CreateBillBody {
   orderId: number;
+  /** @minimum 0 */
   discount?: number;
   dueDate?: string | null;
 }

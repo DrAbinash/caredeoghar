@@ -220,6 +220,7 @@ export interface BillList {
 
 export interface CreateBillBody {
   orderId: number;
+  /** @minimum 0 */
   discount?: number;
   dueDate?: string | null;
 }
@@ -236,6 +237,7 @@ export const UpdateBillBodyStatus = {
 } as const;
 
 export interface UpdateBillBody {
+  /** @minimum 0 */
   discount?: number;
   status?: UpdateBillBodyStatus;
   dueDate?: string | null;
@@ -261,6 +263,7 @@ export const CreatePaymentBodyMethod = {
 
 export interface CreatePaymentBody {
   billId: number;
+  /** @exclusiveMinimum 0 */
   amount: number;
   method: CreatePaymentBodyMethod;
   referenceNumber?: string | null;
