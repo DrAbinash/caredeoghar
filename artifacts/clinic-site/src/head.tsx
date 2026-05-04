@@ -116,10 +116,10 @@ export function HeadManager({ settings, page }: { settings: SiteSettings; page: 
     }
 
     // customHeadHtml is an admin-only field (protected at the API layer by
-    // requireStaffPermission("/website") which only grants access to
-    // admin/super_admin roles). It is intentionally rendered as-is to support
-    // legitimate use cases such as embedding third-party widgets or verification
-    // scripts that cannot be expressed as structured tracking IDs.
+    // the isAdminRole() guard inside PATCH /settings, which restricts writes
+    // to admin/super_admin roles only). It is intentionally rendered as-is to
+    // support legitimate use cases such as embedding third-party widgets or
+    // verification scripts that cannot be expressed as structured tracking IDs.
     if (settings.customHeadHtml) {
       html += settings.customHeadHtml;
     }

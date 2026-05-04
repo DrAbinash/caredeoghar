@@ -1,10 +1,13 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+
+const artifactDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const app: Express = express();
 
@@ -45,7 +48,7 @@ app.use("/api", router);
 app.use("/uploads", (_req: Request, res: Response, next: NextFunction) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   next();
-}, express.static(path.resolve(process.cwd(), "data/uploads")));
+}, express.static(path.resolve(artifactDir, "data/uploads")));
 
 // =============================================================================
 // Production single-port static serving (Windows .exe / portable build)

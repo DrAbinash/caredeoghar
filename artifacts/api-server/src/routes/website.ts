@@ -10,9 +10,11 @@ import {
 import { portalSessionsTable, usersTable } from "@workspace/db/schema";
 import { and, eq, asc, desc, gt } from "drizzle-orm";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import fs from "node:fs/promises";
 import crypto from "node:crypto";
 import multer from "multer";
+import sanitizeHtml from "sanitize-html";
 import {
   requireStaffAuth,
   requireStaffPermission,
@@ -72,6 +74,47 @@ async function canViewDrafts(req: Request): Promise<boolean> {
 function isAdminRole(req: Request): boolean {
   const session = (req as StaffAuthRequest).staffSession;
   return !!session && FULL_ACCESS_ROLES.has(session.role);
+}
+
+const SANITIZE_OPTS: sanitizeHtml.IOptions = {
+  allowedTags: sanitizeHtml.defaults.allowedTags.concat([
+    "img", "figure", "figcaption", "video", "audio", "source",
+    "details", "summary", "mark", "abbr", "time", "hr",
+  ]),
+  allowedAttributes: {
+    ...sanitizeHtml.defaults.allowedAttributes,
+    img: ["src", "alt", "title", "width", "height", "loading"],
+    a: ["href", "title", "target", "rel"],
+    video: ["src", "controls", "width", "height", "poster"],
+    audio: ["src", "controls"],
+    source: ["src", "type"],
+    time: ["datetime"],
+    "*": ["class", "id", "style"],
+  },
+  allowedSchemes: ["http", "https", "mailto", "tel"],
+  disallowedTagsMode: "discard",
+};
+
+function serverSanitizeHtml(html: string): string {
+  if (!html) return "";
+  return sanitizeHtml(html, SANITIZE_OPTS);
+}
+
+function sanitizePageSectionsForPublic<T extends { sections?: string | null }>(page: T): T {
+  if (!page.sections) return page;
+  try {
+    const sections: unknown[] = JSON.parse(page.sections);
+    if (!Array.isArray(sections)) return page;
+    const cleaned = sections.map((s: any) => {
+      if (s?.type === "custom_html" && typeof s.config?.html === "string") {
+        return { ...s, config: { ...s.config, html: serverSanitizeHtml(s.config.html) } };
+      }
+      return s;
+    });
+    return { ...page, sections: JSON.stringify(cleaned) };
+  } catch {
+    return page;
+  }
 }
 
 function stripCustomHtmlSections(sectionsJson: string, existingSectionsJson?: string): string {
@@ -206,7 +249,7 @@ websiteRouter.get("/pages", async (req, res) => {
     .from(sitePagesTable)
     .where(eq(sitePagesTable.status, "published"))
     .orderBy(asc(sitePagesTable.orderIndex), asc(sitePagesTable.id));
-  res.json({ pages });
+  res.json({ pages: pages.map(sanitizePageSectionsForPublic) });
 });
 
 websiteRouter.get("/pages/:id", async (req, res) => {
@@ -223,7 +266,7 @@ websiteRouter.get("/pages/:id", async (req, res) => {
     }
   }
 
-  res.json(p);
+  res.json(draftsAllowed ? p : sanitizePageSectionsForPublic(p));
 });
 
 websiteRouter.post("/pages", requireStaffAuth, requireStaffPermission("/website"), async (req, res) => {
@@ -388,7 +431,10 @@ websiteRouter.delete("/faqs/:id", requireStaffAuth, requireStaffPermission("/web
 // ─────────────────────────────────────────────────────────────────────────────
 // Photos — local filesystem upload (data/uploads/site)
 // ─────────────────────────────────────────────────────────────────────────────
-const UPLOAD_DIR = path.resolve(process.cwd(), "data/uploads/site");
+const UPLOAD_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../data/uploads/site",
+);
 
 const ALLOWED_MIME = new Set([
   "image/png",

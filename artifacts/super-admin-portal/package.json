@@ -6,7 +6,7 @@
   "scripts": {
     "predev": "test -x node_modules/.bin/vite || pnpm install",
     "dev": "vite --config vite.config.ts --host 0.0.0.0",
-    "prebuild": "test -x node_modules/.bin/vite || pnpm install",
+    "prebuild": "test -x node_modules/.bin/vite || CI=true pnpm install",
     "build": "vite build --config vite.config.ts",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit"
