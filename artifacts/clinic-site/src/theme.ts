@@ -61,8 +61,8 @@ function loadGoogleFont(key: string) {
 
 export function applyTheme(s: SiteSettings) {
   const root = document.documentElement.style;
-  const primary = hexToHsl(s.primaryColor) ?? "200 95% 42%";
-  const bg = hexToHsl(s.backgroundColor) ?? "0 0% 100%";
+  const primary = hexToHsl(s.primaryColor ?? "") ?? "200 95% 42%";
+  const bg = hexToHsl(s.backgroundColor ?? "") ?? "0 0% 100%";
   // Pick readable text color based on background lightness
   const bgLight = parseInt((bg.match(/(\d+)%\s*$/)?.[1] ?? "100"), 10);
   const fg = bgLight > 55 ? "222 47% 11%" : "0 0% 100%";
@@ -71,7 +71,7 @@ export function applyTheme(s: SiteSettings) {
   root.setProperty("--site-bg", bg);
   root.setProperty("--site-fg", fg);
 
-  const fontKey = (s.fontHeading || "inter").toLowerCase().replace(/[^a-z]/g, "");
+  const fontKey = ((s.fontHeading as string) || "inter").toLowerCase().replace(/[^a-z]/g, "");
   const fontStack = FONT_MAP[fontKey] ?? FONT_MAP.inter;
   loadGoogleFont(fontKey);
   root.setProperty("--site-font", fontStack);
