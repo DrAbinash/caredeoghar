@@ -7,7 +7,7 @@ import {
   siteFaqsTable,
   sitePhotosTable,
 } from "@workspace/db";
-import { portalSessionsTable } from "@workspace/db/schema";
+import { portalSessionsTable, usersTable } from "@workspace/db/schema";
 import { and, eq, asc, desc, gt } from "drizzle-orm";
 import path from "node:path";
 import fs from "node:fs/promises";
@@ -43,7 +43,7 @@ async function hasStaffSession(req: Request): Promise<boolean> {
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
   if (!token) return false;
   const [session] = await db
-    .select({ id: portalSessionsTable.id })
+    .select({ id: portalSessionsTable.id, subjectId: portalSessionsTable.subjectId })
     .from(portalSessionsTable)
     .where(
       and(
@@ -53,7 +53,15 @@ async function hasStaffSession(req: Request): Promise<boolean> {
       ),
     )
     .limit(1);
-  return !!session;
+  if (!session) return false;
+
+  const [user] = await db
+    .select({ isActive: usersTable.isActive })
+    .from(usersTable)
+    .where(eq(usersTable.id, session.subjectId))
+    .limit(1);
+
+  return !!user?.isActive;
 }
 
 async function canViewDrafts(req: Request): Promise<boolean> {
