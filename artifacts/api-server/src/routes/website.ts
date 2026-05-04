@@ -95,6 +95,15 @@ const SANITIZE_OPTS: sanitizeHtml.IOptions = {
   disallowedTagsMode: "discard",
 };
 
+function parseJsonArray(value: string | null | undefined): unknown[] {
+  try {
+    const parsed = JSON.parse(value || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 function serverSanitizeHtml(html: string): string {
   if (!html) return "";
   return sanitizeHtml(html, SANITIZE_OPTS);
@@ -132,33 +141,14 @@ function isCustomHtmlSection(
 }
 
 function stripCustomHtmlSections(sectionsJson: string, existingSectionsJson?: string): string {
-  try {
-    const incoming: unknown[] = JSON.parse(sectionsJson || "[]");
-    if (!Array.isArray(incoming)) return sectionsJson;
+  const incoming = parseJsonArray(sectionsJson);
+  const withoutCustomHtml = incoming.filter((s: unknown) => (s as { type?: string }).type !== "custom_html");
+  if (!existingSectionsJson) return JSON.stringify(withoutCustomHtml);
 
-    const withoutCustomHtml = incoming.filter((s: unknown) => {
-      return (s as { type?: string }).type !== "custom_html";
-    });
-
-    if (!existingSectionsJson) return JSON.stringify(withoutCustomHtml);
-
-    try {
-      const existing: unknown[] = JSON.parse(existingSectionsJson || "[]");
-      if (!Array.isArray(existing)) return JSON.stringify(withoutCustomHtml);
-
-      const existingCustomHtml = existing.filter((s: unknown) => {
-        return (s as { type?: string }).type === "custom_html";
-      });
-
-      if (existingCustomHtml.length === 0) return JSON.stringify(withoutCustomHtml);
-
-      return JSON.stringify([...withoutCustomHtml, ...existingCustomHtml]);
-    } catch {
-      return JSON.stringify(withoutCustomHtml);
-    }
-  } catch {
-    return sectionsJson;
-  }
+  const existing = parseJsonArray(existingSectionsJson);
+  const existingCustomHtml = existing.filter((s: unknown) => (s as { type?: string }).type === "custom_html");
+  if (existingCustomHtml.length === 0) return JSON.stringify(withoutCustomHtml);
+  return JSON.stringify([...withoutCustomHtml, ...existingCustomHtml]);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -287,13 +277,18 @@ websiteRouter.get("/pages/:id", async (req, res) => {
 });
 
 websiteRouter.post("/pages", requireStaffAuth, requireStaffPermission("/website"), async (req, res) => {
+  const sections = req.body.sections !== undefined
+    ? isAdminRole(req)
+      ? req.body.sections
+      : stripCustomHtmlSections(String(req.body.sections))
+    : "[]";
   const [page] = await db.insert(sitePagesTable).values({
     slug: req.body.slug,
     title: req.body.title,
     status: req.body.status ?? "draft",
     orderIndex: Number(req.body.orderIndex ?? 0),
     showInNav: req.body.showInNav ?? true,
-    sections: req.body.sections ?? "[]",
+    sections,
   }).returning();
   res.status(201).json(page);
 });
@@ -346,24 +341,34 @@ websiteRouter.get("/popups", async (req, res) => {
     return;
   }
 
-  const popups = await db.select().from(sitePopupsTable).orderBy(desc(sitePopupsTable.priority), asc(sitePopupsTable.id));
+  const popups = await db
+    .select()
+    .from(sitePopupsTable)
+    .where(eq(sitePopupsTable.enabled, true))
+    .orderBy(asc(sitePopupsTable.id));
   res.json({ popups });
 });
 
 websiteRouter.post("/popups", requireStaffAuth, requireStaffPermission("/website"), async (req, res) => {
   const [popup] = await db.insert(sitePopupsTable).values({
-    name: req.body.name,
+    title: req.body.title,
+    body: req.body.body,
+    ctaLabel: req.body.ctaLabel,
+    ctaUrl: req.body.ctaUrl,
+    imageUrl: req.body.imageUrl,
+    triggerType: req.body.triggerType,
+    triggerValue: req.body.triggerValue,
     enabled: req.body.enabled ?? true,
-    trigger: req.body.trigger ?? "manual",
-    config: req.body.config ?? {},
-    priority: Number(req.body.priority ?? 0),
   }).returning();
   res.status(201).json(popup);
 });
 
 websiteRouter.patch("/popups/:id", requireStaffAuth, requireStaffPermission("/website"), async (req, res) => {
   const id = Number(req.params.id);
-  const [u] = await db.update(sitePopupsTable).set(req.body).where(eq(sitePopupsTable.id, id)).returning();
+  const allowed = ["title", "body", "ctaLabel", "ctaUrl", "imageUrl", "triggerType", "triggerValue", "enabled"];
+  const updates: Record<string, unknown> = {};
+  for (const k of allowed) if (req.body[k] !== undefined) updates[k] = req.body[k];
+  const [u] = await db.update(sitePopupsTable).set(updates).where(eq(sitePopupsTable.id, id)).returning();
   if (!u) { res.status(404).json({ error: "Popup not found" }); return; }
   res.json(u);
 });
