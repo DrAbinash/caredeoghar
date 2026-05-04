@@ -6,7 +6,7 @@ import {
   patientReportsTable,
 } from "@workspace/db/schema";
 import { and, desc, eq, isNull, or } from "drizzle-orm";
-import { sanitizePatient } from "./patients.js";
+import { sanitizePatient } from "./patients";
 
 function firstHeader(v: string | string[] | undefined): string {
   return Array.isArray(v) ? (v[0] ?? "") : (v ?? "");
