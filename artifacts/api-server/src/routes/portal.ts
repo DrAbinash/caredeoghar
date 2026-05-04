@@ -18,6 +18,7 @@ import {
   doctorsTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, gt, sql, count } from "drizzle-orm";
+import { sanitizePatient } from "./patients";
 
 export const portalRouter = Router();
 
@@ -478,8 +479,7 @@ portalRouter.get("/me", requirePatientAuth, async (req: PortalAuthRequest, res) 
   const id = req.portalSession!.subjectId;
   const [p] = await db.select().from(patientsTable).where(eq(patientsTable.id, id)).limit(1);
   if (!p) { res.status(404).json({ error: "Patient not found" }); return; }
-  const { portalPinHash, ...safe } = p;
-  res.json({ ...safe, hasPortalAccess: portalPinHash !== null });
+  res.json(sanitizePatient(p));
 });
 
 portalRouter.put("/me", requirePatientAuth, async (req: PortalAuthRequest, res) => {
@@ -529,8 +529,7 @@ portalRouter.put("/me", requirePatientAuth, async (req: PortalAuthRequest, res) 
     return;
   }
   const [updated] = await db.update(patientsTable).set(update).where(eq(patientsTable.id, id)).returning();
-  const { portalPinHash, ...safe } = updated;
-  res.json({ ...safe, hasPortalAccess: portalPinHash !== null });
+  res.json(sanitizePatient(updated));
 });
 
 // Bills + payments
