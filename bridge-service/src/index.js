@@ -96,10 +96,15 @@ app.post("/capture", async (req, res) => {
     if (!captureToken) {
       return res.status(400).json({ error: "captureToken is required. The ERP client must obtain one via POST /api/bridge/capture-challenge before calling /capture." });
     }
-    const validation = await erp("/api/bridge/validate-capture-token", {
-      method: "POST",
-      body: JSON.stringify({ captureToken }),
-    });
+    let validation;
+    try {
+      validation = await erp("/api/bridge/validate-capture-token", {
+        method: "POST",
+        body: JSON.stringify({ captureToken }),
+      });
+    } catch (e) {
+      return res.status(401).json({ error: e.message || "Invalid capture token" });
+    }
     if (!validation.ok) {
       return res.status(401).json({ error: validation.error || "Invalid capture token" });
     }
