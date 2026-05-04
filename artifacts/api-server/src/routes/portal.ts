@@ -478,7 +478,8 @@ portalRouter.get("/me", requirePatientAuth, async (req: PortalAuthRequest, res) 
   const id = req.portalSession!.subjectId;
   const [p] = await db.select().from(patientsTable).where(eq(patientsTable.id, id)).limit(1);
   if (!p) { res.status(404).json({ error: "Patient not found" }); return; }
-  res.json(p);
+  const { portalPinHash, ...safe } = p;
+  res.json({ ...safe, hasPortalAccess: portalPinHash !== null });
 });
 
 portalRouter.put("/me", requirePatientAuth, async (req: PortalAuthRequest, res) => {
@@ -528,7 +529,8 @@ portalRouter.put("/me", requirePatientAuth, async (req: PortalAuthRequest, res) 
     return;
   }
   const [updated] = await db.update(patientsTable).set(update).where(eq(patientsTable.id, id)).returning();
-  res.json(updated);
+  const { portalPinHash, ...safe } = updated;
+  res.json({ ...safe, hasPortalAccess: portalPinHash !== null });
 });
 
 // Bills + payments

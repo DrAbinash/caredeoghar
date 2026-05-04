@@ -6,6 +6,7 @@ import {
   patientReportsTable,
 } from "@workspace/db/schema";
 import { and, desc, eq, isNull, or } from "drizzle-orm";
+import { sanitizePatient } from "./patients.js";
 
 function firstHeader(v: string | string[] | undefined): string {
   return Array.isArray(v) ? (v[0] ?? "") : (v ?? "");
@@ -93,7 +94,7 @@ teleradiologyRouter.get("/share/:token.json", async (req, res) => {
         testName: test?.name ?? null,
         patientFirstName: patient?.firstName ?? null,
       }
-    : { study, patient, test };
+    : { study, patient: patient ? sanitizePatient(patient) : null, test };
   res.json({ audience: link.audience, ...safe });
 });
 

@@ -17,6 +17,9 @@ import {
   ListPaymentsQueryParams,
 } from "@workspace/api-zod";
 import { orderTestsTable, testsTable, doctorsTable } from "@workspace/db";
+import { sanitizePatient } from "./patients";
+import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
+import { FULL_ACCESS_ROLES } from "../middleware/requireStaffAuth";
 
 export const billsRouter = Router();
 export const paymentsRouter = Router();
@@ -69,7 +72,7 @@ async function buildBill(bill: typeof billsTable.$inferSelect) {
     orderDetails = {
       ...order,
       totalAmount: Number(order.totalAmount),
-      patient: patient ?? null,
+      patient: patient ? sanitizePatient(patient) : null,
       doctor,
       tests: orderTestRows.map((ot) => ({
         ...ot.orderTest,
@@ -87,7 +90,7 @@ async function buildBill(bill: typeof billsTable.$inferSelect) {
     totalAmount: Number(bill.totalAmount),
     paidAmount: Number(bill.paidAmount),
     balanceAmount: Number(bill.balanceAmount),
-    patient: patient ?? null,
+    patient: patient ? sanitizePatient(patient) : null,
     order: orderDetails,
     payments: payments.map((p) => ({ ...p, amount: Number(p.amount) })),
   };
@@ -227,7 +230,7 @@ billsRouter.get("/", async (req, res) => {
   });
 });
 
-billsRouter.post("/", async (req, res) => {
+billsRouter.post("/", async (req: StaffAuthRequest, res) => {
   const payload = req.body?.data ?? req.body ?? {};
   const parsed = CreateBillBody.safeParse(payload);
   if (!parsed.success) {
@@ -246,6 +249,26 @@ billsRouter.post("/", async (req, res) => {
 
   const subtotal = Number(order.totalAmount);
   const discountAmt = Number(discount);
+
+  if (!Number.isFinite(discountAmt) || discountAmt < 0) {
+    res.status(400).json({ error: "Discount must be zero or a positive number" });
+    return;
+  }
+  if (discountAmt > subtotal) {
+    res.status(400).json({ error: `Discount (${discountAmt.toFixed(2)}) cannot exceed subtotal (${subtotal.toFixed(2)})` });
+    return;
+  }
+
+  const session = req.staffSession;
+  if (session && !FULL_ACCESS_ROLES.has(session.role) && session.maxDiscount !== null) {
+    const maxPct = session.maxDiscount;
+    const maxAllowed = Math.round((subtotal * maxPct / 100) * 100) / 100;
+    if (discountAmt > maxAllowed + 0.01) {
+      res.status(403).json({ error: `Your maximum allowed discount is ${maxPct}% (₹${maxAllowed.toFixed(2)} on this bill). Please ask an admin to apply a higher discount.` });
+      return;
+    }
+  }
+
   const taxAmount = 0;
   const totalAmount = subtotal - discountAmt + taxAmount;
 
@@ -340,7 +363,7 @@ billsRouter.get("/:id", async (req, res) => {
   res.json(await buildBill(bill));
 });
 
-billsRouter.put("/:id", async (req, res) => {
+billsRouter.put("/:id", async (req: StaffAuthRequest, res) => {
   const paramsParsed = UpdateBillParams.safeParse({ id: Number(req.params.id) });
   const bodyParsed = UpdateBillBody.safeParse(req.body);
   if (!paramsParsed.success || !bodyParsed.success) {
@@ -362,6 +385,26 @@ billsRouter.put("/:id", async (req, res) => {
     const newDiscount = Number(discount);
     const subtotal = Number(existingBill.subtotal);
     const taxAmount = Number(existingBill.taxAmount);
+
+    if (!Number.isFinite(newDiscount) || newDiscount < 0) {
+      res.status(400).json({ error: "Discount must be zero or a positive number" });
+      return;
+    }
+    if (newDiscount > subtotal) {
+      res.status(400).json({ error: `Discount (${newDiscount.toFixed(2)}) cannot exceed subtotal (${subtotal.toFixed(2)})` });
+      return;
+    }
+
+    const session = req.staffSession;
+    if (session && !FULL_ACCESS_ROLES.has(session.role) && session.maxDiscount !== null) {
+      const maxPct = session.maxDiscount;
+      const maxAllowed = Math.round((subtotal * maxPct / 100) * 100) / 100;
+      if (newDiscount > maxAllowed + 0.01) {
+        res.status(403).json({ error: `Your maximum allowed discount is ${maxPct}% (₹${maxAllowed.toFixed(2)} on this bill). Please ask an admin to apply a higher discount.` });
+        return;
+      }
+    }
+
     const newTotal = subtotal - newDiscount + taxAmount;
     const paidAmount = Number(existingBill.paidAmount);
     updateData.discount = String(newDiscount);
@@ -814,9 +857,20 @@ paymentsRouter.post("/", async (req, res) => {
   }
   const { billId, amount, method, referenceNumber, notes } = parsed.data;
 
+  if (!Number.isFinite(amount) || amount <= 0) {
+    res.status(400).json({ error: "Payment amount must be greater than zero. Use the refund endpoint to process refunds." });
+    return;
+  }
+
   const [bill] = await db.select().from(billsTable).where(eq(billsTable.id, billId));
   if (!bill) {
     res.status(404).json({ error: "Bill not found" });
+    return;
+  }
+
+  const currentBalance = Number(bill.balanceAmount);
+  if (amount > currentBalance + 0.01) {
+    res.status(400).json({ error: `Payment amount (₹${amount.toFixed(2)}) exceeds outstanding balance (₹${currentBalance.toFixed(2)})` });
     return;
   }
 

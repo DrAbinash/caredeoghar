@@ -12,6 +12,13 @@ import {
 
 export const patientsRouter = Router();
 
+type PatientRow = typeof patientsTable.$inferSelect;
+
+export function sanitizePatient(p: PatientRow) {
+  const { portalPinHash, ...safe } = p;
+  return { ...safe, hasPortalAccess: portalPinHash !== null };
+}
+
 async function generatePatientId(): Promise<string> {
   // Derive next ID from the maximum existing patient_id value
   const [row] = await db
@@ -49,7 +56,7 @@ patientsRouter.get("/", async (req, res) => {
   ]);
 
   res.json({
-    patients,
+    patients: patients.map(sanitizePatient),
     total: Number(countResult[0]?.count ?? 0),
     page,
     limit,
@@ -90,7 +97,7 @@ patientsRouter.post("/", async (req, res) => {
     .insert(patientsTable)
     .values(insertValues as typeof patientsTable.$inferInsert)
     .returning();
-  res.status(201).json(patient);
+  res.status(201).json(sanitizePatient(patient));
 });
 
 patientsRouter.get("/:id", async (req, res) => {
@@ -107,7 +114,7 @@ patientsRouter.get("/:id", async (req, res) => {
     res.status(404).json({ error: "Patient not found" });
     return;
   }
-  res.json(patient);
+  res.json(sanitizePatient(patient));
 });
 
 patientsRouter.put("/:id", async (req, res) => {
@@ -140,7 +147,7 @@ patientsRouter.put("/:id", async (req, res) => {
     res.status(404).json({ error: "Patient not found" });
     return;
   }
-  res.json(updated);
+  res.json(sanitizePatient(updated));
 });
 
 patientsRouter.get("/:id/history", async (req, res) => {
@@ -173,7 +180,7 @@ patientsRouter.get("/:id/history", async (req, res) => {
       return {
         ...order,
         totalAmount: Number(order.totalAmount),
-        patient: patient ?? null,
+        patient: patient ? sanitizePatient(patient) : null,
         doctor,
         tests: orderTests.map((ot) => ({
           ...ot.orderTest,

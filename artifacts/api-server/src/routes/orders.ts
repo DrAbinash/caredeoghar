@@ -8,6 +8,7 @@ import {
   UpdateOrderParams,
   UpdateOrderBody,
 } from "@workspace/api-zod";
+import { sanitizePatient } from "./patients";
 
 export const ordersRouter = Router();
 
@@ -36,7 +37,7 @@ async function buildOrder(order: typeof ordersTable.$inferSelect) {
   return {
     ...order,
     totalAmount: Number(order.totalAmount),
-    patient: patient ?? null,
+    patient: patient ? sanitizePatient(patient) : null,
     doctor,
     tests: orderTestRows.map((ot) => ({
       ...ot.orderTest,
