@@ -3,7 +3,7 @@
 // scanners (ZKTeco, Mantra MFS100, Morpho, etc.) via vendor SDK and performs
 // the actual capture + matching locally. The server only stores templates and
 // records identification results — never the raw biometric data.
-import { Router } from "express";
+import { Router, type Request, type Response, type NextFunction } from "express";
 import crypto from "crypto";
 import { db } from "@workspace/db";
 import {
@@ -21,12 +21,16 @@ const SESSION_HOURS = 8;
 // refuses all authenticated bridge requests so the service is never left open.
 const BRIDGE_SECRET = process.env["FINGERPRINT_BRIDGE_SECRET"] ?? "";
 
-function requireBridgeAuth(req: Parameters<Parameters<typeof bridgeRouter.use>[0]>[0], res: Parameters<Parameters<typeof bridgeRouter.use>[0]>[1], next: () => void) {
+function requireBridgeAuth(req: Request, res: Response, next: NextFunction) {
   if (!BRIDGE_SECRET) {
-    return res.status(503).json({ error: "Bridge authentication is not configured on this server. Set FINGERPRINT_BRIDGE_SECRET." });
+    res.status(503).json({ error: "Bridge authentication is not configured on this server. Set FINGERPRINT_BRIDGE_SECRET." });
+    return;
   }
   const provided = String(req.headers["x-bridge-secret"] ?? "");
-  if (provided !== BRIDGE_SECRET) return res.status(401).json({ error: "Bridge auth failed" });
+  if (provided !== BRIDGE_SECRET) {
+    res.status(401).json({ error: "Bridge auth failed" });
+    return;
+  }
   next();
 }
 
@@ -50,6 +54,7 @@ const ENROLL_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const PUNCH_CHALLENGE_TTL_MS = 2 * 60 * 1000;
 const LOGIN_CHALLENGE_TTL_MS = 2 * 60 * 1000;
 const CAPTURE_CHALLENGE_TTL_MS = 2 * 60 * 1000;
+const CAPTURE_CHALLENGE_MIN_ROLE = new Set(["admin", "super_admin"]);
 
 const enrollChallenges = new Map<string, EnrollChallenge>();
 const punchChallenges = new Map<string, SimpleChallenge>();
@@ -112,7 +117,28 @@ bridgeRouter.get("/info", (_req, res) => {
 bridgeRouter.post("/capture-challenge", async (req, res) => {
   const session = await validateStaffToken(String(req.headers.authorization ?? ""));
   if (!session) {
-    return res.status(401).json({ error: "Staff session required to initiate fingerprint capture" });
+    res.status(401).json({ error: "Staff session required to initiate fingerprint capture" });
+    return;
+  }
+
+  const [caller] = await db
+    .select({ id: usersTable.id, role: usersTable.role, permissions: usersTable.permissions })
+    .from(usersTable)
+    .where(eq(usersTable.id, session.subjectId))
+    .limit(1);
+
+  let parsedPerms: string[] = [];
+  try {
+    if (caller?.permissions) {
+      const p = JSON.parse(caller.permissions);
+      if (Array.isArray(p)) parsedPerms = p.filter((v: unknown): v is string => typeof v === "string");
+    }
+  } catch {}
+
+  const hasSettingsPerm = parsedPerms.includes("/settings");
+  if (!caller || (!CAPTURE_CHALLENGE_MIN_ROLE.has(caller.role) && !hasSettingsPerm)) {
+    res.status(403).json({ error: "Only administrators or settings-level staff can initiate fingerprint capture" });
+    return;
   }
 
   const captureToken = crypto.randomBytes(32).toString("hex");
@@ -128,7 +154,8 @@ bridgeRouter.post("/capture-challenge", async (req, res) => {
 bridgeRouter.post("/enroll-challenge", async (req, res) => {
   const session = await validateStaffToken(String(req.headers.authorization ?? ""));
   if (!session) {
-    return res.status(401).json({ error: "Staff session required to initiate fingerprint enrollment" });
+    res.status(401).json({ error: "Staff session required to initiate fingerprint enrollment" });
+    return;
   }
 
   const [caller] = await db.select({ id: usersTable.id, role: usersTable.role, permissions: usersTable.permissions })
@@ -137,7 +164,10 @@ bridgeRouter.post("/enroll-challenge", async (req, res) => {
   const body = req.body as { scope?: string; scopeId?: number };
   const scope = body.scope === "user" ? "user" : "staff";
   const scopeId = Number(body.scopeId);
-  if (!scopeId) return res.status(400).json({ error: "scopeId required" });
+  if (!scopeId) {
+    res.status(400).json({ error: "scopeId required" });
+    return;
+  }
 
   const ADMIN_ROLES = new Set(["admin", "super_admin"]);
   const isAdmin = caller && ADMIN_ROLES.has(caller.role);
@@ -152,16 +182,23 @@ bridgeRouter.post("/enroll-challenge", async (req, res) => {
   const isSelfEnrollUser = scope === "user" && caller && scopeId === caller.id;
 
   if (!isAdmin && !hasSettingsPerm && !isSelfEnrollUser) {
-    return res.status(403).json({ error: "Only administrators or settings-level staff can enroll fingerprints for other accounts. You may only enroll your own fingerprint." });
+    res.status(403).json({ error: "Only administrators or settings-level staff can enroll fingerprints for other accounts. You may only enroll your own fingerprint." });
+    return;
   }
 
   // Verify that the subject being enrolled actually exists
   if (scope === "staff") {
     const [s] = await db.select({ id: staffTable.id }).from(staffTable).where(eq(staffTable.id, scopeId));
-    if (!s) return res.status(404).json({ error: "Staff not found" });
+    if (!s) {
+      res.status(404).json({ error: "Staff not found" });
+      return;
+    }
   } else {
     const [u] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.id, scopeId));
-    if (!u) return res.status(404).json({ error: "User not found" });
+    if (!u) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
   }
 
   const challengeToken = crypto.randomBytes(32).toString("hex");
@@ -182,7 +219,8 @@ bridgeRouter.post("/enroll-challenge", async (req, res) => {
 bridgeRouter.post("/punch-challenge", async (req, res) => {
   const session = await validateStaffToken(String(req.headers.authorization ?? ""));
   if (!session) {
-    return res.status(401).json({ error: "Staff session required to initiate attendance punch" });
+    res.status(401).json({ error: "Staff session required to initiate attendance punch" });
+    return;
   }
 
   const punchToken = crypto.randomBytes(32).toString("hex");
@@ -222,19 +260,23 @@ bridgeRouter.post("/login-challenge", (_req, res) => {
 bridgeRouter.post("/enroll", requireBridgeAuth, async (req, res) => {
   const enrollToken = String(req.headers["x-enroll-token"] ?? "");
   if (!enrollToken) {
-    return res.status(401).json({ error: "x-enroll-token is required. Obtain one via POST /api/bridge/enroll-challenge with a valid staff session." });
+    res.status(401).json({ error: "x-enroll-token is required. Obtain one via POST /api/bridge/enroll-challenge with a valid staff session." });
+    return;
   }
 
   const challenge = enrollChallenges.get(enrollToken);
   if (!challenge) {
-    return res.status(401).json({ error: "Invalid enrollment token" });
+    res.status(401).json({ error: "Invalid enrollment token" });
+    return;
   }
   if (challenge.used) {
-    return res.status(401).json({ error: "Enrollment token has already been used" });
+    res.status(401).json({ error: "Enrollment token has already been used" });
+    return;
   }
   if (Date.now() > challenge.expiresAt) {
     enrollChallenges.delete(enrollToken);
-    return res.status(401).json({ error: "Enrollment token has expired" });
+    res.status(401).json({ error: "Enrollment token has expired" });
+    return;
   }
 
   const body = req.body as { scope?: string; scopeId?: number; vendor?: string; template?: string; fingerName?: string; quality?: number };
@@ -242,12 +284,14 @@ bridgeRouter.post("/enroll", requireBridgeAuth, async (req, res) => {
   const scopeId = Number(body.scopeId);
   const template = body.template;
   if (!scopeId || !template || template.length < 8) {
-    return res.status(400).json({ error: "scopeId and template required" });
+    res.status(400).json({ error: "scopeId and template required" });
+    return;
   }
 
   // Enforce that the token authorises exactly the scope/scopeId being enrolled.
   if (challenge.scope !== scope || challenge.scopeId !== scopeId) {
-    return res.status(403).json({ error: "Enrollment token is not valid for this scope/scopeId" });
+    res.status(403).json({ error: "Enrollment token is not valid for this scope/scopeId" });
+    return;
   }
 
   // Mark as used before the DB write so a concurrent duplicate request is rejected.
@@ -256,10 +300,16 @@ bridgeRouter.post("/enroll", requireBridgeAuth, async (req, res) => {
   // Sanity check the scopeId exists
   if (scope === "staff") {
     const [s] = await db.select().from(staffTable).where(eq(staffTable.id, scopeId));
-    if (!s) return res.status(404).json({ error: "Staff not found" });
+    if (!s) {
+      res.status(404).json({ error: "Staff not found" });
+      return;
+    }
   } else {
     const [u] = await db.select().from(usersTable).where(eq(usersTable.id, scopeId));
-    if (!u) return res.status(404).json({ error: "User not found" });
+    if (!u) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
   }
 
   const [row] = await db.insert(bridgeFingerprintTemplatesTable).values({
@@ -295,7 +345,10 @@ bridgeRouter.get("/templates", requireBridgeAuth, async (req, res) => {
 bridgeRouter.get("/templates/list", requireBridgeAuth, async (req, res) => {
   const scope = req.query.scope === "user" ? "user" : "staff";
   const scopeId = Number(req.query.scopeId);
-  if (!scopeId) return res.status(400).json({ error: "scopeId required" });
+  if (!scopeId) {
+    res.status(400).json({ error: "scopeId required" });
+    return;
+  }
   const rows = await db.select({
     id: bridgeFingerprintTemplatesTable.id,
     vendor: bridgeFingerprintTemplatesTable.vendor,
@@ -321,19 +374,31 @@ bridgeRouter.delete("/templates/:id", requireBridgeAuth, async (req, res) => {
 // trigger an attendance punch.
 bridgeRouter.post("/staff-punch", requireBridgeAuth, async (req, res) => {
   const punchCheck = consumeChallenge(punchChallenges, String(req.headers["x-punch-token"] ?? ""));
-  if (!punchCheck.ok) return res.status(punchCheck.status).json({ error: punchCheck.error });
+  if (!punchCheck.ok) {
+    res.status(punchCheck.status).json({ error: punchCheck.error });
+    return;
+  }
 
   const body = req.body as { templateId?: number; action?: string };
   const templateId = Number(body.templateId);
-  if (!templateId) return res.status(400).json({ error: "templateId required" });
+  if (!templateId) {
+    res.status(400).json({ error: "templateId required" });
+    return;
+  }
   const action = body.action === "out" ? "out" : "in";
 
   const [tmpl] = await db.select().from(bridgeFingerprintTemplatesTable).where(eq(bridgeFingerprintTemplatesTable.id, templateId));
-  if (!tmpl || tmpl.scope !== "staff") return res.status(404).json({ error: "Template not found" });
+  if (!tmpl || tmpl.scope !== "staff") {
+    res.status(404).json({ error: "Template not found" });
+    return;
+  }
 
   await db.update(bridgeFingerprintTemplatesTable).set({ lastUsedAt: new Date() }).where(eq(bridgeFingerprintTemplatesTable.id, templateId));
   const [staff] = await db.select().from(staffTable).where(eq(staffTable.id, tmpl.scopeId));
-  if (!staff) return res.status(404).json({ error: "Staff not found" });
+  if (!staff) {
+    res.status(404).json({ error: "Staff not found" });
+    return;
+  }
 
   const today = new Date().toISOString().slice(0, 10);
   const now = new Date();
@@ -385,18 +450,33 @@ bridgeRouter.post("/staff-punch", requireBridgeAuth, async (req, res) => {
 // the two-step flow prevents a single raw fetch() from triggering logins.
 bridgeRouter.post("/user-login", requireBridgeAuth, async (req, res) => {
   const loginCheck = consumeChallenge(loginChallenges, String(req.headers["x-login-token"] ?? ""));
-  if (!loginCheck.ok) return res.status(loginCheck.status).json({ error: loginCheck.error });
+  if (!loginCheck.ok) {
+    res.status(loginCheck.status).json({ error: loginCheck.error });
+    return;
+  }
 
   const body = req.body as { templateId?: number };
   const templateId = Number(body.templateId);
-  if (!templateId) return res.status(400).json({ error: "templateId required" });
+  if (!templateId) {
+    res.status(400).json({ error: "templateId required" });
+    return;
+  }
 
   const [tmpl] = await db.select().from(bridgeFingerprintTemplatesTable).where(eq(bridgeFingerprintTemplatesTable.id, templateId));
-  if (!tmpl || tmpl.scope !== "user") return res.status(404).json({ error: "Template not found" });
+  if (!tmpl || tmpl.scope !== "user") {
+    res.status(404).json({ error: "Template not found" });
+    return;
+  }
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, tmpl.scopeId));
-  if (!user) return res.status(404).json({ error: "User not found" });
-  if (!user.isActive) return res.status(403).json({ error: "User is deactivated" });
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  if (!user.isActive) {
+    res.status(403).json({ error: "User is deactivated" });
+    return;
+  }
 
   await db.update(bridgeFingerprintTemplatesTable).set({ lastUsedAt: new Date() }).where(eq(bridgeFingerprintTemplatesTable.id, templateId));
 
@@ -416,9 +496,15 @@ bridgeRouter.post("/user-login", requireBridgeAuth, async (req, res) => {
 // ── Verify a session token (used by client to bootstrap) ──
 bridgeRouter.get("/session/verify", async (req, res) => {
   const token = String(req.query.token ?? "");
-  if (!token) return res.json({ active: false });
+  if (!token) {
+    res.json({ active: false });
+    return;
+  }
   const [s] = await db.select().from(userSessionsTable).where(eq(userSessionsTable.token, token));
-  if (!s || !s.isActive || new Date(s.expiresAt) < new Date()) return res.json({ active: false });
+  if (!s || !s.isActive || new Date(s.expiresAt) < new Date()) {
+    res.json({ active: false });
+    return;
+  }
   res.json({ active: true, user: { id: s.userId, name: s.userName }, loginMethod: s.loginMethod, expiresAt: s.expiresAt });
 });
 
