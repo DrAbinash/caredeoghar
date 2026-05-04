@@ -1,4 +1,17 @@
 #!/usr/bin/env node
+//
+// Preinstall guard — keeps the workspace healthy by:
+//   1. Removing stray package-lock.json / yarn.lock files
+//   2. Blocking non-pnpm package managers
+//   3. Blocking `pnpm install --prod` (corrupts the shared virtual store)
+//      while still allowing `pnpm deploy --prod` (isolated, safe)
+//
+// pnpm sets `npm_command` to the subcommand name ("install", "deploy", etc.)
+// and `npm_config_production` to "true" when `--prod` is passed.
+// Verified on pnpm 10.26.1 — if pnpm is upgraded, re-run:
+//   pnpm --filter @workspace/scripts run test:preinstall-guard
+// to confirm the env vars are still set as expected.
+//
 const fs = require("fs");
 const path = require("path");
 
