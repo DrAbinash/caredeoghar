@@ -18,6 +18,13 @@ function sanitizeCustomHtml(html: string): string {
   });
 }
 
+const SAFE_URL_RE = /^(https?:|mailto:|tel:|\/(?!\/))/i;
+
+function safeUrl(url: string, fallback = ""): string {
+  if (!url) return fallback;
+  return SAFE_URL_RE.test(url.trim()) ? url.trim() : fallback;
+}
+
 function get(c: Record<string, unknown>, k: string, fb = ""): string {
   return typeof c[k] === "string" ? (c[k] as string) : fb;
 }
@@ -35,7 +42,8 @@ export function HeaderSection({ section, settings, pages, basePath }: { section:
   const [open, setOpen] = useState(false);
   const navPages = pages.filter((p) => p.showInNav && p.status === "published");
   useEffect(() => { setOpen(false); }, [loc]);
-  const ctaHref = ctaUrl.startsWith("/") ? `${basePath}${ctaUrl.replace(/^\//, "")}` : ctaUrl;
+  const safeCta = safeUrl(ctaUrl, "/appointment");
+  const ctaHref = safeCta.startsWith("/") ? `${basePath}${safeCta.replace(/^\//, "")}` : safeCta;
   const isActive = (slug: string) => (loc === "/" && slug === "home") || loc === `/${slug}`;
   return (
     <header className="site-header">
@@ -101,7 +109,7 @@ export function HeroSection({ section, settings, basePath }: { section: Section;
         <h1 className="h-display" style={{ marginBottom: "1rem" }}>{heading}</h1>
         {subheading && <p style={{ fontSize: "clamp(1rem, 1.5vw, 1.2rem)", maxWidth: 700, margin: "0 auto 1.5rem", opacity: 0.95 }}>{subheading}</p>}
         {ctaLabel && (
-          <a href={ctaUrl.startsWith("/") ? `${basePath}${ctaUrl.replace(/^\//, "")}` : ctaUrl}
+          <a href={(() => { const s = safeUrl(ctaUrl, "#"); return s.startsWith("/") ? `${basePath}${s.replace(/^\//, "")}` : s; })()}
              className={buttonClass(settings, "primary")}
              style={{ background: "white", color: "hsl(var(--site-primary))" }}>
             {ctaLabel}
@@ -256,8 +264,8 @@ export function ConnectSection({ section, settings }: { section: Section; settin
       <div className="container-narrow text-center">
         <h2 className="h-section" style={{ marginBottom: "1.5rem" }}>{heading}</h2>
         <div style={{ display: "flex", gap: ".75rem", justifyContent: "center", flexWrap: "wrap" }}>
-          {items.filter(([k]) => social[k]).map(([k, icon]) => (
-            <a key={k} href={social[k]} target="_blank" rel="noreferrer"
+          {items.filter(([k]) => social[k] && safeUrl(social[k])).map(([k, icon]) => (
+            <a key={k} href={safeUrl(social[k])} target="_blank" rel="noreferrer"
                style={{ width: 48, height: 48, borderRadius: 9999, background: "hsl(var(--site-primary))", color: "hsl(var(--site-primary-fg))", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
               {icon}
             </a>
@@ -366,10 +374,14 @@ export function FooterSection({ section, settings, basePath }: { section: Sectio
       <div className="container-narrow" style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: "1rem", alignItems: "center" }}>
         <div style={{ opacity: 0.85, fontSize: ".95rem" }}>{text}</div>
         <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
-          {links.map((l, i) => (
-            <a key={i} href={l.url.startsWith("/") ? `${basePath}${l.url.replace(/^\//, "")}` : l.url}
-               style={{ color: "inherit", opacity: 0.85, textDecoration: "underline" }}>{l.label}</a>
-          ))}
+          {links.map((l, i) => {
+            const s = safeUrl(l.url, "#");
+            const href = s.startsWith("/") ? `${basePath}${s.replace(/^\//, "")}` : s;
+            return (
+              <a key={i} href={href}
+                 style={{ color: "inherit", opacity: 0.85, textDecoration: "underline" }}>{l.label}</a>
+            );
+          })}
         </div>
       </div>
     </footer>

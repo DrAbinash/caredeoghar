@@ -140,6 +140,56 @@ function isCustomHtmlSection(
   return typeof cfg.html === "string";
 }
 
+const SAFE_URL_SCHEMES = /^(https?:|mailto:|tel:|\/(?!\/))/i;
+
+function sanitizeUrl(url: unknown): string {
+  if (typeof url !== "string" || url.trim() === "") return "";
+  const trimmed = url.trim();
+  return SAFE_URL_SCHEMES.test(trimmed) ? trimmed : "";
+}
+
+function sanitizeSocialLinks(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return value;
+    const cleaned: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      cleaned[k] = sanitizeUrl(v);
+    }
+    return JSON.stringify(cleaned);
+  } catch {
+    return value;
+  }
+}
+
+function sanitizeSectionUrls(sectionsJson: string): string {
+  try {
+    const sections: unknown[] = JSON.parse(sectionsJson);
+    if (!Array.isArray(sections)) return sectionsJson;
+    const cleaned = sections.map((section) => {
+      if (!section || typeof section !== "object") return section;
+      const s = section as Record<string, unknown>;
+      const cfg = s.config && typeof s.config === "object" ? { ...(s.config as Record<string, unknown>) } : null;
+      if (!cfg) return section;
+
+      if ("ctaUrl" in cfg) cfg.ctaUrl = sanitizeUrl(cfg.ctaUrl);
+      if ("links" in cfg && Array.isArray(cfg.links)) {
+        cfg.links = (cfg.links as unknown[]).map((link) => {
+          if (!link || typeof link !== "object") return link;
+          const l = { ...(link as Record<string, unknown>) };
+          if ("url" in l) l.url = sanitizeUrl(l.url);
+          return l;
+        });
+      }
+      return { ...s, config: cfg };
+    });
+    return JSON.stringify(cleaned);
+  } catch {
+    return sectionsJson;
+  }
+}
+
 function stripCustomHtmlSections(sectionsJson: string, existingSectionsJson?: string): string {
   const incoming = parseJsonArray(sectionsJson);
   const withoutCustomHtml = incoming.filter((s: unknown) => (s as { type?: string }).type !== "custom_html");
@@ -194,9 +244,17 @@ websiteRouter.patch("/settings", requireStaffAuth, requireStaffPermission("/webs
     allowed.push("customHeadHtml");
   }
 
+  const URL_FIELDS = new Set<string>(["faviconUrl", "logoUrl", "seoOgImage"]);
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   for (const k of allowed) {
-    if (req.body[k] !== undefined) updates[k] = req.body[k];
+    if (req.body[k] === undefined) continue;
+    if (URL_FIELDS.has(k)) {
+      updates[k] = sanitizeUrl(req.body[k]);
+    } else if (k === "socialLinks") {
+      updates[k] = sanitizeSocialLinks(req.body[k]);
+    } else {
+      updates[k] = req.body[k];
+    }
   }
   const [updated] = await db
     .update(siteSettingsTable)
@@ -292,8 +350,8 @@ websiteRouter.post("/pages", requireStaffAuth, requireStaffPermission("/website"
   }
   const sections = req.body.sections !== undefined
     ? isAdminRole(req)
-      ? req.body.sections
-      : stripCustomHtmlSections(String(req.body.sections))
+      ? sanitizeSectionUrls(String(req.body.sections))
+      : sanitizeSectionUrls(stripCustomHtmlSections(String(req.body.sections)))
     : "[]";
   const [page] = await db.insert(sitePagesTable).values({
     slug: req.body.slug,
@@ -316,8 +374,8 @@ websiteRouter.patch("/pages/:id", requireStaffAuth, requireStaffPermission("/web
   for (const k of allowed) if (req.body[k] !== undefined) updates[k] = req.body[k];
   if (req.body.sections !== undefined) {
     updates.sections = isAdminRole(req)
-      ? req.body.sections
-      : stripCustomHtmlSections(String(req.body.sections), existing.sections);
+      ? sanitizeSectionUrls(String(req.body.sections))
+      : sanitizeSectionUrls(stripCustomHtmlSections(String(req.body.sections), existing.sections));
   }
   const nextSlug = typeof req.body.slug === "string" ? req.body.slug.trim() : "";
   if (nextSlug && nextSlug !== existing.slug) {
@@ -373,8 +431,8 @@ websiteRouter.post("/popups", requireStaffAuth, requireStaffPermission("/website
     title: req.body.title,
     body: req.body.body,
     ctaLabel: req.body.ctaLabel,
-    ctaUrl: req.body.ctaUrl,
-    imageUrl: req.body.imageUrl,
+    ctaUrl: sanitizeUrl(req.body.ctaUrl),
+    imageUrl: sanitizeUrl(req.body.imageUrl),
     triggerType: req.body.triggerType,
     triggerValue: req.body.triggerValue,
     enabled: req.body.enabled ?? true,
@@ -384,9 +442,13 @@ websiteRouter.post("/popups", requireStaffAuth, requireStaffPermission("/website
 
 websiteRouter.patch("/popups/:id", requireStaffAuth, requireStaffPermission("/website"), async (req, res) => {
   const id = Number(req.params.id);
+  const URL_POPUP_FIELDS = new Set(["ctaUrl", "imageUrl"]);
   const allowed = ["title", "body", "ctaLabel", "ctaUrl", "imageUrl", "triggerType", "triggerValue", "enabled"];
   const updates: Record<string, unknown> = {};
-  for (const k of allowed) if (req.body[k] !== undefined) updates[k] = req.body[k];
+  for (const k of allowed) {
+    if (req.body[k] === undefined) continue;
+    updates[k] = URL_POPUP_FIELDS.has(k) ? sanitizeUrl(req.body[k]) : req.body[k];
+  }
   const [u] = await db.update(sitePopupsTable).set(updates).where(eq(sitePopupsTable.id, id)).returning();
   if (!u) { res.status(404).json({ error: "Popup not found" }); return; }
   res.json(u);
