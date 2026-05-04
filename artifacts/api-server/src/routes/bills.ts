@@ -260,8 +260,8 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
   }
 
   const session = req.staffSession;
-  if (session && !FULL_ACCESS_ROLES.has(session.role) && session.maxDiscount !== null) {
-    const maxPct = session.maxDiscount;
+  if (session && !FULL_ACCESS_ROLES.has(session.role) && discountAmt > 0) {
+    const maxPct = session.maxDiscount ?? 0;
     const maxAllowed = Math.round((subtotal * maxPct / 100) * 100) / 100;
     if (discountAmt > maxAllowed + 0.01) {
       res.status(403).json({ error: `Your maximum allowed discount is ${maxPct}% (₹${maxAllowed.toFixed(2)} on this bill). Please ask an admin to apply a higher discount.` });
@@ -396,8 +396,8 @@ billsRouter.put("/:id", async (req: StaffAuthRequest, res) => {
     }
 
     const session = req.staffSession;
-    if (session && !FULL_ACCESS_ROLES.has(session.role) && session.maxDiscount !== null) {
-      const maxPct = session.maxDiscount;
+    if (session && !FULL_ACCESS_ROLES.has(session.role) && newDiscount > 0) {
+      const maxPct = session.maxDiscount ?? 0;
       const maxAllowed = Math.round((subtotal * maxPct / 100) * 100) / 100;
       if (newDiscount > maxAllowed + 0.01) {
         res.status(403).json({ error: `Your maximum allowed discount is ${maxPct}% (₹${maxAllowed.toFixed(2)} on this bill). Please ask an admin to apply a higher discount.` });
