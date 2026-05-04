@@ -14,7 +14,7 @@ export interface StaffAuthRequest extends Request {
   };
 }
 
-const FULL_ACCESS_ROLES = new Set(["admin", "super_admin"]);
+export const FULL_ACCESS_ROLES = new Set(["admin", "super_admin"]);
 
 /**
  * Express middleware that requires a valid, active, non-expired staff portal

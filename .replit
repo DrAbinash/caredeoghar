@@ -14,7 +14,7 @@ id = "artifacts/clinic-site"
 
 [deployment]
 router = "application"
-deploymentTarget = "gce"
+deploymentTarget = "cloudrun"
 
 [deployment.postBuild]
 args = ["pnpm", "store", "prune"]

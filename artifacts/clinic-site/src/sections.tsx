@@ -3,11 +3,20 @@ import { Link, useLocation } from "wouter";
 import {
   Phone, Mail, MapPin, Star, ChevronDown, Facebook, Instagram, Twitter, Youtube, Linkedin, Menu, X as XIcon,
 } from "lucide-react";
+import DOMPurify from "dompurify";
 import type { Section, SiteSettings, Page, Faq, Photo } from "./types";
 import { parseSocial } from "./types";
 import { buttonClass } from "./theme";
 import { api } from "./api";
 import { resolveAssetUrl } from "./config";
+
+function sanitizeCustomHtml(html: string): string {
+  if (!html) return "";
+  return DOMPurify.sanitize(html, {
+    ADD_TAGS: ["iframe"],
+    ADD_ATTR: ["allowfullscreen", "loading", "referrerpolicy", "frameborder", "allow", "target"],
+  });
+}
 
 function get(c: Record<string, unknown>, k: string, fb = ""): string {
   return typeof c[k] === "string" ? (c[k] as string) : fb;
@@ -343,7 +352,8 @@ export function GallerySection({ section }: { section: Section }) {
 export function CustomHtmlSection({ section }: { section: Section }) {
   const c = section.config;
   const html = get(c, "html");
-  return <section className="section"><div className="container-narrow" dangerouslySetInnerHTML={{ __html: html }} /></section>;
+  const sanitized = sanitizeCustomHtml(html);
+  return <section className="section"><div className="container-narrow" dangerouslySetInnerHTML={{ __html: sanitized }} /></section>;
 }
 
 // ───── FOOTER ─────

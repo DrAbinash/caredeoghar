@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import {
   db,
   siteSettingsTable,
@@ -7,12 +7,18 @@ import {
   siteFaqsTable,
   sitePhotosTable,
 } from "@workspace/db";
-import { eq, asc, desc } from "drizzle-orm";
+import { portalSessionsTable } from "@workspace/db/schema";
+import { and, eq, asc, desc, gt } from "drizzle-orm";
 import path from "node:path";
 import fs from "node:fs/promises";
 import crypto from "node:crypto";
 import multer from "multer";
-import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
+import {
+  requireStaffAuth,
+  requireStaffPermission,
+  FULL_ACCESS_ROLES,
+  type StaffAuthRequest,
+} from "../middleware/requireStaffAuth";
 
 export const websiteRouter = Router();
 
@@ -25,6 +31,71 @@ export const websiteRouter = Router();
 const previewTokens = new Map<string, number>(); // token → expiry (epoch ms)
 const PREVIEW_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
+function isValidPreviewToken(req: Request): boolean {
+  const token = typeof req.query.preview_token === "string" ? req.query.preview_token : "";
+  if (!token) return false;
+  const exp = previewTokens.get(token);
+  return !!exp && exp > Date.now();
+}
+
+async function hasStaffSession(req: Request): Promise<boolean> {
+  const auth = req.headers.authorization ?? "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  if (!token) return false;
+  const [session] = await db
+    .select({ id: portalSessionsTable.id })
+    .from(portalSessionsTable)
+    .where(
+      and(
+        eq(portalSessionsTable.token, token),
+        eq(portalSessionsTable.scope, "staff"),
+        gt(portalSessionsTable.expiresAt, new Date()),
+      ),
+    )
+    .limit(1);
+  return !!session;
+}
+
+async function canViewDrafts(req: Request): Promise<boolean> {
+  if (isValidPreviewToken(req)) return true;
+  return hasStaffSession(req);
+}
+
+function isAdminRole(req: Request): boolean {
+  const session = (req as StaffAuthRequest).staffSession;
+  return !!session && FULL_ACCESS_ROLES.has(session.role);
+}
+
+function stripCustomHtmlSections(sectionsJson: string, existingSectionsJson?: string): string {
+  try {
+    const incoming: unknown[] = JSON.parse(sectionsJson || "[]");
+    if (!Array.isArray(incoming)) return sectionsJson;
+
+    const withoutCustomHtml = incoming.filter((s: unknown) => {
+      return (s as { type?: string }).type !== "custom_html";
+    });
+
+    if (!existingSectionsJson) return JSON.stringify(withoutCustomHtml);
+
+    try {
+      const existing: unknown[] = JSON.parse(existingSectionsJson || "[]");
+      if (!Array.isArray(existing)) return JSON.stringify(withoutCustomHtml);
+
+      const existingCustomHtml = existing.filter((s: unknown) => {
+        return (s as { type?: string }).type === "custom_html";
+      });
+
+      if (existingCustomHtml.length === 0) return JSON.stringify(withoutCustomHtml);
+
+      return JSON.stringify([...withoutCustomHtml, ...existingCustomHtml]);
+    } catch {
+      return JSON.stringify(withoutCustomHtml);
+    }
+  } catch {
+    return sectionsJson;
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Site Settings — singleton row (id = 1). Auto-creates on first read.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -35,18 +106,23 @@ async function getOrCreateSettings() {
   return created;
 }
 
-// Public: the clinic-site frontend reads settings, pages, FAQs, photos, and
-// popups without credentials to render the public-facing website.
-websiteRouter.get("/settings", async (_req, res) => {
+websiteRouter.get("/settings", async (req, res) => {
   const s = await getOrCreateSettings();
+  const draftsAllowed = await canViewDrafts(req);
+
+  if (!s.isPublished && !draftsAllowed) {
+    res.json({
+      id: s.id,
+      siteTitle: s.siteTitle,
+      isPublished: false,
+    });
+    return;
+  }
   res.json(s);
 });
 
-// Mutating: require staff session AND the "/website" module permission.
-// Admin and super_admin roles bypass the permission check automatically.
 websiteRouter.patch("/settings", requireStaffAuth, requireStaffPermission("/website"), async (req, res) => {
   await getOrCreateSettings();
-  // Whitelist editable fields. We never trust id, createdAt, etc.
   const allowed: (keyof typeof siteSettingsTable.$inferInsert)[] = [
     "siteTitle", "tagline", "about", "contactEmail", "contactPhone",
     "whatsappNumber", "whatsappEnabled", "whatsappGreeting", "address",
@@ -56,9 +132,14 @@ websiteRouter.patch("/settings", requireStaffAuth, requireStaffPermission("/webs
     "customDomain",
     "seoMetaTitle", "seoMetaDescription", "seoKeywords", "seoOgImage",
     "googleAnalyticsId", "googleTagManagerId", "googleAdsenseId",
-    "metaPixelId", "facebookMetaTag", "pinterestMetaTag", "customHeadHtml",
+    "metaPixelId", "facebookMetaTag", "pinterestMetaTag",
     "socialLinks",
   ];
+
+  if (isAdminRole(req)) {
+    allowed.push("customHeadHtml");
+  }
+
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   for (const k of allowed) {
     if (req.body[k] !== undefined) updates[k] = req.body[k];
@@ -98,29 +179,64 @@ websiteRouter.post("/unpublish", requireStaffAuth, requireStaffPermission("/webs
 // ─────────────────────────────────────────────────────────────────────────────
 // Pages
 // ─────────────────────────────────────────────────────────────────────────────
-websiteRouter.get("/pages", async (_req, res) => {
-  const pages = await db.select().from(sitePagesTable).orderBy(asc(sitePagesTable.orderIndex), asc(sitePagesTable.id));
+websiteRouter.get("/pages", async (req, res) => {
+  const draftsAllowed = await canViewDrafts(req);
+
+  if (draftsAllowed) {
+    const pages = await db.select().from(sitePagesTable).orderBy(asc(sitePagesTable.orderIndex), asc(sitePagesTable.id));
+    res.json({ pages });
+    return;
+  }
+
+  const settings = await getOrCreateSettings();
+  if (!settings.isPublished) {
+    res.json({ pages: [] });
+    return;
+  }
+
+  const pages = await db
+    .select()
+    .from(sitePagesTable)
+    .where(eq(sitePagesTable.status, "published"))
+    .orderBy(asc(sitePagesTable.orderIndex), asc(sitePagesTable.id));
   res.json({ pages });
 });
 
 websiteRouter.get("/pages/:id", async (req, res) => {
   const [p] = await db.select().from(sitePagesTable).where(eq(sitePagesTable.id, Number(req.params.id)));
-  if (!p) return res.status(404).json({ error: "Page not found" });
+  if (!p) { res.status(404).json({ error: "Page not found" }); return; }
+
+  const draftsAllowed = await canViewDrafts(req);
+
+  if (!draftsAllowed) {
+    const settings = await getOrCreateSettings();
+    if (!settings.isPublished || p.status !== "published") {
+      res.status(404).json({ error: "Page not found" });
+      return;
+    }
+  }
+
   res.json(p);
 });
 
 websiteRouter.post("/pages", requireStaffAuth, requireStaffPermission("/website"), async (req, res) => {
   const { slug, title } = req.body ?? {};
-  if (!slug || !title) return res.status(400).json({ error: "slug and title required" });
+  if (!slug || !title) { res.status(400).json({ error: "slug and title required" }); return; }
   const dup = await db.select().from(sitePagesTable).where(eq(sitePagesTable.slug, slug));
-  if (dup.length > 0) return res.status(409).json({ error: "Slug already in use" });
+  if (dup.length > 0) { res.status(409).json({ error: "Slug already in use" }); return; }
+
+  let sections = req.body.sections ?? "[]";
+  if (!isAdminRole(req)) {
+    sections = stripCustomHtmlSections(sections);
+  }
+
   const [created] = await db.insert(sitePagesTable).values({
     slug,
     title,
     status: req.body.status ?? "draft",
     orderIndex: Number(req.body.orderIndex ?? 0),
     showInNav: req.body.showInNav ?? true,
-    sections: req.body.sections ?? "[]",
+    sections,
     seoMetaTitle: req.body.seoMetaTitle ?? "",
     seoMetaDescription: req.body.seoMetaDescription ?? "",
   }).returning();
@@ -132,8 +248,20 @@ websiteRouter.patch("/pages/:id", requireStaffAuth, requireStaffPermission("/web
   const allowed = ["slug", "title", "status", "orderIndex", "showInNav", "sections", "seoMetaTitle", "seoMetaDescription"];
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   for (const k of allowed) if (req.body[k] !== undefined) updates[k] = req.body[k];
+
+  if (typeof updates.sections === "string" && !isAdminRole(req)) {
+    const [existing] = await db
+      .select({ sections: sitePagesTable.sections })
+      .from(sitePagesTable)
+      .where(eq(sitePagesTable.id, id));
+    updates.sections = stripCustomHtmlSections(
+      updates.sections as string,
+      existing?.sections,
+    );
+  }
+
   const [updated] = await db.update(sitePagesTable).set(updates).where(eq(sitePagesTable.id, id)).returning();
-  if (!updated) return res.status(404).json({ error: "Page not found" });
+  if (!updated) { res.status(404).json({ error: "Page not found" }); return; }
   res.json(updated);
 });
 
@@ -145,8 +273,26 @@ websiteRouter.delete("/pages/:id", requireStaffAuth, requireStaffPermission("/we
 // ─────────────────────────────────────────────────────────────────────────────
 // Popups
 // ─────────────────────────────────────────────────────────────────────────────
-websiteRouter.get("/popups", async (_req, res) => {
-  const popups = await db.select().from(sitePopupsTable).orderBy(desc(sitePopupsTable.id));
+websiteRouter.get("/popups", async (req, res) => {
+  const draftsAllowed = await canViewDrafts(req);
+  const settings = await getOrCreateSettings();
+
+  if (!settings.isPublished && !draftsAllowed) {
+    res.json({ popups: [] });
+    return;
+  }
+
+  if (draftsAllowed) {
+    const popups = await db.select().from(sitePopupsTable).orderBy(desc(sitePopupsTable.id));
+    res.json({ popups });
+    return;
+  }
+
+  const popups = await db
+    .select()
+    .from(sitePopupsTable)
+    .where(eq(sitePopupsTable.enabled, true))
+    .orderBy(desc(sitePopupsTable.id));
   res.json({ popups });
 });
 
@@ -170,7 +316,7 @@ websiteRouter.patch("/popups/:id", requireStaffAuth, requireStaffPermission("/we
   const updates: Record<string, unknown> = {};
   for (const k of allowed) if (req.body[k] !== undefined) updates[k] = req.body[k];
   const [u] = await db.update(sitePopupsTable).set(updates).where(eq(sitePopupsTable.id, id)).returning();
-  if (!u) return res.status(404).json({ error: "Popup not found" });
+  if (!u) { res.status(404).json({ error: "Popup not found" }); return; }
   res.json(u);
 });
 
@@ -182,14 +328,32 @@ websiteRouter.delete("/popups/:id", requireStaffAuth, requireStaffPermission("/w
 // ─────────────────────────────────────────────────────────────────────────────
 // FAQs
 // ─────────────────────────────────────────────────────────────────────────────
-websiteRouter.get("/faqs", async (_req, res) => {
-  const faqs = await db.select().from(siteFaqsTable).orderBy(asc(siteFaqsTable.orderIndex), asc(siteFaqsTable.id));
+websiteRouter.get("/faqs", async (req, res) => {
+  const draftsAllowed = await canViewDrafts(req);
+  const settings = await getOrCreateSettings();
+
+  if (!settings.isPublished && !draftsAllowed) {
+    res.json({ faqs: [] });
+    return;
+  }
+
+  if (draftsAllowed) {
+    const faqs = await db.select().from(siteFaqsTable).orderBy(asc(siteFaqsTable.orderIndex), asc(siteFaqsTable.id));
+    res.json({ faqs });
+    return;
+  }
+
+  const faqs = await db
+    .select()
+    .from(siteFaqsTable)
+    .where(eq(siteFaqsTable.enabled, true))
+    .orderBy(asc(siteFaqsTable.orderIndex), asc(siteFaqsTable.id));
   res.json({ faqs });
 });
 
 websiteRouter.post("/faqs", requireStaffAuth, requireStaffPermission("/website"), async (req, res) => {
   const { question, answer } = req.body ?? {};
-  if (!question || !answer) return res.status(400).json({ error: "question and answer required" });
+  if (!question || !answer) { res.status(400).json({ error: "question and answer required" }); return; }
   const [f] = await db.insert(siteFaqsTable).values({
     question,
     answer,
@@ -205,7 +369,7 @@ websiteRouter.patch("/faqs/:id", requireStaffAuth, requireStaffPermission("/webs
   const updates: Record<string, unknown> = {};
   for (const k of allowed) if (req.body[k] !== undefined) updates[k] = req.body[k];
   const [u] = await db.update(siteFaqsTable).set(updates).where(eq(siteFaqsTable.id, id)).returning();
-  if (!u) return res.status(404).json({ error: "FAQ not found" });
+  if (!u) { res.status(404).json({ error: "FAQ not found" }); return; }
   res.json(u);
 });
 
@@ -219,10 +383,6 @@ websiteRouter.delete("/faqs/:id", requireStaffAuth, requireStaffPermission("/web
 // ─────────────────────────────────────────────────────────────────────────────
 const UPLOAD_DIR = path.resolve(process.cwd(), "data/uploads/site");
 
-// SVG is intentionally excluded: SVG documents can contain <script> elements
-// and execute JavaScript when opened directly in a browser, making them
-// equivalent to active content. Only passive raster image formats that cannot
-// carry executable scripts are permitted.
 const ALLOWED_MIME = new Set([
   "image/png",
   "image/jpeg",
@@ -232,11 +392,6 @@ const ALLOWED_MIME = new Set([
   "image/vnd.microsoft.icon",
 ]);
 
-// Derive the stored file extension from the server-validated MIME type, NOT
-// from the original filename supplied by the client. This prevents an attacker
-// from uploading a file with a spoofed MIME type (e.g. Content-Type: image/png)
-// and a dangerous extension (e.g. payload.html) — the server always persists a
-// safe extension so express.static will never serve the file as HTML or script.
 const MIME_TO_EXT: Record<string, string> = {
   "image/png": ".png",
   "image/jpeg": ".jpg",
@@ -253,7 +408,6 @@ const upload = multer({
       catch (e) { cb(e as Error, UPLOAD_DIR); }
     },
     filename: (_req, file, cb) => {
-      // Force extension from MIME type — never trust the client-supplied filename extension.
       const ext = MIME_TO_EXT[file.mimetype] ?? ".bin";
       cb(null, `${Date.now()}${ext}`);
     },
@@ -265,15 +419,21 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
-// Public: the clinic-site frontend fetches photos to render galleries.
-websiteRouter.get("/photos", async (_req, res) => {
+websiteRouter.get("/photos", async (req, res) => {
+  const draftsAllowed = await canViewDrafts(req);
+  const settings = await getOrCreateSettings();
+
+  if (!settings.isPublished && !draftsAllowed) {
+    res.json({ photos: [] });
+    return;
+  }
+
   const photos = await db.select().from(sitePhotosTable).orderBy(desc(sitePhotosTable.uploadedAt));
   res.json({ photos });
 });
 
-// Mutating: photo upload and deletion require staff session + /website permission.
 websiteRouter.post("/photos", requireStaffAuth, requireStaffPermission("/website"), upload.single("photo"), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "No file" });
+  if (!req.file) { res.status(400).json({ error: "No file" }); return; }
   const url = `/uploads/site/${req.file.filename}`;
   const [p] = await db.insert(sitePhotosTable).values({
     url,
@@ -286,8 +446,6 @@ websiteRouter.post("/photos", requireStaffAuth, requireStaffPermission("/website
 websiteRouter.delete("/photos/:id", requireStaffAuth, requireStaffPermission("/website"), async (req, res) => {
   const id = Number(req.params.id);
   const [p] = await db.select().from(sitePhotosTable).where(eq(sitePhotosTable.id, id));
-  // Guard against path traversal: only delete files inside UPLOAD_DIR. We
-  // re-derive the absolute path from the basename of the stored url.
   if (p?.url?.startsWith("/uploads/site/")) {
     const base = path.basename(p.url);
     const abs = path.join(UPLOAD_DIR, base);
@@ -309,7 +467,6 @@ websiteRouter.post("/preview-token", requireStaffAuth, requireStaffPermission("/
   const token = crypto.randomUUID();
   const now = Date.now();
   previewTokens.set(token, now + PREVIEW_TOKEN_TTL_MS);
-  // Prune expired tokens on every issuance so the map never grows unboundedly.
   for (const [t, exp] of previewTokens) {
     if (exp < now) previewTokens.delete(t);
   }

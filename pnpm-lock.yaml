@@ -282,6 +282,10 @@ importers:
         version: 3.1.0
 
   artifacts/clinic-site:
+    dependencies:
+      dompurify:
+        specifier: ^3.4.2
+        version: 3.4.2
     devDependencies:
       '@hookform/resolvers':
         specifier: ^3.10.0
@@ -6475,7 +6479,6 @@ snapshots:
   dompurify@3.4.2:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
-    optional: true
 
   dotenv@16.6.1: {}
 

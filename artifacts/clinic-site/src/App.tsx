@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Router as WouterRouter, useLocation } from "wouter";
-import { api } from "./api";
+import { api, setPreviewToken } from "./api";
 import type { SiteSettings, Page, Popup } from "./types";
 import { parseSections } from "./types";
 import { applyTheme } from "./theme";
@@ -109,9 +109,11 @@ function App() {
   }, [previewToken]);
 
   useEffect(() => {
-    // Wait for preview verification to finish before fetching site data, so
-    // we can correctly decide whether to show drafts.
     if (previewToken && previewState === "verifying") return;
+
+    if (previewToken && previewState === "valid") {
+      setPreviewToken(previewToken);
+    }
 
     Promise.all([api.settings(), api.pages(), api.popups().catch(() => ({ popups: [] }))])
       .then(([settings, pageRes, popupRes]) => {

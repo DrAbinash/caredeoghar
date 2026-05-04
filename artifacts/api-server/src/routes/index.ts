@@ -64,6 +64,13 @@ router.use("/p/r", publicReportsRouter);
 // Public tele-radiology share viewer (token-gated) — no staff auth.
 router.use("/teleradiology", teleradiologyRouter);
 
+// Website router: GET endpoints are intentionally public so the clinic-site
+// frontend can fetch settings/pages/faqs/photos/popups without credentials.
+// Mutating endpoints inside websiteRouter each apply requireStaffAuth directly.
+// Must be mounted here (above the pathless storage middleware) so that
+// unauthenticated public requests are not intercepted by requireStaffAuth.
+router.use("/website", websiteRouter);
+
 // ─── Staff-authenticated ERP routes ──────────────────────────────────────────
 // Each route requiring a module permission is gated with requireStaffPermission
 // immediately after requireStaffAuth so that low-privilege staff cannot access
@@ -163,11 +170,6 @@ router.use("/signatures", requireStaffAuth, signaturesRouter);
 router.use("/whatsapp", requireStaffAuth, whatsappRouter);
 router.use("/tokens", requireStaffAuth, tokensRouter);
 router.use("/test-tokens", requireStaffAuth, testTokensRouter);
-
-// Website router: GET endpoints are intentionally public so the clinic-site
-// frontend can fetch settings/pages/faqs/photos/popups without credentials.
-// Mutating endpoints inside websiteRouter each apply requireStaffAuth directly.
-router.use("/website", websiteRouter);
 
 // ─── Super-admin-only sensitive operational routes ────────────────────────────
 router.use("/backup", requireSuperAdmin, backupRouter);
