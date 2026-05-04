@@ -2,25 +2,18 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { testTokensTable, patientsTable, testsTable } from "@workspace/db/schema";
 import { and, asc, desc, eq, isNull, or, sql, inArray } from "drizzle-orm";
+import { requireStaffAuth } from "../middleware/requireStaffAuth";
 
 // Public-readable display feed for waiting-room LCDs.
 // Returns minimal patient info (first name + last initial) for privacy.
 export const displayRouter: IRouter = Router();
-
-const DISPLAY_ALLOWLIST = new Set(["127.0.0.1", "::1", "localhost"]);
 
 function todayISO(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-displayRouter.get("/queue", async (req, res) => {
-  const host = String(req.hostname ?? "").toLowerCase();
-  if (!DISPLAY_ALLOWLIST.has(host)) {
-    res.status(403).json({ error: "Display feed is restricted to the local kiosk" });
-    return;
-  }
-
+displayRouter.get("/queue", requireStaffAuth, async (req, res) => {
   const ledgerId = Number(req.query.ledgerId ?? 1);
   const date = (req.query.date as string) || todayISO();
   const departmentsRaw = (req.query.departments as string) || "";
