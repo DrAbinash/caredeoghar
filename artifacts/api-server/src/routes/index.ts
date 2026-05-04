@@ -156,17 +156,26 @@ router.use("/dicom", requireStaffAuth, requireStaffPermission("/dicom-nodes"), d
 // Radiology studies are tied to the orders workflow — /orders permission
 router.use("/radiology", requireStaffAuth, requireStaffPermission("/orders"), radiologyRouter);
 
-// ─── Unrestricted staff-authenticated routes ──────────────────────────────────
-// These routes serve operational functions not covered by the permission toggle
-// system (matching frontend PERMISSIONED_PATHS behaviour: paths not in the set
-// are accessible to every signed-in staff member).
+// Clinical report & compliance routes — /reports permission.
+// These expose patient PHI (names, codes, phone, email, test details),
+// clinician signature records, and compliance Form-F data. Restricting them
+// to the /reports permission matches every other sensitive clinical module.
+router.use("/form-f", requireStaffAuth, requireStaffPermission("/reports"), formFRouter);
+router.use("/patient-reports", requireStaffAuth, requireStaffPermission("/reports"), patientReportsRouter);
+router.use("/signatures", requireStaffAuth, requireStaffPermission("/reports"), signaturesRouter);
+
+// AI endpoints — each sub-route applies its own requireStaffPermission matching
+// the data domain it accesses (patients PHI, billing records, or radiology
+// orders). requireStaffAuth here provides the outer authentication guard;
+// per-route permission checks inside aiRouter enforce module-level access.
 router.use("/ai", requireStaffAuth, aiRouter);
+
+// ─── Unrestricted staff-authenticated routes ──────────────────────────────────
+// These routes serve operational functions genuinely shared across all staff
+// roles and do not expose sensitive module-specific data on their own.
 router.use("/samples", requireStaffAuth, samplesRouter);
 router.use("/appointments", requireStaffAuth, appointmentsRouter);
 router.use("/packages", requireStaffAuth, packagesRouter);
-router.use("/form-f", requireStaffAuth, formFRouter);
-router.use("/patient-reports", requireStaffAuth, patientReportsRouter);
-router.use("/signatures", requireStaffAuth, signaturesRouter);
 router.use("/whatsapp", requireStaffAuth, whatsappRouter);
 router.use("/tokens", requireStaffAuth, tokensRouter);
 router.use("/test-tokens", requireStaffAuth, testTokensRouter);

@@ -3,13 +3,16 @@ import { db } from "@workspace/db";
 import { patientsTable, ordersTable } from "@workspace/db";
 import { orderTestsTable, testsTable, billsTable, paymentsTable } from "@workspace/db";
 import { eq, desc, gte, lte, and } from "drizzle-orm";
-import { requireStaffAuth } from "../middleware/requireStaffAuth";
+import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
 
 const router = Router();
 
 // Defense-in-depth: enforce staff authentication at the router level.
 // These endpoints load patient PHI and billing data and send it to an external
 // AI provider — they must never be reachable without a valid staff session.
+// Individual routes below add requireStaffPermission matching the data domain
+// each endpoint accesses, so that low-privilege staff cannot use AI to
+// exfiltrate data from modules they have not been granted.
 router.use(requireStaffAuth);
 
 const BASE_URL = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com";
@@ -77,8 +80,9 @@ const MODALITY_NAMES: Record<string, string> = {
   OT: "Imaging study",
 };
 
-// Generate AI clinical notes for a patient
-router.post("/clinical-note", async (req, res) => {
+// Generate AI clinical notes for a patient — requires /patients permission
+// (loads patient demographics, orders, and test history from the patients module)
+router.post("/clinical-note", requireStaffPermission("/patients"), async (req, res) => {
   const { patientId } = req.body;
   if (!patientId) { res.status(400).json({ error: "patientId required" }); return; }
 
@@ -121,8 +125,9 @@ Please generate a concise professional clinical summary note (3-4 sentences) sui
   }
 });
 
-// Generate billing insights
-router.post("/billing-insights", async (req, res) => {
+// Generate billing insights — requires /reports permission
+// (reads bills and payments tables and sends financial data to Gemini)
+router.post("/billing-insights", requireStaffPermission("/reports"), async (req, res) => {
   const { from, to } = req.body as { from?: string; to?: string };
 
   const fromDate = from ? new Date(from) : new Date(Date.now() - 30 * 86400000);
@@ -165,8 +170,9 @@ Provide insights as a numbered list. Be specific, practical, and mention specifi
   }
 });
 
-// Draft patient follow-up message
-router.post("/patient-message", async (req, res) => {
+// Draft patient follow-up message — requires /patients permission
+// (loads patient identity information from the patients module)
+router.post("/patient-message", requireStaffPermission("/patients"), async (req, res) => {
   const { patientId, type } = req.body as { patientId: number; type: "followup" | "results" | "payment" };
   if (!patientId) { res.status(400).json({ error: "patientId required" }); return; }
 
@@ -199,10 +205,13 @@ Keep it brief, friendly, and professional. Include the center name. Do not inclu
 });
 
 // ── Radiology AI assistants ─────────────────────────────────────────────────
+// All radiology AI endpoints require /orders permission — they are part of the
+// radiology reporting workflow which is gated behind /orders on the server.
+
 // Generate structured findings for a radiology study.
 // Body: { modality: string, testName?: string, clinicalHistory?: string, dictation?: string }
 // Returns: { findings: string }
-router.post("/radiology-findings", async (req, res) => {
+router.post("/radiology-findings", requireStaffPermission("/orders"), async (req, res) => {
   const b = (req.body ?? {}) as Record<string, unknown>;
   const modality = String(b.modality ?? "").trim();
   const testName = String(b.testName ?? "").trim();
@@ -236,7 +245,7 @@ Write a professional FINDINGS section organised by anatomical region in short cl
 
 // Generate a 1–4 line impression bullet list from a findings narrative.
 // Body: { findings: string, modality?: string, testName?: string }
-router.post("/radiology-impression", async (req, res) => {
+router.post("/radiology-impression", requireStaffPermission("/orders"), async (req, res) => {
   const b = (req.body ?? {}) as Record<string, unknown>;
   const findings = String(b.findings ?? "").trim();
   const modality = String(b.modality ?? "").trim();
@@ -267,7 +276,7 @@ Rules:
 // Browsers' built-in Web Speech API does the live transcription on the client;
 // this endpoint is the server-side fallback for browsers that lack it (Firefox,
 // Safari on some devices) or when the radiologist uploads a recorded clip.
-router.post("/transcribe", async (req, res) => {
+router.post("/transcribe", requireStaffPermission("/orders"), async (req, res) => {
   const b = (req.body ?? {}) as Record<string, unknown>;
   const audioBase64 = typeof b.audioBase64 === "string" ? b.audioBase64 : "";
   const mimeType = typeof b.mimeType === "string" && b.mimeType ? b.mimeType : "audio/webm";

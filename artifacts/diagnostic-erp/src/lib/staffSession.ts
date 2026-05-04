@@ -66,6 +66,14 @@ export const PERMISSIONED_PATHS: ReadonlySet<string> = new Set([
   "/settings",
   "/dicom-nodes",
   "/website",
+  // Clinical report & compliance paths — gated behind /reports permission.
+  // Matches the server-side requireStaffPermission("/reports") added to the
+  // /api/form-f, /api/patient-reports, and /api/signatures routes so that
+  // a low-privilege staff member cannot reach these frontend pages or call
+  // the corresponding API endpoints without the /reports module grant.
+  "/form-f",
+  "/patient-reports",
+  "/signatures",
 ]);
 
 // Permission aliases — paths whose access is granted by another permission.
@@ -74,8 +82,15 @@ export const PERMISSIONED_PATHS: ReadonlySet<string> = new Set([
 // admin/super_admin". Adding /hr-forms as a separate toggle would require
 // every clinic to re-grant it; aliasing keeps existing /settings users
 // flowing through unchanged.
+//
+// /form-f, /patient-reports, and /signatures piggyback on /reports:
+// they are operational screens within the clinical report workflow and
+// should be available to any role that has already been granted /reports.
 const PERMISSION_ALIASES: Readonly<Record<string, string>> = {
   "/hr-forms": "/settings",
+  "/form-f": "/reports",
+  "/patient-reports": "/reports",
+  "/signatures": "/reports",
 };
 
 // Roles that always get full access regardless of stored permissions.
