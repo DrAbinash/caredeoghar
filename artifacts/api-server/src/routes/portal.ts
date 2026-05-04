@@ -19,6 +19,7 @@ import {
 } from "@workspace/db/schema";
 import { eq, and, desc, gt, sql, count } from "drizzle-orm";
 import { sanitizePatient } from "./patients";
+import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
 
 export const portalRouter = Router();
 
@@ -368,29 +369,6 @@ async function requirePatientAuth(req: PortalAuthRequest, res: Response, next: N
   next();
 }
 
-async function requireStaffAuth(req: PortalAuthRequest, res: Response, next: NextFunction) {
-  const auth = req.headers.authorization || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  if (!token) {
-    res.status(401).json({ error: "Staff login required" });
-    return;
-  }
-
-  const [session] = await db
-    .select()
-    .from(portalSessionsTable)
-    .where(and(eq(portalSessionsTable.token, token), gt(portalSessionsTable.expiresAt, new Date())))
-    .limit(1);
-
-  if (!session || session.scope !== "staff") {
-    res.status(401).json({ error: "Staff session expired. Please log in again." });
-    return;
-  }
-
-  req.portalSession = session;
-  next();
-}
-
 // =====================================================================
 // Staff-only admin endpoints
 // =====================================================================
@@ -399,7 +377,7 @@ async function requireStaffAuth(req: PortalAuthRequest, res: Response, next: Nex
 // Staff must be authenticated. The code is bcrypt-hashed before storage.
 // Send { patientId: number, accessCode: string } to set a new code, or
 // { patientId: number, accessCode: null } to revoke portal access.
-portalRouter.post("/admin/set-patient-portal-code", requireStaffAuth, async (req: PortalAuthRequest, res) => {
+portalRouter.post("/admin/set-patient-portal-code", requireStaffAuth, requireStaffPermission("/patients"), async (req: PortalAuthRequest, res) => {
   const patientId = req.body?.patientId == null ? null : Number(req.body.patientId);
   if (!Number.isInteger(patientId) || (patientId as number) <= 0) {
     res.status(400).json({ error: "patientId must be a positive integer" });
@@ -444,7 +422,7 @@ portalRouter.post("/admin/set-patient-portal-code", requireStaffAuth, async (req
 });
 
 // Check whether a patient has a portal access code set (without revealing the hash).
-portalRouter.get("/admin/patient-portal-status/:patientId", requireStaffAuth, async (req: PortalAuthRequest, res) => {
+portalRouter.get("/admin/patient-portal-status/:patientId", requireStaffAuth, requireStaffPermission("/patients"), async (req: PortalAuthRequest, res) => {
   const patientId = Number(req.params.patientId);
   if (!Number.isInteger(patientId) || patientId <= 0) {
     res.status(400).json({ error: "Invalid patient ID" });

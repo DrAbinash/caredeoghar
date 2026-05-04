@@ -171,6 +171,10 @@ router.use("/whatsapp", requireStaffAuth, whatsappRouter);
 router.use("/tokens", requireStaffAuth, tokensRouter);
 router.use("/test-tokens", requireStaffAuth, testTokensRouter);
 
+// Website router: GET endpoints are intentionally public so the clinic-site
+// frontend can fetch settings/pages/faqs/photos/popups without credentials.
+router.use("/website", websiteRouter);
+
 // ─── Super-admin-only sensitive operational routes ────────────────────────────
 router.use("/backup", requireSuperAdmin, backupRouter);
 router.use("/system", requireSuperAdmin, systemRouter);

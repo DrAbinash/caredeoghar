@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { db } from "@workspace/db";
-import { superAdminSessionsTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { superAdminSessionsTable, usersTable } from "@workspace/db/schema";
+import { and, eq } from "drizzle-orm";
 
 /**
  * Express middleware that requires a valid, active, non-expired super-admin
@@ -24,14 +24,23 @@ export async function requireSuperAdmin(
   const [session] = await db
     .select()
     .from(superAdminSessionsTable)
-    .where(eq(superAdminSessionsTable.token, token));
+    .where(and(eq(superAdminSessionsTable.token, token), eq(superAdminSessionsTable.isActive, true)));
 
-  if (!session || !session.isActive) {
+  if (!session) {
     res.status(401).json({ error: "Invalid super admin session" });
     return;
   }
   if (new Date(session.expiresAt) < new Date()) {
     res.status(401).json({ error: "Super admin session expired" });
+    return;
+  }
+  const [user] = await db
+    .select({ isActive: usersTable.isActive, role: usersTable.role })
+    .from(usersTable)
+    .where(eq(usersTable.id, session.userId))
+    .limit(1);
+  if (!user || !user.isActive || user.role !== "super_admin") {
+    res.status(401).json({ error: "Super admin session is no longer valid" });
     return;
   }
   next();
