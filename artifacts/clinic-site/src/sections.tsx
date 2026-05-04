@@ -48,39 +48,43 @@ export function HeaderSection({ section, settings, pages, basePath }: { section:
   return (
     <header className="site-header">
       <div className="container-narrow site-header-row">
+        {/* Far left — Staff Login */}
         <a href="/" className={`${buttonClass(settings, "primary")} header-cta-desktop`} style={{ flexShrink: 0 }}>Staff Login</a>
-        <Link to="/" className="flex items-center gap-2 font-bold" style={{ fontSize: "1.05rem", minWidth: 0 }}>
-          {showLogo && settings.logoUrl
-            ? <img src={resolveAssetUrl(settings.logoUrl)} alt={settings.siteTitle} style={{ height: 36, maxWidth: 160, objectFit: "contain" }} />
-            : <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{settings.siteTitle || "Clinic"}</span>}
-        </Link>
-        <nav className="nav-desktop">
+
+        {/* Far right — Clinic name + nav links + CTA, all equally spaced */}
+        <div className="header-cta-desktop" style={{ display: "flex", alignItems: "center", gap: "1rem", marginLeft: "auto" }}>
+          <Link to="/" className={buttonClass(settings, "primary")}>
+            {showLogo && settings.logoUrl
+              ? <img src={resolveAssetUrl(settings.logoUrl)} alt={settings.siteTitle} style={{ height: 28, maxWidth: 120, objectFit: "contain" }} />
+              : <span>{settings.siteTitle || "Clinic"}</span>}
+          </Link>
           {navPages.map((p) => (
-            <Link key={p.id} to={p.slug === "home" ? "/" : `/${p.slug}`} className={`nav-link ${isActive(p.slug) ? "active" : ""}`}>
+            <Link key={p.id} to={p.slug === "home" ? "/" : `/${p.slug}`} className={buttonClass(settings, "primary")}>
               {p.title}
             </Link>
           ))}
-        </nav>
-        <div style={{ display: "flex", alignItems: "center", gap: ".5rem" }}>
           {ctaLabel && (
-            <a href={ctaHref} className={`${buttonClass(settings, "primary")} header-cta-desktop`}>{ctaLabel}</a>
-          )}
-          {navPages.length > 0 && (
-            <button className="nav-toggle" aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-              {open ? <XIcon size={20} /> : <Menu size={20} />}
-            </button>
+            <a href={ctaHref} className={buttonClass(settings, "primary")}>{ctaLabel}</a>
           )}
         </div>
+
+        {/* Mobile hamburger */}
+        {navPages.length > 0 && (
+          <button className="nav-toggle" style={{ marginLeft: "auto" }} aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+            {open ? <XIcon size={20} /> : <Menu size={20} />}
+          </button>
+        )}
       </div>
       {open && navPages.length > 0 && (
         <nav className="nav-mobile" style={{ display: "flex" }}>
+          <Link to="/" className={buttonClass(settings, "primary")} style={{ justifyContent: "center" }}>{settings.siteTitle || "Clinic"}</Link>
           {navPages.map((p) => (
-            <Link key={p.id} to={p.slug === "home" ? "/" : `/${p.slug}`} className={`nav-link ${isActive(p.slug) ? "active" : ""}`}>
+            <Link key={p.id} to={p.slug === "home" ? "/" : `/${p.slug}`} className={buttonClass(settings, "primary")} style={{ justifyContent: "center", marginTop: ".25rem" }}>
               {p.title}
             </Link>
           ))}
           {ctaLabel && (
-            <a href={ctaHref} className={buttonClass(settings, "primary")} style={{ justifyContent: "center", marginTop: ".5rem" }}>{ctaLabel}</a>
+            <a href={ctaHref} className={buttonClass(settings, "primary")} style={{ justifyContent: "center", marginTop: ".25rem" }}>{ctaLabel}</a>
           )}
           <a href="/" className={buttonClass(settings, "primary")} style={{ justifyContent: "center", marginTop: ".25rem" }}>Staff Login</a>
         </nav>
