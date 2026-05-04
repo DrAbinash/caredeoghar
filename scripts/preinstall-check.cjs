@@ -8,7 +8,7 @@
 //
 // pnpm sets `npm_command` to the subcommand name ("install", "deploy", etc.)
 // and `npm_config_production` to "true" when `--prod` is passed.
-// Verified on pnpm 10.26.1 — if pnpm is upgraded, re-run:
+// Verified on pnpm 10.33.2 — if pnpm is upgraded, re-run:
 //   pnpm --filter @workspace/scripts run test:preinstall-guard
 // to confirm the env vars are still set as expected.
 //
