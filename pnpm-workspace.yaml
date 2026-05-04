@@ -14,6 +14,10 @@ packages:
 # symlinks (e.g. vite) that other workspace packages depend on.
 # For production-only node_modules, use `pnpm deploy --prod <target-dir>`
 # which creates an isolated copy without corrupting the workspace.
+# When running `pnpm deploy` from scripts (build-payload.mjs, Dockerfile),
+# always pass --ignore-scripts so the root preinstall guard does not block
+# the deploy. `pnpm deploy` is safe to run alongside dev workflows: it only
+# reads from the content-addressable store and writes to an isolated target.
 
 autoInstallPeers: false
 

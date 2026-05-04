@@ -18,11 +18,14 @@ if (!ua.startsWith("pnpm/")) {
 }
 
 if (process.env.npm_config_production === "true") {
-  console.error(
-    "ERROR: Do not run `pnpm install --prod` in this workspace.\n" +
-    "It prunes devDependencies from the shared virtual store, breaking\n" +
-    "CLI binaries (e.g. vite) that other packages depend on.\n" +
-    "Use `pnpm deploy --prod <target-dir>` for isolated prod node_modules."
-  );
-  process.exit(1);
+  const cmd = (process.env.npm_command || "").toLowerCase();
+  if (cmd !== "deploy") {
+    console.error(
+      "ERROR: Do not run `pnpm install --prod` in this workspace.\n" +
+      "It prunes devDependencies from the shared virtual store, breaking\n" +
+      "CLI binaries (e.g. vite) that other packages depend on.\n" +
+      "Use `pnpm deploy --prod <target-dir>` for isolated prod node_modules."
+    );
+    process.exit(1);
+  }
 }

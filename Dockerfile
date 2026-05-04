@@ -43,7 +43,7 @@ RUN pnpm install --frozen-lockfile --ignore-scripts
 # -----------------------------------------------------------------------------
 FROM base AS api-build
 RUN pnpm --filter @workspace/api-server run build \
- && pnpm --filter @workspace/api-server --prod --legacy deploy /api-deploy
+ && pnpm --filter @workspace/api-server --prod --legacy --ignore-scripts deploy /api-deploy
 
 
 # -----------------------------------------------------------------------------
