@@ -4,7 +4,9 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "predev": "test -x node_modules/.bin/vite || pnpm install",
     "dev": "vite dev",
+    "prebuild": "test -x node_modules/.bin/vite || pnpm install",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit"

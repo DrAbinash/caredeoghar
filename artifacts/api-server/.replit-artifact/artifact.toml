@@ -18,7 +18,7 @@ NODE_ENV = "production"
 run = "pnpm --filter @workspace/api-server run dev"
 
 [services.production]
-build = ["bash", "-lc", "export CI=true && pnpm --filter @workspace/api-server run build && pnpm --filter @workspace/api-server install --prod"]
+build = ["pnpm", "--filter", "@workspace/api-server", "run", "build"]
 run = ["node", "--enable-source-maps", "dist/index.mjs"]
 
 [services.production.health.startup]

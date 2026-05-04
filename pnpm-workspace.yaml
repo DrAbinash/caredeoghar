@@ -9,6 +9,12 @@ packages:
   # The Windows Build workflow installs deps directly inside windows-build/
   # via its own package.json (run `pnpm install` inside windows-build first).
 
+# WARNING: Never run `pnpm install --prod` inside the workspace.
+# It prunes devDependencies from the shared virtual store, breaking
+# symlinks (e.g. vite) that other workspace packages depend on.
+# For production-only node_modules, use `pnpm deploy --prod <target-dir>`
+# which creates an isolated copy without corrupting the workspace.
+
 autoInstallPeers: false
 
 catalog:
