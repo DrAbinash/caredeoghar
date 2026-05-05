@@ -127,15 +127,39 @@ ordersRouter.post("/", async (req, res) => {
   }
 
   // Support two formats: custom [{testId, price}] or legacy testIds[]
+  // BOTH paths must verify each test id exists AND is active, otherwise we'd
+  // accept orders for discontinued/unknown tests and silently fail at insert
+  // time (or, worse, mis-charge the patient).
   let lineItems: { testId: number; price: string }[] = [];
   if (hasCustom) {
-    lineItems = customTests.map((ct) => ({ testId: ct.testId, price: String(ct.price) }));
+    const requestedIds = customTests!.map((ct) => ct.testId);
+    const foundTests = await db.select({ id: testsTable.id, isActive: testsTable.isActive })
+      .from(testsTable)
+      .where(sql`${testsTable.id} = ANY(${requestedIds})`);
+    const foundMap = new Map(foundTests.map((t) => [t.id, t]));
+    const missing = requestedIds.filter((id) => !foundMap.has(id));
+    const inactive = requestedIds.filter((id) => foundMap.get(id) && !foundMap.get(id)!.isActive);
+    if (missing.length > 0 || inactive.length > 0) {
+      res.status(400).json({
+        error: "Invalid request",
+        details: [
+          {
+            path: ["tests"],
+            message:
+              missing.length > 0
+                ? `One or more testIds do not refer to an existing test: ${missing.join(", ")}`
+                : `One or more testIds refer to discontinued (inactive) tests: ${inactive.join(", ")}`,
+          },
+        ],
+      });
+      return;
+    }
+    lineItems = customTests!.map((ct) => ({ testId: ct.testId, price: String(ct.price) }));
   } else {
     const tests = await db.select().from(testsTable).where(
       sql`${testsTable.id} = ANY(${testIds!})`
     );
-    lineItems = tests.map((t) => ({ testId: t.id, price: t.price }));
-    if (lineItems.length !== testIds!.length) {
+    if (tests.length !== testIds!.length) {
       res.status(400).json({
         error: "Invalid request",
         details: [
@@ -147,6 +171,20 @@ ordersRouter.post("/", async (req, res) => {
       });
       return;
     }
+    const inactive = tests.filter((t) => !t.isActive).map((t) => t.id);
+    if (inactive.length > 0) {
+      res.status(400).json({
+        error: "Invalid request",
+        details: [
+          {
+            path: ["testIds"],
+            message: `One or more testIds refer to discontinued (inactive) tests: ${inactive.join(", ")}`,
+          },
+        ],
+      });
+      return;
+    }
+    lineItems = tests.map((t) => ({ testId: t.id, price: t.price }));
   }
 
   const totalAmount = lineItems.reduce((sum, t) => sum + Number(t.price), 0);
