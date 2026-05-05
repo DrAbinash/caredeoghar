@@ -198,14 +198,20 @@ testTokensRouter.post("/:id/call", async (req, res) => {
       const [t] = await tx.select().from(testTokensTable).where(eq(testTokensTable.id, id));
       if (!t) return null;
 
-      // Auto-complete any previous "serving" token in the same department/date/ledger.
+      // Auto-complete any previous "serving" token in the same
+      // department/date/ledger. Use the token's actual ledgerId; if it is
+      // null, scope strictly to other null-ledger rows instead of silently
+      // collapsing all unaffiliated tokens into ledger #1.
+      const ledgerCondition = t.ledgerId == null
+        ? isNull(testTokensTable.ledgerId)
+        : eq(testTokensTable.ledgerId, t.ledgerId);
       await tx.update(testTokensTable)
         .set({ status: "done", completedAt: new Date() })
         .where(and(
           eq(testTokensTable.department, t.department),
           eq(testTokensTable.tokenDate, t.tokenDate),
           eq(testTokensTable.status, "serving"),
-          ledgerScope(t.ledgerId ?? 1),
+          ledgerCondition,
         ));
 
       const [u] = await tx.update(testTokensTable)

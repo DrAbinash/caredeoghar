@@ -155,14 +155,33 @@ billsRouter.get("/search", async (req, res) => {
 });
 
 billsRouter.get("/preview-number", async (req, res) => {
-  let ledgerId = 1;
+  // Either ledgerId or doctorId must resolve to a valid ledger. We refuse to
+  // silently default to ledger #1 because that misnumbers and mis-attributes
+  // bills for any branch other than the first.
   const doctorIdRaw = req.query.doctorId;
   const ledgerIdRaw = req.query.ledgerId;
-  if (ledgerIdRaw) {
-    ledgerId = Number(ledgerIdRaw) || 1;
-  } else if (doctorIdRaw) {
-    const [d] = await db.select().from(doctorsTable).where(eq(doctorsTable.id, Number(doctorIdRaw)));
-    ledgerId = d?.ledgerId ?? 1;
+  let ledgerId: number | null = null;
+  if (ledgerIdRaw !== undefined && ledgerIdRaw !== "") {
+    const n = Number(ledgerIdRaw);
+    if (!Number.isInteger(n) || n < 1) {
+      return res.status(400).json({ error: "Invalid request", details: [{ path: ["ledgerId"], message: "ledgerId must be a positive integer" }] });
+    }
+    ledgerId = n;
+  } else if (doctorIdRaw !== undefined && doctorIdRaw !== "") {
+    const docId = Number(doctorIdRaw);
+    if (!Number.isInteger(docId) || docId < 1) {
+      return res.status(400).json({ error: "Invalid request", details: [{ path: ["doctorId"], message: "doctorId must be a positive integer" }] });
+    }
+    const [d] = await db.select().from(doctorsTable).where(eq(doctorsTable.id, docId));
+    if (!d) {
+      return res.status(400).json({ error: "Invalid request", details: [{ path: ["doctorId"], message: `Doctor with id ${docId} does not exist.` }] });
+    }
+    if (d.ledgerId == null) {
+      return res.status(400).json({ error: "Invalid request", details: [{ path: ["doctorId"], message: `Doctor ${docId} has no ledger assigned; specify ledgerId explicitly.` }] });
+    }
+    ledgerId = d.ledgerId;
+  } else {
+    return res.status(400).json({ error: "Invalid request", details: [{ path: [], message: "Either ledgerId or doctorId is required." }] });
   }
   const num = (await countBillsForLedger(ledgerId)) + 1;
   const date = new Date();

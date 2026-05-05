@@ -516,8 +516,14 @@ radiologyRouter.post("/:id/issues", async (req, res) => {
   if (!body.issueType || !["film", "cd", "print"].includes(body.issueType)) {
     res.status(400).json({ error: "issueType must be film, cd, or print" }); return;
   }
-  const qty = Number(body.quantity ?? 1);
-  if (!Number.isFinite(qty) || qty < 1) { res.status(400).json({ error: "quantity must be >= 1" }); return; }
+  // Quantity is required — silently defaulting to 1 has caused inventory
+  // drift when the UI forgot to send it on multi-film/CD issues.
+  if (body.quantity === undefined || body.quantity === null) {
+    res.status(400).json({ error: "Invalid request", details: [{ path: ["quantity"], message: "quantity is required" }] });
+    return;
+  }
+  const qty = Number(body.quantity);
+  if (!Number.isInteger(qty) || qty < 1) { res.status(400).json({ error: "Invalid request", details: [{ path: ["quantity"], message: "quantity must be a positive integer" }] }); return; }
 
   const [study] = await db.select().from(radiologyStudiesTable).where(eq(radiologyStudiesTable.id, id));
   if (!study) { res.status(404).json({ error: "Study not found" }); return; }
