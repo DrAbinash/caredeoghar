@@ -5,13 +5,13 @@ generated = []
 id = "oRd0cMLyeXJ02-c6LyANS"
 uri = "file://windows-build/dist/DiagnosticERP-Portable.zip"
 type = "unspecified"
-title = "DiagnosticERP-Portable.zip — portable build (267 MB)"
+title = "DiagnosticERP-Portable.zip (Portable App)"
 
 [[outputs]]
 id = "bKz3kVPnHAUHmF36aG-Vy"
 uri = "file://windows-build/dist/DiagnosticERP-Setup.zip"
 type = "unspecified"
-title = "DiagnosticERP-Setup.zip (241 MB) — NSIS Installer (zipped)"
+title = "DiagnosticERP-Setup.exe (NSIS Installer, zipped)"
 
 [[outputs]]
 id = "8AMMDF15p_kYYgtDnoLPV"
@@ -23,10 +23,10 @@ title = "DiagnosticERP-Desktop-Setup.zip — Electron desktop app (393 MB)"
 id = "EzvVTSNiNKuKLbahMpunQ"
 uri = "file://windows-build/dist/SuperAdmin-Portable.zip"
 type = "unspecified"
-title = "SuperAdmin-Portable.zip — Super Admin portable (300 MB)"
+title = "SuperAdmin-Portable.zip (Super Admin Portable)"
 
 [[outputs]]
 id = "y-PWSWWhXohPRHwZK9XWO"
 uri = "file://windows-build/dist/DiagnosticERP-Update.zip"
 type = "unspecified"
-title = "DiagnosticERP-Update.zip — in-place update (200 MB)"
+title = "DiagnosticERP-Update.zip (Update Pack)"
