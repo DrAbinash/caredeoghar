@@ -48,6 +48,29 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          // Group react + radix together to avoid circular chunk dependency
+          if (
+            id.includes("react-dom") ||
+            id.includes("react/") ||
+            id.includes("/react.") ||
+            id === "react" ||
+            id.includes("@radix-ui")
+          ) {
+            return "vendor-react";
+          }
+          if (id.includes("@tanstack")) {
+            return "vendor-query";
+          }
+          if (id.includes("react-hook-form")) {
+            return "vendor-forms";
+          }
+        },
+      },
+    },
   },
   server: {
     port,

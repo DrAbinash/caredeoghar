@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
@@ -7,11 +7,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useForm } from "react-hook-form";
 import { ShieldAlert, LogOut, ExternalLink, Copy, CheckCheck, Eye, EyeOff, Lock, BookOpen, HandCoins, ListChecks, Wallet } from "lucide-react";
-import BooksManager from "./pages/Books";
-import CommissionRules from "./pages/CommissionRules";
-import CommissionReport from "./pages/CommissionReport";
-import DoctorLedger from "./pages/DoctorLedger";
 import { setSaToken } from "./lib/saApi";
+
+const BooksManager     = lazy(() => import("./pages/Books"));
+const CommissionRules  = lazy(() => import("./pages/CommissionRules"));
+const CommissionReport = lazy(() => import("./pages/CommissionReport"));
+const DoctorLedger     = lazy(() => import("./pages/DoctorLedger"));
+
+function PageLoader() {
+  return (
+    <div className="min-h-screen w-full flex items-center justify-center bg-background">
+      <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+    </div>
+  );
+}
 
 const queryClient = new QueryClient();
 
@@ -354,26 +363,28 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {!session ? (
-        <LoginScreen onLogin={(s) => { setSession(s); setView("home"); }} />
-      ) : view === "books" ? (
-        <BooksManager token={session.token} onBack={() => setView("home")} />
-      ) : view === "commission-report" ? (
-        <CommissionReport onBack={() => setView("home")} />
-      ) : view === "commission-rules" ? (
-        <CommissionRules onBack={() => setView("home")} />
-      ) : view === "doctor-ledger" ? (
-        <DoctorLedger onBack={() => setView("home")} />
-      ) : (
-        <ActiveSessionScreen
-          session={session}
-          onEject={() => { setSession(null); setView("home"); }}
-          onManageBooks={() => setView("books")}
-          onCommissionReport={() => setView("commission-report")}
-          onCommissionRules={() => setView("commission-rules")}
-          onDoctorLedger={() => setView("doctor-ledger")}
-        />
-      )}
+      <Suspense fallback={<PageLoader />}>
+        {!session ? (
+          <LoginScreen onLogin={(s) => { setSession(s); setView("home"); }} />
+        ) : view === "books" ? (
+          <BooksManager token={session.token} onBack={() => setView("home")} />
+        ) : view === "commission-report" ? (
+          <CommissionReport onBack={() => setView("home")} />
+        ) : view === "commission-rules" ? (
+          <CommissionRules onBack={() => setView("home")} />
+        ) : view === "doctor-ledger" ? (
+          <DoctorLedger onBack={() => setView("home")} />
+        ) : (
+          <ActiveSessionScreen
+            session={session}
+            onEject={() => { setSession(null); setView("home"); }}
+            onManageBooks={() => setView("books")}
+            onCommissionReport={() => setView("commission-report")}
+            onCommissionRules={() => setView("commission-rules")}
+            onDoctorLedger={() => setView("doctor-ledger")}
+          />
+        )}
+      </Suspense>
       <Toaster />
     </QueryClientProvider>
   );
