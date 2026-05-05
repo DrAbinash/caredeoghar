@@ -185,6 +185,53 @@ async function main() {
         expectStatus(r.status, 400, r.body);
       });
     }
+
+    console.log("\n# accounting: NaN id guards + body validation");
+
+    for (const path of [
+      "/api/accounting/accounts/abc",
+      "/api/accounting/vouchers/abc",
+      "/api/accounting/vouchers/abc/audits",
+    ]) {
+      await check(`${path} → 400 (NaN id)`, async () => {
+        const r = await req(token, "GET", path);
+        // PATCH/DELETE for accounts/vouchers also share the guard, but a GET
+        // probe is enough to confirm the parser fires before drizzle.
+        if (path.endsWith("/audits")) {
+          expectStatus(r.status, 400, r.body);
+        } else {
+          // /accounts/abc and /vouchers/abc are not GET routes — express will
+          // 404. Probe with PATCH instead so we hit the guard.
+          const r2 = await req(token, "PATCH", path, {});
+          expectStatus(r2.status, 400, r2.body);
+        }
+      });
+    }
+    await check("DELETE /api/accounting/vouchers/abc → 400 (NaN id)", async () => {
+      const r = await req(token, "DELETE", "/api/accounting/vouchers/abc");
+      expectStatus(r.status, 400, r.body);
+    });
+    await check("POST /api/accounting/accounts {} → 400 (zod)", async () => {
+      const r = await req(token, "POST", "/api/accounting/accounts", {});
+      expectStatus(r.status, 400, r.body);
+      expectErrorEnvelope(r.body);
+    });
+    await check("POST /api/accounting/vouchers {} → 400 (zod)", async () => {
+      const r = await req(token, "POST", "/api/accounting/vouchers", {});
+      expectStatus(r.status, 400, r.body);
+      expectErrorEnvelope(r.body);
+    });
+
+    console.log("\n# radiology: staffId guard");
+
+    await check("GET /api/radiology/worklist?assigned=mine&staffId=abc → 400", async () => {
+      const r = await req(token, "GET", "/api/radiology/worklist?assigned=mine&staffId=abc");
+      expectStatus(r.status, 400, r.body);
+    });
+    await check("GET /api/radiology/worklist?assigned=mine (no staffId) → 400", async () => {
+      const r = await req(token, "GET", "/api/radiology/worklist?assigned=mine");
+      expectStatus(r.status, 400, r.body);
+    });
   } finally {
     await dropStaffToken(token);
     await pool.end();

@@ -327,34 +327,42 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
   const totalAmount = subtotal - discountAmt + taxAmount;
 
   const ledgerId = await resolveLedgerForOrder(orderId);
-  const billNumber = await generateBillNumber(ledgerId);
 
-  // Backfill order with its ledger
-  if (!order.ledgerId) {
-    await db.update(ordersTable).set({ ledgerId }).where(eq(ordersTable.id, orderId));
-  }
-  // Bind patient to this ledger if they don't already belong to one
-  const [pat] = await db.select().from(patientsTable).where(eq(patientsTable.id, order.patientId));
-  if (pat && !pat.ledgerId) {
-    await db.update(patientsTable).set({ ledgerId }).where(eq(patientsTable.id, pat.id));
-  }
+  // Atomically: generate bill number, backfill order's ledgerId, bind patient
+  // to ledger, and insert the bill row. Previously these were 3-4 sequential
+  // writes outside any transaction — a mid-flight failure (e.g. unique-key
+  // collision on billNumber) would leave the order/patient mutated with no
+  // matching bill row.
+  const { bill, pat } = await db.transaction(async (tx) => {
+    const billNumber = await generateBillNumber(ledgerId);
 
-  const [bill] = await db.insert(billsTable).values({
-    billNumber,
-    orderId,
-    patientId: order.patientId,
-    subtotal: subtotal.toFixed(2),
-    discount: discountAmt.toFixed(2),
-    discountReason,
-    discountReasonNote,
-    taxAmount: taxAmount.toFixed(2),
-    totalAmount: totalAmount.toFixed(2),
-    paidAmount: "0.00",
-    balanceAmount: totalAmount.toFixed(2),
-    status: "pending",
-    ledgerId,
-    dueDate: dueDate ?? null,
-  }).returning();
+    if (!order.ledgerId) {
+      await tx.update(ordersTable).set({ ledgerId }).where(eq(ordersTable.id, orderId));
+    }
+    const [patRow] = await tx.select().from(patientsTable).where(eq(patientsTable.id, order.patientId));
+    if (patRow && !patRow.ledgerId) {
+      await tx.update(patientsTable).set({ ledgerId }).where(eq(patientsTable.id, patRow.id));
+    }
+
+    const [billRow] = await tx.insert(billsTable).values({
+      billNumber,
+      orderId,
+      patientId: order.patientId,
+      subtotal: subtotal.toFixed(2),
+      discount: discountAmt.toFixed(2),
+      discountReason,
+      discountReasonNote,
+      taxAmount: taxAmount.toFixed(2),
+      totalAmount: totalAmount.toFixed(2),
+      paidAmount: "0.00",
+      balanceAmount: totalAmount.toFixed(2),
+      status: "pending",
+      ledgerId,
+      dueDate: dueDate ?? null,
+    }).returning();
+
+    return { bill: billRow, pat: patRow };
+  });
 
   // Auto-generate queue token (per book, resets daily) — never blocks bill creation
   let tokenInfo: { tokenNo: number; tokenDate: string } | null = null;
@@ -887,34 +895,34 @@ billsRouter.delete("/:id", async (req, res) => {
     newValue: null,
   });
 
-  // Delete payments and audits for this bill first, then the bill
-  await db.delete(paymentsTable).where(eq(paymentsTable.billId, id));
-  await db.delete(billsTable).where(eq(billsTable.id, id));
+  // Delete payments + bill, reset order, renumber later bills — all in one
+  // transaction. Otherwise a partial failure (e.g. mid-renumber) leaves the
+  // sequence with gaps or duplicate numbers and an inconsistent order status.
+  await db.transaction(async (tx) => {
+    await tx.delete(paymentsTable).where(eq(paymentsTable.billId, id));
+    await tx.delete(billsTable).where(eq(billsTable.id, id));
+    await tx.update(ordersTable).set({ status: "pending" }).where(eq(ordersTable.id, bill.orderId));
 
-  // Reset order back to pending so a new bill can be generated
-  await db.update(ordersTable).set({ status: "pending" }).where(eq(ordersTable.id, bill.orderId));
+    if (billNumMatch) {
+      const monthPrefix = billNumMatch[1];
+      const deletedSeq  = Number(billNumMatch[2]);
 
-  // Renumber bills in the same YYYYMM that come after the deleted one
-  if (billNumMatch) {
-    const monthPrefix = billNumMatch[1]; // e.g. "202604"
-    const deletedSeq  = Number(billNumMatch[2]);
+      const laterBills = await tx
+        .select()
+        .from(billsTable)
+        .where(like(billsTable.billNumber, `BILL-${monthPrefix}-%`))
+        .orderBy(billsTable.billNumber);
 
-    // Fetch all bills in this month with a higher sequence
-    const laterBills = await db
-      .select()
-      .from(billsTable)
-      .where(like(billsTable.billNumber, `BILL-${monthPrefix}-%`))
-      .orderBy(billsTable.billNumber);
-
-    for (const lb of laterBills) {
-      const m = lb.billNumber.match(/^BILL-(\d{6})-(\d+)$/);
-      if (!m) continue;
-      const seq = Number(m[2]);
-      if (seq <= deletedSeq) continue;  // only renumber those after the deleted one
-      const newBillNumber = `BILL-${m[1]}-${String(seq - 1).padStart(4, "0")}`;
-      await db.update(billsTable).set({ billNumber: newBillNumber }).where(eq(billsTable.id, lb.id));
+      for (const lb of laterBills) {
+        const m = lb.billNumber.match(/^BILL-(\d{6})-(\d+)$/);
+        if (!m) continue;
+        const seq = Number(m[2]);
+        if (seq <= deletedSeq) continue;
+        const newBillNumber = `BILL-${m[1]}-${String(seq - 1).padStart(4, "0")}`;
+        await tx.update(billsTable).set({ billNumber: newBillNumber }).where(eq(billsTable.id, lb.id));
+      }
     }
-  }
+  });
 
   res.json({ success: true, deletedBillNumber: bill.billNumber });
 });

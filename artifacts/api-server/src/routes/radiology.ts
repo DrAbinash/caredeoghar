@@ -137,14 +137,30 @@ radiologyRouter.get("/worklist", async (req, res) => {
   const modality = (req.query.modality as string) || "";
   const search = (req.query.search as string)?.trim() || "";
   const assigned = (req.query.assigned as string) || "";
-  const staffId = Number(req.query.staffId) || 0;
+  // staffId is only meaningful for `assigned=mine`. Reject malformed values
+  // (e.g. "undefined") with a 400 instead of silently coercing to 0 and
+  // returning an empty worklist that looks like "you have no studies".
+  const rawStaffId = req.query.staffId;
+  let staffId: number | null = null;
+  if (rawStaffId !== undefined && rawStaffId !== null && rawStaffId !== "") {
+    const n = Number(rawStaffId);
+    if (!Number.isInteger(n) || n < 1) {
+      res.status(400).json({ error: "Invalid staffId" });
+      return;
+    }
+    staffId = n;
+  }
 
   const conds = [eq(radiologyStudiesTable.studyDate, date)];
   if (status && status !== "all") conds.push(eq(radiologyStudiesTable.status, status));
   if (modality && modality !== "all") conds.push(eq(radiologyStudiesTable.modality, modality));
   if (assigned === "unclaimed") {
     conds.push(isNull(radiologyStudiesTable.assignedRadiologistId));
-  } else if (assigned === "mine" && staffId) {
+  } else if (assigned === "mine") {
+    if (staffId === null) {
+      res.status(400).json({ error: "assigned=mine requires staffId" });
+      return;
+    }
     conds.push(eq(radiologyStudiesTable.assignedRadiologistId, staffId));
   }
 

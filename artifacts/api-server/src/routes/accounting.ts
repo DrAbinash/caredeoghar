@@ -1,9 +1,51 @@
-import { Router } from "express";
+import { Router, type Response } from "express";
 import { db, billsTable, paymentsTable } from "@workspace/db";
 import { accountsTable, vouchersTable, voucherAuditsTable } from "@workspace/db/schema";
-import { eq, desc, and, gte, lte, like } from "drizzle-orm";
+import { eq, desc, and, gte, lte, like, sql } from "drizzle-orm";
+import { z } from "zod/v4";
+import { apiError, apiErrorFromZod } from "../lib/api-error";
 
 const router = Router();
+
+// Reject non-positive-integer route IDs *before* drizzle sees them — otherwise
+// `Number("abc")` → NaN and PostgreSQL throws an opaque 500.
+function parseId(raw: string, res: Response): number | null {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1) {
+    apiError(res, 400, "Invalid id");
+    return null;
+  }
+  return n;
+}
+
+const AccountBody = z.object({
+  name: z.string().trim().min(1),
+  type: z.string().trim().min(1),
+  code: z.string().trim().optional().nullable(),
+  bankName: z.string().trim().optional().nullable(),
+  accountNumber: z.string().trim().optional().nullable(),
+  ifscCode: z.string().trim().optional().nullable(),
+  tallyGroup: z.string().trim().optional().nullable(),
+  openingBalance: z.union([z.number(), z.string()]).optional(),
+  openingBalanceType: z.enum(["Dr", "Cr"]).optional(),
+  gstApplicable: z.boolean().optional(),
+  gstNumber: z.string().trim().optional().nullable(),
+  pan: z.string().trim().optional().nullable(),
+});
+
+const VoucherBody = z.object({
+  type: z.enum(["payment", "receipt", "contra", "journal", "bank_transfer", "sales", "purchase"]),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date must be YYYY-MM-DD"),
+  creditAccountId: z.union([z.number().int().positive(), z.string().regex(/^\d+$/)]),
+  debitAccountId: z.union([z.number().int().positive(), z.string().regex(/^\d+$/)]),
+  amount: z.union([z.number().positive(), z.string().regex(/^-?\d+(\.\d+)?$/)]),
+  particular: z.string().trim().min(1),
+  remark: z.string().trim().optional().nullable(),
+  performedBy: z.string().trim().optional().nullable(),
+  reference: z.string().trim().optional().nullable(),
+  narration: z.string().trim().optional().nullable(),
+  billId: z.union([z.number().int().positive(), z.string().regex(/^\d+$/)]).optional().nullable(),
+});
 
 // ─── Tally voucher type mapping ──────────────────────────────────────────────
 const TALLY_VOUCHER_TYPE: Record<string, string> = {
@@ -49,7 +91,9 @@ router.get("/accounts", async (_req, res) => {
 });
 
 router.post("/accounts", async (req, res) => {
-  const { name, type, code, bankName, accountNumber, ifscCode, tallyGroup, openingBalance, openingBalanceType, gstApplicable, gstNumber, pan } = req.body;
+  const parsed = AccountBody.safeParse(req.body);
+  if (!parsed.success) { apiErrorFromZod(res, 400, "Invalid body", parsed.error); return; }
+  const { name, type, code, bankName, accountNumber, ifscCode, tallyGroup, openingBalance, openingBalanceType, gstApplicable, gstNumber, pan } = parsed.data;
   const [account] = await db
     .insert(accountsTable)
     .values({
@@ -67,7 +111,8 @@ router.post("/accounts", async (req, res) => {
 });
 
 router.patch("/accounts/:id", async (req, res) => {
-  const id = Number(req.params.id);
+  const id = parseId(req.params.id, res);
+  if (id === null) return;
   const updates: Record<string, unknown> = {};
   const allowed = ["name", "type", "code", "bankName", "accountNumber", "ifscCode", "isActive",
     "tallyGroup", "openingBalance", "openingBalanceType", "gstApplicable", "gstNumber", "pan"];
@@ -87,8 +132,7 @@ router.patch("/accounts/:id", async (req, res) => {
 
 // ─── Vouchers ────────────────────────────────────────────────────────────────
 
-async function nextVoucherNumber(type: string): Promise<string> {
-  const count = await db.select().from(vouchersTable);
+function voucherBucket(type: string): string {
   const prefix = type === "payment" ? "PV"
     : type === "receipt" ? "RV"
     : type === "contra" || type === "bank_transfer" ? "BT"
@@ -97,7 +141,24 @@ async function nextVoucherNumber(type: string): Promise<string> {
     : "JV";
   const year = new Date().getFullYear();
   const month = String(new Date().getMonth() + 1).padStart(2, "0");
-  return `${prefix}-${year}${month}-${String(count.length + 1).padStart(4, "0")}`;
+  return `${prefix}-${year}${month}-`;
+}
+
+// Compute the next sequence in a per-month bucket. Race-prone by itself —
+// always pair with the unique-constraint retry loop in POST /vouchers below.
+async function nextVoucherNumber(type: string, attemptOffset = 0): Promise<string> {
+  const bucket = voucherBucket(type);
+  const r = await db
+    .select({ c: sql<number>`count(*)` })
+    .from(vouchersTable)
+    .where(like(vouchersTable.voucherNumber, `${bucket}%`));
+  const next = Number(r[0]?.c ?? 0) + 1 + attemptOffset;
+  return `${bucket}${String(next).padStart(4, "0")}`;
+}
+
+// Postgres unique-violation SQLSTATE
+function isUniqueViolation(err: unknown): boolean {
+  return !!err && typeof err === "object" && (err as { code?: string }).code === "23505";
 }
 
 router.get("/vouchers", async (req, res) => {
@@ -120,32 +181,50 @@ router.get("/vouchers", async (req, res) => {
 });
 
 router.post("/vouchers", async (req, res) => {
-  const { type, date, creditAccountId, debitAccountId, amount, particular, remark, performedBy, reference, narration, billId } = req.body;
-  const voucherNumber = await nextVoucherNumber(type);
-  const [voucher] = await db
-    .insert(vouchersTable)
-    .values({
-      voucherNumber,
-      type,
-      date,
-      creditAccountId: creditAccountId.toString(),
-      debitAccountId: debitAccountId.toString(),
-      amount: amount.toString(),
-      particular,
-      remark,
-      performedBy,
-      reference,
-      narration,
-      billId: billId ? Number(billId) : null,
-    })
-    .returning();
-  res.status(201).json({ ...voucher, amount: Number(voucher.amount) });
-  return;
+  const parsed = VoucherBody.safeParse(req.body);
+  if (!parsed.success) { apiErrorFromZod(res, 400, "Invalid body", parsed.error); return; }
+  const { type, date, creditAccountId, debitAccountId, amount, particular, remark, performedBy, reference, narration, billId } = parsed.data;
+
+  // Race-safe insert: count-based numbering can collide under concurrency, but
+  // the DB has a unique index on voucher_number. On unique-violation we bump
+  // the sequence by the attempt count and retry. 3 attempts ≈ tolerates a
+  // 3-way concurrent insert into the same bucket; surfaces 409 beyond that.
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const voucherNumber = await nextVoucherNumber(type, attempt);
+    try {
+      const [voucher] = await db
+        .insert(vouchersTable)
+        .values({
+          voucherNumber,
+          type,
+          date,
+          creditAccountId: creditAccountId.toString(),
+          debitAccountId: debitAccountId.toString(),
+          amount: amount.toString(),
+          particular,
+          remark,
+          performedBy,
+          reference,
+          narration,
+          billId: billId ? Number(billId) : null,
+        })
+        .returning();
+      res.status(201).json({ ...voucher, amount: Number(voucher.amount) });
+      return;
+    } catch (err) {
+      if (!isUniqueViolation(err)) throw err;
+      lastErr = err;
+    }
+  }
+  apiError(res, 409, "Could not allocate a unique voucher number, please retry");
+  void lastErr;
 });
 
 // Edit voucher with audit trail
 router.patch("/vouchers/:id", async (req, res) => {
-  const id = Number(req.params.id);
+  const id = parseId(req.params.id, res);
+  if (id === null) return;
   const { editedBy, reason, date, amount, particular, remark, performedBy, reference, narration, creditAccountId, debitAccountId } = req.body;
 
   if (!editedBy || !reason) {
@@ -214,14 +293,17 @@ router.patch("/vouchers/:id", async (req, res) => {
 });
 
 router.delete("/vouchers/:id", async (req, res) => {
-  await db.delete(vouchersTable).where(eq(vouchersTable.id, Number(req.params.id)));
+  const id = parseId(req.params.id, res);
+  if (id === null) return;
+  await db.delete(vouchersTable).where(eq(vouchersTable.id, id));
   res.json({ ok: true });
   return;
 });
 
 // Get audit history for a specific voucher
 router.get("/vouchers/:id/audits", async (req, res) => {
-  const id = Number(req.params.id);
+  const id = parseId(req.params.id, res);
+  if (id === null) return;
   const audits = await db.select().from(voucherAuditsTable).where(eq(voucherAuditsTable.voucherId, id)).orderBy(desc(voucherAuditsTable.createdAt));
   res.json(audits);
   return;
