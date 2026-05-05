@@ -9,6 +9,12 @@ import {
   billsTable,
 } from "@workspace/db/schema";
 import { eq, desc, and, gte, lte, inArray } from "drizzle-orm";
+import {
+  CreateCommissionRuleBody,
+  UpdateCommissionRuleBody,
+  UpdateCommissionRuleParams,
+  DeleteCommissionRuleParams,
+} from "@workspace/api-zod";
 
 const router = Router();
 
@@ -31,43 +37,80 @@ router.get("/rules", async (req, res) => {
 
 // Create rule
 router.post("/rules", async (req, res) => {
-  const { doctorId, name, type, value, scope, categories, testIds, isExclusive } = req.body;
+  const parsed = CreateCommissionRuleBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
+    return;
+  }
+  const { doctorId, name, type, value, scope, categories, testIds, isExclusive } = parsed.data;
+  if (doctorId == null) {
+    res.status(400).json({ error: "doctorId is required" });
+    return;
+  }
   const [rule] = await db
     .insert(commissionRulesTable)
     .values({
-      doctorId: Number(doctorId),
+      doctorId,
       name,
-      type: type || "percentage",
+      type,
       value: value.toString(),
-      scope: scope || "all",
+      scope,
       categories: categories ? JSON.stringify(categories) : null,
       testIds: testIds ? JSON.stringify(testIds) : null,
-      isExclusive: isExclusive || false,
+      isExclusive: isExclusive ?? false,
     })
     .returning();
   res.status(201).json({ ...rule, value: Number(rule.value) });
 });
 
-// Update rule
+// Update rule (partial)
+const UpdateCommissionRuleBodyPartial = UpdateCommissionRuleBody.partial();
 router.patch("/rules/:id", async (req, res) => {
-  const id = Number(req.params.id);
+  const paramsParsed = UpdateCommissionRuleParams.safeParse({ id: req.params.id });
+  const bodyParsed = UpdateCommissionRuleBodyPartial.safeParse(req.body);
+  if (!paramsParsed.success || !bodyParsed.success) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: [
+        ...(paramsParsed.success ? [] : paramsParsed.error.issues),
+        ...(bodyParsed.success ? [] : bodyParsed.error.issues),
+      ],
+    });
+    return;
+  }
+  const id = paramsParsed.data.id;
+  const data = bodyParsed.data;
   const updates: Record<string, unknown> = {};
-  const allowed = ["name", "type", "value", "scope", "categories", "testIds", "isExclusive", "isActive"];
-  for (const k of allowed) {
-    if (req.body[k] !== undefined) {
-      if (k === "value") updates[k] = req.body[k].toString();
-      else if (k === "categories" || k === "testIds") updates[k] = JSON.stringify(req.body[k]);
-      else updates[k] = req.body[k];
-    }
+  if (data.name !== undefined) updates.name = data.name;
+  if (data.type !== undefined) updates.type = data.type;
+  if (data.value !== undefined) updates.value = data.value.toString();
+  if (data.scope !== undefined) updates.scope = data.scope;
+  if (data.categories !== undefined) updates.categories = data.categories ? JSON.stringify(data.categories) : null;
+  if (data.testIds !== undefined) updates.testIds = data.testIds ? JSON.stringify(data.testIds) : null;
+  if (data.doctorId != null) updates.doctorId = data.doctorId;
+  if (data.isExclusive !== undefined) updates.isExclusive = data.isExclusive;
+  // isActive is not part of the OpenAPI body schema; accept it directly when provided
+  if (typeof req.body?.isActive === "boolean") updates.isActive = req.body.isActive;
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "No fields to update" });
+    return;
   }
   const [rule] = await db.update(commissionRulesTable).set(updates).where(eq(commissionRulesTable.id, id)).returning();
-  if (!rule) return res.status(404).json({ error: "Rule not found" });
+  if (!rule) {
+    res.status(404).json({ error: "Rule not found" });
+    return;
+  }
   res.json({ ...rule, value: Number(rule.value) });
 });
 
 // Delete rule
 router.delete("/rules/:id", async (req, res) => {
-  await db.delete(commissionRulesTable).where(eq(commissionRulesTable.id, Number(req.params.id)));
+  const parsed = DeleteCommissionRuleParams.safeParse({ id: req.params.id });
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid id", details: parsed.error.issues });
+    return;
+  }
+  await db.delete(commissionRulesTable).where(eq(commissionRulesTable.id, parsed.data.id));
   res.json({ ok: true });
 });
 

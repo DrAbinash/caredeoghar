@@ -110,3 +110,4 @@ export * from "./updateExpenseBody";
 export * from "./updateLedgerBody";
 export * from "./updateOrderBody";
 export * from "./updateOrderBodyStatus";
+export * from "./updatePayoutBody";

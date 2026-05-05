@@ -687,6 +687,16 @@ export interface CreatePayoutBody {
   periodTo?: string | null;
 }
 
+export interface UpdatePayoutBody {
+  amount?: number;
+  paymentDate?: string;
+  paymentMethod?: string;
+  reference?: string | null;
+  notes?: string | null;
+  periodFrom?: string | null;
+  periodTo?: string | null;
+}
+
 export interface Book {
   id: number;
   name: string;

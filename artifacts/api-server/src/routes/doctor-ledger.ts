@@ -10,6 +10,13 @@ import {
   billsTable,
 } from "@workspace/db/schema";
 import { eq, desc, and, gte, lte, inArray, sql } from "drizzle-orm";
+import {
+  CreateDoctorPayoutBody,
+  CreateDoctorPayoutParams,
+  DeleteDoctorPayoutParams,
+  UpdateDoctorPayoutBody,
+  UpdateDoctorPayoutParams,
+} from "@workspace/api-zod";
 
 export const doctorLedgerRouter = Router();
 
@@ -298,40 +305,64 @@ doctorLedgerRouter.get("/:doctorId", async (req, res) => {
 // ─── POST /:doctorId/payouts : record a new payout ─────────────────────────────
 doctorLedgerRouter.post("/:doctorId/payouts", async (req, res) => {
   try {
-    const doctorId = Number(req.params.doctorId);
-    if (!Number.isFinite(doctorId)) return res.status(400).json({ error: "Invalid doctorId" });
+    const paramsParsed = CreateDoctorPayoutParams.safeParse({ doctorId: req.params.doctorId });
+    const bodyParsed = CreateDoctorPayoutBody.safeParse(req.body);
+    if (!paramsParsed.success || !bodyParsed.success) {
+      res.status(400).json({
+        error: "Invalid request",
+        details: [
+          ...(paramsParsed.success ? [] : paramsParsed.error.issues),
+          ...(bodyParsed.success ? [] : bodyParsed.error.issues),
+        ],
+      });
+      return;
+    }
+    const doctorId = paramsParsed.data.doctorId;
+    const data = bodyParsed.data;
+
+    if (data.amount <= 0) {
+      res.status(400).json({ error: "amount must be a positive number" });
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(data.paymentDate)) {
+      res.status(400).json({ error: "Invalid paymentDate" });
+      return;
+    }
+    const allowedMethods = ["cash", "bank", "upi", "cheque", "card", "other"];
+    if (!allowedMethods.includes(data.paymentMethod)) {
+      res.status(400).json({ error: "Invalid paymentMethod" });
+      return;
+    }
+    if (data.periodFrom && !/^\d{4}-\d{2}-\d{2}$/.test(data.periodFrom)) {
+      res.status(400).json({ error: "Invalid periodFrom" });
+      return;
+    }
+    if (data.periodTo && !/^\d{4}-\d{2}-\d{2}$/.test(data.periodTo)) {
+      res.status(400).json({ error: "Invalid periodTo" });
+      return;
+    }
 
     const [doctor] = await db.select().from(doctorsTable).where(eq(doctorsTable.id, doctorId));
-    if (!doctor) return res.status(404).json({ error: "Doctor not found" });
-
-    const body = req.body ?? {};
-    const amount = Number(body.amount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      return res.status(400).json({ error: "amount must be a positive number" });
+    if (!doctor) {
+      res.status(404).json({ error: "Doctor not found" });
+      return;
     }
-    const paymentDate = typeof body.paymentDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.paymentDate)
-      ? body.paymentDate
-      : new Date().toISOString().split("T")[0];
-    const allowedMethods = ["cash", "bank", "upi", "cheque", "card", "other"];
-    const paymentMethod = allowedMethods.includes(body.paymentMethod) ? body.paymentMethod : "cash";
-
-    const periodFrom = typeof body.periodFrom === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.periodFrom) ? body.periodFrom : null;
-    const periodTo   = typeof body.periodTo   === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.periodTo)   ? body.periodTo   : null;
 
     const trim = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+    const performedBy = trim((req.body ?? {}).performedBy);
 
     const [row] = await db
       .insert(doctorPayoutsTable)
       .values({
         doctorId,
-        amount: amount.toFixed(2),
-        paymentDate,
-        paymentMethod,
-        reference: trim(body.reference),
-        periodFrom,
-        periodTo,
-        notes: trim(body.notes),
-        performedBy: trim(body.performedBy),
+        amount: data.amount.toFixed(2),
+        paymentDate: data.paymentDate,
+        paymentMethod: data.paymentMethod,
+        reference: trim(data.reference),
+        periodFrom: data.periodFrom ?? null,
+        periodTo: data.periodTo ?? null,
+        notes: trim(data.notes),
+        performedBy,
       })
       .returning();
 
@@ -345,37 +376,62 @@ doctorLedgerRouter.post("/:doctorId/payouts", async (req, res) => {
 // ─── PATCH /payouts/:id : edit an existing payout ─────────────────────────────
 doctorLedgerRouter.patch("/payouts/:id", async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid payout id" });
-    const body = req.body ?? {};
+    const paramsParsed = UpdateDoctorPayoutParams.safeParse({ id: req.params.id });
+    const bodyParsed = UpdateDoctorPayoutBody.safeParse(req.body);
+    if (!paramsParsed.success || !bodyParsed.success) {
+      res.status(400).json({
+        error: "Invalid request",
+        details: [
+          ...(paramsParsed.success ? [] : paramsParsed.error.issues),
+          ...(bodyParsed.success ? [] : bodyParsed.error.issues),
+        ],
+      });
+      return;
+    }
+    const id = paramsParsed.data.id;
+    const data = bodyParsed.data;
     const updates: Record<string, unknown> = {};
-    if (body.amount !== undefined) {
-      const a = Number(body.amount);
-      if (!Number.isFinite(a) || a <= 0) return res.status(400).json({ error: "amount must be positive" });
-      updates.amount = a.toFixed(2);
+    if (data.amount !== undefined) {
+      if (data.amount <= 0) {
+        res.status(400).json({ error: "amount must be positive" });
+        return;
+      }
+      updates.amount = data.amount.toFixed(2);
     }
-    if (body.paymentDate !== undefined) {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(body.paymentDate))) return res.status(400).json({ error: "Invalid paymentDate" });
-      updates.paymentDate = body.paymentDate;
+    if (data.paymentDate !== undefined) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(data.paymentDate)) {
+        res.status(400).json({ error: "Invalid paymentDate" });
+        return;
+      }
+      updates.paymentDate = data.paymentDate;
     }
-    if (body.paymentMethod !== undefined) {
+    if (data.paymentMethod !== undefined) {
       const allowed = ["cash", "bank", "upi", "cheque", "card", "other"];
-      if (!allowed.includes(body.paymentMethod)) return res.status(400).json({ error: "Invalid paymentMethod" });
-      updates.paymentMethod = body.paymentMethod;
+      if (!allowed.includes(data.paymentMethod)) {
+        res.status(400).json({ error: "Invalid paymentMethod" });
+        return;
+      }
+      updates.paymentMethod = data.paymentMethod;
     }
-    if (body.reference !== undefined) updates.reference = body.reference || null;
-    if (body.notes !== undefined) updates.notes = body.notes || null;
-    if (body.periodFrom !== undefined) updates.periodFrom = body.periodFrom || null;
-    if (body.periodTo !== undefined) updates.periodTo = body.periodTo || null;
+    if (data.reference !== undefined) updates.reference = data.reference || null;
+    if (data.notes !== undefined) updates.notes = data.notes || null;
+    if (data.periodFrom !== undefined) updates.periodFrom = data.periodFrom || null;
+    if (data.periodTo !== undefined) updates.periodTo = data.periodTo || null;
 
-    if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No fields to update" });
+    if (Object.keys(updates).length === 0) {
+      res.status(400).json({ error: "No fields to update" });
+      return;
+    }
 
     const [row] = await db
       .update(doctorPayoutsTable)
       .set(updates)
       .where(eq(doctorPayoutsTable.id, id))
       .returning();
-    if (!row) return res.status(404).json({ error: "Payout not found" });
+    if (!row) {
+      res.status(404).json({ error: "Payout not found" });
+      return;
+    }
     res.json({ ...row, amount: Number(row.amount) });
   } catch (err) {
     req.log?.error({ err }, "doctor-ledger payout patch failed");
@@ -386,10 +442,17 @@ doctorLedgerRouter.patch("/payouts/:id", async (req, res) => {
 // ─── DELETE /payouts/:id ───────────────────────────────────────────────────────
 doctorLedgerRouter.delete("/payouts/:id", async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid payout id" });
+    const parsed = DeleteDoctorPayoutParams.safeParse({ id: req.params.id });
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid payout id", details: parsed.error.issues });
+      return;
+    }
+    const id = parsed.data.id;
     const result = await db.delete(doctorPayoutsTable).where(eq(doctorPayoutsTable.id, id)).returning();
-    if (result.length === 0) return res.status(404).json({ error: "Payout not found" });
+    if (result.length === 0) {
+      res.status(404).json({ error: "Payout not found" });
+      return;
+    }
     res.json({ ok: true });
   } catch (err) {
     req.log?.error({ err }, "doctor-ledger payout delete failed");

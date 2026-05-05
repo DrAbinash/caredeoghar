@@ -85,6 +85,7 @@ import type {
   UpdateExpenseBody,
   UpdateLedgerBody,
   UpdateOrderBody,
+  UpdatePayoutBody,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -4160,6 +4161,93 @@ export const useCreateDoctorPayout = <
   TContext
 > => {
   return useMutation(getCreateDoctorPayoutMutationOptions(options));
+};
+
+/**
+ * @summary Update a payout record
+ */
+export const getUpdateDoctorPayoutUrl = (id: number) => {
+  return `/api/doctor-ledger/payouts/${id}`;
+};
+
+export const updateDoctorPayout = async (
+  id: number,
+  updatePayoutBody: UpdatePayoutBody,
+  options?: RequestInit,
+): Promise<DoctorPayout> => {
+  return customFetch<DoctorPayout>(getUpdateDoctorPayoutUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updatePayoutBody),
+  });
+};
+
+export const getUpdateDoctorPayoutMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateDoctorPayout>>,
+    TError,
+    { id: number; data: BodyType<UpdatePayoutBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateDoctorPayout>>,
+  TError,
+  { id: number; data: BodyType<UpdatePayoutBody> },
+  TContext
+> => {
+  const mutationKey = ["updateDoctorPayout"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateDoctorPayout>>,
+    { id: number; data: BodyType<UpdatePayoutBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateDoctorPayout(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateDoctorPayoutMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateDoctorPayout>>
+>;
+export type UpdateDoctorPayoutMutationBody = BodyType<UpdatePayoutBody>;
+export type UpdateDoctorPayoutMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a payout record
+ */
+export const useUpdateDoctorPayout = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateDoctorPayout>>,
+    TError,
+    { id: number; data: BodyType<UpdatePayoutBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateDoctorPayout>>,
+  TError,
+  { id: number; data: BodyType<UpdatePayoutBody> },
+  TContext
+> => {
+  return useMutation(getUpdateDoctorPayoutMutationOptions(options));
 };
 
 /**

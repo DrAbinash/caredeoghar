@@ -1042,6 +1042,29 @@ paths:
                 $ref: "#/components/schemas/DoctorPayout"
 
   /doctor-ledger/payouts/{id}:
+    patch:
+      operationId: updateDoctorPayout
+      tags: [super-admin]
+      summary: Update a payout record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePayoutBody"
+      responses:
+        "200":
+          description: Updated payout
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DoctorPayout"
     delete:
       operationId: deleteDoctorPayout
       tags: [super-admin]
@@ -2298,6 +2321,28 @@ components:
           type: string
           nullable: true
       required: [amount, paymentDate, paymentMethod]
+
+    UpdatePayoutBody:
+      type: object
+      properties:
+        amount:
+          type: number
+        paymentDate:
+          type: string
+        paymentMethod:
+          type: string
+        reference:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        periodFrom:
+          type: string
+          nullable: true
+        periodTo:
+          type: string
+          nullable: true
 
     # Books / Ledger schemas
     Book:

@@ -1676,6 +1676,35 @@ export const CreateDoctorPayoutBody = zod.object({
 });
 
 /**
+ * @summary Update a payout record
+ */
+export const UpdateDoctorPayoutParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateDoctorPayoutBody = zod.object({
+  amount: zod.number().optional(),
+  paymentDate: zod.string().optional(),
+  paymentMethod: zod.string().optional(),
+  reference: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  periodFrom: zod.string().nullish(),
+  periodTo: zod.string().nullish(),
+});
+
+export const UpdateDoctorPayoutResponse = zod.object({
+  id: zod.number(),
+  doctorId: zod.number(),
+  amount: zod.number(),
+  paymentDate: zod.string(),
+  paymentMethod: zod.string(),
+  reference: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  periodFrom: zod.string().nullish(),
+  periodTo: zod.string().nullish(),
+});
+
+/**
  * @summary Delete a payout record
  */
 export const DeleteDoctorPayoutParams = zod.object({
