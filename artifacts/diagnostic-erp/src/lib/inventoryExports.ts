@@ -110,10 +110,10 @@ export async function exportInventoryExcel(
   rows: StockExportRow[],
   meta: StockExportMeta,
 ): Promise<void> {
-  const writeXlsxFile = (await import("write-excel-file/browser")).default as (
+  const writeXlsxFile = (await import("write-excel-file/browser")).default as unknown as (
     data: XCell[][],
-    opts: { columns?: { width: number }[]; type: "blob" }
-  ) => Promise<Blob>;
+    opts?: { columns?: { width: number }[] }
+  ) => { toBlob: () => Promise<Blob> };
 
   const HEADER_BG = "#6366F1";
   const TOTALS_BG = "#F3F4F6";
@@ -167,8 +167,7 @@ export async function exportInventoryExcel(
 
   const blob = await writeXlsxFile(data, {
     columns: [{ width: 6 }, { width: 32 }, { width: 14 }, { width: 16 }, { width: 8 }, { width: 12 }, { width: 14 }, { width: 18 }],
-    type: "blob",
-  });
+  }).toBlob();
 
   const saveAs = await loadSaveAs();
   saveAs(blob, defaultFilename("xlsx"));

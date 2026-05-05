@@ -156,10 +156,9 @@ export async function exportExcel(
   sections: ExportDoctorSection[],
   meta: ReportMeta,
 ): Promise<void> {
-  const writeXlsxFile = (await import("write-excel-file/browser")).default as (
-    data: RCell[][][],
-    opts: { sheets: string[]; columns?: { width: number }[][]; type: "blob" }
-  ) => Promise<Blob>;
+  const writeXlsxFile = (await import("write-excel-file/browser")).default as unknown as (
+    sheets: Array<{ data: RCell[][]; sheet?: string; columns?: { width: number }[] }>
+  ) => { toBlob: () => Promise<Blob> };
 
   const HEADER_BG = "#F3F4F6";
   const AMBER_BG  = "#FEF3C7";
@@ -249,14 +248,10 @@ export async function exportExcel(
     detailData.push([null]);
   }
 
-  const blob = await writeXlsxFile([summaryData, detailData], {
-    sheets: ["Summary", "Detailed Report"],
-    columns: [
-      [{ width: 28 }, { width: 20 }, { width: 10 }, { width: 10 }, { width: 16 }, { width: 18 }, { width: 12 }],
-      [{ width: 30 }, { width: 14 }, { width: 14 }, { width: 18 }],
-    ],
-    type: "blob",
-  });
+  const blob = await writeXlsxFile([
+    { data: summaryData, sheet: "Summary",         columns: [{ width: 28 }, { width: 20 }, { width: 10 }, { width: 10 }, { width: 16 }, { width: 18 }, { width: 12 }] },
+    { data: detailData,  sheet: "Detailed Report", columns: [{ width: 30 }, { width: 14 }, { width: 14 }, { width: 18 }] },
+  ]).toBlob();
 
   saveAs(
     blob,
