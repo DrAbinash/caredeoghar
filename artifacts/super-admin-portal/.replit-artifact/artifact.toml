@@ -19,8 +19,7 @@ run = "pnpm --filter @workspace/super-admin-portal run dev"
 
 [services.production]
 build = [ "pnpm", "--filter", "@workspace/super-admin-portal", "run", "build" ]
-publicDir = "artifacts/super-admin-portal/dist/public"
-serve = "static"
+run = "npx serve -s artifacts/super-admin-portal/dist/public -l $PORT --no-clipboard"
 
 [[services.production.rewrites]]
 from = "/*"

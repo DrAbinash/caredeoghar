@@ -19,8 +19,7 @@ run = "pnpm --filter @workspace/diagnostic-erp run dev"
 
 [services.production]
 build = [ "pnpm", "--filter", "@workspace/diagnostic-erp", "run", "build" ]
-publicDir = "artifacts/diagnostic-erp/dist/public"
-serve = "static"
+run = "npx serve -s artifacts/diagnostic-erp/dist/public -l $PORT --no-clipboard"
 
 [[services.production.rewrites]]
 from = "/*"
