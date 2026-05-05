@@ -54,7 +54,6 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "NODE_ENV=production node --enable-source-maps artifacts/api-server/dist/index.mjs"
-waitForPort = 8080
 
 [workflows.workflow.metadata]
 outputType = "console"
