@@ -83,7 +83,7 @@ export default function Samples() {
   const [outsourceForm, setOutsourceForm] = useState({ lab: "", expected: "", tracking: "" });
 
   const session = readStaffSession();
-  const staffName = session?.fullName ?? session?.username ?? "";
+  const staffName = session?.user?.name ?? "";
 
   const { data, isLoading, refetch } = useQuery<{ samples: Sample[]; counters: Record<string, number> }>({
     queryKey: ["samples", { statusFilter, dateFrom, dateTo, outsourcedOnly, search }],

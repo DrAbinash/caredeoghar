@@ -196,7 +196,7 @@ export default function ReportHub() {
 
   return (
     <div className="p-6 space-y-4 max-w-[1400px] mx-auto">
-      <PageHeader title="Report Generation" description="Pathology + radiology reports — sign, verify, mark critical, print, share." />
+      <PageHeader title="Report Generation" subtitle="Pathology + radiology reports — sign, verify, mark critical, print, share." />
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">

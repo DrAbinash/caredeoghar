@@ -118,7 +118,7 @@ export default function PACS() {
 
   const openInWeasis = async (study: DicomStudy) => {
     try {
-      const data = await api.get(`/api/pacs/studies/${study.ID}/weasis-url`);
+      const data = await api.get<{ weasisUrl: string; orthancViewerUrl: string; ohifUrl: string | null; studyInstanceUID: string }>(`/api/pacs/studies/${study.ID}/weasis-url`);
       setWeasisUrls(data);
       setViewerOpen(true);
     } catch {

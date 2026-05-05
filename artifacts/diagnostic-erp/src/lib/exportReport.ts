@@ -116,12 +116,6 @@ export async function exportPDF(
         3: { halign: "right", cellWidth: 36 },
       },
       bodyStyles: { textColor: [30, 30, 30] },
-      didDrawRow: (data) => {
-        if (data.row.index === section.rows.length) {
-          // Total row styling
-          doc.setFillColor(255, 251, 235);
-        }
-      },
       willDrawCell: (data) => {
         if (data.row.index === section.rows.length) {
           doc.setFillColor(255, 251, 235);
@@ -290,7 +284,7 @@ export async function exportWord(
       })],
     });
 
-  const children: (Paragraph | Table)[] = [
+  const children: (InstanceType<typeof Paragraph> | InstanceType<typeof Table>)[] = [
     new Paragraph({
       text: meta.title.toUpperCase(),
       heading: HeadingLevel.HEADING_1,

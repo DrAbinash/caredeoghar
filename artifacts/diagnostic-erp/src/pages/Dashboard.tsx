@@ -1,4 +1,3 @@
-import { useNavigate } from "wouter";
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";

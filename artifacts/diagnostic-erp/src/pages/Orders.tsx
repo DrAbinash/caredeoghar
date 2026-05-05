@@ -7,6 +7,7 @@ import {
   useListTests,
   useListDoctors,
   getListOrdersQueryKey,
+  ListOrdersStatus,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import PageHeader from "@/components/PageHeader";
@@ -46,9 +47,9 @@ export default function Orders() {
   const [selectedTestIds, setSelectedTestIds] = useState<number[]>([]);
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useListOrders({ status: (status || undefined) as typeof status extends "" ? undefined : typeof status, page, limit: 20 });
+  const { data, isLoading } = useListOrders({ status: (status || undefined) as ListOrdersStatus | undefined, page, limit: 20 });
   const { data: patients } = useListPatients({ limit: 200 });
-  const { data: tests } = useListTests({ limit: 200 });
+  const { data: tests } = useListTests();
   const { data: doctors } = useListDoctors();
 
   const createOrder = useCreateOrder({

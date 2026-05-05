@@ -267,8 +267,7 @@ export default function Radiology() {
     <div className="space-y-4">
       <PageHeader
         title="Radiology"
-        description="Modality worklist, technician assignment, reporting & film/CD tracking"
-        icon={Radio}
+        subtitle="Modality worklist, technician assignment, reporting & film/CD tracking"
       />
 
       {/* Today's snapshot */}

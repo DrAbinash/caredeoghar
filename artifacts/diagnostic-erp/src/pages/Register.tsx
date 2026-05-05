@@ -88,7 +88,7 @@ export default function Register() {
     // Fetch applicable discount suggestion
     setLoadingSuggestion(true);
     try {
-      const result = await api.post("/api/discounts/apply", {
+      const result = await api.post<{ discount: number; rule: { id: number; name: string; reason: string | null } | null } | null>("/api/discounts/apply", {
         tests: selectedTests.map(t => ({ testId: t.testId, category: t.category, price: t.price })),
       });
       setDiscountSuggestion(result);
@@ -112,7 +112,7 @@ export default function Register() {
           status: "pending",
           notes: notes || undefined,
           tests: selectedTests.map(t => ({ testId: t.testId, price: t.price })),
-        } as Parameters<typeof createOrder.mutateAsync>[0]["data"],
+        } as unknown as Parameters<typeof createOrder.mutateAsync>[0]["data"],
       });
 
       // Create bill

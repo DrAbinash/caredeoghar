@@ -110,7 +110,7 @@ export default function Expenses() {
 
   const { data: expenses = [], isLoading } = useQuery<Expense[]>({
     queryKey: ["expenses", categoryFilter, paymentFilter, from, to, search],
-    queryFn: () => api(`/expenses?${queryParams}`),
+    queryFn: () => api.get<Expense[]>(`/api/expenses?${queryParams}`),
   });
 
   const summaryParams = new URLSearchParams();
@@ -119,12 +119,12 @@ export default function Expenses() {
 
   const { data: summary = [] } = useQuery<SummaryRow[]>({
     queryKey: ["expenses-summary", from, to],
-    queryFn: () => api(`/expenses/summary?${summaryParams}`),
+    queryFn: () => api.get<SummaryRow[]>(`/api/expenses/summary?${summaryParams}`),
   });
 
   const createMut = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
-      api("/expenses", { method: "POST", body: JSON.stringify({ data: body }) }),
+      api.post("/api/expenses", { data: body }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["expenses"] });
       qc.invalidateQueries({ queryKey: ["expenses-summary"] });
@@ -137,7 +137,7 @@ export default function Expenses() {
 
   const updateMut = useMutation({
     mutationFn: ({ id, ...body }: Record<string, unknown>) =>
-      api(`/expenses/${id}`, { method: "PATCH", body: JSON.stringify({ data: body }) }),
+      api.patch(`/api/expenses/${id}`, { data: body }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["expenses"] });
       qc.invalidateQueries({ queryKey: ["expenses-summary"] });
@@ -148,7 +148,7 @@ export default function Expenses() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id: number) => api(`/expenses/${id}`, { method: "DELETE" }),
+    mutationFn: (id: number) => api.delete(`/api/expenses/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["expenses"] });
       qc.invalidateQueries({ queryKey: ["expenses-summary"] });
@@ -200,7 +200,7 @@ export default function Expenses() {
       <PageHeader
         title="Expense Management"
         subtitle="Track and manage operational expenses"
-        action={
+        actions={
           <Button onClick={() => { setShowForm(true); setForm({ ...EMPTY_FORM }); }}>
             <Plus size={15} className="mr-1.5" /> Add Expense
           </Button>

@@ -130,10 +130,9 @@ export default function BillDetail({ id }: { id: number }) {
   useEffect(() => {
     if (!bill) return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get("print") === "1") {
-      const timer = setTimeout(() => window.print(), 600);
-      return () => clearTimeout(timer);
-    }
+    if (params.get("print") !== "1") return;
+    const timer = setTimeout(() => window.print(), 600);
+    return () => clearTimeout(timer);
   }, [bill]);
 
   const { data: audits = [], refetch: refetchAudits } = useQuery<BillAudit[]>({
@@ -670,7 +669,7 @@ export default function BillDetail({ id }: { id: number }) {
                 <div style={{ fontSize: "11px", color: "#555" }}>ID: {bill.patient.patientId}</div>
                 <div style={{ fontSize: "11px", color: "#555" }}>Ph: {bill.patient.phone}</div>
                 {bill.patient.gender && <div style={{ fontSize: "11px", color: "#555" }}>Gender: {bill.patient.gender}</div>}
-                {bill.patient.age && <div style={{ fontSize: "11px", color: "#555" }}>Age: {bill.patient.age} yrs</div>}
+                {(bill.patient as unknown as Record<string, unknown>).age && <div style={{ fontSize: "11px", color: "#555" }}>Age: {(bill.patient as unknown as Record<string, unknown>).age as number} yrs</div>}
               </>
             )}
           </div>
@@ -946,7 +945,7 @@ export default function BillDetail({ id }: { id: number }) {
               Super Edit — {bill.billNumber}
             </DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSuperEdit(onSuperEditSubmit)} className="space-y-4">
+          <form onSubmit={onSuperEditSubmit} className="space-y-4">
             <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-xs text-amber-700 dark:text-amber-400">
               Editing amounts will recalculate the total and balance. All changes are permanently logged.
             </div>
@@ -1002,7 +1001,7 @@ export default function BillDetail({ id }: { id: number }) {
               <AlertTriangle size={16} /> Delete Bill — {bill.billNumber}
             </DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleDelete(onDeleteSubmit)} className="space-y-4">
+          <form onSubmit={onDeleteSubmit} className="space-y-4">
             <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-3 text-xs text-red-700 dark:text-red-400 space-y-1">
               <p className="font-semibold">This action cannot be undone.</p>
               <p>Deleting this bill will:</p>

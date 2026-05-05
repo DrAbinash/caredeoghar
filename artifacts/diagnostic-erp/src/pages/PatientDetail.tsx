@@ -93,10 +93,10 @@ export default function PatientDetail({ id }: { id: number }) {
     setAiLoading(true);
     try {
       if (type === "clinical-note") {
-        const res = await api.post("/api/ai/clinical-note", { patientId: id });
+        const res = await api.post<{ note: string }>("/api/ai/clinical-note", { patientId: id });
         setAiResult(res.note);
       } else {
-        const res = await api.post("/api/ai/patient-message", { patientId: id, type: mtype ?? msgType });
+        const res = await api.post<{ message: string }>("/api/ai/patient-message", { patientId: id, type: mtype ?? msgType });
         setAiResult(res.message);
       }
     } catch {

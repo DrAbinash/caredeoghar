@@ -102,27 +102,27 @@ export default function Appointments() {
     queryFn: () => {
       const params = new URLSearchParams({ date: selectedDate });
       if (statusFilter !== "all") params.set("status", statusFilter);
-      return api(`/appointments?${params}`);
+      return api.get<Appointment[]>(`/api/appointments?${params}`);
     },
   });
 
   const { data: stats } = useQuery<Record<string, number>>({
     queryKey: ["appointments-stats", selectedDate],
-    queryFn: () => api("/appointments/stats"),
+    queryFn: () => api.get<Record<string, number>>("/api/appointments/stats"),
   });
 
   const { data: patients = [] } = useQuery<{ id: number; patientId: string; firstName: string; lastName: string; phone: string }[]>({
     queryKey: ["patients-list"],
-    queryFn: () => api<{ patients: { id: number; patientId: string; firstName: string; lastName: string; phone: string }[] }>("/patients?limit=500").then((d) => d.patients),
+    queryFn: () => api.get<{ patients: { id: number; patientId: string; firstName: string; lastName: string; phone: string }[] }>("/api/patients?limit=500").then((d) => d.patients),
   });
 
   const { data: doctors = [] } = useQuery<{ id: number; name: string }[]>({
     queryKey: ["doctors-list"],
-    queryFn: () => api<{ doctors: { id: number; name: string }[] }>("/doctors").then((d) => d.doctors),
+    queryFn: () => api.get<{ doctors: { id: number; name: string }[] }>("/api/doctors").then((d) => d.doctors),
   });
 
   const createMut = useMutation({
-    mutationFn: (body: Record<string, unknown>) => api("/appointments", { method: "POST", body: JSON.stringify(body) }),
+    mutationFn: (body: Record<string, unknown>) => api.post("/api/appointments", body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["appointments"] });
       qc.invalidateQueries({ queryKey: ["appointments-stats"] });
@@ -135,7 +135,7 @@ export default function Appointments() {
 
   const updateMut = useMutation({
     mutationFn: ({ id, ...body }: Record<string, unknown>) =>
-      api(`/appointments/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+      api.patch(`/api/appointments/${id}`, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["appointments"] });
       qc.invalidateQueries({ queryKey: ["appointments-stats"] });
@@ -147,7 +147,7 @@ export default function Appointments() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id: number) => api(`/appointments/${id}`, { method: "DELETE" }),
+    mutationFn: (id: number) => api.delete(`/api/appointments/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["appointments"] });
       qc.invalidateQueries({ queryKey: ["appointments-stats"] });
@@ -211,7 +211,7 @@ export default function Appointments() {
       <PageHeader
         title="Appointments"
         subtitle="Schedule and manage patient appointments"
-        action={
+        actions={
           <Button onClick={() => setShowForm(true)}>
             <Plus size={15} className="mr-1.5" /> Book Appointment
           </Button>
