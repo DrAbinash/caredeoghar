@@ -742,6 +742,263 @@ export interface ResetLedgerResult {
   wiped: ResetLedgerResultWiped;
 }
 
+export interface BillAudit {
+  id: number;
+  billId: number;
+  editedBy?: string | null;
+  reason?: string | null;
+  changeType: string;
+  oldValue?: string | null;
+  newValue?: string | null;
+  createdAt?: string;
+}
+
+export interface LogBillReprintBody {
+  /** @minLength 1 */
+  reprintedBy: string;
+  /** @minLength 1 */
+  reason: string;
+}
+
+export interface CancelBillBody {
+  /** @minLength 1 */
+  performedBy: string;
+  /** @minLength 3 */
+  reason: string;
+}
+
+export type RefundBillBodyMethod =
+  (typeof RefundBillBodyMethod)[keyof typeof RefundBillBodyMethod];
+
+export const RefundBillBodyMethod = {
+  cash: "cash",
+  card: "card",
+  upi: "upi",
+  insurance: "insurance",
+  cheque: "cheque",
+} as const;
+
+export interface RefundBillBody {
+  /** @minLength 1 */
+  performedBy: string;
+  /** @minLength 3 */
+  reason: string;
+  /** @exclusiveMinimum 0 */
+  amount: number;
+  method?: RefundBillBodyMethod;
+}
+
+export interface CreateInventoryConsumptionRuleBody {
+  testId: number | string;
+  itemId: number | string;
+  quantity?: number | string;
+}
+
+export interface SuperEditBillBody {
+  token: string;
+  reason: string;
+  subtotal?: number;
+  discount?: number;
+  taxAmount?: number;
+}
+
+export interface DeleteBillBody {
+  token: string;
+  reason: string;
+}
+
+export interface UpdateDoctorBody {
+  name?: string;
+  specialization?: string;
+  phone?: string | null;
+  email?: string | null;
+  hospitalAffiliation?: string | null;
+  registrationNumber?: string | null;
+  defaultCommission?: number | string;
+  defaultCommissionType?: string;
+  ledgerId?: number | null;
+}
+
+export interface Branch {
+  id: number;
+  code: string;
+  name: string;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  gstin?: string | null;
+  manager?: string | null;
+  isMain: boolean;
+  isActive: boolean;
+  notes?: string | null;
+}
+
+export interface CreateBranchBody {
+  code: string;
+  name: string;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  gstin?: string | null;
+  manager?: string | null;
+  isMain?: boolean;
+  isActive?: boolean;
+  notes?: string | null;
+}
+
+export interface UpdateBranchBody {
+  code?: string;
+  name?: string;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  gstin?: string | null;
+  manager?: string | null;
+  isMain?: boolean;
+  isActive?: boolean;
+  notes?: string | null;
+}
+
+export interface Department {
+  id: number;
+  name: string;
+  code?: string | null;
+  description?: string | null;
+  headOfDepartment?: string | null;
+  contactPhone?: string | null;
+  contactEmail?: string | null;
+  isActive: boolean;
+}
+
+export interface CreateDepartmentBody {
+  name: string;
+  code?: string | null;
+  description?: string | null;
+  headOfDepartment?: string | null;
+  contactPhone?: string | null;
+  contactEmail?: string | null;
+  isActive?: boolean;
+}
+
+export interface UpdateDepartmentBody {
+  name?: string;
+  code?: string | null;
+  description?: string | null;
+  headOfDepartment?: string | null;
+  contactPhone?: string | null;
+  contactEmail?: string | null;
+  isActive?: boolean;
+}
+
+export interface AbnormalFinding {
+  id: number;
+  testId?: number | null;
+  modality?: string | null;
+  category?: string | null;
+  keyword: string;
+  aliases?: string | null;
+  description: string;
+  severity?: string;
+  isActive?: boolean;
+  usageCount?: number;
+}
+
+export interface CreateAbnormalFindingBody {
+  testId?: number | null;
+  modality?: string | null;
+  category?: string | null;
+  keyword: string;
+  aliases?: string | null;
+  description: string;
+  severity?: string;
+  isActive?: boolean;
+}
+
+export interface UpdateAbnormalFindingBody {
+  testId?: number | null;
+  modality?: string | null;
+  category?: string | null;
+  keyword?: string;
+  aliases?: string | null;
+  description?: string;
+  severity?: string;
+  isActive?: boolean;
+}
+
+export interface InventoryItem {
+  id: number;
+  name: string;
+  unit: string;
+  category: string;
+  currentStock: number;
+  minStock: number;
+  costPrice: number;
+  preferredVendorId?: number | null;
+  isActive?: boolean;
+}
+
+export interface CreateInventoryItemBody {
+  name: string;
+  unit: string;
+  category?: string;
+  currentStock?: number | string;
+  minStock?: number | string;
+  costPrice?: number | string;
+  preferredVendorId?: number | string | null;
+}
+
+export interface UpdateInventoryItemBody {
+  name?: string;
+  unit?: string;
+  category?: string;
+  minStock?: number | string;
+  costPrice?: number | string;
+  isActive?: boolean;
+  preferredVendorId?: number | string | null;
+}
+
+export interface StockInBody {
+  quantity: number | string;
+  reason?: string | null;
+  reference?: string | null;
+  performedBy?: string | null;
+  vendorId?: number | string | null;
+  invoiceNumber?: string | null;
+  invoiceDate?: string | null;
+  unitCost?: number | string | null;
+}
+
+export interface StockOutBody {
+  quantity: number | string;
+  reason?: string | null;
+  reference?: string | null;
+  performedBy?: string | null;
+}
+
+export interface StockAdjustBody {
+  newQuantity: number | string;
+  reason?: string | null;
+  performedBy?: string | null;
+}
+
+export interface ConsumptionRuleItem {
+  itemId: number | string;
+  quantity: number | string;
+}
+
+export interface ReplaceConsumptionRulesBody {
+  items: ConsumptionRuleItem[];
+}
+
 export type ListPatientsParams = {
   search?: string;
   page?: number;
@@ -799,6 +1056,16 @@ export const ListBillsStatus = {
   cancelled: "cancelled",
 } as const;
 
+export type DeleteBill200 = {
+  success: boolean;
+  deletedBillNumber?: string;
+};
+
+export type LogBillReprint200 = {
+  success: boolean;
+  reprintCount: number;
+};
+
 export type ListPaymentsParams = {
   billId?: number;
   page?: number;
@@ -808,6 +1075,52 @@ export type ListPaymentsParams = {
 export type ListDoctorsParams = {
   search?: string;
 };
+
+export type DeleteDoctor200 = {
+  success: boolean;
+};
+
+export type DeleteBranch200 = {
+  success: boolean;
+};
+
+export type DeleteDepartment200 = {
+  success: boolean;
+};
+
+export type DeleteAbnormalFinding200 = {
+  success: boolean;
+};
+
+export type ListAbnormalFindingsParams = {
+  testId?: number;
+  modality?: string;
+  q?: string;
+  /**
+   * @maximum 500
+   */
+  limit?: number;
+};
+
+export type InventoryStockIn201 = { [key: string]: unknown };
+
+export type InventoryStockOut201 = { [key: string]: unknown };
+
+export type InventoryAdjust200 = { [key: string]: unknown };
+
+export type GetInventoryHistory200Item = { [key: string]: unknown };
+
+export type CreateInventoryConsumptionRule201 = { [key: string]: unknown };
+
+export type ReplaceInventoryConsumptionRulesByTest200 = {
+  [key: string]: unknown;
+};
+
+export type DeleteInventoryConsumptionRulesByTest200 = {
+  [key: string]: unknown;
+};
+
+export type DeleteInventoryConsumptionRule200 = { [key: string]: unknown };
 
 export type GetRevenueReportParams = {
   period?: GetRevenueReportPeriod;

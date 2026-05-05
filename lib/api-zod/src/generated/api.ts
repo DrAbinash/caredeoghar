@@ -966,6 +966,443 @@ export const UpdateBillResponse = zod.object({
 });
 
 /**
+ * @summary Delete a bill (super admin)
+ */
+export const DeleteBillParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteBillBody = zod.object({
+  token: zod.string(),
+  reason: zod.string(),
+});
+
+export const DeleteBillResponse = zod.object({
+  success: zod.boolean(),
+  deletedBillNumber: zod.string().optional(),
+});
+
+/**
+ * @summary Log a reprint of a bill (audited + emailed)
+ */
+export const LogBillReprintParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const LogBillReprintBody = zod.object({
+  reprintedBy: zod.string().min(1),
+  reason: zod.string().min(1),
+});
+
+export const LogBillReprintResponse = zod.object({
+  success: zod.boolean(),
+  reprintCount: zod.number(),
+});
+
+/**
+ * @summary List audit-log entries for a bill
+ */
+export const ListBillAuditsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ListBillAuditsResponseItem = zod.object({
+  id: zod.number(),
+  billId: zod.number(),
+  editedBy: zod.string().nullish(),
+  reason: zod.string().nullish(),
+  changeType: zod.string(),
+  oldValue: zod.string().nullish(),
+  newValue: zod.string().nullish(),
+  createdAt: zod.coerce.date().optional(),
+});
+export const ListBillAuditsResponse = zod.array(ListBillAuditsResponseItem);
+
+/**
+ * @summary Cancel a bill
+ */
+export const CancelBillParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const cancelBillBodyReasonMin = 3;
+
+export const CancelBillBody = zod.object({
+  performedBy: zod.string().min(1),
+  reason: zod.string().min(cancelBillBodyReasonMin),
+});
+
+export const CancelBillResponse = zod.object({
+  id: zod.number(),
+  billNumber: zod.string(),
+  orderId: zod.number(),
+  order: zod.object({
+    id: zod.number(),
+    orderNumber: zod.string(),
+    patientId: zod.number(),
+    patient: zod.object({
+      id: zod.number(),
+      patientId: zod.string(),
+      firstName: zod.string(),
+      lastName: zod.string(),
+      dateOfBirth: zod.string(),
+      gender: zod.enum(["male", "female", "other"]),
+      phone: zod.string(),
+      email: zod.string().nullish(),
+      address: zod.string().nullish(),
+      bloodGroup: zod.string().nullish(),
+      createdAt: zod.string(),
+    }),
+    doctorId: zod.number().nullish(),
+    doctor: zod
+      .object({
+        id: zod.number(),
+        name: zod.string(),
+        specialization: zod.string(),
+        phone: zod.string().nullish(),
+        email: zod.string().nullish(),
+        hospitalAffiliation: zod.string().nullish(),
+        registrationNumber: zod
+          .string()
+          .nullish()
+          .describe(
+            "State medical council registration number — printed on PCPNDT Form F.",
+          ),
+        defaultCommission: zod.union([zod.number(), zod.string()]).nullish(),
+        defaultCommissionType: zod.string().nullish(),
+        ledgerId: zod.number().nullish(),
+        createdAt: zod.string(),
+      })
+      .nullish(),
+    status: zod.enum([
+      "pending",
+      "collected",
+      "processing",
+      "completed",
+      "cancelled",
+    ]),
+    tests: zod.array(
+      zod.object({
+        id: zod.number(),
+        testId: zod.number(),
+        test: zod.object({
+          id: zod.number(),
+          code: zod.string(),
+          name: zod.string(),
+          category: zod.string(),
+          price: zod.number(),
+          duration: zod.string(),
+          description: zod.string().nullish(),
+          isActive: zod.boolean(),
+          createdAt: zod.string(),
+        }),
+        price: zod.number(),
+        result: zod.string().nullish(),
+        resultStatus: zod.string().nullish(),
+      }),
+    ),
+    totalAmount: zod.number(),
+    notes: zod.string().nullish(),
+    collectedAt: zod.string().nullish(),
+    completedAt: zod.string().nullish(),
+    createdAt: zod.string(),
+  }),
+  patientId: zod.number(),
+  patient: zod.object({
+    id: zod.number(),
+    patientId: zod.string(),
+    firstName: zod.string(),
+    lastName: zod.string(),
+    dateOfBirth: zod.string(),
+    gender: zod.enum(["male", "female", "other"]),
+    phone: zod.string(),
+    email: zod.string().nullish(),
+    address: zod.string().nullish(),
+    bloodGroup: zod.string().nullish(),
+    createdAt: zod.string(),
+  }),
+  subtotal: zod.number(),
+  discount: zod.number(),
+  taxAmount: zod.number(),
+  totalAmount: zod.number(),
+  paidAmount: zod.number(),
+  balanceAmount: zod.number(),
+  status: zod.enum(["draft", "pending", "partial", "paid", "cancelled"]),
+  dueDate: zod.string().nullish(),
+  payments: zod.array(
+    zod.object({
+      id: zod.number(),
+      billId: zod.number(),
+      amount: zod.number(),
+      method: zod.enum(["cash", "card", "upi", "insurance", "cheque"]),
+      referenceNumber: zod.string().nullish(),
+      notes: zod.string().nullish(),
+      createdAt: zod.string(),
+    }),
+  ),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Record a refund against a bill
+ */
+export const RefundBillParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const refundBillBodyReasonMin = 3;
+
+export const refundBillBodyAmountExclusiveMin = 0;
+
+export const refundBillBodyMethodDefault = `cash`;
+
+export const RefundBillBody = zod.object({
+  performedBy: zod.string().min(1),
+  reason: zod.string().min(refundBillBodyReasonMin),
+  amount: zod.number().gt(refundBillBodyAmountExclusiveMin),
+  method: zod
+    .enum(["cash", "card", "upi", "insurance", "cheque"])
+    .default(refundBillBodyMethodDefault),
+});
+
+export const RefundBillResponse = zod.object({
+  id: zod.number(),
+  billNumber: zod.string(),
+  orderId: zod.number(),
+  order: zod.object({
+    id: zod.number(),
+    orderNumber: zod.string(),
+    patientId: zod.number(),
+    patient: zod.object({
+      id: zod.number(),
+      patientId: zod.string(),
+      firstName: zod.string(),
+      lastName: zod.string(),
+      dateOfBirth: zod.string(),
+      gender: zod.enum(["male", "female", "other"]),
+      phone: zod.string(),
+      email: zod.string().nullish(),
+      address: zod.string().nullish(),
+      bloodGroup: zod.string().nullish(),
+      createdAt: zod.string(),
+    }),
+    doctorId: zod.number().nullish(),
+    doctor: zod
+      .object({
+        id: zod.number(),
+        name: zod.string(),
+        specialization: zod.string(),
+        phone: zod.string().nullish(),
+        email: zod.string().nullish(),
+        hospitalAffiliation: zod.string().nullish(),
+        registrationNumber: zod
+          .string()
+          .nullish()
+          .describe(
+            "State medical council registration number — printed on PCPNDT Form F.",
+          ),
+        defaultCommission: zod.union([zod.number(), zod.string()]).nullish(),
+        defaultCommissionType: zod.string().nullish(),
+        ledgerId: zod.number().nullish(),
+        createdAt: zod.string(),
+      })
+      .nullish(),
+    status: zod.enum([
+      "pending",
+      "collected",
+      "processing",
+      "completed",
+      "cancelled",
+    ]),
+    tests: zod.array(
+      zod.object({
+        id: zod.number(),
+        testId: zod.number(),
+        test: zod.object({
+          id: zod.number(),
+          code: zod.string(),
+          name: zod.string(),
+          category: zod.string(),
+          price: zod.number(),
+          duration: zod.string(),
+          description: zod.string().nullish(),
+          isActive: zod.boolean(),
+          createdAt: zod.string(),
+        }),
+        price: zod.number(),
+        result: zod.string().nullish(),
+        resultStatus: zod.string().nullish(),
+      }),
+    ),
+    totalAmount: zod.number(),
+    notes: zod.string().nullish(),
+    collectedAt: zod.string().nullish(),
+    completedAt: zod.string().nullish(),
+    createdAt: zod.string(),
+  }),
+  patientId: zod.number(),
+  patient: zod.object({
+    id: zod.number(),
+    patientId: zod.string(),
+    firstName: zod.string(),
+    lastName: zod.string(),
+    dateOfBirth: zod.string(),
+    gender: zod.enum(["male", "female", "other"]),
+    phone: zod.string(),
+    email: zod.string().nullish(),
+    address: zod.string().nullish(),
+    bloodGroup: zod.string().nullish(),
+    createdAt: zod.string(),
+  }),
+  subtotal: zod.number(),
+  discount: zod.number(),
+  taxAmount: zod.number(),
+  totalAmount: zod.number(),
+  paidAmount: zod.number(),
+  balanceAmount: zod.number(),
+  status: zod.enum(["draft", "pending", "partial", "paid", "cancelled"]),
+  dueDate: zod.string().nullish(),
+  payments: zod.array(
+    zod.object({
+      id: zod.number(),
+      billId: zod.number(),
+      amount: zod.number(),
+      method: zod.enum(["cash", "card", "upi", "insurance", "cheque"]),
+      referenceNumber: zod.string().nullish(),
+      notes: zod.string().nullish(),
+      createdAt: zod.string(),
+    }),
+  ),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Super-admin edit of bill amounts
+ */
+export const SuperEditBillParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const SuperEditBillBody = zod.object({
+  token: zod.string(),
+  reason: zod.string(),
+  subtotal: zod.number().optional(),
+  discount: zod.number().optional(),
+  taxAmount: zod.number().optional(),
+});
+
+export const SuperEditBillResponse = zod.object({
+  id: zod.number(),
+  billNumber: zod.string(),
+  orderId: zod.number(),
+  order: zod.object({
+    id: zod.number(),
+    orderNumber: zod.string(),
+    patientId: zod.number(),
+    patient: zod.object({
+      id: zod.number(),
+      patientId: zod.string(),
+      firstName: zod.string(),
+      lastName: zod.string(),
+      dateOfBirth: zod.string(),
+      gender: zod.enum(["male", "female", "other"]),
+      phone: zod.string(),
+      email: zod.string().nullish(),
+      address: zod.string().nullish(),
+      bloodGroup: zod.string().nullish(),
+      createdAt: zod.string(),
+    }),
+    doctorId: zod.number().nullish(),
+    doctor: zod
+      .object({
+        id: zod.number(),
+        name: zod.string(),
+        specialization: zod.string(),
+        phone: zod.string().nullish(),
+        email: zod.string().nullish(),
+        hospitalAffiliation: zod.string().nullish(),
+        registrationNumber: zod
+          .string()
+          .nullish()
+          .describe(
+            "State medical council registration number — printed on PCPNDT Form F.",
+          ),
+        defaultCommission: zod.union([zod.number(), zod.string()]).nullish(),
+        defaultCommissionType: zod.string().nullish(),
+        ledgerId: zod.number().nullish(),
+        createdAt: zod.string(),
+      })
+      .nullish(),
+    status: zod.enum([
+      "pending",
+      "collected",
+      "processing",
+      "completed",
+      "cancelled",
+    ]),
+    tests: zod.array(
+      zod.object({
+        id: zod.number(),
+        testId: zod.number(),
+        test: zod.object({
+          id: zod.number(),
+          code: zod.string(),
+          name: zod.string(),
+          category: zod.string(),
+          price: zod.number(),
+          duration: zod.string(),
+          description: zod.string().nullish(),
+          isActive: zod.boolean(),
+          createdAt: zod.string(),
+        }),
+        price: zod.number(),
+        result: zod.string().nullish(),
+        resultStatus: zod.string().nullish(),
+      }),
+    ),
+    totalAmount: zod.number(),
+    notes: zod.string().nullish(),
+    collectedAt: zod.string().nullish(),
+    completedAt: zod.string().nullish(),
+    createdAt: zod.string(),
+  }),
+  patientId: zod.number(),
+  patient: zod.object({
+    id: zod.number(),
+    patientId: zod.string(),
+    firstName: zod.string(),
+    lastName: zod.string(),
+    dateOfBirth: zod.string(),
+    gender: zod.enum(["male", "female", "other"]),
+    phone: zod.string(),
+    email: zod.string().nullish(),
+    address: zod.string().nullish(),
+    bloodGroup: zod.string().nullish(),
+    createdAt: zod.string(),
+  }),
+  subtotal: zod.number(),
+  discount: zod.number(),
+  taxAmount: zod.number(),
+  totalAmount: zod.number(),
+  paidAmount: zod.number(),
+  balanceAmount: zod.number(),
+  status: zod.enum(["draft", "pending", "partial", "paid", "cancelled"]),
+  dueDate: zod.string().nullish(),
+  payments: zod.array(
+    zod.object({
+      id: zod.number(),
+      billId: zod.number(),
+      amount: zod.number(),
+      method: zod.enum(["cash", "card", "upi", "insurance", "cheque"]),
+      referenceNumber: zod.string().nullish(),
+      notes: zod.string().nullish(),
+      createdAt: zod.string(),
+    }),
+  ),
+  createdAt: zod.string(),
+});
+
+/**
  * @summary List payments
  */
 export const listPaymentsQueryPageDefault = 1;
@@ -1049,6 +1486,530 @@ export const CreateDoctorBody = zod.object({
   hospitalAffiliation: zod.string().nullish(),
   registrationNumber: zod.string().nullish(),
 });
+
+/**
+ * @summary Update referring doctor
+ */
+export const UpdateDoctorParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateDoctorBody = zod.object({
+  name: zod.string().optional(),
+  specialization: zod.string().optional(),
+  phone: zod.string().nullish(),
+  email: zod.string().nullish(),
+  hospitalAffiliation: zod.string().nullish(),
+  registrationNumber: zod.string().nullish(),
+  defaultCommission: zod.union([zod.number(), zod.string()]).optional(),
+  defaultCommissionType: zod.string().optional(),
+  ledgerId: zod.number().nullish(),
+});
+
+export const UpdateDoctorResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  specialization: zod.string(),
+  phone: zod.string().nullish(),
+  email: zod.string().nullish(),
+  hospitalAffiliation: zod.string().nullish(),
+  registrationNumber: zod
+    .string()
+    .nullish()
+    .describe(
+      "State medical council registration number — printed on PCPNDT Form F.",
+    ),
+  defaultCommission: zod.union([zod.number(), zod.string()]).nullish(),
+  defaultCommissionType: zod.string().nullish(),
+  ledgerId: zod.number().nullish(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Delete referring doctor
+ */
+export const DeleteDoctorParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteDoctorResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary List branches
+ */
+export const ListBranchesResponseItem = zod.object({
+  id: zod.number(),
+  code: zod.string(),
+  name: zod.string(),
+  address: zod.string().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  pincode: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  email: zod.string().nullish(),
+  gstin: zod.string().nullish(),
+  manager: zod.string().nullish(),
+  isMain: zod.boolean(),
+  isActive: zod.boolean(),
+  notes: zod.string().nullish(),
+});
+export const ListBranchesResponse = zod.array(ListBranchesResponseItem);
+
+/**
+ * @summary Create a branch
+ */
+export const CreateBranchBody = zod.object({
+  code: zod.string(),
+  name: zod.string(),
+  address: zod.string().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  pincode: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  email: zod.string().nullish(),
+  gstin: zod.string().nullish(),
+  manager: zod.string().nullish(),
+  isMain: zod.boolean().optional(),
+  isActive: zod.boolean().optional(),
+  notes: zod.string().nullish(),
+});
+
+/**
+ * @summary Get branch
+ */
+export const GetBranchParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetBranchResponse = zod.object({
+  id: zod.number(),
+  code: zod.string(),
+  name: zod.string(),
+  address: zod.string().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  pincode: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  email: zod.string().nullish(),
+  gstin: zod.string().nullish(),
+  manager: zod.string().nullish(),
+  isMain: zod.boolean(),
+  isActive: zod.boolean(),
+  notes: zod.string().nullish(),
+});
+
+/**
+ * @summary Update branch
+ */
+export const UpdateBranchParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateBranchBody = zod.object({
+  code: zod.string().optional(),
+  name: zod.string().optional(),
+  address: zod.string().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  pincode: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  email: zod.string().nullish(),
+  gstin: zod.string().nullish(),
+  manager: zod.string().nullish(),
+  isMain: zod.boolean().optional(),
+  isActive: zod.boolean().optional(),
+  notes: zod.string().nullish(),
+});
+
+export const UpdateBranchResponse = zod.object({
+  id: zod.number(),
+  code: zod.string(),
+  name: zod.string(),
+  address: zod.string().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  pincode: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  email: zod.string().nullish(),
+  gstin: zod.string().nullish(),
+  manager: zod.string().nullish(),
+  isMain: zod.boolean(),
+  isActive: zod.boolean(),
+  notes: zod.string().nullish(),
+});
+
+/**
+ * @summary Delete branch
+ */
+export const DeleteBranchParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteBranchResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary Create a department
+ */
+export const CreateDepartmentBody = zod.object({
+  name: zod.string(),
+  code: zod.string().nullish(),
+  description: zod.string().nullish(),
+  headOfDepartment: zod.string().nullish(),
+  contactPhone: zod.string().nullish(),
+  contactEmail: zod.string().nullish(),
+  isActive: zod.boolean().optional(),
+});
+
+/**
+ * @summary Update a department
+ */
+export const UpdateDepartmentParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateDepartmentBody = zod.object({
+  name: zod.string().optional(),
+  code: zod.string().nullish(),
+  description: zod.string().nullish(),
+  headOfDepartment: zod.string().nullish(),
+  contactPhone: zod.string().nullish(),
+  contactEmail: zod.string().nullish(),
+  isActive: zod.boolean().optional(),
+});
+
+export const UpdateDepartmentResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  code: zod.string().nullish(),
+  description: zod.string().nullish(),
+  headOfDepartment: zod.string().nullish(),
+  contactPhone: zod.string().nullish(),
+  contactEmail: zod.string().nullish(),
+  isActive: zod.boolean(),
+});
+
+/**
+ * @summary Delete a department
+ */
+export const DeleteDepartmentParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteDepartmentResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary Get an abnormal finding
+ */
+export const GetAbnormalFindingParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetAbnormalFindingResponse = zod.object({
+  id: zod.number(),
+  testId: zod.number().nullish(),
+  modality: zod.string().nullish(),
+  category: zod.string().nullish(),
+  keyword: zod.string(),
+  aliases: zod.string().nullish(),
+  description: zod.string(),
+  severity: zod.string().optional(),
+  isActive: zod.boolean().optional(),
+  usageCount: zod.number().optional(),
+});
+
+/**
+ * @summary Update an abnormal finding
+ */
+export const UpdateAbnormalFindingParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateAbnormalFindingBody = zod.object({
+  testId: zod.number().nullish(),
+  modality: zod.string().nullish(),
+  category: zod.string().nullish(),
+  keyword: zod.string().optional(),
+  aliases: zod.string().nullish(),
+  description: zod.string().optional(),
+  severity: zod.string().optional(),
+  isActive: zod.boolean().optional(),
+});
+
+export const UpdateAbnormalFindingResponse = zod.object({
+  id: zod.number(),
+  testId: zod.number().nullish(),
+  modality: zod.string().nullish(),
+  category: zod.string().nullish(),
+  keyword: zod.string(),
+  aliases: zod.string().nullish(),
+  description: zod.string(),
+  severity: zod.string().optional(),
+  isActive: zod.boolean().optional(),
+  usageCount: zod.number().optional(),
+});
+
+/**
+ * @summary Delete an abnormal finding
+ */
+export const DeleteAbnormalFindingParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteAbnormalFindingResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary Increment usage counter
+ */
+export const IncrementAbnormalFindingUseParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const IncrementAbnormalFindingUseResponse = zod.object({
+  id: zod.number(),
+  testId: zod.number().nullish(),
+  modality: zod.string().nullish(),
+  category: zod.string().nullish(),
+  keyword: zod.string(),
+  aliases: zod.string().nullish(),
+  description: zod.string(),
+  severity: zod.string().optional(),
+  isActive: zod.boolean().optional(),
+  usageCount: zod.number().optional(),
+});
+
+/**
+ * @summary List abnormal findings (filtered)
+ */
+export const listAbnormalFindingsQueryLimitDefault = 100;
+export const listAbnormalFindingsQueryLimitMax = 500;
+
+export const ListAbnormalFindingsQueryParams = zod.object({
+  testId: zod.coerce.number().optional(),
+  modality: zod.coerce.string().optional(),
+  q: zod.coerce.string().optional(),
+  limit: zod.coerce
+    .number()
+    .max(listAbnormalFindingsQueryLimitMax)
+    .default(listAbnormalFindingsQueryLimitDefault),
+});
+
+export const ListAbnormalFindingsResponseItem = zod.object({
+  id: zod.number(),
+  testId: zod.number().nullish(),
+  modality: zod.string().nullish(),
+  category: zod.string().nullish(),
+  keyword: zod.string(),
+  aliases: zod.string().nullish(),
+  description: zod.string(),
+  severity: zod.string().optional(),
+  isActive: zod.boolean().optional(),
+  usageCount: zod.number().optional(),
+});
+export const ListAbnormalFindingsResponse = zod.array(
+  ListAbnormalFindingsResponseItem,
+);
+
+/**
+ * @summary Create an abnormal finding
+ */
+export const CreateAbnormalFindingBody = zod.object({
+  testId: zod.number().nullish(),
+  modality: zod.string().nullish(),
+  category: zod.string().nullish(),
+  keyword: zod.string(),
+  aliases: zod.string().nullish(),
+  description: zod.string(),
+  severity: zod.string().optional(),
+  isActive: zod.boolean().optional(),
+});
+
+/**
+ * @summary Create an inventory item
+ */
+export const CreateInventoryItemBody = zod.object({
+  name: zod.string(),
+  unit: zod.string(),
+  category: zod.string().optional(),
+  currentStock: zod.union([zod.number(), zod.string()]).optional(),
+  minStock: zod.union([zod.number(), zod.string()]).optional(),
+  costPrice: zod.union([zod.number(), zod.string()]).optional(),
+  preferredVendorId: zod.union([zod.number(), zod.string()]).nullish(),
+});
+
+/**
+ * @summary List inventory items by vendor
+ */
+export const ListInventoryItemsByVendorParams = zod.object({
+  vendorId: zod.coerce.number(),
+});
+
+export const ListInventoryItemsByVendorResponseItem = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  unit: zod.string(),
+  category: zod.string(),
+  currentStock: zod.number(),
+  minStock: zod.number(),
+  costPrice: zod.number(),
+  preferredVendorId: zod.number().nullish(),
+  isActive: zod.boolean().optional(),
+});
+export const ListInventoryItemsByVendorResponse = zod.array(
+  ListInventoryItemsByVendorResponseItem,
+);
+
+/**
+ * @summary Update an inventory item
+ */
+export const UpdateInventoryItemParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateInventoryItemBody = zod.object({
+  name: zod.string().optional(),
+  unit: zod.string().optional(),
+  category: zod.string().optional(),
+  minStock: zod.union([zod.number(), zod.string()]).optional(),
+  costPrice: zod.union([zod.number(), zod.string()]).optional(),
+  isActive: zod.boolean().optional(),
+  preferredVendorId: zod.union([zod.number(), zod.string()]).nullish(),
+});
+
+export const UpdateInventoryItemResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  unit: zod.string(),
+  category: zod.string(),
+  currentStock: zod.number(),
+  minStock: zod.number(),
+  costPrice: zod.number(),
+  preferredVendorId: zod.number().nullish(),
+  isActive: zod.boolean().optional(),
+});
+
+/**
+ * @summary Add stock for an item
+ */
+export const InventoryStockInParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const InventoryStockInBody = zod.object({
+  quantity: zod.union([zod.number(), zod.string()]),
+  reason: zod.string().nullish(),
+  reference: zod.string().nullish(),
+  performedBy: zod.string().nullish(),
+  vendorId: zod.union([zod.number(), zod.string()]).nullish(),
+  invoiceNumber: zod.string().nullish(),
+  invoiceDate: zod.string().nullish(),
+  unitCost: zod.union([zod.number(), zod.string()]).nullish(),
+});
+
+/**
+ * @summary Remove stock for an item
+ */
+export const InventoryStockOutParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const InventoryStockOutBody = zod.object({
+  quantity: zod.union([zod.number(), zod.string()]),
+  reason: zod.string().nullish(),
+  reference: zod.string().nullish(),
+  performedBy: zod.string().nullish(),
+});
+
+/**
+ * @summary Adjust stock to a target level
+ */
+export const InventoryAdjustParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const InventoryAdjustBody = zod.object({
+  newQuantity: zod.union([zod.number(), zod.string()]),
+  reason: zod.string().nullish(),
+  performedBy: zod.string().nullish(),
+});
+
+export const InventoryAdjustResponse = zod.record(zod.string(), zod.unknown());
+
+/**
+ * @summary Stock transaction history for an item
+ */
+export const GetInventoryHistoryParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetInventoryHistoryResponseItem = zod.record(
+  zod.string(),
+  zod.unknown(),
+);
+export const GetInventoryHistoryResponse = zod.array(
+  GetInventoryHistoryResponseItem,
+);
+
+/**
+ * @summary Create a single consumption rule
+ */
+export const CreateInventoryConsumptionRuleBody = zod.object({
+  testId: zod.union([zod.number(), zod.string()]),
+  itemId: zod.union([zod.number(), zod.string()]),
+  quantity: zod.union([zod.number(), zod.string()]).optional(),
+});
+
+/**
+ * @summary Replace consumption rules for a test
+ */
+export const ReplaceInventoryConsumptionRulesByTestParams = zod.object({
+  testId: zod.coerce.number(),
+});
+
+export const ReplaceInventoryConsumptionRulesByTestBody = zod.object({
+  items: zod.array(
+    zod.object({
+      itemId: zod.union([zod.number(), zod.string()]),
+      quantity: zod.union([zod.number(), zod.string()]),
+    }),
+  ),
+});
+
+export const ReplaceInventoryConsumptionRulesByTestResponse = zod.record(
+  zod.string(),
+  zod.unknown(),
+);
+
+/**
+ * @summary Delete every consumption rule for a test
+ */
+export const DeleteInventoryConsumptionRulesByTestParams = zod.object({
+  testId: zod.coerce.number(),
+});
+
+export const DeleteInventoryConsumptionRulesByTestResponse = zod.record(
+  zod.string(),
+  zod.unknown(),
+);
+
+/**
+ * @summary Delete a single consumption rule
+ */
+export const DeleteInventoryConsumptionRuleParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteInventoryConsumptionRuleResponse = zod.record(
+  zod.string(),
+  zod.unknown(),
+);
 
 /**
  * @summary Get dashboard statistics

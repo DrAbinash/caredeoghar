@@ -1,14 +1,20 @@
 import { Router } from "express";
 import { db, doctorsTable } from "@workspace/db";
-import { ilike, or, sql, desc, eq } from "drizzle-orm";
-import { ListDoctorsQueryParams, CreateDoctorBody } from "@workspace/api-zod";
+import { ilike, or, desc, eq } from "drizzle-orm";
+import {
+  ListDoctorsQueryParams,
+  CreateDoctorBody,
+  UpdateDoctorParams,
+  UpdateDoctorBody,
+  DeleteDoctorParams,
+} from "@workspace/api-zod";
 
 export const doctorsRouter = Router();
 
 doctorsRouter.get("/", async (req, res) => {
   const parsed = ListDoctorsQueryParams.safeParse(req.query);
   if (!parsed.success) {
-    res.status(400).json({ error: "Invalid query params" });
+    res.status(400).json({ error: "Invalid request", details: parsed.error.issues });
     return;
   }
   const { search } = parsed.data;
@@ -31,7 +37,7 @@ doctorsRouter.get("/", async (req, res) => {
 doctorsRouter.post("/", async (req, res) => {
   const parsed = CreateDoctorBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
+    res.status(400).json({ error: "Invalid request", details: parsed.error.issues });
     return;
   }
   const ledgerId = req.body?.ledgerId !== undefined && req.body.ledgerId !== null
@@ -42,31 +48,53 @@ doctorsRouter.post("/", async (req, res) => {
 });
 
 doctorsRouter.patch("/:id", async (req, res) => {
-  const id = Number(req.params.id);
-  const { name, specialization, phone, email, hospitalAffiliation, registrationNumber, defaultCommission, defaultCommissionType, ledgerId } = req.body;
+  const paramsParsed = UpdateDoctorParams.safeParse(req.params);
+  const bodyParsed = UpdateDoctorBody.safeParse(req.body);
+  if (!paramsParsed.success || !bodyParsed.success) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: [
+        ...(paramsParsed.success ? [] : paramsParsed.error.issues),
+        ...(bodyParsed.success ? [] : bodyParsed.error.issues),
+      ],
+    });
+    return;
+  }
+  const id = paramsParsed.data.id;
+  const body = bodyParsed.data;
 
   const updates: Record<string, unknown> = {};
-  if (name !== undefined) updates.name = name;
-  if (specialization !== undefined) updates.specialization = specialization;
-  if (phone !== undefined) updates.phone = phone || null;
-  if (email !== undefined) updates.email = email || null;
-  if (hospitalAffiliation !== undefined) updates.hospitalAffiliation = hospitalAffiliation || null;
+  if (body.name !== undefined) updates.name = body.name;
+  if (body.specialization !== undefined) updates.specialization = body.specialization;
+  if (body.phone !== undefined) updates.phone = body.phone || null;
+  if (body.email !== undefined) updates.email = body.email || null;
+  if (body.hospitalAffiliation !== undefined) updates.hospitalAffiliation = body.hospitalAffiliation || null;
   // Module B: registrationNumber persists from the Doctors form so PCPNDT Form F can auto-fill it.
-  if (registrationNumber !== undefined) updates.registrationNumber = registrationNumber || null;
-  if (defaultCommission !== undefined) updates.defaultCommission = String(defaultCommission);
-  if (defaultCommissionType !== undefined) updates.defaultCommissionType = defaultCommissionType;
-  if (ledgerId !== undefined) updates.ledgerId = ledgerId === null ? null : Number(ledgerId);
+  if (body.registrationNumber !== undefined) updates.registrationNumber = body.registrationNumber || null;
+  if (body.defaultCommission !== undefined) updates.defaultCommission = String(body.defaultCommission);
+  if (body.defaultCommissionType !== undefined) updates.defaultCommissionType = body.defaultCommissionType;
+  if (body.ledgerId !== undefined) updates.ledgerId = body.ledgerId === null ? null : Number(body.ledgerId);
 
   if (Object.keys(updates).length === 0) {
-    return res.status(400).json({ error: "No fields to update" });
+    res.status(400).json({ error: "No fields to update" });
+    return;
   }
 
   const [doctor] = await db.update(doctorsTable).set(updates).where(eq(doctorsTable.id, id)).returning();
-  if (!doctor) return res.status(404).json({ error: "Doctor not found" });
+  if (!doctor) {
+    res.status(404).json({ error: "Doctor not found" });
+    return;
+  }
   res.json(doctor);
 });
 
 doctorsRouter.delete("/:id", async (req, res) => {
-  await db.delete(doctorsTable).where(eq(doctorsTable.id, Number(req.params.id)));
-  res.json({ ok: true });
+  const paramsParsed = DeleteDoctorParams.safeParse(req.params);
+  if (!paramsParsed.success) {
+    res.status(400).json({ error: "Invalid request", details: paramsParsed.error.issues });
+    return;
+  }
+  await db.delete(doctorsTable).where(eq(doctorsTable.id, paramsParsed.data.id));
+  res.json({ success: true });
 });
+

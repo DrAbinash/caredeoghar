@@ -8,6 +8,24 @@ import {
   vendorsTable,
 } from "@workspace/db/schema";
 import { eq, desc, lt, and, inArray } from "drizzle-orm";
+import {
+  ListInventoryItemsByVendorParams,
+  CreateInventoryItemBody,
+  CreateInventoryConsumptionRuleBody,
+  UpdateInventoryItemParams,
+  UpdateInventoryItemBody,
+  InventoryStockInParams,
+  InventoryStockInBody,
+  InventoryStockOutParams,
+  InventoryStockOutBody,
+  InventoryAdjustParams,
+  InventoryAdjustBody,
+  GetInventoryHistoryParams,
+  ReplaceInventoryConsumptionRulesByTestParams,
+  ReplaceInventoryConsumptionRulesByTestBody,
+  DeleteInventoryConsumptionRulesByTestParams,
+  DeleteInventoryConsumptionRuleParams,
+} from "@workspace/api-zod";
 
 const router = Router();
 
@@ -23,12 +41,15 @@ router.get("/", async (_req, res) => {
 // Vendor master is now exposed under /api/vendors. We deliberately keep
 // /api/inventory/items-by-vendor as a thin convenience for the inventory page.
 router.get("/items-by-vendor/:vendorId", async (req, res) => {
-  const vendorId = Number(req.params.vendorId);
-  if (!Number.isFinite(vendorId)) return res.status(400).json({ error: "Invalid vendorId" });
+  const paramsParsed = ListInventoryItemsByVendorParams.safeParse(req.params);
+  if (!paramsParsed.success) {
+    res.status(400).json({ error: "Invalid request", details: paramsParsed.error.issues });
+    return;
+  }
   const items = await db
     .select()
     .from(inventoryItemsTable)
-    .where(eq(inventoryItemsTable.preferredVendorId, vendorId))
+    .where(eq(inventoryItemsTable.preferredVendorId, paramsParsed.data.vendorId))
     .orderBy(inventoryItemsTable.name);
   res.json(items.map(toNum));
 });
@@ -49,7 +70,12 @@ router.get("/low-stock", async (_req, res) => {
 
 // Create item
 router.post("/", async (req, res) => {
-  const { name, unit, category, currentStock, minStock, costPrice, preferredVendorId } = req.body;
+  const bodyParsed = CreateInventoryItemBody.safeParse(req.body);
+  if (!bodyParsed.success) {
+    res.status(400).json({ error: "Invalid request", details: bodyParsed.error.issues });
+    return;
+  }
+  const { name, unit, category, currentStock, minStock, costPrice, preferredVendorId } = bodyParsed.data;
   const vid = preferredVendorId == null || preferredVendorId === "" ? null : Number(preferredVendorId);
   const [item] = await db
     .insert(inventoryItemsTable)
@@ -57,9 +83,9 @@ router.post("/", async (req, res) => {
       name,
       unit,
       category: category || "consumable",
-      currentStock: currentStock?.toString() || "0",
-      minStock: minStock?.toString() || "0",
-      costPrice: costPrice?.toString() || "0",
+      currentStock: currentStock != null ? String(currentStock) : "0",
+      minStock: minStock != null ? String(minStock) : "0",
+      costPrice: costPrice != null ? String(costPrice) : "0",
       preferredVendorId: Number.isFinite(vid as number) ? (vid as number) : null,
     })
     .returning();
@@ -68,16 +94,29 @@ router.post("/", async (req, res) => {
 
 // Update item
 router.patch("/:id", async (req, res) => {
-  const id = Number(req.params.id);
-  const updates: Record<string, unknown> = {};
-  const allowed = ["name", "unit", "category", "minStock", "costPrice", "isActive"];
-  for (const k of allowed) {
-    if (req.body[k] !== undefined) {
-      updates[k] = ["minStock", "costPrice"].includes(k) ? req.body[k].toString() : req.body[k];
-    }
+  const paramsParsed = UpdateInventoryItemParams.safeParse(req.params);
+  const bodyParsed = UpdateInventoryItemBody.safeParse(req.body);
+  if (!paramsParsed.success || !bodyParsed.success) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: [
+        ...(paramsParsed.success ? [] : paramsParsed.error.issues),
+        ...(bodyParsed.success ? [] : bodyParsed.error.issues),
+      ],
+    });
+    return;
   }
-  if ("preferredVendorId" in req.body) {
-    const v = req.body.preferredVendorId;
+  const id = paramsParsed.data.id;
+  const body = bodyParsed.data;
+  const updates: Record<string, unknown> = {};
+  if (body.name !== undefined) updates.name = body.name;
+  if (body.unit !== undefined) updates.unit = body.unit;
+  if (body.category !== undefined) updates.category = body.category;
+  if (body.minStock !== undefined) updates.minStock = String(body.minStock);
+  if (body.costPrice !== undefined) updates.costPrice = String(body.costPrice);
+  if (body.isActive !== undefined) updates.isActive = body.isActive;
+  if (body.preferredVendorId !== undefined) {
+    const v = body.preferredVendorId;
     if (v == null || v === "") {
       updates.preferredVendorId = null;
     } else {
@@ -86,18 +125,39 @@ router.patch("/:id", async (req, res) => {
     }
   }
   const [item] = await db.update(inventoryItemsTable).set(updates).where(eq(inventoryItemsTable.id, id)).returning();
-  if (!item) return res.status(404).json({ error: "Item not found" });
+  if (!item) {
+    res.status(404).json({ error: "Item not found" });
+    return;
+  }
   res.json(toNum(item));
 });
 
 // Stock in
 router.post("/:id/stock-in", async (req, res) => {
-  const id = Number(req.params.id);
-  const { quantity, reason, reference, performedBy, vendorId, invoiceNumber, invoiceDate, unitCost } = req.body;
+  const paramsParsed = InventoryStockInParams.safeParse(req.params);
+  const bodyParsed = InventoryStockInBody.safeParse(req.body);
+  if (!paramsParsed.success || !bodyParsed.success) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: [
+        ...(paramsParsed.success ? [] : paramsParsed.error.issues),
+        ...(bodyParsed.success ? [] : bodyParsed.error.issues),
+      ],
+    });
+    return;
+  }
+  const id = paramsParsed.data.id;
+  const { quantity, reason, reference, performedBy, vendorId, invoiceNumber, invoiceDate, unitCost } = bodyParsed.data;
   const qty = Number(quantity);
-  if (!Number.isFinite(qty) || qty <= 0) return res.status(400).json({ error: "quantity must be > 0" });
+  if (!Number.isFinite(qty) || qty <= 0) {
+    res.status(400).json({ error: "quantity must be > 0" });
+    return;
+  }
   const [existing] = await db.select().from(inventoryItemsTable).where(eq(inventoryItemsTable.id, id));
-  if (!existing) return res.status(404).json({ error: "Item not found" });
+  if (!existing) {
+    res.status(404).json({ error: "Item not found" });
+    return;
+  }
 
   const vid = vendorId == null || vendorId === "" ? null : Number(vendorId);
   const uc = unitCost == null || unitCost === "" ? null : Number(unitCost);
@@ -111,7 +171,7 @@ router.post("/:id/stock-in", async (req, res) => {
     await tx.update(inventoryItemsTable).set({ currentStock: after.toString() }).where(eq(inventoryItemsTable.id, id));
     const [inserted] = await tx.insert(inventoryTransactionsTable).values({
       itemId: id, type: "in", quantity: qty.toString(), stockBefore: before.toString(), stockAfter: after.toString(),
-      reason, reference, performedBy,
+      reason: reason ?? null, reference: reference ?? null, performedBy: performedBy ?? null,
       vendorId: Number.isFinite(vid as number) ? (vid as number) : null,
       invoiceNumber: typeof invoiceNumber === "string" && invoiceNumber.trim() ? invoiceNumber.trim() : null,
       invoiceDate: idate,
@@ -124,41 +184,80 @@ router.post("/:id/stock-in", async (req, res) => {
 
 // Stock out
 router.post("/:id/stock-out", async (req, res) => {
-  const id = Number(req.params.id);
-  const { quantity, reason, reference, performedBy } = req.body;
+  const paramsParsed = InventoryStockOutParams.safeParse(req.params);
+  const bodyParsed = InventoryStockOutBody.safeParse(req.body);
+  if (!paramsParsed.success || !bodyParsed.success) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: [
+        ...(paramsParsed.success ? [] : paramsParsed.error.issues),
+        ...(bodyParsed.success ? [] : bodyParsed.error.issues),
+      ],
+    });
+    return;
+  }
+  const id = paramsParsed.data.id;
+  const { quantity, reason, reference, performedBy } = bodyParsed.data;
   const qty = Number(quantity);
   const [existing] = await db.select().from(inventoryItemsTable).where(eq(inventoryItemsTable.id, id));
-  if (!existing) return res.status(404).json({ error: "Item not found" });
+  if (!existing) {
+    res.status(404).json({ error: "Item not found" });
+    return;
+  }
   const before = Number(existing.currentStock);
-  if (before < qty) return res.status(400).json({ error: "Insufficient stock" });
+  if (before < qty) {
+    res.status(400).json({ error: "Insufficient stock" });
+    return;
+  }
   const after = before - qty;
   await db.update(inventoryItemsTable).set({ currentStock: after.toString() }).where(eq(inventoryItemsTable.id, id));
   const [txn] = await db.insert(inventoryTransactionsTable).values({
     itemId: id, type: "out", quantity: qty.toString(), stockBefore: before.toString(), stockAfter: after.toString(),
-    reason, reference, performedBy,
+    reason: reason ?? null, reference: reference ?? null, performedBy: performedBy ?? null,
   }).returning();
   res.status(201).json({ transaction: txn, newStock: after });
 });
 
 // Stock adjustment
 router.post("/:id/adjust", async (req, res) => {
-  const id = Number(req.params.id);
-  const { newQuantity, reason, performedBy } = req.body;
+  const paramsParsed = InventoryAdjustParams.safeParse(req.params);
+  const bodyParsed = InventoryAdjustBody.safeParse(req.body);
+  if (!paramsParsed.success || !bodyParsed.success) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: [
+        ...(paramsParsed.success ? [] : paramsParsed.error.issues),
+        ...(bodyParsed.success ? [] : bodyParsed.error.issues),
+      ],
+    });
+    return;
+  }
+  const id = paramsParsed.data.id;
+  const { newQuantity, reason, performedBy } = bodyParsed.data;
   const target = Number(newQuantity);
   const [existing] = await db.select().from(inventoryItemsTable).where(eq(inventoryItemsTable.id, id));
-  if (!existing) return res.status(404).json({ error: "Item not found" });
+  if (!existing) {
+    res.status(404).json({ error: "Item not found" });
+    return;
+  }
   const before = Number(existing.currentStock);
   await db.update(inventoryItemsTable).set({ currentStock: target.toString() }).where(eq(inventoryItemsTable.id, id));
   await db.insert(inventoryTransactionsTable).values({
     itemId: id, type: "adjustment", quantity: (target - before).toString(),
-    stockBefore: before.toString(), stockAfter: target.toString(), reason, performedBy,
+    stockBefore: before.toString(), stockAfter: target.toString(),
+    reason: reason ?? null, performedBy: performedBy ?? null,
   });
   res.json({ newStock: target });
 });
 
 // Transaction history for an item (joins vendor name when available)
 router.get("/:id/history", async (req, res) => {
-  const id = Number(req.params.id);
+  const paramsParsed = GetInventoryHistoryParams.safeParse(req.params);
+  if (!paramsParsed.success) {
+    res.status(400).json({ error: "Invalid request", details: paramsParsed.error.issues });
+    return;
+  }
+  const id = paramsParsed.data.id;
   const rows = await db
     .select({
       id: inventoryTransactionsTable.id,
@@ -203,10 +302,19 @@ router.get("/consumption-rules", async (_req, res) => {
 });
 
 router.post("/consumption-rules", async (req, res) => {
-  const { testId, itemId, quantity } = req.body;
+  const bodyParsed = CreateInventoryConsumptionRuleBody.safeParse(req.body);
+  if (!bodyParsed.success) {
+    res.status(400).json({ error: "Invalid request", details: bodyParsed.error.issues });
+    return;
+  }
+  const { testId, itemId, quantity } = bodyParsed.data;
   const [rule] = await db
     .insert(inventoryConsumptionRulesTable)
-    .values({ testId: Number(testId), itemId: Number(itemId), quantity: quantity?.toString() || "1" })
+    .values({
+      testId: Number(testId),
+      itemId: Number(itemId),
+      quantity: quantity != null ? String(quantity) : "1",
+    })
     .returning();
   res.status(201).json(rule);
 });
@@ -223,23 +331,20 @@ router.post("/consumption-rules", async (req, res) => {
 //   2. The composite (testId,itemId) is not enforced as unique at the DB
 //      level, so there is no `ON CONFLICT` shortcut available.
 router.put("/consumption-rules/by-test/:testId", async (req, res) => {
-  const testId = Number(req.params.testId);
-  if (!Number.isFinite(testId) || testId <= 0) {
-    return res.status(400).json({ error: "Invalid testId" });
+  const paramsParsed = ReplaceInventoryConsumptionRulesByTestParams.safeParse(req.params);
+  const bodyParsed = ReplaceInventoryConsumptionRulesByTestBody.safeParse(req.body);
+  if (!paramsParsed.success || !bodyParsed.success) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: [
+        ...(paramsParsed.success ? [] : paramsParsed.error.issues),
+        ...(bodyParsed.success ? [] : bodyParsed.error.issues),
+      ],
+    });
+    return;
   }
-
-  // STRICT contract: `items` must be explicitly present AND an array.
-  // We never coerce missing/null to []; that would let a malformed client
-  // payload (e.g. `{}` or `{ items: null }`) silently wipe out every rule
-  // for the test. The dialog always sends a real array, so a missing
-  // field is always a client bug worth surfacing as a 400.
-  if (!Object.prototype.hasOwnProperty.call(req.body ?? {}, "items")) {
-    return res.status(400).json({ error: "Missing required field: items" });
-  }
-  const rawItems = req.body.items;
-  if (!Array.isArray(rawItems)) {
-    return res.status(400).json({ error: "Field 'items' must be an array" });
-  }
+  const testId = paramsParsed.data.testId;
+  const rawItems = bodyParsed.data.items;
 
   // Validate / normalise input BEFORE touching the DB so a bad payload
   // can never leave a test with zero rules by mistake.
@@ -249,10 +354,12 @@ router.put("/consumption-rules/by-test/:testId", async (req, res) => {
     const itemId = Number(it?.itemId);
     const qty = Number(it?.quantity);
     if (!Number.isFinite(itemId) || itemId <= 0) {
-      return res.status(400).json({ error: `Invalid itemId: ${it?.itemId}` });
+      res.status(400).json({ error: `Invalid itemId: ${it?.itemId}` });
+      return;
     }
     if (!Number.isFinite(qty) || qty <= 0) {
-      return res.status(400).json({ error: `Quantity for item ${itemId} must be > 0` });
+      res.status(400).json({ error: `Quantity for item ${itemId} must be > 0` });
+      return;
     }
     // Dedupe — if the user added the same item twice in the dialog, sum the
     // quantities rather than inserting two conflicting rows for the same test.
@@ -273,7 +380,10 @@ router.put("/consumption-rules/by-test/:testId", async (req, res) => {
     .from(testsTable)
     .where(eq(testsTable.id, testId))
     .limit(1);
-  if (!testExists) return res.status(404).json({ error: `Test ${testId} not found` });
+  if (!testExists) {
+    res.status(404).json({ error: `Test ${testId} not found` });
+    return;
+  }
 
   if (normalised.length > 0) {
     const itemIds = normalised.map((n) => n.itemId);
@@ -284,9 +394,8 @@ router.put("/consumption-rules/by-test/:testId", async (req, res) => {
     const foundSet = new Set(found.map((r) => r.id));
     const missing = itemIds.filter((id) => !foundSet.has(id));
     if (missing.length > 0) {
-      return res
-        .status(400)
-        .json({ error: `Inventory item(s) not found: ${missing.join(", ")}` });
+      res.status(400).json({ error: `Inventory item(s) not found: ${missing.join(", ")}` });
+      return;
     }
   }
 
@@ -301,24 +410,30 @@ router.put("/consumption-rules/by-test/:testId", async (req, res) => {
       .returning();
   });
 
-  res.json({ ok: true, count: inserted.length, rules: inserted });
+  res.json({ success: true, count: inserted.length, rules: inserted });
 });
 
 // Delete every consumption rule for a given test.
 router.delete("/consumption-rules/by-test/:testId", async (req, res) => {
-  const testId = Number(req.params.testId);
-  if (!Number.isFinite(testId) || testId <= 0) {
-    return res.status(400).json({ error: "Invalid testId" });
+  const paramsParsed = DeleteInventoryConsumptionRulesByTestParams.safeParse(req.params);
+  if (!paramsParsed.success) {
+    res.status(400).json({ error: "Invalid request", details: paramsParsed.error.issues });
+    return;
   }
   await db
     .delete(inventoryConsumptionRulesTable)
-    .where(eq(inventoryConsumptionRulesTable.testId, testId));
-  res.json({ ok: true });
+    .where(eq(inventoryConsumptionRulesTable.testId, paramsParsed.data.testId));
+  res.json({ success: true });
 });
 
 router.delete("/consumption-rules/:id", async (req, res) => {
-  await db.delete(inventoryConsumptionRulesTable).where(eq(inventoryConsumptionRulesTable.id, Number(req.params.id)));
-  res.json({ ok: true });
+  const paramsParsed = DeleteInventoryConsumptionRuleParams.safeParse(req.params);
+  if (!paramsParsed.success) {
+    res.status(400).json({ error: "Invalid request", details: paramsParsed.error.issues });
+    return;
+  }
+  await db.delete(inventoryConsumptionRulesTable).where(eq(inventoryConsumptionRulesTable.id, paramsParsed.data.id));
+  res.json({ success: true });
 });
 
 function toNum(item: Record<string, unknown>) {

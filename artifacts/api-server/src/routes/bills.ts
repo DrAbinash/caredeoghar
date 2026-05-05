@@ -15,6 +15,17 @@ import {
   UpdateBillBody,
   CreatePaymentBody,
   ListPaymentsQueryParams,
+  SuperEditBillParams,
+  SuperEditBillBody,
+  DeleteBillParams,
+  DeleteBillBody,
+  LogBillReprintParams,
+  LogBillReprintBody,
+  ListBillAuditsParams,
+  CancelBillParams,
+  CancelBillBody,
+  RefundBillParams,
+  RefundBillBody,
 } from "@workspace/api-zod";
 import { orderTestsTable, testsTable, doctorsTable } from "@workspace/db";
 import { sanitizePatient } from "./patients";
@@ -452,13 +463,21 @@ billsRouter.put("/:id", async (req: StaffAuthRequest, res) => {
 
 // ── Re-print log: insert audit + email admin/super-admin ─────────────────────
 billsRouter.post("/:id/reprint-log", async (req, res) => {
-  const id = Number(req.params.id);
-  const reprintedBy = String(req.body?.reprintedBy || "").trim();
-  const reason = String(req.body?.reason || "").trim();
-  if (!id || !reprintedBy || !reason) {
-    res.status(400).json({ error: "id, reprintedBy and reason are required" });
+  const paramsParsed = LogBillReprintParams.safeParse(req.params);
+  const bodyParsed = LogBillReprintBody.safeParse(req.body);
+  if (!paramsParsed.success || !bodyParsed.success) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: [
+        ...(paramsParsed.success ? [] : paramsParsed.error.issues),
+        ...(bodyParsed.success ? [] : bodyParsed.error.issues),
+      ],
+    });
     return;
   }
+  const id = paramsParsed.data.id;
+  const reprintedBy = bodyParsed.data.reprintedBy.trim();
+  const reason = bodyParsed.data.reason.trim();
 
   const [bill] = await db.select().from(billsTable).where(eq(billsTable.id, id));
   if (!bill) {
@@ -507,11 +526,16 @@ billsRouter.post("/:id/reprint-log", async (req, res) => {
     totalAmount: Number(bill.totalAmount),
   }).catch((err) => console.error("[email] bill reprint notification failed:", err));
 
-  res.json({ ok: true, reprintCount });
+  res.json({ success: true, reprintCount });
 });
 
 billsRouter.get("/:id/audits", async (req, res) => {
-  const id = Number(req.params.id);
+  const paramsParsed = ListBillAuditsParams.safeParse(req.params);
+  if (!paramsParsed.success) {
+    res.status(400).json({ error: "Invalid request", details: paramsParsed.error.issues });
+    return;
+  }
+  const id = paramsParsed.data.id;
   const audits = await db.select().from(billAuditsTable).where(eq(billAuditsTable.billId, id)).orderBy(desc(billAuditsTable.createdAt));
   res.json(audits);
 });
@@ -520,18 +544,21 @@ billsRouter.get("/:id/audits", async (req, res) => {
 // Marks a bill as cancelled with mandatory reason + actor. Audit-logged.
 // Available to any staff (no super-admin token); same trust model as Edit Bill.
 billsRouter.post("/:id/cancel", async (req, res) => {
-  const id = Number(req.params.id);
-  const performedBy = String(req.body?.performedBy || "").trim();
-  const reason = String(req.body?.reason || "").trim();
-
-  if (!id || !performedBy || !reason) {
-    res.status(400).json({ error: "performedBy and reason are required" });
+  const paramsParsed = CancelBillParams.safeParse(req.params);
+  const bodyParsed = CancelBillBody.safeParse(req.body);
+  if (!paramsParsed.success || !bodyParsed.success) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: [
+        ...(paramsParsed.success ? [] : paramsParsed.error.issues),
+        ...(bodyParsed.success ? [] : bodyParsed.error.issues),
+      ],
+    });
     return;
   }
-  if (reason.length < 3) {
-    res.status(400).json({ error: "Please provide a clear reason (at least 3 characters)" });
-    return;
-  }
+  const id = paramsParsed.data.id;
+  const performedBy = bodyParsed.data.performedBy.trim();
+  const reason = bodyParsed.data.reason.trim();
 
   // Serialize concurrent cancel/refund attempts on this bill via row-level lock.
   const txResult = await db.transaction(async (tx) => {
@@ -593,29 +620,23 @@ billsRouter.post("/:id/cancel", async (req, res) => {
 // payment history shows it, decrements paidAmount, increments refundAmount,
 // recomputes balanceAmount + status, audits, and emails.
 billsRouter.post("/:id/refund", async (req, res) => {
-  const id = Number(req.params.id);
-  const performedBy = String(req.body?.performedBy || "").trim();
-  const reason = String(req.body?.reason || "").trim();
-  const rawAmount = Number(req.body?.amount);
-  const method = String(req.body?.method || "cash").trim().toLowerCase();
-  const allowedMethods = new Set(["cash", "card", "upi", "insurance", "cheque"]);
-
-  if (!id || !performedBy || !reason || !Number.isFinite(rawAmount)) {
-    res.status(400).json({ error: "performedBy, reason and amount are required" });
+  const paramsParsed = RefundBillParams.safeParse(req.params);
+  const bodyParsed = RefundBillBody.safeParse(req.body);
+  if (!paramsParsed.success || !bodyParsed.success) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: [
+        ...(paramsParsed.success ? [] : paramsParsed.error.issues),
+        ...(bodyParsed.success ? [] : bodyParsed.error.issues),
+      ],
+    });
     return;
   }
-  if (reason.length < 3) {
-    res.status(400).json({ error: "Please provide a clear reason (at least 3 characters)" });
-    return;
-  }
-  if (rawAmount <= 0) {
-    res.status(400).json({ error: "Refund amount must be greater than zero" });
-    return;
-  }
-  if (!allowedMethods.has(method)) {
-    res.status(400).json({ error: "Invalid refund method" });
-    return;
-  }
+  const id = paramsParsed.data.id;
+  const performedBy = bodyParsed.data.performedBy.trim();
+  const reason = bodyParsed.data.reason.trim();
+  const rawAmount = bodyParsed.data.amount;
+  const method = (bodyParsed.data.method ?? "cash").trim().toLowerCase();
 
   // Round to 2 decimals to avoid float comparison surprises (₹).
   const amount = Math.round(rawAmount * 100) / 100;
@@ -723,21 +744,33 @@ async function verifySuperAdminToken(token: string): Promise<{ valid: boolean; u
 
 // ── Super-admin: full amount edit ─────────────────────────────────────────────
 billsRouter.patch("/:id/super-edit", async (req, res) => {
-  const id = Number(req.params.id);
-  const { token, reason, subtotal, discount, taxAmount } = req.body;
-
-  if (!token || !reason) {
-    return res.status(400).json({ error: "token and reason are required" });
+  const paramsParsed = SuperEditBillParams.safeParse(req.params);
+  const bodyParsed = SuperEditBillBody.safeParse(req.body);
+  if (!paramsParsed.success || !bodyParsed.success) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: [
+        ...(paramsParsed.success ? [] : paramsParsed.error.issues),
+        ...(bodyParsed.success ? [] : bodyParsed.error.issues),
+      ],
+    });
+    return;
   }
+  const id = paramsParsed.data.id;
+  const { token, reason, subtotal, discount, taxAmount } = bodyParsed.data;
 
   const { valid, userName } = await verifySuperAdminToken(token);
   if (!valid) {
-    return res.status(403).json({ error: "Super admin session expired or invalid. Please re-authenticate via the Super Admin Portal." });
+    res.status(403).json({ error: "Super admin session expired or invalid. Please re-authenticate via the Super Admin Portal." });
+    return;
   }
   const superAdminName = userName;
 
   const [bill] = await db.select().from(billsTable).where(eq(billsTable.id, id));
-  if (!bill) return res.status(404).json({ error: "Bill not found" });
+  if (!bill) {
+    res.status(404).json({ error: "Bill not found" });
+    return;
+  }
 
   const newSubtotal  = subtotal  !== undefined ? Number(subtotal)  : Number(bill.subtotal);
   const newDiscount  = discount  !== undefined ? Number(discount)  : Number(bill.discount);
@@ -771,20 +804,32 @@ billsRouter.patch("/:id/super-edit", async (req, res) => {
 
 // ── Super-admin: delete bill + renumber subsequent ────────────────────────────
 billsRouter.delete("/:id", async (req, res) => {
-  const id = Number(req.params.id);
-  const { token, reason } = req.body;
-
-  if (!token || !reason) {
-    return res.status(400).json({ error: "token and reason are required" });
+  const paramsParsed = DeleteBillParams.safeParse(req.params);
+  const bodyParsed = DeleteBillBody.safeParse(req.body);
+  if (!paramsParsed.success || !bodyParsed.success) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: [
+        ...(paramsParsed.success ? [] : paramsParsed.error.issues),
+        ...(bodyParsed.success ? [] : bodyParsed.error.issues),
+      ],
+    });
+    return;
   }
+  const id = paramsParsed.data.id;
+  const { token, reason } = bodyParsed.data;
 
   const { valid, userName } = await verifySuperAdminToken(token);
   if (!valid) {
-    return res.status(403).json({ error: "Super admin session expired or invalid. Please re-authenticate via the Super Admin Portal." });
+    res.status(403).json({ error: "Super admin session expired or invalid. Please re-authenticate via the Super Admin Portal." });
+    return;
   }
 
   const [bill] = await db.select().from(billsTable).where(eq(billsTable.id, id));
-  if (!bill) return res.status(404).json({ error: "Bill not found" });
+  if (!bill) {
+    res.status(404).json({ error: "Bill not found" });
+    return;
+  }
 
   // Parse bill number to get YYYYMM prefix and sequence number
   const billNumMatch = bill.billNumber.match(/^BILL-(\d{6})-(\d+)$/);
@@ -828,7 +873,7 @@ billsRouter.delete("/:id", async (req, res) => {
     }
   }
 
-  res.json({ ok: true, deletedBillNumber: bill.billNumber });
+  res.json({ success: true, deletedBillNumber: bill.billNumber });
 });
 
 // Payments
