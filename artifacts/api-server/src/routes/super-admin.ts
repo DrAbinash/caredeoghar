@@ -2,11 +2,28 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import { z } from "zod/v4";
 import { db } from "@workspace/db";
 import { usersTable, superAdminSessionsTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 
 export const superAdminRouter = Router();
+
+// No generated zod schemas exist for these auth endpoints (they are not in
+// the OpenAPI spec), so we declare local schemas and use the same safeParse
+// pattern as the validated routes (appointments, expenses, etc.).
+const LoginBody = z.object({
+  name: z.string().trim().min(1, "name is required"),
+  pin: z.string().trim().min(1, "pin is required"),
+});
+
+const LogoutBody = z.object({
+  token: z.string().min(1, "token is required"),
+});
+
+const VerifyBody = z.object({
+  token: z.string().min(1).optional(),
+});
 
 // Rate limiter: max 5 attempts per IP per 15 minutes
 const loginLimiter = rateLimit({
@@ -39,11 +56,11 @@ async function verifyPin(plain: string, stored: string): Promise<boolean> {
 
 // POST /api/super-admin/login — validates name + PIN, creates session token
 superAdminRouter.post("/login", loginLimiter, async (req, res) => {
-  const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
-  const pin = typeof req.body.pin === "string" ? req.body.pin.trim() : "";
-  if (!name || !pin) {
-    return res.status(400).json({ error: "name and pin are required" });
+  const parsed = LoginBody.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
   }
+  const { name, pin } = parsed.data;
 
   const [user] = await db.select().from(usersTable)
     .where(and(eq(usersTable.name, name), eq(usersTable.isActive, true)));
@@ -77,8 +94,11 @@ superAdminRouter.post("/login", loginLimiter, async (req, res) => {
 
 // POST /api/super-admin/logout — revoke a session token
 superAdminRouter.post("/logout", async (req, res) => {
-  const { token } = req.body;
-  if (!token) return res.status(400).json({ error: "token is required" });
+  const parsed = LogoutBody.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
+  }
+  const { token } = parsed.data;
 
   await db.update(superAdminSessionsTable)
     .set({ isActive: false })
@@ -91,7 +111,11 @@ superAdminRouter.post("/logout", async (req, res) => {
 // Token is accepted in the request body (never in the query string to avoid
 // exposure in logs, browser history, and reverse-proxy access logs).
 superAdminRouter.post("/verify", async (req, res) => {
-  const token = typeof req.body?.token === "string" ? req.body.token : null;
+  const parsed = VerifyBody.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
+  }
+  const token = parsed.data.token ?? null;
   if (!token) return res.json({ active: false, userName: null });
 
   const [session] = await db.select().from(superAdminSessionsTable)

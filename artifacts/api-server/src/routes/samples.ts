@@ -29,6 +29,33 @@ const CONTAINER_TYPES = [
 ];
 const COLLECTION_SITES = ["Center", "Home", "Camp", "External"];
 
+// ─── Reusable validation schemas ────────────────────────────────────────────
+
+const IdParams = z.object({ id: z.coerce.number().int().positive() });
+
+// Strict calendar-aware YYYY-MM-DD validator. Rejects shape mismatches AND
+// values that look right but aren't real dates (`2026-13-40`, `2026-02-31`).
+const IsoDate = z.string().refine((s) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const [y, m, d] = s.split("-").map(Number);
+  if (m < 1 || m > 12 || d < 1 || d > 31) return false;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return (
+    !Number.isNaN(dt.getTime()) &&
+    dt.getUTCFullYear() === y &&
+    dt.getUTCMonth() === m - 1 &&
+    dt.getUTCDate() === d
+  );
+}, { message: "Invalid date — expected YYYY-MM-DD calendar date" });
+
+const ListQuery = z.object({
+  status: z.string().optional(),
+  dateFrom: IsoDate.optional(),
+  dateTo: IsoDate.optional(),
+  search: z.string().optional(),
+  outsourcedOnly: z.union([z.literal("true"), z.literal("false")]).optional(),
+});
+
 function isUniqueViolation(err: unknown): boolean {
   let cur: unknown = err;
   for (let i = 0; i < 5 && cur && typeof cur === "object"; i++) {
@@ -96,11 +123,13 @@ async function expandSample(s: typeof samplesTable.$inferSelect) {
 // ─── Listing ────────────────────────────────────────────────────────────────
 
 router.get("/", async (req, res) => {
-  const status = typeof req.query.status === "string" ? req.query.status : null;
-  const dateFrom = typeof req.query.dateFrom === "string" ? req.query.dateFrom : null;
-  const dateTo = typeof req.query.dateTo === "string" ? req.query.dateTo : null;
-  const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
-  const outsourcedOnly = req.query.outsourcedOnly === "true";
+  const q = ListQuery.safeParse(req.query);
+  if (!q.success) { res.status(400).json({ error: "Invalid query", details: q.error.issues }); return; }
+  const status = q.data.status ?? null;
+  const dateFrom = q.data.dateFrom ?? null;
+  const dateTo = q.data.dateTo ?? null;
+  const search = (q.data.search ?? "").trim();
+  const outsourcedOnly = q.data.outsourcedOnly === "true";
 
   const conds = [];
   if (status && status !== "all" && (SAMPLE_STATUSES as readonly string[]).includes(status)) {
@@ -147,9 +176,9 @@ router.get("/options", (_req, res) => {
 });
 
 router.get("/:id", async (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const [row] = await db.select().from(samplesTable).where(eq(samplesTable.id, id));
+  const p = IdParams.safeParse(req.params);
+  if (!p.success) { res.status(400).json({ error: "Invalid id", details: p.error.issues }); return; }
+  const [row] = await db.select().from(samplesTable).where(eq(samplesTable.id, p.data.id));
   if (!row) { res.status(404).json({ error: "Sample not found" }); return; }
   res.json(await expandSample(row));
 });
@@ -238,8 +267,9 @@ const VALID_TRANSITIONS: Record<SampleStatus, SampleStatus[]> = {
 };
 
 router.post("/:id/status", async (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const p = IdParams.safeParse(req.params);
+  if (!p.success) { res.status(400).json({ error: "Invalid id", details: p.error.issues }); return; }
+  const id = p.data.id;
   const body = z.object({
     status: z.enum(SAMPLE_STATUSES),
     rejectionReason: z.string().optional(),
@@ -289,8 +319,9 @@ const outsourceBody = z.object({
 });
 
 router.post("/:id/outsource", async (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const p = IdParams.safeParse(req.params);
+  if (!p.success) { res.status(400).json({ error: "Invalid id", details: p.error.issues }); return; }
+  const id = p.data.id;
   const body = outsourceBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({ error: "Invalid body", details: body.error.issues }); return; }
 
@@ -312,8 +343,9 @@ router.post("/:id/outsource", async (req, res) => {
 });
 
 router.post("/:id/outsource/receive", async (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const p = IdParams.safeParse(req.params);
+  if (!p.success) { res.status(400).json({ error: "Invalid id", details: p.error.issues }); return; }
+  const id = p.data.id;
   const [sample] = await db.select().from(samplesTable).where(eq(samplesTable.id, id));
   if (!sample) { res.status(404).json({ error: "Sample not found" }); return; }
   if (!sample.isOutsourced) { res.status(400).json({ error: "Sample is not marked as outsourced" }); return; }
@@ -325,8 +357,9 @@ router.post("/:id/outsource/receive", async (req, res) => {
 });
 
 router.delete("/:id/outsource", async (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const p = IdParams.safeParse(req.params);
+  if (!p.success) { res.status(400).json({ error: "Invalid id", details: p.error.issues }); return; }
+  const id = p.data.id;
   const [sample] = await db.select().from(samplesTable).where(eq(samplesTable.id, id));
   if (!sample) { res.status(404).json({ error: "Sample not found" }); return; }
 
@@ -344,8 +377,9 @@ router.delete("/:id/outsource", async (req, res) => {
 // ─── Notes / metadata edit ──────────────────────────────────────────────────
 
 router.patch("/:id", async (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const p = IdParams.safeParse(req.params);
+  if (!p.success) { res.status(400).json({ error: "Invalid id", details: p.error.issues }); return; }
+  const id = p.data.id;
   const body = z.object({
     notes: z.string().optional(),
     volume: z.string().optional(),
@@ -366,8 +400,9 @@ router.patch("/:id", async (req, res) => {
 // ─── Delete ─────────────────────────────────────────────────────────────────
 
 router.delete("/:id", async (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const p = IdParams.safeParse(req.params);
+  if (!p.success) { res.status(400).json({ error: "Invalid id", details: p.error.issues }); return; }
+  const id = p.data.id;
   const [sample] = await db.select().from(samplesTable).where(eq(samplesTable.id, id));
   if (!sample) { res.status(404).json({ error: "Sample not found" }); return; }
   // ON DELETE CASCADE on sample_test_assignments removes the junction rows.

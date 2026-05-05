@@ -2,9 +2,38 @@ import { Router } from "express";
 import { db, ordersTable, patientsTable, billsTable, paymentsTable, orderTestsTable, testsTable } from "@workspace/db";
 import { accountsTable, vouchersTable } from "@workspace/db/schema";
 import { eq, sql, gte, lte, and, desc } from "drizzle-orm";
+import { z } from "zod/v4";
 import { GetRevenueReportQueryParams } from "@workspace/api-zod";
 
 export const reportsRouter = Router();
+
+// ─── Reusable query validation ──────────────────────────────────────────────
+
+// Strict calendar-aware YYYY-MM-DD validator. Rejects both shape mismatches
+// (`2026-1-1`) AND values that look right but aren't real dates
+// (`2026-13-40`, `2026-02-31`). Without the calendar check `new Date(s)` would
+// silently produce Invalid Date and bubble up as a 500 from Drizzle.
+const IsoDate = z.string().refine((s) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const [y, m, d] = s.split("-").map(Number);
+  if (m < 1 || m > 12 || d < 1 || d > 31) return false;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return (
+    !Number.isNaN(dt.getTime()) &&
+    dt.getUTCFullYear() === y &&
+    dt.getUTCMonth() === m - 1 &&
+    dt.getUTCDate() === d
+  );
+}, { message: "Invalid date — expected YYYY-MM-DD calendar date" });
+
+const DateRangeQuery = z.object({
+  from: IsoDate.optional(),
+  to: IsoDate.optional(),
+});
+
+const SingleDateQuery = z.object({
+  date: IsoDate.optional(),
+});
 
 function formatCurrency(n: number) {
   return `₹${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(n)}`;
@@ -264,7 +293,9 @@ reportsRouter.get("/recent-activity", async (_req, res) => {
 
 // Income / Expense daily breakdown  ─────────────────────────────────────────
 reportsRouter.get("/income-expense", async (req, res) => {
-  const { from, to } = req.query as Record<string, string>;
+  const q = DateRangeQuery.safeParse(req.query);
+  if (!q.success) { res.status(400).json({ error: "Invalid query", details: q.error.issues }); return; }
+  const { from, to } = q.data;
   const fromDate = from ? new Date(from) : (() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; })();
   const toDate   = to   ? new Date(to + "T23:59:59.999Z") : (() => { const d = new Date(); d.setHours(23,59,59,999); return d; })();
 
@@ -337,7 +368,9 @@ reportsRouter.get("/income-expense", async (req, res) => {
 
 // Payment method summary  ─────────────────────────────────────────────────────
 reportsRouter.get("/payment-methods", async (req, res) => {
-  const { from, to } = req.query as Record<string, string>;
+  const q = DateRangeQuery.safeParse(req.query);
+  if (!q.success) { res.status(400).json({ error: "Invalid query", details: q.error.issues }); return; }
+  const { from, to } = q.data;
   const fromDate = from ? new Date(from) : (() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; })();
   const toDate   = to   ? new Date(to + "T23:59:59.999Z") : (() => { const d = new Date(); d.setHours(23,59,59,999); return d; })();
 
@@ -384,7 +417,9 @@ reportsRouter.get("/payment-methods", async (req, res) => {
 
 // Daily full summary (single date) ────────────────────────────────────────────
 reportsRouter.get("/daily-summary", async (req, res) => {
-  const date = (req.query.date as string) || new Date().toISOString().split("T")[0];
+  const q = SingleDateQuery.safeParse(req.query);
+  if (!q.success) { res.status(400).json({ error: "Invalid query", details: q.error.issues }); return; }
+  const date = q.data.date || new Date().toISOString().split("T")[0];
   const fromDate = new Date(date);
   fromDate.setHours(0,0,0,0);
   const toDate = new Date(date);
@@ -437,7 +472,9 @@ reportsRouter.get("/daily-summary", async (req, res) => {
 });
 
 reportsRouter.get("/daily-summary/pdf", async (req, res) => {
-  const date = (req.query.date as string) || new Date().toISOString().split("T")[0];
+  const q = SingleDateQuery.safeParse(req.query);
+  if (!q.success) { res.status(400).json({ error: "Invalid query", details: q.error.issues }); return; }
+  const date = q.data.date || new Date().toISOString().split("T")[0];
   const fromDate = new Date(date);
   fromDate.setHours(0,0,0,0);
   const toDate = new Date(date);
