@@ -23,6 +23,10 @@ tags:
     description: Reports and analytics
   - name: doctors
     description: Referring doctors
+  - name: appointments
+    description: Appointment scheduling
+  - name: expenses
+    description: Expense management
 
 paths:
   /healthz:
@@ -573,6 +577,273 @@ paths:
               schema:
                 $ref: "#/components/schemas/ActivityList"
 
+  # Appointments
+  /appointments:
+    get:
+      operationId: listAppointments
+      tags: [appointments]
+      summary: List appointments
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: patientId
+          in: query
+          schema:
+            type: integer
+        - name: doctorId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of appointments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Appointment"
+    post:
+      operationId: createAppointment
+      tags: [appointments]
+      summary: Book a new appointment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAppointmentBody"
+      responses:
+        "201":
+          description: Appointment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppointmentBase"
+
+  /appointments/stats:
+    get:
+      operationId: getAppointmentStats
+      tags: [appointments]
+      summary: Get today appointment stats
+      responses:
+        "200":
+          description: Today stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppointmentStats"
+
+  /appointments/{id}:
+    get:
+      operationId: getAppointment
+      tags: [appointments]
+      summary: Get appointment by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Appointment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appointment"
+    patch:
+      operationId: updateAppointment
+      tags: [appointments]
+      summary: Update appointment fields or status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAppointmentBody"
+      responses:
+        "200":
+          description: Updated appointment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppointmentBase"
+    delete:
+      operationId: deleteAppointment
+      tags: [appointments]
+      summary: Delete an appointment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required: [success]
+
+  # Expenses
+  /expenses:
+    get:
+      operationId: listExpenses
+      tags: [expenses]
+      summary: List expenses
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: paymentMode
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of expenses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Expense"
+    post:
+      operationId: createExpense
+      tags: [expenses]
+      summary: Record a new expense
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateExpenseBody"
+      responses:
+        "201":
+          description: Expense created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+
+  /expenses/summary:
+    get:
+      operationId: getExpensesSummary
+      tags: [expenses]
+      summary: Get expenses summary by category
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Category summary
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ExpenseSummaryRow"
+
+  /expenses/{id}:
+    get:
+      operationId: getExpense
+      tags: [expenses]
+      summary: Get expense by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Expense
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+    patch:
+      operationId: updateExpense
+      tags: [expenses]
+      summary: Update an expense
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateExpenseBody"
+      responses:
+        "200":
+          description: Updated expense
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+    delete:
+      operationId: deleteExpense
+      tags: [expenses]
+      summary: Delete an expense
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required: [success]
+
 components:
   schemas:
     HealthStatus:
@@ -1110,3 +1381,211 @@ components:
           items:
             $ref: "#/components/schemas/Activity"
       required: [activities]
+
+    # Appointment schemas
+    AppointmentPatient:
+      type: object
+      properties:
+        id:
+          type: integer
+        patientId:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        phone:
+          type: string
+      required: [id, patientId, firstName, lastName, phone]
+
+    AppointmentDoctor:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required: [id, name]
+
+    AppointmentBase:
+      type: object
+      properties:
+        id:
+          type: integer
+        appointmentId:
+          type: string
+        patientId:
+          type: integer
+        doctorId:
+          type: ["integer", "null"]
+        packageId:
+          type: ["integer", "null"]
+        appointmentDate:
+          type: string
+        timeSlot:
+          type: string
+        status:
+          type: string
+        type:
+          type: string
+        notes:
+          type: ["string", "null"]
+        ledgerId:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, appointmentId, patientId, appointmentDate, timeSlot, status, type]
+
+    Appointment:
+      allOf:
+        - $ref: "#/components/schemas/AppointmentBase"
+        - type: object
+          properties:
+            patient:
+              oneOf:
+                - $ref: "#/components/schemas/AppointmentPatient"
+                - type: "null"
+            doctor:
+              oneOf:
+                - $ref: "#/components/schemas/AppointmentDoctor"
+                - type: "null"
+
+    AppointmentStats:
+      type: object
+      properties:
+        total:
+          type: integer
+        scheduled:
+          type: integer
+        confirmed:
+          type: integer
+        completed:
+          type: integer
+        cancelled:
+          type: integer
+        noShow:
+          type: integer
+      required: [total, scheduled, confirmed, completed, cancelled, noShow]
+
+    CreateAppointmentBody:
+      type: object
+      properties:
+        patientId:
+          type: integer
+        doctorId:
+          type: ["integer", "null"]
+        packageId:
+          type: ["integer", "null"]
+        appointmentDate:
+          type: string
+        timeSlot:
+          type: string
+        status:
+          type: string
+        type:
+          type: string
+        notes:
+          type: ["string", "null"]
+      required: [patientId, appointmentDate, timeSlot]
+
+    UpdateAppointmentBody:
+      type: object
+      properties:
+        status:
+          type: string
+        timeSlot:
+          type: string
+        appointmentDate:
+          type: string
+        doctorId:
+          type: ["integer", "null"]
+        packageId:
+          type: ["integer", "null"]
+        notes:
+          type: ["string", "null"]
+        type:
+          type: string
+
+    # Expense schemas
+    Expense:
+      type: object
+      properties:
+        id:
+          type: integer
+        expenseId:
+          type: string
+        category:
+          type: string
+        description:
+          type: string
+        amount:
+          type: number
+        expenseDate:
+          type: string
+        paymentMode:
+          type: string
+        paidTo:
+          type: ["string", "null"]
+        approvedBy:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, expenseId, category, description, amount, expenseDate, paymentMode]
+
+    ExpenseSummaryRow:
+      type: object
+      properties:
+        category:
+          type: string
+        total:
+          type: number
+        count:
+          type: integer
+      required: [category, total, count]
+
+    CreateExpenseBody:
+      type: object
+      properties:
+        category:
+          type: string
+        description:
+          type: string
+        amount:
+          type: number
+        expenseDate:
+          type: string
+        paymentMode:
+          type: string
+        paidTo:
+          type: ["string", "null"]
+        approvedBy:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+      required: [category, description, amount, expenseDate]
+
+    UpdateExpenseBody:
+      type: object
+      properties:
+        category:
+          type: string
+        description:
+          type: string
+        amount:
+          type: number
+        expenseDate:
+          type: string
+        paymentMode:
+          type: string
+        paidTo:
+          type: ["string", "null"]
+        approvedBy:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]

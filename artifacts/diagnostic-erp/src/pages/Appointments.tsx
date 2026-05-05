@@ -1,6 +1,17 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/fetchApi";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useListAppointments,
+  useGetAppointmentStats,
+  useListPatients,
+  useListDoctors,
+  useCreateAppointment,
+  useUpdateAppointment,
+  useDeleteAppointment,
+  getListAppointmentsQueryKey,
+  getGetAppointmentStatsQueryKey,
+  type Appointment,
+} from "@workspace/api-client-react";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,20 +65,6 @@ const TIME_SLOTS = [
   "17:00", "17:30",
 ];
 
-type Appointment = {
-  id: number;
-  appointmentId: string;
-  patientId: number;
-  doctorId: number | null;
-  appointmentDate: string;
-  timeSlot: string;
-  status: string;
-  type: string;
-  notes: string | null;
-  patient: { id: number; patientId: string; firstName: string; lastName: string; phone: string } | null;
-  doctor: { id: number; name: string } | null;
-};
-
 function toDateString(d: Date) {
   return d.toISOString().slice(0, 10);
 }
@@ -97,63 +94,56 @@ export default function Appointments() {
     notes: "",
   });
 
-  const { data: appointments = [], isLoading } = useQuery<Appointment[]>({
-    queryKey: ["appointments", selectedDate, statusFilter],
-    queryFn: () => {
-      const params = new URLSearchParams({ date: selectedDate });
-      if (statusFilter !== "all") params.set("status", statusFilter);
-      return api.get<Appointment[]>(`/api/appointments?${params}`);
+  const { data: appointments = [], isLoading } = useListAppointments({
+    date: selectedDate,
+    status: statusFilter !== "all" ? statusFilter : undefined,
+  });
+
+  const { data: stats } = useGetAppointmentStats();
+
+  const { data: patientsData } = useListPatients({ limit: 500 });
+  const patients = patientsData?.patients ?? [];
+
+  const { data: doctorsData } = useListDoctors();
+  const doctors = doctorsData?.doctors ?? [];
+
+  function invalidateAppointments() {
+    qc.invalidateQueries({ queryKey: getListAppointmentsQueryKey() });
+    qc.invalidateQueries({ queryKey: getGetAppointmentStatsQueryKey() });
+  }
+
+  const createMut = useCreateAppointment({
+    mutation: {
+      onSuccess: () => {
+        invalidateAppointments();
+        setShowForm(false);
+        resetForm();
+        toast({ title: "Appointment booked" });
+      },
+      onError: () => toast({ title: "Failed to create appointment", variant: "destructive" }),
     },
   });
 
-  const { data: stats } = useQuery<Record<string, number>>({
-    queryKey: ["appointments-stats", selectedDate],
-    queryFn: () => api.get<Record<string, number>>("/api/appointments/stats"),
-  });
-
-  const { data: patients = [] } = useQuery<{ id: number; patientId: string; firstName: string; lastName: string; phone: string }[]>({
-    queryKey: ["patients-list"],
-    queryFn: () => api.get<{ patients: { id: number; patientId: string; firstName: string; lastName: string; phone: string }[] }>("/api/patients?limit=500").then((d) => d.patients),
-  });
-
-  const { data: doctors = [] } = useQuery<{ id: number; name: string }[]>({
-    queryKey: ["doctors-list"],
-    queryFn: () => api.get<{ doctors: { id: number; name: string }[] }>("/api/doctors").then((d) => d.doctors),
-  });
-
-  const createMut = useMutation({
-    mutationFn: (body: Record<string, unknown>) => api.post("/api/appointments", body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["appointments"] });
-      qc.invalidateQueries({ queryKey: ["appointments-stats"] });
-      setShowForm(false);
-      resetForm();
-      toast({ title: "Appointment booked" });
+  const updateMut = useUpdateAppointment({
+    mutation: {
+      onSuccess: () => {
+        invalidateAppointments();
+        setEditApt(null);
+        setStatusDialog(null);
+        toast({ title: "Appointment updated" });
+      },
+      onError: () => toast({ title: "Update failed", variant: "destructive" }),
     },
-    onError: () => toast({ title: "Failed to create appointment", variant: "destructive" }),
   });
 
-  const updateMut = useMutation({
-    mutationFn: ({ id, ...body }: Record<string, unknown>) =>
-      api.patch(`/api/appointments/${id}`, body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["appointments"] });
-      qc.invalidateQueries({ queryKey: ["appointments-stats"] });
-      setEditApt(null);
-      setStatusDialog(null);
-      toast({ title: "Appointment updated" });
+  const deleteMut = useDeleteAppointment({
+    mutation: {
+      onSuccess: () => {
+        invalidateAppointments();
+        toast({ title: "Appointment deleted" });
+      },
+      onError: () => toast({ title: "Delete failed", variant: "destructive" }),
     },
-    onError: () => toast({ title: "Update failed", variant: "destructive" }),
-  });
-
-  const deleteMut = useMutation({
-    mutationFn: (id: number) => api.delete(`/api/appointments/${id}`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["appointments"] });
-      qc.invalidateQueries({ queryKey: ["appointments-stats"] });
-      toast({ title: "Appointment deleted" });
-    },
-    onError: () => toast({ title: "Delete failed", variant: "destructive" }),
   });
 
   function resetForm() {
@@ -190,12 +180,14 @@ export default function Appointments() {
       return;
     }
     createMut.mutate({
-      patientId: Number(form.selectedPatientId),
-      doctorId: form.selectedDoctorId ? Number(form.selectedDoctorId) : null,
-      appointmentDate: form.appointmentDate,
-      timeSlot: form.timeSlot,
-      type: form.type,
-      notes: form.notes || null,
+      data: {
+        patientId: Number(form.selectedPatientId),
+        doctorId: form.selectedDoctorId ? Number(form.selectedDoctorId) : null,
+        appointmentDate: form.appointmentDate,
+        timeSlot: form.timeSlot,
+        type: form.type,
+        notes: form.notes || null,
+      },
     });
   }
 
@@ -349,7 +341,7 @@ export default function Appointments() {
                         size="icon"
                         className="h-7 w-7 text-destructive hover:text-destructive"
                         onClick={() => {
-                          if (confirm("Delete this appointment?")) deleteMut.mutate(apt.id);
+                          if (confirm("Delete this appointment?")) deleteMut.mutate({ id: apt.id });
                         }}
                         title="Delete"
                       >
@@ -523,9 +515,11 @@ export default function Appointments() {
                     const notesVal = (document.getElementById("edit-notes") as HTMLInputElement)?.value;
                     updateMut.mutate({
                       id: editApt.id,
-                      appointmentDate: dateVal || editApt.appointmentDate,
-                      timeSlot: editApt.timeSlot,
-                      notes: notesVal || null,
+                      data: {
+                        appointmentDate: dateVal || editApt.appointmentDate,
+                        timeSlot: editApt.timeSlot,
+                        notes: notesVal || null,
+                      },
                     });
                   }}
                 >
@@ -554,7 +548,7 @@ export default function Appointments() {
                   disabled={statusDialog.status === key || updateMut.isPending}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-left transition-colors
                     ${statusDialog.status === key ? "ring-2 ring-primary " + meta.color : "hover:bg-muted/50 border border-card-border"}`}
-                  onClick={() => updateMut.mutate({ id: statusDialog.id, status: key })}
+                  onClick={() => updateMut.mutate({ id: statusDialog.id, data: { status: key } })}
                 >
                   <span className={`w-2 h-2 rounded-full ${meta.color.replace("text-", "bg-").split(" ")[0]}`} />
                   {meta.label}

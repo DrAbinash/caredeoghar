@@ -1,6 +1,16 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/fetchApi";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useListExpenses,
+  useGetExpensesSummary,
+  useCreateExpense,
+  useUpdateExpense,
+  useDeleteExpense,
+  getListExpensesQueryKey,
+  getGetExpensesSummaryQueryKey,
+  type Expense,
+  type ExpenseSummaryRow,
+} from "@workspace/api-client-react";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,21 +71,6 @@ const CATEGORY_COLORS: Record<string, string> = {
   miscellaneous: "bg-gray-100 text-gray-700",
 };
 
-type Expense = {
-  id: number;
-  expenseId: string;
-  category: string;
-  description: string;
-  amount: number;
-  expenseDate: string;
-  paymentMode: string;
-  paidTo: string | null;
-  approvedBy: string | null;
-  notes: string | null;
-};
-
-type SummaryRow = { category: string; total: number; count: number };
-
 const EMPTY_FORM = {
   category: "miscellaneous",
   description: "",
@@ -101,60 +96,59 @@ export default function Expenses() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [activeTab, setActiveTab] = useState<"list" | "summary">("list");
 
-  const queryParams = new URLSearchParams();
-  if (categoryFilter !== "all") queryParams.set("category", categoryFilter);
-  if (paymentFilter !== "all") queryParams.set("paymentMode", paymentFilter);
-  if (from) queryParams.set("from", from);
-  if (to) queryParams.set("to", to);
-  if (search) queryParams.set("search", search);
+  const listParams = {
+    category: categoryFilter !== "all" ? categoryFilter : undefined,
+    paymentMode: paymentFilter !== "all" ? paymentFilter : undefined,
+    from: from || undefined,
+    to: to || undefined,
+    search: search || undefined,
+  };
 
-  const { data: expenses = [], isLoading } = useQuery<Expense[]>({
-    queryKey: ["expenses", categoryFilter, paymentFilter, from, to, search],
-    queryFn: () => api.get<Expense[]>(`/api/expenses?${queryParams}`),
-  });
+  const summaryParams = {
+    from: from || undefined,
+    to: to || undefined,
+  };
 
-  const summaryParams = new URLSearchParams();
-  if (from) summaryParams.set("from", from);
-  if (to) summaryParams.set("to", to);
+  const { data: expenses = [], isLoading } = useListExpenses(listParams);
 
-  const { data: summary = [] } = useQuery<SummaryRow[]>({
-    queryKey: ["expenses-summary", from, to],
-    queryFn: () => api.get<SummaryRow[]>(`/api/expenses/summary?${summaryParams}`),
-  });
+  const { data: summary = [] } = useGetExpensesSummary(summaryParams);
 
-  const createMut = useMutation({
-    mutationFn: (body: Record<string, unknown>) =>
-      api.post("/api/expenses", { data: body }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["expenses"] });
-      qc.invalidateQueries({ queryKey: ["expenses-summary"] });
-      setShowForm(false);
-      setForm({ ...EMPTY_FORM });
-      toast({ title: "Expense recorded" });
+  function invalidateExpenses() {
+    qc.invalidateQueries({ queryKey: getListExpensesQueryKey() });
+    qc.invalidateQueries({ queryKey: getGetExpensesSummaryQueryKey() });
+  }
+
+  const createMut = useCreateExpense({
+    mutation: {
+      onSuccess: () => {
+        invalidateExpenses();
+        setShowForm(false);
+        setForm({ ...EMPTY_FORM });
+        toast({ title: "Expense recorded" });
+      },
+      onError: () => toast({ title: "Failed to record expense", variant: "destructive" }),
     },
-    onError: () => toast({ title: "Failed to record expense", variant: "destructive" }),
   });
 
-  const updateMut = useMutation({
-    mutationFn: ({ id, ...body }: Record<string, unknown>) =>
-      api.patch(`/api/expenses/${id}`, { data: body }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["expenses"] });
-      qc.invalidateQueries({ queryKey: ["expenses-summary"] });
-      setEditExp(null);
-      toast({ title: "Expense updated" });
+  const updateMut = useUpdateExpense({
+    mutation: {
+      onSuccess: () => {
+        invalidateExpenses();
+        setEditExp(null);
+        toast({ title: "Expense updated" });
+      },
+      onError: () => toast({ title: "Update failed", variant: "destructive" }),
     },
-    onError: () => toast({ title: "Update failed", variant: "destructive" }),
   });
 
-  const deleteMut = useMutation({
-    mutationFn: (id: number) => api.delete(`/api/expenses/${id}`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["expenses"] });
-      qc.invalidateQueries({ queryKey: ["expenses-summary"] });
-      toast({ title: "Expense deleted" });
+  const deleteMut = useDeleteExpense({
+    mutation: {
+      onSuccess: () => {
+        invalidateExpenses();
+        toast({ title: "Expense deleted" });
+      },
+      onError: () => toast({ title: "Delete failed", variant: "destructive" }),
     },
-    onError: () => toast({ title: "Delete failed", variant: "destructive" }),
   });
 
   function openEdit(exp: Expense) {
@@ -184,9 +178,9 @@ export default function Expenses() {
       notes: form.notes || null,
     };
     if (editExp) {
-      updateMut.mutate({ id: editExp.id, ...body });
+      updateMut.mutate({ id: editExp.id, data: body });
     } else {
-      createMut.mutate(body);
+      createMut.mutate({ data: body });
     }
   }
 
@@ -365,7 +359,7 @@ export default function Expenses() {
                               size="icon"
                               className="h-7 w-7 text-destructive hover:text-destructive"
                               onClick={() => {
-                                if (confirm("Delete this expense?")) deleteMut.mutate(exp.id);
+                                if (confirm("Delete this expense?")) deleteMut.mutate({ id: exp.id });
                               }}
                             >
                               <Trash2 size={12} />

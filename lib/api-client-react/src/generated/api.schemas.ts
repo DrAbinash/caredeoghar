@@ -349,6 +349,132 @@ export interface ActivityList {
   activities: Activity[];
 }
 
+export interface AppointmentPatient {
+  id: number;
+  patientId: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+}
+
+export interface AppointmentDoctor {
+  id: number;
+  name: string;
+}
+
+export interface AppointmentBase {
+  id: number;
+  appointmentId: string;
+  patientId: number;
+  /** @nullable */
+  doctorId?: number | null;
+  /** @nullable */
+  packageId?: number | null;
+  appointmentDate: string;
+  timeSlot: string;
+  status: string;
+  type: string;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  ledgerId?: number | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type Appointment = AppointmentBase & {
+  patient?: AppointmentPatient | null;
+  doctor?: AppointmentDoctor | null;
+};
+
+export interface AppointmentStats {
+  total: number;
+  scheduled: number;
+  confirmed: number;
+  completed: number;
+  cancelled: number;
+  noShow: number;
+}
+
+export interface CreateAppointmentBody {
+  patientId: number;
+  /** @nullable */
+  doctorId?: number | null;
+  /** @nullable */
+  packageId?: number | null;
+  appointmentDate: string;
+  timeSlot: string;
+  status?: string;
+  type?: string;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface UpdateAppointmentBody {
+  status?: string;
+  timeSlot?: string;
+  appointmentDate?: string;
+  /** @nullable */
+  doctorId?: number | null;
+  /** @nullable */
+  packageId?: number | null;
+  /** @nullable */
+  notes?: string | null;
+  type?: string;
+}
+
+export interface Expense {
+  id: number;
+  expenseId: string;
+  category: string;
+  description: string;
+  amount: number;
+  expenseDate: string;
+  paymentMode: string;
+  /** @nullable */
+  paidTo?: string | null;
+  /** @nullable */
+  approvedBy?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ExpenseSummaryRow {
+  category: string;
+  total: number;
+  count: number;
+}
+
+export interface CreateExpenseBody {
+  category: string;
+  description: string;
+  amount: number;
+  expenseDate: string;
+  paymentMode?: string;
+  /** @nullable */
+  paidTo?: string | null;
+  /** @nullable */
+  approvedBy?: string | null;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface UpdateExpenseBody {
+  category?: string;
+  description?: string;
+  amount?: number;
+  expenseDate?: string;
+  paymentMode?: string;
+  /** @nullable */
+  paidTo?: string | null;
+  /** @nullable */
+  approvedBy?: string | null;
+  /** @nullable */
+  notes?: string | null;
+}
+
 export type ListPatientsParams = {
   search?: string;
   page?: number;
@@ -428,3 +554,31 @@ export const GetRevenueReportPeriod = {
   weekly: "weekly",
   monthly: "monthly",
 } as const;
+
+export type ListAppointmentsParams = {
+  date?: string;
+  status?: string;
+  patientId?: number;
+  doctorId?: number;
+};
+
+export type DeleteAppointment200 = {
+  success: boolean;
+};
+
+export type ListExpensesParams = {
+  category?: string;
+  paymentMode?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+};
+
+export type GetExpensesSummaryParams = {
+  from?: string;
+  to?: string;
+};
+
+export type DeleteExpense200 = {
+  success: boolean;
+};

@@ -1104,3 +1104,299 @@ export const GetRecentActivityResponse = zod.object({
     }),
   ),
 });
+
+/**
+ * @summary List appointments
+ */
+export const ListAppointmentsQueryParams = zod.object({
+  date: zod.coerce.string().optional(),
+  status: zod.coerce.string().optional(),
+  patientId: zod.coerce.number().optional(),
+  doctorId: zod.coerce.number().optional(),
+});
+
+export const ListAppointmentsResponseItem = zod
+  .object({
+    id: zod.number(),
+    appointmentId: zod.string(),
+    patientId: zod.number(),
+    doctorId: zod.number().nullish(),
+    packageId: zod.number().nullish(),
+    appointmentDate: zod.string(),
+    timeSlot: zod.string(),
+    status: zod.string(),
+    type: zod.string(),
+    notes: zod.string().nullish(),
+    ledgerId: zod.number().nullish(),
+    createdAt: zod.string().optional(),
+    updatedAt: zod.string().optional(),
+  })
+  .and(
+    zod.object({
+      patient: zod
+        .union([
+          zod.object({
+            id: zod.number(),
+            patientId: zod.string(),
+            firstName: zod.string(),
+            lastName: zod.string(),
+            phone: zod.string(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
+      doctor: zod
+        .union([
+          zod.object({
+            id: zod.number(),
+            name: zod.string(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
+    }),
+  );
+export const ListAppointmentsResponse = zod.array(ListAppointmentsResponseItem);
+
+/**
+ * @summary Book a new appointment
+ */
+export const CreateAppointmentBody = zod.object({
+  patientId: zod.number(),
+  doctorId: zod.number().nullish(),
+  packageId: zod.number().nullish(),
+  appointmentDate: zod.string(),
+  timeSlot: zod.string(),
+  status: zod.string().optional(),
+  type: zod.string().optional(),
+  notes: zod.string().nullish(),
+});
+
+/**
+ * @summary Get today appointment stats
+ */
+export const GetAppointmentStatsResponse = zod.object({
+  total: zod.number(),
+  scheduled: zod.number(),
+  confirmed: zod.number(),
+  completed: zod.number(),
+  cancelled: zod.number(),
+  noShow: zod.number(),
+});
+
+/**
+ * @summary Get appointment by ID
+ */
+export const GetAppointmentParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetAppointmentResponse = zod
+  .object({
+    id: zod.number(),
+    appointmentId: zod.string(),
+    patientId: zod.number(),
+    doctorId: zod.number().nullish(),
+    packageId: zod.number().nullish(),
+    appointmentDate: zod.string(),
+    timeSlot: zod.string(),
+    status: zod.string(),
+    type: zod.string(),
+    notes: zod.string().nullish(),
+    ledgerId: zod.number().nullish(),
+    createdAt: zod.string().optional(),
+    updatedAt: zod.string().optional(),
+  })
+  .and(
+    zod.object({
+      patient: zod
+        .union([
+          zod.object({
+            id: zod.number(),
+            patientId: zod.string(),
+            firstName: zod.string(),
+            lastName: zod.string(),
+            phone: zod.string(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
+      doctor: zod
+        .union([
+          zod.object({
+            id: zod.number(),
+            name: zod.string(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
+    }),
+  );
+
+/**
+ * @summary Update appointment fields or status
+ */
+export const UpdateAppointmentParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateAppointmentBody = zod.object({
+  status: zod.string().optional(),
+  timeSlot: zod.string().optional(),
+  appointmentDate: zod.string().optional(),
+  doctorId: zod.number().nullish(),
+  packageId: zod.number().nullish(),
+  notes: zod.string().nullish(),
+  type: zod.string().optional(),
+});
+
+export const UpdateAppointmentResponse = zod.object({
+  id: zod.number(),
+  appointmentId: zod.string(),
+  patientId: zod.number(),
+  doctorId: zod.number().nullish(),
+  packageId: zod.number().nullish(),
+  appointmentDate: zod.string(),
+  timeSlot: zod.string(),
+  status: zod.string(),
+  type: zod.string(),
+  notes: zod.string().nullish(),
+  ledgerId: zod.number().nullish(),
+  createdAt: zod.string().optional(),
+  updatedAt: zod.string().optional(),
+});
+
+/**
+ * @summary Delete an appointment
+ */
+export const DeleteAppointmentParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteAppointmentResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary List expenses
+ */
+export const ListExpensesQueryParams = zod.object({
+  category: zod.coerce.string().optional(),
+  paymentMode: zod.coerce.string().optional(),
+  from: zod.coerce.string().optional(),
+  to: zod.coerce.string().optional(),
+  search: zod.coerce.string().optional(),
+});
+
+export const ListExpensesResponseItem = zod.object({
+  id: zod.number(),
+  expenseId: zod.string(),
+  category: zod.string(),
+  description: zod.string(),
+  amount: zod.number(),
+  expenseDate: zod.string(),
+  paymentMode: zod.string(),
+  paidTo: zod.string().nullish(),
+  approvedBy: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.string().optional(),
+  updatedAt: zod.string().optional(),
+});
+export const ListExpensesResponse = zod.array(ListExpensesResponseItem);
+
+/**
+ * @summary Record a new expense
+ */
+export const CreateExpenseBody = zod.object({
+  category: zod.string(),
+  description: zod.string(),
+  amount: zod.number(),
+  expenseDate: zod.string(),
+  paymentMode: zod.string().optional(),
+  paidTo: zod.string().nullish(),
+  approvedBy: zod.string().nullish(),
+  notes: zod.string().nullish(),
+});
+
+/**
+ * @summary Get expenses summary by category
+ */
+export const GetExpensesSummaryQueryParams = zod.object({
+  from: zod.coerce.string().optional(),
+  to: zod.coerce.string().optional(),
+});
+
+export const GetExpensesSummaryResponseItem = zod.object({
+  category: zod.string(),
+  total: zod.number(),
+  count: zod.number(),
+});
+export const GetExpensesSummaryResponse = zod.array(
+  GetExpensesSummaryResponseItem,
+);
+
+/**
+ * @summary Get expense by ID
+ */
+export const GetExpenseParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetExpenseResponse = zod.object({
+  id: zod.number(),
+  expenseId: zod.string(),
+  category: zod.string(),
+  description: zod.string(),
+  amount: zod.number(),
+  expenseDate: zod.string(),
+  paymentMode: zod.string(),
+  paidTo: zod.string().nullish(),
+  approvedBy: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.string().optional(),
+  updatedAt: zod.string().optional(),
+});
+
+/**
+ * @summary Update an expense
+ */
+export const UpdateExpenseParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateExpenseBody = zod.object({
+  category: zod.string().optional(),
+  description: zod.string().optional(),
+  amount: zod.number().optional(),
+  expenseDate: zod.string().optional(),
+  paymentMode: zod.string().optional(),
+  paidTo: zod.string().nullish(),
+  approvedBy: zod.string().nullish(),
+  notes: zod.string().nullish(),
+});
+
+export const UpdateExpenseResponse = zod.object({
+  id: zod.number(),
+  expenseId: zod.string(),
+  category: zod.string(),
+  description: zod.string(),
+  amount: zod.number(),
+  expenseDate: zod.string(),
+  paymentMode: zod.string(),
+  paidTo: zod.string().nullish(),
+  approvedBy: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.string().optional(),
+  updatedAt: zod.string().optional(),
+});
+
+/**
+ * @summary Delete an expense
+ */
+export const DeleteExpenseParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteExpenseResponse = zod.object({
+  success: zod.boolean(),
+});
