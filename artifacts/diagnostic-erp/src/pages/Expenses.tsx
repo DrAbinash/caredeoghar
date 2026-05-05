@@ -184,8 +184,8 @@ export default function Expenses() {
     }
   }
 
-  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
-  const grandTotal = summary.reduce((s, r) => s + r.total, 0);
+  const totalExpenses = expenses.reduce((s: number, e: Expense) => s + e.amount, 0);
+  const grandTotal = summary.reduce((s: number, r: ExpenseSummaryRow) => s + r.total, 0);
 
   const hasFilters = categoryFilter !== "all" || paymentFilter !== "all" || from || to || search;
 
@@ -322,7 +322,7 @@ export default function Expenses() {
                   </tr>
                 </thead>
                 <tbody>
-                  {expenses.map((exp) => {
+                  {expenses.map((exp: Expense) => {
                     const catColor = CATEGORY_COLORS[exp.category] || "bg-gray-100 text-gray-700";
                     return (
                       <tr key={exp.id} className="border-b border-card-border last:border-0 hover:bg-muted/20">
@@ -393,7 +393,7 @@ export default function Expenses() {
             <div className="text-center py-12 text-muted-foreground text-sm">No data in selected range</div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {summary.map((row) => {
+              {summary.map((row: ExpenseSummaryRow) => {
                 const pct = grandTotal ? (row.total / grandTotal) * 100 : 0;
                 const catColor = CATEGORY_COLORS[row.category] || "bg-gray-100 text-gray-700";
                 return (
