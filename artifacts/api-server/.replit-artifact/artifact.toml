@@ -14,7 +14,7 @@ localPort = 8080
 run = "pnpm --filter @workspace/api-server run dev"
 
 [services.production]
-build = ["pnpm", "--filter", "@workspace/api-server", "run", "build"]
+build = ["pnpm", "--filter", "@workspace/api-server", "run", "build:deploy"]
 run = "node --enable-source-maps artifacts/api-server/dist/index.mjs"
 
 [services.production.health.startup]
@@ -23,3 +23,4 @@ path = "/api/healthz"
 [services.env]
 PORT = "8080"
 NODE_ENV = "production"
+SERVE_STATIC_DIR = "artifacts/api-server/dist/web"
