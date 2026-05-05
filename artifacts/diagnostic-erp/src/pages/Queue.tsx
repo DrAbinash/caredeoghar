@@ -107,8 +107,10 @@ export default function QueuePage() {
   }, [tokens, department]);
 
   const openDisplay = () => {
-    const url = `/display${department !== "all" ? `?departments=${encodeURIComponent(department)}` : ""}`;
-    window.open(url, "_blank", "noopener,noreferrer");
+    const params = new URLSearchParams();
+    params.set("ledgerId", String(ledgerId));
+    if (department !== "all") params.set("departments", department);
+    window.open(`/display?${params.toString()}`, "_blank", "noopener,noreferrer");
   };
 
   return (

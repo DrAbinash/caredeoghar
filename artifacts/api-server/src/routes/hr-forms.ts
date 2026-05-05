@@ -86,6 +86,7 @@ export const staffScopedHrFormsHandler = async (req: import("express").Request, 
 
 router.get("/:id", async (req, res) => {
   const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "Invalid id" });
   const [row] = await db.select().from(hrRejoiningFormsTable).where(eq(hrRejoiningFormsTable.id, id));
   if (!row) return res.status(404).json({ error: "HR form not found" });
   return res.json(toFormJson(row as Record<string, unknown>));
@@ -204,6 +205,7 @@ router.post("/:id/reject", async (req: StaffAuthRequest, res) => {
 // ── Delete (only when not approved) ──────────────────────────────────────────
 router.delete("/:id", async (req, res) => {
   const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "Invalid id" });
   const [form] = await db.select().from(hrRejoiningFormsTable).where(eq(hrRejoiningFormsTable.id, id));
   if (!form) return res.status(404).json({ error: "HR form not found" });
   if (form.managementStatus === "approved") {

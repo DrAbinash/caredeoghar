@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, billsTable, paymentsTable, ordersTable, patientsTable } from "@workspace/db";
-import { billAuditsTable, superAdminSessionsTable } from "@workspace/db/schema";
+import { billAuditsTable, superAdminSessionsTable, ledgersTable } from "@workspace/db/schema";
 import { sendBillEditEmail, sendBillReprintEmail } from "../email";
 import { generateTokenForBill } from "./tokens";
 import { generateTestTokensForOrder } from "./test-tokens";
@@ -166,6 +166,10 @@ billsRouter.get("/preview-number", async (req, res) => {
     if (!Number.isInteger(n) || n < 1) {
       return res.status(400).json({ error: "Invalid request", details: [{ path: ["ledgerId"], message: "ledgerId must be a positive integer" }] });
     }
+    const [lg] = await db.select({ id: ledgersTable.id }).from(ledgersTable).where(eq(ledgersTable.id, n));
+    if (!lg) {
+      return res.status(400).json({ error: "Invalid request", details: [{ path: ["ledgerId"], message: `Ledger with id ${n} does not exist.` }] });
+    }
     ledgerId = n;
   } else if (doctorIdRaw !== undefined && doctorIdRaw !== "") {
     const docId = Number(doctorIdRaw);
@@ -274,6 +278,26 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
   const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, orderId));
   if (!order) {
     res.status(404).json({ error: "Order not found" });
+    return;
+  }
+
+  // Refuse to bill against an order that contains discontinued / removed tests
+  // (matches the same guard applied at order creation in orders.ts). Catches
+  // the case where a test is deactivated *between* order creation and billing.
+  const orderLineTests = await db
+    .select({ testId: orderTestsTable.testId, isActive: testsTable.isActive, name: testsTable.name })
+    .from(orderTestsTable)
+    .innerJoin(testsTable, eq(testsTable.id, orderTestsTable.testId))
+    .where(eq(orderTestsTable.orderId, orderId));
+  const inactiveLineTests = orderLineTests.filter((t) => !t.isActive);
+  if (inactiveLineTests.length > 0) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: [{
+        path: ["orderId"],
+        message: `Order contains discontinued tests and cannot be billed: ${inactiveLineTests.map((t) => `#${t.testId} ${t.name}`).join(", ")}. Edit the order to remove them.`,
+      }],
+    });
     return;
   }
 

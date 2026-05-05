@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, ordersTable, orderTestsTable, testsTable, patientsTable, doctorsTable } from "@workspace/db";
-import { eq, and, sql, desc, gte, lte } from "drizzle-orm";
+import { eq, and, sql, desc, gte, lte, inArray } from "drizzle-orm";
 import {
   ListOrdersQueryParams,
   CreateOrderBody,
@@ -135,7 +135,7 @@ ordersRouter.post("/", async (req, res) => {
     const requestedIds = customTests!.map((ct) => ct.testId);
     const foundTests = await db.select({ id: testsTable.id, isActive: testsTable.isActive })
       .from(testsTable)
-      .where(sql`${testsTable.id} = ANY(${requestedIds})`);
+      .where(inArray(testsTable.id, requestedIds));
     const foundMap = new Map(foundTests.map((t) => [t.id, t]));
     const missing = requestedIds.filter((id) => !foundMap.has(id));
     const inactive = requestedIds.filter((id) => foundMap.get(id) && !foundMap.get(id)!.isActive);
@@ -157,7 +157,7 @@ ordersRouter.post("/", async (req, res) => {
     lineItems = customTests!.map((ct) => ({ testId: ct.testId, price: String(ct.price) }));
   } else {
     const tests = await db.select().from(testsTable).where(
-      sql`${testsTable.id} = ANY(${testIds!})`
+      inArray(testsTable.id, testIds!),
     );
     if (tests.length !== testIds!.length) {
       res.status(400).json({

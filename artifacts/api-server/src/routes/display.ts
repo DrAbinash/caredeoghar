@@ -13,8 +13,16 @@ function todayISO(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-displayRouter.get("/queue", requireStaffAuth, async (req, res) => {
-  const ledgerId = Number(req.query.ledgerId ?? 1);
+displayRouter.get("/queue", requireStaffAuth, async (req, res): Promise<void> => {
+  const raw = req.query.ledgerId;
+  const ledgerId = Number(raw);
+  if (raw === undefined || raw === "" || !Number.isInteger(ledgerId) || ledgerId <= 0) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: [{ path: ["ledgerId"], message: "ledgerId is required and must be a positive integer" }],
+    });
+    return;
+  }
   const date = (req.query.date as string) || todayISO();
   const departmentsRaw = (req.query.departments as string) || "";
   const departments = departmentsRaw.split(",").map((s) => s.trim()).filter(Boolean);

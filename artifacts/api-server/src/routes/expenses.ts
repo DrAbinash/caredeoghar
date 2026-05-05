@@ -77,6 +77,7 @@ router.get("/summary", async (req, res) => {
 // Get single expense
 router.get("/:id", async (req, res) => {
   const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "Invalid id" });
   const [row] = await db.select().from(expensesTable).where(eq(expensesTable.id, id));
   if (!row) return res.status(404).json({ error: "Expense not found" });
   return res.json(toNum(row as unknown as Record<string, unknown>));
@@ -139,6 +140,7 @@ router.patch("/:id", async (req, res) => {
 // Delete expense
 router.delete("/:id", async (req, res) => {
   const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "Invalid id" });
   const [expense] = await db.delete(expensesTable).where(eq(expensesTable.id, id)).returning();
   if (!expense) return res.status(404).json({ error: "Expense not found" });
   return res.json({ success: true });

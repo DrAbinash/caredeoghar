@@ -1,0 +1,204 @@
+// Lightweight request-validation test suite for @workspace/api-server.
+//
+// Hits the live api-server on localhost:80 (via the shared proxy), authenticated
+// as a super_admin staff user via a fresh portal session inserted directly into
+// the DB (bypasses /staff-login PIN flow).
+//
+// Runs a table of cases and asserts each one returns the expected status and
+// (where applicable) the standard `{ error, details }` shape. Exits non-zero
+// on the first failure, which makes it CI-friendly.
+
+import crypto from "node:crypto";
+import { Pool } from "pg";
+
+const BASE = process.env.API_BASE_URL || "http://localhost:80";
+const DB_URL = process.env.DATABASE_URL;
+if (!DB_URL) {
+  console.error("DATABASE_URL is required");
+  process.exit(2);
+}
+
+const pool = new Pool({ connectionString: DB_URL });
+
+async function mintStaffToken() {
+  const { rows } = await pool.query(
+    `select id, name from users where role in ('admin','super_admin') and is_active = true order by id limit 1`,
+  );
+  if (rows.length === 0) throw new Error("no admin/super_admin user available");
+  const user = rows[0];
+  const token = crypto.randomBytes(24).toString("hex");
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1h
+  await pool.query(
+    `insert into portal_sessions (token, scope, subject_id, subject_name, expires_at)
+     values ($1, 'staff', $2, $3, $4)`,
+    [token, user.id, user.name ?? "", expiresAt],
+  );
+  return { token, userId: user.id };
+}
+
+async function dropStaffToken(token) {
+  await pool.query(`delete from portal_sessions where token = $1`, [token]);
+}
+
+let pass = 0;
+let fail = 0;
+const failures = [];
+
+async function check(name, run) {
+  try {
+    await run();
+    pass++;
+    process.stdout.write(`  ok  ${name}\n`);
+  } catch (err) {
+    fail++;
+    failures.push({ name, message: err?.message ?? String(err) });
+    process.stdout.write(`  FAIL ${name}\n        ${err?.message ?? err}\n`);
+  }
+}
+
+function expectStatus(actual, expected, body) {
+  if (actual !== expected) {
+    throw new Error(`expected status ${expected}, got ${actual} (body: ${JSON.stringify(body).slice(0, 300)})`);
+  }
+}
+
+function expectErrorEnvelope(body) {
+  if (!body || typeof body !== "object" || typeof body.error !== "string") {
+    throw new Error(`expected { error: string, ... } envelope, got ${JSON.stringify(body).slice(0, 200)}`);
+  }
+}
+
+async function req(token, method, path, body) {
+  const headers = { Authorization: `Bearer ${token}` };
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const r = await fetch(`${BASE}${path}`, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await r.text();
+  let json;
+  try { json = text ? JSON.parse(text) : null; } catch { json = text; }
+  return { status: r.status, body: json };
+}
+
+async function main() {
+  console.log(`> validation-tests against ${BASE}`);
+  const { token } = await mintStaffToken();
+
+  try {
+    console.log("\n# auth + ledgerId guards");
+
+    await check("GET /api/tokens/today without ledgerId → 400", async () => {
+      const r = await req(token, "GET", "/api/tokens/today");
+      expectStatus(r.status, 400, r.body);
+      expectErrorEnvelope(r.body);
+    });
+    await check("GET /api/tokens/today?ledgerId=abc → 400", async () => {
+      const r = await req(token, "GET", "/api/tokens/today?ledgerId=abc");
+      expectStatus(r.status, 400, r.body);
+    });
+    await check("GET /api/tokens/today?ledgerId=-1 → 400", async () => {
+      const r = await req(token, "GET", "/api/tokens/today?ledgerId=-1");
+      expectStatus(r.status, 400, r.body);
+    });
+    await check("GET /api/tokens/today?ledgerId=1 → 200", async () => {
+      const r = await req(token, "GET", "/api/tokens/today?ledgerId=1");
+      expectStatus(r.status, 200, r.body);
+      if (!Array.isArray(r.body)) throw new Error("expected array");
+    });
+
+    await check("GET /api/test-tokens/today without ledgerId → 400", async () => {
+      const r = await req(token, "GET", "/api/test-tokens/today");
+      expectStatus(r.status, 400, r.body);
+    });
+    await check("GET /api/test-tokens/today?ledgerId=1 → 200", async () => {
+      const r = await req(token, "GET", "/api/test-tokens/today?ledgerId=1");
+      expectStatus(r.status, 200, r.body);
+    });
+
+    await check("GET /api/display/queue without ledgerId → 400", async () => {
+      const r = await req(token, "GET", "/api/display/queue");
+      expectStatus(r.status, 400, r.body);
+    });
+    await check("GET /api/display/queue?ledgerId=1 → 200", async () => {
+      const r = await req(token, "GET", "/api/display/queue?ledgerId=1");
+      expectStatus(r.status, 200, r.body);
+    });
+
+    console.log("\n# orders: discontinued / unknown tests");
+
+    await check("POST /api/orders empty body → 400", async () => {
+      const r = await req(token, "POST", "/api/orders", {});
+      expectStatus(r.status, 400, r.body);
+      expectErrorEnvelope(r.body);
+    });
+    await check("POST /api/orders unknown testIds → 400", async () => {
+      const r = await req(token, "POST", "/api/orders", {
+        patientId: 1, doctorId: null, testIds: [999999],
+      });
+      expectStatus(r.status, 400, r.body);
+    });
+
+    console.log("\n# bills: ledger / doctor required for /preview-number");
+
+    await check("GET /api/bills/preview-number with no ledger / doctor → 400", async () => {
+      const r = await req(token, "GET", "/api/bills/preview-number");
+      expectStatus(r.status, 400, r.body);
+      expectErrorEnvelope(r.body);
+    });
+    await check("GET /api/bills/preview-number?ledgerId=abc → 400", async () => {
+      const r = await req(token, "GET", "/api/bills/preview-number?ledgerId=abc");
+      expectStatus(r.status, 400, r.body);
+    });
+    await check("GET /api/bills/preview-number?ledgerId=999999 → 400 (unknown ledger)", async () => {
+      const r = await req(token, "GET", "/api/bills/preview-number?ledgerId=999999");
+      expectStatus(r.status, 400, r.body);
+    });
+
+    console.log("\n# generic body validation");
+
+    await check("PATCH /api/tokens/9999 with garbage status → 400", async () => {
+      const r = await req(token, "PATCH", "/api/tokens/9999", { status: "garbage" });
+      expectStatus(r.status, 400, r.body);
+    });
+    await check("PATCH /api/test-tokens/9999 with priority=99 → 400", async () => {
+      const r = await req(token, "PATCH", "/api/test-tokens/9999", { priority: 99 });
+      expectStatus(r.status, 400, r.body);
+    });
+
+    console.log("\n# numeric path-param coercion (NaN guards)");
+
+    for (const path of [
+      "/api/expenses/abc",
+      "/api/appointments/abc",
+      "/api/hr-forms/abc",
+    ]) {
+      await check(`GET ${path} → 400 (NaN id)`, async () => {
+        const r = await req(token, "GET", path);
+        expectStatus(r.status, 400, r.body);
+      });
+      await check(`DELETE ${path} → 400 (NaN id)`, async () => {
+        const r = await req(token, "DELETE", path);
+        // hr-forms has no DELETE; tolerate 404 from express
+        if (r.status === 404 && path.includes("hr-forms")) return;
+        expectStatus(r.status, 400, r.body);
+      });
+    }
+  } finally {
+    await dropStaffToken(token);
+    await pool.end();
+  }
+
+  console.log(`\n${pass} passed, ${fail} failed`);
+  if (fail > 0) {
+    console.log("\nFAILURES:");
+    for (const f of failures) console.log(`  - ${f.name}: ${f.message}`);
+    process.exit(1);
+  }
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(2);
+});

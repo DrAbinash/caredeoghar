@@ -52,9 +52,17 @@ export async function generateTokenForBill(opts: {
   return { tokenNo: row.tokenNo, tokenDate };
 }
 
-// GET /api/tokens/today?ledgerId=1
-tokensRouter.get("/today", async (req, res) => {
-  const ledgerId = Number(req.query.ledgerId ?? 1);
+// GET /api/tokens/today?ledgerId=N (required)
+tokensRouter.get("/today", async (req, res): Promise<void> => {
+  const raw = req.query.ledgerId;
+  const ledgerId = Number(raw);
+  if (raw === undefined || raw === "" || !Number.isInteger(ledgerId) || ledgerId <= 0) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: [{ path: ["ledgerId"], message: "ledgerId is required and must be a positive integer" }],
+    });
+    return;
+  }
   const date = (req.query.date as string) || todayISO();
   const rows = await db
     .select({

@@ -91,6 +91,7 @@ router.get("/stats", async (req, res) => {
 // Get single appointment
 router.get("/:id", async (req, res) => {
   const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "Invalid id" });
   const [row] = await db
     .select({
       appointment: appointmentsTable,
@@ -184,6 +185,7 @@ router.patch("/:id", async (req, res) => {
 // Delete appointment
 router.delete("/:id", async (req, res) => {
   const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "Invalid id" });
   const [apt] = await db
     .delete(appointmentsTable)
     .where(eq(appointmentsTable.id, id))

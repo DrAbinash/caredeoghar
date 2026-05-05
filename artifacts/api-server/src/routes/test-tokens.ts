@@ -85,9 +85,17 @@ export async function generateTestToken(opts: {
   throw new Error("generateTestToken: exhausted retries");
 }
 
-// GET /api/test-tokens/today?ledgerId=1&date=YYYY-MM-DD&department=USG&search=...
-testTokensRouter.get("/today", async (req, res) => {
-  const ledgerId = Number(req.query.ledgerId ?? 1);
+// GET /api/test-tokens/today?ledgerId=N&date=YYYY-MM-DD&department=USG&search=...
+testTokensRouter.get("/today", async (req, res): Promise<void> => {
+  const raw = req.query.ledgerId;
+  const ledgerId = Number(raw);
+  if (raw === undefined || raw === "" || !Number.isInteger(ledgerId) || ledgerId <= 0) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: [{ path: ["ledgerId"], message: "ledgerId is required and must be a positive integer" }],
+    });
+    return;
+  }
   const date = (req.query.date as string) || todayISO();
   const department = (req.query.department as string) || "";
   const search = (req.query.search as string)?.trim() || "";

@@ -18,12 +18,15 @@ type Clinic = { name?: string; logoDataUrl?: string | null };
 // LCD/LED TV in portrait or landscape orientation. Auto-refreshes every 4s.
 export default function Display() {
   const params = new URLSearchParams(window.location.search);
-  const ledgerId = Number(params.get("ledgerId") ?? 1);
+  const ledgerRaw = params.get("ledgerId");
+  const ledgerNum = Number(ledgerRaw);
+  const ledgerId = ledgerRaw && Number.isInteger(ledgerNum) && ledgerNum > 0 ? ledgerNum : null;
   const departments = (params.get("departments") ?? "").trim();
   const layout = (params.get("layout") ?? "").trim() === "single" ? "single" : "grid";
 
   const { data, isLoading } = useQuery<DisplayPayload>({
     queryKey: ["display-queue", ledgerId, departments],
+    enabled: ledgerId !== null,
     queryFn: () => api.get(`/api/display/queue?ledgerId=${ledgerId}${departments ? `&departments=${encodeURIComponent(departments)}` : ""}`),
     refetchInterval: 4_000,
   });
@@ -101,7 +104,13 @@ export default function Display() {
 
       {/* Body */}
       <div className="p-6 sm:p-10">
-        {isLoading && (
+        {ledgerId === null && (
+          <div className="text-center text-amber-300/90 py-24">
+            <div className="text-2xl font-bold mb-2">Missing book selection</div>
+            <div className="text-sm text-white/70">Open this display from the Queue page so a book/ledger is selected.</div>
+          </div>
+        )}
+        {ledgerId !== null && isLoading && (
           <div className="text-center text-white/50 text-xl py-32">Loading queue…</div>
         )}
         {!isLoading && cards.length === 0 && (
