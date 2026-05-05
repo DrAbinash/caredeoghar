@@ -79,6 +79,38 @@ ordersRouter.post("/", async (req, res) => {
   }
   const { patientId, doctorId, testIds, tests: customTests, notes } = parsed.data;
 
+  const [patientRow] = await db.select({ id: patientsTable.id }).from(patientsTable).where(eq(patientsTable.id, patientId));
+  if (!patientRow) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: [
+        {
+          path: ["patientId"],
+          message: `Patient with id ${patientId} does not exist.`,
+        },
+      ],
+    });
+    return;
+  }
+
+  let resolvedDoctor: typeof doctorsTable.$inferSelect | null = null;
+  if (doctorId !== undefined && doctorId !== null) {
+    const [d] = await db.select().from(doctorsTable).where(eq(doctorsTable.id, doctorId));
+    if (!d) {
+      res.status(400).json({
+        error: "Invalid request",
+        details: [
+          {
+            path: ["doctorId"],
+            message: `Doctor with id ${doctorId} does not exist.`,
+          },
+        ],
+      });
+      return;
+    }
+    resolvedDoctor = d;
+  }
+
   const hasCustom = !!customTests && customTests.length > 0;
   const hasLegacy = !!testIds && testIds.length > 0;
   if (!hasCustom && !hasLegacy) {
@@ -121,11 +153,7 @@ ordersRouter.post("/", async (req, res) => {
   const orderNumber = await generateOrderNumber();
 
   // Resolve ledger from doctor (fallback: default ledger 1)
-  let ledgerId = 1;
-  if (doctorId) {
-    const [d] = await db.select().from(doctorsTable).where(eq(doctorsTable.id, doctorId));
-    if (d?.ledgerId) ledgerId = d.ledgerId;
-  }
+  const ledgerId = resolvedDoctor?.ledgerId ?? 1;
 
   const [order] = await db.insert(ordersTable).values({
     orderNumber,
