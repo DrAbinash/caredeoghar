@@ -35,6 +35,24 @@ const SingleDateQuery = z.object({
   date: IsoDate.optional(),
 });
 
+// Resolve from/to into UTC-consistent ISO day strings + Date boundaries.
+// Defaults to month-start..today using UTC parts so the range never inverts
+// at timezone boundaries. Returns null if from > to.
+function resolveDateRange(from: string | undefined, to: string | undefined) {
+  const now = new Date();
+  const monthStartIso = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+  const todayIso = now.toISOString().slice(0, 10);
+  const fromIso = from ?? monthStartIso;
+  const toIso = to ?? todayIso;
+  if (fromIso > toIso) return null;
+  return {
+    fromIso,
+    toIso,
+    fromDate: new Date(fromIso + "T00:00:00.000Z"),
+    toDate: new Date(toIso + "T23:59:59.999Z"),
+  };
+}
+
 function formatCurrency(n: number) {
   return `₹${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(n)}`;
 }
@@ -295,17 +313,18 @@ reportsRouter.get("/recent-activity", async (_req, res) => {
 reportsRouter.get("/income-expense", async (req, res) => {
   const q = DateRangeQuery.safeParse(req.query);
   if (!q.success) { res.status(400).json({ error: "Invalid query", details: q.error.issues }); return; }
-  const { from, to } = q.data;
-  const fromDate = from ? new Date(from) : (() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; })();
-  const toDate   = to   ? new Date(to + "T23:59:59.999Z") : (() => { const d = new Date(); d.setHours(23,59,59,999); return d; })();
+  const range = resolveDateRange(q.data.from, q.data.to);
+  if (!range) { res.status(400).json({ error: "Invalid range: 'from' must be on or before 'to'" }); return; }
+  const { fromIso, toIso, fromDate, toDate } = range;
 
   // Payments received (income by day + method)
   const payments = await db.select().from(paymentsTable)
     .where(and(gte(paymentsTable.createdAt, fromDate), lte(paymentsTable.createdAt, toDate)));
 
-  // Vouchers that are expenses — fetch separately and join in JS to avoid text↔integer type mismatch
+  // Vouchers that are expenses — vouchers.date is stored as text (YYYY-MM-DD),
+  // so compare against ISO strings, not Date objects.
   const rawVouchers = await db.select().from(vouchersTable)
-    .where(and(gte(vouchersTable.date, fromDate), lte(vouchersTable.date, toDate)));
+    .where(and(gte(vouchersTable.date, fromIso), lte(vouchersTable.date, toIso)));
   const allAccounts = rawVouchers.length
     ? await db.select().from(accountsTable)
     : [];
@@ -337,7 +356,7 @@ reportsRouter.get("/income-expense", async (req, res) => {
     if (!acc) continue;
     const isExpense = acc.tallyGroup && ["Direct Expenses","Indirect Expenses","Purchase Accounts"].some(g => acc.tallyGroup?.includes(g));
     if (!isExpense && acc.type !== "expense") continue;
-    const day = row.v.date.toISOString().split("T")[0];
+    const day = row.v.date;
     if (!expenseByDay[day]) expenseByDay[day] = { date: day, amount: 0, count: 0 };
     expenseByDay[day].amount += Number(row.v.amount);
     expenseByDay[day].count++;
@@ -370,9 +389,9 @@ reportsRouter.get("/income-expense", async (req, res) => {
 reportsRouter.get("/payment-methods", async (req, res) => {
   const q = DateRangeQuery.safeParse(req.query);
   if (!q.success) { res.status(400).json({ error: "Invalid query", details: q.error.issues }); return; }
-  const { from, to } = q.data;
-  const fromDate = from ? new Date(from) : (() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; })();
-  const toDate   = to   ? new Date(to + "T23:59:59.999Z") : (() => { const d = new Date(); d.setHours(23,59,59,999); return d; })();
+  const range = resolveDateRange(q.data.from, q.data.to);
+  if (!range) { res.status(400).json({ error: "Invalid range: 'from' must be on or before 'to'" }); return; }
+  const { fromDate, toDate } = range;
 
   const payments = await db.select({
     payment: paymentsTable, bill: billsTable, patient: patientsTable,
@@ -408,7 +427,7 @@ reportsRouter.get("/payment-methods", async (req, res) => {
         amount: Number(r.payment.amount),
         billNumber: (r.bill as { billNumber?: string } | null)?.billNumber ?? "",
         patientName: r.patient ? `${r.patient.firstName} ${r.patient.lastName}` : "Unknown",
-        reference: r.payment.transactionRef ?? "",
+        reference: r.payment.referenceNumber ?? "",
       })),
     })),
     grandTotal,
