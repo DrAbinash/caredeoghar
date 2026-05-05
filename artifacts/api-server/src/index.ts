@@ -17,6 +17,16 @@ import { startCronScheduler } from "./cron";
 import { ensureDefaultLedger } from "./routes/ledgers";
 import { backfillExpirePublicTokens } from "./routes/patient-reports";
 
+process.on("uncaughtException", (err) => {
+  logger.error({ err }, "Uncaught exception — exiting");
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  logger.error({ reason }, "Unhandled promise rejection — exiting");
+  process.exit(1);
+});
+
 const rawPort = process.env["PORT"] ?? "8080";
 
 const port = Number(rawPort);
@@ -25,14 +35,14 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
-  }
-
+const server = app.listen(port, () => {
   logger.info({ port }, "Server listening");
   startCronScheduler();
   ensureDefaultLedger().catch((e) => logger.error({ err: e }, "Failed to seed default ledger"));
   backfillExpirePublicTokens().catch((e) => logger.error({ err: e }, "Failed to backfill public token expiry"));
+});
+
+server.on("error", (err) => {
+  logger.error({ err }, "Server failed to bind — exiting");
+  process.exit(1);
 });
