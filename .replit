@@ -1,4 +1,4 @@
-modules = ["nodejs-24", "python-3.11", "postgresql-16"]
+modules = ["nodejs-24"]
 
 [[artifacts]]
 id = "3B4_FFSkEVBkAeYMFRJ2e"
@@ -6,12 +6,12 @@ run = "node --enable-source-maps artifacts/api-server/dist/index.mjs"
 buildCommand = "pnpm --filter @workspace/api-server run build"
 localPort = 8080
 
-
+[[artifacts]]
+id = "artifacts/mockup-sandbox"
 
 [deployment]
 router = "application"
 deploymentTarget = "autoscale"
-run = "node --enable-source-maps artifacts/api-server/dist/index.mjs"
 
 [deployment.postBuild]
 args = ["pnpm", "store", "prune"]
@@ -20,27 +20,6 @@ env = { "CI" = "true" }
 [workflows]
 runButton = "Project"
 
-[[workflows.[[artifacts]]
-id = "artifacts/api-server"]]
-name = "Project"
-mode = "parallel"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Windows Build"
-
-[[workflows.workflow]]
-name = "Windows Build"
-author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "rm -f /tmp/wb-logs/done.flag && mkdir -p /tmp/wb-logs && pnpm -C windows-build run build:all 2>&1 | tee /tmp/wb-logs/build-all.log && pnpm -C windows-build run build:super-admin 2>&1 | tee /tmp/wb-logs/build-sa.log && date -Iseconds > /tmp/wb-logs/done.flag && echo BUILD_COMPLETE"
-
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = true
@@ -48,6 +27,3 @@ expertMode = true
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
-
-[nix]
-channel = "stable-25_05"
