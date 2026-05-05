@@ -40,7 +40,18 @@ if (Number.isNaN(port) || port <= 0) {
 
 const server = app.listen(port, () => {
   logger.info({ port }, "Server listening");
-  startCronScheduler();
+
+  // Cron schedulers must NOT run on autoscale deployments: containers can
+  // scale to zero and miss firing windows, and every cold start would
+  // re-init the scheduler. Enable them only on always-on hosts (Reserved VM,
+  // local dev, or the Windows desktop bundle) by setting ENABLE_SCHEDULERS=1.
+  if (process.env["ENABLE_SCHEDULERS"] === "1" || process.env["ENABLE_SCHEDULERS"] === "true") {
+    startCronScheduler();
+    logger.info("Cron schedulers enabled (ENABLE_SCHEDULERS set)");
+  } else {
+    logger.info("Cron schedulers disabled (set ENABLE_SCHEDULERS=1 to enable)");
+  }
+
   ensureDefaultLedger().catch((e) => logger.error({ err: e }, "Failed to seed default ledger"));
   backfillExpirePublicTokens().catch((e) => logger.error({ err: e }, "Failed to backfill public token expiry"));
 });

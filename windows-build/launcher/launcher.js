@@ -278,6 +278,7 @@ function startServer(httpPort, databaseUrl) {
     UPDATE_STAGING_DIR: STAGING_DIR,
     UPDATE_MARKER_FILE: MARKER_FILE,
     FINGERPRINT_BRIDGE_SECRET: bridgeSecret,
+    ENABLE_SCHEDULERS: "1",
   };
   log(`Starting API server on http://127.0.0.1:${httpPort} …`);
   serverProc = spawn(NODE_EXE, ["--enable-source-maps", SERVER_ENTRY], {
