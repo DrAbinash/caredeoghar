@@ -18,6 +18,7 @@ import {
   useAssignDoctorsToLedger,
   useResetLedger,
   type Book,
+  type Doctor,
 } from "@workspace/api-client-react";
 
 export default function BooksManager({ token, onBack }: { token: string; onBack: () => void }) {
@@ -315,18 +316,11 @@ function Stat({ icon: Icon, label, value }: { icon: React.ComponentType<{ size?:
   );
 }
 
-type DoctorForAssign = {
-  id: number;
-  name: string;
-  specialization: string;
-  ledgerId?: number | null;
-};
-
 function AssignDoctorsModal({
   book, allDoctors, token, onClose, onSaved,
 }: {
   book: Book;
-  allDoctors: DoctorForAssign[];
+  allDoctors: Doctor[];
   token: string;
   onClose: () => void;
   onSaved: () => void;
