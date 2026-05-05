@@ -197,16 +197,29 @@ export interface OrderList {
 }
 
 export type CreateOrderBodyTestsItem = {
+  /** @minimum 1 */
   testId: number;
+  /** @minimum 0 */
   price: number;
 };
 
 export interface CreateOrderBody {
+  /** @minimum 1 */
   patientId: number;
+  /** @minimum 1 */
   doctorId?: number | null;
+  /**
+   * @minItems 1
+   * @maxItems 100
+   */
   testIds?: number[];
-  /** Custom line items with overridden prices. When present, takes precedence over testIds. */
+  /**
+   * Custom line items with overridden prices. When present, takes precedence over testIds.
+   * @minItems 1
+   * @maxItems 100
+   */
   tests?: CreateOrderBodyTestsItem[];
+  /** @maxLength 2000 */
   notes?: string | null;
 }
 
@@ -1073,10 +1086,28 @@ export type ListTestsParams = {
 
 export type ListOrdersParams = {
   status?: ListOrdersStatus;
+  /**
+   * @minimum 1
+   */
   patientId?: number;
+  /**
+   * @minimum 1
+   */
   page?: number;
+  /**
+   * @minimum 1
+   * @maximum 200
+   */
   limit?: number;
+  /**
+   * ISO date or date-time string (parsed with new Date()).
+   * @minLength 1
+   */
   dateFrom?: string;
+  /**
+   * ISO date or date-time string (parsed with new Date()).
+   * @minLength 1
+   */
   dateTo?: string;
 };
 

@@ -7,6 +7,8 @@
  */
 
 export type CreateOrderBodyTestsItem = {
+  /** @minimum 1 */
   testId: number;
+  /** @minimum 0 */
   price: number;
 };

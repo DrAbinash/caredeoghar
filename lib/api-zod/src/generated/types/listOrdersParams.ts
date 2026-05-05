@@ -9,9 +9,27 @@ import type { ListOrdersStatus } from "./listOrdersStatus";
 
 export type ListOrdersParams = {
   status?: ListOrdersStatus;
+  /**
+   * @minimum 1
+   */
   patientId?: number;
+  /**
+   * @minimum 1
+   */
   page?: number;
+  /**
+   * @minimum 1
+   * @maximum 200
+   */
   limit?: number;
+  /**
+   * ISO date or date-time string (parsed with new Date()).
+   * @minLength 1
+   */
   dateFrom?: string;
+  /**
+   * ISO date or date-time string (parsed with new Date()).
+   * @minLength 1
+   */
   dateTo?: string;
 };

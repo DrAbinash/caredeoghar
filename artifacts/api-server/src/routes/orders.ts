@@ -79,15 +79,42 @@ ordersRouter.post("/", async (req, res) => {
   }
   const { patientId, doctorId, testIds, tests: customTests, notes } = parsed.data;
 
+  const hasCustom = !!customTests && customTests.length > 0;
+  const hasLegacy = !!testIds && testIds.length > 0;
+  if (!hasCustom && !hasLegacy) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: [
+        {
+          path: ["tests"],
+          message: "At least one of `tests` or `testIds` must be provided with one or more items.",
+        },
+      ],
+    });
+    return;
+  }
+
   // Support two formats: custom [{testId, price}] or legacy testIds[]
   let lineItems: { testId: number; price: string }[] = [];
-  if (customTests && customTests.length > 0) {
-    lineItems = customTests.map((ct: { testId: number; price: number }) => ({ testId: ct.testId, price: String(ct.price) }));
-  } else if (testIds && testIds.length > 0) {
+  if (hasCustom) {
+    lineItems = customTests.map((ct) => ({ testId: ct.testId, price: String(ct.price) }));
+  } else {
     const tests = await db.select().from(testsTable).where(
-      sql`${testsTable.id} = ANY(${testIds})`
+      sql`${testsTable.id} = ANY(${testIds!})`
     );
     lineItems = tests.map((t) => ({ testId: t.id, price: t.price }));
+    if (lineItems.length !== testIds!.length) {
+      res.status(400).json({
+        error: "Invalid request",
+        details: [
+          {
+            path: ["testIds"],
+            message: "One or more testIds do not refer to an existing test.",
+          },
+        ],
+      });
+      return;
+    }
   }
 
   const totalAmount = lineItems.reduce((sum, t) => sum + Number(t.price), 0);

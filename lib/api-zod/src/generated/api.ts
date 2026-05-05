@@ -289,18 +289,33 @@ export const UpdateTestResponse = zod.object({
 /**
  * @summary List test orders
  */
+
 export const listOrdersQueryPageDefault = 1;
+
 export const listOrdersQueryLimitDefault = 20;
+export const listOrdersQueryLimitMax = 200;
 
 export const ListOrdersQueryParams = zod.object({
   status: zod
     .enum(["pending", "collected", "processing", "completed", "cancelled"])
     .optional(),
-  patientId: zod.coerce.number().optional(),
-  page: zod.coerce.number().default(listOrdersQueryPageDefault),
-  limit: zod.coerce.number().default(listOrdersQueryLimitDefault),
-  dateFrom: zod.coerce.string().optional(),
-  dateTo: zod.coerce.string().optional(),
+  patientId: zod.coerce.number().min(1).optional(),
+  page: zod.coerce.number().min(1).default(listOrdersQueryPageDefault),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(listOrdersQueryLimitMax)
+    .default(listOrdersQueryLimitDefault),
+  dateFrom: zod.coerce
+    .string()
+    .min(1)
+    .optional()
+    .describe("ISO date or date-time string (parsed with new Date())."),
+  dateTo: zod.coerce
+    .string()
+    .min(1)
+    .optional()
+    .describe("ISO date or date-time string (parsed with new Date())."),
 });
 
 export const ListOrdersResponse = zod.object({
@@ -385,22 +400,37 @@ export const ListOrdersResponse = zod.object({
 /**
  * @summary Create test order
  */
+
+export const createOrderBodyTestIdsMax = 100;
+
+export const createOrderBodyTestsItemPriceMin = 0;
+
+export const createOrderBodyTestsMax = 100;
+
+export const createOrderBodyNotesMax = 2000;
+
 export const CreateOrderBody = zod.object({
-  patientId: zod.number(),
-  doctorId: zod.number().nullish(),
-  testIds: zod.array(zod.number()).optional(),
+  patientId: zod.number().min(1),
+  doctorId: zod.number().min(1).nullish(),
+  testIds: zod
+    .array(zod.number().min(1))
+    .min(1)
+    .max(createOrderBodyTestIdsMax)
+    .optional(),
   tests: zod
     .array(
       zod.object({
-        testId: zod.number(),
-        price: zod.number(),
+        testId: zod.number().min(1),
+        price: zod.number().min(createOrderBodyTestsItemPriceMin),
       }),
     )
+    .min(1)
+    .max(createOrderBodyTestsMax)
     .optional()
     .describe(
       "Custom line items with overridden prices. When present, takes precedence over testIds.",
     ),
-  notes: zod.string().nullish(),
+  notes: zod.string().max(createOrderBodyNotesMax).nullish(),
 });
 
 /**

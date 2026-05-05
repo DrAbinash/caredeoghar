@@ -8,10 +8,21 @@
 import type { CreateOrderBodyTestsItem } from "./createOrderBodyTestsItem";
 
 export interface CreateOrderBody {
+  /** @minimum 1 */
   patientId: number;
+  /** @minimum 1 */
   doctorId?: number | null;
+  /**
+   * @minItems 1
+   * @maxItems 100
+   */
   testIds?: number[];
-  /** Custom line items with overridden prices. When present, takes precedence over testIds. */
+  /**
+   * Custom line items with overridden prices. When present, takes precedence over testIds.
+   * @minItems 1
+   * @maxItems 100
+   */
   tests?: CreateOrderBodyTestsItem[];
+  /** @maxLength 2000 */
   notes?: string | null;
 }
