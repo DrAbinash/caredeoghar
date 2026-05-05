@@ -21,6 +21,7 @@ import {
   RefreshCw, Pencil, History, Building2, ArrowUpDown, Search, Clock,
   CreditCard, Filter,
 } from "lucide-react";
+import Form3C from "@/components/accounting/Form3C";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -377,6 +378,7 @@ export default function Accounting() {
             <TabsTrigger value="balance-sheet">Balance Sheet</TabsTrigger>
             <TabsTrigger value="voucher-edits">Voucher Edits</TabsTrigger>
             <TabsTrigger value="export">Tally Export</TabsTrigger>
+            <TabsTrigger value="form-3c" data-testid="tab-form-3c">Form 3C</TabsTrigger>
           </TabsList>
 
           {/* ── Vouchers Tab ── */}
@@ -1072,6 +1074,11 @@ export default function Accounting() {
                 <li>Verify Trial Balance in Tally matches the one here</li>
               </ol>
             </div>
+          </TabsContent>
+
+          {/* ── Form 3C Tab ── */}
+          <TabsContent value="form-3c" className="space-y-4">
+            <Form3C />
           </TabsContent>
         </Tabs>
       </div>
