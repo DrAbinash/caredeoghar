@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,49 +18,18 @@ import {
   TrendingUp, Users, Wallet, Receipt, Trash2, Plus, X, BookOpen,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { saApi, saAuthHeaders } from "@/lib/saApi";
+import { saAuthHeaders } from "@/lib/saApi";
+import {
+  useGetDoctorLedgerSummary,
+  useGetDoctorLedgerDetail,
+  getGetDoctorLedgerDetailQueryKey,
+  useCreateDoctorPayout,
+  useDeleteDoctorPayout,
+  type DoctorPayout,
+} from "@workspace/api-client-react";
 
 const inr = (n: number) =>
   `₹${(Number.isFinite(n) ? n : 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-type Row = {
-  doctorId: number; doctorName: string; specialization: string;
-  phone: string | null; email: string | null;
-  orderCount: number; revenueWindow: number;
-  earnedWindow: number; paidWindow: number; dueWindow: number;
-  earnedLifetime: number; paidLifetime: number; outstanding: number;
-};
-
-type SummaryResponse = {
-  rows: Row[];
-  totals: { doctors: number; earnedWindow: number; paidWindow: number; dueWindow: number; outstanding: number };
-  window: { from: string | null; to: string | null };
-};
-
-type LedgerEntry = {
-  kind: "earned" | "paid"; date: string; particular: string;
-  credit: number; debit: number; balance: number;
-  ref?: string | null; id?: number;
-};
-
-type Payout = {
-  id: number; doctorId: number; amount: number;
-  paymentDate: string; paymentMethod: string;
-  reference: string | null; notes: string | null;
-  periodFrom: string | null; periodTo: string | null;
-};
-
-type DetailResponse = {
-  doctor: { id: number; name: string; specialization: string; phone: string | null; email: string | null };
-  window: { from: string | null; to: string | null };
-  summary: {
-    totalRevenue: number; totalEarned: number; totalPaid: number;
-    dueWindow: number; lifetimeEarned: number; lifetimePaid: number;
-    outstanding: number; orderCount: number; payoutCount: number;
-  };
-  payouts: Payout[];
-  ledger: LedgerEntry[];
-};
 
 const todayStr = () => new Date().toISOString().split("T")[0];
 const monthStartStr = () => {
@@ -76,69 +46,106 @@ const PRESETS = [
 
 export default function DoctorLedger({ onBack }: { onBack: () => void }) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   const [from, setFrom] = useState<string>("");
   const [to, setTo] = useState<string>("");
   const [search, setSearch] = useState("");
-  const [data, setData] = useState<SummaryResponse | null>(null);
-  const [loading, setLoading] = useState(false);
 
   const [openDoctorId, setOpenDoctorId] = useState<number | null>(null);
-  const [detail, setDetail] = useState<DetailResponse | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
 
-  const [payDialogOpen, setPayDialogOpen] = useState(false);
+  // When Pay is clicked from the summary table the detail may not be loaded yet.
+  // pendingPayDialog defers opening the pay dialog until we have a doctorId.
   const [pendingPayDialog, setPendingPayDialog] = useState(false);
+  const [payDialogOpen, setPayDialogOpen] = useState(false);
   const [payForm, setPayForm] = useState({
     amount: "", paymentDate: todayStr(), paymentMethod: "cash",
     reference: "", notes: "", periodFrom: "", periodTo: "",
   });
-  const [submitting, setSubmitting] = useState(false);
-  const [deletingPayout, setDeletingPayout] = useState<Payout | null>(null);
+  const [deletingPayout, setDeletingPayout] = useState<DoctorPayout | null>(null);
 
-  const loadSummary = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (from) params.set("from", from);
-      if (to) params.set("to", to);
-      if (search.trim()) params.set("search", search.trim());
-      const resp = await saApi.get<SummaryResponse>(`/doctor-ledger?${params.toString()}`);
-      setData(resp);
-    } catch (err) {
-      toast({ title: "Failed to load doctor ledger", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
+  const summaryParams = {
+    ...(from ? { from } : {}),
+    ...(to ? { to } : {}),
   };
 
-  const loadDetail = async (doctorId: number) => {
-    setDetailLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (from) params.set("from", from);
-      if (to) params.set("to", to);
-      const resp = await saApi.get<DetailResponse>(`/doctor-ledger/${doctorId}?${params.toString()}`);
-      setDetail(resp);
-    } catch (err) {
-      toast({ title: "Failed to load ledger", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
-    } finally {
-      setDetailLoading(false);
+  const {
+    data,
+    isLoading,
+    refetch: refetchSummary,
+    error: summaryError,
+    queryKey: summaryQueryKey,
+  } = useGetDoctorLedgerSummary(summaryParams);
+
+  useEffect(() => {
+    if (summaryError) {
+      toast({ title: "Failed to load doctor ledger", description: String(summaryError), variant: "destructive" });
     }
+  }, [summaryError, toast]);
+
+  const detailParams = {
+    ...(from ? { from } : {}),
+    ...(to ? { to } : {}),
   };
 
-  useEffect(() => { loadSummary(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [from, to]);
-  useEffect(() => {
-    if (openDoctorId !== null) loadDetail(openDoctorId);
-    else { setDetail(null); setPendingPayDialog(false); }
-    /* eslint-disable-next-line react-hooks/exhaustive-deps */
-  }, [openDoctorId, from, to]);
+  const {
+    data: detail,
+    isLoading: detailLoading,
+    error: detailError,
+    queryKey: detailQueryKey,
+  } = useGetDoctorLedgerDetail(openDoctorId ?? 0, detailParams, {
+    query: {
+      enabled: openDoctorId !== null,
+      queryKey: getGetDoctorLedgerDetailQueryKey(openDoctorId ?? 0, detailParams),
+    },
+  });
 
   useEffect(() => {
-    if (pendingPayDialog && detail && detail.doctor.id === openDoctorId && !detailLoading) {
-      setPayDialogOpen(true);
+    if (detailError) {
+      toast({ title: "Failed to load ledger", description: String(detailError), variant: "destructive" });
+    }
+  }, [detailError, toast]);
+
+  // Once detail has loaded and we have a pending pay dialog, open it.
+  useEffect(() => {
+    if (pendingPayDialog && detail?.doctor.id) {
       setPendingPayDialog(false);
+      setPayDialogOpen(true);
     }
-  }, [pendingPayDialog, detail, openDoctorId, detailLoading]);
+  }, [pendingPayDialog, detail]);
+
+  const createPayoutMutation = useCreateDoctorPayout({
+    mutation: {
+      onSuccess: () => {
+        const amt = Number(payForm.amount);
+        toast({ title: "Payment recorded", description: `${inr(amt)} paid to ${detail?.doctor.name ?? "doctor"}` });
+        setPayDialogOpen(false);
+        setPayForm({
+          amount: "", paymentDate: todayStr(), paymentMethod: "cash",
+          reference: "", notes: "", periodFrom: "", periodTo: "",
+        });
+        queryClient.invalidateQueries({ queryKey: detailQueryKey });
+        queryClient.invalidateQueries({ queryKey: summaryQueryKey });
+      },
+      onError: (err: unknown) => {
+        toast({ title: "Failed to record payment", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+      },
+    },
+  });
+
+  const deletePayoutMutation = useDeleteDoctorPayout({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Payout deleted" });
+        setDeletingPayout(null);
+        queryClient.invalidateQueries({ queryKey: detailQueryKey });
+        queryClient.invalidateQueries({ queryKey: summaryQueryKey });
+      },
+      onError: (err: unknown) => {
+        toast({ title: "Delete failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+      },
+    },
+  });
 
   const filteredRows = useMemo(() => {
     if (!data) return [];
@@ -150,16 +157,16 @@ export default function DoctorLedger({ onBack }: { onBack: () => void }) {
     );
   }, [data, search]);
 
-  const submitPayout = async () => {
-    if (!detail) return;
+  const submitPayout = () => {
+    if (openDoctorId === null) return;
     const amt = Number(payForm.amount);
     if (!Number.isFinite(amt) || amt <= 0) {
       toast({ title: "Enter a valid amount", variant: "destructive" });
       return;
     }
-    setSubmitting(true);
-    try {
-      await saApi.post(`/doctor-ledger/${detail.doctor.id}/payouts`, {
+    createPayoutMutation.mutate({
+      doctorId: openDoctorId,
+      data: {
         amount: amt,
         paymentDate: payForm.paymentDate,
         paymentMethod: payForm.paymentMethod,
@@ -167,31 +174,13 @@ export default function DoctorLedger({ onBack }: { onBack: () => void }) {
         notes: payForm.notes || null,
         periodFrom: payForm.periodFrom || null,
         periodTo: payForm.periodTo || null,
-      });
-      toast({ title: "Payment recorded", description: `${inr(amt)} paid to ${detail.doctor.name}` });
-      setPayDialogOpen(false);
-      setPayForm({
-        amount: "", paymentDate: todayStr(), paymentMethod: "cash",
-        reference: "", notes: "", periodFrom: "", periodTo: "",
-      });
-      await Promise.all([loadDetail(detail.doctor.id), loadSummary()]);
-    } catch (err) {
-      toast({ title: "Failed to record payment", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
-    } finally {
-      setSubmitting(false);
-    }
+      },
+    });
   };
 
-  const confirmDeletePayout = async () => {
-    if (!deletingPayout || !detail) return;
-    try {
-      await saApi.delete(`/doctor-ledger/payouts/${deletingPayout.id}`);
-      toast({ title: "Payout deleted" });
-      setDeletingPayout(null);
-      await Promise.all([loadDetail(detail.doctor.id), loadSummary()]);
-    } catch (err) {
-      toast({ title: "Delete failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
-    }
+  const confirmDeletePayout = () => {
+    if (!deletingPayout) return;
+    deletePayoutMutation.mutate({ id: deletingPayout.id });
   };
 
   const exportCSV = async () => {
@@ -281,7 +270,7 @@ export default function DoctorLedger({ onBack }: { onBack: () => void }) {
               </Button>
             ))}
           </div>
-          <Button variant="outline" size="sm" onClick={loadSummary}>
+          <Button variant="outline" size="sm" onClick={() => refetchSummary()}>
             <RefreshCw size={14} className="mr-1" /> Refresh
           </Button>
         </div>
@@ -302,7 +291,7 @@ export default function DoctorLedger({ onBack }: { onBack: () => void }) {
                 </tr>
               </thead>
               <tbody>
-                {loading ? (
+                {isLoading ? (
                   [...Array(5)].map((_, i) => (
                     <tr key={i} className="border-b border-border/50 animate-pulse">
                       {[...Array(7)].map((_, j) => (
@@ -331,7 +320,10 @@ export default function DoctorLedger({ onBack }: { onBack: () => void }) {
                           </Button>
                           <Button
                             size="sm"
-                            onClick={() => { setOpenDoctorId(r.doctorId); setPendingPayDialog(true); }}
+                            onClick={() => {
+                              setOpenDoctorId(r.doctorId);
+                              setPendingPayDialog(true);
+                            }}
                           >
                             <Plus size={14} className="mr-1" /> Pay
                           </Button>
@@ -347,7 +339,7 @@ export default function DoctorLedger({ onBack }: { onBack: () => void }) {
       </div>
 
       {/* Per-doctor ledger drawer */}
-      <Dialog open={openDoctorId !== null} onOpenChange={(v) => !v && setOpenDoctorId(null)}>
+      <Dialog open={openDoctorId !== null} onOpenChange={(v) => { if (!v) { setOpenDoctorId(null); setPendingPayDialog(false); } }}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex items-center justify-between gap-4">
@@ -464,7 +456,7 @@ export default function DoctorLedger({ onBack }: { onBack: () => void }) {
       <Dialog open={payDialogOpen} onOpenChange={setPayDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Record Payment to {detail?.doctor.name}</DialogTitle>
+            <DialogTitle>Record Payment to {detail?.doctor.name ?? "Doctor"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div>
@@ -503,58 +495,61 @@ export default function DoctorLedger({ onBack }: { onBack: () => void }) {
                     <SelectItem value="bank">Bank Transfer</SelectItem>
                     <SelectItem value="upi">UPI</SelectItem>
                     <SelectItem value="cheque">Cheque</SelectItem>
-                    <SelectItem value="card">Card</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
             <div>
-              <Label>Reference (txn id, cheque no.)</Label>
-              <Input value={payForm.reference} onChange={e => setPayForm(p => ({ ...p, reference: e.target.value }))} placeholder="optional" />
+              <Label>Reference / Cheque No</Label>
+              <Input value={payForm.reference} onChange={e => setPayForm(p => ({ ...p, reference: e.target.value }))} placeholder="Optional" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Period from</Label>
+                <Label>Period From</Label>
                 <Input type="date" value={payForm.periodFrom} onChange={e => setPayForm(p => ({ ...p, periodFrom: e.target.value }))} />
               </div>
               <div>
-                <Label>Period to</Label>
+                <Label>Period To</Label>
                 <Input type="date" value={payForm.periodTo} onChange={e => setPayForm(p => ({ ...p, periodTo: e.target.value }))} />
               </div>
             </div>
             <div>
               <Label>Notes</Label>
-              <Input value={payForm.notes} onChange={e => setPayForm(p => ({ ...p, notes: e.target.value }))} placeholder="optional" />
+              <Input value={payForm.notes} onChange={e => setPayForm(p => ({ ...p, notes: e.target.value }))} placeholder="Optional" />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPayDialogOpen(false)}>Cancel</Button>
-            <Button onClick={submitPayout} disabled={submitting}>
-              {submitting ? "Saving…" : "Record Payment"}
+            <Button onClick={submitPayout} disabled={createPayoutMutation.isPending}>
+              {createPayoutMutation.isPending ? "Recording…" : "Record Payment"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete payout confirm */}
-      <AlertDialog open={deletingPayout !== null} onOpenChange={(v) => !v && setDeletingPayout(null)}>
+      {/* Delete payout confirmation */}
+      <AlertDialog open={!!deletingPayout} onOpenChange={(v) => !v && setDeletingPayout(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete payout?</AlertDialogTitle>
+            <AlertDialogTitle>Delete Payout?</AlertDialogTitle>
             <AlertDialogDescription>
               {deletingPayout && (
                 <>
-                  Remove payout of <span className="font-mono">{inr(deletingPayout.amount)}</span> on{" "}
-                  <span className="font-mono">{deletingPayout.paymentDate}</span> via{" "}
-                  <span className="uppercase">{deletingPayout.paymentMethod}</span>?
+                  Remove the {inr(deletingPayout.amount)} payment on{" "}
+                  {deletingPayout.paymentDate}? This cannot be undone.
                 </>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeletePayout} className="bg-rose-600 hover:bg-rose-700">Delete</AlertDialogAction>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground"
+              onClick={confirmDeletePayout}
+              disabled={deletePayoutMutation.isPending}
+            >
+              {deletePayoutMutation.isPending ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -562,32 +557,37 @@ export default function DoctorLedger({ onBack }: { onBack: () => void }) {
   );
 }
 
-function KpiCard({ icon, label, value, tone }: { icon: React.ReactNode; label: string; value: string; tone?: "ok" | "warn" | "danger" }) {
-  const toneClass =
-    tone === "danger" ? "border-rose-200 bg-rose-50/50 dark:bg-rose-900/10 dark:border-rose-900/30" :
-    tone === "warn"   ? "border-amber-200 bg-amber-50/50 dark:bg-amber-900/10 dark:border-amber-900/30" :
-    tone === "ok"     ? "border-emerald-200 bg-emerald-50/30 dark:bg-emerald-900/10 dark:border-emerald-900/30" :
+function KpiCard({
+  icon, label, value, tone,
+}: {
+  icon: React.ReactNode; label: string; value: string; tone?: "warn" | "danger" | "ok";
+}) {
+  const color =
+    tone === "warn" ? "text-amber-600" :
+    tone === "danger" ? "text-rose-600" :
     "";
   return (
-    <div className={`bg-card border border-border rounded-xl p-3 shadow-sm ${toneClass}`}>
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground uppercase tracking-wide">
-        {icon} {label}
-      </div>
-      <div className="text-xl font-semibold mt-1 font-mono">{value}</div>
+    <div className="bg-card border border-border rounded-xl p-4">
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">{icon}{label}</div>
+      <p className={`text-lg font-bold font-mono ${color}`}>{value}</p>
     </div>
   );
 }
 
-function SummaryTile({ label, value, tone }: { label: string; value: string; tone?: "ok" | "warn" | "danger" }) {
-  const toneClass =
+function SummaryTile({
+  label, value, tone,
+}: {
+  label: string; value: string; tone?: "warn" | "danger" | "ok";
+}) {
+  const color =
+    tone === "warn" ? "text-amber-600" :
     tone === "danger" ? "text-rose-600" :
-    tone === "warn"   ? "text-amber-600" :
-    tone === "ok"     ? "text-emerald-600" :
+    tone === "ok" ? "text-emerald-600" :
     "";
   return (
-    <div className="bg-muted/30 border border-border rounded-lg p-3">
-      <div className="text-xs text-muted-foreground uppercase tracking-wide">{label}</div>
-      <div className={`text-lg font-semibold mt-1 font-mono ${toneClass}`}>{value}</div>
+    <div className="bg-muted/30 rounded-xl border border-border p-3">
+      <p className="text-[11px] text-muted-foreground">{label}</p>
+      <p className={`text-base font-bold font-mono mt-0.5 ${color}`}>{value}</p>
     </div>
   );
 }

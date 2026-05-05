@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,63 +13,85 @@ import {
 import { useForm } from "react-hook-form";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Plus, Trash2, Stethoscope, Star } from "lucide-react";
-import { saApi } from "@/lib/saApi";
-
-type CommRule = {
-  id: number; doctorId: number; name: string; type: "percentage" | "fixed";
-  value: number; scope: "all" | "category" | "test"; categories: string[];
-  testIds: number[]; isExclusive: boolean; isActive: boolean;
-};
-
-type Doctor = {
-  id: number; name: string; specialization: string;
-  defaultCommission?: string | number;
-  defaultCommissionType?: string;
-};
-
-type Test = { id: number; name: string };
+import {
+  useListDoctors,
+  useListTests,
+  useListCommissionRules,
+  useCreateCommissionRule,
+  useUpdateCommissionRule,
+  useDeleteCommissionRule,
+  type CommissionRule,
+} from "@workspace/api-client-react";
 
 const CATEGORIES = ["hematology", "biochemistry", "microbiology", "serology", "radiology", "cardiology", "urine analysis", "other"];
 const inr = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default function CommissionRules({ onBack }: { onBack: () => void }) {
   const { toast } = useToast();
-  const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [tests, setTests] = useState<Test[]>([]);
-  const [rules, setRules] = useState<CommRule[]>([]);
+  const queryClient = useQueryClient();
+
   const [selectedDoctorId, setSelectedDoctorId] = useState<number | null>(null);
   const [ruleOpen, setRuleOpen] = useState(false);
-  const [editRule, setEditRule] = useState<CommRule | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [editRule, setEditRule] = useState<CommissionRule | null>(null);
 
-  // Doctors and tests are not gated by super-admin token (regular ERP data)
+  const { data: doctorsData } = useListDoctors();
+  const doctors = doctorsData?.doctors ?? [];
+
+  const { data: testsData } = useListTests();
+  const tests = testsData?.tests ?? [];
+
+  const { data: rulesData, queryKey: rulesQueryKey, error: rulesError } = useListCommissionRules(
+    selectedDoctorId !== null ? { doctorId: selectedDoctorId } : undefined,
+  );
+
   useEffect(() => {
-    (async () => {
-      try {
-        const [dRes, tRes] = await Promise.all([
-          fetch("/api/doctors").then(r => r.json()),
-          fetch("/api/tests").then(r => r.json()),
-        ]);
-        setDoctors(Array.isArray(dRes?.doctors) ? dRes.doctors : []);
-        setTests(Array.isArray(tRes?.tests) ? tRes.tests : []);
-      } catch (e) {
-        toast({ title: "Failed to load doctors/tests", description: String(e), variant: "destructive" });
-      }
-    })();
-  }, [toast]);
-
-  const reloadRules = async () => {
-    try {
-      const data = await saApi.get<CommRule[]>(
-        `/commission/rules${selectedDoctorId ? `?doctorId=${selectedDoctorId}` : ""}`,
-      );
-      setRules(Array.isArray(data) ? data : []);
-    } catch (e) {
-      toast({ title: "Failed to load rules", description: String(e), variant: "destructive" });
+    if (rulesError) {
+      toast({ title: "Failed to load rules", description: String(rulesError), variant: "destructive" });
     }
-  };
+  }, [rulesError, toast]);
 
-  useEffect(() => { reloadRules(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [selectedDoctorId]);
+  const rules: CommissionRule[] = Array.isArray(rulesData) ? rulesData : [];
+
+  const deleteMutation = useDeleteCommissionRule({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Rule deleted" });
+        queryClient.invalidateQueries({ queryKey: rulesQueryKey });
+      },
+      onError: (e: unknown) => {
+        toast({ title: "Delete failed", description: String(e), variant: "destructive" });
+      },
+    },
+  });
+
+  const createMutation = useCreateCommissionRule({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Rule created" });
+        queryClient.invalidateQueries({ queryKey: rulesQueryKey });
+        setRuleOpen(false);
+        reset();
+      },
+      onError: (e: unknown) => {
+        toast({ title: "Save failed", description: String(e), variant: "destructive" });
+      },
+    },
+  });
+
+  const updateMutation = useUpdateCommissionRule({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Rule updated" });
+        queryClient.invalidateQueries({ queryKey: rulesQueryKey });
+        setRuleOpen(false);
+        setEditRule(null);
+        reset();
+      },
+      onError: (e: unknown) => {
+        toast({ title: "Save failed", description: String(e), variant: "destructive" });
+      },
+    },
+  });
 
   const { register, handleSubmit, reset, watch, setValue } = useForm<{
     name: string; type: string; value: string; scope: string;
@@ -77,7 +100,7 @@ export default function CommissionRules({ onBack }: { onBack: () => void }) {
   const scope = watch("scope", "all");
   const ruleType = watch("type", "percentage");
 
-  const openEdit = (rule: CommRule) => {
+  const openEdit = (rule: CommissionRule) => {
     setEditRule(rule);
     reset({
       name: rule.name, type: rule.type, value: String(rule.value), scope: rule.scope,
@@ -87,47 +110,34 @@ export default function CommissionRules({ onBack }: { onBack: () => void }) {
     setRuleOpen(true);
   };
 
-  const onDelete = async (id: number) => {
+  const onDelete = (id: number) => {
     if (!confirm("Delete this commission rule?")) return;
-    try {
-      await saApi.delete(`/commission/rules/${id}`);
-      toast({ title: "Rule deleted" });
-      await reloadRules();
-    } catch (e) {
-      toast({ title: "Delete failed", description: String(e), variant: "destructive" });
-    }
+    deleteMutation.mutate({ id });
   };
 
-  const onSave = handleSubmit(async (d) => {
-    const body: Record<string, unknown> = {
-      doctorId: selectedDoctorId, name: d.name, type: d.type, value: Number(d.value),
-      scope: d.scope, isExclusive: d.isExclusive === "true",
+  const onSave = handleSubmit((d) => {
+    const body = {
+      doctorId: selectedDoctorId,
+      name: d.name,
+      type: d.type as "percentage" | "fixed",
+      value: Number(d.value),
+      scope: d.scope as "all" | "category" | "test",
+      isExclusive: d.isExclusive === "true",
+      categories: d.scope === "category"
+        ? d.categories.split(",").map(s => s.trim()).filter(Boolean)
+        : [],
+      testIds: d.scope === "test"
+        ? d.testIds.split(",").map(n => Number(n)).filter(Boolean)
+        : [],
     };
-    if (d.scope === "category") {
-      body.categories = d.categories.split(",").map(s => s.trim()).filter(Boolean);
-    }
-    if (d.scope === "test") {
-      body.testIds = d.testIds.split(",").map(n => Number(n)).filter(Boolean);
-    }
-    setSaving(true);
-    try {
-      if (editRule) {
-        await saApi.patch(`/commission/rules/${editRule.id}`, body);
-        toast({ title: "Rule updated" });
-      } else {
-        await saApi.post("/commission/rules", body);
-        toast({ title: "Rule created" });
-      }
-      setRuleOpen(false);
-      setEditRule(null);
-      reset();
-      await reloadRules();
-    } catch (e) {
-      toast({ title: "Save failed", description: String(e), variant: "destructive" });
-    } finally {
-      setSaving(false);
+    if (editRule) {
+      updateMutation.mutate({ id: editRule.id, data: body });
+    } else {
+      createMutation.mutate({ data: body });
     }
   });
+
+  const isSaving = createMutation.isPending || updateMutation.isPending;
 
   return (
     <div className="min-h-screen w-full bg-background">
@@ -225,7 +235,12 @@ export default function CommissionRules({ onBack }: { onBack: () => void }) {
                         <td className="px-4 py-3">
                           <div className="flex gap-1 justify-end">
                             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => openEdit(rule)}>Edit</Button>
-                            <Button size="sm" variant="ghost" className="h-7 text-destructive hover:text-destructive" onClick={() => onDelete(rule.id)}>
+                            <Button
+                              size="sm" variant="ghost"
+                              className="h-7 text-destructive hover:text-destructive"
+                              onClick={() => onDelete(rule.id)}
+                              disabled={deleteMutation.isPending}
+                            >
                               <Trash2 size={13} />
                             </Button>
                           </div>
@@ -319,7 +334,9 @@ export default function CommissionRules({ onBack }: { onBack: () => void }) {
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => { setRuleOpen(false); setEditRule(null); }}>Cancel</Button>
-              <Button type="submit" disabled={saving}>{saving ? "Saving…" : editRule ? "Update" : "Add Rule"}</Button>
+              <Button type="submit" disabled={isSaving}>
+                {isSaving ? "Saving…" : editRule ? "Update" : "Add Rule"}
+              </Button>
             </div>
           </form>
         </DialogContent>

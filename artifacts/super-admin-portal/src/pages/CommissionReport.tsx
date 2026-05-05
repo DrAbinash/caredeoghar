@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,27 +7,12 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Printer, Stethoscope } from "lucide-react";
-import { saApi } from "@/lib/saApi";
-
-type TestGroupRow = {
-  testId: number; testName: string; category: string;
-  count: number; revenue: number; commission: number;
-  ruleName: string; ruleValue: number; ruleType: string;
-};
-
-type DetailedDoctor = {
-  doctor: { id: number; name: string; specialization: string; defaultCommission: number; defaultCommissionType: string };
-  orderCount: number; testCount: number;
-  totalRevenue: number; totalCommission: number; effectiveRate: number;
-  grouped: TestGroupRow[] | null;
-};
-
-type DetailedReport = {
-  report: DetailedDoctor[];
-  grandTotal: { doctors: number; orders: number; revenue: number; commission: number };
-};
-
-type Doctor = { id: number; name: string };
+import {
+  useListDoctors,
+  useGetDetailedCommissionReport,
+  type CommissionTestGroupRow,
+  type CommissionDoctorEntry,
+} from "@workspace/api-client-react";
 
 const inr = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const ALPHA = ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p"];
@@ -36,39 +21,27 @@ export default function CommissionReport({ onBack }: { onBack: () => void }) {
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
 
-  const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [reportDoctorId, setReportDoctorId] = useState<number | null>(null);
   const [from, setFrom] = useState(() => {
     const d = new Date(); d.setDate(1); return d.toISOString().split("T")[0];
   });
   const [to, setTo] = useState(new Date().toISOString().split("T")[0]);
-  const [data, setData] = useState<DetailedReport | null>(null);
-  const [loading, setLoading] = useState(false);
+
+  const { data: doctorsData } = useListDoctors();
+  const doctors = doctorsData?.doctors ?? [];
+
+  const { data, isLoading, error: reportError } = useGetDetailedCommissionReport({
+    from,
+    to,
+    groupBy: "test",
+    ...(reportDoctorId !== null ? { doctorId: reportDoctorId } : {}),
+  });
 
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/doctors");
-        const body = await res.json();
-        setDoctors(Array.isArray(body?.doctors) ? body.doctors : []);
-      } catch { /* ignore */ }
-    })();
-  }, []);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const url = `/commission/report-detailed?from=${from}&to=${to}&groupBy=test${reportDoctorId ? `&doctorId=${reportDoctorId}` : ""}`;
-      const res = await saApi.get<DetailedReport>(url);
-      setData(res);
-    } catch (e) {
-      toast({ title: "Failed to load report", description: String(e), variant: "destructive" });
-    } finally {
-      setLoading(false);
+    if (reportError) {
+      toast({ title: "Failed to load report", description: String(reportError), variant: "destructive" });
     }
-  };
-
-  useEffect(() => { load(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [from, to, reportDoctorId]);
+  }, [reportError, toast]);
 
   const report = data?.report ?? [];
   const grandTotal = data?.grandTotal ?? { doctors: 0, orders: 0, revenue: 0, commission: 0 };
@@ -173,7 +146,7 @@ export default function CommissionReport({ onBack }: { onBack: () => void }) {
             <p className="meta">Generated: {new Date().toLocaleString("en-IN")}</p>
           </div>
 
-          {loading ? (
+          {isLoading ? (
             <div className="space-y-4">
               {[...Array(3)].map((_, i) => <div key={i} className="h-48 bg-muted rounded-xl animate-pulse" />)}
             </div>
@@ -212,9 +185,9 @@ export default function CommissionReport({ onBack }: { onBack: () => void }) {
   );
 }
 
-function CommissionTable({ entry, index }: { entry: DetailedDoctor; index: number }) {
+function CommissionTable({ entry, index }: { entry: CommissionDoctorEntry; index: number }) {
   const label = ALPHA[index] ?? String(index + 1);
-  const rows: TestGroupRow[] = Array.isArray(entry.grouped) ? entry.grouped : [];
+  const rows: CommissionTestGroupRow[] = Array.isArray(entry.grouped) ? entry.grouped : [];
 
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">

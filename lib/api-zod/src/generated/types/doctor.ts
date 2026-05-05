@@ -15,5 +15,8 @@ export interface Doctor {
   hospitalAffiliation?: string | null;
   /** State medical council registration number — printed on PCPNDT Form F. */
   registrationNumber?: string | null;
+  defaultCommission?: number | string | null;
+  defaultCommissionType?: string | null;
+  ledgerId?: number | null;
   createdAt: string;
 }

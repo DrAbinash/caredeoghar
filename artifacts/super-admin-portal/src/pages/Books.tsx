@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,120 +8,117 @@ import {
   ArrowLeft, BookOpen, Plus, Pencil, Trash2, Users, FileText,
   Calendar, AlertTriangle, Check, X, Loader2, Star,
 } from "lucide-react";
-
-const API_BASE = "/api";
-
-type Book = {
-  id: number;
-  name: string;
-  isDefault: boolean;
-  doctorCount: number;
-  patientCount: number;
-  billCount: number;
-  orderCount: number;
-  appointmentCount: number;
-};
-
-type Doctor = {
-  id: number;
-  name: string;
-  specialization: string;
-  ledgerId: number | null;
-};
+import {
+  useListDoctors,
+  getListDoctorsQueryKey,
+  useListLedgers,
+  useCreateLedger,
+  useUpdateLedger,
+  useDeleteLedger,
+  useAssignDoctorsToLedger,
+  useResetLedger,
+  type Book,
+} from "@workspace/api-client-react";
 
 export default function BooksManager({ token, onBack }: { token: string; onBack: () => void }) {
   const { toast } = useToast();
-  const [books, setBooks] = useState<Book[]>([]);
-  const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+
   const [newName, setNewName] = useState("");
-  const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingName, setEditingName] = useState("");
   const [assignTarget, setAssignTarget] = useState<Book | null>(null);
   const [resetTarget, setResetTarget] = useState<Book | null>(null);
   const [resetReason, setResetReason] = useState("");
   const [resetConfirm, setResetConfirm] = useState("");
-  const [resetting, setResetting] = useState(false);
 
-  const refresh = async () => {
-    setLoading(true);
-    try {
-      const [bRes, dRes] = await Promise.all([
-        fetch(`${API_BASE}/ledgers`),
-        fetch(`${API_BASE}/doctors`),
-      ]);
-      const bBody = await bRes.json();
-      const dBody = await dRes.json();
-      setBooks(Array.isArray(bBody) ? bBody : []);
-      setDoctors(Array.isArray(dBody?.doctors) ? dBody.doctors : []);
-    } catch {
+  const { data: booksData, isLoading, error: booksError, queryKey: booksQueryKey } = useListLedgers();
+  const books: Book[] = Array.isArray(booksData) ? booksData : [];
+
+  useEffect(() => {
+    if (booksError) {
       toast({ title: "Failed to load", description: "Network error", variant: "destructive" });
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [booksError, toast]);
 
-  useEffect(() => { refresh(); }, []);
+  const { data: doctorsData } = useListDoctors();
+  const doctors = doctorsData?.doctors ?? [];
 
-  const create = async () => {
+  const createMutation = useCreateLedger({
+    mutation: {
+      onSuccess: (_, { data: { name } }) => {
+        toast({ title: "Book created", description: name });
+        setNewName("");
+        queryClient.invalidateQueries({ queryKey: booksQueryKey });
+      },
+      onError: (e: unknown) => {
+        toast({ title: "Could not create", description: (e as Error).message, variant: "destructive" });
+      },
+    },
+  });
+
+  const renameMutation = useUpdateLedger({
+    mutation: {
+      onSuccess: () => {
+        setEditingId(null);
+        queryClient.invalidateQueries({ queryKey: booksQueryKey });
+      },
+      onError: (e: unknown) => {
+        toast({ title: "Rename failed", description: (e as Error).message, variant: "destructive" });
+      },
+    },
+  });
+
+  const deleteMutation = useDeleteLedger({
+    mutation: {
+      onSuccess: (_, { data: _body, id }) => {
+        const book = books.find(b => b.id === id);
+        toast({ title: "Book deleted", description: book?.name });
+        queryClient.invalidateQueries({ queryKey: booksQueryKey });
+        queryClient.invalidateQueries({ queryKey: getListDoctorsQueryKey() });
+      },
+      onError: (e: unknown) => {
+        toast({ title: "Cannot delete", description: (e as Error).message, variant: "destructive" });
+      },
+    },
+  });
+
+  const resetMutation = useResetLedger({
+    mutation: {
+      onSuccess: (body) => {
+        toast({
+          title: `"${resetTarget?.name}" reset to bill #1`,
+          description: `Wiped ${body.wiped.bills} bills · ${body.wiped.orders} orders · ${body.wiped.patients} patients`,
+        });
+        setResetTarget(null);
+        setResetReason("");
+        setResetConfirm("");
+        queryClient.invalidateQueries({ queryKey: booksQueryKey });
+      },
+      onError: (e: unknown) => {
+        toast({ title: "Reset failed", description: (e as Error).message, variant: "destructive" });
+      },
+    },
+  });
+
+  const create = () => {
     const name = newName.trim();
     if (!name) return;
-    setCreating(true);
-    try {
-      const res = await fetch(`${API_BASE}/ledgers`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, name }),
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? "Failed");
-      toast({ title: "Book created", description: name });
-      setNewName("");
-      await refresh();
-    } catch (e) {
-      toast({ title: "Could not create", description: (e as Error).message, variant: "destructive" });
-    } finally {
-      setCreating(false);
-    }
+    createMutation.mutate({ data: { token, name } });
   };
 
-  const saveRename = async (id: number) => {
+  const saveRename = (id: number) => {
     const name = editingName.trim();
     if (!name) { setEditingId(null); return; }
-    try {
-      const res = await fetch(`${API_BASE}/ledgers/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, name }),
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? "Failed");
-      setEditingId(null);
-      await refresh();
-    } catch (e) {
-      toast({ title: "Rename failed", description: (e as Error).message, variant: "destructive" });
-    }
+    renameMutation.mutate({ id, data: { token, name } });
   };
 
-  const deleteBook = async (book: Book) => {
+  const deleteBook = (book: Book) => {
     if (!confirm(`Delete the book "${book.name}"? Doctors assigned to it will move back to Default.`)) return;
-    try {
-      const res = await fetch(`${API_BASE}/ledgers/${book.id}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? "Failed");
-      toast({ title: "Book deleted", description: book.name });
-      await refresh();
-    } catch (e) {
-      toast({ title: "Cannot delete", description: (e as Error).message, variant: "destructive" });
-    }
+    deleteMutation.mutate({ id: book.id, data: { token } });
   };
 
-  const doReset = async () => {
+  const doReset = () => {
     if (!resetTarget) return;
     if (resetConfirm !== resetTarget.name) {
       toast({ title: "Type the book name to confirm", variant: "destructive" });
@@ -130,28 +128,7 @@ export default function BooksManager({ token, onBack }: { token: string; onBack:
       toast({ title: "Reason is required (min 3 characters)", variant: "destructive" });
       return;
     }
-    setResetting(true);
-    try {
-      const res = await fetch(`${API_BASE}/ledgers/${resetTarget.id}/reset`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, reason: resetReason.trim() }),
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? "Failed");
-      toast({
-        title: `"${resetTarget.name}" reset to bill #1`,
-        description: `Wiped ${body.wiped.bills} bills · ${body.wiped.orders} orders · ${body.wiped.patients} patients`,
-      });
-      setResetTarget(null);
-      setResetReason("");
-      setResetConfirm("");
-      await refresh();
-    } catch (e) {
-      toast({ title: "Reset failed", description: (e as Error).message, variant: "destructive" });
-    } finally {
-      setResetting(false);
-    }
+    resetMutation.mutate({ id: resetTarget.id, data: { token, reason: resetReason.trim() } });
   };
 
   return (
@@ -179,15 +156,15 @@ export default function BooksManager({ token, onBack }: { token: string; onBack:
               placeholder="e.g. Dr Abinash + Dr Ramesh"
               onKeyDown={(e) => e.key === "Enter" && create()}
             />
-            <Button onClick={create} disabled={creating || !newName.trim()}>
-              {creating ? <Loader2 size={14} className="animate-spin mr-1" /> : <Plus size={14} className="mr-1" />}
+            <Button onClick={create} disabled={createMutation.isPending || !newName.trim()}>
+              {createMutation.isPending ? <Loader2 size={14} className="animate-spin mr-1" /> : <Plus size={14} className="mr-1" />}
               Create
             </Button>
           </div>
         </div>
 
         {/* Books list */}
-        {loading ? (
+        {isLoading ? (
           <div className="flex items-center justify-center py-12 text-muted-foreground">
             <Loader2 className="animate-spin mr-2" size={16} /> Loading…
           </div>
@@ -226,7 +203,12 @@ export default function BooksManager({ token, onBack }: { token: string; onBack:
                     )}
                   </div>
                   {!b.isDefault && (
-                    <Button variant="ghost" size="sm" onClick={() => deleteBook(b)} className="text-destructive hover:bg-destructive/10">
+                    <Button
+                      variant="ghost" size="sm"
+                      onClick={() => deleteBook(b)}
+                      className="text-destructive hover:bg-destructive/10"
+                      disabled={deleteMutation.isPending}
+                    >
                       <Trash2 size={13} />
                     </Button>
                   )}
@@ -267,7 +249,11 @@ export default function BooksManager({ token, onBack }: { token: string; onBack:
           allDoctors={doctors}
           token={token}
           onClose={() => setAssignTarget(null)}
-          onSaved={() => { setAssignTarget(null); refresh(); }}
+          onSaved={() => {
+            setAssignTarget(null);
+            queryClient.invalidateQueries({ queryKey: booksQueryKey });
+            queryClient.invalidateQueries({ queryKey: getListDoctorsQueryKey() });
+          }}
         />
       )}
 
@@ -280,7 +266,7 @@ export default function BooksManager({ token, onBack }: { token: string; onBack:
                 <AlertTriangle className="text-destructive" size={20} />
               </div>
               <div>
-                <h2 className="text-lg font-bold">Reset “{resetTarget.name}”?</h2>
+                <h2 className="text-lg font-bold">Reset "{resetTarget.name}"?</h2>
                 <p className="text-xs text-muted-foreground mt-1">
                   This permanently deletes <b>{resetTarget.billCount} bills</b>, <b>{resetTarget.orderCount} orders</b>,{" "}
                   <b>{resetTarget.patientCount} patients</b>, all payments and appointments in this book.
@@ -304,10 +290,10 @@ export default function BooksManager({ token, onBack }: { token: string; onBack:
               <Button variant="ghost" onClick={() => setResetTarget(null)}>Cancel</Button>
               <Button
                 variant="destructive"
-                disabled={resetting || resetConfirm !== resetTarget.name || resetReason.trim().length < 3}
+                disabled={resetMutation.isPending || resetConfirm !== resetTarget.name || resetReason.trim().length < 3}
                 onClick={doReset}
               >
-                {resetting ? <Loader2 size={14} className="animate-spin mr-1.5" /> : <Trash2 size={14} className="mr-1.5" />}
+                {resetMutation.isPending ? <Loader2 size={14} className="animate-spin mr-1.5" /> : <Trash2 size={14} className="mr-1.5" />}
                 Permanently Reset
               </Button>
             </div>
@@ -329,17 +315,39 @@ function Stat({ icon: Icon, label, value }: { icon: React.ComponentType<{ size?:
   );
 }
 
+type DoctorForAssign = {
+  id: number;
+  name: string;
+  specialization: string;
+  ledgerId?: number | null;
+};
+
 function AssignDoctorsModal({
   book, allDoctors, token, onClose, onSaved,
 }: {
-  book: Book; allDoctors: Doctor[]; token: string; onClose: () => void; onSaved: () => void;
+  book: Book;
+  allDoctors: DoctorForAssign[];
+  token: string;
+  onClose: () => void;
+  onSaved: () => void;
 }) {
   const { toast } = useToast();
   const [selected, setSelected] = useState<Set<number>>(
     () => new Set(allDoctors.filter(d => d.ledgerId === book.id).map(d => d.id)),
   );
   const [filter, setFilter] = useState("");
-  const [saving, setSaving] = useState(false);
+
+  const saveMutation = useAssignDoctorsToLedger({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Doctors updated", description: `${selected.size} assigned to ${book.name}` });
+        onSaved();
+      },
+      onError: (e: unknown) => {
+        toast({ title: "Save failed", description: (e as Error).message, variant: "destructive" });
+      },
+    },
+  });
 
   const filtered = allDoctors.filter(d =>
     !filter ||
@@ -353,31 +361,12 @@ function AssignDoctorsModal({
     setSelected(next);
   };
 
-  const save = async () => {
-    setSaving(true);
-    try {
-      const res = await fetch(`${API_BASE}/ledgers/${book.id}/assign-doctors`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, doctorIds: Array.from(selected) }),
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? "Failed");
-      toast({ title: "Doctors updated", description: `${selected.size} assigned to ${book.name}` });
-      onSaved();
-    } catch (e) {
-      toast({ title: "Save failed", description: (e as Error).message, variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-card border border-border rounded-2xl p-6 max-w-lg w-full shadow-2xl flex flex-col max-h-[80vh]">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-lg font-bold">Assign doctors to “{book.name}”</h2>
+            <h2 className="text-lg font-bold">Assign doctors to "{book.name}"</h2>
             <p className="text-xs text-muted-foreground mt-0.5">Selected doctors will route their bills/orders to this book.</p>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose}><X size={16} /></Button>
@@ -418,8 +407,11 @@ function AssignDoctorsModal({
           <span className="text-xs text-muted-foreground">{selected.size} selected</span>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button onClick={save} disabled={saving}>
-              {saving ? <Loader2 size={14} className="animate-spin mr-1.5" /> : null}
+            <Button
+              onClick={() => saveMutation.mutate({ id: book.id, data: { token, doctorIds: Array.from(selected) } })}
+              disabled={saveMutation.isPending}
+            >
+              {saveMutation.isPending ? <Loader2 size={14} className="animate-spin mr-1.5" /> : null}
               Save
             </Button>
           </div>

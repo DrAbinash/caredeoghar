@@ -27,6 +27,10 @@ tags:
     description: Appointment scheduling
   - name: expenses
     description: Expense management
+  - name: super-admin
+    description: Super admin commission and ledger operations
+  - name: ledgers
+    description: Books / ledger group management
 
 paths:
   /healthz:
@@ -844,6 +848,361 @@ paths:
                     type: boolean
                 required: [success]
 
+  # Super Admin — Commission Rules
+  /commission/rules:
+    get:
+      operationId: listCommissionRules
+      tags: [super-admin]
+      summary: List commission rules
+      parameters:
+        - name: doctorId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of commission rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CommissionRule"
+    post:
+      operationId: createCommissionRule
+      tags: [super-admin]
+      summary: Create a commission rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommissionRuleBody"
+      responses:
+        "201":
+          description: Created rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommissionRule"
+
+  /commission/rules/{id}:
+    patch:
+      operationId: updateCommissionRule
+      tags: [super-admin]
+      summary: Update a commission rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommissionRuleBody"
+      responses:
+        "200":
+          description: Updated rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommissionRule"
+    delete:
+      operationId: deleteCommissionRule
+      tags: [super-admin]
+      summary: Delete a commission rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required: [success]
+
+  /commission/report-detailed:
+    get:
+      operationId: getDetailedCommissionReport
+      tags: [super-admin]
+      summary: Detailed commission report grouped by test
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+        - name: doctorId
+          in: query
+          schema:
+            type: integer
+        - name: groupBy
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Detailed commission report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DetailedCommissionReport"
+
+  # Super Admin — Doctor Ledger
+  /doctor-ledger:
+    get:
+      operationId: getDoctorLedgerSummary
+      tags: [super-admin]
+      summary: Summary of earned/paid/due commission per doctor
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Doctor ledger summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DoctorLedgerSummary"
+
+  /doctor-ledger/{doctorId}:
+    get:
+      operationId: getDoctorLedgerDetail
+      tags: [super-admin]
+      summary: Detailed ledger for a specific doctor
+      parameters:
+        - name: doctorId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: from
+          in: query
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Doctor ledger detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DoctorLedgerDetail"
+
+  /doctor-ledger/{doctorId}/payouts:
+    post:
+      operationId: createDoctorPayout
+      tags: [super-admin]
+      summary: Record a payout to a doctor
+      parameters:
+        - name: doctorId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePayoutBody"
+      responses:
+        "201":
+          description: Created payout
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DoctorPayout"
+
+  /doctor-ledger/payouts/{id}:
+    delete:
+      operationId: deleteDoctorPayout
+      tags: [super-admin]
+      summary: Delete a payout record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required: [success]
+
+  # Books / Ledgers
+  /ledgers:
+    get:
+      operationId: listLedgers
+      tags: [ledgers]
+      summary: List books (ledger groups)
+      responses:
+        "200":
+          description: List of books
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Book"
+    post:
+      operationId: createLedger
+      tags: [ledgers]
+      summary: Create a new book
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLedgerBody"
+      responses:
+        "201":
+          description: Created book
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+
+  /ledgers/{id}:
+    patch:
+      operationId: updateLedger
+      tags: [ledgers]
+      summary: Rename a book
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateLedgerBody"
+      responses:
+        "200":
+          description: Updated book
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+    delete:
+      operationId: deleteLedger
+      tags: [ledgers]
+      summary: Delete a book
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteLedgerBody"
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required: [success]
+
+  /ledgers/{id}/assign-doctors:
+    post:
+      operationId: assignDoctorsToLedger
+      tags: [ledgers]
+      summary: Assign doctors to a book
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignDoctorsBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assigned:
+                    type: integer
+                required: [assigned]
+
+  /ledgers/{id}/reset:
+    post:
+      operationId: resetLedger
+      tags: [ledgers]
+      summary: Reset a book (wipe all patient/bill/order data)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetLedgerBody"
+      responses:
+        "200":
+          description: Reset result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResetLedgerResult"
+
 components:
   schemas:
     HealthStatus:
@@ -1240,6 +1599,17 @@ components:
           type: string
           nullable: true
           description: State medical council registration number — printed on PCPNDT Form F.
+        defaultCommission:
+          oneOf:
+            - type: number
+            - type: string
+          nullable: true
+        defaultCommissionType:
+          type: string
+          nullable: true
+        ledgerId:
+          type: integer
+          nullable: true
         createdAt:
           type: string
       required: [id, name, specialization, createdAt]
@@ -1589,3 +1959,424 @@ components:
           type: ["string", "null"]
         notes:
           type: ["string", "null"]
+
+    # Super Admin schemas
+    CommissionRule:
+      type: object
+      properties:
+        id:
+          type: integer
+        doctorId:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+          enum: [percentage, fixed]
+        value:
+          type: number
+        scope:
+          type: string
+          enum: [all, category, test]
+        categories:
+          type: array
+          items:
+            type: string
+        testIds:
+          type: array
+          items:
+            type: integer
+        isExclusive:
+          type: boolean
+        isActive:
+          type: boolean
+      required: [id, doctorId, name, type, value, scope, categories, testIds, isExclusive, isActive]
+
+    CommissionRuleBody:
+      type: object
+      properties:
+        doctorId:
+          type: integer
+          nullable: true
+        name:
+          type: string
+        type:
+          type: string
+          enum: [percentage, fixed]
+        value:
+          type: number
+        scope:
+          type: string
+          enum: [all, category, test]
+        categories:
+          type: array
+          items:
+            type: string
+        testIds:
+          type: array
+          items:
+            type: integer
+        isExclusive:
+          type: boolean
+      required: [name, type, value, scope]
+
+    CommissionTestGroupRow:
+      type: object
+      properties:
+        testId:
+          type: integer
+        testName:
+          type: string
+        category:
+          type: string
+        count:
+          type: integer
+        revenue:
+          type: number
+        commission:
+          type: number
+        ruleName:
+          type: string
+        ruleValue:
+          type: number
+        ruleType:
+          type: string
+      required: [testId, testName, category, count, revenue, commission, ruleName, ruleValue, ruleType]
+
+    CommissionDoctorEntry:
+      type: object
+      properties:
+        doctor:
+          type: object
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+            specialization:
+              type: string
+            defaultCommission:
+              type: number
+            defaultCommissionType:
+              type: string
+          required: [id, name, specialization, defaultCommission, defaultCommissionType]
+        orderCount:
+          type: integer
+        testCount:
+          type: integer
+        totalRevenue:
+          type: number
+        totalCommission:
+          type: number
+        effectiveRate:
+          type: number
+        grouped:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/CommissionTestGroupRow"
+      required: [doctor, orderCount, testCount, totalRevenue, totalCommission, effectiveRate]
+
+    DetailedCommissionReport:
+      type: object
+      properties:
+        report:
+          type: array
+          items:
+            $ref: "#/components/schemas/CommissionDoctorEntry"
+        grandTotal:
+          type: object
+          properties:
+            doctors:
+              type: integer
+            orders:
+              type: integer
+            revenue:
+              type: number
+            commission:
+              type: number
+          required: [doctors, orders, revenue, commission]
+      required: [report, grandTotal]
+
+    DoctorLedgerRow:
+      type: object
+      properties:
+        doctorId:
+          type: integer
+        doctorName:
+          type: string
+        specialization:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        orderCount:
+          type: integer
+        revenueWindow:
+          type: number
+        earnedWindow:
+          type: number
+        paidWindow:
+          type: number
+        dueWindow:
+          type: number
+        earnedLifetime:
+          type: number
+        paidLifetime:
+          type: number
+        outstanding:
+          type: number
+      required: [doctorId, doctorName, specialization, orderCount, revenueWindow, earnedWindow, paidWindow, dueWindow, earnedLifetime, paidLifetime, outstanding]
+
+    DoctorLedgerSummary:
+      type: object
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/DoctorLedgerRow"
+        totals:
+          type: object
+          properties:
+            doctors:
+              type: integer
+            earnedWindow:
+              type: number
+            paidWindow:
+              type: number
+            dueWindow:
+              type: number
+            outstanding:
+              type: number
+          required: [doctors, earnedWindow, paidWindow, dueWindow, outstanding]
+        window:
+          type: object
+          properties:
+            from:
+              type: string
+              nullable: true
+            to:
+              type: string
+              nullable: true
+          required: [from, to]
+      required: [rows, totals, window]
+
+    DoctorPayout:
+      type: object
+      properties:
+        id:
+          type: integer
+        doctorId:
+          type: integer
+        amount:
+          type: number
+        paymentDate:
+          type: string
+        paymentMethod:
+          type: string
+        reference:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        periodFrom:
+          type: string
+          nullable: true
+        periodTo:
+          type: string
+          nullable: true
+      required: [id, doctorId, amount, paymentDate, paymentMethod]
+
+    LedgerEntry:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [earned, paid]
+        date:
+          type: string
+        particular:
+          type: string
+        credit:
+          type: number
+        debit:
+          type: number
+        balance:
+          type: number
+        ref:
+          type: string
+          nullable: true
+        id:
+          type: integer
+          nullable: true
+      required: [kind, date, particular, credit, debit, balance]
+
+    DoctorLedgerDetail:
+      type: object
+      properties:
+        doctor:
+          type: object
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+            specialization:
+              type: string
+            phone:
+              type: string
+              nullable: true
+            email:
+              type: string
+              nullable: true
+          required: [id, name, specialization]
+        window:
+          type: object
+          properties:
+            from:
+              type: string
+              nullable: true
+            to:
+              type: string
+              nullable: true
+          required: [from, to]
+        summary:
+          type: object
+          properties:
+            totalRevenue:
+              type: number
+            totalEarned:
+              type: number
+            totalPaid:
+              type: number
+            dueWindow:
+              type: number
+            lifetimeEarned:
+              type: number
+            lifetimePaid:
+              type: number
+            outstanding:
+              type: number
+            orderCount:
+              type: integer
+            payoutCount:
+              type: integer
+          required: [totalRevenue, totalEarned, totalPaid, dueWindow, lifetimeEarned, lifetimePaid, outstanding, orderCount, payoutCount]
+        payouts:
+          type: array
+          items:
+            $ref: "#/components/schemas/DoctorPayout"
+        ledger:
+          type: array
+          items:
+            $ref: "#/components/schemas/LedgerEntry"
+      required: [doctor, window, summary, payouts, ledger]
+
+    CreatePayoutBody:
+      type: object
+      properties:
+        amount:
+          type: number
+        paymentDate:
+          type: string
+        paymentMethod:
+          type: string
+        reference:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        periodFrom:
+          type: string
+          nullable: true
+        periodTo:
+          type: string
+          nullable: true
+      required: [amount, paymentDate, paymentMethod]
+
+    # Books / Ledger schemas
+    Book:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        isDefault:
+          type: boolean
+        doctorCount:
+          type: integer
+        patientCount:
+          type: integer
+        billCount:
+          type: integer
+        orderCount:
+          type: integer
+        appointmentCount:
+          type: integer
+      required: [id, name, isDefault, doctorCount, patientCount, billCount, orderCount, appointmentCount]
+
+    CreateLedgerBody:
+      type: object
+      properties:
+        token:
+          type: string
+        name:
+          type: string
+      required: [token, name]
+
+    UpdateLedgerBody:
+      type: object
+      properties:
+        token:
+          type: string
+        name:
+          type: string
+      required: [token, name]
+
+    DeleteLedgerBody:
+      type: object
+      properties:
+        token:
+          type: string
+      required: [token]
+
+    AssignDoctorsBody:
+      type: object
+      properties:
+        token:
+          type: string
+        doctorIds:
+          type: array
+          items:
+            type: integer
+      required: [token, doctorIds]
+
+    ResetLedgerBody:
+      type: object
+      properties:
+        token:
+          type: string
+        reason:
+          type: string
+      required: [token, reason]
+
+    ResetLedgerResult:
+      type: object
+      properties:
+        wiped:
+          type: object
+          properties:
+            bills:
+              type: integer
+            orders:
+              type: integer
+            patients:
+              type: integer
+          required: [bills, orders, patients]
+      required: [wiped]

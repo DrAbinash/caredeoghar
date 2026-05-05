@@ -104,6 +104,9 @@ export interface Doctor {
   hospitalAffiliation?: string | null;
   /** State medical council registration number — printed on PCPNDT Form F. */
   registrationNumber?: string | null;
+  defaultCommission?: number | string | null;
+  defaultCommissionType?: string | null;
+  ledgerId?: number | null;
   createdAt: string;
 }
 
@@ -475,6 +478,260 @@ export interface UpdateExpenseBody {
   notes?: string | null;
 }
 
+export type CommissionRuleType =
+  (typeof CommissionRuleType)[keyof typeof CommissionRuleType];
+
+export const CommissionRuleType = {
+  percentage: "percentage",
+  fixed: "fixed",
+} as const;
+
+export type CommissionRuleScope =
+  (typeof CommissionRuleScope)[keyof typeof CommissionRuleScope];
+
+export const CommissionRuleScope = {
+  all: "all",
+  category: "category",
+  test: "test",
+} as const;
+
+export interface CommissionRule {
+  id: number;
+  doctorId: number;
+  name: string;
+  type: CommissionRuleType;
+  value: number;
+  scope: CommissionRuleScope;
+  categories: string[];
+  testIds: number[];
+  isExclusive: boolean;
+  isActive: boolean;
+}
+
+export type CommissionRuleBodyType =
+  (typeof CommissionRuleBodyType)[keyof typeof CommissionRuleBodyType];
+
+export const CommissionRuleBodyType = {
+  percentage: "percentage",
+  fixed: "fixed",
+} as const;
+
+export type CommissionRuleBodyScope =
+  (typeof CommissionRuleBodyScope)[keyof typeof CommissionRuleBodyScope];
+
+export const CommissionRuleBodyScope = {
+  all: "all",
+  category: "category",
+  test: "test",
+} as const;
+
+export interface CommissionRuleBody {
+  doctorId?: number | null;
+  name: string;
+  type: CommissionRuleBodyType;
+  value: number;
+  scope: CommissionRuleBodyScope;
+  categories?: string[];
+  testIds?: number[];
+  isExclusive?: boolean;
+}
+
+export interface CommissionTestGroupRow {
+  testId: number;
+  testName: string;
+  category: string;
+  count: number;
+  revenue: number;
+  commission: number;
+  ruleName: string;
+  ruleValue: number;
+  ruleType: string;
+}
+
+export type CommissionDoctorEntryDoctor = {
+  id: number;
+  name: string;
+  specialization: string;
+  defaultCommission: number;
+  defaultCommissionType: string;
+};
+
+export interface CommissionDoctorEntry {
+  doctor: CommissionDoctorEntryDoctor;
+  orderCount: number;
+  testCount: number;
+  totalRevenue: number;
+  totalCommission: number;
+  effectiveRate: number;
+  grouped?: CommissionTestGroupRow[] | null;
+}
+
+export type DetailedCommissionReportGrandTotal = {
+  doctors: number;
+  orders: number;
+  revenue: number;
+  commission: number;
+};
+
+export interface DetailedCommissionReport {
+  report: CommissionDoctorEntry[];
+  grandTotal: DetailedCommissionReportGrandTotal;
+}
+
+export interface DoctorLedgerRow {
+  doctorId: number;
+  doctorName: string;
+  specialization: string;
+  phone?: string | null;
+  email?: string | null;
+  orderCount: number;
+  revenueWindow: number;
+  earnedWindow: number;
+  paidWindow: number;
+  dueWindow: number;
+  earnedLifetime: number;
+  paidLifetime: number;
+  outstanding: number;
+}
+
+export type DoctorLedgerSummaryTotals = {
+  doctors: number;
+  earnedWindow: number;
+  paidWindow: number;
+  dueWindow: number;
+  outstanding: number;
+};
+
+export type DoctorLedgerSummaryWindow = {
+  from: string | null;
+  to: string | null;
+};
+
+export interface DoctorLedgerSummary {
+  rows: DoctorLedgerRow[];
+  totals: DoctorLedgerSummaryTotals;
+  window: DoctorLedgerSummaryWindow;
+}
+
+export interface DoctorPayout {
+  id: number;
+  doctorId: number;
+  amount: number;
+  paymentDate: string;
+  paymentMethod: string;
+  reference?: string | null;
+  notes?: string | null;
+  periodFrom?: string | null;
+  periodTo?: string | null;
+}
+
+export type LedgerEntryKind =
+  (typeof LedgerEntryKind)[keyof typeof LedgerEntryKind];
+
+export const LedgerEntryKind = {
+  earned: "earned",
+  paid: "paid",
+} as const;
+
+export interface LedgerEntry {
+  kind: LedgerEntryKind;
+  date: string;
+  particular: string;
+  credit: number;
+  debit: number;
+  balance: number;
+  ref?: string | null;
+  id?: number | null;
+}
+
+export type DoctorLedgerDetailDoctor = {
+  id: number;
+  name: string;
+  specialization: string;
+  phone?: string | null;
+  email?: string | null;
+};
+
+export type DoctorLedgerDetailWindow = {
+  from: string | null;
+  to: string | null;
+};
+
+export type DoctorLedgerDetailSummary = {
+  totalRevenue: number;
+  totalEarned: number;
+  totalPaid: number;
+  dueWindow: number;
+  lifetimeEarned: number;
+  lifetimePaid: number;
+  outstanding: number;
+  orderCount: number;
+  payoutCount: number;
+};
+
+export interface DoctorLedgerDetail {
+  doctor: DoctorLedgerDetailDoctor;
+  window: DoctorLedgerDetailWindow;
+  summary: DoctorLedgerDetailSummary;
+  payouts: DoctorPayout[];
+  ledger: LedgerEntry[];
+}
+
+export interface CreatePayoutBody {
+  amount: number;
+  paymentDate: string;
+  paymentMethod: string;
+  reference?: string | null;
+  notes?: string | null;
+  periodFrom?: string | null;
+  periodTo?: string | null;
+}
+
+export interface Book {
+  id: number;
+  name: string;
+  isDefault: boolean;
+  doctorCount: number;
+  patientCount: number;
+  billCount: number;
+  orderCount: number;
+  appointmentCount: number;
+}
+
+export interface CreateLedgerBody {
+  token: string;
+  name: string;
+}
+
+export interface UpdateLedgerBody {
+  token: string;
+  name: string;
+}
+
+export interface DeleteLedgerBody {
+  token: string;
+}
+
+export interface AssignDoctorsBody {
+  token: string;
+  doctorIds: number[];
+}
+
+export interface ResetLedgerBody {
+  token: string;
+  reason: string;
+}
+
+export type ResetLedgerResultWiped = {
+  bills: number;
+  orders: number;
+  patients: number;
+};
+
+export interface ResetLedgerResult {
+  wiped: ResetLedgerResultWiped;
+}
+
 export type ListPatientsParams = {
   search?: string;
   page?: number;
@@ -581,4 +838,42 @@ export type GetExpensesSummaryParams = {
 
 export type DeleteExpense200 = {
   success: boolean;
+};
+
+export type ListCommissionRulesParams = {
+  doctorId?: number;
+};
+
+export type DeleteCommissionRule200 = {
+  success: boolean;
+};
+
+export type GetDetailedCommissionReportParams = {
+  from?: string;
+  to?: string;
+  doctorId?: number;
+  groupBy?: string;
+};
+
+export type GetDoctorLedgerSummaryParams = {
+  from?: string;
+  to?: string;
+  search?: string;
+};
+
+export type GetDoctorLedgerDetailParams = {
+  from?: string;
+  to?: string;
+};
+
+export type DeleteDoctorPayout200 = {
+  success: boolean;
+};
+
+export type DeleteLedger200 = {
+  success: boolean;
+};
+
+export type AssignDoctorsToLedger200 = {
+  assigned: number;
 };

@@ -155,6 +155,9 @@ export const GetPatientHistoryResponse = zod.object({
             .describe(
               "State medical council registration number — printed on PCPNDT Form F.",
             ),
+          defaultCommission: zod.union([zod.number(), zod.string()]).nullish(),
+          defaultCommissionType: zod.string().nullish(),
+          ledgerId: zod.number().nullish(),
           createdAt: zod.string(),
         })
         .nullish(),
@@ -334,6 +337,9 @@ export const ListOrdersResponse = zod.object({
             .describe(
               "State medical council registration number — printed on PCPNDT Form F.",
             ),
+          defaultCommission: zod.union([zod.number(), zod.string()]).nullish(),
+          defaultCommissionType: zod.string().nullish(),
+          ledgerId: zod.number().nullish(),
           createdAt: zod.string(),
         })
         .nullish(),
@@ -425,6 +431,9 @@ export const GetOrderResponse = zod.object({
         .describe(
           "State medical council registration number — printed on PCPNDT Form F.",
         ),
+      defaultCommission: zod.union([zod.number(), zod.string()]).nullish(),
+      defaultCommissionType: zod.string().nullish(),
+      ledgerId: zod.number().nullish(),
       createdAt: zod.string(),
     })
     .nullish(),
@@ -512,6 +521,9 @@ export const UpdateOrderResponse = zod.object({
         .describe(
           "State medical council registration number — printed on PCPNDT Form F.",
         ),
+      defaultCommission: zod.union([zod.number(), zod.string()]).nullish(),
+      defaultCommissionType: zod.string().nullish(),
+      ledgerId: zod.number().nullish(),
       createdAt: zod.string(),
     })
     .nullish(),
@@ -614,6 +626,11 @@ export const ListBillsResponse = zod.object({
               .describe(
                 "State medical council registration number — printed on PCPNDT Form F.",
               ),
+            defaultCommission: zod
+              .union([zod.number(), zod.string()])
+              .nullish(),
+            defaultCommissionType: zod.string().nullish(),
+            ledgerId: zod.number().nullish(),
             createdAt: zod.string(),
           })
           .nullish(),
@@ -745,6 +762,9 @@ export const GetBillResponse = zod.object({
           .describe(
             "State medical council registration number — printed on PCPNDT Form F.",
           ),
+        defaultCommission: zod.union([zod.number(), zod.string()]).nullish(),
+        defaultCommissionType: zod.string().nullish(),
+        ledgerId: zod.number().nullish(),
         createdAt: zod.string(),
       })
       .nullish(),
@@ -870,6 +890,9 @@ export const UpdateBillResponse = zod.object({
           .describe(
             "State medical council registration number — printed on PCPNDT Form F.",
           ),
+        defaultCommission: zod.union([zod.number(), zod.string()]).nullish(),
+        defaultCommissionType: zod.string().nullish(),
+        ledgerId: zod.number().nullish(),
         createdAt: zod.string(),
       })
       .nullish(),
@@ -1006,6 +1029,9 @@ export const ListDoctorsResponse = zod.object({
         .describe(
           "State medical council registration number — printed on PCPNDT Form F.",
         ),
+      defaultCommission: zod.union([zod.number(), zod.string()]).nullish(),
+      defaultCommissionType: zod.string().nullish(),
+      ledgerId: zod.number().nullish(),
       createdAt: zod.string(),
     }),
   ),
@@ -1399,4 +1425,360 @@ export const DeleteExpenseParams = zod.object({
 
 export const DeleteExpenseResponse = zod.object({
   success: zod.boolean(),
+});
+
+/**
+ * @summary List commission rules
+ */
+export const ListCommissionRulesQueryParams = zod.object({
+  doctorId: zod.coerce.number().optional(),
+});
+
+export const ListCommissionRulesResponseItem = zod.object({
+  id: zod.number(),
+  doctorId: zod.number(),
+  name: zod.string(),
+  type: zod.enum(["percentage", "fixed"]),
+  value: zod.number(),
+  scope: zod.enum(["all", "category", "test"]),
+  categories: zod.array(zod.string()),
+  testIds: zod.array(zod.number()),
+  isExclusive: zod.boolean(),
+  isActive: zod.boolean(),
+});
+export const ListCommissionRulesResponse = zod.array(
+  ListCommissionRulesResponseItem,
+);
+
+/**
+ * @summary Create a commission rule
+ */
+export const CreateCommissionRuleBody = zod.object({
+  doctorId: zod.number().nullish(),
+  name: zod.string(),
+  type: zod.enum(["percentage", "fixed"]),
+  value: zod.number(),
+  scope: zod.enum(["all", "category", "test"]),
+  categories: zod.array(zod.string()).optional(),
+  testIds: zod.array(zod.number()).optional(),
+  isExclusive: zod.boolean().optional(),
+});
+
+/**
+ * @summary Update a commission rule
+ */
+export const UpdateCommissionRuleParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateCommissionRuleBody = zod.object({
+  doctorId: zod.number().nullish(),
+  name: zod.string(),
+  type: zod.enum(["percentage", "fixed"]),
+  value: zod.number(),
+  scope: zod.enum(["all", "category", "test"]),
+  categories: zod.array(zod.string()).optional(),
+  testIds: zod.array(zod.number()).optional(),
+  isExclusive: zod.boolean().optional(),
+});
+
+export const UpdateCommissionRuleResponse = zod.object({
+  id: zod.number(),
+  doctorId: zod.number(),
+  name: zod.string(),
+  type: zod.enum(["percentage", "fixed"]),
+  value: zod.number(),
+  scope: zod.enum(["all", "category", "test"]),
+  categories: zod.array(zod.string()),
+  testIds: zod.array(zod.number()),
+  isExclusive: zod.boolean(),
+  isActive: zod.boolean(),
+});
+
+/**
+ * @summary Delete a commission rule
+ */
+export const DeleteCommissionRuleParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteCommissionRuleResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary Detailed commission report grouped by test
+ */
+export const GetDetailedCommissionReportQueryParams = zod.object({
+  from: zod.coerce.string().optional(),
+  to: zod.coerce.string().optional(),
+  doctorId: zod.coerce.number().optional(),
+  groupBy: zod.coerce.string().optional(),
+});
+
+export const GetDetailedCommissionReportResponse = zod.object({
+  report: zod.array(
+    zod.object({
+      doctor: zod.object({
+        id: zod.number(),
+        name: zod.string(),
+        specialization: zod.string(),
+        defaultCommission: zod.number(),
+        defaultCommissionType: zod.string(),
+      }),
+      orderCount: zod.number(),
+      testCount: zod.number(),
+      totalRevenue: zod.number(),
+      totalCommission: zod.number(),
+      effectiveRate: zod.number(),
+      grouped: zod
+        .array(
+          zod.object({
+            testId: zod.number(),
+            testName: zod.string(),
+            category: zod.string(),
+            count: zod.number(),
+            revenue: zod.number(),
+            commission: zod.number(),
+            ruleName: zod.string(),
+            ruleValue: zod.number(),
+            ruleType: zod.string(),
+          }),
+        )
+        .nullish(),
+    }),
+  ),
+  grandTotal: zod.object({
+    doctors: zod.number(),
+    orders: zod.number(),
+    revenue: zod.number(),
+    commission: zod.number(),
+  }),
+});
+
+/**
+ * @summary Summary of earned/paid/due commission per doctor
+ */
+export const GetDoctorLedgerSummaryQueryParams = zod.object({
+  from: zod.coerce.string().optional(),
+  to: zod.coerce.string().optional(),
+  search: zod.coerce.string().optional(),
+});
+
+export const GetDoctorLedgerSummaryResponse = zod.object({
+  rows: zod.array(
+    zod.object({
+      doctorId: zod.number(),
+      doctorName: zod.string(),
+      specialization: zod.string(),
+      phone: zod.string().nullish(),
+      email: zod.string().nullish(),
+      orderCount: zod.number(),
+      revenueWindow: zod.number(),
+      earnedWindow: zod.number(),
+      paidWindow: zod.number(),
+      dueWindow: zod.number(),
+      earnedLifetime: zod.number(),
+      paidLifetime: zod.number(),
+      outstanding: zod.number(),
+    }),
+  ),
+  totals: zod.object({
+    doctors: zod.number(),
+    earnedWindow: zod.number(),
+    paidWindow: zod.number(),
+    dueWindow: zod.number(),
+    outstanding: zod.number(),
+  }),
+  window: zod.object({
+    from: zod.string().nullable(),
+    to: zod.string().nullable(),
+  }),
+});
+
+/**
+ * @summary Detailed ledger for a specific doctor
+ */
+export const GetDoctorLedgerDetailParams = zod.object({
+  doctorId: zod.coerce.number(),
+});
+
+export const GetDoctorLedgerDetailQueryParams = zod.object({
+  from: zod.coerce.string().optional(),
+  to: zod.coerce.string().optional(),
+});
+
+export const GetDoctorLedgerDetailResponse = zod.object({
+  doctor: zod.object({
+    id: zod.number(),
+    name: zod.string(),
+    specialization: zod.string(),
+    phone: zod.string().nullish(),
+    email: zod.string().nullish(),
+  }),
+  window: zod.object({
+    from: zod.string().nullable(),
+    to: zod.string().nullable(),
+  }),
+  summary: zod.object({
+    totalRevenue: zod.number(),
+    totalEarned: zod.number(),
+    totalPaid: zod.number(),
+    dueWindow: zod.number(),
+    lifetimeEarned: zod.number(),
+    lifetimePaid: zod.number(),
+    outstanding: zod.number(),
+    orderCount: zod.number(),
+    payoutCount: zod.number(),
+  }),
+  payouts: zod.array(
+    zod.object({
+      id: zod.number(),
+      doctorId: zod.number(),
+      amount: zod.number(),
+      paymentDate: zod.string(),
+      paymentMethod: zod.string(),
+      reference: zod.string().nullish(),
+      notes: zod.string().nullish(),
+      periodFrom: zod.string().nullish(),
+      periodTo: zod.string().nullish(),
+    }),
+  ),
+  ledger: zod.array(
+    zod.object({
+      kind: zod.enum(["earned", "paid"]),
+      date: zod.string(),
+      particular: zod.string(),
+      credit: zod.number(),
+      debit: zod.number(),
+      balance: zod.number(),
+      ref: zod.string().nullish(),
+      id: zod.number().nullish(),
+    }),
+  ),
+});
+
+/**
+ * @summary Record a payout to a doctor
+ */
+export const CreateDoctorPayoutParams = zod.object({
+  doctorId: zod.coerce.number(),
+});
+
+export const CreateDoctorPayoutBody = zod.object({
+  amount: zod.number(),
+  paymentDate: zod.string(),
+  paymentMethod: zod.string(),
+  reference: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  periodFrom: zod.string().nullish(),
+  periodTo: zod.string().nullish(),
+});
+
+/**
+ * @summary Delete a payout record
+ */
+export const DeleteDoctorPayoutParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteDoctorPayoutResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary List books (ledger groups)
+ */
+export const ListLedgersResponseItem = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  isDefault: zod.boolean(),
+  doctorCount: zod.number(),
+  patientCount: zod.number(),
+  billCount: zod.number(),
+  orderCount: zod.number(),
+  appointmentCount: zod.number(),
+});
+export const ListLedgersResponse = zod.array(ListLedgersResponseItem);
+
+/**
+ * @summary Create a new book
+ */
+export const CreateLedgerBody = zod.object({
+  token: zod.string(),
+  name: zod.string(),
+});
+
+/**
+ * @summary Rename a book
+ */
+export const UpdateLedgerParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateLedgerBody = zod.object({
+  token: zod.string(),
+  name: zod.string(),
+});
+
+export const UpdateLedgerResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  isDefault: zod.boolean(),
+  doctorCount: zod.number(),
+  patientCount: zod.number(),
+  billCount: zod.number(),
+  orderCount: zod.number(),
+  appointmentCount: zod.number(),
+});
+
+/**
+ * @summary Delete a book
+ */
+export const DeleteLedgerParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteLedgerBody = zod.object({
+  token: zod.string(),
+});
+
+export const DeleteLedgerResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary Assign doctors to a book
+ */
+export const AssignDoctorsToLedgerParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const AssignDoctorsToLedgerBody = zod.object({
+  token: zod.string(),
+  doctorIds: zod.array(zod.number()),
+});
+
+export const AssignDoctorsToLedgerResponse = zod.object({
+  assigned: zod.number(),
+});
+
+/**
+ * @summary Reset a book (wipe all patient/bill/order data)
+ */
+export const ResetLedgerParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ResetLedgerBody = zod.object({
+  token: zod.string(),
+  reason: zod.string(),
+});
+
+export const ResetLedgerResponse = zod.object({
+  wiped: zod.object({
+    bills: zod.number(),
+    orders: zod.number(),
+    patients: zod.number(),
+  }),
 });

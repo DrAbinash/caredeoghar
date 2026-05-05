@@ -21,29 +21,48 @@ import type {
   Appointment,
   AppointmentBase,
   AppointmentStats,
+  AssignDoctorsBody,
+  AssignDoctorsToLedger200,
   Bill,
   BillList,
+  Book,
+  CommissionRule,
+  CommissionRuleBody,
   CreateAppointmentBody,
   CreateBillBody,
   CreateDoctorBody,
   CreateExpenseBody,
+  CreateLedgerBody,
   CreateOrderBody,
   CreatePatientBody,
   CreatePaymentBody,
+  CreatePayoutBody,
   CreateTestBody,
   DashboardStats,
   DeleteAppointment200,
+  DeleteCommissionRule200,
+  DeleteDoctorPayout200,
   DeleteExpense200,
+  DeleteLedger200,
+  DeleteLedgerBody,
+  DetailedCommissionReport,
   DiagnosticTest,
   Doctor,
+  DoctorLedgerDetail,
+  DoctorLedgerSummary,
   DoctorList,
+  DoctorPayout,
   Expense,
   ExpenseSummaryRow,
+  GetDetailedCommissionReportParams,
+  GetDoctorLedgerDetailParams,
+  GetDoctorLedgerSummaryParams,
   GetExpensesSummaryParams,
   GetRevenueReportParams,
   HealthStatus,
   ListAppointmentsParams,
   ListBillsParams,
+  ListCommissionRulesParams,
   ListDoctorsParams,
   ListExpensesParams,
   ListOrdersParams,
@@ -57,11 +76,14 @@ import type {
   Payment,
   PaymentList,
   PopularTestList,
+  ResetLedgerBody,
+  ResetLedgerResult,
   RevenueReport,
   TestList,
   UpdateAppointmentBody,
   UpdateBillBody,
   UpdateExpenseBody,
+  UpdateLedgerBody,
   UpdateOrderBody,
 } from "./api.schemas";
 
@@ -3361,4 +3383,1375 @@ export const useDeleteExpense = <
   TContext
 > => {
   return useMutation(getDeleteExpenseMutationOptions(options));
+};
+
+/**
+ * @summary List commission rules
+ */
+export const getListCommissionRulesUrl = (
+  params?: ListCommissionRulesParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/commission/rules?${stringifiedParams}`
+    : `/api/commission/rules`;
+};
+
+export const listCommissionRules = async (
+  params?: ListCommissionRulesParams,
+  options?: RequestInit,
+): Promise<CommissionRule[]> => {
+  return customFetch<CommissionRule[]>(getListCommissionRulesUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListCommissionRulesQueryKey = (
+  params?: ListCommissionRulesParams,
+) => {
+  return [`/api/commission/rules`, ...(params ? [params] : [])] as const;
+};
+
+export const getListCommissionRulesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listCommissionRules>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListCommissionRulesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listCommissionRules>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListCommissionRulesQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listCommissionRules>>
+  > = ({ signal }) =>
+    listCommissionRules(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listCommissionRules>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListCommissionRulesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listCommissionRules>>
+>;
+export type ListCommissionRulesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List commission rules
+ */
+
+export function useListCommissionRules<
+  TData = Awaited<ReturnType<typeof listCommissionRules>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListCommissionRulesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listCommissionRules>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListCommissionRulesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a commission rule
+ */
+export const getCreateCommissionRuleUrl = () => {
+  return `/api/commission/rules`;
+};
+
+export const createCommissionRule = async (
+  commissionRuleBody: CommissionRuleBody,
+  options?: RequestInit,
+): Promise<CommissionRule> => {
+  return customFetch<CommissionRule>(getCreateCommissionRuleUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(commissionRuleBody),
+  });
+};
+
+export const getCreateCommissionRuleMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCommissionRule>>,
+    TError,
+    { data: BodyType<CommissionRuleBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createCommissionRule>>,
+  TError,
+  { data: BodyType<CommissionRuleBody> },
+  TContext
+> => {
+  const mutationKey = ["createCommissionRule"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createCommissionRule>>,
+    { data: BodyType<CommissionRuleBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createCommissionRule(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateCommissionRuleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createCommissionRule>>
+>;
+export type CreateCommissionRuleMutationBody = BodyType<CommissionRuleBody>;
+export type CreateCommissionRuleMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a commission rule
+ */
+export const useCreateCommissionRule = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCommissionRule>>,
+    TError,
+    { data: BodyType<CommissionRuleBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createCommissionRule>>,
+  TError,
+  { data: BodyType<CommissionRuleBody> },
+  TContext
+> => {
+  return useMutation(getCreateCommissionRuleMutationOptions(options));
+};
+
+/**
+ * @summary Update a commission rule
+ */
+export const getUpdateCommissionRuleUrl = (id: number) => {
+  return `/api/commission/rules/${id}`;
+};
+
+export const updateCommissionRule = async (
+  id: number,
+  commissionRuleBody: CommissionRuleBody,
+  options?: RequestInit,
+): Promise<CommissionRule> => {
+  return customFetch<CommissionRule>(getUpdateCommissionRuleUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(commissionRuleBody),
+  });
+};
+
+export const getUpdateCommissionRuleMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateCommissionRule>>,
+    TError,
+    { id: number; data: BodyType<CommissionRuleBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateCommissionRule>>,
+  TError,
+  { id: number; data: BodyType<CommissionRuleBody> },
+  TContext
+> => {
+  const mutationKey = ["updateCommissionRule"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateCommissionRule>>,
+    { id: number; data: BodyType<CommissionRuleBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateCommissionRule(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateCommissionRuleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateCommissionRule>>
+>;
+export type UpdateCommissionRuleMutationBody = BodyType<CommissionRuleBody>;
+export type UpdateCommissionRuleMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a commission rule
+ */
+export const useUpdateCommissionRule = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateCommissionRule>>,
+    TError,
+    { id: number; data: BodyType<CommissionRuleBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateCommissionRule>>,
+  TError,
+  { id: number; data: BodyType<CommissionRuleBody> },
+  TContext
+> => {
+  return useMutation(getUpdateCommissionRuleMutationOptions(options));
+};
+
+/**
+ * @summary Delete a commission rule
+ */
+export const getDeleteCommissionRuleUrl = (id: number) => {
+  return `/api/commission/rules/${id}`;
+};
+
+export const deleteCommissionRule = async (
+  id: number,
+  options?: RequestInit,
+): Promise<DeleteCommissionRule200> => {
+  return customFetch<DeleteCommissionRule200>(getDeleteCommissionRuleUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteCommissionRuleMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteCommissionRule>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteCommissionRule>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteCommissionRule"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteCommissionRule>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteCommissionRule(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteCommissionRuleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteCommissionRule>>
+>;
+
+export type DeleteCommissionRuleMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a commission rule
+ */
+export const useDeleteCommissionRule = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteCommissionRule>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteCommissionRule>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteCommissionRuleMutationOptions(options));
+};
+
+/**
+ * @summary Detailed commission report grouped by test
+ */
+export const getGetDetailedCommissionReportUrl = (
+  params?: GetDetailedCommissionReportParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/commission/report-detailed?${stringifiedParams}`
+    : `/api/commission/report-detailed`;
+};
+
+export const getDetailedCommissionReport = async (
+  params?: GetDetailedCommissionReportParams,
+  options?: RequestInit,
+): Promise<DetailedCommissionReport> => {
+  return customFetch<DetailedCommissionReport>(
+    getGetDetailedCommissionReportUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetDetailedCommissionReportQueryKey = (
+  params?: GetDetailedCommissionReportParams,
+) => {
+  return [
+    `/api/commission/report-detailed`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetDetailedCommissionReportQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDetailedCommissionReport>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetDetailedCommissionReportParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDetailedCommissionReport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetDetailedCommissionReportQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getDetailedCommissionReport>>
+  > = ({ signal }) =>
+    getDetailedCommissionReport(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDetailedCommissionReport>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDetailedCommissionReportQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDetailedCommissionReport>>
+>;
+export type GetDetailedCommissionReportQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Detailed commission report grouped by test
+ */
+
+export function useGetDetailedCommissionReport<
+  TData = Awaited<ReturnType<typeof getDetailedCommissionReport>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetDetailedCommissionReportParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDetailedCommissionReport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDetailedCommissionReportQueryOptions(
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Summary of earned/paid/due commission per doctor
+ */
+export const getGetDoctorLedgerSummaryUrl = (
+  params?: GetDoctorLedgerSummaryParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/doctor-ledger?${stringifiedParams}`
+    : `/api/doctor-ledger`;
+};
+
+export const getDoctorLedgerSummary = async (
+  params?: GetDoctorLedgerSummaryParams,
+  options?: RequestInit,
+): Promise<DoctorLedgerSummary> => {
+  return customFetch<DoctorLedgerSummary>(
+    getGetDoctorLedgerSummaryUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetDoctorLedgerSummaryQueryKey = (
+  params?: GetDoctorLedgerSummaryParams,
+) => {
+  return [`/api/doctor-ledger`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetDoctorLedgerSummaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDoctorLedgerSummary>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetDoctorLedgerSummaryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDoctorLedgerSummary>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetDoctorLedgerSummaryQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getDoctorLedgerSummary>>
+  > = ({ signal }) =>
+    getDoctorLedgerSummary(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDoctorLedgerSummary>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDoctorLedgerSummaryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDoctorLedgerSummary>>
+>;
+export type GetDoctorLedgerSummaryQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Summary of earned/paid/due commission per doctor
+ */
+
+export function useGetDoctorLedgerSummary<
+  TData = Awaited<ReturnType<typeof getDoctorLedgerSummary>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetDoctorLedgerSummaryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDoctorLedgerSummary>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDoctorLedgerSummaryQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Detailed ledger for a specific doctor
+ */
+export const getGetDoctorLedgerDetailUrl = (
+  doctorId: number,
+  params?: GetDoctorLedgerDetailParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/doctor-ledger/${doctorId}?${stringifiedParams}`
+    : `/api/doctor-ledger/${doctorId}`;
+};
+
+export const getDoctorLedgerDetail = async (
+  doctorId: number,
+  params?: GetDoctorLedgerDetailParams,
+  options?: RequestInit,
+): Promise<DoctorLedgerDetail> => {
+  return customFetch<DoctorLedgerDetail>(
+    getGetDoctorLedgerDetailUrl(doctorId, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetDoctorLedgerDetailQueryKey = (
+  doctorId: number,
+  params?: GetDoctorLedgerDetailParams,
+) => {
+  return [
+    `/api/doctor-ledger/${doctorId}`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetDoctorLedgerDetailQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDoctorLedgerDetail>>,
+  TError = ErrorType<unknown>,
+>(
+  doctorId: number,
+  params?: GetDoctorLedgerDetailParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDoctorLedgerDetail>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getGetDoctorLedgerDetailQueryKey(doctorId, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getDoctorLedgerDetail>>
+  > = ({ signal }) =>
+    getDoctorLedgerDetail(doctorId, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!doctorId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDoctorLedgerDetail>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDoctorLedgerDetailQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDoctorLedgerDetail>>
+>;
+export type GetDoctorLedgerDetailQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Detailed ledger for a specific doctor
+ */
+
+export function useGetDoctorLedgerDetail<
+  TData = Awaited<ReturnType<typeof getDoctorLedgerDetail>>,
+  TError = ErrorType<unknown>,
+>(
+  doctorId: number,
+  params?: GetDoctorLedgerDetailParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDoctorLedgerDetail>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDoctorLedgerDetailQueryOptions(
+    doctorId,
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Record a payout to a doctor
+ */
+export const getCreateDoctorPayoutUrl = (doctorId: number) => {
+  return `/api/doctor-ledger/${doctorId}/payouts`;
+};
+
+export const createDoctorPayout = async (
+  doctorId: number,
+  createPayoutBody: CreatePayoutBody,
+  options?: RequestInit,
+): Promise<DoctorPayout> => {
+  return customFetch<DoctorPayout>(getCreateDoctorPayoutUrl(doctorId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createPayoutBody),
+  });
+};
+
+export const getCreateDoctorPayoutMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createDoctorPayout>>,
+    TError,
+    { doctorId: number; data: BodyType<CreatePayoutBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createDoctorPayout>>,
+  TError,
+  { doctorId: number; data: BodyType<CreatePayoutBody> },
+  TContext
+> => {
+  const mutationKey = ["createDoctorPayout"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createDoctorPayout>>,
+    { doctorId: number; data: BodyType<CreatePayoutBody> }
+  > = (props) => {
+    const { doctorId, data } = props ?? {};
+
+    return createDoctorPayout(doctorId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateDoctorPayoutMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createDoctorPayout>>
+>;
+export type CreateDoctorPayoutMutationBody = BodyType<CreatePayoutBody>;
+export type CreateDoctorPayoutMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Record a payout to a doctor
+ */
+export const useCreateDoctorPayout = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createDoctorPayout>>,
+    TError,
+    { doctorId: number; data: BodyType<CreatePayoutBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createDoctorPayout>>,
+  TError,
+  { doctorId: number; data: BodyType<CreatePayoutBody> },
+  TContext
+> => {
+  return useMutation(getCreateDoctorPayoutMutationOptions(options));
+};
+
+/**
+ * @summary Delete a payout record
+ */
+export const getDeleteDoctorPayoutUrl = (id: number) => {
+  return `/api/doctor-ledger/payouts/${id}`;
+};
+
+export const deleteDoctorPayout = async (
+  id: number,
+  options?: RequestInit,
+): Promise<DeleteDoctorPayout200> => {
+  return customFetch<DeleteDoctorPayout200>(getDeleteDoctorPayoutUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteDoctorPayoutMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteDoctorPayout>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteDoctorPayout>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteDoctorPayout"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteDoctorPayout>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteDoctorPayout(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteDoctorPayoutMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteDoctorPayout>>
+>;
+
+export type DeleteDoctorPayoutMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a payout record
+ */
+export const useDeleteDoctorPayout = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteDoctorPayout>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteDoctorPayout>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteDoctorPayoutMutationOptions(options));
+};
+
+/**
+ * @summary List books (ledger groups)
+ */
+export const getListLedgersUrl = () => {
+  return `/api/ledgers`;
+};
+
+export const listLedgers = async (options?: RequestInit): Promise<Book[]> => {
+  return customFetch<Book[]>(getListLedgersUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListLedgersQueryKey = () => {
+  return [`/api/ledgers`] as const;
+};
+
+export const getListLedgersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listLedgers>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listLedgers>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListLedgersQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listLedgers>>> = ({
+    signal,
+  }) => listLedgers({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listLedgers>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListLedgersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listLedgers>>
+>;
+export type ListLedgersQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List books (ledger groups)
+ */
+
+export function useListLedgers<
+  TData = Awaited<ReturnType<typeof listLedgers>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listLedgers>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListLedgersQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a new book
+ */
+export const getCreateLedgerUrl = () => {
+  return `/api/ledgers`;
+};
+
+export const createLedger = async (
+  createLedgerBody: CreateLedgerBody,
+  options?: RequestInit,
+): Promise<Book> => {
+  return customFetch<Book>(getCreateLedgerUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createLedgerBody),
+  });
+};
+
+export const getCreateLedgerMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createLedger>>,
+    TError,
+    { data: BodyType<CreateLedgerBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createLedger>>,
+  TError,
+  { data: BodyType<CreateLedgerBody> },
+  TContext
+> => {
+  const mutationKey = ["createLedger"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createLedger>>,
+    { data: BodyType<CreateLedgerBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createLedger(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateLedgerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createLedger>>
+>;
+export type CreateLedgerMutationBody = BodyType<CreateLedgerBody>;
+export type CreateLedgerMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a new book
+ */
+export const useCreateLedger = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createLedger>>,
+    TError,
+    { data: BodyType<CreateLedgerBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createLedger>>,
+  TError,
+  { data: BodyType<CreateLedgerBody> },
+  TContext
+> => {
+  return useMutation(getCreateLedgerMutationOptions(options));
+};
+
+/**
+ * @summary Rename a book
+ */
+export const getUpdateLedgerUrl = (id: number) => {
+  return `/api/ledgers/${id}`;
+};
+
+export const updateLedger = async (
+  id: number,
+  updateLedgerBody: UpdateLedgerBody,
+  options?: RequestInit,
+): Promise<Book> => {
+  return customFetch<Book>(getUpdateLedgerUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateLedgerBody),
+  });
+};
+
+export const getUpdateLedgerMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateLedger>>,
+    TError,
+    { id: number; data: BodyType<UpdateLedgerBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateLedger>>,
+  TError,
+  { id: number; data: BodyType<UpdateLedgerBody> },
+  TContext
+> => {
+  const mutationKey = ["updateLedger"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateLedger>>,
+    { id: number; data: BodyType<UpdateLedgerBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateLedger(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateLedgerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateLedger>>
+>;
+export type UpdateLedgerMutationBody = BodyType<UpdateLedgerBody>;
+export type UpdateLedgerMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Rename a book
+ */
+export const useUpdateLedger = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateLedger>>,
+    TError,
+    { id: number; data: BodyType<UpdateLedgerBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateLedger>>,
+  TError,
+  { id: number; data: BodyType<UpdateLedgerBody> },
+  TContext
+> => {
+  return useMutation(getUpdateLedgerMutationOptions(options));
+};
+
+/**
+ * @summary Delete a book
+ */
+export const getDeleteLedgerUrl = (id: number) => {
+  return `/api/ledgers/${id}`;
+};
+
+export const deleteLedger = async (
+  id: number,
+  deleteLedgerBody: DeleteLedgerBody,
+  options?: RequestInit,
+): Promise<DeleteLedger200> => {
+  return customFetch<DeleteLedger200>(getDeleteLedgerUrl(id), {
+    ...options,
+    method: "DELETE",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(deleteLedgerBody),
+  });
+};
+
+export const getDeleteLedgerMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteLedger>>,
+    TError,
+    { id: number; data: BodyType<DeleteLedgerBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteLedger>>,
+  TError,
+  { id: number; data: BodyType<DeleteLedgerBody> },
+  TContext
+> => {
+  const mutationKey = ["deleteLedger"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteLedger>>,
+    { id: number; data: BodyType<DeleteLedgerBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return deleteLedger(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteLedgerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteLedger>>
+>;
+export type DeleteLedgerMutationBody = BodyType<DeleteLedgerBody>;
+export type DeleteLedgerMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a book
+ */
+export const useDeleteLedger = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteLedger>>,
+    TError,
+    { id: number; data: BodyType<DeleteLedgerBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteLedger>>,
+  TError,
+  { id: number; data: BodyType<DeleteLedgerBody> },
+  TContext
+> => {
+  return useMutation(getDeleteLedgerMutationOptions(options));
+};
+
+/**
+ * @summary Assign doctors to a book
+ */
+export const getAssignDoctorsToLedgerUrl = (id: number) => {
+  return `/api/ledgers/${id}/assign-doctors`;
+};
+
+export const assignDoctorsToLedger = async (
+  id: number,
+  assignDoctorsBody: AssignDoctorsBody,
+  options?: RequestInit,
+): Promise<AssignDoctorsToLedger200> => {
+  return customFetch<AssignDoctorsToLedger200>(
+    getAssignDoctorsToLedgerUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(assignDoctorsBody),
+    },
+  );
+};
+
+export const getAssignDoctorsToLedgerMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof assignDoctorsToLedger>>,
+    TError,
+    { id: number; data: BodyType<AssignDoctorsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof assignDoctorsToLedger>>,
+  TError,
+  { id: number; data: BodyType<AssignDoctorsBody> },
+  TContext
+> => {
+  const mutationKey = ["assignDoctorsToLedger"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof assignDoctorsToLedger>>,
+    { id: number; data: BodyType<AssignDoctorsBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return assignDoctorsToLedger(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AssignDoctorsToLedgerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof assignDoctorsToLedger>>
+>;
+export type AssignDoctorsToLedgerMutationBody = BodyType<AssignDoctorsBody>;
+export type AssignDoctorsToLedgerMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Assign doctors to a book
+ */
+export const useAssignDoctorsToLedger = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof assignDoctorsToLedger>>,
+    TError,
+    { id: number; data: BodyType<AssignDoctorsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof assignDoctorsToLedger>>,
+  TError,
+  { id: number; data: BodyType<AssignDoctorsBody> },
+  TContext
+> => {
+  return useMutation(getAssignDoctorsToLedgerMutationOptions(options));
+};
+
+/**
+ * @summary Reset a book (wipe all patient/bill/order data)
+ */
+export const getResetLedgerUrl = (id: number) => {
+  return `/api/ledgers/${id}/reset`;
+};
+
+export const resetLedger = async (
+  id: number,
+  resetLedgerBody: ResetLedgerBody,
+  options?: RequestInit,
+): Promise<ResetLedgerResult> => {
+  return customFetch<ResetLedgerResult>(getResetLedgerUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(resetLedgerBody),
+  });
+};
+
+export const getResetLedgerMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resetLedger>>,
+    TError,
+    { id: number; data: BodyType<ResetLedgerBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resetLedger>>,
+  TError,
+  { id: number; data: BodyType<ResetLedgerBody> },
+  TContext
+> => {
+  const mutationKey = ["resetLedger"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resetLedger>>,
+    { id: number; data: BodyType<ResetLedgerBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return resetLedger(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResetLedgerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resetLedger>>
+>;
+export type ResetLedgerMutationBody = BodyType<ResetLedgerBody>;
+export type ResetLedgerMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Reset a book (wipe all patient/bill/order data)
+ */
+export const useResetLedger = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resetLedger>>,
+    TError,
+    { id: number; data: BodyType<ResetLedgerBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resetLedger>>,
+  TError,
+  { id: number; data: BodyType<ResetLedgerBody> },
+  TContext
+> => {
+  return useMutation(getResetLedgerMutationOptions(options));
 };

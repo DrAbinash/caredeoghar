@@ -17,6 +17,7 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+let _customHeadersGetter: (() => Record<string, string> | null | undefined) | null = null;
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -42,6 +43,24 @@ export function setBaseUrl(url: string | null): void {
  */
 export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;
+}
+
+/**
+ * Register a getter that supplies additional HTTP headers to attach to every
+ * request made by the generated API client.
+ *
+ * The getter is called before each fetch; when it returns a non-null/undefined
+ * object, all key-value pairs are set as request headers (headers already
+ * present on the request are NOT overwritten).
+ *
+ * Useful for injecting non-Bearer auth headers (e.g. X-SA-Token for the super
+ * admin portal) without requiring each call site to pass headers manually.
+ * Pass `null` to clear the getter.
+ */
+export function setCustomHeadersGetter(
+  getter: (() => Record<string, string> | null | undefined) | null,
+): void {
+  _customHeadersGetter = getter;
 }
 
 function isRequest(input: RequestInfo | URL): input is Request {
@@ -355,6 +374,19 @@ export async function customFetch<T = unknown>(
     const token = await _authTokenGetter();
     if (token) {
       headers.set("authorization", `Bearer ${token}`);
+    }
+  }
+
+  // Attach any additional custom headers (e.g. X-SA-Token) when a getter is
+  // configured and the header is not already present on the request.
+  if (_customHeadersGetter) {
+    const customHeaders = _customHeadersGetter();
+    if (customHeaders) {
+      for (const [key, value] of Object.entries(customHeaders)) {
+        if (!headers.has(key)) {
+          headers.set(key, value);
+        }
+      }
     }
   }
 
