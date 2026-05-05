@@ -6,14 +6,7 @@ run = "node --enable-source-maps artifacts/api-server/dist/index.mjs"
 buildCommand = "pnpm --filter @workspace/api-server run build"
 localPort = 8080
 
-[[artifacts]]
-id = "artifacts/diagnostic-erp"
 
-[[artifacts]]
-id = "artifacts/super-admin-portal"
-
-[[artifacts]]
-id = "artifacts/clinic-site"
 
 [deployment]
 router = "application"
@@ -27,7 +20,8 @@ env = { "CI" = "true" }
 [workflows]
 runButton = "Project"
 
-[[workflows.workflow]]
+[[workflows.[[artifacts]]
+id = "artifacts/api-server"]]
 name = "Project"
 mode = "parallel"
 author = "agent"
