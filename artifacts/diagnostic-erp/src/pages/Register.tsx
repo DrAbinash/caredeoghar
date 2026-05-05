@@ -108,11 +108,10 @@ export default function Register() {
       const order = await createOrder.mutateAsync({
         data: {
           patientId: createdPatientId,
-          doctorId: selectedDoctorId ?? undefined,
-          status: "pending",
-          notes: notes || undefined,
-          tests: selectedTests.map(t => ({ testId: t.testId, price: t.price })),
-        } as unknown as Parameters<typeof createOrder.mutateAsync>[0]["data"],
+          doctorId: selectedDoctorId ?? null,
+          notes: notes || null,
+          testIds: selectedTests.map(t => t.testId),
+        },
       });
 
       // Create bill

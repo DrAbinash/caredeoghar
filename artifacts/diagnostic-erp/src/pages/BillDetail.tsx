@@ -669,7 +669,7 @@ export default function BillDetail({ id }: { id: number }) {
                 <div style={{ fontSize: "11px", color: "#555" }}>ID: {bill.patient.patientId}</div>
                 <div style={{ fontSize: "11px", color: "#555" }}>Ph: {bill.patient.phone}</div>
                 {bill.patient.gender && <div style={{ fontSize: "11px", color: "#555" }}>Gender: {bill.patient.gender}</div>}
-                {(bill.patient as unknown as Record<string, unknown>).age && <div style={{ fontSize: "11px", color: "#555" }}>Age: {(bill.patient as unknown as Record<string, unknown>).age as number} yrs</div>}
+                {bill.patient.dateOfBirth && (() => { const age = Math.floor((Date.now() - new Date(bill.patient.dateOfBirth).getTime()) / (365.25 * 24 * 3600 * 1000)); return age > 0 ? <div style={{ fontSize: "11px", color: "#555" }}>Age: {age} yrs</div> : null; })()}
               </>
             )}
           </div>
