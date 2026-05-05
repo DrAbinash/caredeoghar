@@ -1,7 +1,7 @@
 modules = ["nodejs-24", "python-3.11", "postgresql-16"]
 
 [[artifacts]]
-id = "artifacts/api-server"
+id = "3B4_FFSkEVBkAeYMFRJ2e"
 
 [[artifacts]]
 id = "artifacts/diagnostic-erp"
