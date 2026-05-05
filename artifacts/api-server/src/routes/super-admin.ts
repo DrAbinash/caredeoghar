@@ -55,22 +55,23 @@ async function verifyPin(plain: string, stored: string): Promise<boolean> {
 }
 
 // POST /api/super-admin/login — validates name + PIN, creates session token
-superAdminRouter.post("/login", loginLimiter, async (req, res) => {
+superAdminRouter.post("/login", loginLimiter, async (req, res): Promise<void> => {
   const parsed = LoginBody.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
+    res.status(400).json({ error: "Invalid request", details: parsed.error.issues });
+    return;
   }
   const { name, pin } = parsed.data;
 
   const [user] = await db.select().from(usersTable)
     .where(and(eq(usersTable.name, name), eq(usersTable.isActive, true)));
 
-  if (!user) return res.status(401).json({ error: "Invalid credentials" });
-  if (user.role !== "super_admin") return res.status(403).json({ error: "Access denied — not a super admin" });
-  if (!user.pin) return res.status(401).json({ error: "No PIN configured for this user" });
+  if (!user) { res.status(401).json({ error: "Invalid credentials" }); return; }
+  if (user.role !== "super_admin") { res.status(403).json({ error: "Access denied — not a super admin" }); return; }
+  if (!user.pin) { res.status(401).json({ error: "No PIN configured for this user" }); return; }
 
   const pinMatches = await verifyPin(pin, user.pin);
-  if (!pinMatches) return res.status(401).json({ error: "Invalid credentials" });
+  if (!pinMatches) { res.status(401).json({ error: "Invalid credentials" }); return; }
 
   // Transparently upgrade plaintext legacy PINs to bcrypt on first successful login
   if (!isBcryptHash(user.pin)) {
@@ -93,10 +94,11 @@ superAdminRouter.post("/login", loginLimiter, async (req, res) => {
 });
 
 // POST /api/super-admin/logout — revoke a session token
-superAdminRouter.post("/logout", async (req, res) => {
+superAdminRouter.post("/logout", async (req, res): Promise<void> => {
   const parsed = LogoutBody.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
+    res.status(400).json({ error: "Invalid request", details: parsed.error.issues });
+    return;
   }
   const { token } = parsed.data;
 
@@ -110,13 +112,14 @@ superAdminRouter.post("/logout", async (req, res) => {
 // POST /api/super-admin/verify — check if token is active.
 // Token is accepted in the request body (never in the query string to avoid
 // exposure in logs, browser history, and reverse-proxy access logs).
-superAdminRouter.post("/verify", async (req, res) => {
+superAdminRouter.post("/verify", async (req, res): Promise<void> => {
   const parsed = VerifyBody.safeParse(req.body ?? {});
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
+    res.status(400).json({ error: "Invalid request", details: parsed.error.issues });
+    return;
   }
   const token = parsed.data.token ?? null;
-  if (!token) return res.json({ active: false, userName: null });
+  if (!token) { res.json({ active: false, userName: null }); return; }
 
   const [session] = await db.select().from(superAdminSessionsTable)
     .where(eq(superAdminSessionsTable.token, token));
@@ -128,7 +131,8 @@ superAdminRouter.post("/verify", async (req, res) => {
         .set({ isActive: false })
         .where(eq(superAdminSessionsTable.token, token));
     }
-    return res.json({ active: false, userName: null });
+    res.json({ active: false, userName: null });
+    return;
   }
 
   res.json({ active: true, userName: session.userName, expiresAt: session.expiresAt });

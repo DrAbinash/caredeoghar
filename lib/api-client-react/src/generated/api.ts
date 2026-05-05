@@ -47,6 +47,7 @@ import type {
   CreatePatientBody,
   CreatePaymentBody,
   CreatePayoutBody,
+  CreateReportTemplateBody,
   CreateTestBody,
   DashboardStats,
   DeleteAbnormalFinding200,
@@ -63,6 +64,7 @@ import type {
   DeleteInventoryConsumptionRulesByTest200,
   DeleteLedger200,
   DeleteLedgerBody,
+  DeleteReportTemplate200,
   Department,
   DetailedCommissionReport,
   DiagnosticTest,
@@ -93,6 +95,7 @@ import type {
   ListOrdersParams,
   ListPatientsParams,
   ListPaymentsParams,
+  ListReportTemplatesParams,
   ListTestsParams,
   LogBillReprint200,
   LogBillReprintBody,
@@ -106,6 +109,7 @@ import type {
   RefundBillBody,
   ReplaceConsumptionRulesBody,
   ReplaceInventoryConsumptionRulesByTest200,
+  ReportTemplate,
   ResetLedgerBody,
   ResetLedgerResult,
   RevenueReport,
@@ -125,6 +129,7 @@ import type {
   UpdateLedgerBody,
   UpdateOrderBody,
   UpdatePayoutBody,
+  UpdateReportTemplateBody,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -7763,4 +7768,450 @@ export const useResetLedger = <
   TContext
 > => {
   return useMutation(getResetLedgerMutationOptions(options));
+};
+
+/**
+ * @summary List report templates
+ */
+export const getListReportTemplatesUrl = (
+  params?: ListReportTemplatesParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/report-templates?${stringifiedParams}`
+    : `/api/report-templates`;
+};
+
+export const listReportTemplates = async (
+  params?: ListReportTemplatesParams,
+  options?: RequestInit,
+): Promise<ReportTemplate[]> => {
+  return customFetch<ReportTemplate[]>(getListReportTemplatesUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListReportTemplatesQueryKey = (
+  params?: ListReportTemplatesParams,
+) => {
+  return [`/api/report-templates`, ...(params ? [params] : [])] as const;
+};
+
+export const getListReportTemplatesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listReportTemplates>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListReportTemplatesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listReportTemplates>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListReportTemplatesQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listReportTemplates>>
+  > = ({ signal }) =>
+    listReportTemplates(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listReportTemplates>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListReportTemplatesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listReportTemplates>>
+>;
+export type ListReportTemplatesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List report templates
+ */
+
+export function useListReportTemplates<
+  TData = Awaited<ReturnType<typeof listReportTemplates>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListReportTemplatesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listReportTemplates>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListReportTemplatesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a report template
+ */
+export const getCreateReportTemplateUrl = () => {
+  return `/api/report-templates`;
+};
+
+export const createReportTemplate = async (
+  createReportTemplateBody: CreateReportTemplateBody,
+  options?: RequestInit,
+): Promise<ReportTemplate> => {
+  return customFetch<ReportTemplate>(getCreateReportTemplateUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createReportTemplateBody),
+  });
+};
+
+export const getCreateReportTemplateMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createReportTemplate>>,
+    TError,
+    { data: BodyType<CreateReportTemplateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createReportTemplate>>,
+  TError,
+  { data: BodyType<CreateReportTemplateBody> },
+  TContext
+> => {
+  const mutationKey = ["createReportTemplate"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createReportTemplate>>,
+    { data: BodyType<CreateReportTemplateBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createReportTemplate(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateReportTemplateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createReportTemplate>>
+>;
+export type CreateReportTemplateMutationBody =
+  BodyType<CreateReportTemplateBody>;
+export type CreateReportTemplateMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a report template
+ */
+export const useCreateReportTemplate = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createReportTemplate>>,
+    TError,
+    { data: BodyType<CreateReportTemplateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createReportTemplate>>,
+  TError,
+  { data: BodyType<CreateReportTemplateBody> },
+  TContext
+> => {
+  return useMutation(getCreateReportTemplateMutationOptions(options));
+};
+
+/**
+ * @summary Get a report template
+ */
+export const getGetReportTemplateUrl = (id: number) => {
+  return `/api/report-templates/${id}`;
+};
+
+export const getReportTemplate = async (
+  id: number,
+  options?: RequestInit,
+): Promise<ReportTemplate> => {
+  return customFetch<ReportTemplate>(getGetReportTemplateUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetReportTemplateQueryKey = (id: number) => {
+  return [`/api/report-templates/${id}`] as const;
+};
+
+export const getGetReportTemplateQueryOptions = <
+  TData = Awaited<ReturnType<typeof getReportTemplate>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getReportTemplate>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetReportTemplateQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getReportTemplate>>
+  > = ({ signal }) => getReportTemplate(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getReportTemplate>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetReportTemplateQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getReportTemplate>>
+>;
+export type GetReportTemplateQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get a report template
+ */
+
+export function useGetReportTemplate<
+  TData = Awaited<ReturnType<typeof getReportTemplate>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getReportTemplate>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetReportTemplateQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update a report template
+ */
+export const getUpdateReportTemplateUrl = (id: number) => {
+  return `/api/report-templates/${id}`;
+};
+
+export const updateReportTemplate = async (
+  id: number,
+  updateReportTemplateBody: UpdateReportTemplateBody,
+  options?: RequestInit,
+): Promise<ReportTemplate> => {
+  return customFetch<ReportTemplate>(getUpdateReportTemplateUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateReportTemplateBody),
+  });
+};
+
+export const getUpdateReportTemplateMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateReportTemplate>>,
+    TError,
+    { id: number; data: BodyType<UpdateReportTemplateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateReportTemplate>>,
+  TError,
+  { id: number; data: BodyType<UpdateReportTemplateBody> },
+  TContext
+> => {
+  const mutationKey = ["updateReportTemplate"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateReportTemplate>>,
+    { id: number; data: BodyType<UpdateReportTemplateBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateReportTemplate(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateReportTemplateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateReportTemplate>>
+>;
+export type UpdateReportTemplateMutationBody =
+  BodyType<UpdateReportTemplateBody>;
+export type UpdateReportTemplateMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a report template
+ */
+export const useUpdateReportTemplate = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateReportTemplate>>,
+    TError,
+    { id: number; data: BodyType<UpdateReportTemplateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateReportTemplate>>,
+  TError,
+  { id: number; data: BodyType<UpdateReportTemplateBody> },
+  TContext
+> => {
+  return useMutation(getUpdateReportTemplateMutationOptions(options));
+};
+
+/**
+ * @summary Delete a report template
+ */
+export const getDeleteReportTemplateUrl = (id: number) => {
+  return `/api/report-templates/${id}`;
+};
+
+export const deleteReportTemplate = async (
+  id: number,
+  options?: RequestInit,
+): Promise<DeleteReportTemplate200> => {
+  return customFetch<DeleteReportTemplate200>(getDeleteReportTemplateUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteReportTemplateMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteReportTemplate>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteReportTemplate>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteReportTemplate"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteReportTemplate>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteReportTemplate(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteReportTemplateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteReportTemplate>>
+>;
+
+export type DeleteReportTemplateMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a report template
+ */
+export const useDeleteReportTemplate = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteReportTemplate>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteReportTemplate>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteReportTemplateMutationOptions(options));
 };

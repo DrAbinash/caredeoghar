@@ -50,7 +50,7 @@ async function buildOrder(order: typeof ordersTable.$inferSelect) {
 ordersRouter.get("/", async (req, res) => {
   const parsed = ListOrdersQueryParams.safeParse(req.query);
   if (!parsed.success) {
-    res.status(400).json({ error: "Invalid query params" });
+    res.status(400).json({ error: "Invalid request", details: parsed.error.issues });
     return;
   }
   const { status, patientId, page = 1, limit = 20, dateFrom, dateTo } = parsed.data;
@@ -74,7 +74,7 @@ ordersRouter.get("/", async (req, res) => {
 ordersRouter.post("/", async (req, res) => {
   const parsed = CreateOrderBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
+    res.status(400).json({ error: "Invalid request", details: parsed.error.issues });
     return;
   }
   const { patientId, doctorId, testIds, tests: customTests, notes } = parsed.data;
@@ -82,7 +82,7 @@ ordersRouter.post("/", async (req, res) => {
   // Support two formats: custom [{testId, price}] or legacy testIds[]
   let lineItems: { testId: number; price: string }[] = [];
   if (customTests && customTests.length > 0) {
-    lineItems = customTests.map((ct) => ({ testId: ct.testId, price: String(ct.price) }));
+    lineItems = customTests.map((ct: { testId: number; price: number }) => ({ testId: ct.testId, price: String(ct.price) }));
   } else if (testIds && testIds.length > 0) {
     const tests = await db.select().from(testsTable).where(
       sql`${testsTable.id} = ANY(${testIds})`
@@ -127,7 +127,7 @@ ordersRouter.post("/", async (req, res) => {
 ordersRouter.get("/:id", async (req, res) => {
   const parsed = GetOrderParams.safeParse({ id: Number(req.params.id) });
   if (!parsed.success) {
-    res.status(400).json({ error: "Invalid id" });
+    res.status(400).json({ error: "Invalid request", details: parsed.error.issues });
     return;
   }
   const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, parsed.data.id));
@@ -142,7 +142,11 @@ ordersRouter.put("/:id", async (req, res) => {
   const paramsParsed = UpdateOrderParams.safeParse({ id: Number(req.params.id) });
   const bodyParsed = UpdateOrderBody.safeParse(req.body);
   if (!paramsParsed.success || !bodyParsed.success) {
-    res.status(400).json({ error: "Invalid request" });
+    const details = [
+      ...(paramsParsed.success ? [] : paramsParsed.error.issues),
+      ...(bodyParsed.success ? [] : bodyParsed.error.issues),
+    ];
+    res.status(400).json({ error: "Invalid request", details });
     return;
   }
   const { status, notes } = bodyParsed.data;

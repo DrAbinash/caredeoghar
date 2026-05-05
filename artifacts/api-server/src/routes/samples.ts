@@ -3,7 +3,7 @@ import {
   db, samplesTable, sampleTestAssignmentsTable, insertSampleSchema,
   ordersTable, patientsTable, orderTestsTable, testsTable,
 } from "@workspace/db";
-import { and, eq, gte, lte, sql, inArray, desc, like } from "drizzle-orm";
+import { and, eq, gte, lte, sql, inArray, desc, like, type SQL } from "drizzle-orm";
 import { z } from "zod/v4";
 
 const router: IRouter = Router();
@@ -124,14 +124,14 @@ async function expandSample(s: typeof samplesTable.$inferSelect) {
 
 router.get("/", async (req, res) => {
   const q = ListQuery.safeParse(req.query);
-  if (!q.success) { res.status(400).json({ error: "Invalid query", details: q.error.issues }); return; }
+  if (!q.success) { res.status(400).json({ error: "Invalid request", details: q.error.issues }); return; }
   const status = q.data.status ?? null;
   const dateFrom = q.data.dateFrom ?? null;
   const dateTo = q.data.dateTo ?? null;
   const search = (q.data.search ?? "").trim();
   const outsourcedOnly = q.data.outsourcedOnly === "true";
 
-  const conds = [];
+  const conds: SQL[] = [];
   if (status && status !== "all" && (SAMPLE_STATUSES as readonly string[]).includes(status)) {
     conds.push(eq(samplesTable.status, status));
   }
@@ -148,7 +148,7 @@ router.get("/", async (req, res) => {
 
   // Status counters across the SAME filters (minus status itself).
   const counterConds = conds.filter((c) => c !== conds.find((x) => x === conds[0] && status));
-  const baseFilters = [];
+  const baseFilters: SQL[] = [];
   if (dateFrom) baseFilters.push(gte(samplesTable.collectedAt, new Date(`${dateFrom}T00:00:00`)));
   if (dateTo)   baseFilters.push(lte(samplesTable.collectedAt, new Date(`${dateTo}T23:59:59.999`)));
   if (outsourcedOnly) baseFilters.push(eq(samplesTable.isOutsourced, true));
@@ -177,7 +177,7 @@ router.get("/options", (_req, res) => {
 
 router.get("/:id", async (req, res) => {
   const p = IdParams.safeParse(req.params);
-  if (!p.success) { res.status(400).json({ error: "Invalid id", details: p.error.issues }); return; }
+  if (!p.success) { res.status(400).json({ error: "Invalid request", details: p.error.issues }); return; }
   const [row] = await db.select().from(samplesTable).where(eq(samplesTable.id, p.data.id));
   if (!row) { res.status(404).json({ error: "Sample not found" }); return; }
   res.json(await expandSample(row));
@@ -201,7 +201,7 @@ const createBody = insertSampleSchema.extend({
 router.post("/", async (req, res) => {
   const parsed = createBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
+    res.status(400).json({ error: "Invalid request", details: parsed.error.issues });
     return;
   }
   const { orderTestIds, ...sample } = parsed.data;
@@ -268,14 +268,14 @@ const VALID_TRANSITIONS: Record<SampleStatus, SampleStatus[]> = {
 
 router.post("/:id/status", async (req, res) => {
   const p = IdParams.safeParse(req.params);
-  if (!p.success) { res.status(400).json({ error: "Invalid id", details: p.error.issues }); return; }
+  if (!p.success) { res.status(400).json({ error: "Invalid request", details: p.error.issues }); return; }
   const id = p.data.id;
   const body = z.object({
     status: z.enum(SAMPLE_STATUSES),
     rejectionReason: z.string().optional(),
     actorName: z.string().optional(),
   }).safeParse(req.body);
-  if (!body.success) { res.status(400).json({ error: "Invalid body", details: body.error.issues }); return; }
+  if (!body.success) { res.status(400).json({ error: "Invalid request", details: body.error.issues }); return; }
 
   const [sample] = await db.select().from(samplesTable).where(eq(samplesTable.id, id));
   if (!sample) { res.status(404).json({ error: "Sample not found" }); return; }
@@ -320,10 +320,10 @@ const outsourceBody = z.object({
 
 router.post("/:id/outsource", async (req, res) => {
   const p = IdParams.safeParse(req.params);
-  if (!p.success) { res.status(400).json({ error: "Invalid id", details: p.error.issues }); return; }
+  if (!p.success) { res.status(400).json({ error: "Invalid request", details: p.error.issues }); return; }
   const id = p.data.id;
   const body = outsourceBody.safeParse(req.body);
-  if (!body.success) { res.status(400).json({ error: "Invalid body", details: body.error.issues }); return; }
+  if (!body.success) { res.status(400).json({ error: "Invalid request", details: body.error.issues }); return; }
 
   const [sample] = await db.select().from(samplesTable).where(eq(samplesTable.id, id));
   if (!sample) { res.status(404).json({ error: "Sample not found" }); return; }
@@ -344,7 +344,7 @@ router.post("/:id/outsource", async (req, res) => {
 
 router.post("/:id/outsource/receive", async (req, res) => {
   const p = IdParams.safeParse(req.params);
-  if (!p.success) { res.status(400).json({ error: "Invalid id", details: p.error.issues }); return; }
+  if (!p.success) { res.status(400).json({ error: "Invalid request", details: p.error.issues }); return; }
   const id = p.data.id;
   const [sample] = await db.select().from(samplesTable).where(eq(samplesTable.id, id));
   if (!sample) { res.status(404).json({ error: "Sample not found" }); return; }
@@ -358,7 +358,7 @@ router.post("/:id/outsource/receive", async (req, res) => {
 
 router.delete("/:id/outsource", async (req, res) => {
   const p = IdParams.safeParse(req.params);
-  if (!p.success) { res.status(400).json({ error: "Invalid id", details: p.error.issues }); return; }
+  if (!p.success) { res.status(400).json({ error: "Invalid request", details: p.error.issues }); return; }
   const id = p.data.id;
   const [sample] = await db.select().from(samplesTable).where(eq(samplesTable.id, id));
   if (!sample) { res.status(404).json({ error: "Sample not found" }); return; }
@@ -378,7 +378,7 @@ router.delete("/:id/outsource", async (req, res) => {
 
 router.patch("/:id", async (req, res) => {
   const p = IdParams.safeParse(req.params);
-  if (!p.success) { res.status(400).json({ error: "Invalid id", details: p.error.issues }); return; }
+  if (!p.success) { res.status(400).json({ error: "Invalid request", details: p.error.issues }); return; }
   const id = p.data.id;
   const body = z.object({
     notes: z.string().optional(),
@@ -388,7 +388,7 @@ router.patch("/:id", async (req, res) => {
     collectionSite: z.string().refine((v) => COLLECTION_SITES.includes(v)).optional(),
     collectedByName: z.string().optional(),
   }).safeParse(req.body);
-  if (!body.success) { res.status(400).json({ error: "Invalid body", details: body.error.issues }); return; }
+  if (!body.success) { res.status(400).json({ error: "Invalid request", details: body.error.issues }); return; }
 
   const [sample] = await db.select().from(samplesTable).where(eq(samplesTable.id, id));
   if (!sample) { res.status(404).json({ error: "Sample not found" }); return; }
@@ -401,7 +401,7 @@ router.patch("/:id", async (req, res) => {
 
 router.delete("/:id", async (req, res) => {
   const p = IdParams.safeParse(req.params);
-  if (!p.success) { res.status(400).json({ error: "Invalid id", details: p.error.issues }); return; }
+  if (!p.success) { res.status(400).json({ error: "Invalid request", details: p.error.issues }); return; }
   const id = p.data.id;
   const [sample] = await db.select().from(samplesTable).where(eq(samplesTable.id, id));
   if (!sample) { res.status(404).json({ error: "Sample not found" }); return; }

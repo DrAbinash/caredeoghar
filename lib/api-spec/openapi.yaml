@@ -31,6 +31,8 @@ tags:
     description: Super admin commission and ledger operations
   - name: ledgers
     description: Books / ledger group management
+  - name: report-templates
+    description: Per-test report template library
 
 paths:
   /healthz:
@@ -1978,8 +1980,161 @@ paths:
               schema:
                 $ref: "#/components/schemas/ResetLedgerResult"
 
+  /report-templates:
+    get:
+      operationId: listReportTemplates
+      tags: [report-templates]
+      summary: List report templates
+      parameters:
+        - name: testId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReportTemplate"
+    post:
+      operationId: createReportTemplate
+      tags: [report-templates]
+      summary: Create a report template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReportTemplateBody"
+      responses:
+        "201":
+          description: Created template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportTemplate"
+
+  /report-templates/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      operationId: getReportTemplate
+      tags: [report-templates]
+      summary: Get a report template
+      responses:
+        "200":
+          description: Template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportTemplate"
+    patch:
+      operationId: updateReportTemplate
+      tags: [report-templates]
+      summary: Update a report template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateReportTemplateBody"
+      responses:
+        "200":
+          description: Updated template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportTemplate"
+    delete:
+      operationId: deleteReportTemplate
+      tags: [report-templates]
+      summary: Delete a report template
+      responses:
+        "200":
+          description: Deletion result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                required: [ok]
+
 components:
   schemas:
+    ReportTemplate:
+      type: object
+      properties:
+        id:
+          type: integer
+        testId:
+          type: integer
+        name:
+          type: string
+        content:
+          type: string
+        format:
+          type: string
+          enum: [html, text]
+        isDefault:
+          type: boolean
+        tags:
+          type: string
+          nullable: true
+        modality:
+          type: string
+          nullable: true
+      required: [id, testId, name, content, format, isDefault]
+
+    CreateReportTemplateBody:
+      type: object
+      properties:
+        testId:
+          type: integer
+        name:
+          type: string
+        content:
+          type: string
+        format:
+          type: string
+          enum: [html, text]
+        isDefault:
+          type: boolean
+        tags:
+          type: string
+          nullable: true
+        modality:
+          type: string
+          nullable: true
+      required: [testId, name, content]
+
+    UpdateReportTemplateBody:
+      type: object
+      properties:
+        name:
+          type: string
+        content:
+          type: string
+        format:
+          type: string
+          enum: [html, text]
+        isDefault:
+          type: boolean
+        tags:
+          type: string
+          nullable: true
+        modality:
+          type: string
+          nullable: true
+
     HealthStatus:
       type: object
       properties:
@@ -2198,10 +2353,21 @@ components:
           type: array
           items:
             type: integer
+        tests:
+          type: array
+          description: "Custom line items with overridden prices. When present, takes precedence over testIds."
+          items:
+            type: object
+            properties:
+              testId:
+                type: integer
+              price:
+                type: number
+            required: [testId, price]
         notes:
           type: string
           nullable: true
-      required: [patientId, testIds]
+      required: [patientId]
 
     UpdateOrderBody:
       type: object

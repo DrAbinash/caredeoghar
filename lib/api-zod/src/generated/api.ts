@@ -388,7 +388,18 @@ export const ListOrdersResponse = zod.object({
 export const CreateOrderBody = zod.object({
   patientId: zod.number(),
   doctorId: zod.number().nullish(),
-  testIds: zod.array(zod.number()),
+  testIds: zod.array(zod.number()).optional(),
+  tests: zod
+    .array(
+      zod.object({
+        testId: zod.number(),
+        price: zod.number(),
+      }),
+    )
+    .optional()
+    .describe(
+      "Custom line items with overridden prices. When present, takes precedence over testIds.",
+    ),
   notes: zod.string().nullish(),
 });
 
@@ -2771,4 +2782,94 @@ export const ResetLedgerResponse = zod.object({
     orders: zod.number(),
     patients: zod.number(),
   }),
+});
+
+/**
+ * @summary List report templates
+ */
+export const ListReportTemplatesQueryParams = zod.object({
+  testId: zod.coerce.number().optional(),
+});
+
+export const ListReportTemplatesResponseItem = zod.object({
+  id: zod.number(),
+  testId: zod.number(),
+  name: zod.string(),
+  content: zod.string(),
+  format: zod.enum(["html", "text"]),
+  isDefault: zod.boolean(),
+  tags: zod.string().nullish(),
+  modality: zod.string().nullish(),
+});
+export const ListReportTemplatesResponse = zod.array(
+  ListReportTemplatesResponseItem,
+);
+
+/**
+ * @summary Create a report template
+ */
+export const CreateReportTemplateBody = zod.object({
+  testId: zod.number(),
+  name: zod.string(),
+  content: zod.string(),
+  format: zod.enum(["html", "text"]).optional(),
+  isDefault: zod.boolean().optional(),
+  tags: zod.string().nullish(),
+  modality: zod.string().nullish(),
+});
+
+/**
+ * @summary Get a report template
+ */
+export const GetReportTemplateParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetReportTemplateResponse = zod.object({
+  id: zod.number(),
+  testId: zod.number(),
+  name: zod.string(),
+  content: zod.string(),
+  format: zod.enum(["html", "text"]),
+  isDefault: zod.boolean(),
+  tags: zod.string().nullish(),
+  modality: zod.string().nullish(),
+});
+
+/**
+ * @summary Update a report template
+ */
+export const UpdateReportTemplateParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateReportTemplateBody = zod.object({
+  name: zod.string().optional(),
+  content: zod.string().optional(),
+  format: zod.enum(["html", "text"]).optional(),
+  isDefault: zod.boolean().optional(),
+  tags: zod.string().nullish(),
+  modality: zod.string().nullish(),
+});
+
+export const UpdateReportTemplateResponse = zod.object({
+  id: zod.number(),
+  testId: zod.number(),
+  name: zod.string(),
+  content: zod.string(),
+  format: zod.enum(["html", "text"]),
+  isDefault: zod.boolean(),
+  tags: zod.string().nullish(),
+  modality: zod.string().nullish(),
+});
+
+/**
+ * @summary Delete a report template
+ */
+export const DeleteReportTemplateParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteReportTemplateResponse = zod.object({
+  ok: zod.boolean(),
 });

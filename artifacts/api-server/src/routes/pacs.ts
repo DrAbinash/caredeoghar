@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod/v4";
 import { requireStaffAuth } from "../middleware/requireStaffAuth";
 
 const router = Router();
@@ -8,6 +9,13 @@ const router = Router();
 // credentials and return patient imaging data — unauthenticated access would
 // expose DICOM patient records and internal PACS configuration.
 router.use(requireStaffAuth);
+
+// Orthanc resource IDs are 36-char hex UUIDs with dashes (8-4-4-4-12). We
+// validate them with a permissive hex pattern so that arbitrary user input
+// can never be smuggled into the upstream Orthanc URL.
+const OrthancId = z.string().regex(/^[A-Fa-f0-9-]{8,64}$/, "Invalid Orthanc ID");
+const OrthancPatientIdParams = z.object({ orthancPatientId: OrthancId });
+const OrthancIdParams = z.object({ id: OrthancId });
 
 function getOrthancConfig() {
   const url = (process.env.ORTHANC_URL || "").replace(/\/$/, "");
@@ -57,68 +65,82 @@ router.get("/health", async (_req, res) => {
 
 // ─── Patients ────────────────────────────────────────────────────────────────
 
-router.get("/patients", async (_req, res) => {
+router.get("/patients", async (_req, res): Promise<void> => {
   const { ok, data, status } = await orthancFetch("/patients?expand");
-  if (!ok) return res.status(status).json(data);
+  if (!ok) { res.status(status).json(data); return; }
   res.json(data);
 });
 
-router.get("/patients/:orthancPatientId", async (req, res) => {
-  const { ok, data, status } = await orthancFetch(`/patients/${req.params.orthancPatientId}`);
-  if (!ok) return res.status(status).json(data);
+router.get("/patients/:orthancPatientId", async (req, res): Promise<void> => {
+  const p = OrthancPatientIdParams.safeParse(req.params);
+  if (!p.success) { res.status(400).json({ error: "Invalid request", details: p.error.issues }); return; }
+  const { ok, data, status } = await orthancFetch(`/patients/${p.data.orthancPatientId}`);
+  if (!ok) { res.status(status).json(data); return; }
   res.json(data);
 });
 
-router.get("/patients/:orthancPatientId/studies", async (req, res) => {
-  const { ok, data, status } = await orthancFetch(`/patients/${req.params.orthancPatientId}/studies`);
-  if (!ok) return res.status(status).json(data);
+router.get("/patients/:orthancPatientId/studies", async (req, res): Promise<void> => {
+  const p = OrthancPatientIdParams.safeParse(req.params);
+  if (!p.success) { res.status(400).json({ error: "Invalid request", details: p.error.issues }); return; }
+  const { ok, data, status } = await orthancFetch(`/patients/${p.data.orthancPatientId}/studies`);
+  if (!ok) { res.status(status).json(data); return; }
   res.json(data);
 });
 
 // ─── Studies ─────────────────────────────────────────────────────────────────
 
-router.get("/studies", async (_req, res) => {
+router.get("/studies", async (_req, res): Promise<void> => {
   const { ok, data, status } = await orthancFetch("/studies?expand");
-  if (!ok) return res.status(status).json(data);
+  if (!ok) { res.status(status).json(data); return; }
   res.json(data);
 });
 
-router.get("/studies/:id", async (req, res) => {
-  const { ok, data, status } = await orthancFetch(`/studies/${req.params.id}`);
-  if (!ok) return res.status(status).json(data);
+router.get("/studies/:id", async (req, res): Promise<void> => {
+  const p = OrthancIdParams.safeParse(req.params);
+  if (!p.success) { res.status(400).json({ error: "Invalid request", details: p.error.issues }); return; }
+  const { ok, data, status } = await orthancFetch(`/studies/${p.data.id}`);
+  if (!ok) { res.status(status).json(data); return; }
   res.json(data);
 });
 
-router.get("/studies/:id/series", async (req, res) => {
-  const { ok, data, status } = await orthancFetch(`/studies/${req.params.id}/series`);
-  if (!ok) return res.status(status).json(data);
+router.get("/studies/:id/series", async (req, res): Promise<void> => {
+  const p = OrthancIdParams.safeParse(req.params);
+  if (!p.success) { res.status(400).json({ error: "Invalid request", details: p.error.issues }); return; }
+  const { ok, data, status } = await orthancFetch(`/studies/${p.data.id}/series`);
+  if (!ok) { res.status(status).json(data); return; }
   res.json(data);
 });
 
 // ─── Series ──────────────────────────────────────────────────────────────────
 
-router.get("/series/:id", async (req, res) => {
-  const { ok, data, status } = await orthancFetch(`/series/${req.params.id}`);
-  if (!ok) return res.status(status).json(data);
+router.get("/series/:id", async (req, res): Promise<void> => {
+  const p = OrthancIdParams.safeParse(req.params);
+  if (!p.success) { res.status(400).json({ error: "Invalid request", details: p.error.issues }); return; }
+  const { ok, data, status } = await orthancFetch(`/series/${p.data.id}`);
+  if (!ok) { res.status(status).json(data); return; }
   res.json(data);
 });
 
-router.get("/series/:id/instances", async (req, res) => {
-  const { ok, data, status } = await orthancFetch(`/series/${req.params.id}/instances`);
-  if (!ok) return res.status(status).json(data);
+router.get("/series/:id/instances", async (req, res): Promise<void> => {
+  const p = OrthancIdParams.safeParse(req.params);
+  if (!p.success) { res.status(400).json({ error: "Invalid request", details: p.error.issues }); return; }
+  const { ok, data, status } = await orthancFetch(`/series/${p.data.id}/instances`);
+  if (!ok) { res.status(status).json(data); return; }
   res.json(data);
 });
 
 // ─── Instances ────────────────────────────────────────────────────────────────
 
-router.get("/instances/:id/preview", async (req, res) => {
+router.get("/instances/:id/preview", async (req, res): Promise<void> => {
+  const p = OrthancIdParams.safeParse(req.params);
+  if (!p.success) { res.status(400).json({ error: "Invalid request", details: p.error.issues }); return; }
   const { url, user, pass } = getOrthancConfig();
-  if (!url) return res.status(503).json({ error: "PACS not configured" });
+  if (!url) { res.status(503).json({ error: "PACS not configured" }); return; }
   try {
-    const resp = await fetch(`${url}/instances/${req.params.id}/preview`, {
+    const resp = await fetch(`${url}/instances/${p.data.id}/preview`, {
       headers: orthancHeaders(user, pass),
     });
-    if (!resp.ok) return res.status(resp.status).json({ error: "Preview not found" });
+    if (!resp.ok) { res.status(resp.status).json({ error: "Preview not found" }); return; }
     const buffer = await resp.arrayBuffer();
     res.setHeader("Content-Type", resp.headers.get("Content-Type") || "image/png");
     res.send(Buffer.from(buffer));
@@ -130,9 +152,9 @@ router.get("/instances/:id/preview", async (req, res) => {
 // ─── WADO proxy ──────────────────────────────────────────────────────────────
 // Proxy WADO-URI requests so Weasis can fetch via our backend (avoids CORS)
 
-router.get("/wado", async (req, res) => {
+router.get("/wado", async (req, res): Promise<void> => {
   const { url, user, pass } = getOrthancConfig();
-  if (!url) return res.status(503).json({ error: "PACS not configured" });
+  if (!url) { res.status(503).json({ error: "PACS not configured" }); return; }
   const qs = new URLSearchParams(req.query as Record<string, string>).toString();
   try {
     const resp = await fetch(`${url}/wado?${qs}`, { headers: orthancHeaders(user, pass) });
@@ -146,13 +168,17 @@ router.get("/wado", async (req, res) => {
 
 // ─── Search studies by patient name / ID ─────────────────────────────────────
 
-router.get("/search", async (req, res) => {
-  const { q = "" } = req.query as Record<string, string>;
+const SearchQuery = z.object({ q: z.string().optional() });
+
+router.get("/search", async (req, res): Promise<void> => {
+  const parsed = SearchQuery.safeParse(req.query);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid request", details: parsed.error.issues }); return; }
+  const q = parsed.data.q ?? "";
   const { ok, data, status } = await orthancFetch("/studies?expand");
-  if (!ok) return res.status(status).json(data);
+  if (!ok) { res.status(status).json(data); return; }
 
   const studies = data as unknown[];
-  if (!q) return res.json(studies);
+  if (!q) { res.json(studies); return; }
 
   const lower = q.toLowerCase();
   const filtered = (studies as Record<string, unknown>[]).filter((s: Record<string, unknown>) => {
@@ -166,12 +192,14 @@ router.get("/search", async (req, res) => {
 
 // ─── Weasis launcher URL helper ───────────────────────────────────────────────
 
-router.get("/studies/:id/weasis-url", async (req, res) => {
+router.get("/studies/:id/weasis-url", async (req, res): Promise<void> => {
+  const p = OrthancIdParams.safeParse(req.params);
+  if (!p.success) { res.status(400).json({ error: "Invalid request", details: p.error.issues }); return; }
   const { url } = getOrthancConfig();
-  if (!url) return res.status(503).json({ error: "PACS not configured" });
+  if (!url) { res.status(503).json({ error: "PACS not configured" }); return; }
 
-  const { ok, data } = await orthancFetch(`/studies/${req.params.id}`);
-  if (!ok) return res.status(404).json({ error: "Study not found" });
+  const { ok, data } = await orthancFetch(`/studies/${p.data.id}`);
+  if (!ok) { res.status(404).json({ error: "Study not found" }); return; }
 
   const study = data as Record<string, unknown>;
   const mainTags = study.MainDicomTags as Record<string, string> | undefined;
@@ -185,7 +213,7 @@ router.get("/studies/:id/weasis-url", async (req, res) => {
   res.json({
     studyInstanceUID,
     weasisUrl,
-    orthancViewerUrl: `${url}/app/explorer.html#study?uuid=${req.params.id}`,
+    orthancViewerUrl: `${url}/app/explorer.html#study?uuid=${p.data.id}`,
     ohifUrl: process.env.OHIF_URL
       ? `${process.env.OHIF_URL}/viewer?StudyInstanceUIDs=${studyInstanceUID}`
       : null,

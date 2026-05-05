@@ -181,7 +181,7 @@ reportsRouter.get("/dashboard", async (_req, res) => {
 reportsRouter.get("/revenue", async (req, res) => {
   const parsed = GetRevenueReportQueryParams.safeParse(req.query);
   if (!parsed.success) {
-    res.status(400).json({ error: "Invalid query params" });
+    res.status(400).json({ error: "Invalid request", details: parsed.error.issues });
     return;
   }
   const period = parsed.data.period ?? "monthly";
@@ -312,7 +312,7 @@ reportsRouter.get("/recent-activity", async (_req, res) => {
 // Income / Expense daily breakdown  ─────────────────────────────────────────
 reportsRouter.get("/income-expense", async (req, res) => {
   const q = DateRangeQuery.safeParse(req.query);
-  if (!q.success) { res.status(400).json({ error: "Invalid query", details: q.error.issues }); return; }
+  if (!q.success) { res.status(400).json({ error: "Invalid request", details: q.error.issues }); return; }
   const range = resolveDateRange(q.data.from, q.data.to);
   if (!range) { res.status(400).json({ error: "Invalid range: 'from' must be on or before 'to'" }); return; }
   const { fromIso, toIso, fromDate, toDate } = range;
@@ -388,7 +388,7 @@ reportsRouter.get("/income-expense", async (req, res) => {
 // Payment method summary  ─────────────────────────────────────────────────────
 reportsRouter.get("/payment-methods", async (req, res) => {
   const q = DateRangeQuery.safeParse(req.query);
-  if (!q.success) { res.status(400).json({ error: "Invalid query", details: q.error.issues }); return; }
+  if (!q.success) { res.status(400).json({ error: "Invalid request", details: q.error.issues }); return; }
   const range = resolveDateRange(q.data.from, q.data.to);
   if (!range) { res.status(400).json({ error: "Invalid range: 'from' must be on or before 'to'" }); return; }
   const { fromDate, toDate } = range;
@@ -437,7 +437,7 @@ reportsRouter.get("/payment-methods", async (req, res) => {
 // Daily full summary (single date) ────────────────────────────────────────────
 reportsRouter.get("/daily-summary", async (req, res) => {
   const q = SingleDateQuery.safeParse(req.query);
-  if (!q.success) { res.status(400).json({ error: "Invalid query", details: q.error.issues }); return; }
+  if (!q.success) { res.status(400).json({ error: "Invalid request", details: q.error.issues }); return; }
   const date = q.data.date || new Date().toISOString().split("T")[0];
   const fromDate = new Date(date);
   fromDate.setHours(0,0,0,0);
@@ -492,7 +492,7 @@ reportsRouter.get("/daily-summary", async (req, res) => {
 
 reportsRouter.get("/daily-summary/pdf", async (req, res) => {
   const q = SingleDateQuery.safeParse(req.query);
-  if (!q.success) { res.status(400).json({ error: "Invalid query", details: q.error.issues }); return; }
+  if (!q.success) { res.status(400).json({ error: "Invalid request", details: q.error.issues }); return; }
   const date = q.data.date || new Date().toISOString().split("T")[0];
   const fromDate = new Date(date);
   fromDate.setHours(0,0,0,0);

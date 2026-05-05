@@ -5,10 +5,13 @@
  * Diagnostic Center Billing ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { CreateOrderBodyTestsItem } from "./createOrderBodyTestsItem";
 
 export interface CreateOrderBody {
   patientId: number;
   doctorId?: number | null;
-  testIds: number[];
+  testIds?: number[];
+  /** Custom line items with overridden prices. When present, takes precedence over testIds. */
+  tests?: CreateOrderBodyTestsItem[];
   notes?: string | null;
 }

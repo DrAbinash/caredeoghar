@@ -5,6 +5,60 @@
  * Diagnostic Center Billing ERP API
  * OpenAPI spec version: 0.1.0
  */
+export type ReportTemplateFormat =
+  (typeof ReportTemplateFormat)[keyof typeof ReportTemplateFormat];
+
+export const ReportTemplateFormat = {
+  html: "html",
+  text: "text",
+} as const;
+
+export interface ReportTemplate {
+  id: number;
+  testId: number;
+  name: string;
+  content: string;
+  format: ReportTemplateFormat;
+  isDefault: boolean;
+  tags?: string | null;
+  modality?: string | null;
+}
+
+export type CreateReportTemplateBodyFormat =
+  (typeof CreateReportTemplateBodyFormat)[keyof typeof CreateReportTemplateBodyFormat];
+
+export const CreateReportTemplateBodyFormat = {
+  html: "html",
+  text: "text",
+} as const;
+
+export interface CreateReportTemplateBody {
+  testId: number;
+  name: string;
+  content: string;
+  format?: CreateReportTemplateBodyFormat;
+  isDefault?: boolean;
+  tags?: string | null;
+  modality?: string | null;
+}
+
+export type UpdateReportTemplateBodyFormat =
+  (typeof UpdateReportTemplateBodyFormat)[keyof typeof UpdateReportTemplateBodyFormat];
+
+export const UpdateReportTemplateBodyFormat = {
+  html: "html",
+  text: "text",
+} as const;
+
+export interface UpdateReportTemplateBody {
+  name?: string;
+  content?: string;
+  format?: UpdateReportTemplateBodyFormat;
+  isDefault?: boolean;
+  tags?: string | null;
+  modality?: string | null;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -142,10 +196,17 @@ export interface OrderList {
   limit: number;
 }
 
+export type CreateOrderBodyTestsItem = {
+  testId: number;
+  price: number;
+};
+
 export interface CreateOrderBody {
   patientId: number;
   doctorId?: number | null;
-  testIds: number[];
+  testIds?: number[];
+  /** Custom line items with overridden prices. When present, takes precedence over testIds. */
+  tests?: CreateOrderBodyTestsItem[];
   notes?: string | null;
 }
 
@@ -1199,4 +1260,12 @@ export type DeleteLedger200 = {
 
 export type AssignDoctorsToLedger200 = {
   assigned: number;
+};
+
+export type ListReportTemplatesParams = {
+  testId?: number;
+};
+
+export type DeleteReportTemplate200 = {
+  ok: boolean;
 };
