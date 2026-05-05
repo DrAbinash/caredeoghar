@@ -2,6 +2,11 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { expensesTable, expenseCounterTable } from "@workspace/db/schema";
 import { eq, desc, and, gte, lte, ilike, sql } from "drizzle-orm";
+import {
+  CreateExpenseBody,
+  UpdateExpenseBody,
+  UpdateExpenseParams,
+} from "@workspace/api-zod";
 
 const router = Router();
 
@@ -79,10 +84,11 @@ router.get("/:id", async (req, res) => {
 
 // Create expense
 router.post("/", async (req, res) => {
-  const { category, description, amount, expenseDate, paymentMode, paidTo, approvedBy, notes } = req.body;
-  if (!category || !description || !amount || !expenseDate) {
-    return res.status(400).json({ error: "category, description, amount, expenseDate are required" });
+  const parsed = CreateExpenseBody.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
   }
+  const { category, description, amount, expenseDate, paymentMode, paidTo, approvedBy, notes } = parsed.data;
 
   const expId = await generateExpenseId();
   const [expense] = await db
@@ -94,9 +100,9 @@ router.post("/", async (req, res) => {
       amount: String(amount),
       expenseDate,
       paymentMode: paymentMode || "cash",
-      paidTo: paidTo || null,
-      approvedBy: approvedBy || null,
-      notes: notes || null,
+      paidTo: paidTo ?? null,
+      approvedBy: approvedBy ?? null,
+      notes: notes ?? null,
     })
     .returning();
 
@@ -105,13 +111,18 @@ router.post("/", async (req, res) => {
 
 // Update expense
 router.patch("/:id", async (req, res) => {
-  const id = Number(req.params.id);
-  const allowed = ["category", "description", "amount", "expenseDate", "paymentMode", "paidTo", "approvedBy", "notes", "voucherId"];
+  const paramsParsed = UpdateExpenseParams.safeParse({ id: Number(req.params.id) });
+  if (!paramsParsed.success) {
+    return res.status(400).json({ error: "Invalid id" });
+  }
+  const bodyParsed = UpdateExpenseBody.safeParse(req.body);
+  if (!bodyParsed.success) {
+    return res.status(400).json({ error: "Invalid body", details: bodyParsed.error.issues });
+  }
   const updates: Record<string, unknown> = {};
-  for (const k of allowed) {
-    if (req.body[k] !== undefined) {
-      updates[k] = k === "amount" ? String(req.body[k]) : req.body[k];
-    }
+  for (const [k, v] of Object.entries(bodyParsed.data)) {
+    if (v === undefined) continue;
+    updates[k] = k === "amount" ? String(v) : v;
   }
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: "No valid fields to update" });
@@ -119,7 +130,7 @@ router.patch("/:id", async (req, res) => {
   const [expense] = await db
     .update(expensesTable)
     .set(updates)
-    .where(eq(expensesTable.id, id))
+    .where(eq(expensesTable.id, paramsParsed.data.id))
     .returning();
   if (!expense) return res.status(404).json({ error: "Expense not found" });
   return res.json(toNum(expense as unknown as Record<string, unknown>));

@@ -7,6 +7,11 @@ import {
   doctorsTable,
 } from "@workspace/db/schema";
 import { eq, desc, and } from "drizzle-orm";
+import {
+  CreateAppointmentBody,
+  UpdateAppointmentBody,
+  UpdateAppointmentParams,
+} from "@workspace/api-zod";
 
 const router = Router();
 
@@ -112,21 +117,22 @@ router.get("/:id", async (req, res) => {
 
 // Create appointment
 router.post("/", async (req, res) => {
-  const { patientId, doctorId, packageId, appointmentDate, timeSlot, status, type, notes } = req.body;
-  if (!patientId || !appointmentDate || !timeSlot) {
-    return res.status(400).json({ error: "patientId, appointmentDate, timeSlot are required" });
+  const parsed = CreateAppointmentBody.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
   }
+  const { patientId, doctorId, packageId, appointmentDate, timeSlot, status, type, notes } = parsed.data;
 
   const aptId = await generateAppointmentId();
 
   // Resolve ledger from doctor → patient → default
   let ledgerId = 1;
   if (doctorId) {
-    const [d] = await db.select().from(doctorsTable).where(eq(doctorsTable.id, Number(doctorId)));
+    const [d] = await db.select().from(doctorsTable).where(eq(doctorsTable.id, doctorId));
     if (d?.ledgerId) ledgerId = d.ledgerId;
   }
   if (ledgerId === 1) {
-    const [p] = await db.select().from(patientsTable).where(eq(patientsTable.id, Number(patientId)));
+    const [p] = await db.select().from(patientsTable).where(eq(patientsTable.id, patientId));
     if (p?.ledgerId) ledgerId = p.ledgerId;
   }
 
@@ -134,14 +140,14 @@ router.post("/", async (req, res) => {
     .insert(appointmentsTable)
     .values({
       appointmentId: aptId,
-      patientId: Number(patientId),
-      doctorId: doctorId ? Number(doctorId) : null,
-      packageId: packageId ? Number(packageId) : null,
+      patientId,
+      doctorId: doctorId ?? null,
+      packageId: packageId ?? null,
       appointmentDate,
       timeSlot,
       status: status || "scheduled",
       type: type || "walk-in",
-      notes: notes || null,
+      notes: notes ?? null,
       ledgerId,
     })
     .returning();
@@ -151,11 +157,17 @@ router.post("/", async (req, res) => {
 
 // Update appointment status / fields
 router.patch("/:id", async (req, res) => {
-  const id = Number(req.params.id);
-  const allowed = ["status", "timeSlot", "appointmentDate", "doctorId", "packageId", "notes", "type"];
+  const paramsParsed = UpdateAppointmentParams.safeParse({ id: Number(req.params.id) });
+  if (!paramsParsed.success) {
+    return res.status(400).json({ error: "Invalid id" });
+  }
+  const bodyParsed = UpdateAppointmentBody.safeParse(req.body);
+  if (!bodyParsed.success) {
+    return res.status(400).json({ error: "Invalid body", details: bodyParsed.error.issues });
+  }
   const updates: Record<string, unknown> = {};
-  for (const k of allowed) {
-    if (req.body[k] !== undefined) updates[k] = req.body[k];
+  for (const [k, v] of Object.entries(bodyParsed.data)) {
+    if (v !== undefined) updates[k] = v;
   }
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: "No valid fields to update" });
@@ -163,7 +175,7 @@ router.patch("/:id", async (req, res) => {
   const [apt] = await db
     .update(appointmentsTable)
     .set(updates)
-    .where(eq(appointmentsTable.id, id))
+    .where(eq(appointmentsTable.id, paramsParsed.data.id))
     .returning();
   if (!apt) return res.status(404).json({ error: "Appointment not found" });
   return res.json(apt);
