@@ -48,6 +48,7 @@ import { backupRouter } from "./backup";
 import { vendorsRouter } from "./vendors";
 import { websiteRouter } from "./website";
 import { systemRouter } from "./system";
+import internalCronRouter from "./internal-cron";
 import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
 import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
 
@@ -55,6 +56,10 @@ const router: IRouter = Router();
 
 // ─── Public / unauthenticated routes ─────────────────────────────────────────
 router.use(healthRouter);
+// Internal cron trigger endpoints — auth via CRON_SECRET bearer token, not staff session.
+// Hit by a Replit Scheduled deployment (see scripts/src/trigger-cron.ts) so cron emails
+// keep firing on autoscale where in-process schedulers are disabled.
+router.use("/internal/cron", internalCronRouter);
 router.use("/super-admin", superAdminRouter);
 router.use("/portal", portalRouter);
 router.use("/display", displayRouter);

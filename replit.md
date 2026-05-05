@@ -28,7 +28,7 @@ The system features a unified single-page billing workflow, customizable quick t
 
 ## Technical Implementations
 
-The API server uses Express 5, capable of serving static frontends. The database schema is managed with Drizzle ORM. AI integration leverages the Gemini REST API for clinical note generation, billing insights, and patient communication. Email notifications are powered by Nodemailer and `node-cron`. The system is designed for cross-platform compatibility (Windows, macOS, Linux) and supports Dockerized deployment using `Dockerfile` and `docker-compose.yml`. Security features include SSRF-guarded `tcpProbe` and bearer token authentication.
+The API server uses Express 5, capable of serving static frontends. The database schema is managed with Drizzle ORM. AI integration leverages the Gemini REST API for clinical note generation, billing insights, and patient communication. Email notifications are powered by Nodemailer and `node-cron`. The in-process schedulers (daily summary, month-end commission) are gated behind `ENABLE_SCHEDULERS=1` so they only run on always-on hosts (Windows desktop bundle, Reserved VM, local dev). On the autoscale cloud deployment they stay off, and the same logic is reachable via `POST /api/internal/cron/{daily-summary,month-end-commission}` (Bearer-auth via `CRON_SECRET`) so a Replit Scheduled deployment can fire them on a calendar — see `scripts/src/trigger-cron.ts`. The system is designed for cross-platform compatibility (Windows, macOS, Linux) and supports Dockerized deployment using `Dockerfile` and `docker-compose.yml`. Security features include SSRF-guarded `tcpProbe` and bearer token authentication.
 
 ## Feature Specifications
 

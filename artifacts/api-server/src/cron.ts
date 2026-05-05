@@ -64,6 +64,14 @@ function scheduleMonthEndCommission() {
   console.log("[cron] Month-end commission scheduler started (fires at 20:00 on last day of month)");
 }
 
+export async function runDailySummary() {
+  return fireDailySummary();
+}
+
+export async function runMonthEndCommission(now: Date = new Date()) {
+  return fireMonthEndCommission(now);
+}
+
 async function fireDailySummary() {
   try {
     const todayStart = new Date();
