@@ -23,8 +23,11 @@ process.on("uncaughtException", (err) => {
 });
 
 process.on("unhandledRejection", (reason) => {
-  logger.error({ reason }, "Unhandled promise rejection — exiting");
-  process.exit(1);
+  logger.error({ reason }, "Unhandled promise rejection — continuing");
+  // Do NOT exit: crashing on every unhandled rejection prevents the server
+  // from ever passing its startup health check if a background operation
+  // (cron job, startup backfill, etc.) rejects in the production environment.
+  // Log the rejection so it is visible in deployment logs and investigate.
 });
 
 const rawPort = process.env["PORT"] ?? "8080";

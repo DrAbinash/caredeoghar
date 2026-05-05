@@ -63,8 +63,11 @@ async function buildAll() {
       "@aws-sdk/*",
       "@azure/*",
       "@opentelemetry/*",
-      "@google-cloud/*",
-      "@google/*",
+      // @google-cloud/* is intentionally NOT externalized so that
+      // @google-cloud/storage (the only GCS dep used at runtime) is bundled
+      // into dist/index.mjs. This makes the production bundle self-contained
+      // and avoids a NODE_PATH / node_modules resolution failure in the
+      // production VM after pnpm store prune removes the global store cache.
       "googleapis",
       "firebase-admin",
       "@parcel/watcher",
