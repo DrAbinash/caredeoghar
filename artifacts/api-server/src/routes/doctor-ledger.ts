@@ -14,6 +14,8 @@ import {
   CreateDoctorPayoutBody,
   CreateDoctorPayoutParams,
   DeleteDoctorPayoutParams,
+  GetDoctorLedgerDetailParams,
+  GetDoctorLedgerDetailQueryParams,
   UpdateDoctorPayoutBody,
   UpdateDoctorPayoutParams,
 } from "@workspace/api-zod";
@@ -204,13 +206,26 @@ doctorLedgerRouter.get("/", async (req, res) => {
 // ─── GET /:doctorId : per-doctor detailed ledger ───────────────────────────────
 doctorLedgerRouter.get("/:doctorId", async (req, res) => {
   try {
-    const doctorId = Number(req.params.doctorId);
-    if (!Number.isFinite(doctorId)) return res.status(400).json({ error: "Invalid doctorId" });
+    const paramsParsed = GetDoctorLedgerDetailParams.safeParse({ doctorId: req.params.doctorId });
+    const queryParsed = GetDoctorLedgerDetailQueryParams.safeParse(req.query);
+    if (!paramsParsed.success || !queryParsed.success) {
+      res.status(400).json({
+        error: "Invalid request",
+        details: [
+          ...(paramsParsed.success ? [] : paramsParsed.error.issues),
+          ...(queryParsed.success ? [] : queryParsed.error.issues),
+        ],
+      });
+      return;
+    }
+    const doctorId = paramsParsed.data.doctorId;
+    const { from, to } = queryParsed.data;
 
     const [doctor] = await db.select().from(doctorsTable).where(eq(doctorsTable.id, doctorId));
-    if (!doctor) return res.status(404).json({ error: "Doctor not found" });
-
-    const { from, to } = req.query as Record<string, string | undefined>;
+    if (!doctor) {
+      res.status(404).json({ error: "Doctor not found" });
+      return;
+    }
 
     const earnedReport = await computeEarned({ from, to, doctorId });
     const earnedRows = earnedReport[0]?.orders ?? [];
@@ -463,11 +478,25 @@ doctorLedgerRouter.delete("/payouts/:id", async (req, res) => {
 // ─── GET /:doctorId/export : CSV export of the ledger window ──────────────────
 doctorLedgerRouter.get("/:doctorId/export", async (req, res) => {
   try {
-    const doctorId = Number(req.params.doctorId);
-    if (!Number.isFinite(doctorId)) return res.status(400).json({ error: "Invalid doctorId" });
+    const paramsParsed = GetDoctorLedgerDetailParams.safeParse({ doctorId: req.params.doctorId });
+    const queryParsed = GetDoctorLedgerDetailQueryParams.safeParse(req.query);
+    if (!paramsParsed.success || !queryParsed.success) {
+      res.status(400).json({
+        error: "Invalid request",
+        details: [
+          ...(paramsParsed.success ? [] : paramsParsed.error.issues),
+          ...(queryParsed.success ? [] : queryParsed.error.issues),
+        ],
+      });
+      return;
+    }
+    const doctorId = paramsParsed.data.doctorId;
     const [doctor] = await db.select().from(doctorsTable).where(eq(doctorsTable.id, doctorId));
-    if (!doctor) return res.status(404).json({ error: "Doctor not found" });
-    const { from, to } = req.query as Record<string, string | undefined>;
+    if (!doctor) {
+      res.status(404).json({ error: "Doctor not found" });
+      return;
+    }
+    const { from, to } = queryParsed.data;
 
     const earnedReport = await computeEarned({ from, to, doctorId });
     const earnedRows = earnedReport[0]?.orders ?? [];
