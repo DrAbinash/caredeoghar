@@ -141,64 +141,125 @@ export async function exportPDF(
 }
 
 // ─── Excel Export ─────────────────────────────────────────────────────────────
+
+type RCell = {
+  value?: string | number | null;
+  type?: typeof String | typeof Number;
+  fontWeight?: "bold";
+  color?: string;
+  backgroundColor?: string;
+  align?: "left" | "center" | "right";
+  span?: number;
+} | null;
+
 export async function exportExcel(
   sections: ExportDoctorSection[],
   meta: ReportMeta,
 ): Promise<void> {
-  const ExcelJS = await import("exceljs");
-  const wb = new ExcelJS.Workbook();
+  const writeXlsxFile = (await import("write-excel-file/browser")).default as (
+    data: RCell[][][],
+    opts: { sheets: string[]; columns?: { width: number }[][]; type: "blob" }
+  ) => Promise<Blob>;
 
-  // ── Summary sheet ──
-  const summaryWs = wb.addWorksheet("Summary");
-  summaryWs.columns = [
-    { width: 28 }, { width: 20 }, { width: 10 },
-    { width: 10 }, { width: 16 }, { width: 18 }, { width: 12 },
-  ];
+  const HEADER_BG = "#F3F4F6";
+  const AMBER_BG  = "#FEF3C7";
 
-  summaryWs.addRow([meta.title]);
-  summaryWs.addRow([`Date Range: ${meta.from} to ${meta.to}`]);
-  summaryWs.addRow([`Doctor: ${meta.doctorFilter}`]);
-  summaryWs.addRow([`Generated: ${meta.generatedAt}`]);
-  summaryWs.addRow([]);
+  // ── Summary sheet ──────────────────────────────────────────────────────────
+  const summaryData: RCell[][] = [];
+
+  summaryData.push([{ value: meta.title, fontWeight: "bold", span: 7 }]);
+  summaryData.push([{ value: `Date Range: ${meta.from} to ${meta.to}`, span: 7 }]);
+  summaryData.push([{ value: `Doctor: ${meta.doctorFilter}`, span: 7 }]);
+  summaryData.push([{ value: `Generated: ${meta.generatedAt}`, span: 7 }]);
+  summaryData.push([null]);
 
   if (meta.grandTotal) {
     const g = meta.grandTotal;
-    summaryWs.addRow(["Doctors with Referrals", "Total Orders", "Total Revenue", "Commission Payable"]);
-    summaryWs.addRow([g.doctors, g.orders, g.revenue, g.commission]);
-    summaryWs.addRow([]);
+    summaryData.push([
+      { value: "Doctors with Referrals", fontWeight: "bold", backgroundColor: AMBER_BG },
+      { value: "Total Orders",           fontWeight: "bold", backgroundColor: AMBER_BG },
+      { value: "Total Revenue",          fontWeight: "bold", backgroundColor: AMBER_BG },
+      { value: "Commission Payable",     fontWeight: "bold", backgroundColor: AMBER_BG },
+      null, null, null,
+    ]);
+    summaryData.push([
+      { value: g.doctors, align: "center" },
+      { value: g.orders,  align: "center" },
+      { value: g.revenue  },
+      { value: g.commission, fontWeight: "bold", color: "#B45309" },
+      null, null, null,
+    ]);
+    summaryData.push([null]);
   }
 
-  summaryWs.addRow(["Doctor", "Specialization", "Orders", "Tests", "Total Revenue", "Total Commission", "Eff. Rate %"]);
+  summaryData.push([
+    { value: "Doctor",           fontWeight: "bold", backgroundColor: HEADER_BG },
+    { value: "Specialization",   fontWeight: "bold", backgroundColor: HEADER_BG },
+    { value: "Orders",           fontWeight: "bold", backgroundColor: HEADER_BG, align: "center" },
+    { value: "Tests",            fontWeight: "bold", backgroundColor: HEADER_BG, align: "center" },
+    { value: "Total Revenue",    fontWeight: "bold", backgroundColor: HEADER_BG, align: "right"  },
+    { value: "Total Commission", fontWeight: "bold", backgroundColor: HEADER_BG, align: "right"  },
+    { value: "Eff. Rate %",      fontWeight: "bold", backgroundColor: HEADER_BG, align: "center" },
+  ]);
   for (const s of sections) {
-    summaryWs.addRow([
-      s.doctorName, s.specialization, s.orderCount, s.testCount,
-      s.totalRevenue, s.totalCommission, s.effectiveRate,
+    summaryData.push([
+      { value: s.doctorName,       type: String },
+      { value: s.specialization,   type: String },
+      { value: s.orderCount,       align: "center" },
+      { value: s.testCount,        align: "center" },
+      { value: s.totalRevenue,     align: "right"  },
+      { value: s.totalCommission,  align: "right"  },
+      { value: s.effectiveRate,    align: "center" },
     ]);
   }
 
-  // ── Per-doctor detail sheet ──
-  const detailWs = wb.addWorksheet("Detailed Report");
-  detailWs.columns = [
-    { width: 30 }, { width: 14 }, { width: 14 }, { width: 18 },
-  ];
+  // ── Detailed Report sheet ──────────────────────────────────────────────────
+  const detailData: RCell[][] = [];
 
-  detailWs.addRow([meta.title]);
-  detailWs.addRow([`Date Range: ${meta.from} to ${meta.to}`, "", "", `Doctor: ${meta.doctorFilter}`]);
-  detailWs.addRow([]);
+  detailData.push([{ value: meta.title, fontWeight: "bold", span: 4 }]);
+  detailData.push([{ value: `Date Range: ${meta.from} to ${meta.to}` }, null, null, { value: `Doctor: ${meta.doctorFilter}` }]);
+  detailData.push([null]);
 
   for (const s of sections) {
-    detailWs.addRow([`${s.label} ${s.doctorName}`, s.specialization, `${s.orderCount} orders`, `Eff. Rate: ${s.effectiveRate}%`]);
-    detailWs.addRow(["Test Name", "No of Tests", "% / Fixed", "Total Amount (Rs.)"]);
+    detailData.push([
+      { value: `${s.label} ${s.doctorName}`, fontWeight: "bold" },
+      { value: s.specialization, type: String },
+      { value: `${s.orderCount} orders`, type: String },
+      { value: `Eff. Rate: ${s.effectiveRate}%`, type: String },
+    ]);
+    detailData.push([
+      { value: "Test Name",            fontWeight: "bold", backgroundColor: HEADER_BG },
+      { value: "No of Tests",          fontWeight: "bold", backgroundColor: HEADER_BG, align: "center" },
+      { value: "% / Fixed",            fontWeight: "bold", backgroundColor: HEADER_BG, align: "center" },
+      { value: "Total Amount (Rs.)",   fontWeight: "bold", backgroundColor: HEADER_BG, align: "right"  },
+    ]);
     for (const r of s.rows) {
-      detailWs.addRow([r.testName, r.count, r.rateLabel, r.commission]);
+      detailData.push([
+        { value: r.testName, type: String },
+        { value: r.count,    align: "center" },
+        { value: r.rateLabel, type: String, align: "center" },
+        { value: r.commission, align: "right" },
+      ]);
     }
-    detailWs.addRow(["", "", "Total \u2192", s.totalCommission]);
-    detailWs.addRow([]);
+    detailData.push([
+      null, null,
+      { value: "Total \u2192", fontWeight: "bold", backgroundColor: AMBER_BG, align: "right" },
+      { value: s.totalCommission, fontWeight: "bold", backgroundColor: AMBER_BG, color: "#B45309", align: "right" },
+    ]);
+    detailData.push([null]);
   }
 
-  const buf = await wb.xlsx.writeBuffer();
+  const blob = await writeXlsxFile([summaryData, detailData], {
+    sheets: ["Summary", "Detailed Report"],
+    columns: [
+      [{ width: 28 }, { width: 20 }, { width: 10 }, { width: 10 }, { width: 16 }, { width: 18 }, { width: 12 }],
+      [{ width: 30 }, { width: 14 }, { width: 14 }, { width: 18 }],
+    ],
+    type: "blob",
+  });
+
   saveAs(
-    new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+    blob,
     `${meta.title.replace(/\s+/g, "_")}_${meta.from}_to_${meta.to}.xlsx`,
   );
 }

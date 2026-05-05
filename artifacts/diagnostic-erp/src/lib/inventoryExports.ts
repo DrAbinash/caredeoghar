@@ -90,145 +90,88 @@ function summarize(rows: StockExportRow[]) {
 }
 
 // ─── Excel (.xlsx) ───────────────────────────────────────────────────────────
+
+type XCell = {
+  value?: string | number | null;
+  type?: typeof String | typeof Number;
+  fontWeight?: "bold";
+  fontSize?: number;
+  fontStyle?: "italic";
+  color?: string;
+  backgroundColor?: string;
+  align?: "left" | "center" | "right";
+  height?: number;
+  span?: number;
+  borderStyle?: "thin" | "medium";
+  borderColor?: string;
+} | null;
+
 export async function exportInventoryExcel(
   rows: StockExportRow[],
   meta: StockExportMeta,
 ): Promise<void> {
-  const ExcelJS = (await import("exceljs")).default;
-  const wb = new ExcelJS.Workbook();
-  wb.creator = meta.title || "Diagnostic ERP";
-  wb.created = new Date();
+  const writeXlsxFile = (await import("write-excel-file/browser")).default as (
+    data: XCell[][],
+    opts: { columns?: { width: number }[]; type: "blob" }
+  ) => Promise<Blob>;
 
-  const ws = wb.addWorksheet("Stock Levels", {
-    views: [{ state: "frozen", ySplit: 5 }],
-  });
+  const HEADER_BG = "#6366F1";
+  const TOTALS_BG = "#F3F4F6";
+  const tb: Pick<XCell & object, "borderStyle" | "borderColor"> = { borderStyle: "thin", borderColor: "#E5E7EB" };
 
-  // ── Header rows (title / subtitle / meta)
-  ws.mergeCells("A1:H1");
-  const titleCell = ws.getCell("A1");
-  titleCell.value = (meta.title || "Inventory Stock Report").toUpperCase();
-  titleCell.font = { bold: true, size: 14, color: { argb: "FF1F2937" } };
-  titleCell.alignment = { horizontal: "center", vertical: "middle" };
-  ws.getRow(1).height = 22;
+  const data: XCell[][] = [];
+
+  data.push([{ value: (meta.title || "Inventory Stock Report").toUpperCase(), fontWeight: "bold", fontSize: 14, color: "#1F2937", align: "center", height: 22, span: 8 }]);
 
   if (meta.subtitle) {
-    ws.mergeCells("A2:H2");
-    const sub = ws.getCell("A2");
-    sub.value = meta.subtitle;
-    sub.font = { italic: true, size: 10, color: { argb: "FF6B7280" } };
-    sub.alignment = { horizontal: "center" };
+    data.push([{ value: meta.subtitle, fontStyle: "italic", fontSize: 10, color: "#6B7280", align: "center", span: 8 }]);
   }
 
-  ws.mergeCells("A3:H3");
-  const metaCell = ws.getCell("A3");
-  metaCell.value = `${meta.filterLabel ?? "All items"}    Generated: ${meta.generatedAt}`;
-  metaCell.font = { size: 9, color: { argb: "FF6B7280" } };
-  metaCell.alignment = { horizontal: "center" };
+  data.push([{ value: `${meta.filterLabel ?? "All items"}    Generated: ${meta.generatedAt}`, fontSize: 9, color: "#6B7280", align: "center", span: 8 }]);
 
-  ws.addRow([]); // spacer (row 4)
+  data.push([null]);
 
-  // ── Header row (row 5)
-  const headers = [
-    "#",
-    "Item Name",
-    "Category",
-    "Current Stock",
-    "Unit",
-    "Min Stock",
-    "Status",
-    "Stock Value (₹)",
-  ];
-  const headerRow = ws.addRow(headers);
-  headerRow.eachCell((cell) => {
-    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF6366F1" } };
-    cell.alignment = { horizontal: "center", vertical: "middle" };
-    cell.border = {
-      top: { style: "thin" }, bottom: { style: "thin" },
-      left: { style: "thin" }, right: { style: "thin" },
-    };
-  });
-  headerRow.height = 18;
+  data.push(["#", "Item Name", "Category", "Current Stock", "Unit", "Min Stock", "Status", "Stock Value (Rs.)"].map<XCell>(h => ({
+    value: h, fontWeight: "bold", color: "#FFFFFF", backgroundColor: HEADER_BG, align: "center", height: 18, borderStyle: "thin", borderColor: "#4F46E5",
+  })));
 
-  // ── Data rows
   rows.forEach((r, idx) => {
     const cur = safeNum(r.currentStock);
-    const row = ws.addRow([
-      idx + 1,
-      // Free-text columns are funneled through safeText() to defuse spreadsheet
-      // formula injection (cells starting with =, +, -, @, tab, CR).
-      safeText(r.name),
-      safeText(r.category),
-      cur,
-      safeText(r.unit),
-      safeNum(r.minStock),
-      stockStatus(r),
-      cur * safeNum(r.costPrice),
-    ]);
-    row.getCell(3).alignment = { horizontal: "center" };
-    row.getCell(4).alignment = { horizontal: "right" };
-    row.getCell(6).alignment = { horizontal: "right" };
-    row.getCell(7).alignment = { horizontal: "center" };
-    row.getCell(8).alignment = { horizontal: "right" };
-    row.getCell(8).numFmt = '#,##0.00';
-
-    // Highlight low / out of stock
     const status = stockStatus(r);
-    if (status === "Out of Stock") {
-      row.getCell(7).font = { bold: true, color: { argb: "FFB91C1C" } };
-      row.getCell(7).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } };
-    } else if (status === "Low Stock") {
-      row.getCell(7).font = { bold: true, color: { argb: "FFB45309" } };
-      row.getCell(7).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEF3C7" } };
-    } else {
-      row.getCell(7).font = { color: { argb: "FF15803D" } };
-    }
-
-    row.eachCell((cell) => {
-      cell.border = {
-        top: { style: "thin", color: { argb: "FFE5E7EB" } },
-        bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
-        left: { style: "thin", color: { argb: "FFE5E7EB" } },
-        right: { style: "thin", color: { argb: "FFE5E7EB" } },
-      };
-    });
+    const isOut = status === "Out of Stock";
+    const isLow2 = status === "Low Stock";
+    data.push([
+      { value: idx + 1,                     align: "center",  ...tb },
+      { value: safeText(r.name),            type: String,     ...tb },
+      { value: safeText(r.category),        type: String,     align: "center", ...tb },
+      { value: cur,                         align: "right",   ...tb },
+      { value: safeText(r.unit),            type: String,     align: "center", ...tb },
+      { value: safeNum(r.minStock),         align: "right",   ...tb },
+      { value: status, type: String, align: "center", fontWeight: (isOut || isLow2) ? "bold" : undefined, color: isOut ? "#B91C1C" : isLow2 ? "#B45309" : "#15803D", backgroundColor: isOut ? "#FEE2E2" : isLow2 ? "#FEF3C7" : undefined, ...tb },
+      { value: cur * safeNum(r.costPrice),  align: "right",   ...tb },
+    ]);
   });
 
-  // ── Totals row
   const totals = summarize(rows);
-  const totalsRow = ws.addRow([
-    "",
-    `TOTAL (${totals.totalItems} items)`,
-    "",
-    "",
-    "",
-    "",
-    `${totals.lowStockCount} low / ${totals.outOfStockCount} out`,
-    totals.totalStockValue,
+  const mb: Pick<XCell & object, "borderStyle" | "borderColor" | "backgroundColor"> = { borderStyle: "medium", borderColor: "#9CA3AF", backgroundColor: TOTALS_BG };
+  data.push([
+    { value: null,                                                            ...mb },
+    { value: `TOTAL (${totals.totalItems} items)`, fontWeight: "bold",       ...mb },
+    { value: null,                                                            ...mb },
+    { value: null,                                                            ...mb },
+    { value: null,                                                            ...mb },
+    { value: null,                                                            ...mb },
+    { value: `${totals.lowStockCount} low / ${totals.outOfStockCount} out`, fontWeight: "bold", align: "center", ...mb },
+    { value: totals.totalStockValue, fontWeight: "bold", align: "right",     ...mb },
   ]);
-  totalsRow.eachCell((cell) => {
-    cell.font = { bold: true };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } };
-    cell.border = { top: { style: "medium" } };
+
+  const blob = await writeXlsxFile(data, {
+    columns: [{ width: 6 }, { width: 32 }, { width: 14 }, { width: 16 }, { width: 8 }, { width: 12 }, { width: 14 }, { width: 18 }],
+    type: "blob",
   });
-  totalsRow.getCell(8).numFmt = '#,##0.00';
-  totalsRow.getCell(8).alignment = { horizontal: "right" };
 
-  // ── Column widths
-  ws.columns = [
-    { width: 6 },
-    { width: 32 },
-    { width: 14 },
-    { width: 16 },
-    { width: 8 },
-    { width: 12 },
-    { width: 14 },
-    { width: 18 },
-  ];
-
-  const buf = await wb.xlsx.writeBuffer();
   const saveAs = await loadSaveAs();
-  saveAs(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), defaultFilename("xlsx"));
+  saveAs(blob, defaultFilename("xlsx"));
 }
 
 // ─── PDF (.pdf) ──────────────────────────────────────────────────────────────
