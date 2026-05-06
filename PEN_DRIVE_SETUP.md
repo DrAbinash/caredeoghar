@@ -31,19 +31,41 @@ This works the same way on:
 
 3. **Plug the pen drive into the computer you bill from.**
 
-## Daily use — billing UI (cloud or local)
+## One-time pairing — billing PC (do this ONCE per browser profile)
+
+There is **no visible button** for this. Operators who don't know the
+combo cannot tell that USB-key support exists.
 
 1. Plug in the pen drive.
-2. In the billing app sidebar, scroll to the bottom — there is a small
-   dashed **"Insert USB key"** button. (You will only see it if the gate is
-   enforced on the server.)
-3. Click it → file picker opens → pick `superadmin.key` from the pen drive.
-4. The button turns into an amber **"Super Admin"** link with a `KEY` badge.
-5. Click "Super Admin" → opens the Super Admin Portal in a new tab. Log in
-   with PIN as usual.
-6. When done, click **"Eject USB key"** below the Super Admin link to clear
-   the key from this browser session, OR just close the tab — the key only
-   lives in `sessionStorage`, which dies with the tab.
+2. In the billing app, press **Ctrl + Alt + U**. A small "Pair super-admin
+   pen drive" dialog appears.
+3. Click **"Pick pen-drive folder"**. Chrome's folder picker opens — pick
+   the **root of the pen drive** (the folder that contains
+   `superadmin.key`). Allow read access when prompted.
+4. The dialog closes silently. The Super Admin link appears in the sidebar.
+
+The browser remembers the folder permanently for this PC. If you ever want
+to pair a different drive, press Ctrl+Alt+U again and click **"Re-pair"**.
+
+### Browser support
+
+The auto-detect needs the **File System Access API**, available in Chrome,
+Edge, Brave, Opera, Arc, and other Chromium-based browsers (Windows, macOS,
+Linux, Chrome OS). Firefox and Safari fall back to a simple file picker
+inside the same Ctrl+Alt+U dialog — they need to pick `superadmin.key` once
+per session manually.
+
+## Daily use
+
+1. Plug in the pen drive **before** opening the billing app (or while it's
+   open — within a few seconds the link appears).
+2. The amber **"Super Admin"** link with a `KEY` badge will be visible at
+   the bottom of the sidebar.
+3. Click it → opens the Super Admin Portal in a new tab. Log in with PIN.
+4. **Pull the pen drive** when you're done. Within 4 seconds the link
+   disappears and the in-browser key is cleared automatically — anyone
+   else using this PC sees no trace of the super-admin surface. Closing
+   the tab also clears the key.
 
 ## Direct super-admin portal access
 
