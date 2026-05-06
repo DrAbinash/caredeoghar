@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useForm } from "react-hook-form";
-import { ShieldAlert, LogOut, ExternalLink, Copy, CheckCheck, Eye, EyeOff, Lock, BookOpen, HandCoins, ListChecks, Wallet } from "lucide-react";
-import { setSaToken } from "./lib/saApi";
+import { ShieldAlert, LogOut, ExternalLink, Copy, CheckCheck, Eye, EyeOff, Lock, BookOpen, HandCoins, ListChecks, Wallet, Usb } from "lucide-react";
+import { setSaToken, setSaUsbKey, loadSaUsbKeyFromSession, saUsbHeader } from "./lib/saApi";
 
 const BooksManager     = lazy(() => import("./pages/Books"));
 const CommissionRules  = lazy(() => import("./pages/CommissionRules"));
@@ -69,7 +69,84 @@ function CountdownTimer({ expiresAt }: { expiresAt: string }) {
   return <span className="font-mono text-sm">{remaining}</span>;
 }
 
-function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
+function UsbUnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const handleFile = async (file: File) => {
+    setError(null);
+    setBusy(true);
+    try {
+      const text = (await file.text()).trim();
+      if (!text) {
+        setError("The selected file is empty.");
+        return;
+      }
+      const res = await fetch(`${API_BASE}/super-admin/usb/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: text }),
+      });
+      if (!res.ok) {
+        setError(res.status === 429 ? "Too many attempts. Try again later." : "Invalid USB key file.");
+        return;
+      }
+      setSaUsbKey(text);
+      onUnlocked();
+    } catch {
+      setError("Could not read the file.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen w-full flex items-center justify-center bg-background p-4">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 mb-4">
+            <Usb className="w-8 h-8 text-primary" />
+          </div>
+          <h1 className="text-2xl font-bold text-foreground tracking-tight">Insert USB Key</h1>
+          <p className="text-sm text-muted-foreground mt-1">Plug in your super-admin pen drive</p>
+        </div>
+
+        <div className="bg-card border border-border rounded-2xl p-6 shadow-xl shadow-black/20">
+          <p className="text-xs text-muted-foreground mb-4">
+            Select the <span className="font-mono text-foreground">superadmin.key</span> file from your USB pen drive to unlock super-admin login.
+          </p>
+
+          <label className="block">
+            <span className="sr-only">USB key file</span>
+            <input
+              type="file"
+              accept=".key,text/plain,application/octet-stream"
+              disabled={busy}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void handleFile(f);
+              }}
+              className="block w-full text-xs text-muted-foreground file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 file:cursor-pointer"
+            />
+          </label>
+
+          {busy && <p className="text-xs text-muted-foreground mt-3">Verifying…</p>}
+          {error && (
+            <div className="mt-3 bg-destructive/10 border border-destructive/30 text-destructive text-xs rounded-lg px-3 py-2">
+              {error}
+            </div>
+          )}
+        </div>
+
+        <p className="text-center text-xs text-muted-foreground mt-6">
+          The key file never leaves your device or this server. No pen drive = no super-admin.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function LoginScreen({ onLogin, onLockUsb }: { onLogin: (session: Session) => void; onLockUsb: () => void }) {
   const { register, handleSubmit, formState: { isSubmitting, errors } } = useForm<LoginForm>();
   const [apiError, setApiError] = useState<string | null>(null);
   const [showPin, setShowPin] = useState(false);
@@ -79,7 +156,7 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
     try {
       const res = await fetch(`${API_BASE}/super-admin/login`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...saUsbHeader() },
         body: JSON.stringify({ name: data.name, pin: data.pin }),
       });
       const body = await res.json();
@@ -166,6 +243,14 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
               {isSubmitting ? "Authenticating…" : "Authenticate"}
             </Button>
           </form>
+
+          <button
+            type="button"
+            onClick={onLockUsb}
+            className="w-full mt-3 text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center justify-center gap-1.5"
+          >
+            <Usb size={11} /> Eject USB key
+          </button>
         </div>
 
         <p className="text-center text-xs text-muted-foreground mt-6">
@@ -220,7 +305,7 @@ function ActiveSessionScreen({
     try {
       await fetch(`${API_BASE}/super-admin/logout`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...saUsbHeader() },
         body: JSON.stringify({ token: session.token }),
       });
     } catch { /* ignore */ }
@@ -351,6 +436,7 @@ function ActiveSessionScreen({
 }
 
 function App() {
+  const [usbUnlocked, setUsbUnlocked] = useState<boolean>(() => loadSaUsbKeyFromSession() !== null);
   const [session, setSession] = useState<Session | null>(null);
   const [view, setView] = useState<"home" | "books" | "commission-report" | "commission-rules" | "doctor-ledger">("home");
 
@@ -361,11 +447,22 @@ function App() {
     setSaToken(session?.token ?? null);
   }, [session]);
 
+  const ejectUsb = () => {
+    setSaUsbKey(null);
+    setSession(null);
+    setUsbUnlocked(false);
+  };
+
   return (
     <QueryClientProvider client={queryClient}>
       <Suspense fallback={<PageLoader />}>
-        {!session ? (
-          <LoginScreen onLogin={(s) => { setSession(s); setView("home"); }} />
+        {!usbUnlocked ? (
+          <UsbUnlockScreen onUnlocked={() => setUsbUnlocked(true)} />
+        ) : !session ? (
+          <LoginScreen
+            onLogin={(s) => { setSession(s); setView("home"); }}
+            onLockUsb={ejectUsb}
+          />
         ) : view === "books" ? (
           <BooksManager token={session.token} onBack={() => setView("home")} />
         ) : view === "commission-report" ? (

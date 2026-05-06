@@ -1,6 +1,8 @@
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard,
+  ShieldAlert,
+  Usb,
   Users,
   FlaskConical,
   ClipboardList,
@@ -37,12 +39,21 @@ import {
   Globe,
   Download,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { readStaffSession, clearStaffSession, canAccess } from "@/lib/staffSession";
+import {
+  getStoredUsbKey,
+  storeUsbKey,
+  clearUsbKey,
+  verifyUsbKey,
+  fetchUsbGateEnforced,
+  onUsbKeyChange,
+  readKeyFile,
+} from "@/lib/usbKey";
 
 const navItems = [
   { path: "/", icon: Zap, label: "Billing Desk" },
@@ -137,6 +148,44 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // Filter nav by permissions when a staff session exists.
   const visibleNav = navItems.filter((n) => canAccess(session, n.path));
 
+  // ── Super-admin USB pen-drive gate ──────────────────────────────────────
+  // The "Super Admin" link is invisible by default. It only appears after
+  // the operator inserts their pen drive and uploads `superadmin.key` via
+  // the file picker below — which validates against the server secret.
+  const [usbKeyPresent, setUsbKeyPresent] = useState<boolean>(() => getStoredUsbKey() !== null);
+  const [usbGateEnforced, setUsbGateEnforced] = useState<boolean>(true);
+  const [usbBusy, setUsbBusy] = useState(false);
+  const [usbError, setUsbError] = useState<string | null>(null);
+  const usbFileRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    void fetchUsbGateEnforced().then(setUsbGateEnforced);
+    const off = onUsbKeyChange(() => setUsbKeyPresent(getStoredUsbKey() !== null));
+    return off;
+  }, []);
+
+  const onUsbFileChosen = async (file: File) => {
+    setUsbError(null);
+    setUsbBusy(true);
+    try {
+      const key = await readKeyFile(file);
+      if (!key) { setUsbError("Empty key file."); return; }
+      const ok = await verifyUsbKey(key);
+      if (!ok) { setUsbError("Invalid USB key."); return; }
+      storeUsbKey(key);
+    } finally {
+      setUsbBusy(false);
+      if (usbFileRef.current) usbFileRef.current.value = "";
+    }
+  };
+
+  const onEjectUsb = () => { clearUsbKey(); };
+
+  const openSuperAdmin = () => {
+    const url = `${window.location.origin}/super-admin-portal/`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
   const onLogout = async () => {
     // Best-effort: tell the server to invalidate the portal session, and clear
     // BOTH the legacy portal-staff key and the new ERP session key.
@@ -213,6 +262,60 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
+
+        {/* Super-admin USB gate — invisible unless the gate is enforced.
+            When the operator inserts their pen drive and uploads the key
+            file, the Super Admin link appears here. */}
+        {usbGateEnforced && (
+          <div className="px-3 py-2 border-t border-sidebar-border space-y-1.5">
+            <input
+              ref={usbFileRef}
+              type="file"
+              accept=".key,text/plain,application/octet-stream"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void onUsbFileChosen(f);
+              }}
+            />
+            {usbKeyPresent ? (
+              <>
+                <button
+                  onClick={openSuperAdmin}
+                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-semibold bg-amber-500/15 border border-amber-500/30 text-amber-200 hover:bg-amber-500/25 transition-colors"
+                  title="Open Super Admin Portal in a new tab"
+                >
+                  <ShieldAlert size={13} />
+                  Super Admin
+                  <span className="ml-auto inline-flex items-center gap-1 text-[10px] text-amber-300/80">
+                    <Usb size={10} /> KEY
+                  </span>
+                </button>
+                <button
+                  onClick={onEjectUsb}
+                  className="w-full text-[10px] text-sidebar-foreground/50 hover:text-sidebar-foreground/80 inline-flex items-center justify-center gap-1"
+                >
+                  Eject USB key
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => usbFileRef.current?.click()}
+                  disabled={usbBusy}
+                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent border border-dashed border-sidebar-border transition-colors"
+                  title="Insert your super-admin USB pen drive and pick superadmin.key"
+                >
+                  <Usb size={13} />
+                  {usbBusy ? "Verifying…" : "Insert USB key"}
+                </button>
+                {usbError && (
+                  <p className="text-[10px] text-destructive px-1">{usbError}</p>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         {/* Signed-in user (only shown when a portal staff session exists) */}
         {session && (

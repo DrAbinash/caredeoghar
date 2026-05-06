@@ -6,8 +6,59 @@ import { z } from "zod/v4";
 import { db } from "@workspace/db";
 import { usersTable, superAdminSessionsTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
+import {
+  requireSuperAdminUsb,
+  isValidUsbKey,
+  isUsbGateEnforced,
+} from "../middleware/requireSuperAdminUsb";
 
 export const superAdminRouter = Router();
+
+// Body schema for the USB pen-drive key verification endpoint. The client reads
+// `superadmin.key` off the user's plugged-in pen drive and posts its content.
+const UsbVerifyBody = z.object({
+  key: z.string().min(1, "key is required").max(4096),
+});
+
+// Rate limiter for the USB verify endpoint — slow brute-force attempts.
+const usbVerifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many USB key attempts. Please try again later." },
+});
+
+// POST /api/super-admin/usb/verify — checks a presented USB key against the
+// SUPER_ADMIN_USB_KEY env secret. Used by both the super-admin-portal unlock
+// screen and the billing UI's "Detect USB key" affordance to decide whether
+// to reveal the super-admin link.
+//
+// Public on purpose (no auth) so an unauthenticated client can ask "is this
+// pen drive valid?" before bothering the user with a PIN screen — but rate
+// limited so it can't be brute-forced from the internet. Returns the same
+// shape on success and failure so timing is uniform.
+superAdminRouter.post("/usb/verify", usbVerifyLimiter, (req, res): void => {
+  const parsed = UsbVerifyBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, error: "Invalid request" });
+    return;
+  }
+  const ok = isValidUsbKey(parsed.data.key);
+  if (!ok) {
+    res.status(401).json({ ok: false, error: "Invalid USB key" });
+    return;
+  }
+  res.json({ ok: true, enforced: isUsbGateEnforced() });
+});
+
+// GET /api/super-admin/usb/status — tells the client whether the pen-drive
+// gate is enforced on this server (i.e. SUPER_ADMIN_USB_KEY is set). Used by
+// the billing UI to decide whether to show the "Insert USB key" affordance
+// at all. No secrets in the response.
+superAdminRouter.get("/usb/status", (_req, res): void => {
+  res.json({ enforced: isUsbGateEnforced() });
+});
 
 // No generated zod schemas exist for these auth endpoints (they are not in
 // the OpenAPI spec), so we declare local schemas and use the same safeParse
@@ -54,8 +105,11 @@ async function verifyPin(plain: string, stored: string): Promise<boolean> {
   return crypto.timingSafeEqual(a, b);
 }
 
-// POST /api/super-admin/login — validates name + PIN, creates session token
-superAdminRouter.post("/login", loginLimiter, async (req, res): Promise<void> => {
+// POST /api/super-admin/login — validates name + PIN, creates session token.
+// Gated by the USB pen-drive middleware: without a valid X-SA-USB-Key header
+// the request is rejected before the PIN is even checked. This makes the
+// super-admin login surface invisible to anyone without the physical key.
+superAdminRouter.post("/login", requireSuperAdminUsb, loginLimiter, async (req, res): Promise<void> => {
   const parsed = LoginBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid request", details: parsed.error.issues });

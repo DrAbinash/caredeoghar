@@ -2,6 +2,24 @@ import { Router } from "express";
 import { db, billsTable, paymentsTable, ordersTable, patientsTable } from "@workspace/db";
 import { billAuditsTable, superAdminSessionsTable, ledgersTable } from "@workspace/db/schema";
 import { sendBillEditEmail, sendBillReprintEmail } from "../email";
+import { isValidUsbKey, isUsbGateEnforced } from "../middleware/requireSuperAdminUsb";
+import type { Request, Response } from "express";
+
+// Reject super-admin bill mutations if the USB pen-drive gate is enforced
+// and the request does not carry a valid X-SA-USB-Key header. Returns true
+// when the response has been sent (caller should return). Centralised here so
+// the super-admin token flow used by /:id/super-edit and DELETE /:id matches
+// the rest of the super-admin surface (see middleware/requireSuperAdmin.ts).
+function rejectIfUsbMissing(req: Request, res: Response): boolean {
+  if (!isUsbGateEnforced()) return false;
+  const headerVal = req.header("x-sa-usb-key");
+  const usb = (typeof headerVal === "string" ? headerVal : "").trim();
+  if (!usb || !isValidUsbKey(usb)) {
+    res.status(401).json({ error: "USB key required" });
+    return true;
+  }
+  return false;
+}
 import { generateTokenForBill } from "./tokens";
 import { generateTestTokensForOrder } from "./test-tokens";
 import { generateStudiesForOrder } from "./radiology";
@@ -795,6 +813,7 @@ async function verifySuperAdminToken(token: string): Promise<{ valid: boolean; u
 
 // ── Super-admin: full amount edit ─────────────────────────────────────────────
 billsRouter.patch("/:id/super-edit", async (req, res) => {
+  if (rejectIfUsbMissing(req, res)) return;
   const paramsParsed = SuperEditBillParams.safeParse(req.params);
   const bodyParsed = SuperEditBillBody.safeParse(req.body);
   if (!paramsParsed.success || !bodyParsed.success) {
@@ -855,6 +874,7 @@ billsRouter.patch("/:id/super-edit", async (req, res) => {
 
 // ── Super-admin: delete bill + renumber subsequent ────────────────────────────
 billsRouter.delete("/:id", async (req, res) => {
+  if (rejectIfUsbMissing(req, res)) return;
   const paramsParsed = DeleteBillParams.safeParse(req.params);
   const bodyParsed = DeleteBillBody.safeParse(req.body);
   if (!paramsParsed.success || !bodyParsed.success) {

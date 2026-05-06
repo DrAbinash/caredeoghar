@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { db } from "@workspace/db";
 import { superAdminSessionsTable, usersTable } from "@workspace/db/schema";
 import { and, eq } from "drizzle-orm";
+import { isValidUsbKey, isUsbGateEnforced } from "./requireSuperAdminUsb";
 
 /**
  * Express middleware that requires a valid, active, non-expired super-admin
@@ -14,6 +15,19 @@ export async function requireSuperAdmin(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
+  // Defense in depth: if the USB pen-drive gate is enforced on this server,
+  // every super-admin-protected request must also carry the X-SA-USB-Key
+  // header. This means even a stolen session token is useless without the
+  // physical pen drive plugged in.
+  if (isUsbGateEnforced()) {
+    const usbHeader = req.header("x-sa-usb-key");
+    const usbVal = (typeof usbHeader === "string" ? usbHeader : "").trim();
+    if (!usbVal || !isValidUsbKey(usbVal)) {
+      res.status(401).json({ error: "USB key required" });
+      return;
+    }
+  }
+
   const headerVal = req.header("x-sa-token");
   const token = (typeof headerVal === "string" ? headerVal : "").trim();
   if (!token) {
