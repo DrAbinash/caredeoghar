@@ -9,7 +9,7 @@ localPort = 8080
 
 [deployment]
 router = "application"
-deploymentTarget = "reserved"
+deploymentTarget = "vm"
 run = "node --enable-source-maps artifacts/api-server/dist/index.mjs"
 
 [deployment.postBuild]
