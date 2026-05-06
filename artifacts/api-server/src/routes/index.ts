@@ -145,7 +145,18 @@ router.get(
 // Clinic configuration — /settings permission
 router.use("/clinic-settings", requireStaffAuth, requireStaffPermission("/settings"), clinicSettingsRouter);
 router.use("/email-settings", requireStaffAuth, requireStaffPermission("/settings"), emailSettingsRouter);
-router.use("/test-categories", requireStaffAuth, requireStaffPermission("/settings"), testCategoriesRouter);
+// Test categories: anyone with staff auth can READ the list (Test Catalog,
+// Billing Desk, Reports filter all need it). Mutations stay admin-only via
+// the /settings permission.
+router.use(
+  "/test-categories",
+  requireStaffAuth,
+  (req, res, next) => {
+    if (req.method === "GET") return next();
+    return requireStaffPermission("/settings")(req, res, next);
+  },
+  testCategoriesRouter,
+);
 router.use("/report-templates", requireStaffAuth, requireStaffPermission("/settings"), reportTemplatesRouter);
 router.use("/abnormal-findings", requireStaffAuth, requireStaffPermission("/settings"), abnormalFindingsRouter);
 router.use("/machines", requireStaffAuth, requireStaffPermission("/settings"), machinesRouter);

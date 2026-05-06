@@ -565,22 +565,38 @@ export default function BillDetail({ id }: { id: number }) {
         )}
       </div>
 
-      {/* ── Print Receipt (hidden on screen, visible when printing) ── */}
+      {/* ── Print Receipt (hidden on screen, visible when printing) ──
+          Notes:
+          - We don't use position:fixed: on some browsers it overflows the
+            page and produces a blank trailing page. Plain block flow + the
+            hide-everything-else rule prints exactly the receipt.
+          - `text-transform: uppercase` on the wrapper forces ALL displayed
+            patient/doctor/test text into capital case as required, regardless
+            of the case the user typed in. */}
       <style>{`
         @media print {
+          html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
+          /* Hide everything via visibility so the receipt's ancestors
+             (#root, App layout) stay laid-out — using display:none on
+             siblings of #root would hide the receipt itself. Then re-show
+             only the receipt subtree and pull it to (0,0) with absolute
+             positioning. position:absolute (not fixed!) avoids the
+             "blank trailing page" bug Chrome had with position:fixed. */
           body * { visibility: hidden !important; }
           .print-receipt, .print-receipt * { visibility: visible !important; }
           .print-receipt {
-            position: fixed !important;
-            top: 0 !important; left: 0 !important;
-            width: 100% !important;
-            padding: ${paperSize === "A5" ? "10px 14px" : "20px 28px"} !important;
+            position: absolute !important;
+            top: 0 !important; left: 0 !important; right: 0 !important;
+            margin: 0 !important;
+            padding: ${paperSize === "A5" ? "6px 10px" : "16px 22px"} !important;
             background: white !important;
             color: black !important;
             font-family: Arial, sans-serif !important;
-            font-size: ${paperSize === "A5" ? "11px" : "13px"} !important;
+            font-size: ${paperSize === "A5" ? "10.5px" : "12.5px"} !important;
+            text-transform: uppercase !important;
           }
-          @page { size: ${paperSize}; margin: ${paperSize === "A5" ? "6mm 6mm" : "10mm 10mm"}; }
+          .print-receipt .pr-keep-case { text-transform: none !important; }
+          @page { size: ${paperSize}; margin: ${paperSize === "A5" ? "5mm 6mm" : "8mm 10mm"}; }
         }
         @media screen { .print-receipt { display: none; } }
       `}</style>
@@ -631,22 +647,24 @@ export default function BillDetail({ id }: { id: number }) {
           )}
         </div>
 
-        {/* Bill title + meta */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
+        {/* Bill title + meta — bill number is shown as a pure number
+            (the legacy `BILL-` prefix is stripped here). */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
           <div>
-            <div style={{ fontSize: "16px", fontWeight: "700", color: "#111" }}>TAX INVOICE</div>
-            <div style={{ fontSize: "12px", color: "#444", marginTop: "3px" }}>Bill No: <strong>{bill.billNumber}</strong></div>
-            <div style={{ fontSize: "11px", color: "#666" }}>Date: {new Date(bill.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</div>
-            <div style={{ fontSize: "11px", color: "#666" }}>Time: {new Date(bill.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</div>
+            <div style={{ fontSize: "15px", fontWeight: "700", color: "#111" }}>INVOICE / RECEIPT</div>
+            <div style={{ fontSize: "11.5px", color: "#444", marginTop: "2px" }}>
+              Bill No: <strong>{String(bill.billNumber).replace(/^BILL-?/i, "").replace(/-/g, "")}</strong>
+              {"   "}·{"   "}
+              Date: {new Date(bill.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })} {new Date(bill.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+            </div>
           </div>
           <div style={{ textAlign: "right" }}>
             <div style={{
               display: "inline-block",
-              padding: "4px 14px",
-              borderRadius: "20px",
-              fontSize: "11px",
+              padding: "3px 10px",
+              borderRadius: "16px",
+              fontSize: "10.5px",
               fontWeight: "700",
-              textTransform: "uppercase",
               background: bill.status === "paid" ? "#dcfce7" : bill.status === "cancelled" ? "#fee2e2" : "#fef9c3",
               color: bill.status === "paid" ? "#15803d" : bill.status === "cancelled" ? "#dc2626" : "#854d0e",
               border: `1px solid ${bill.status === "paid" ? "#86efac" : bill.status === "cancelled" ? "#fca5a5" : "#fde047"}`,
@@ -654,37 +672,40 @@ export default function BillDetail({ id }: { id: number }) {
               {bill.status}
             </div>
             {bill.order?.orderNumber && (
-              <div style={{ fontSize: "11px", color: "#666", marginTop: "4px" }}>Order: {bill.order.orderNumber}</div>
+              <div style={{ fontSize: "10.5px", color: "#666", marginTop: "2px" }}>Order: {bill.order.orderNumber}</div>
             )}
           </div>
         </div>
 
-        {/* Patient + Doctor info */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px", padding: "12px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "6px" }}>
-          <div>
-            <div style={{ fontSize: "10px", fontWeight: "700", textTransform: "uppercase", color: "#64748b", marginBottom: "4px" }}>Patient Details</div>
-            {bill.patient && (
-              <>
-                <div style={{ fontWeight: "700", fontSize: "14px" }}>{bill.patient.firstName} {bill.patient.lastName}</div>
-                <div style={{ fontSize: "11px", color: "#555" }}>ID: {bill.patient.patientId}</div>
-                <div style={{ fontSize: "11px", color: "#555" }}>Ph: {bill.patient.phone}</div>
-                {bill.patient.gender && <div style={{ fontSize: "11px", color: "#555" }}>Gender: {bill.patient.gender}</div>}
-                {bill.patient.dateOfBirth && (() => { const age = Math.floor((Date.now() - new Date(bill.patient.dateOfBirth).getTime()) / (365.25 * 24 * 3600 * 1000)); return age > 0 ? <div style={{ fontSize: "11px", color: "#555" }}>Age: {age} yrs</div> : null; })()}
-              </>
-            )}
-          </div>
-          <div>
-            <div style={{ fontSize: "10px", fontWeight: "700", textTransform: "uppercase", color: "#64748b", marginBottom: "4px" }}>Referred By</div>
-            {bill.order?.doctor ? (
-              <>
-                <div style={{ fontWeight: "600", fontSize: "13px" }}>Dr. {bill.order.doctor.name}</div>
-                {bill.order.doctor.specialization && <div style={{ fontSize: "11px", color: "#555" }}>{bill.order.doctor.specialization}</div>}
-              </>
-            ) : (
-              <div style={{ fontSize: "12px", color: "#94a3b8" }}>Self-referred / Walk-in</div>
-            )}
-          </div>
-        </div>
+        {/* Patient + Doctor info — compact 2-line block (no boxed bg, no
+            grid) so an A5 bill fits on a single page. The wrapper's
+            text-transform:uppercase rule capitalizes name / gender /
+            doctor automatically. */}
+        {bill.patient && (() => {
+          const ageYrs = bill.patient.dateOfBirth
+            ? Math.floor((Date.now() - new Date(bill.patient.dateOfBirth).getTime()) / (365.25 * 24 * 3600 * 1000))
+            : null;
+          const meta = [
+            bill.patient.gender || null,
+            ageYrs && ageYrs > 0 ? `${ageYrs} YRS` : null,
+            bill.patient.phone ? `PH ${bill.patient.phone}` : null,
+            `ID ${bill.patient.patientId}`,
+          ].filter(Boolean).join("  ·  ");
+          const ref = bill.order?.doctor
+            ? `Dr. ${bill.order.doctor.name}${bill.order.doctor.specialization ? ` (${bill.order.doctor.specialization})` : ""}`
+            : "Self / Walk-in";
+          return (
+            <div style={{ marginBottom: "10px", padding: "6px 8px", borderTop: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0", lineHeight: 1.35 }}>
+              <div style={{ fontSize: "12.5px" }}>
+                <strong>{bill.patient.firstName} {bill.patient.lastName}</strong>
+                <span style={{ color: "#555", marginLeft: 8, fontWeight: 400 }}>{meta}</span>
+              </div>
+              <div style={{ fontSize: "11px", color: "#555" }}>
+                Ref: <strong>{ref}</strong>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Tests table */}
         {bill.order?.tests && bill.order.tests.length > 0 && (

@@ -72,10 +72,24 @@ async function resolveLedgerForOrder(orderId: number): Promise<number> {
   return 1;
 }
 
+/**
+ * Bill numbers are pure-numeric: YYYYMM + 4-digit sequence (e.g. 2026050001).
+ * Older rows in the DB may still carry the legacy `BILL-YYYYMM-####` prefix;
+ * `parseBillNumberParts` handles both shapes so the renumber logic keeps
+ * working across the migration.
+ */
 async function generateBillNumber(ledgerId: number): Promise<string> {
   const num = (await countBillsForLedger(ledgerId)) + 1;
   const date = new Date();
-  return `BILL-${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}-${String(num).padStart(4, "0")}`;
+  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(num).padStart(4, "0")}`;
+}
+
+function parseBillNumberParts(billNumber: string): { monthPrefix: string; seq: number } | null {
+  const legacy = billNumber.match(/^BILL-(\d{6})-(\d+)$/);
+  if (legacy) return { monthPrefix: legacy[1]!, seq: Number(legacy[2]) };
+  const numeric = billNumber.match(/^(\d{6})(\d{4,})$/);
+  if (numeric) return { monthPrefix: numeric[1]!, seq: Number(numeric[2]) };
+  return null;
 }
 
 async function buildBill(bill: typeof billsTable.$inferSelect) {
@@ -207,7 +221,7 @@ billsRouter.get("/preview-number", async (req, res) => {
   }
   const num = (await countBillsForLedger(ledgerId)) + 1;
   const date = new Date();
-  const next = `BILL-${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}-${String(num).padStart(4, "0")}`;
+  const next = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(num).padStart(4, "0")}`;
   return res.json({ next, ledgerId });
 });
 
@@ -902,8 +916,9 @@ billsRouter.delete("/:id", async (req, res) => {
     return;
   }
 
-  // Parse bill number to get YYYYMM prefix and sequence number
-  const billNumMatch = bill.billNumber.match(/^BILL-(\d{6})-(\d+)$/);
+  // Parse bill number to get YYYYMM prefix and sequence number (handles both
+  // legacy `BILL-YYYYMM-####` and current pure-numeric `YYYYMM####`).
+  const billNumMatch = parseBillNumberParts(bill.billNumber);
 
   // Pre-audit (bill_audits has no FK constraint so insert before or after is fine)
   await db.insert(billAuditsTable).values({
@@ -924,21 +939,26 @@ billsRouter.delete("/:id", async (req, res) => {
     await tx.update(ordersTable).set({ status: "pending" }).where(eq(ordersTable.id, bill.orderId));
 
     if (billNumMatch) {
-      const monthPrefix = billNumMatch[1];
-      const deletedSeq  = Number(billNumMatch[2]);
+      const { monthPrefix, seq: deletedSeq } = billNumMatch;
 
+      // Match both legacy `BILL-YYYYMM-...` and numeric `YYYYMM...` rows for
+      // the same month so renumbering works during/after the format switch.
       const laterBills = await tx
         .select()
         .from(billsTable)
-        .where(like(billsTable.billNumber, `BILL-${monthPrefix}-%`))
+        .where(
+          or(
+            like(billsTable.billNumber, `BILL-${monthPrefix}-%`),
+            like(billsTable.billNumber, `${monthPrefix}%`),
+          ),
+        )
         .orderBy(billsTable.billNumber);
 
       for (const lb of laterBills) {
-        const m = lb.billNumber.match(/^BILL-(\d{6})-(\d+)$/);
-        if (!m) continue;
-        const seq = Number(m[2]);
-        if (seq <= deletedSeq) continue;
-        const newBillNumber = `BILL-${m[1]}-${String(seq - 1).padStart(4, "0")}`;
+        const parts = parseBillNumberParts(lb.billNumber);
+        if (!parts || parts.monthPrefix !== monthPrefix) continue;
+        if (parts.seq <= deletedSeq) continue;
+        const newBillNumber = `${monthPrefix}${String(parts.seq - 1).padStart(4, "0")}`;
         await tx.update(billsTable).set({ billNumber: newBillNumber }).where(eq(billsTable.id, lb.id));
       }
     }

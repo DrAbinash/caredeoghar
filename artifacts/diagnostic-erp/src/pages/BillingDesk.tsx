@@ -756,7 +756,7 @@ export default function BillingDesk() {
         <div className="flex items-center gap-1.5 text-xs sm:text-sm">
           <Hash size={13} className="text-muted-foreground" />
           <span className="font-mono text-primary font-semibold">
-            {previewBillNo?.next ?? "BILL-…"}
+            {previewBillNo?.next ?? "—"}
           </span>
           <span className="hidden sm:inline text-xs text-muted-foreground">(next bill no.)</span>
         </div>
@@ -1594,17 +1594,23 @@ export default function BillingDesk() {
         <div className="billing-desk-receipt">
           <style>{`
             @media print {
+              html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
+              /* Visibility-based isolation (NOT display:none on body
+                 children) because the receipt is nested inside #root.
+                 position:absolute (NOT fixed) to avoid the blank
+                 trailing page Chrome produces with position:fixed. */
               body * { visibility: hidden !important; }
               .billing-desk-receipt, .billing-desk-receipt * { visibility: visible !important; }
               .billing-desk-receipt {
-                display: block !important;
                 position: absolute !important;
-                left: 0 !important;
-                top: 0 !important;
-                width: 100% !important;
-                padding: 20px !important;
+                top: 0 !important; left: 0 !important; right: 0 !important;
+                margin: 0 !important;
+                padding: 8mm 8mm !important;
+                max-width: none !important;
+                text-transform: uppercase;
               }
-              @page { margin: 10mm; }
+              .billing-desk-receipt .bdr-keep-case { text-transform: none !important; }
+              @page { margin: 6mm 8mm; }
             }
             .billing-desk-receipt {
               display: none;
@@ -1615,6 +1621,9 @@ export default function BillingDesk() {
               margin: 0 auto;
               padding: 24px;
             }
+            .bdr-patient { border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; padding: 5px 4px; margin-bottom: 10px; font-size: 11px; line-height: 1.35; }
+            .bdr-patient-line { display: flex; justify-content: space-between; gap: 12px; }
+            .bdr-patient-line strong { font-weight: 700; }
             .bdr-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 14px; }
             .bdr-header h1 { font-size: 20px; font-weight: 700; margin: 0 0 2px; }
             .bdr-header p  { margin: 1px 0; font-size: 11px; color: #444; }
@@ -1659,25 +1668,30 @@ export default function BillingDesk() {
               )}
             </div>
           </div>
-          <div className="bdr-title">Tax Invoice</div>
+          <div className="bdr-title">Invoice / Receipt</div>
 
-          <div className="bdr-meta">
-            <table>
-              <tbody>
-                <tr><td>Patient</td><td>: {lastBill.patient.firstName} {lastBill.patient.lastName}</td></tr>
-                <tr><td>Patient ID</td><td>: {lastBill.patient.patientId}</td></tr>
-                <tr><td>Phone</td><td>: {lastBill.patient.phone}</td></tr>
-                {lastBill.patient.gender && <tr><td>Gender</td><td>: {lastBill.patient.gender}</td></tr>}
-                {lastBill.doctorName && <tr><td>Ref. Doctor</td><td>: Dr. {lastBill.doctorName}</td></tr>}
-              </tbody>
-            </table>
-            <table>
-              <tbody>
-                <tr><td>Bill No.</td><td>: {lastBill.billNumber}</td></tr>
-                <tr><td>Date</td><td>: {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</td></tr>
-                <tr><td>Time</td><td>: {new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</td></tr>
-              </tbody>
-            </table>
+          {/* Compact 2-line patient block to keep most bills on a single A5
+              page. The .billing-desk-receipt wrapper has text-transform:
+              uppercase so name / gender / doctor render in capital case. */}
+          <div className="bdr-patient">
+            <div className="bdr-patient-line">
+              <strong>{lastBill.patient.firstName} {lastBill.patient.lastName}</strong>
+              <span>
+                {[
+                  lastBill.patient.gender || null,
+                  lastBill.patient.phone ? `Ph ${lastBill.patient.phone}` : null,
+                  `ID ${lastBill.patient.patientId}`,
+                ].filter(Boolean).join("  ·  ")}
+              </span>
+            </div>
+            <div className="bdr-patient-line">
+              <span>Ref: <strong>{lastBill.doctorName ? `Dr. ${lastBill.doctorName}` : "Self / Walk-in"}</strong></span>
+              <span>
+                Bill No: <strong>{String(lastBill.billNumber).replace(/^BILL-?/i, "").replace(/-/g, "")}</strong>
+                {"   "}·{"   "}
+                {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })} {new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            </div>
           </div>
 
           <table className="bdr-table">
