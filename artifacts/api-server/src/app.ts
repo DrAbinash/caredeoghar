@@ -51,20 +51,26 @@ app.use("/uploads", (_req: Request, res: Response, next: NextFunction) => {
 }, express.static(path.resolve(artifactDir, "data/uploads")));
 
 // =============================================================================
-// Production single-port static serving (Windows .exe / portable build)
+// Production single-port static serving (Windows .exe / portable build /
+// Replit Autoscale Cloud Run deployment)
 //
 // When SERVE_STATIC_DIR points at a folder that contains:
 //   <dir>/erp/                  — diagnostic-erp Vite build (BASE_PATH=/)
-//   <dir>/super-admin-portal/   — super-admin-portal build (BASE_PATH=/super-admin-portal/)
+//   <dir>/site/                 — clinic-site Vite build    (BASE_PATH=/site/)
+//   <dir>/super-admin-portal/   — super-admin-portal build  (BASE_PATH=/super-admin-portal/)
 //
 // the API server will also serve those static frontends with SPA fallback.
 // This avoids needing nginx in the Windows desktop build — one Node process
-// serves the API and both web UIs. Has zero effect when SERVE_STATIC_DIR is
-// unset (Replit dev / Docker compose / etc. where nginx or Vite handles it).
+// serves the API and all three web UIs. The same mechanism powers Replit
+// Autoscale (Cloud Run = single container, single port) where the deploy
+// build script (scripts/build-deploy.mjs) stages these folders into
+// artifacts/api-server/dist/web. Has zero effect when SERVE_STATIC_DIR is
+// unset (Replit dev workflows, where each artifact runs its own Vite server).
 // =============================================================================
 const staticDir = process.env["SERVE_STATIC_DIR"];
 if (staticDir) {
   const erpDir = path.join(staticDir, "erp");
+  const siteDir = path.join(staticDir, "site");
   const adminDir = path.join(staticDir, "super-admin-portal");
 
   if (!existsSync(erpDir) || !existsSync(adminDir)) {
@@ -73,7 +79,8 @@ if (staticDir) {
       "SERVE_STATIC_DIR is set but expected sub-folders are missing; static serving disabled",
     );
   } else {
-    logger.info({ erpDir, adminDir }, "Serving frontends from disk");
+    const hasSite = existsSync(siteDir);
+    logger.info({ erpDir, siteDir, adminDir, hasSite }, "Serving frontends from disk");
 
     // Super Admin Portal (built with BASE_PATH=/super-admin-portal/)
     app.use("/super-admin-portal", express.static(adminDir, { index: false, fallthrough: true }));
@@ -83,13 +90,28 @@ if (staticDir) {
       });
     });
 
-    // Main Diagnostic ERP (built with BASE_PATH=/) — catch-all SPA last
-    app.use(express.static(erpDir, { index: false, fallthrough: true }));
-    app.get(/^\/(?!api\/).*/, (_req: Request, res: Response, next: NextFunction) => {
-      res.sendFile(path.join(erpDir, "index.html"), (err) => {
-        if (err) next(err);
+    // Public Clinic Website (built with BASE_PATH=/site/)
+    if (hasSite) {
+      app.use("/site", express.static(siteDir, { index: false, fallthrough: true }));
+      app.get(/^\/site(\/.*)?$/, (_req: Request, res: Response, next: NextFunction) => {
+        res.sendFile(path.join(siteDir, "index.html"), (err) => {
+          if (err) next(err);
+        });
       });
-    });
+    }
+
+    // Main Diagnostic ERP (built with BASE_PATH=/) — catch-all SPA last.
+    // Excludes /api/, /site/, and /super-admin-portal/ so those routes are
+    // handled by their own handlers above (and not swallowed by the SPA).
+    app.use(express.static(erpDir, { index: false, fallthrough: true }));
+    app.get(
+      /^\/(?!api\/|site\/|site$|super-admin-portal\/|super-admin-portal$).*/,
+      (_req: Request, res: Response, next: NextFunction) => {
+        res.sendFile(path.join(erpDir, "index.html"), (err) => {
+          if (err) next(err);
+        });
+      },
+    );
   }
 }
 
