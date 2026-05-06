@@ -49,7 +49,7 @@ export function HeaderSection({ section, settings, pages, basePath }: { section:
     <header className="site-header">
       <div className="container-narrow site-header-row">
         {/* Far left — Staff Login (always visible, compact on mobile) */}
-        <a href="/" className={`${buttonClass(settings, "primary")} header-staff-login`} style={{ flexShrink: 0 }}>Staff Login</a>
+        <a href="/erp/portal" className={`${buttonClass(settings, "primary")} header-staff-login`} style={{ flexShrink: 0 }}>Staff Login</a>
 
         {/* Far right — Clinic name + nav links + CTA, hidden on mobile (in hamburger instead) */}
         <div className="header-right">
@@ -86,7 +86,7 @@ export function HeaderSection({ section, settings, pages, basePath }: { section:
           {ctaLabel && (
             <a href={ctaHref} className={buttonClass(settings, "primary")} style={{ justifyContent: "center", marginTop: ".25rem" }}>{ctaLabel}</a>
           )}
-          <a href="/" className={buttonClass(settings, "primary")} style={{ justifyContent: "center", marginTop: ".25rem" }}>Staff Login</a>
+          <a href="/erp/portal" className={buttonClass(settings, "primary")} style={{ justifyContent: "center", marginTop: ".25rem" }}>Staff Login</a>
         </nav>
       )}
     </header>
