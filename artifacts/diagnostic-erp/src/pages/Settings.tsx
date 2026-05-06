@@ -26,8 +26,15 @@ import { useToast } from "@/hooks/use-toast";
 
 type AppUser = {
   id: number; name: string; email: string; role: string;
-  permissions: string | null; pin: string | null; isActive: boolean;
+  permissions: string | null;
+  // Server returns a boolean instead of the hashed PIN string
+  pin?: string | null;
+  hasPin?: boolean;
+  isActive: boolean;
   maxDiscount: number | null;
+  username?: string | null;
+  photoDataUrl?: string | null;
+  mustChangePin?: boolean;
 };
 
 type EmailSettings = {
@@ -198,16 +205,238 @@ function UsersTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
   const [open, setOpen] = useState(false);
   const [editUser, setEditUser] = useState<AppUser | null>(null);
   const [selectedPerms, setSelectedPerms] = useState<string[]>([]);
+  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  const [photoErr, setPhotoErr] = useState("");
+  const [saveErr, setSaveErr] = useState("");
   const { data: users = [], isLoading } = useQuery<AppUser[]>({ queryKey: ["users"], queryFn: () => api.get("/api/users") });
-  const saveUser = useMutation({ mutationFn: (body: Record<string, unknown>) => editUser ? api.patch(`/api/users/${editUser.id}`, body) : api.post("/api/users", body), onSuccess: () => { qc.invalidateQueries({ queryKey: ["users"] }); setOpen(false); setEditUser(null); reset(); } });
+  const saveUser = useMutation({
+    mutationFn: (body: Record<string, unknown>) => editUser ? api.patch(`/api/users/${editUser.id}`, body) : api.post("/api/users", body),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["users"] }); setOpen(false); setEditUser(null); setPhotoDataUrl(null); setSaveErr(""); reset(); },
+    onError: (e: Error) => setSaveErr(e.message || "Could not save user"),
+  });
   const toggleActive = useMutation({ mutationFn: ({ id, isActive }: { id: number; isActive: boolean }) => api.patch(`/api/users/${id}`, { isActive }), onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }) });
   const deleteUser = useMutation({ mutationFn: (id: number) => api.delete(`/api/users/${id}`), onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }) });
-  const { register, handleSubmit, reset, setValue, watch } = useForm<{ name: string; email: string; role: string; pin: string; maxDiscount: string; }>();
-  const openAdd = () => { setEditUser(null); setSelectedPerms(DEFAULT_PERMISSIONS["receptionist"]); reset({ role: "receptionist", maxDiscount: "" }); setOpen(true); };
-  const openEdit = (u: AppUser) => { setEditUser(u); setSelectedPerms(u.permissions ? JSON.parse(u.permissions) : DEFAULT_PERMISSIONS[u.role] ?? []); reset({ name: u.name, email: u.email, role: u.role, pin: u.pin ?? "", maxDiscount: u.maxDiscount != null ? String(u.maxDiscount) : "" }); setOpen(true); };
+  const { register, handleSubmit, reset, setValue, watch } = useForm<{ name: string; email: string; username: string; role: string; pin: string; maxDiscount: string; }>();
+
+  const openAdd = () => {
+    setEditUser(null);
+    setSelectedPerms(DEFAULT_PERMISSIONS["receptionist"]);
+    setPhotoDataUrl(null);
+    setPhotoErr(""); setSaveErr("");
+    reset({ name: "", email: "", username: "", role: "receptionist", pin: "", maxDiscount: "" });
+    setOpen(true);
+  };
+  const openEdit = (u: AppUser) => {
+    setEditUser(u);
+    setSelectedPerms(u.permissions ? JSON.parse(u.permissions) : DEFAULT_PERMISSIONS[u.role] ?? []);
+    setPhotoDataUrl(u.photoDataUrl ?? null);
+    setPhotoErr(""); setSaveErr("");
+    // PIN field stays blank on edit — leaving it blank means "don't change".
+    // Typing a new value resets it (and forces a change on next login).
+    reset({ name: u.name, email: u.email, username: u.username ?? "", role: u.role, pin: "", maxDiscount: u.maxDiscount != null ? String(u.maxDiscount) : "" });
+    setOpen(true);
+  };
   const togglePerm = (path: string) => setSelectedPerms(prev => prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]);
-  const onSave = handleSubmit((d) => { saveUser.mutate({ ...d, permissions: selectedPerms, pin: d.pin || null, maxDiscount: d.maxDiscount !== "" ? Number(d.maxDiscount) : null }); });
-  return (<><div className="flex items-center justify-between mb-4"><p className="text-sm text-muted-foreground">Manage user accounts, roles, and module access</p><Button size="sm" onClick={openAdd}><Plus size={14} className="mr-1" /> Add User</Button></div><div className="space-y-4">{isLoading ? <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-muted rounded-xl animate-pulse" />)}</div> : users.length === 0 ? <div className="text-center py-16 text-muted-foreground"><User2 size={36} className="mx-auto mb-3 opacity-30" /><p>No users yet. Add your first user to get started.</p></div> : (<div className="bg-card border border-card-border rounded-xl overflow-hidden"><table className="w-full text-sm"><thead className="bg-muted/50 border-b border-card-border"><tr><th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Name</th><th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Email</th><th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Role</th><th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Modules</th><th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Status</th><th className="px-4 py-3" /></tr></thead><tbody>{users.map((u) => { const perms: string[] = u.permissions ? JSON.parse(u.permissions) : []; return (<tr key={u.id} className="border-b border-card-border last:border-0 hover:bg-muted/20"><td className="px-4 py-3"><div className="flex items-center gap-2"><div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">{u.name.charAt(0).toUpperCase()}</div><span className="font-medium">{u.name}</span>{u.pin && <Shield size={11} className="text-muted-foreground" />}</div></td><td className="px-4 py-3 text-muted-foreground">{u.email}</td><td className="px-4 py-3"><Badge className={`${ROLE_COLORS[u.role] ?? "bg-gray-100 text-gray-700"} text-xs capitalize`}>{u.role}</Badge></td><td className="px-4 py-3"><div className="flex flex-wrap gap-1 max-w-xs">{perms.slice(0, 4).map(p => { const mod = ALL_MODULES.find(m => m.path === p); return mod ? <span key={p} className="text-xs bg-muted px-1.5 py-0.5 rounded">{mod.label}</span> : null; })}{perms.length > 4 && <span className="text-xs text-muted-foreground">+{perms.length - 4} more</span>}</div></td><td className="px-4 py-3"><button onClick={() => toggleActive.mutate({ id: u.id, isActive: !u.isActive })} className={`text-xs px-2 py-0.5 rounded-full font-medium ${u.isActive ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>{u.isActive ? "Active" : "Inactive"}</button></td><td className="px-4 py-3"><div className="flex gap-1 justify-end"><Button size="sm" variant="ghost" className="h-7" onClick={() => openEdit(u)}><Pencil size={13} /></Button><Button size="sm" variant="ghost" className="h-7 text-destructive hover:text-destructive" onClick={() => deleteUser.mutate(u.id)}><Trash2 size={13} /></Button></div></td></tr>); })}</tbody></table></div>)}<div className="bg-muted/30 border border-card-border rounded-xl p-4"><p className="text-xs font-semibold uppercase text-muted-foreground mb-3">Role Descriptions</p><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">{[{ role: "super_admin", desc: "All permissions + delete/super-edit bills" }, { role: "admin", desc: "Full access to all modules" }, { role: "manager", desc: "Reports, billing, referrals, accounting, discounts" }, { role: "accountant", desc: "Accounting, reports, billing & payments view" }, { role: "billing", desc: "Patients, billing, payments, quick register, discounts" }, { role: "lab", desc: "Orders, test catalog, report generator, inventory" }, { role: "receptionist", desc: "Patients, orders, quick register" }].map(r => (<div key={r.role} className="flex items-start gap-2"><Badge className={`${ROLE_COLORS[r.role]} text-xs capitalize flex-shrink-0 mt-0.5`}>{r.role}</Badge><span className="text-muted-foreground">{r.desc}</span></div>))}</div></div></div><Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>{editUser ? "Edit User" : "Add User"}</DialogTitle></DialogHeader><form onSubmit={onSave} className="space-y-4"><div className="grid grid-cols-2 gap-4"><div><Label>Name</Label><Input {...register("name", { required: true })} className="mt-1" /></div><div><Label>Email</Label><Input {...register("email", { required: true })} className="mt-1" /></div><div><Label>Role</Label><Select value={watch("role")} onValueChange={(v) => setValue("role", v)}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent>{ROLES.map(r => <SelectItem key={r} value={r} className="capitalize">{r}</SelectItem>)}</SelectContent></Select></div><div><Label>PIN</Label><Input {...register("pin")} className="mt-1" /></div></div><div><Label>Max Discount</Label><Input {...register("maxDiscount")} className="mt-1" /></div><div className="border-t pt-4"><p className="text-xs font-semibold uppercase text-muted-foreground mb-3">Module Permissions</p><div className="grid grid-cols-2 gap-2">{ALL_MODULES.map(m => (<button key={m.path} type="button" onClick={() => togglePerm(m.path)} className="flex items-center gap-2 text-sm p-2 rounded-lg border border-border hover:bg-muted/50 text-left">{selectedPerms.includes(m.path) ? <CheckSquare size={14} /> : <Square size={14} />}<span>{m.label}</span></button>))}</div></div><div className="flex justify-end gap-2 pt-2"><Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit">Save</Button></div></form></DialogContent></Dialog></>);
+
+  const onPhotoChange = (file: File | null) => {
+    setPhotoErr("");
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { setPhotoErr("Please pick an image file"); return; }
+    if (file.size > 800_000) { setPhotoErr("Photo too large — please pick an image under 800 KB"); return; }
+    const reader = new FileReader();
+    reader.onload = () => setPhotoDataUrl(String(reader.result));
+    reader.readAsDataURL(file);
+  };
+
+  const onSave = handleSubmit((d) => {
+    setSaveErr("");
+    const body: Record<string, unknown> = {
+      name: d.name?.trim(),
+      email: d.email?.trim(),
+      // Lowercase + trim — matches what the server stores for case-insensitive
+      // login. Empty string sent so the server clears legacy values when needed.
+      username: (d.username ?? "").trim().toLowerCase(),
+      role: d.role,
+      permissions: selectedPerms,
+      maxDiscount: d.maxDiscount !== "" ? Number(d.maxDiscount) : null,
+      photoDataUrl: photoDataUrl,
+    };
+    // Only include PIN when admin actually typed one — blank means "leave it"
+    if (d.pin && d.pin.trim().length > 0) body.pin = d.pin.trim();
+    saveUser.mutate(body);
+  });
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm text-muted-foreground">Manage user accounts, roles, and module access</p>
+        <Button size="sm" onClick={openAdd}><Plus size={14} className="mr-1" /> Add User</Button>
+      </div>
+      <div className="space-y-4">
+        {isLoading ? (
+          <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-muted rounded-xl animate-pulse" />)}</div>
+        ) : users.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground"><User2 size={36} className="mx-auto mb-3 opacity-30" /><p>No users yet. Add your first user to get started.</p></div>
+        ) : (
+          <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 border-b border-card-border">
+                <tr>
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Name</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Username</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Email</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Role</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Modules</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Status</th>
+                  <th className="px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((u) => {
+                  const perms: string[] = u.permissions ? JSON.parse(u.permissions) : [];
+                  const hasPin = !!(u.hasPin ?? u.pin);
+                  return (
+                    <tr key={u.id} className="border-b border-card-border last:border-0 hover:bg-muted/20">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          {u.photoDataUrl ? (
+                            <img src={u.photoDataUrl} alt="" className="w-7 h-7 rounded-full object-cover border" />
+                          ) : (
+                            <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">{u.name.charAt(0).toUpperCase()}</div>
+                          )}
+                          <span className="font-medium">{u.name}</span>
+                          {hasPin && <Shield size={11} className="text-muted-foreground" />}
+                          {u.mustChangePin && <span title="Must change PIN on next login" className="text-[10px] text-amber-600 font-medium">PIN reset</span>}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{u.username || <span className="opacity-40">—</span>}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
+                      <td className="px-4 py-3"><Badge className={`${ROLE_COLORS[u.role] ?? "bg-gray-100 text-gray-700"} text-xs capitalize`}>{u.role}</Badge></td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1 max-w-xs">
+                          {perms.slice(0, 4).map(p => { const mod = ALL_MODULES.find(m => m.path === p); return mod ? <span key={p} className="text-xs bg-muted px-1.5 py-0.5 rounded">{mod.label}</span> : null; })}
+                          {perms.length > 4 && <span className="text-xs text-muted-foreground">+{perms.length - 4} more</span>}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <button onClick={() => toggleActive.mutate({ id: u.id, isActive: !u.isActive })} className={`text-xs px-2 py-0.5 rounded-full font-medium ${u.isActive ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>{u.isActive ? "Active" : "Inactive"}</button>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-1 justify-end">
+                          <Button size="sm" variant="ghost" className="h-7" onClick={() => openEdit(u)}><Pencil size={13} /></Button>
+                          <Button size="sm" variant="ghost" className="h-7 text-destructive hover:text-destructive" onClick={() => { if (confirm(`Delete user "${u.name}"?`)) deleteUser.mutate(u.id); }}><Trash2 size={13} /></Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div className="bg-muted/30 border border-card-border rounded-xl p-4">
+          <p className="text-xs font-semibold uppercase text-muted-foreground mb-3">Role Descriptions</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
+            {[
+              { role: "super_admin", desc: "All permissions + delete/super-edit bills" },
+              { role: "admin", desc: "Full access to all modules" },
+              { role: "manager", desc: "Reports, billing, referrals, accounting, discounts" },
+              { role: "accountant", desc: "Accounting, reports, billing & payments view" },
+              { role: "billing", desc: "Patients, billing, payments, quick register, discounts" },
+              { role: "lab", desc: "Orders, test catalog, report generator, inventory" },
+              { role: "receptionist", desc: "Patients, orders, quick register" },
+            ].map(r => (
+              <div key={r.role} className="flex items-start gap-2">
+                <Badge className={`${ROLE_COLORS[r.role]} text-xs capitalize flex-shrink-0 mt-0.5`}>{r.role}</Badge>
+                <span className="text-muted-foreground">{r.desc}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>{editUser ? "Edit User" : "Add User"}</DialogTitle></DialogHeader>
+          <form onSubmit={onSave} className="space-y-4">
+            {/* Photo at the top so admins can recognize the staff member at a glance */}
+            <div className="flex items-center gap-4">
+              {photoDataUrl ? (
+                <img src={photoDataUrl} alt="Staff" className="w-20 h-20 rounded-full object-cover border-2 border-card-border" />
+              ) : (
+                <div className="w-20 h-20 rounded-full bg-muted border-2 border-dashed border-card-border flex items-center justify-center text-muted-foreground"><User2 size={28} /></div>
+              )}
+              <div className="space-y-2">
+                <input id="staff-photo-input" type="file" accept="image/*" className="hidden" onChange={(e) => onPhotoChange(e.target.files?.[0] ?? null)} />
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById("staff-photo-input")?.click()}>
+                    <Upload size={13} className="mr-1.5" /> {photoDataUrl ? "Change Photo" : "Add Photo"}
+                  </Button>
+                  {photoDataUrl && (
+                    <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => setPhotoDataUrl(null)}><Trash2 size={13} className="mr-1.5" /> Remove</Button>
+                  )}
+                </div>
+                <p className="text-[11px] text-muted-foreground">Optional. Square image works best. Max 800 KB.</p>
+                {photoErr && <p className="text-xs text-destructive">{photoErr}</p>}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Name *</Label>
+                <Input {...register("name", { required: true })} className="mt-1" placeholder="Dr. Asha Verma" />
+              </div>
+              <div>
+                <Label>Username *</Label>
+                <Input {...register("username", { required: true })} className="mt-1" autoComplete="off" placeholder="asha" />
+                <p className="text-[11px] text-muted-foreground mt-1">Used for staff sign-in. Letters, numbers, dot/underscore.</p>
+              </div>
+              <div>
+                <Label>Email *</Label>
+                <Input type="email" {...register("email", { required: true })} className="mt-1" />
+              </div>
+              <div>
+                <Label>Role *</Label>
+                <Select value={watch("role")} onValueChange={(v) => setValue("role", v)}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>{ROLES.map(r => <SelectItem key={r} value={r} className="capitalize">{r}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>{editUser ? "Reset PIN (leave blank to keep)" : "PIN *"}</Label>
+                <Input type="password" inputMode="numeric" autoComplete="new-password" {...register("pin", editUser ? {} : { required: true, minLength: 6 })} className="mt-1" placeholder={editUser ? "•••••• (unchanged)" : "At least 6 characters"} />
+                <p className="text-[11px] text-muted-foreground mt-1">User will be forced to set their own PIN on next sign-in.</p>
+              </div>
+              <div>
+                <Label>Max Discount %</Label>
+                <Input type="number" {...register("maxDiscount")} className="mt-1" placeholder="e.g. 20" />
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <p className="text-xs font-semibold uppercase text-muted-foreground mb-3">Module Permissions</p>
+              <div className="grid grid-cols-2 gap-2">
+                {ALL_MODULES.map(m => (
+                  <button key={m.path} type="button" onClick={() => togglePerm(m.path)} className="flex items-center gap-2 text-sm p-2 rounded-lg border border-border hover:bg-muted/50 text-left">
+                    {selectedPerms.includes(m.path) ? <CheckSquare size={14} /> : <Square size={14} />}
+                    <span>{m.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {saveErr && (
+              <div className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-sm text-destructive">{saveErr}</div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={saveUser.isPending}>{saveUser.isPending ? "Saving…" : "Save"}</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
 
 type ClinicSettings = {

@@ -13,9 +13,14 @@ export type StaffUser = {
   id: number;
   name: string;
   email: string;
+  username?: string | null;
   role: string;
   permissions: string[];
   maxDiscount: number | null;
+  photoDataUrl?: string | null;
+  // Server-issued flag — when true the staff-login flow forces the user
+  // through the change-PIN screen before persisting this session.
+  mustChangePin?: boolean;
 };
 
 export type StaffSession = {

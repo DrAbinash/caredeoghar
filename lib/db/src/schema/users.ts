@@ -6,9 +6,22 @@ export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
+  // Login handle preferred over email for staff sign-in. Nullable + unique
+  // so legacy rows without a username still work via the email fallback in
+  // /api/portal/staff-login. Stored lowercase.
+  username: text("username").unique(),
   role: text("role").notNull().default("receptionist"),
   permissions: text("permissions"),
   pin: text("pin"),
+  // Optional staff portrait shown next to their name. Stored as a base64
+  // data URL (kept small client-side, < 800 KB) so it round-trips through
+  // existing JSON endpoints without needing object-storage plumbing.
+  photoDataUrl: text("photo_data_url"),
+  // Set to true whenever an admin creates the user or resets their PIN.
+  // Cleared the moment the user successfully changes the PIN themselves.
+  // Staff-login response reports this so the UI can force a PIN-change
+  // step before letting them into the ERP.
+  mustChangePin: boolean("must_change_pin").notNull().default(false),
   isActive: boolean("is_active").notNull().default(true),
   maxDiscount: numeric("max_discount", { precision: 5, scale: 2 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

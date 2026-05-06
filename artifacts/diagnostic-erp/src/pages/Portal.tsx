@@ -52,9 +52,12 @@ type StaffSession = {
     id: number;
     name: string;
     email: string;
+    username?: string | null;
     role: string;
     permissions: string[];
     maxDiscount: number | null;
+    photoDataUrl?: string | null;
+    mustChangePin?: boolean;
   };
 };
 
@@ -418,34 +421,51 @@ function PatientLogin() {
 // =====================================================================
 
 function StaffLogin() {
-  const [, navigate] = useLocation();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
+  // When the freshly-issued session has must_change_pin=true the server is
+  // telling us the admin set this user's PIN — keep them out of the ERP
+  // until they've picked their own. The session is held in component state
+  // (NOT localStorage) until the change succeeds, so a tab close == logout.
+  const [pendingSession, setPendingSession] = useState<StaffSession | null>(null);
   const { data: settings } = useQuery<PortalSettings>({
     queryKey: ["portal-settings"],
     queryFn: () => api.get("/api/portal/settings"),
   });
 
+  const finalizeSession = (s: StaffSession) => {
+    localStorage.setItem(STAFF_KEY, JSON.stringify(s));
+    const erp: ErpStaffSession = { token: s.token, user: s.user };
+    writeStaffSession(erp);
+    const target = firstPermissionedPath(erp, ERP_NAV_ORDER) ?? firstAllowedPath(erp, ERP_NAV_ORDER);
+    const base = (import.meta as { env: { BASE_URL: string } }).env.BASE_URL || "/";
+    window.location.href = `${base}${target}`.replace(/\/+/g, "/").replace(":/", "://");
+  };
+
   const login = useMutation({
-    mutationFn: (body: { email: string; pin: string }) => api.post<StaffSession>("/api/portal/staff-login", body),
+    mutationFn: (body: { username: string; pin: string }) => api.post<StaffSession>("/api/portal/staff-login", body),
     onSuccess: (s) => {
-      // Keep the legacy portal-staff key (for portal logout / future use)…
-      localStorage.setItem(STAFF_KEY, JSON.stringify(s));
-      // …and also write the ERP-readable session, which Layout/route guard
-      // use to filter the sidebar to only the pages this user is allowed to see.
-      const erp: ErpStaffSession = { token: s.token, user: s.user };
-      writeStaffSession(erp);
-      // Land them on the first PERMISSIONED page they have rights to — that's
-      // a real role-relevant landing (e.g. lab user → /orders, billing → /,
-      // accountant → /accounting). Falls back to firstAllowedPath if nothing
-      // matches (defensive — every staff role has at least one perm).
-      const target = firstPermissionedPath(erp, ERP_NAV_ORDER) ?? firstAllowedPath(erp, ERP_NAV_ORDER);
-      const base = (import.meta as { env: { BASE_URL: string } }).env.BASE_URL || "/";
-      window.location.href = `${base}${target}`.replace(/\/+/g, "/").replace(":/", "://");
+      if (s.user.mustChangePin) {
+        setPendingSession(s);
+        return;
+      }
+      finalizeSession(s);
     },
     onError: (e: Error) => setError(e.message),
   });
+
+  if (pendingSession) {
+    return (
+      <ForceChangePin
+        session={pendingSession}
+        settings={settings}
+        currentPin={pin}
+        onSuccess={() => finalizeSession({ ...pendingSession, user: { ...pendingSession.user, mustChangePin: false } })}
+        onCancel={() => { setPendingSession(null); setPin(""); }}
+      />
+    );
+  }
 
   return (
     <>
@@ -464,21 +484,24 @@ function StaffLogin() {
           </div>
           <h1 className="text-2xl font-bold text-center mb-2">Staff Login</h1>
           <p className="text-muted-foreground text-sm text-center mb-6">
-            Sign in with your work email and PIN.
+            Sign in with your username and PIN.
           </p>
 
           <form
-            onSubmit={(e) => { e.preventDefault(); setError(""); login.mutate({ email: email.trim(), pin: pin.trim() }); }}
+            onSubmit={(e) => { e.preventDefault(); setError(""); login.mutate({ username: username.trim().toLowerCase(), pin: pin.trim() }); }}
             className="space-y-4"
           >
             <div>
-              <Label htmlFor="email">Work Email</Label>
+              <Label htmlFor="username">Username</Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="you@clinic.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="username"
+                type="text"
+                autoCapitalize="none"
+                autoComplete="username"
+                spellCheck={false}
+                placeholder="your username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 className="mt-1.5 h-12"
                 autoFocus
               />
@@ -489,6 +512,7 @@ function StaffLogin() {
                 id="pin"
                 type="password"
                 inputMode="numeric"
+                autoComplete="current-password"
                 placeholder="••••"
                 value={pin}
                 onChange={(e) => setPin(e.target.value)}
@@ -502,7 +526,7 @@ function StaffLogin() {
               </div>
             )}
 
-            <Button type="submit" className="w-full h-12 text-base" disabled={login.isPending || !email.trim() || !pin.trim()}>
+            <Button type="submit" className="w-full h-12 text-base" disabled={login.isPending || !username.trim() || !pin.trim()}>
               {login.isPending ? <><Loader2 size={16} className="mr-2 animate-spin" /> Signing in…</> : <>Sign in <ArrowRight size={16} className="ml-2" /></>}
             </Button>
           </form>
@@ -510,6 +534,115 @@ function StaffLogin() {
           <p className="text-xs text-muted-foreground text-center mt-6">
             Forgot your PIN? Please contact your administrator.
           </p>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// Shown immediately after a successful login when the server reports
+// mustChangePin=true. The current PIN is the one the user just typed on the
+// login form (the parent passes it down) so they don't have to re-enter it.
+function ForceChangePin({
+  session,
+  settings,
+  currentPin,
+  onSuccess,
+  onCancel,
+}: {
+  session: StaffSession;
+  settings: PortalSettings | undefined;
+  currentPin: string;
+  onSuccess: () => void;
+  onCancel: () => void;
+}) {
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [error, setError] = useState("");
+
+  const change = useMutation({
+    mutationFn: (body: { currentPin: string; newPin: string }) =>
+      fetchApi("/api/portal/staff-change-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` },
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => onSuccess(),
+    onError: (e: Error) => setError(e.message),
+  });
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (newPin.length < 6) { setError("New PIN must be at least 6 characters."); return; }
+    if (newPin !== confirmPin) { setError("The two PINs don't match."); return; }
+    if (newPin === currentPin) { setError("New PIN must be different from your current PIN."); return; }
+    change.mutate({ currentPin, newPin });
+  };
+
+  return (
+    <>
+      <PortalHeader
+        settings={settings}
+        right={
+          <button
+            type="button"
+            onClick={onCancel}
+            className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+          >
+            <ArrowLeft size={14} /> Cancel
+          </button>
+        }
+      />
+      <div className="max-w-md mx-auto px-4 py-12">
+        <div className="bg-white dark:bg-slate-900 border rounded-2xl p-8 shadow-lg">
+          <div className="h-14 w-14 rounded-xl bg-amber-100 dark:bg-amber-950 flex items-center justify-center mb-4 mx-auto">
+            <AlertCircle size={28} className="text-amber-600 dark:text-amber-400" />
+          </div>
+          <h1 className="text-2xl font-bold text-center mb-2">Set a new PIN</h1>
+          <p className="text-muted-foreground text-sm text-center mb-6">
+            Hi {session.user.name.split(" ")[0]}, please choose a personal PIN before continuing.
+          </p>
+
+          <form onSubmit={submit} className="space-y-4">
+            <div>
+              <Label htmlFor="newPin">New PIN (at least 6 characters)</Label>
+              <Input
+                id="newPin"
+                type="password"
+                inputMode="numeric"
+                autoComplete="new-password"
+                placeholder="••••••"
+                value={newPin}
+                onChange={(e) => setNewPin(e.target.value)}
+                className="mt-1.5 h-12 text-lg tracking-widest"
+                autoFocus
+              />
+            </div>
+            <div>
+              <Label htmlFor="confirmPin">Confirm new PIN</Label>
+              <Input
+                id="confirmPin"
+                type="password"
+                inputMode="numeric"
+                autoComplete="new-password"
+                placeholder="••••••"
+                value={confirmPin}
+                onChange={(e) => setConfirmPin(e.target.value)}
+                className="mt-1.5 h-12 text-lg tracking-widest"
+              />
+            </div>
+
+            {error && (
+              <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg p-3 text-sm text-red-700 dark:text-red-400 flex items-start gap-2">
+                <AlertCircle size={16} className="mt-0.5 shrink-0" /> {error}
+              </div>
+            )}
+
+            <Button type="submit" className="w-full h-12 text-base" disabled={change.isPending || !newPin || !confirmPin}>
+              {change.isPending ? <><Loader2 size={16} className="mr-2 animate-spin" /> Saving…</> : <>Set new PIN <ArrowRight size={16} className="ml-2" /></>}
+            </Button>
+          </form>
         </div>
       </div>
     </>

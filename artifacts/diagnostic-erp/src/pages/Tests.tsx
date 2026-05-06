@@ -73,20 +73,37 @@ export default function Tests() {
   const { data: allCategories = [] } = useTestCategories();
   const activeCategories = allCategories.filter((c) => c.isActive);
 
+  const [submitErr, setSubmitErr] = useState("");
+
   const createTest = useCreateTest({
     mutation: {
-      onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListTestsQueryKey() }); setOpen(false); reset(); },
+      onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListTestsQueryKey() }); setOpen(false); setSubmitErr(""); reset(); },
+      onError: (e: Error) => setSubmitErr(e.message || "Could not save the test"),
     },
   });
   const updateTest = useUpdateTest({
     mutation: {
-      onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListTestsQueryKey() }); setEditTest(null); },
+      onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListTestsQueryKey() }); setEditTest(null); setSubmitErr(""); },
+      onError: (e: Error) => setSubmitErr(e.message || "Could not update the test"),
     },
   });
 
   const { register, handleSubmit, reset, setValue, watch } = useForm<TestForm>({ defaultValues: { isActive: true } });
 
   const onSubmit = (data: TestForm) => {
+    setSubmitErr("");
+    // Surface the silent-failure case where the user opened the dialog and
+    // hit Save without selecting a category from the dropdown. The Select
+    // only registers the field via setValue, so react-hook-form's `required`
+    // can't catch this for us.
+    if (!data.category || !data.category.trim()) {
+      setSubmitErr("Please pick a category. Click 'Categories' to add one if the list is empty.");
+      return;
+    }
+    if (!Number.isFinite(Number(data.price)) || Number(data.price) < 0) {
+      setSubmitErr("Price must be a positive number.");
+      return;
+    }
     // Cast through unknown so the codegen'd zod doesn't reject the new
     // department/roomNumber fields. The server reads them off req.body.
     const payload = { ...data, price: Number(data.price) } as unknown as Parameters<typeof createTest.mutate>[0]["data"];
@@ -264,10 +281,15 @@ export default function Tests() {
               <input type="checkbox" id="isActive" {...register("isActive")} className="rounded" />
               <Label htmlFor="isActive">Active</Label>
             </div>
+            {submitErr && (
+              <div className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-sm text-destructive">
+                {submitErr}
+              </div>
+            )}
             <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={() => { setOpen(false); setSubmitErr(""); }}>Cancel</Button>
               <Button type="submit" disabled={createTest.isPending || updateTest.isPending}>
-                {editTest ? "Save Changes" : "Add Test"}
+                {createTest.isPending || updateTest.isPending ? "Saving…" : (editTest ? "Save Changes" : "Add Test")}
               </Button>
             </div>
           </form>

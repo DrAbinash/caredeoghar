@@ -1,11 +1,35 @@
-import { Router } from "express";
+import { Router, type Response } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
+import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
 
 const router = Router();
+
+// Defense in depth: this router lives behind requireStaffAuth +
+// requireStaffPermission("/settings"), which lets any "admin" / "manager"
+// (or anyone manually granted /settings) administer staff. WITHOUT the
+// guard below, a /settings-permitted user could PATCH their own row to
+// role="super_admin" and silently jump the privilege fence. Only a caller
+// whose own session role is super_admin may create, modify, or delete
+// super_admin rows, or set any user's role to super_admin.
+function blockSuperAdminEscalation(
+  req: StaffAuthRequest,
+  res: Response,
+  opts: { existingRole?: string; nextRole?: string },
+): boolean {
+  const callerRole = req.staffSession?.role ?? "";
+  if (callerRole === "super_admin") return false;
+  const touchesSuperAdmin =
+    opts.existingRole === "super_admin" || opts.nextRole === "super_admin";
+  if (touchesSuperAdmin) {
+    res.status(403).json({ error: "Only a super-admin can manage super-admin accounts" });
+    return true;
+  }
+  return false;
+}
 
 const ROLES = ["super_admin", "admin", "manager", "accountant", "billing", "lab", "receptionist"];
 
@@ -27,18 +51,44 @@ function isBcryptHash(value: string): boolean {
   return value.startsWith("$2a$") || value.startsWith("$2b$") || value.startsWith("$2y$");
 }
 
+// Normalize username: trim, lowercase. Empty string becomes null so the
+// unique index doesn't collide on multiple "" values across legacy rows.
+function normUsername(v: unknown): string | null {
+  if (v === undefined || v === null) return null;
+  const s = String(v).trim().toLowerCase();
+  return s === "" ? null : s;
+}
+
+// Cap the staff portrait to ~800 KB so a careless 5-megapixel selfie
+// can't blow up the users JSON payload that the whole ERP fetches.
+function validatePhoto(v: unknown): string | null | { error: string } {
+  if (v === undefined) return null; // sentinel — caller treats as "not provided"
+  if (v === null || v === "") return null;
+  const s = String(v);
+  if (!s.startsWith("data:image/")) {
+    return { error: "photoDataUrl must be a data:image/* URL" };
+  }
+  if (s.length > 1_100_000) {
+    return { error: "Photo too large — please pick an image under 800 KB" };
+  }
+  return s;
+}
+
 router.get("/", async (_req, res) => {
   const users = await db.select().from(usersTable).orderBy(usersTable.name);
-  res.json(users.map(u => ({ ...u, pin: undefined })));
+  // Strip the PIN hash but keep the boolean signal "this user has a PIN"
+  // so the UI can show the little Shield icon next to their name.
+  res.json(users.map(u => ({ ...u, pin: undefined, hasPin: !!u.pin })));
   return;
 });
 
-router.post("/", async (req, res) => {
+router.post("/", async (req: StaffAuthRequest, res) => {
   const { name, email, role, permissions, pin, maxDiscount } = req.body;
   if (!name || !email || !role) {
     res.status(400).json({ error: "name, email and role are required" });
     return;
   }
+  if (blockSuperAdminEscalation(req, res, { nextRole: role })) return;
 
   const perms = permissions ?? DEFAULT_PERMISSIONS[role] ?? DEFAULT_PERMISSIONS.receptionist;
 
@@ -52,28 +102,79 @@ router.post("/", async (req, res) => {
     hashedPin = await bcrypt.hash(String(pin), BCRYPT_ROUNDS);
   }
 
-  const [user] = await db
-    .insert(usersTable)
-    .values({ name, email, role, permissions: JSON.stringify(perms), pin: hashedPin, maxDiscount: maxDiscount != null ? String(maxDiscount) : null })
-    .returning();
-  res.status(201).json({ ...user, pin: undefined, maxDiscount: user.maxDiscount != null ? Number(user.maxDiscount) : null });
+  const username = normUsername(req.body.username);
+  const photoCheck = validatePhoto(req.body.photoDataUrl);
+  if (photoCheck && typeof photoCheck === "object") {
+    res.status(400).json({ error: photoCheck.error });
+    return;
+  }
+
+  try {
+    const [user] = await db
+      .insert(usersTable)
+      .values({
+        name,
+        email,
+        username,
+        role,
+        permissions: JSON.stringify(perms),
+        pin: hashedPin,
+        photoDataUrl: photoCheck as string | null,
+        // Force a PIN change on the first successful sign-in whenever an
+        // admin assigns the initial PIN.
+        mustChangePin: !!hashedPin,
+        maxDiscount: maxDiscount != null ? String(maxDiscount) : null,
+      })
+      .returning();
+    res.status(201).json({ ...user, pin: undefined, hasPin: !!user.pin, maxDiscount: user.maxDiscount != null ? Number(user.maxDiscount) : null });
+  } catch (e) {
+    const msg = (e as { message?: string })?.message ?? "";
+    if (msg.includes("users_username_unique")) {
+      res.status(409).json({ error: "Username already taken" });
+      return;
+    }
+    if (msg.includes("users_email_unique")) {
+      res.status(409).json({ error: "Email already in use" });
+      return;
+    }
+    throw e;
+  }
   return;
 });
 
-router.patch("/:id", async (req, res) => {
+router.patch("/:id", async (req: StaffAuthRequest, res) => {
   const id = Number(req.params.id);
+  // Look up the existing role so we can also block demoting/editing a
+  // super_admin row by a non-super_admin caller.
+  const [existing] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, id)).limit(1);
+  if (!existing) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  if (blockSuperAdminEscalation(req, res, { existingRole: existing.role, nextRole: req.body?.role })) return;
   const updates: Record<string, unknown> = {};
   if (req.body.name !== undefined) updates.name = req.body.name;
   if (req.body.email !== undefined) updates.email = req.body.email;
+  if (req.body.username !== undefined) updates.username = normUsername(req.body.username);
   if (req.body.role !== undefined) updates.role = req.body.role;
   if (req.body.permissions !== undefined) updates.permissions = JSON.stringify(req.body.permissions);
   if (req.body.isActive !== undefined) updates.isActive = req.body.isActive;
   if (req.body.maxDiscount !== undefined) updates.maxDiscount = req.body.maxDiscount != null ? String(req.body.maxDiscount) : null;
 
+  if (req.body.photoDataUrl !== undefined) {
+    const photoCheck = validatePhoto(req.body.photoDataUrl);
+    if (photoCheck && typeof photoCheck === "object") {
+      res.status(400).json({ error: photoCheck.error });
+      return;
+    }
+    updates.photoDataUrl = photoCheck as string | null;
+  }
+
   // Hash the PIN before storing when an admin sets/resets it
   if (req.body.pin !== undefined) {
     if (req.body.pin === null || req.body.pin === "") {
       updates.pin = null;
+      updates.mustChangePin = false;
     } else {
       const pinStr = String(req.body.pin);
       if (pinStr.length < 6) {
@@ -81,15 +182,30 @@ router.patch("/:id", async (req, res) => {
         return;
       }
       updates.pin = await bcrypt.hash(pinStr, BCRYPT_ROUNDS);
+      // Admin resets always force a change on next login
+      updates.mustChangePin = true;
     }
   }
 
-  const [user] = await db.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning();
-  if (!user) {
-    res.status(404).json({ error: "User not found" });
-    return;
+  try {
+    const [user] = await db.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning();
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    res.json({ ...user, pin: undefined, hasPin: !!user.pin, maxDiscount: user.maxDiscount != null ? Number(user.maxDiscount) : null });
+  } catch (e) {
+    const msg = (e as { message?: string })?.message ?? "";
+    if (msg.includes("users_username_unique")) {
+      res.status(409).json({ error: "Username already taken" });
+      return;
+    }
+    if (msg.includes("users_email_unique")) {
+      res.status(409).json({ error: "Email already in use" });
+      return;
+    }
+    throw e;
   }
-  res.json({ ...user, pin: undefined, maxDiscount: user.maxDiscount != null ? Number(user.maxDiscount) : null });
   return;
 });
 
@@ -139,8 +255,15 @@ router.patch("/:id/password", async (req, res) => {
   return;
 });
 
-router.delete("/:id", async (req, res) => {
-  await db.delete(usersTable).where(eq(usersTable.id, Number(req.params.id)));
+router.delete("/:id", async (req: StaffAuthRequest, res) => {
+  const id = Number(req.params.id);
+  const [existing] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, id)).limit(1);
+  if (!existing) {
+    res.json({ ok: true });
+    return;
+  }
+  if (blockSuperAdminEscalation(req, res, { existingRole: existing.role })) return;
+  await db.delete(usersTable).where(eq(usersTable.id, id));
   res.json({ ok: true });
   return;
 });

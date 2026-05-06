@@ -17,7 +17,7 @@ import {
   appointmentCounterTable,
   doctorsTable,
 } from "@workspace/db/schema";
-import { eq, and, desc, gt, sql, count } from "drizzle-orm";
+import { eq, and, desc, gt, sql, count, or } from "drizzle-orm";
 import { sanitizePatient } from "./patients";
 import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
 
@@ -259,16 +259,26 @@ portalRouter.post("/patient-login", patientLoginLimiter, async (req, res) => {
 portalRouter.post("/staff-login", staffLoginLimiter, async (req, res) => {
   if (!(await requirePortalEnabled(res))) return;
 
-  const email = String(req.body?.email ?? "").trim().toLowerCase();
+  // Accept the new `username` field as the primary handle, but keep the
+  // older `email` field too so any saved/autofilled creds keep working.
+  // Either one can be supplied — we look up by username first, then fall
+  // back to email so legacy users (no username assigned) can still sign in.
+  const handle = String(req.body?.username ?? req.body?.email ?? "")
+    .trim()
+    .toLowerCase();
   const pin = String(req.body?.pin ?? "").trim();
-  if (!email || !pin) {
-    res.status(400).json({ error: "Email and PIN are required" });
+  if (!handle || !pin) {
+    res.status(400).json({ error: "Username and PIN are required" });
     return;
   }
 
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(or(eq(usersTable.username, handle), eq(usersTable.email, handle)))
+    .limit(1);
   if (!user || !user.isActive || !user.pin) {
-    res.status(401).json({ error: "Invalid email or PIN" });
+    res.status(401).json({ error: "Invalid username or PIN" });
     return;
   }
 
@@ -309,11 +319,78 @@ portalRouter.post("/staff-login", staffLoginLimiter, async (req, res) => {
       id: user.id,
       name: user.name,
       email: user.email,
+      username: user.username,
       role: user.role,
       permissions,
       maxDiscount: user.maxDiscount ?? null,
+      photoDataUrl: user.photoDataUrl ?? null,
+      // Frontend uses this to force a PIN-change screen before letting
+      // the user into the ERP. The flag is cleared by /staff-change-pin.
+      mustChangePin: user.mustChangePin === true,
     },
   });
+});
+
+// First-login PIN change. Authenticated by the staff session token issued
+// by /staff-login. The user proves knowledge of the current PIN, picks a
+// new one, and we clear the must_change_pin flag in the same write so they
+// can land in the ERP without being bounced again.
+portalRouter.post("/staff-change-pin", async (req, res) => {
+  if (!(await requirePortalEnabled(res))) return;
+
+  const auth = req.headers.authorization || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  if (!token) {
+    res.status(401).json({ error: "Login required" });
+    return;
+  }
+
+  const [session] = await db
+    .select()
+    .from(portalSessionsTable)
+    .where(and(
+      eq(portalSessionsTable.token, token),
+      eq(portalSessionsTable.scope, "staff"),
+      gt(portalSessionsTable.expiresAt, new Date()),
+    ))
+    .limit(1);
+  if (!session) {
+    res.status(401).json({ error: "Session expired — please sign in again" });
+    return;
+  }
+
+  const currentPin = String(req.body?.currentPin ?? "").trim();
+  const newPin = String(req.body?.newPin ?? "").trim();
+  if (!currentPin || !newPin) {
+    res.status(400).json({ error: "currentPin and newPin are required" });
+    return;
+  }
+  if (newPin.length < 6) {
+    res.status(400).json({ error: "New PIN must be at least 6 characters" });
+    return;
+  }
+  if (currentPin === newPin) {
+    res.status(400).json({ error: "New PIN must be different from the current PIN" });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, session.subjectId)).limit(1);
+  if (!user || !user.pin) {
+    res.status(401).json({ error: "Account not found" });
+    return;
+  }
+  if (!(await verifyPin(currentPin, user.pin))) {
+    res.status(401).json({ error: "Current PIN is incorrect" });
+    return;
+  }
+
+  const hashed = await bcrypt.hash(newPin, 12);
+  await db
+    .update(usersTable)
+    .set({ pin: hashed, mustChangePin: false })
+    .where(eq(usersTable.id, user.id));
+
+  res.json({ ok: true });
 });
 
 // =====================================================================

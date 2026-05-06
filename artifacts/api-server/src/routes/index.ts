@@ -201,7 +201,11 @@ router.use("/backup", requireSuperAdmin, backupRouter);
 router.use("/system", requireSuperAdmin, systemRouter);
 
 // ─── Super-admin-only routes ──────────────────────────────────────────────────
-router.use("/users", requireSuperAdmin, usersRouter);
+// User management lives under the regular ERP "Settings" surface — admins
+// (and anyone else granted /settings) need to add staff and reset PINs
+// without holding a super-admin session. The route stays inside the
+// staff-auth fence so unauthenticated public callers still cannot touch it.
+router.use("/users", requireStaffAuth, requireStaffPermission("/settings"), usersRouter);
 router.use("/commission", requireSuperAdmin, commissionRouter);
 router.use("/doctor-ledger", requireSuperAdmin, doctorLedgerRouter);
 
