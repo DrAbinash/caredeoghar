@@ -17,28 +17,40 @@ import { startCronScheduler } from "./cron";
 import { ensureDefaultLedger } from "./routes/ledgers";
 import { backfillExpirePublicTokens } from "./routes/patient-reports";
 import { db, usersTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
-// One-shot bootstrap: when the deployed database contains zero users
-// (typical after the very first publish to a brand-new production
-// PostgreSQL), automatically seed a super-admin account so the operator
-// can sign in to the live site without having to run SQL by hand.
+// Bootstrap admin account for fresh production databases.
 //
-// The seed only runs when the users table is completely empty — once any
-// user exists this becomes a no-op forever, so it is safe to leave in.
+// Default behaviour: only seeds when the `users` table is completely
+// empty (typical right after the first publish to a brand-new prod DB).
+// Once any user exists this is a no-op forever, so it's safe to leave in.
 //
-// Defaults are tailored to this clinic; override per-deployment with
-// BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_NAME / BOOTSTRAP_ADMIN_PIN
-// env vars if a different initial account is desired. Operator is
-// expected to change the PIN immediately after first login.
-async function seedInitialSuperAdminIfEmpty(): Promise<void> {
+// Force mode: set BOOTSTRAP_ADMIN_FORCE=1 in deployment secrets to
+// upsert the bootstrap account even when the table already has rows.
+// Use this once when you need to reset the role/PIN on an existing
+// bootstrap row (e.g. you seeded a super_admin but want a regular admin
+// because you don't have the USB pen-drive yet). Remove the env var
+// after the next publish so subsequent restarts don't keep overwriting
+// PIN changes made through the UI.
+//
+// Defaults: role=admin, PIN=1234. Override via BOOTSTRAP_ADMIN_EMAIL /
+// BOOTSTRAP_ADMIN_NAME / BOOTSTRAP_ADMIN_PIN / BOOTSTRAP_ADMIN_ROLE.
+// "admin" gives full access to every module without requiring the USB
+// pen-drive that "super_admin" needs.
+async function seedBootstrapAdminIfNeeded(): Promise<void> {
   try {
-    const existing = await db.select({ id: usersTable.id }).from(usersTable).limit(1);
-    if (existing.length > 0) return; // table already has data — nothing to do
+    const force =
+      process.env["BOOTSTRAP_ADMIN_FORCE"] === "1" ||
+      process.env["BOOTSTRAP_ADMIN_FORCE"] === "true";
+
+    const anyUser = await db.select({ id: usersTable.id }).from(usersTable).limit(1);
+    if (anyUser.length > 0 && !force) return; // already populated, no force flag
 
     const email = (process.env["BOOTSTRAP_ADMIN_EMAIL"] || "abinashsingh@gmail.com").toLowerCase();
     const name = process.env["BOOTSTRAP_ADMIN_NAME"] || "Dr Abinash Kumar";
-    const plainPin = process.env["BOOTSTRAP_ADMIN_PIN"] || "2321";
+    const plainPin = process.env["BOOTSTRAP_ADMIN_PIN"] || "1234";
+    const role = process.env["BOOTSTRAP_ADMIN_ROLE"] || "admin";
     const hash = await bcrypt.hash(plainPin, 12);
 
     const allModulePermissions = [
@@ -46,24 +58,48 @@ async function seedInitialSuperAdminIfEmpty(): Promise<void> {
       "/report-generator", "/referrals", "/discounts", "/tests", "/payments",
       "/reports", "/inventory", "/accounting", "/settings",
     ];
+    const permissionsJson = JSON.stringify(allModulePermissions);
 
-    await db.insert(usersTable).values({
-      name,
-      email,
-      role: "super_admin",
-      permissions: JSON.stringify(allModulePermissions),
-      pin: hash,
-      isActive: true,
-      mustChangePin: false,
-    });
+    const existing = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.email, email))
+      .limit(1);
 
-    logger.warn(
-      { email, role: "super_admin" },
-      "Seeded initial super-admin user (users table was empty). " +
-        "Sign in and change the PIN immediately.",
-    );
+    if (existing.length > 0) {
+      await db
+        .update(usersTable)
+        .set({
+          name,
+          role,
+          permissions: permissionsJson,
+          pin: hash,
+          isActive: true,
+          mustChangePin: false,
+        })
+        .where(eq(usersTable.email, email));
+      logger.warn(
+        { email, role, force },
+        "Bootstrap admin updated (existing row reset to bootstrap defaults). " +
+          "Sign in and change the PIN, then unset BOOTSTRAP_ADMIN_FORCE.",
+      );
+    } else {
+      await db.insert(usersTable).values({
+        name,
+        email,
+        role,
+        permissions: permissionsJson,
+        pin: hash,
+        isActive: true,
+        mustChangePin: false,
+      });
+      logger.warn(
+        { email, role },
+        "Seeded bootstrap admin user. Sign in and change the PIN immediately.",
+      );
+    }
   } catch (err) {
-    logger.error({ err }, "Failed to seed initial super-admin");
+    logger.error({ err }, "Failed to seed/update bootstrap admin");
   }
 }
 
@@ -104,7 +140,7 @@ const server = app.listen(port, () => {
 
   ensureDefaultLedger().catch((e) => logger.error({ err: e }, "Failed to seed default ledger"));
   backfillExpirePublicTokens().catch((e) => logger.error({ err: e }, "Failed to backfill public token expiry"));
-  seedInitialSuperAdminIfEmpty().catch((e) => logger.error({ err: e }, "Failed to seed initial super-admin"));
+  seedBootstrapAdminIfNeeded().catch((e) => logger.error({ err: e }, "Failed to seed/update bootstrap admin"));
 });
 
 server.on("error", (err) => {
