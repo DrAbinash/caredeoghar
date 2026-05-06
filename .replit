@@ -6,8 +6,6 @@ run = "node --enable-source-maps artifacts/api-server/dist/index.mjs"
 buildCommand = "pnpm --filter @workspace/api-server run build"
 localPort = 8080
 
-[[artifacts]]
-id = "artifacts/mockup-sandbox"
 
 [deployment]
 router = "application"
