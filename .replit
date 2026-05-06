@@ -2,6 +2,9 @@ modules = ["nodejs-24", "python-3.11", "postgresql-16"]
 
 [[artifacts]]
 id = "3B4_FFSkEVBkAeYMFRJ2e"
+run = "node --enable-source-maps artifacts/api-server/dist/index.mjs"
+buildCommand = "pnpm --filter @workspace/api-server run build"
+localPort = 8080
 
 [[artifacts]]
 id = "artifacts/diagnostic-erp"
