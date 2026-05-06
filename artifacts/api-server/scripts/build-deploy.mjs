@@ -11,8 +11,8 @@
 //
 // Layout produced under artifacts/api-server/dist/:
 //   dist/index.mjs          — esbuild bundle of the API server
-//   dist/web/erp/           — diagnostic-erp build      (BASE_PATH=/)
-//   dist/web/site/          — clinic-site build         (BASE_PATH=/site/)
+//   dist/web/site/          — clinic-site build         (BASE_PATH=/)        ← public root
+//   dist/web/erp/           — diagnostic-erp build      (BASE_PATH=/erp/)    ← staff app
 //   dist/web/super-admin-portal/ — super-admin build    (BASE_PATH=/super-admin-portal/)
 //
 // At runtime SERVE_STATIC_DIR=artifacts/api-server/dist/web tells app.ts to
@@ -69,8 +69,12 @@ async function main() {
   await rm(WEB_OUT, { recursive: true, force: true });
   await mkdir(WEB_OUT, { recursive: true });
 
-  await buildFrontend("diagnostic-erp", "/", "erp");
-  await buildFrontend("clinic-site", "/site/", "site");
+  // Public clinic website is the new root (/), diagnostic ERP moves under
+  // /erp so the patient-facing domain shows the marketing site by default.
+  // Staff bookmarks must be updated to the new /erp prefix; the patient
+  // portal (which lives inside the ERP SPA) is now reached via /erp/portal.
+  await buildFrontend("clinic-site", "/", "site");
+  await buildFrontend("diagnostic-erp", "/erp/", "erp");
   await buildFrontend("super-admin-portal", "/super-admin-portal/", "super-admin-portal");
 
   log("✓ deploy build complete");

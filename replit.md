@@ -59,10 +59,24 @@ Key features:
 -   **Compliance**: Referral commission features and doctor due/payment ledgers are super-admin exclusive.
 -   **Admin Tools**: Machine/Maintenance module, Master Settings, and Clinic Branding Centralization.
 
+# URL Layout (May 2026 swap)
+
+The public-facing URL space was swapped so the marketing site owns the root domain:
+
+| Path | Artifact | Notes |
+|------|----------|-------|
+| `/` | `clinic-site` | Public clinic website (was `/site/`) |
+| `/erp` | `diagnostic-erp` | Staff ERP (was `/`) |
+| `/erp/portal` | `diagnostic-erp` route | Patient + staff portal landing (was `/portal`) |
+| `/super-admin-portal` | `super-admin-portal` | Unchanged |
+| `/api` | `api-server` | Unchanged |
+
+Touchpoints (keep in sync if changing again): each artifact's `.replit-artifact/artifact.toml` (`previewPath`, `services.paths`, `BASE_PATH`); `artifacts/api-server/scripts/build-deploy.mjs` (BASE_PATH passed to each `buildFrontend`); `artifacts/api-server/src/app.ts` (static mounts + SPA fallback regexes). Old `/portal` and `/site/` bookmarks no longer resolve — communicate to staff/patients before redeploy.
+
 # Deploy Gotchas
 
 -   **Target**: Reserved VM (`deploymentTarget = "vm"` in `.replit` — note the schema only accepts `"vm"`, NOT `"reserved"`). Picked because `node-cron` schedulers in api-server need an always-on host.
--   **Single-process unified serve**: `artifacts/api-server/scripts/build-deploy.mjs` bundles the Express API to `dist/index.mjs` AND builds all 3 SPAs (`diagnostic-erp` → `dist/web/erp/` at `/`, `clinic-site` → `dist/web/site/` at `/site/`, `super-admin-portal` → `dist/web/super-admin-portal/` at `/super-admin-portal/`). At runtime `SERVE_STATIC_DIR=artifacts/api-server/dist/web` makes `app.ts` mount them. One process, one port — required because Reserved VM exposes a single port.
+-   **Single-process unified serve**: `artifacts/api-server/scripts/build-deploy.mjs` bundles the Express API to `dist/index.mjs` AND builds all 3 SPAs (`clinic-site` → `dist/web/site/` at `/`, `diagnostic-erp` → `dist/web/erp/` at `/erp/`, `super-admin-portal` → `dist/web/super-admin-portal/` at `/super-admin-portal/`). At runtime `SERVE_STATIC_DIR=artifacts/api-server/dist/web` makes `app.ts` mount them. One process, one port — required because Reserved VM exposes a single port.
 -   **`.replitignore` whitelist**: the global `**/dist` exclusion would strip the bundled output before image push. Counter-rule `!artifacts/api-server/dist/**` is required. Do NOT remove.
 -   **Required prod secrets**: `DATABASE_URL`, `SUPER_ADMIN_USB_KEY`, `SESSION_SECRET`, `AI_INTEGRATIONS_GEMINI_API_KEY`, `AI_INTEGRATIONS_GEMINI_BASE_URL`, object-storage trio (`DEFAULT_OBJECT_STORAGE_BUCKET_ID`, `PRIVATE_OBJECT_DIR`, `PUBLIC_OBJECT_SEARCH_PATHS`), `ENABLE_SCHEDULERS=1`, `NODE_ENV=production`.
 -   **Geography is locked at first publish** — pick India region in Advanced before clicking Deploy if low-latency for Deoghar matters.

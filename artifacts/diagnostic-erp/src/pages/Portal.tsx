@@ -230,28 +230,50 @@ function PortalLanding() {
     );
   }
 
+  // Per-section heading: clinic identity should dominate the page —
+  // bigger logo + name than the two action cards. The compact PortalHeader
+  // (sticky strip at top) is reused on the inner login screens but the
+  // landing page now leads with a hero block.
+  const clinicName = settings.heading || settings.centerName || "Patient Portal";
+
   return (
     <>
       <PortalHeader settings={settings} />
       <div className="max-w-5xl mx-auto px-4 py-10">
-        <div className="text-center mb-10">
-          <h1 className="text-3xl md:text-4xl font-bold mb-3">Welcome</h1>
+        {/* Hero — much larger logo + clinic name than the action tabs below */}
+        <div className="flex flex-col items-center text-center mb-12">
+          {settings.logoDataUrl ? (
+            <img
+              src={settings.logoDataUrl}
+              alt={clinicName}
+              className="h-28 w-28 md:h-36 md:w-36 rounded-2xl object-contain bg-white border border-slate-200 dark:border-slate-800 shadow-sm mb-6"
+            />
+          ) : (
+            <div className="h-28 w-28 md:h-36 md:w-36 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mb-6 shadow-sm">
+              <Activity className="text-white" size={64} />
+            </div>
+          )}
+          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-3">{clinicName}</h1>
+          {settings.tagline && (
+            <p className="text-lg md:text-xl text-muted-foreground font-medium mb-4">{settings.tagline}</p>
+          )}
           <p className="text-muted-foreground text-base max-w-2xl mx-auto leading-relaxed">
             {settings.welcomeMessage || "Access your reports, bills and appointments online — anytime, anywhere."}
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+        {/* Action tabs — intentionally smaller than the hero above */}
+        <div className="grid md:grid-cols-2 gap-5 max-w-3xl mx-auto">
           <button
             type="button"
             onClick={() => navigate("/portal/patient-login")}
-            className="group bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 hover:border-blue-500 dark:hover:border-blue-400 rounded-2xl p-8 text-left shadow-sm hover:shadow-xl transition-all"
+            className="group bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 hover:border-blue-500 dark:hover:border-blue-400 rounded-2xl p-6 text-left shadow-sm hover:shadow-xl transition-all"
           >
-            <div className="h-14 w-14 rounded-xl bg-blue-100 dark:bg-blue-950 group-hover:bg-blue-500 flex items-center justify-center mb-4 transition-colors">
-              <User size={28} className="text-blue-600 dark:text-blue-400 group-hover:text-white transition-colors" />
+            <div className="h-11 w-11 rounded-xl bg-blue-100 dark:bg-blue-950 group-hover:bg-blue-500 flex items-center justify-center mb-3 transition-colors">
+              <User size={22} className="text-blue-600 dark:text-blue-400 group-hover:text-white transition-colors" />
             </div>
-            <h2 className="text-2xl font-bold mb-2">Patient Login</h2>
-            <p className="text-muted-foreground text-sm leading-relaxed mb-4">
+            <h2 className="text-xl font-bold mb-1.5">Patient Login</h2>
+            <p className="text-muted-foreground text-sm leading-relaxed mb-3">
               View your bills, lab reports, visit history, and book new appointments.
             </p>
             <span className="inline-flex items-center text-blue-600 dark:text-blue-400 font-semibold text-sm">
@@ -262,14 +284,14 @@ function PortalLanding() {
           <button
             type="button"
             onClick={() => navigate("/portal/staff-login")}
-            className="group bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-400 rounded-2xl p-8 text-left shadow-sm hover:shadow-xl transition-all"
+            className="group bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-400 rounded-2xl p-6 text-left shadow-sm hover:shadow-xl transition-all"
           >
-            <div className="h-14 w-14 rounded-xl bg-indigo-100 dark:bg-indigo-950 group-hover:bg-indigo-500 flex items-center justify-center mb-4 transition-colors">
-              <UsersIcon size={28} className="text-indigo-600 dark:text-indigo-400 group-hover:text-white transition-colors" />
+            <div className="h-11 w-11 rounded-xl bg-indigo-100 dark:bg-indigo-950 group-hover:bg-indigo-500 flex items-center justify-center mb-3 transition-colors">
+              <UsersIcon size={22} className="text-indigo-600 dark:text-indigo-400 group-hover:text-white transition-colors" />
             </div>
-            <h2 className="text-2xl font-bold mb-2">Staff Login</h2>
-            <p className="text-muted-foreground text-sm leading-relaxed mb-4">
-              Sign in with your work email and PIN to access the diagnostic center system.
+            <h2 className="text-xl font-bold mb-1.5">Staff Login</h2>
+            <p className="text-muted-foreground text-sm leading-relaxed mb-3">
+              Sign in with your username and PIN to access the diagnostic center system.
             </p>
             <span className="inline-flex items-center text-indigo-600 dark:text-indigo-400 font-semibold text-sm">
               Sign in <ChevronRight size={16} className="ml-1" />
@@ -279,21 +301,29 @@ function PortalLanding() {
 
         {(settings.phone || settings.address) && (
           <div className="mt-12 max-w-3xl mx-auto bg-white/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl p-5">
-            <p className="text-xs uppercase font-semibold text-muted-foreground mb-3">Need help?</p>
-            <div className="grid sm:grid-cols-3 gap-3 text-sm">
-              {settings.phone && (
-                <div className="flex items-center gap-2">
-                  <Phone size={14} className="text-blue-500" /> <span>{settings.phone}</span>
-                </div>
-              )}
-              {settings.email && (
-                <div className="flex items-center gap-2">
-                  <Mail size={14} className="text-blue-500" /> <span className="truncate">{settings.email}</span>
+            <p className="text-xs uppercase font-semibold text-muted-foreground mb-3">Need Help?</p>
+            {/* Address gets its own row + can wrap to multiple lines.
+                Phone/email stay on a compact row so the long address
+                doesn't get truncated to a single ellipsised line. */}
+            <div className="space-y-3 text-sm">
+              {(settings.phone || settings.email) && (
+                <div className="flex flex-wrap gap-x-6 gap-y-2">
+                  {settings.phone && (
+                    <a href={`tel:${settings.phone}`} className="flex items-center gap-2 hover:text-blue-600">
+                      <Phone size={14} className="text-blue-500 shrink-0" /> <span>{settings.phone}</span>
+                    </a>
+                  )}
+                  {settings.email && (
+                    <a href={`mailto:${settings.email}`} className="flex items-center gap-2 hover:text-blue-600 break-all">
+                      <Mail size={14} className="text-blue-500 shrink-0" /> <span>{settings.email}</span>
+                    </a>
+                  )}
                 </div>
               )}
               {settings.address && (
-                <div className="flex items-center gap-2">
-                  <MapPin size={14} className="text-blue-500" /> <span className="truncate">{settings.address}</span>
+                <div className="flex items-start gap-2">
+                  <MapPin size={14} className="text-blue-500 shrink-0 mt-0.5" />
+                  <span className="whitespace-pre-line leading-relaxed">{settings.address}</span>
                 </div>
               )}
             </div>

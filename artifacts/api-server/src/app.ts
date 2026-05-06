@@ -55,8 +55,8 @@ app.use("/uploads", (_req: Request, res: Response, next: NextFunction) => {
 // Replit Autoscale Cloud Run deployment)
 //
 // When SERVE_STATIC_DIR points at a folder that contains:
-//   <dir>/erp/                  — diagnostic-erp Vite build (BASE_PATH=/)
-//   <dir>/site/                 — clinic-site Vite build    (BASE_PATH=/site/)
+//   <dir>/site/                 — clinic-site Vite build    (BASE_PATH=/)        ← root
+//   <dir>/erp/                  — diagnostic-erp Vite build (BASE_PATH=/erp/)    ← staff
 //   <dir>/super-admin-portal/   — super-admin-portal build  (BASE_PATH=/super-admin-portal/)
 //
 // the API server will also serve those static frontends with SPA fallback.
@@ -92,28 +92,29 @@ if (staticDir) {
       });
     });
 
-    // Public Clinic Website (built with BASE_PATH=/site/)
-    if (hasSite) {
-      app.use("/site", express.static(siteDir, { index: false, fallthrough: true }));
-      app.get(/^\/site(\/.*)?$/, (_req: Request, res: Response, next: NextFunction) => {
-        res.sendFile(path.join(siteDir, "index.html"), (err) => {
-          if (err) next(err);
-        });
+    // Diagnostic ERP — staff app, mounted under /erp (built with BASE_PATH=/erp/).
+    // The patient/staff portal lives at /erp/portal as a route inside this SPA.
+    app.use("/erp", express.static(erpDir, { index: false, fallthrough: true }));
+    app.get(/^\/erp(\/.*)?$/, (_req: Request, res: Response, next: NextFunction) => {
+      res.sendFile(path.join(erpDir, "index.html"), (err) => {
+        if (err) next(err);
       });
-    }
+    });
 
-    // Main Diagnostic ERP (built with BASE_PATH=/) — catch-all SPA last.
-    // Excludes /api/, /site/, and /super-admin-portal/ so those routes are
-    // handled by their own handlers above (and not swallowed by the SPA).
-    app.use(express.static(erpDir, { index: false, fallthrough: true }));
-    app.get(
-      /^\/(?!api\/|site\/|site$|super-admin-portal\/|super-admin-portal$).*/,
-      (_req: Request, res: Response, next: NextFunction) => {
-        res.sendFile(path.join(erpDir, "index.html"), (err) => {
-          if (err) next(err);
-        });
-      },
-    );
+    // Public Clinic Website (built with BASE_PATH=/) — catch-all SPA last.
+    // Excludes /api/, /erp, /uploads, and /super-admin-portal so those routes
+    // are handled by their own handlers above (and not swallowed by the SPA).
+    if (hasSite) {
+      app.use(express.static(siteDir, { index: false, fallthrough: true }));
+      app.get(
+        /^\/(?!api\/|erp\/|erp$|uploads\/|super-admin-portal\/|super-admin-portal$).*/,
+        (_req: Request, res: Response, next: NextFunction) => {
+          res.sendFile(path.join(siteDir, "index.html"), (err) => {
+            if (err) next(err);
+          });
+        },
+      );
+    }
   }
 }
 

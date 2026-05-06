@@ -685,7 +685,9 @@ function PublishTab({ settings }: { settings: SiteSettings }) {
   const openPreview = useMutation({
     mutationFn: () => api.post<{ token: string }>("/api/website/preview-token", {}),
     onSuccess: ({ token }) => {
-      window.open(`/site/?preview_token=${encodeURIComponent(token)}`, "_blank", "noreferrer");
+      // Clinic website is now mounted at the root domain (/) — see replit.md
+      // "URL Layout (May 2026 swap)" for the historical move from /site/ → /.
+      window.open(`/?preview_token=${encodeURIComponent(token)}`, "_blank", "noreferrer");
     },
     onError: () => { toast({ title: "Could not open preview", description: "Make sure you are signed in as a website admin.", variant: "destructive" }); },
   });
