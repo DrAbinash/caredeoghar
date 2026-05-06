@@ -16,6 +16,56 @@ import { logger } from "./lib/logger";
 import { startCronScheduler } from "./cron";
 import { ensureDefaultLedger } from "./routes/ledgers";
 import { backfillExpirePublicTokens } from "./routes/patient-reports";
+import { db, usersTable } from "@workspace/db";
+import bcrypt from "bcryptjs";
+
+// One-shot bootstrap: when the deployed database contains zero users
+// (typical after the very first publish to a brand-new production
+// PostgreSQL), automatically seed a super-admin account so the operator
+// can sign in to the live site without having to run SQL by hand.
+//
+// The seed only runs when the users table is completely empty — once any
+// user exists this becomes a no-op forever, so it is safe to leave in.
+//
+// Defaults are tailored to this clinic; override per-deployment with
+// BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_NAME / BOOTSTRAP_ADMIN_PIN
+// env vars if a different initial account is desired. Operator is
+// expected to change the PIN immediately after first login.
+async function seedInitialSuperAdminIfEmpty(): Promise<void> {
+  try {
+    const existing = await db.select({ id: usersTable.id }).from(usersTable).limit(1);
+    if (existing.length > 0) return; // table already has data — nothing to do
+
+    const email = (process.env["BOOTSTRAP_ADMIN_EMAIL"] || "abinashsingh@gmail.com").toLowerCase();
+    const name = process.env["BOOTSTRAP_ADMIN_NAME"] || "Dr Abinash Kumar";
+    const plainPin = process.env["BOOTSTRAP_ADMIN_PIN"] || "2321";
+    const hash = await bcrypt.hash(plainPin, 12);
+
+    const allModulePermissions = [
+      "/", "/patients", "/orders", "/register", "/billing", "/doctors",
+      "/report-generator", "/referrals", "/discounts", "/tests", "/payments",
+      "/reports", "/inventory", "/accounting", "/settings",
+    ];
+
+    await db.insert(usersTable).values({
+      name,
+      email,
+      role: "super_admin",
+      permissions: JSON.stringify(allModulePermissions),
+      pin: hash,
+      isActive: true,
+      mustChangePin: false,
+    });
+
+    logger.warn(
+      { email, role: "super_admin" },
+      "Seeded initial super-admin user (users table was empty). " +
+        "Sign in and change the PIN immediately.",
+    );
+  } catch (err) {
+    logger.error({ err }, "Failed to seed initial super-admin");
+  }
+}
 
 process.on("uncaughtException", (err) => {
   logger.error({ err }, "Uncaught exception — exiting");
@@ -54,6 +104,7 @@ const server = app.listen(port, () => {
 
   ensureDefaultLedger().catch((e) => logger.error({ err: e }, "Failed to seed default ledger"));
   backfillExpirePublicTokens().catch((e) => logger.error({ err: e }, "Failed to backfill public token expiry"));
+  seedInitialSuperAdminIfEmpty().catch((e) => logger.error({ err: e }, "Failed to seed initial super-admin"));
 });
 
 server.on("error", (err) => {

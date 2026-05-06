@@ -11,6 +11,15 @@ const artifactDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 
 const app: Express = express();
 
+// Replit's hosting proxy (and most cloud hosts) terminates TLS upstream and
+// forwards the real client IP via X-Forwarded-For. Without this setting,
+// express-rate-limit refuses to derive client IPs from that header and
+// throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR on every limited route, which
+// floods the logs and makes rate limiting unreliable. "1" trusts exactly
+// one hop (the platform proxy in front of us) — never use `true`/unbounded
+// trust because that lets clients spoof their IP via the same header.
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,
