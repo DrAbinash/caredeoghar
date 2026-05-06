@@ -10,6 +10,7 @@ localPort = 8080
 [deployment]
 router = "application"
 deploymentTarget = "vm"
+build = ["pnpm", "--filter", "@workspace/api-server", "run", "build:deploy"]
 run = "node --enable-source-maps artifacts/api-server/dist/index.mjs"
 
 [deployment.postBuild]

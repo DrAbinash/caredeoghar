@@ -22,6 +22,11 @@ node_modules
 **/node_modules
 dist
 **/dist
+# But the api-server's dist IS the deploy artifact — it contains the bundled
+# Express server (dist/index.mjs) plus the 3 SPAs staged under dist/web/.
+# Build is produced by `pnpm --filter @workspace/api-server run build:deploy`.
+!artifacts/api-server/dist
+!artifacts/api-server/dist/**
 .turbo
 **/.turbo
 .expo

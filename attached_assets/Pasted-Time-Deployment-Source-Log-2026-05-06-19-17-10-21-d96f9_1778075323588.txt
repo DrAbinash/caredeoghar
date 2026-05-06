@@ -1,0 +1,187 @@
+Time
+Deployment
+Source
+Log
+2026-05-06 19:17:10.21
+d96f9b33
+System
+starting up user application
+2026-05-06 19:17:25.97
+d96f9b33
+User
+at wrapModuleLoad (node:internal/modules/cjs/loader:245:24)
+2026-05-06 19:17:25.97
+d96f9b33
+User
+code: 'MODULE_NOT_FOUND',
+2026-05-06 19:17:25.97
+d96f9b33
+User
+at node:internal/main/run_main_module:33:47 {
+2026-05-06 19:17:25.97
+d96f9b33
+User
+Error: Cannot find module '/home/runner/workspace/artifacts/api-server/dist/index.mjs'
+2026-05-06 19:17:25.97
+d96f9b33
+User
+}
+2026-05-06 19:17:25.97
+d96f9b33
+User
+node:internal/modules/cjs/loader:1424
+2026-05-06 19:17:25.97
+d96f9b33
+User
+at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+2026-05-06 19:17:25.97
+d96f9b33
+System
+command finished with error [sh -c node --enable-source-maps artifacts/api-server/dist/index.mjs]: exit status 1
+2026-05-06 19:17:32.33
+d96f9b33
+User
+requireStack: []
+2026-05-06 19:17:32.33
+d96f9b33
+User
+at Module._load (node:internal/modules/cjs/loader:1227:37)
+2026-05-06 19:17:32.33
+d96f9b33
+User
+throw err;
+2026-05-06 19:17:32.33
+d96f9b33
+User
+at node:internal/main/run_main_module:33:47 {
+2026-05-06 19:17:32.33
+d96f9b33
+User
+node:internal/modules/cjs/loader:1424
+2026-05-06 19:17:32.33
+d96f9b33
+User
+at Module._resolveFilename (node:internal/modules/cjs/loader:1421:15)
+2026-05-06 19:17:32.33
+d96f9b33
+User
+^
+2026-05-06 19:17:32.33
+d96f9b33
+User
+Error: Cannot find module '/home/runner/workspace/artifacts/api-server/dist/index.mjs'
+
+2026-05-06 19:17:32.33
+d96f9b33
+User
+at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1064:22)
+2026-05-06 19:17:32.33
+d96f9b33
+User
+at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+2026-05-06 19:17:32.33
+d96f9b33
+User
+Node.js v24.13.0
+2026-05-06 19:17:32.33
+d96f9b33
+User
+at wrapModuleLoad (node:internal/modules/cjs/loader:245:24)
+2026-05-06 19:17:32.33
+d96f9b33
+User
+at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+2026-05-06 19:17:32.33
+d96f9b33
+User
+at defaultResolveImpl (node:internal/modules/cjs/loader:1059:19)
+2026-05-06 19:17:32.33
+d96f9b33
+User
+}
+2026-05-06 19:17:32.33
+d96f9b33
+User
+code: 'MODULE_NOT_FOUND',
+2026-05-06 19:17:32.33
+d96f9b33
+System
+command finished with error [sh -c node --enable-source-maps artifacts/api-server/dist/index.mjs]: exit status 1
+2026-05-06 19:17:37.98
+d96f9b33
+User
+}
+2026-05-06 19:17:37.98
+d96f9b33
+User
+at wrapModuleLoad (node:internal/modules/cjs/loader:245:24)
+2026-05-06 19:17:37.98
+d96f9b33
+User
+at defaultResolveImpl (node:internal/modules/cjs/loader:1059:19)
+2026-05-06 19:17:37.98
+d96f9b33
+User
+code: 'MODULE_NOT_FOUND',
+2026-05-06 19:17:37.98
+d96f9b33
+User
+requireStack: []
+2026-05-06 19:17:37.98
+d96f9b33
+User
+at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1064:22)
+2026-05-06 19:17:37.98
+d96f9b33
+User
+throw err;
+2026-05-06 19:17:37.98
+d96f9b33
+User
+at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+2026-05-06 19:17:37.98
+d96f9b33
+User
+Node.js v24.13.0
+2026-05-06 19:17:37.98
+d96f9b33
+User
+Error: Cannot find module '/home/runner/workspace/artifacts/api-server/dist/index.mjs'
+2026-05-06 19:17:37.98
+d96f9b33
+User
+^
+2026-05-06 19:17:37.98
+d96f9b33
+User
+node:internal/modules/cjs/loader:1424
+2026-05-06 19:17:37.98
+d96f9b33
+User
+at Module._resolveFilename (node:internal/modules/cjs/loader:1421:15)
+2026-05-06 19:17:37.98
+d96f9b33
+User
+at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+2026-05-06 19:17:37.98
+d96f9b33
+User
+at node:internal/main/run_main_module:33:47 {
+2026-05-06 19:17:37.98
+d96f9b33
+User
+at Module._load (node:internal/modules/cjs/loader:1227:37)
+2026-05-06 19:17:37.98
+d96f9b33
+System
+command finished with error [sh -c node --enable-source-maps artifacts/api-server/dist/index.mjs]: exit status 1
+2026-05-06 19:17:42.86
+d96f9b33
+System
+crash loop detected
+
+Collapse
+
+Wrap
+
+Colors
