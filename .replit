@@ -17,7 +17,7 @@ id = "artifacts/clinic-site"
 
 [deployment]
 router = "application"
-deploymentTarget = "autoscale"
+deploymentTarget = "reserved"
 run = "node --enable-source-maps artifacts/api-server/dist/index.mjs"
 
 [deployment.postBuild]
