@@ -67,7 +67,9 @@ app.use("/uploads", (_req: Request, res: Response, next: NextFunction) => {
 // artifacts/api-server/dist/web. Has zero effect when SERVE_STATIC_DIR is
 // unset (Replit dev workflows, where each artifact runs its own Vite server).
 // =============================================================================
-const staticDir = process.env["SERVE_STATIC_DIR"];
+const rawStaticDir = process.env["SERVE_STATIC_DIR"];
+// res.sendFile requires absolute paths; resolve relative values against cwd.
+const staticDir = rawStaticDir ? path.resolve(rawStaticDir) : undefined;
 if (staticDir) {
   const erpDir = path.join(staticDir, "erp");
   const siteDir = path.join(staticDir, "site");
