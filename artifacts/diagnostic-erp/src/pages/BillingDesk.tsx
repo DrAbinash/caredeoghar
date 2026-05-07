@@ -1103,7 +1103,7 @@ export default function BillingDesk() {
         {/* ══════════════════════════════════════════════
             RIGHT COLUMN — Tests + Bill + Payment
         ══════════════════════════════════════════════ */}
-        <div className="w-full lg:flex-1 flex flex-col lg:overflow-hidden min-h-0">
+        <div className="w-full lg:flex-[1.45] flex flex-col lg:overflow-hidden min-h-0">
           <div className="lg:flex-1 flex flex-col lg:overflow-hidden min-h-0 overflow-y-auto">
 
             {/* ── Test Search & Catalog ── */}
@@ -1460,7 +1460,7 @@ export default function BillingDesk() {
             </div>
 
             {/* ── Payment ── */}
-            <div className="flex-shrink-0 bg-card p-2 space-y-2 border-b border-card-border max-h-[38vh] overflow-y-auto">
+            <div className="flex-shrink-0 bg-card p-2 space-y-2 border-b border-card-border max-h-[52vh] overflow-y-auto">
               {/* Toggle */}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <button
@@ -1531,18 +1531,18 @@ export default function BillingDesk() {
                   )}
 
                   {/* Balance / paid status */}
-                  <div className="pt-1 border-t border-card-border flex flex-wrap justify-between items-center gap-2 text-[10px]">
+                  <div className="pt-1 border-t border-card-border space-y-1 text-[10px]">
                     {balance > 0 ? (
-                      <>
+                      <div className="flex items-center justify-between gap-2">
                         <span className="text-muted-foreground">Balance due</span>
                         <span className="text-orange-600 font-semibold">{inr(balance)}</span>
-                      </>
+                      </div>
                     ) : paidTotal > 0 && total > 0 ? (
-                      <span className="text-green-600 font-medium flex items-center gap-1 w-full justify-center">
+                      <div className="flex items-center justify-center gap-1 text-green-600 font-medium">
                         <CheckCircle2 size={11} /> Fully paid — {inr(paidTotal)}
-                      </span>
+                      </div>
                     ) : (
-                      <span className="text-muted-foreground">Enter amount(s) above</span>
+                      <div className="text-muted-foreground">Enter amount(s) above</div>
                     )}
                   </div>
                 </div>
