@@ -562,7 +562,18 @@ export default function BillingDesk() {
       queryClient.invalidateQueries({ queryKey: ["bill-preview-no"] });
       if (printAfterSaveRef.current) {
         printAfterSaveRef.current = false;
-        window.setTimeout(() => window.print(), 250);
+        // Make sure the clinic-settings query has resolved before we print —
+        // otherwise the receipt header falls back to "Diagnostic Centre"
+        // instead of the configured clinic name/address/logo.
+        void queryClient
+          .ensureQueryData({
+            queryKey: ["clinic-settings"],
+            queryFn: () => api.get("/api/clinic-settings"),
+          })
+          .catch(() => {})
+          .then(() => {
+            window.setTimeout(() => window.print(), 250);
+          });
       }
     },
     onError: (err: Error) => toast({ title: err.message || "Failed to generate bill", variant: "destructive" }),
