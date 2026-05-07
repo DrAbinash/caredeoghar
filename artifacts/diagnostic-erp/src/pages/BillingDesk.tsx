@@ -1097,6 +1097,66 @@ export default function BillingDesk() {
             {/* ── Today's Recent Bills ── */}
             <RecentBillsPanel />
 
+            {/* ── Add Package ── */}
+            <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-card-border flex items-center justify-between bg-muted/20">
+                <div className="flex items-center gap-2 text-sm font-semibold text-rose-700 dark:text-rose-300">
+                  <Package size={14} /> Add Package
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate("/packages")}
+                  className="text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  Manage
+                </button>
+              </div>
+              <div className="p-2.5 space-y-2">
+                <div className="relative">
+                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search packages by name, code, or test…"
+                    value={packageSearch}
+                    onChange={(e) => setPackageSearch(e.target.value)}
+                    className="pl-9 h-8 text-sm w-full"
+                  />
+                </div>
+                <div className="border border-card-border rounded-lg overflow-hidden bg-background">
+                  {packages.length === 0 ? (
+                    <div className="px-3 py-3 text-xs text-muted-foreground text-center">
+                      No packages created yet.&nbsp;
+                      <button onClick={() => navigate("/packages")} className="text-primary hover:underline">Create one</button>
+                    </div>
+                  ) : filteredPackages.length === 0 ? (
+                    <div className="px-3 py-3 text-xs text-muted-foreground text-center">No packages match "{packageSearch}"</div>
+                  ) : (
+                    <div className="max-h-40 overflow-y-auto divide-y divide-card-border">
+                      {filteredPackages.map((pkg) => {
+                        const added = selectedPackages.some((p) => p.packageId === pkg.id);
+                        const effective = pkg.price - (pkg.price * pkg.discountPct) / 100;
+                        return (
+                          <button
+                            key={pkg.id}
+                            onClick={() => addPackage(pkg)}
+                            disabled={added}
+                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${
+                              added ? "bg-primary/5 text-muted-foreground cursor-default" : "hover:bg-muted/50"
+                            }`}
+                          >
+                            <Package size={11} className="text-muted-foreground flex-shrink-0" />
+                            <span className="flex-1 font-medium truncate">{pkg.name}</span>
+                            <span className="text-xs text-muted-foreground">{pkg.tests.length} tests</span>
+                            <span className="text-xs font-semibold">{inr(effective)}</span>
+                            {added ? <CheckCircle2 size={12} className="text-primary flex-shrink-0" /> : <Plus size={12} className="text-muted-foreground flex-shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -1227,10 +1287,11 @@ export default function BillingDesk() {
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
 
             <div className="space-y-3">
               {/* ── Selected Tests ── */}
-            <div className="space-y-3">
               <div className="lg:flex-1 min-h-0 overflow-y-auto border-b border-card-border max-h-[34vh] lg:max-h-none">
                 <div className="px-4 py-2 bg-muted/10 flex items-center justify-between">
                   <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
