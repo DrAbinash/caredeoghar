@@ -142,8 +142,18 @@ router.get(
   staffScopedHrFormsHandler,
 );
 
-// Clinic configuration — /settings permission
-router.use("/clinic-settings", requireStaffAuth, requireStaffPermission("/settings"), clinicSettingsRouter);
+// Clinic configuration — any authenticated staff can READ (the bill print
+// receipt and many other surfaces need clinic name/address/logo). Writes
+// (PUT) stay restricted to /settings-permitted users via a method gate.
+router.use(
+  "/clinic-settings",
+  requireStaffAuth,
+  (req, res, next) => {
+    if (req.method === "GET") return next();
+    return requireStaffPermission("/settings")(req, res, next);
+  },
+  clinicSettingsRouter,
+);
 router.use("/email-settings", requireStaffAuth, requireStaffPermission("/settings"), emailSettingsRouter);
 // Test categories: anyone with staff auth can READ the list (Test Catalog,
 // Billing Desk, Reports filter all need it). Mutations stay admin-only via
