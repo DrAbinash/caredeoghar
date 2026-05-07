@@ -173,8 +173,8 @@ async function printBill(b: LastBill, clinic: ClinicLite) {
       th, td { padding:3px 4px; border-bottom:1px solid #ddd; font-size:10px; }
       th { background:#f4f4f4; text-align:left; }
       .meta td { border:none; padding:1px 0; }
-      .totals td { border:none; padding:1px 0; line-height:1.05; }
-      .totals .grand td { border-top:1px solid #000; font-weight:700; padding-top:2px; line-height:1.05; }
+      .totals td { border:none; padding:0; line-height:1; }
+      .totals .grand td { border-top:1px solid #000; font-weight:700; padding-top:1px; line-height:1; }
       .token { margin-top:8px; padding:4px; border:1px dashed #000; text-align:center; font-weight:700; }
     </style></head><body>
     <div class="clinic">
@@ -189,7 +189,7 @@ async function printBill(b: LastBill, clinic: ClinicLite) {
       <tr><td><strong>Phone</strong></td><td>: ${escapeHtml(b.patient.phone || "")}</td>${b.doctorName ? `<td><strong>Ref. Dr</strong></td><td>: ${escapeHtml(b.doctorName)}</td>` : "<td></td><td></td>"}</tr>
     </tbody></table>
     <table style="margin-top:6px"><thead><tr><th>Test</th><th style="text-align:right">Amount</th></tr></thead><tbody>${rows}</tbody></table>
-    <table class="totals" style="margin-top:4px"><tbody>
+    <table class="totals" style="margin-top:2px"><tbody>
       <tr><td>Subtotal</td><td style="text-align:right">₹${b.subtotal.toFixed(2)}</td></tr>
       ${b.discount > 0 ? `<tr><td>Discount</td><td style="text-align:right">−₹${b.discount.toFixed(2)}</td></tr>` : ""}
       <tr class="grand"><td>Total</td><td style="text-align:right">₹${b.total.toFixed(2)}</td></tr>
