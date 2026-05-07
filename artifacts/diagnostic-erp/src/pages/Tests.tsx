@@ -25,7 +25,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Pencil, Settings2, Trash2 } from "lucide-react";
+import { Plus, Search, Pencil, Settings2, Trash2, Download } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 
 type TestForm = {
@@ -74,6 +75,54 @@ export default function Tests() {
   const activeCategories = allCategories.filter((c) => c.isActive);
 
   const [submitErr, setSubmitErr] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const { toast } = useToast();
+
+  // Export the entire test catalog as a CSV file. Always exports the FULL
+  // catalog (ignores the current search/category filter) so a single click
+  // produces a complete backup the user can re-import elsewhere.
+  const exportCsv = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const res = await api.get<{ tests: Array<{
+        code: string; name: string; category: string; department?: string;
+        price: number | string; duration: string; roomNumber?: string;
+        description?: string | null; isActive: boolean;
+      }>; total: number }>("/api/tests?limit=10000");
+      const rows = res?.tests ?? [];
+      const headers = ["code","name","category","department","price","duration","roomNumber","description","isActive"];
+      const escape = (v: unknown) => {
+        const s = v == null ? "" : String(v);
+        // RFC 4180: wrap in quotes if it contains comma, quote, or newline.
+        return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const csv = [
+        headers.join(","),
+        ...rows.map((t) => [
+          t.code, t.name, t.category, t.department ?? "",
+          Number(t.price).toFixed(2), t.duration, t.roomNumber ?? "",
+          t.description ?? "", t.isActive ? "true" : "false",
+        ].map(escape).join(",")),
+      ].join("\r\n");
+      // Prepend a UTF-8 BOM so Excel opens it with the correct encoding.
+      const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const ts = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `test-catalog-${ts}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast({ title: "Export ready", description: `${rows.length} tests downloaded.` });
+    } catch (err) {
+      toast({ title: "Export failed", description: (err as Error).message || "Could not export the catalog.", variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const createTest = useCreateTest({
     mutation: {
@@ -136,6 +185,9 @@ export default function Tests() {
         subtitle={`${data?.total ?? 0} diagnostic tests`}
         actions={
           <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={exportCsv} disabled={exporting} title="Download the entire catalog as CSV">
+              <Download size={14} className="mr-1" /> {exporting ? "Exporting…" : "Export CSV"}
+            </Button>
             <Button size="sm" variant="outline" onClick={() => setManageOpen(true)}>
               <Settings2 size={14} className="mr-1" /> Categories
             </Button>
