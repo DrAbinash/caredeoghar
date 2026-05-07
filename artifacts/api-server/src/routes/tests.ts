@@ -82,14 +82,23 @@ testsRouter.post("/", async (req, res) => {
     return;
   }
   const extra = extractDeptRoom(req.body);
-  const [test] = await db.insert(testsTable).values({
-    ...parsed.data,
-    price: String(parsed.data.price),
-    isActive: parsed.data.isActive ?? true,
-    ...(extra.department !== undefined ? { department: extra.department } : {}),
-    ...(extra.roomNumber !== undefined ? { roomNumber: extra.roomNumber } : {}),
-  }).returning();
-  res.status(201).json({ ...test, price: Number(test.price) });
+  try {
+    const [test] = await db.insert(testsTable).values({
+      ...parsed.data,
+      price: String(parsed.data.price),
+      isActive: parsed.data.isActive ?? true,
+      ...(extra.department !== undefined ? { department: extra.department } : {}),
+      ...(extra.roomNumber !== undefined ? { roomNumber: extra.roomNumber } : {}),
+    }).returning();
+    res.status(201).json({ ...test, price: Number(test.price) });
+  } catch (e) {
+    const msg = (e as { message?: string })?.message ?? "";
+    if (msg.includes("diagnostic_tests_code_unique") || msg.includes("duplicate key")) {
+      res.status(409).json({ error: `Test code "${parsed.data.code}" is already in use. Please pick a different code.` });
+      return;
+    }
+    throw e;
+  }
 });
 
 testsRouter.get("/:id", async (req, res) => {
