@@ -1603,6 +1603,7 @@ export default function BillingDesk() {
               body * { visibility: hidden !important; }
               .billing-desk-receipt, .billing-desk-receipt * { visibility: visible !important; }
               .billing-desk-receipt {
+                display: block !important;
                 position: absolute !important;
                 top: 0 !important; left: 0 !important; right: 0 !important;
                 margin: 0 !important;
