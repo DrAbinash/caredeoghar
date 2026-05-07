@@ -48,6 +48,14 @@ clinicSettingsRouter.put("/", async (req, res) => {
       update[f] = body[f];
     }
   }
+  if (body.billPrintCopies !== undefined) {
+    const n = Number(body.billPrintCopies);
+    if (!Number.isInteger(n) || (n !== 1 && n !== 2)) {
+      res.status(400).json({ error: "billPrintCopies must be 1 or 2" });
+      return;
+    }
+    update.billPrintCopies = n;
+  }
   if (typeof update.logoDataUrl === "string" && update.logoDataUrl.length > 2_000_000) {
     res.status(413).json({ error: "Logo too large (max ~1.5MB)" });
     return;

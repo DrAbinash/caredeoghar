@@ -97,6 +97,7 @@ export default function BillDetail({ id }: { id: number }) {
     name: string; tagline: string; address: string; email: string; phone: string;
     website: string; gstin: string; logoDataUrl: string | null; footerNote?: string;
     showTatOnBill?: boolean;
+    billPrintCopies?: number;
   }>({
     queryKey: ["clinic-settings"],
     queryFn: () => api.get("/api/clinic-settings"),
@@ -601,7 +602,8 @@ export default function BillDetail({ id }: { id: number }) {
         @media screen { .print-receipt { display: none; } }
       `}</style>
 
-      <div className="print-receipt">
+      {Array.from({ length: Math.max(1, Math.min(2, Number(clinic?.billPrintCopies ?? 1) || 1)) }).map((_, copyIdx) => (
+      <div key={copyIdx} className="print-receipt" style={copyIdx > 0 ? { pageBreakBefore: "always" } : undefined}>
         {/* Clinic header — name + address on left, logo on right */}
         <div style={{
           display: "flex",
@@ -814,6 +816,7 @@ export default function BillDetail({ id }: { id: number }) {
           <div style={{ fontSize: "10px", color: "#94a3b8", marginTop: "2px" }}>Reports will be available as per turnaround time. For queries, please call us.</div>
         </div>
       </div>
+      ))}
 
       {/* Re-print Dialog */}
       <Dialog open={reprintOpen} onOpenChange={setReprintOpen}>

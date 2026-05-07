@@ -438,6 +438,7 @@ export default function BillingDesk() {
     website: string; gstin: string; logoDataUrl: string | null; footerNote?: string;
     formFTestIds?: string;
     quickTestIds?: string;
+    billPrintCopies?: number;
   }>({
     queryKey: ["clinic-settings"],
     queryFn: () => api.get("/api/clinic-settings"),
@@ -1590,8 +1591,8 @@ export default function BillingDesk() {
         </div>
       </div>
       {/* ── Hidden Print Receipt (shown only when printing) ── */}
-      {lastBill && (
-        <div className="billing-desk-receipt">
+      {lastBill && Array.from({ length: Math.max(1, Math.min(2, Number(clinic?.billPrintCopies ?? 1) || 1)) }).map((_, copyIdx) => (
+        <div key={copyIdx} className="billing-desk-receipt" style={copyIdx > 0 ? { pageBreakBefore: "always" } : undefined}>
           <style>{`
             @media print {
               html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
@@ -1763,7 +1764,7 @@ export default function BillingDesk() {
             <p>This is a computer-generated invoice. No signature required.</p>
           </div>
         </div>
-      )}
+      ))}
 
       {/* ── Quick Test slot picker dialog ── */}
       <Dialog

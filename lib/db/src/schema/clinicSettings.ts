@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, boolean, integer } from "drizzle-orm/pg-core";
 
 export const clinicSettingsTable = pgTable("clinic_settings", {
   id: serial("id").primaryKey(),
@@ -17,6 +17,10 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   // When true, bill receipts print each test's expected turn-around time
   // (sourced from the test's "duration" field).
   showTatOnBill: boolean("show_tat_on_bill").notNull().default(false),
+  // How many physical copies of a bill to print per print job (1 or 2).
+  // Used by BillingDesk auto-print and BillDetail manual print so a clinic
+  // that needs a customer copy + clinic copy doesn't have to hit Print twice.
+  billPrintCopies: integer("bill_print_copies").notNull().default(1),
   portalEnabled: boolean("portal_enabled").notNull().default(false),
   portalHeading: text("portal_heading").notNull().default(""),
   portalWelcomeMessage: text("portal_welcome_message").notNull().default(""),

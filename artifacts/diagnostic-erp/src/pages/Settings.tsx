@@ -449,6 +449,7 @@ type ClinicSettings = {
   website: string; gstin: string; logoDataUrl: string | null; footerNote: string;
   patientPhotoEnabled?: boolean;
   showTatOnBill?: boolean;
+  billPrintCopies?: number;
 };
 
 function ClinicInfoTab() {
@@ -575,6 +576,31 @@ function ClinicInfoTab() {
           </button>
           <p className="text-[11px] text-muted-foreground leading-relaxed">
             Click <strong>Save Changes</strong> after toggling to apply.
+          </p>
+        </div>
+
+        <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+          <div>
+            <h2 className="font-bold text-lg flex items-center gap-2">🖨️ Bill Print Copies</h2>
+            <p className="text-sm text-muted-foreground">How many copies of each bill to print per print job. Use 2 if you keep one for the patient and one for the clinic file.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {[1, 2].map((n) => {
+              const active = (current.billPrintCopies ?? 1) === n;
+              return (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setForm({ ...current, billPrintCopies: n })}
+                  className={`px-4 py-3 rounded-lg border text-sm font-medium transition-colors ${active ? "bg-blue-50 border-blue-400 text-blue-700 dark:bg-blue-950/30 dark:border-blue-700 dark:text-blue-300" : "bg-muted/30 border-card-border text-muted-foreground hover:bg-muted/50"}`}
+                >
+                  {n} {n === 1 ? "Copy" : "Copies"}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            Click <strong>Save Changes</strong> after choosing to apply.
           </p>
         </div>
 
