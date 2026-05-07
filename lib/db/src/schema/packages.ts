@@ -10,6 +10,7 @@ export const packagesTable = pgTable("packages", {
   description: text("description"),
   price: numeric("price", { precision: 10, scale: 2 }).notNull().default("0"),
   discountPct: numeric("discount_pct", { precision: 5, scale: 2 }).notNull().default("0"),
+  discountAmount: numeric("discount_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
@@ -19,6 +20,8 @@ export const packageTestsTable = pgTable("package_tests", {
   id: serial("id").primaryKey(),
   packageId: integer("package_id").notNull().references(() => packagesTable.id),
   testId: integer("test_id").notNull().references(() => testsTable.id),
+  discountPct: numeric("discount_pct", { precision: 5, scale: 2 }).notNull().default("0"),
+  discountAmount: numeric("discount_amount", { precision: 10, scale: 2 }).notNull().default("0"),
 });
 
 export const packageCounterTable = pgTable("package_counter", {

@@ -69,7 +69,9 @@ type Patient = {
 
 type Doctor = { id: number; name: string; specialization: string };
 type Test   = { id: number; name: string; code: string; price: number; category: string; isActive?: boolean };
-type Pkg    = { id: number; packageCode: string; name: string; price: number; discountPct: number; isActive?: boolean; tests: Test[] };
+// Tests embedded in a package carry their per-package discount overrides.
+type PkgTest = Test & { discountPct?: number; discountAmount?: number };
+type Pkg    = { id: number; packageCode: string; name: string; price: number; discountPct: number; discountAmount?: number; isActive?: boolean; tests: PkgTest[] };
 
 type SelectedTest = { testId: number; name: string; price: number; category: string; source: "test" | "package" };
 type SelectedPackage = { packageId: number; name: string; testIds: number[] };
@@ -641,13 +643,30 @@ export default function BillingDesk() {
   }
 
   function addPackage(pkg: Pkg) {
-    const effective = pkg.price - (pkg.price * pkg.discountPct) / 100;
+    // Package effective price = MRP - %% - flat ₹.
+    const afterPct = pkg.price - (pkg.price * (pkg.discountPct ?? 0)) / 100;
+    const effective = Math.max(0, afterPct - (pkg.discountAmount ?? 0));
     const count = pkg.tests.length || 1;
-    const perTest = effective / count;
+
+    // If any test inside this package carries its own discount override, honour
+    // that on a per-line basis. Otherwise fall back to the historical even
+    // split of the package's effective price.
+    const anyOverride = pkg.tests.some(
+      (t) => Number(t.discountPct ?? 0) > 0 || Number(t.discountAmount ?? 0) > 0,
+    );
+    const computeLinePrice = (t: PkgTest) => {
+      if (anyOverride) {
+        const base = Number(t.price);
+        const after = base - (base * Number(t.discountPct ?? 0)) / 100 - Number(t.discountAmount ?? 0);
+        return Math.max(0, after);
+      }
+      return effective / count;
+    };
+
     const existingIds = new Set(selectedTests.map((s) => s.testId));
     const toAdd: SelectedTest[] = pkg.tests
       .filter((t) => !existingIds.has(t.id))
-      .map((t) => ({ testId: t.id, name: t.name, price: perTest, category: t.category, source: "package" as const }));
+      .map((t) => ({ testId: t.id, name: t.name, price: computeLinePrice(t), category: t.category, source: "package" as const }));
     if (toAdd.length === 0) {
       toast({ title: "All tests in this package already added" });
       return;
@@ -1236,7 +1255,7 @@ export default function BillingDesk() {
                     <div className="max-h-40 overflow-y-auto divide-y divide-card-border">
                       {filteredPackages.map((pkg) => {
                         const added = selectedPackages.some((p) => p.packageId === pkg.id);
-                        const effective = pkg.price - (pkg.price * pkg.discountPct) / 100;
+                        const effective = Math.max(0, pkg.price - (pkg.price * (pkg.discountPct ?? 0)) / 100 - (pkg.discountAmount ?? 0));
                         return (
                           <button
                             key={pkg.id}

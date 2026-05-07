@@ -36,6 +36,8 @@ const inr = (n: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 
 type Test = { id: number; name: string; code: string; price: string | number; category: string };
+// Tests inside a package carry their per-package discount overrides.
+type PackageTestRow = Test & { discountPct?: number; discountAmount?: number };
 type PackageItem = {
   id: number;
   packageCode: string;
@@ -43,17 +45,24 @@ type PackageItem = {
   description: string | null;
   price: number;
   discountPct: number;
+  discountAmount: number;
   isActive: boolean;
-  tests: Test[];
+  tests: PackageTestRow[];
 };
+
+// Per-test discount overrides keyed by testId. Stored as strings while editing
+// so the user can clear the field without it snapping back to "0".
+type TestDiscount = { pct: string; amount: string };
 
 const EMPTY_FORM = {
   name: "",
   description: "",
   price: "",
   discountPct: "0",
+  discountAmount: "0",
   isActive: true,
   testIds: [] as number[],
+  testDiscounts: {} as Record<number, TestDiscount>,
   testSearch: "",
 };
 
@@ -119,13 +128,22 @@ export default function Packages() {
 
   function openEdit(pkg: PackageItem) {
     setEditPkg(pkg);
+    // Seed per-test discount overrides from the saved package_tests rows.
+    const td: Record<number, TestDiscount> = {};
+    for (const t of pkg.tests) {
+      const pct = Number(t.discountPct ?? 0);
+      const amt = Number(t.discountAmount ?? 0);
+      if (pct > 0 || amt > 0) td[t.id] = { pct: String(pct), amount: String(amt) };
+    }
     setForm({
       name: pkg.name,
       description: pkg.description || "",
       price: String(pkg.price),
       discountPct: String(pkg.discountPct),
+      discountAmount: String(pkg.discountAmount ?? 0),
       isActive: pkg.isActive,
       testIds: pkg.tests.map((t) => t.id),
+      testDiscounts: td,
       testSearch: "",
     });
     // Don't override the saved MRP on edit — but if it happens to match the
@@ -136,13 +154,25 @@ export default function Packages() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // Build the rich `tests` array. Tests without an entry in `testDiscounts`
+    // are sent with zeroed discount fields (server treats null/undefined the
+    // same way, but being explicit keeps the API predictable).
+    const tests = form.testIds.map((testId) => {
+      const d = form.testDiscounts[testId];
+      return {
+        testId,
+        discountPct: d ? Number(d.pct || 0) : 0,
+        discountAmount: d ? Number(d.amount || 0) : 0,
+      };
+    });
     const body = {
       name: form.name,
       description: form.description || null,
       price: Number(form.price),
-      discountPct: Number(form.discountPct),
+      discountPct: Number(form.discountPct || 0),
+      discountAmount: Number(form.discountAmount || 0),
       isActive: form.isActive,
-      testIds: form.testIds,
+      tests,
     };
     if (editPkg) {
       updateMut.mutate({ id: editPkg.id, ...body });
@@ -152,12 +182,27 @@ export default function Packages() {
   }
 
   function toggleTest(testId: number) {
-    setForm((prev) => ({
-      ...prev,
-      testIds: prev.testIds.includes(testId)
-        ? prev.testIds.filter((id) => id !== testId)
-        : [...prev.testIds, testId],
-    }));
+    setForm((prev) => {
+      const has = prev.testIds.includes(testId);
+      const nextDiscounts = { ...prev.testDiscounts };
+      if (has) delete nextDiscounts[testId]; // drop overrides if test removed
+      return {
+        ...prev,
+        testIds: has ? prev.testIds.filter((id) => id !== testId) : [...prev.testIds, testId],
+        testDiscounts: nextDiscounts,
+      };
+    });
+  }
+
+  function setTestDiscount(testId: number, field: "pct" | "amount", value: string) {
+    setForm((prev) => {
+      const cur = prev.testDiscounts[testId] ?? { pct: "", amount: "" };
+      const next = { ...cur, [field]: value };
+      const nextMap = { ...prev.testDiscounts, [testId]: next };
+      // Clean up the entry if both fields are empty/zero so we don't ship noise.
+      if (!Number(next.pct || 0) && !Number(next.amount || 0)) delete nextMap[testId];
+      return { ...prev, testDiscounts: nextMap };
+    });
   }
 
   // Build a quick lookup so we don't scan the full tests list on every render.
@@ -210,8 +255,13 @@ export default function Packages() {
       t.code.toLowerCase().includes(form.testSearch.toLowerCase())
   );
 
-  const effectivePrice = (pkg: PackageItem) =>
-    pkg.price - (pkg.price * pkg.discountPct) / 100;
+  // Effective package price = MRP - %discount - flat ₹ discount, clamped at 0.
+  // Per-test discounts are billing-time concerns and don't change the headline
+  // package price shown on the catalog card.
+  const effectivePrice = (pkg: PackageItem) => {
+    const afterPct = pkg.price - (pkg.price * (pkg.discountPct ?? 0)) / 100;
+    return Math.max(0, afterPct - (pkg.discountAmount ?? 0));
+  };
 
   // ── CSV export/import ──────────────────────────────────────────────────
   // Export packages with their test list as a `;`-separated `testCodes`
@@ -230,11 +280,20 @@ export default function Packages() {
         description: p.description ?? "",
         price: Number(p.price).toFixed(2),
         discountPct: Number(p.discountPct).toFixed(2),
-        testCodes: p.tests.map((t) => t.code).join(";"),
+        discountAmount: Number(p.discountAmount ?? 0).toFixed(2),
+        // testCodes encodes per-test discounts as `CODE:pct:amount`, omitted
+        // when both are zero so the file stays readable.
+        testCodes: p.tests
+          .map((t) => {
+            const pct = Number(t.discountPct ?? 0);
+            const amt = Number(t.discountAmount ?? 0);
+            return pct || amt ? `${t.code}:${pct}:${amt}` : t.code;
+          })
+          .join(";"),
         isActive: p.isActive ? "true" : "false",
       }));
       const csv = buildCsv(
-        ["packageCode","name","description","price","discountPct","testCodes","isActive"],
+        ["packageCode","name","description","price","discountPct","discountAmount","testCodes","isActive"],
         rows,
       );
       downloadCsv(csv, `packages-${new Date().toISOString().slice(0, 10)}.csv`);
@@ -385,10 +444,14 @@ export default function Packages() {
                     <div className="text-xs text-muted-foreground">MRP</div>
                     <div className="font-semibold text-sm">{inr(pkg.price)}</div>
                   </div>
-                  {pkg.discountPct > 0 && (
+                  {(pkg.discountPct > 0 || (pkg.discountAmount ?? 0) > 0) && (
                     <div className="text-center">
                       <div className="text-xs text-muted-foreground">Discount</div>
-                      <div className="text-orange-600 font-medium text-sm">{pkg.discountPct}%</div>
+                      <div className="text-orange-600 font-medium text-sm">
+                        {pkg.discountPct > 0 ? `${pkg.discountPct}%` : ""}
+                        {pkg.discountPct > 0 && (pkg.discountAmount ?? 0) > 0 ? " + " : ""}
+                        {(pkg.discountAmount ?? 0) > 0 ? inr(pkg.discountAmount) : ""}
+                      </div>
                     </div>
                   )}
                   <div className="text-right">
@@ -491,19 +554,34 @@ export default function Packages() {
                 )}
               </div>
               <div className="space-y-1.5">
-                <Label>Discount %</Label>
-                <div className="relative">
-                  <Percent size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    value={form.discountPct}
-                    onChange={(e) => setForm({ ...form, discountPct: e.target.value })}
-                    className="pl-8"
-                    placeholder="0"
-                  />
+                <Label>Discount</Label>
+                {/* Both fields apply: MRP - %% - ₹. Use either one or both. */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="relative" title="Percentage discount on MRP">
+                    <Percent size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={form.discountPct}
+                      onChange={(e) => setForm({ ...form, discountPct: e.target.value })}
+                      className="pl-8"
+                      placeholder="%"
+                    />
+                  </div>
+                  <div className="relative" title="Flat amount discount in ₹">
+                    <IndianRupee size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.discountAmount}
+                      onChange={(e) => setForm({ ...form, discountAmount: e.target.value })}
+                      className="pl-8"
+                      placeholder="₹ flat"
+                    />
+                  </div>
                 </div>
               </div>
               <div className="col-span-2 flex items-center gap-2">
@@ -519,7 +597,8 @@ export default function Packages() {
             {/* Effective price preview + savings vs sum-of-tests */}
             {form.price && (() => {
               const mrp = Number(form.price);
-              const effective = mrp - (mrp * Number(form.discountPct || 0)) / 100;
+              const afterPct = mrp - (mrp * Number(form.discountPct || 0)) / 100;
+              const effective = Math.max(0, afterPct - Number(form.discountAmount || 0));
               const savings = sumOfTestPrices - effective;
               const savingsPct = sumOfTestPrices > 0 ? (savings / sumOfTestPrices) * 100 : 0;
               return (
@@ -554,26 +633,65 @@ export default function Packages() {
                   className="pl-9 h-8 text-xs"
                 />
               </div>
-              <div className="border border-card-border rounded-lg max-h-52 overflow-y-auto divide-y divide-card-border">
+              <p className="text-[11px] text-muted-foreground">
+                Tip: per-test discount fields are optional. Use them when one test in the package needs a different discount than the package-level one. Leave blank for none.
+              </p>
+              <div className="border border-card-border rounded-lg max-h-72 overflow-y-auto divide-y divide-card-border">
                 {filteredTests.map((t) => {
                   const selected = form.testIds.includes(t.id);
+                  const td = form.testDiscounts[t.id];
                   return (
-                    <button
+                    <div
                       key={t.id}
-                      type="button"
-                      onClick={() => toggleTest(t.id)}
-                      className={`w-full flex items-center gap-3 px-3 py-2 text-sm text-left transition-colors ${
-                        selected ? "bg-primary/5" : "hover:bg-muted/50"
-                      }`}
+                      className={`text-sm transition-colors ${selected ? "bg-primary/5" : "hover:bg-muted/50"}`}
                     >
-                      <CheckSquare
-                        size={14}
-                        className={selected ? "text-primary" : "text-muted-foreground/30"}
-                      />
-                      <span className="flex-1 font-medium">{t.name}</span>
-                      <span className="text-xs text-muted-foreground font-mono">{t.code}</span>
-                      <span className="text-xs text-muted-foreground">{inr(Number(t.price))}</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleTest(t.id)}
+                        className="w-full flex items-center gap-3 px-3 py-2 text-left"
+                      >
+                        <CheckSquare
+                          size={14}
+                          className={selected ? "text-primary" : "text-muted-foreground/30"}
+                        />
+                        <span className="flex-1 font-medium">{t.name}</span>
+                        <span className="text-xs text-muted-foreground font-mono">{t.code}</span>
+                        <span className="text-xs text-muted-foreground">{inr(Number(t.price))}</span>
+                      </button>
+                      {selected && (
+                        <div
+                          className="px-3 pb-2 pl-10 grid grid-cols-2 gap-2"
+                          /* Stop the wrapping click from toggling selection while typing. */
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="relative" title="Per-test discount %">
+                            <Percent size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.01"
+                              value={td?.pct ?? ""}
+                              onChange={(e) => setTestDiscount(t.id, "pct", e.target.value)}
+                              className="pl-7 h-7 text-xs"
+                              placeholder="%"
+                            />
+                          </div>
+                          <div className="relative" title="Per-test flat ₹ discount">
+                            <IndianRupee size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={td?.amount ?? ""}
+                              onChange={(e) => setTestDiscount(t.id, "amount", e.target.value)}
+                              className="pl-7 h-7 text-xs"
+                              placeholder="₹"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
