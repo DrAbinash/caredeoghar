@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, doctorsTable } from "@workspace/db";
-import { ilike, or, desc, eq } from "drizzle-orm";
+import { ilike, or, desc, eq, and } from "drizzle-orm";
 import {
   ListDoctorsQueryParams,
   CreateDoctorBody,
@@ -86,6 +86,84 @@ doctorsRouter.patch("/:id", async (req, res) => {
     return;
   }
   res.json(doctor);
+});
+
+// ── Bulk CSV import ───────────────────────────────────────────────────────
+// Accepts an array of row objects (parsed client-side). Upserts on
+// `registrationNumber` when present (the most reliable unique key —
+// medical council numbers are globally unique), otherwise on
+// `name + phone`. Returns per-row counts plus the first 50 row-level
+// errors for the UI to surface.
+doctorsRouter.post("/import", async (req, res) => {
+  const rows = Array.isArray(req.body?.rows) ? (req.body.rows as Record<string, unknown>[]) : null;
+  if (!rows) {
+    res.status(400).json({ error: "Request body must include `rows: []`." });
+    return;
+  }
+  if (rows.length > 5000) {
+    res.status(413).json({ error: "Too many rows in one import (max 5000)." });
+    return;
+  }
+
+  let inserted = 0, updated = 0, skipped = 0;
+  const errors: { row: number; reason: string }[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const name = String(r.name ?? "").trim();
+    const specialization = String(r.specialization ?? "").trim();
+
+    if (!name || !specialization) {
+      skipped++;
+      errors.push({ row: i + 2, reason: "Missing required field (name or specialization)." });
+      continue;
+    }
+
+    const phone = typeof r.phone === "string" && r.phone.trim() ? r.phone.trim() : null;
+    const email = typeof r.email === "string" && r.email.trim() ? r.email.trim() : null;
+    const hospitalAffiliation = typeof r.hospitalAffiliation === "string" && r.hospitalAffiliation.trim()
+      ? r.hospitalAffiliation.trim() : null;
+    const registrationNumber = typeof r.registrationNumber === "string" && r.registrationNumber.trim()
+      ? r.registrationNumber.trim() : null;
+
+    const values = { name, specialization, phone, email, hospitalAffiliation, registrationNumber };
+
+    try {
+      // Match priority: registrationNumber > name+phone > name only.
+      let existingId: number | undefined;
+      if (registrationNumber) {
+        const [hit] = await db.select({ id: doctorsTable.id })
+          .from(doctorsTable)
+          .where(eq(doctorsTable.registrationNumber, registrationNumber));
+        existingId = hit?.id;
+      }
+      if (!existingId && phone) {
+        const [hit] = await db.select({ id: doctorsTable.id })
+          .from(doctorsTable)
+          .where(and(eq(doctorsTable.name, name), eq(doctorsTable.phone, phone)));
+        existingId = hit?.id;
+      }
+      if (!existingId) {
+        const [hit] = await db.select({ id: doctorsTable.id })
+          .from(doctorsTable)
+          .where(eq(doctorsTable.name, name));
+        existingId = hit?.id;
+      }
+
+      if (existingId) {
+        await db.update(doctorsTable).set(values).where(eq(doctorsTable.id, existingId));
+        updated++;
+      } else {
+        await db.insert(doctorsTable).values(values);
+        inserted++;
+      }
+    } catch (e) {
+      skipped++;
+      errors.push({ row: i + 2, reason: (e as Error).message || "Database error" });
+    }
+  }
+
+  res.json({ inserted, updated, skipped, errors: errors.slice(0, 50) });
 });
 
 doctorsRouter.delete("/:id", async (req, res) => {

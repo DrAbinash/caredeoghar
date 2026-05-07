@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   useListTests,
   useCreateTest,
@@ -7,6 +7,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
+import { buildCsv, downloadCsv, parseCsv } from "@/lib/csv";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Pencil, Settings2, Trash2, Download } from "lucide-react";
+import { Plus, Search, Pencil, Settings2, Trash2, Download, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 
@@ -76,6 +77,8 @@ export default function Tests() {
 
   const [submitErr, setSubmitErr] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   // Export the entire test catalog as a CSV file. Always exports the FULL
@@ -90,37 +93,56 @@ export default function Tests() {
         price: number | string; duration: string; roomNumber?: string;
         description?: string | null; isActive: boolean;
       }>; total: number }>("/api/tests?limit=10000");
-      const rows = res?.tests ?? [];
-      const headers = ["code","name","category","department","price","duration","roomNumber","description","isActive"];
-      const escape = (v: unknown) => {
-        const s = v == null ? "" : String(v);
-        // RFC 4180: wrap in quotes if it contains comma, quote, or newline.
-        return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-      };
-      const csv = [
-        headers.join(","),
-        ...rows.map((t) => [
-          t.code, t.name, t.category, t.department ?? "",
-          Number(t.price).toFixed(2), t.duration, t.roomNumber ?? "",
-          t.description ?? "", t.isActive ? "true" : "false",
-        ].map(escape).join(",")),
-      ].join("\r\n");
-      // Prepend a UTF-8 BOM so Excel opens it with the correct encoding.
-      const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      const ts = new Date().toISOString().slice(0, 10);
-      a.href = url;
-      a.download = `test-catalog-${ts}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const rows = (res?.tests ?? []).map((t) => ({
+        code: t.code, name: t.name, category: t.category, department: t.department ?? "",
+        price: Number(t.price).toFixed(2), duration: t.duration, roomNumber: t.roomNumber ?? "",
+        description: t.description ?? "", isActive: t.isActive ? "true" : "false",
+      }));
+      const csv = buildCsv(
+        ["code","name","category","department","price","duration","roomNumber","description","isActive"],
+        rows,
+      );
+      downloadCsv(csv, `test-catalog-${new Date().toISOString().slice(0, 10)}.csv`);
       toast({ title: "Export ready", description: `${rows.length} tests downloaded.` });
     } catch (err) {
       toast({ title: "Export failed", description: (err as Error).message || "Could not export the catalog.", variant: "destructive" });
     } finally {
       setExporting(false);
+    }
+  };
+
+  // Import a CSV the user picks from disk. Tests are upserted by `code`
+  // server-side, so re-importing the same file is safe (it will just
+  // refresh existing rows). Returns a toast summary with insert/update/skip
+  // counts plus the first row error if any.
+  const onImportFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";  // allow picking the same file again later
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const rows = parseCsv(text);
+      if (rows.length === 0) {
+        toast({ title: "Empty file", description: "No data rows found in the CSV.", variant: "destructive" });
+        return;
+      }
+      const result = await api.post<{ inserted: number; updated: number; skipped: number; errors: { row: number; reason: string }[] }>(
+        "/api/tests/import", { rows },
+      );
+      queryClient.invalidateQueries({ queryKey: getListTestsQueryKey() });
+      const desc = `${result.inserted} added, ${result.updated} updated`
+        + (result.skipped > 0 ? `, ${result.skipped} skipped` : "")
+        + (result.errors[0] ? ` — first issue: row ${result.errors[0].row}: ${result.errors[0].reason}` : "");
+      toast({
+        title: result.skipped > 0 ? "Import finished with warnings" : "Import complete",
+        description: desc,
+        variant: result.skipped > 0 ? "destructive" : "default",
+      });
+    } catch (err) {
+      toast({ title: "Import failed", description: (err as Error).message || "Could not import the file.", variant: "destructive" });
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -185,6 +207,10 @@ export default function Tests() {
         subtitle={`${data?.total ?? 0} diagnostic tests`}
         actions={
           <div className="flex gap-2">
+            <input ref={importInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onImportFileChosen} />
+            <Button size="sm" variant="outline" onClick={() => importInputRef.current?.click()} disabled={importing} title="Upload a CSV to add or update tests in bulk (matched by `code`)">
+              <Upload size={14} className="mr-1" /> {importing ? "Importing…" : "Import CSV"}
+            </Button>
             <Button size="sm" variant="outline" onClick={exportCsv} disabled={exporting} title="Download the entire catalog as CSV">
               <Download size={14} className="mr-1" /> {exporting ? "Exporting…" : "Export CSV"}
             </Button>

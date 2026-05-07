@@ -115,6 +115,76 @@ testsRouter.get("/:id", async (req, res) => {
   res.json({ ...test, price: Number(test.price) });
 });
 
+// ── Bulk CSV import ───────────────────────────────────────────────────────
+// Accepts an array of row objects (parsed client-side from a CSV file).
+// Upserts each row by `code`: if a test with the same code exists it's
+// updated, otherwise a new one is inserted. Returns per-row counts so the
+// UI can show a friendly summary. Validation is intentionally lenient —
+// missing optional fields default to existing or sensible values.
+testsRouter.post("/import", async (req, res) => {
+  const rows = Array.isArray(req.body?.rows) ? (req.body.rows as Record<string, unknown>[]) : null;
+  if (!rows) {
+    res.status(400).json({ error: "Request body must include `rows: []`." });
+    return;
+  }
+  if (rows.length > 5000) {
+    res.status(413).json({ error: "Too many rows in one import (max 5000)." });
+    return;
+  }
+
+  let inserted = 0, updated = 0, skipped = 0;
+  const errors: { row: number; reason: string }[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const code = String(r.code ?? "").trim();
+    const name = String(r.name ?? "").trim();
+    const category = String(r.category ?? "").trim();
+    const priceRaw = r.price;
+    const duration = String(r.duration ?? "30 min").trim() || "30 min";
+
+    if (!code || !name || !category) {
+      skipped++;
+      errors.push({ row: i + 2, reason: "Missing required field (code, name, or category)." });
+      continue;
+    }
+    const priceNum = Number(priceRaw);
+    if (!Number.isFinite(priceNum) || priceNum < 0) {
+      skipped++;
+      errors.push({ row: i + 2, reason: `Invalid price: "${String(priceRaw)}"` });
+      continue;
+    }
+
+    const department = (typeof r.department === "string" && r.department.trim()) || "Pathology";
+    const roomNumber = typeof r.roomNumber === "string" ? r.roomNumber.trim() : "";
+    const description = typeof r.description === "string" && r.description.trim() ? r.description.trim() : null;
+    const isActive = typeof r.isActive === "string"
+      ? !/^(false|0|no|inactive)$/i.test(r.isActive.trim())
+      : (r.isActive !== false);
+
+    const values = {
+      code, name, category, duration, department, roomNumber, description, isActive,
+      price: priceNum.toFixed(2),
+    };
+
+    try {
+      const [existing] = await db.select({ id: testsTable.id }).from(testsTable).where(eq(testsTable.code, code));
+      if (existing) {
+        await db.update(testsTable).set(values).where(eq(testsTable.id, existing.id));
+        updated++;
+      } else {
+        await db.insert(testsTable).values(values);
+        inserted++;
+      }
+    } catch (e) {
+      skipped++;
+      errors.push({ row: i + 2, reason: (e as Error).message || "Database error" });
+    }
+  }
+
+  res.json({ inserted, updated, skipped, errors: errors.slice(0, 50) });
+});
+
 testsRouter.put("/:id", async (req, res) => {
   const paramsParsed = UpdateTestParams.safeParse({ id: Number(req.params.id) });
   const bodyParsed = UpdateTestBody.safeParse(req.body);

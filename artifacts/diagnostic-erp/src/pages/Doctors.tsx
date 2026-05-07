@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   useListDoctors,
   useCreateDoctor,
@@ -6,6 +6,8 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
+import { buildCsv, downloadCsv, parseCsv } from "@/lib/csv";
+import { useToast } from "@/hooks/use-toast";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +28,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Search, Stethoscope, Phone, Building2, Mail, Pencil, Trash2 } from "lucide-react";
+import { Plus, Search, Stethoscope, Phone, Building2, Mail, Pencil, Trash2, Download, Upload } from "lucide-react";
 import { useForm } from "react-hook-form";
 
 // Module A (compliance): commission fields removed from staff-facing UI.
@@ -79,6 +81,72 @@ export default function Doctors() {
   });
 
   const { register, handleSubmit, reset } = useForm<DoctorForm>();
+  const { toast } = useToast();
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  // Export the full doctor list as a CSV. Ignores the current search box
+  // so the user always gets a complete backup with one click.
+  const exportCsv = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const res = await api.get<{ doctors: Doctor[] }>("/api/doctors");
+      const rows = (res?.doctors ?? []).map((d) => ({
+        name: d.name,
+        specialization: d.specialization,
+        phone: d.phone ?? "",
+        email: d.email ?? "",
+        hospitalAffiliation: d.hospitalAffiliation ?? "",
+        registrationNumber: d.registrationNumber ?? "",
+      }));
+      const csv = buildCsv(
+        ["name","specialization","phone","email","hospitalAffiliation","registrationNumber"],
+        rows,
+      );
+      downloadCsv(csv, `doctors-${new Date().toISOString().slice(0, 10)}.csv`);
+      toast({ title: "Export ready", description: `${rows.length} doctors downloaded.` });
+    } catch (err) {
+      toast({ title: "Export failed", description: (err as Error).message || "Could not export the list.", variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Import a CSV. Doctors are upserted server-side by registrationNumber
+  // (most reliable), then by name + phone, then by name only — so safe
+  // to re-import without creating duplicates.
+  const onImportFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const rows = parseCsv(text);
+      if (rows.length === 0) {
+        toast({ title: "Empty file", description: "No data rows found in the CSV.", variant: "destructive" });
+        return;
+      }
+      const result = await api.post<{ inserted: number; updated: number; skipped: number; errors: { row: number; reason: string }[] }>(
+        "/api/doctors/import", { rows },
+      );
+      invalidate();
+      const desc = `${result.inserted} added, ${result.updated} updated`
+        + (result.skipped > 0 ? `, ${result.skipped} skipped` : "")
+        + (result.errors[0] ? ` — first issue: row ${result.errors[0].row}: ${result.errors[0].reason}` : "");
+      toast({
+        title: result.skipped > 0 ? "Import finished with warnings" : "Import complete",
+        description: desc,
+        variant: result.skipped > 0 ? "destructive" : "default",
+      });
+    } catch (err) {
+      toast({ title: "Import failed", description: (err as Error).message || "Could not import the file.", variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const { register: regEdit, handleSubmit: handleEditSubmit, reset: resetEdit } = useForm<DoctorForm>();
 
@@ -111,9 +179,18 @@ export default function Doctors() {
         title="Referring Doctors"
         subtitle={`${data?.total ?? 0} doctors`}
         actions={
-          <Button size="sm" onClick={() => { setOpen(true); reset(); }}>
-            <Plus size={14} className="mr-1" /> Add Doctor
-          </Button>
+          <div className="flex gap-2">
+            <input ref={importInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onImportFileChosen} />
+            <Button size="sm" variant="outline" onClick={() => importInputRef.current?.click()} disabled={importing} title="Upload a CSV to add or update doctors in bulk">
+              <Upload size={14} className="mr-1" /> {importing ? "Importing…" : "Import CSV"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={exportCsv} disabled={exporting} title="Download the full doctor list as CSV">
+              <Download size={14} className="mr-1" /> {exporting ? "Exporting…" : "Export CSV"}
+            </Button>
+            <Button size="sm" onClick={() => { setOpen(true); reset(); }}>
+              <Plus size={14} className="mr-1" /> Add Doctor
+            </Button>
+          </div>
         }
       />
 
