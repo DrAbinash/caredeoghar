@@ -152,7 +152,19 @@ router.use("/hr-forms", requireStaffAuth, requireStaffPermission("/settings"), h
 // (passport-sized employee photo). Gate both endpoints behind the same
 // /settings permission as the HR form and staff records so a regular biller
 // with an object URL cannot fetch employee photos.
-router.use(requireStaffAuth, requireStaffPermission("/settings"), storageRouter);
+// IMPORTANT: storageRouter declares its own paths starting with
+// "/storage/...", so it has to be mounted at the router root. Path-less
+// `router.use(authMw, permMw, storageRouter)` would apply auth+perm to
+// EVERY subsequent request and silently 403 anyone without /settings
+// (previously broke packages, tokens, appointments, quick-test save,
+// the receipt clinic header, etc. for billing/receptionist roles). Wrap
+// the gate in a URL check so it only fires for /storage/* endpoints.
+router.use((req, res, next) => {
+  if (!req.url.startsWith("/storage/")) return next();
+  return requireStaffAuth(req as never, res, () =>
+    requireStaffPermission("/settings")(req as never, res, next),
+  );
+}, storageRouter);
 // Staff-scoped HR forms listing (mounted on the /staff path so the StaffDetail
 // dialog can fetch all forms for a single employee).
 router.get(
