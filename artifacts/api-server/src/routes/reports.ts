@@ -382,7 +382,37 @@ reportsRouter.get("/income-expense", async (req, res) => {
     cheque: rows.reduce((s, r) => s + r.income.cheque, 0),
   };
 
-  res.json({ rows, totals });
+  // ── User-wise income breakdown ───────────────────────────────────────────
+  // Aggregate every payment in the date range by `recorded_by_name`. Vouchers
+  // (expenses) don't store a user, so this section is income-only.
+  type UserIncome = {
+    userName: string;
+    count: number;
+    total: number;
+    cash: number; upi: number; card: number; bank: number; insurance: number; cheque: number;
+  };
+  const incomeByUser = new Map<string, UserIncome>();
+  for (const p of payments) {
+    const key = (p.recordedByName && p.recordedByName.trim()) || "Unassigned";
+    let u = incomeByUser.get(key);
+    if (!u) {
+      u = { userName: key, count: 0, total: 0, cash: 0, upi: 0, card: 0, bank: 0, insurance: 0, cheque: 0 };
+      incomeByUser.set(key, u);
+    }
+    const amt = Number(p.amount);
+    const method = (p.method || "cash") as string;
+    u.count += 1;
+    u.total += amt;
+    if (method === "cash") u.cash += amt;
+    else if (method === "upi") u.upi += amt;
+    else if (method === "card" || method === "credit_card" || method === "debit_card") u.card += amt;
+    else if (method === "bank_transfer" || method === "neft" || method === "rtgs" || method === "imps") u.bank += amt;
+    else if (method === "insurance") u.insurance += amt;
+    else if (method === "cheque") u.cheque += amt;
+  }
+  const byUser = Array.from(incomeByUser.values()).sort((a, b) => b.total - a.total);
+
+  res.json({ rows, totals, byUser });
 });
 
 // Payment method summary  ─────────────────────────────────────────────────────
@@ -473,11 +503,48 @@ reportsRouter.get("/daily-summary", async (req, res) => {
     cancelled:bills.filter(r => r.b.status === "cancelled").length,
   };
 
+  // ── User-wise breakdown ────────────────────────────────────────────────
+  // Group bills by `created_by_name` (the staff who issued the bill) and
+  // payments by `recorded_by_name` (the staff who collected the payment).
+  // The two sets are merged on user name so a single staff row shows
+  // BOTH how many bills they raised and how much cash/UPI they took in.
+  type UserAgg = {
+    userName: string;
+    billCount: number;
+    billed: number;
+    received: number;
+    methods: Record<string, number>;
+  };
+  const byUserMap = new Map<string, UserAgg>();
+  const ensureUser = (name: string | null | undefined): UserAgg => {
+    const key = (name && name.trim()) || "Unassigned";
+    let row = byUserMap.get(key);
+    if (!row) {
+      row = { userName: key, billCount: 0, billed: 0, received: 0, methods: {} };
+      byUserMap.set(key, row);
+    }
+    return row;
+  };
+  for (const r of bills) {
+    const u = ensureUser(r.b.createdByName);
+    u.billCount += 1;
+    u.billed   += Number(r.b.totalAmount);
+  }
+  for (const p of payments) {
+    const u = ensureUser(p.recordedByName);
+    const amt = Number(p.amount);
+    u.received += amt;
+    const m = p.method || "cash";
+    u.methods[m] = (u.methods[m] || 0) + amt;
+  }
+  const byUser = Array.from(byUserMap.values()).sort((a, b) => b.received - a.received);
+
   res.json({
     date,
     summary: { totalBilled, totalReceived, outstanding, billCount: bills.length, orderCount: orders.length },
     byMethod,
     billsByStatus,
+    byUser,
     bills: bills.map(r => ({
       id: r.b.id,
       billNumber: r.b.billNumber,
@@ -486,6 +553,7 @@ reportsRouter.get("/daily-summary", async (req, res) => {
       paidAmount: Number(r.b.paidAmount),
       status: r.b.status,
       createdAt: r.b.createdAt.toISOString(),
+      createdByName: r.b.createdByName ?? "",
     })),
   });
 });

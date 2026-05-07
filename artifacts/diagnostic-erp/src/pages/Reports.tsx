@@ -37,20 +37,35 @@ type IncomeExpenseRow = {
   expense: { date: string; amount: number; count: number };
   net: number;
 };
+type IncomeExpenseUserRow = {
+  userName: string;
+  count: number;
+  total: number;
+  cash: number; upi: number; card: number; bank: number; insurance: number; cheque: number;
+};
 type IncomeExpenseData = {
   rows: IncomeExpenseRow[];
   totals: { income: number; expense: number; net: number; cash: number; upi: number; card: number; bank: number; insurance: number; cheque: number };
+  byUser?: IncomeExpenseUserRow[];
 };
 type PaymentMethodData = {
   methods: { method: string; count: number; total: number; percentage: number; transactions: { id: number; date: string; time: string; amount: number; billNumber: string; patientName: string; reference: string }[] }[];
   grandTotal: number;
+};
+type DailyUserRow = {
+  userName: string;
+  billCount: number;
+  billed: number;
+  received: number;
+  methods: Record<string, number>;
 };
 type DailySummaryData = {
   date: string;
   summary: { totalBilled: number; totalReceived: number; outstanding: number; billCount: number; orderCount: number };
   byMethod: Record<string, number>;
   billsByStatus: { paid: number; partial: number; pending: number; cancelled: number };
-  bills: { id: number; billNumber: string; patientName: string; totalAmount: number; paidAmount: number; status: string; createdAt: string }[];
+  byUser?: DailyUserRow[];
+  bills: { id: number; billNumber: string; patientName: string; totalAmount: number; paidAmount: number; status: string; createdAt: string; createdByName?: string }[];
 };
 
 export default function Reports() {
@@ -300,6 +315,42 @@ export default function Reports() {
                   </div>
                 </div>
 
+                {/* User-wise breakdown — bills raised + payments collected per staff */}
+                {dailySummaryData.byUser && dailySummaryData.byUser.length > 0 && (
+                  <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+                    <div className="px-4 py-3 border-b border-card-border">
+                      <h3 className="text-sm font-semibold">By User — {dailySummaryData.date}</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">Bills raised by each staff member and the cash/UPI/card they collected</p>
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="text-left px-4 py-2 text-xs text-muted-foreground">User</th>
+                          <th className="text-right px-4 py-2 text-xs text-muted-foreground">Bills</th>
+                          <th className="text-right px-4 py-2 text-xs text-muted-foreground">Billed</th>
+                          <th className="text-right px-4 py-2 text-xs text-muted-foreground">Cash</th>
+                          <th className="text-right px-4 py-2 text-xs text-muted-foreground">UPI</th>
+                          <th className="text-right px-4 py-2 text-xs text-muted-foreground">Card</th>
+                          <th className="text-right px-4 py-2 text-xs text-green-600">Collected</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dailySummaryData.byUser.map(u => (
+                          <tr key={u.userName} className="border-t border-card-border hover:bg-muted/20">
+                            <td className="px-4 py-2 font-medium">{u.userName}</td>
+                            <td className="px-4 py-2 text-right">{u.billCount}</td>
+                            <td className="px-4 py-2 text-right">{inr2(u.billed)}</td>
+                            <td className="px-4 py-2 text-right text-xs">{inr2(u.methods.cash || 0)}</td>
+                            <td className="px-4 py-2 text-right text-xs">{inr2(u.methods.upi || 0)}</td>
+                            <td className="px-4 py-2 text-right text-xs">{inr2((u.methods.card || 0) + (u.methods.credit_card || 0) + (u.methods.debit_card || 0))}</td>
+                            <td className="px-4 py-2 text-right font-semibold text-green-600">{inr2(u.received)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
                 {/* Bills Table */}
                 {dailySummaryData.bills.length > 0 && (
                   <div className="bg-card border border-card-border rounded-xl overflow-hidden">
@@ -314,6 +365,7 @@ export default function Reports() {
                           <th className="text-right px-4 py-2 text-xs text-muted-foreground">Billed</th>
                           <th className="text-right px-4 py-2 text-xs text-muted-foreground">Paid</th>
                           <th className="text-left px-4 py-2 text-xs text-muted-foreground">Status</th>
+                        <th className="text-left px-4 py-2 text-xs text-muted-foreground">By</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -331,6 +383,7 @@ export default function Reports() {
                                 "bg-gray-100 text-gray-600"
                               }`}>{b.status}</span>
                             </td>
+                            <td className="px-4 py-2 text-xs text-muted-foreground">{b.createdByName || "—"}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -447,6 +500,42 @@ export default function Reports() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* User-wise income breakdown — who collected how much */}
+                {incomeExpenseData.byUser && incomeExpenseData.byUser.length > 0 && (
+                  <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+                    <div className="px-4 py-3 border-b border-card-border">
+                      <h3 className="text-sm font-semibold">Income by User</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">Payments collected by each staff member in this date range</p>
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 border-b border-card-border">
+                        <tr>
+                          <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">User</th>
+                          <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">Txns</th>
+                          <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">Cash</th>
+                          <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">UPI</th>
+                          <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">Card</th>
+                          <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">Bank</th>
+                          <th className="text-right px-4 py-3 text-xs font-semibold text-green-600">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {incomeExpenseData.byUser.map(u => (
+                          <tr key={u.userName} className="border-b border-card-border hover:bg-muted/20">
+                            <td className="px-4 py-2.5 font-medium">{u.userName}</td>
+                            <td className="px-4 py-2.5 text-right">{u.count}</td>
+                            <td className="px-4 py-2.5 text-right text-xs">{inr2(u.cash)}</td>
+                            <td className="px-4 py-2.5 text-right text-xs">{inr2(u.upi)}</td>
+                            <td className="px-4 py-2.5 text-right text-xs">{inr2(u.card)}</td>
+                            <td className="px-4 py-2.5 text-right text-xs">{inr2(u.bank)}</td>
+                            <td className="px-4 py-2.5 text-right font-semibold text-green-600">{inr2(u.total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
           </div>

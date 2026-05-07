@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import QRCode from "qrcode";
 import { Link, useLocation } from "wouter";
 import { useGetBill, useCreatePayment, getGetBillQueryKey, getListBillsQueryKey } from "@workspace/api-client-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
@@ -108,12 +109,27 @@ export default function BillDetail({ id }: { id: number }) {
   // Inline QR for the printed receipt — shares the same encoding as
   // BillingDesk so the verify URL stays consistent across surfaces.
   const buildBillVerifyUrl = (billNumber: string) =>
-    `${window.location.origin}/verify/bill/${encodeURIComponent(billNumber)}`;
-  const qrSvgDataUrl = (text: string) => {
-    const safe = text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180"><rect width="180" height="180" fill="#fff"/><rect x="12" y="12" width="156" height="156" rx="8" fill="none" stroke="#111" stroke-width="4"/><text x="90" y="88" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#111">VERIFY</text><text x="90" y="112" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#444">${safe}</text></svg>`;
-    return `data:image/svg+xml;base64,${btoa(svg)}`;
-  };
+    // Public api-server route — works in dev (proxied /api) and production
+    // (unified serve). See artifacts/api-server/src/routes/verify.ts.
+    `${window.location.origin}/api/verify/bill/${encodeURIComponent(billNumber)}`;
+
+  // Real scannable QR (PNG data URL) generated via the qrcode library
+  // when the bill loads. Empty string until generation completes; the
+  // <img> below skips rendering until the data URL is ready.
+  const [billQrDataUrl, setBillQrDataUrl] = useState<string>("");
+  useEffect(() => {
+    if (!bill?.billNumber) { setBillQrDataUrl(""); return; }
+    let cancelled = false;
+    QRCode.toDataURL(buildBillVerifyUrl(bill.billNumber), {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 256,
+      color: { dark: "#000000", light: "#ffffff" },
+    })
+      .then((url) => { if (!cancelled) setBillQrDataUrl(url); })
+      .catch(() => { if (!cancelled) setBillQrDataUrl(""); });
+    return () => { cancelled = true; };
+  }, [bill?.billNumber]);
 
   const reprintLog = useMutation({
     mutationFn: (body: { reprintedBy: string; reason: string }) =>
@@ -690,11 +706,13 @@ export default function BillDetail({ id }: { id: number }) {
             {/* Auto-included verify QR — toggle in Settings → "Print QR on bill". */}
             {clinic?.qrOnBillEnabled !== false && (
               <div className="pr-keep-case" style={{ marginTop: "6px", display: "inline-block", textAlign: "center", fontSize: "8px", color: "#444", lineHeight: 1.1 }}>
-                <img
-                  src={qrSvgDataUrl(buildBillVerifyUrl(bill.billNumber))}
-                  alt="Verify QR"
-                  style={{ width: paperSize === "A5" ? "56px" : "68px", height: paperSize === "A5" ? "56px" : "68px", display: "block" }}
-                />
+                {billQrDataUrl && (
+                  <img
+                    src={billQrDataUrl}
+                    alt="Verify QR"
+                    style={{ width: paperSize === "A5" ? "56px" : "68px", height: paperSize === "A5" ? "56px" : "68px", display: "block" }}
+                  />
+                )}
                 <div style={{ marginTop: "2px" }}>Scan to verify</div>
               </div>
             )}

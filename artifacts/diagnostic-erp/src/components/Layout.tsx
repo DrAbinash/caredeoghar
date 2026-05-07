@@ -203,12 +203,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   });
 
   // Auto-expand any group containing the active route; let user toggle others.
+  // The "Imaging" group is always default-open so DICOM Nodes / PACS Viewer
+  // remain visible at a glance — they're easy to overlook when nested.
   const initialOpen: Record<string, boolean> = {};
   for (const n of visibleNav) {
     if (isGroup(n)) {
-      initialOpen[n.id] = n.children.some((c) =>
+      const active = n.children.some((c) =>
         c.path === "/" ? location === "/" : location === c.path || location.startsWith(c.path + "/"),
       );
+      initialOpen[n.id] = active || n.id === "imaging-grp";
     }
   }
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(initialOpen);

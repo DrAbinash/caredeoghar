@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import QRCode from "qrcode";
 import { api } from "@/lib/fetchApi";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -137,9 +138,14 @@ function openPrintWindow(html: string) {
 }
 
 function buildBillVerifyUrl(billNumber: string) {
-  return `${window.location.origin}/verify/bill/${encodeURIComponent(billNumber)}`;
+  // Points at the public api-server endpoint so the QR works in both dev
+  // (where /api is proxied) and production (single-process unified serve).
+  return `${window.location.origin}/api/verify/bill/${encodeURIComponent(billNumber)}`;
 }
 
+// Lightweight placeholder used as a fallback before the async QR has been
+// generated. The real scannable QR is produced via the `qrcode` library in
+// the BillingDesk component below and stored in state.
 function qrSvgDataUrl(text: string) {
   const safe = escapeHtml(text);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180"><rect width="180" height="180" fill="#fff"/><rect x="12" y="12" width="156" height="156" rx="8" fill="none" stroke="#111" stroke-width="4"/><text x="90" y="88" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#111">VERIFY</text><text x="90" y="112" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#444">${safe}</text></svg>`;
@@ -341,6 +347,24 @@ export default function BillingDesk() {
   const [payNow, setPayNow]               = useState(true);
   const [paymentSplits, setPaymentSplits] = useState<PaySplit[]>([{ mode: "cash", amount: "" }]);
   const [lastBill, setLastBill]           = useState<LastBill | null>(null);
+  // Real scannable QR (PNG data URL) generated via the qrcode library
+  // whenever a new bill is saved. Falls back to the placeholder SVG until
+  // the async generation finishes — the print fires ~500ms later so the
+  // real QR is virtually always ready before window.print().
+  const [billQrDataUrl, setBillQrDataUrl] = useState<string>("");
+  useEffect(() => {
+    if (!lastBill) { setBillQrDataUrl(""); return; }
+    let cancelled = false;
+    QRCode.toDataURL(buildBillVerifyUrl(lastBill.billNumber), {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 256,
+      color: { dark: "#000000", light: "#ffffff" },
+    })
+      .then((url) => { if (!cancelled) setBillQrDataUrl(url); })
+      .catch(() => { if (!cancelled) setBillQrDataUrl(""); });
+    return () => { cancelled = true; };
+  }, [lastBill]);
   const [showBillToast, setShowBillToast] = useState(false);
   const [suggLoading, setSuggLoading]     = useState(false);
   const [suggestion, setSuggestion]       = useState<{ discount: number; rule: { name: string } | null } | null>(null);
@@ -1512,7 +1536,7 @@ export default function BillingDesk() {
             {/* Auto-included verify QR (toggle in Settings → "Print QR on bill"). */}
             {clinic?.qrOnBillEnabled !== false && (
               <div className="bdr-keep-case" style={{ flexShrink: 0, textAlign: "center", fontSize: 8, color: "#444", lineHeight: 1.1 }}>
-                <img src={qrSvgDataUrl(buildBillVerifyUrl(lastBill.billNumber))} alt="Verify QR" style={{ width: 64, height: 64, display: "block" }} />
+                <img src={billQrDataUrl || qrSvgDataUrl(buildBillVerifyUrl(lastBill.billNumber))} alt="Verify QR" style={{ width: 64, height: 64, display: "block" }} />
                 <div style={{ marginTop: 2 }}>Scan to verify</div>
               </div>
             )}

@@ -48,6 +48,7 @@ import { backupRouter } from "./backup";
 import { vendorsRouter } from "./vendors";
 import { websiteRouter } from "./website";
 import { systemRouter } from "./system";
+import { verifyRouter } from "./verify";
 import internalCronRouter from "./internal-cron";
 import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
 import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
@@ -68,6 +69,10 @@ router.use("/bridge", bridgeRouter);
 router.use("/p/r", publicReportsRouter);
 // Public tele-radiology share viewer (token-gated) — no staff auth.
 router.use("/teleradiology", teleradiologyRouter);
+// Public bill-verification page — the QR code on every printed bill links
+// here so anyone (patient, regulator) can confirm the bill is genuine.
+// Read-only, no PII beyond what is already on the printed receipt.
+router.use("/verify", verifyRouter);
 
 // Website router: GET endpoints are intentionally public so the clinic-site
 // frontend can fetch settings/pages/faqs/photos/popups without credentials.
