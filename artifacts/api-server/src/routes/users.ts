@@ -95,8 +95,8 @@ router.post("/", async (req: StaffAuthRequest, res) => {
   // Hash the PIN before storing — never persist plaintext credentials
   let hashedPin: string | null = null;
   if (pin) {
-    if (String(pin).length < 6) {
-      res.status(400).json({ error: "PIN must be at least 6 characters" });
+    if (String(pin).length < 4) {
+      res.status(400).json({ error: "PIN must be at least 4 characters" });
       return;
     }
     hashedPin = await bcrypt.hash(String(pin), BCRYPT_ROUNDS);
@@ -177,8 +177,8 @@ router.patch("/:id", async (req: StaffAuthRequest, res) => {
       updates.mustChangePin = false;
     } else {
       const pinStr = String(req.body.pin);
-      if (pinStr.length < 6) {
-        res.status(400).json({ error: "PIN must be at least 6 characters" });
+      if (pinStr.length < 4) {
+        res.status(400).json({ error: "PIN must be at least 4 characters" });
         return;
       }
       updates.pin = await bcrypt.hash(pinStr, BCRYPT_ROUNDS);
@@ -244,8 +244,8 @@ router.patch("/:id/password", async (req, res) => {
   }
 
   const newPinStr = String(newPin);
-  if (newPinStr.length < 6) {
-    res.status(400).json({ error: "New PIN must be at least 6 characters" });
+  if (newPinStr.length < 4) {
+    res.status(400).json({ error: "New PIN must be at least 4 characters" });
     return;
   }
 

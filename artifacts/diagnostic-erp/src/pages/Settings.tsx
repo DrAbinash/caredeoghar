@@ -216,7 +216,7 @@ function UsersTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
   });
   const toggleActive = useMutation({ mutationFn: ({ id, isActive }: { id: number; isActive: boolean }) => api.patch(`/api/users/${id}`, { isActive }), onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }) });
   const deleteUser = useMutation({ mutationFn: (id: number) => api.delete(`/api/users/${id}`), onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }) });
-  const { register, handleSubmit, reset, setValue, watch } = useForm<{ name: string; email: string; username: string; role: string; pin: string; maxDiscount: string; }>();
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<{ name: string; email: string; username: string; role: string; pin: string; maxDiscount: string; }>();
 
   const openAdd = () => {
     setEditUser(null);
@@ -383,16 +383,19 @@ function UsersTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Name *</Label>
-                <Input {...register("name", { required: true })} className="mt-1" placeholder="Dr. Asha Verma" />
+                <Input {...register("name", { required: "Name is required" })} className="mt-1" placeholder="Dr. Asha Verma" />
+                {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message || "Name is required"}</p>}
               </div>
               <div>
                 <Label>Username *</Label>
-                <Input {...register("username", { required: true })} className="mt-1" autoComplete="off" placeholder="asha" />
+                <Input {...register("username", { required: "Username is required" })} className="mt-1" autoComplete="off" placeholder="asha" />
                 <p className="text-[11px] text-muted-foreground mt-1">Used for staff sign-in. Letters, numbers, dot/underscore.</p>
+                {errors.username && <p className="text-xs text-destructive mt-1">{errors.username.message || "Username is required"}</p>}
               </div>
               <div>
                 <Label>Email *</Label>
-                <Input type="email" {...register("email", { required: true })} className="mt-1" />
+                <Input type="email" {...register("email", { required: "Email is required" })} className="mt-1" />
+                {errors.email && <p className="text-xs text-destructive mt-1">{errors.email.message || "Email is required"}</p>}
               </div>
               <div>
                 <Label>Role *</Label>
@@ -403,8 +406,9 @@ function UsersTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
               </div>
               <div>
                 <Label>{editUser ? "Reset PIN (leave blank to keep)" : "PIN *"}</Label>
-                <Input type="password" inputMode="numeric" autoComplete="new-password" {...register("pin", editUser ? {} : { required: true, minLength: 6 })} className="mt-1" placeholder={editUser ? "•••••• (unchanged)" : "At least 6 characters"} />
+                <Input type="password" inputMode="numeric" autoComplete="new-password" {...register("pin", editUser ? { minLength: { value: 4, message: "PIN must be at least 4 characters" } } : { required: "PIN is required", minLength: { value: 4, message: "PIN must be at least 4 characters" } })} className="mt-1" placeholder={editUser ? "•••••• (unchanged)" : "At least 4 characters"} />
                 <p className="text-[11px] text-muted-foreground mt-1">User will be forced to set their own PIN on next sign-in.</p>
+                {errors.pin && <p className="text-xs text-destructive mt-1">{errors.pin.message || "PIN is required"}</p>}
               </div>
               <div>
                 <Label>Max Discount %</Label>

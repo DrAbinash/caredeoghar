@@ -365,8 +365,8 @@ portalRouter.post("/staff-change-pin", async (req, res) => {
     res.status(400).json({ error: "currentPin and newPin are required" });
     return;
   }
-  if (newPin.length < 6) {
-    res.status(400).json({ error: "New PIN must be at least 6 characters" });
+  if (newPin.length < 4) {
+    res.status(400).json({ error: "New PIN must be at least 4 characters" });
     return;
   }
   if (currentPin === newPin) {
