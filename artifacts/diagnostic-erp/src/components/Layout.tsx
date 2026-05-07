@@ -38,6 +38,7 @@ import {
   Wrench,
   Globe,
   Download,
+  ChevronRight,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -61,37 +62,77 @@ import {
   ensurePairedDirPermission,
 } from "@/lib/usbKey";
 
-const navItems = [
+type NavLeaf = { path: string; icon: typeof Zap; label: string };
+type NavGroup = { id: string; icon: typeof Zap; label: string; children: NavLeaf[] };
+type NavEntry = NavLeaf | NavGroup;
+
+const isGroup = (n: NavEntry): n is NavGroup => "children" in n;
+
+// Sidebar layout — flat items + collapsible groups. Routes/permissions are
+// unchanged; only the visual grouping is consolidated to reduce clutter.
+const navItems: NavEntry[] = [
   { path: "/", icon: Zap, label: "Billing Desk" },
   { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { path: "/patients", icon: Users, label: "Patients" },
   { path: "/appointments", icon: CalendarDays, label: "Appointments" },
   { path: "/queue", icon: Ticket, label: "Queue Tokens" },
   { path: "/radiology", icon: Radio, label: "Radiology" },
-  { path: "/orders", icon: ClipboardList, label: "Orders" },
-  { path: "/tests", icon: FlaskConical, label: "Test Catalog" },
-  { path: "/packages", icon: Boxes, label: "Test Packages" },
-  { path: "/billing", icon: Receipt, label: "Billing" },
-  { path: "/dues", icon: AlertCircle, label: "Due Payments" },
-  { path: "/payments", icon: CreditCard, label: "Payments" },
+  {
+    id: "billing-grp",
+    icon: Receipt,
+    label: "Billing & Payments",
+    children: [
+      { path: "/billing", icon: Receipt, label: "Bills" },
+      { path: "/dues", icon: AlertCircle, label: "Due Payments" },
+      { path: "/payments", icon: CreditCard, label: "Payments" },
+      { path: "/orders", icon: ClipboardList, label: "Orders" },
+    ],
+  },
+  {
+    id: "tests-grp",
+    icon: FlaskConical,
+    label: "Test Catalog",
+    children: [
+      { path: "/tests", icon: FlaskConical, label: "Tests" },
+      { path: "/packages", icon: Boxes, label: "Packages" },
+    ],
+  },
   { path: "/reports", icon: BarChart3, label: "Reports" },
   { path: "/report-generator", icon: FilePen, label: "Report Generator" },
   { path: "/report-hub", icon: FileText, label: "Report Hub" },
   { path: "/inventory", icon: Package, label: "Inventory" },
   { path: "/expenses", icon: TrendingDown, label: "Expenses" },
-  { path: "/staff", icon: Fingerprint, label: "Staff" },
-  { path: "/hr-forms", icon: FilePen, label: "HR Forms" },
+  {
+    id: "staff-grp",
+    icon: Fingerprint,
+    label: "Staff",
+    children: [
+      { path: "/staff", icon: Fingerprint, label: "Staff Directory" },
+      { path: "/hr-forms", icon: FilePen, label: "HR Forms" },
+    ],
+  },
   { path: "/referrals", icon: Stethoscope, label: "Doctors" },
   { path: "/accounting", icon: BookOpen, label: "Accounting" },
   { path: "/discounts", icon: Tag, label: "Discounts" },
   { path: "/form-f", icon: FileText, label: "Form F (PCPNDT)" },
   { path: "/website", icon: Globe, label: "Website Builder" },
-  { path: "/pacs", icon: Monitor, label: "PACS Viewer" },
-  { path: "/dicom-nodes", icon: Server, label: "DICOM Nodes" },
+  {
+    id: "imaging-grp",
+    icon: Monitor,
+    label: "Imaging",
+    children: [
+      { path: "/pacs", icon: Monitor, label: "PACS Viewer" },
+      { path: "/dicom-nodes", icon: Server, label: "DICOM Nodes" },
+    ],
+  },
   { path: "/machines", icon: Wrench, label: "Machines" },
   { path: "/settings", icon: Settings2, label: "Settings" },
   { path: "/system-update", icon: Download, label: "System Update" },
 ];
+
+// Flat list of every leaf path (used for the mobile header label lookup).
+const flatNavLeaves = (items: NavEntry[]): NavLeaf[] =>
+  items.flatMap((n) => (isGroup(n) ? n.children : [n]));
 
 function ThemeToggle() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
@@ -151,8 +192,40 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const session = readStaffSession();
 
-  // Filter nav by permissions when a staff session exists.
-  const visibleNav = navItems.filter((n) => canAccess(session, n.path));
+  // Filter nav by permissions when a staff session exists. For groups, drop
+  // children the user can't access; hide the group entirely if nothing left.
+  const visibleNav: NavEntry[] = navItems.flatMap<NavEntry>((n) => {
+    if (isGroup(n)) {
+      const kids = n.children.filter((c) => canAccess(session, c.path));
+      return kids.length ? [{ ...n, children: kids }] : [];
+    }
+    return canAccess(session, n.path) ? [n] : [];
+  });
+
+  // Auto-expand any group containing the active route; let user toggle others.
+  const initialOpen: Record<string, boolean> = {};
+  for (const n of visibleNav) {
+    if (isGroup(n)) {
+      initialOpen[n.id] = n.children.some((c) =>
+        c.path === "/" ? location === "/" : location === c.path || location.startsWith(c.path + "/"),
+      );
+    }
+  }
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(initialOpen);
+  // Re-expand active group on navigation.
+  useEffect(() => {
+    setOpenGroups((prev) => {
+      const next = { ...prev };
+      for (const n of navItems) {
+        if (!isGroup(n)) continue;
+        const active = n.children.some((c) =>
+          c.path === "/" ? location === "/" : location === c.path || location.startsWith(c.path + "/"),
+        );
+        if (active) next[n.id] = true;
+      }
+      return next;
+    });
+  }, [location]);
 
   // ── Super-admin USB pen-drive gate ──────────────────────────────────────
   // ZERO visible affordance. The Super Admin link only appears when:
@@ -318,23 +391,77 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {visibleNav.map(({ path, icon: Icon, label }) => {
-            const isActive = path === "/" ? location === "/" : location.startsWith(path);
+          {visibleNav.map((entry) => {
+            if (!isGroup(entry)) {
+              const { path, icon: Icon, label } = entry;
+              const isActive = path === "/" ? location === "/" : location === path || location.startsWith(path + "/");
+              return (
+                <Link
+                  key={path}
+                  href={path}
+                  onClick={() => setSidebarOpen(false)}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer",
+                    isActive
+                      ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent",
+                  )}
+                >
+                  <Icon size={15} />
+                  {label}
+                </Link>
+              );
+            }
+
+            const { id, icon: GroupIcon, label, children } = entry;
+            const groupActive = children.some((c) =>
+              c.path === "/" ? location === "/" : location === c.path || location.startsWith(c.path + "/"),
+            );
+            const open = openGroups[id] ?? groupActive;
             return (
-              <Link
-                key={path}
-                href={path}
-                onClick={() => setSidebarOpen(false)}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer",
-                  isActive
-                    ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                    : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+              <div key={id}>
+                <button
+                  type="button"
+                  onClick={() => setOpenGroups((prev) => ({ ...prev, [id]: !open }))}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer",
+                    groupActive
+                      ? "text-sidebar-foreground bg-sidebar-accent/60"
+                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent",
+                  )}
+                  aria-expanded={open}
+                >
+                  <GroupIcon size={15} />
+                  <span className="flex-1 text-left">{label}</span>
+                  <ChevronRight
+                    size={13}
+                    className={cn("transition-transform duration-150", open && "rotate-90")}
+                  />
+                </button>
+                {open && (
+                  <div className="mt-0.5 ml-4 pl-2 border-l border-sidebar-border space-y-0.5">
+                    {children.map(({ path, icon: ChildIcon, label: childLabel }) => {
+                      const isActive = path === "/" ? location === "/" : location === path || location.startsWith(path + "/");
+                      return (
+                        <Link
+                          key={path}
+                          href={path}
+                          onClick={() => setSidebarOpen(false)}
+                          className={cn(
+                            "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] font-medium transition-colors cursor-pointer",
+                            isActive
+                              ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                              : "text-sidebar-foreground/65 hover:text-sidebar-foreground hover:bg-sidebar-accent",
+                          )}
+                        >
+                          <ChildIcon size={13} />
+                          {childLabel}
+                        </Link>
+                      );
+                    })}
+                  </div>
                 )}
-              >
-                <Icon size={15} />
-                {label}
-              </Link>
+              </div>
             );
           })}
         </nav>
@@ -406,7 +533,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <Activity size={14} className="text-white" />
             </div>
             <span className="font-semibold text-sm truncate">
-              {visibleNav.find(n => n.path === "/" ? location === "/" : location.startsWith(n.path))?.label ?? "DiagnoCenter"}
+              {flatNavLeaves(visibleNav).find(n => n.path === "/" ? location === "/" : location === n.path || location.startsWith(n.path + "/"))?.label ?? "DiagnoCenter"}
             </span>
           </div>
           <div className="ml-auto flex items-center gap-1">
