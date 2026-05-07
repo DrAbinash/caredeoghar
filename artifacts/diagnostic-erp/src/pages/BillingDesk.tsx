@@ -1109,71 +1109,6 @@ export default function BillingDesk() {
             {/* ── Test Search & Catalog ── */}
             <div className="flex-shrink-0 border-b border-card-border">
               <div className="p-2.5 space-y-2">
-                {/* ── Add Package compact row (label + search + categories + manage) ── */}
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-700 dark:text-rose-300 flex-shrink-0">
-                    <Package size={13} /> Add Package
-                  </div>
-                  <div className="relative min-w-0 flex-1">
-                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      placeholder="Search packages by name, code, or test…"
-                      value={packageSearch}
-                      onChange={(e) => setPackageSearch(e.target.value)}
-                      className="pl-9 h-8 text-sm w-full"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => navigate("/packages")}
-                    className="h-8 rounded-md border border-card-border px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 flex-shrink-0"
-                  >
-                    All Categories
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => navigate("/packages")}
-                    className="text-[11px] font-normal text-muted-foreground hover:text-foreground flex-shrink-0"
-                  >
-                    Manage packages
-                  </button>
-                </div>
-
-                {/* ── Package list ── */}
-                <div className="border border-card-border rounded-lg overflow-hidden bg-background">
-                  {packages.length === 0 ? (
-                    <div className="px-3 py-3 text-xs text-muted-foreground text-center">
-                      No packages created yet.&nbsp;
-                      <button onClick={() => navigate("/packages")} className="text-primary hover:underline">Create one</button>
-                    </div>
-                  ) : filteredPackages.length === 0 ? (
-                    <div className="px-3 py-3 text-xs text-muted-foreground text-center">No packages match "{packageSearch}"</div>
-                  ) : (
-                    <div className="max-h-24 overflow-y-auto divide-y divide-card-border">
-                      {filteredPackages.map((pkg) => {
-                        const added = selectedPackages.some((p) => p.packageId === pkg.id);
-                        const effective = pkg.price - (pkg.price * pkg.discountPct) / 100;
-                        return (
-                          <button
-                            key={pkg.id}
-                            onClick={() => addPackage(pkg)}
-                            disabled={added}
-                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${
-                              added ? "bg-primary/5 text-muted-foreground cursor-default" : "hover:bg-muted/50"
-                            }`}
-                          >
-                            <Package size={11} className="text-muted-foreground flex-shrink-0" />
-                            <span className="flex-1 font-medium truncate">{pkg.name}</span>
-                            <span className="text-xs text-muted-foreground">{pkg.tests.length} tests</span>
-                            <span className="text-xs font-semibold">{inr(effective)}</span>
-                            {added ? <CheckCircle2 size={12} className="text-primary flex-shrink-0" /> : <Plus size={12} className="text-muted-foreground flex-shrink-0" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
                 {/* ── Quick Test Tabs (6 customizable slots) ── */}
                 <div className="pt-1">
                   <div className="flex items-center justify-between gap-2 text-xs font-semibold text-violet-700 dark:text-violet-300 mb-1">
@@ -1293,262 +1228,147 @@ export default function BillingDesk() {
                   </div>
                 </div>
 
-              </div>
-            </div>
-
-            {/* ── Selected Tests ── */}
-            <div className="lg:flex-1 min-h-0 overflow-y-auto border-b border-card-border max-h-[34vh] lg:max-h-none">
-              <div className="px-4 py-2 bg-muted/10 flex items-center justify-between">
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Selected Tests ({selectedTests.length})
-                </span>
-                {selectedTests.length > 0 && (
-                  <button className="text-xs text-destructive hover:text-destructive/80" onClick={() => setSelectedTests([])}>
-                    Clear all
-                  </button>
-                )}
-              </div>
-              {selectedTests.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                  <FlaskConical size={24} className="mb-2 opacity-30" />
-                  <p className="text-xs">No tests added yet</p>
+            <div className="space-y-3">
+              {/* ── Selected Tests ── */}
+            <div className="space-y-3">
+              <div className="lg:flex-1 min-h-0 overflow-y-auto border-b border-card-border max-h-[34vh] lg:max-h-none">
+                <div className="px-4 py-2 bg-muted/10 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Selected Tests ({selectedTests.length})
+                  </span>
+                  {selectedTests.length > 0 && (
+                    <button className="text-xs text-destructive hover:text-destructive/80" onClick={() => setSelectedTests([])}>
+                      Clear all
+                    </button>
+                  )}
                 </div>
-              ) : (
-                <div className="divide-y divide-card-border">
-                  {selectedTests.map((t) => (
-                    <div key={t.testId} className="flex items-center gap-2 px-4 py-2.5">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">{t.name}</div>
-                        <div className="text-xs text-muted-foreground capitalize">{t.category}
-                          {t.source === "package" && <span className="ml-1 text-orange-500">· pkg</span>}
+                {selectedTests.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                    <FlaskConical size={24} className="mb-2 opacity-30" />
+                    <p className="text-xs">No tests added yet</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-card-border">
+                    {selectedTests.map((t) => (
+                      <div key={t.testId} className="flex items-center gap-2 px-4 py-2.5">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{t.name}</div>
+                          <div className="text-xs text-muted-foreground capitalize">{t.category}
+                            {t.source === "package" && <span className="ml-1 text-orange-500">· pkg</span>}
+                          </div>
                         </div>
-                      </div>
-                      <span className="text-sm font-semibold flex-shrink-0">{inr(t.price)}</span>
-                      <button onClick={() => removeTest(t.testId)} className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0">
-                        <X size={13} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {selectedPackages.length > 0 && (
-                <div className="border-t border-card-border bg-muted/5 px-4 py-3 space-y-2">
-                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Selected Packages</div>
-                  <div className="space-y-2">
-                    {selectedPackages.map((pkg) => (
-                      <div key={pkg.packageId} className="flex items-center justify-between gap-2 rounded-md border border-card-border px-3 py-2">
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium truncate">{pkg.name}</div>
-                          <div className="text-xs text-muted-foreground">{pkg.testIds.length} tests included</div>
-                        </div>
-                        <button onClick={() => removePackage(pkg.packageId)} className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0">
+                        <span className="text-sm font-semibold flex-shrink-0">{inr(t.price)}</span>
+                        <button onClick={() => removeTest(t.testId)} className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0">
                           <X size={13} />
                         </button>
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
-            </div>
-
-            {/* ── Bill Summary ── */}
-            <div className="flex-shrink-0 border-b border-card-border bg-card">
-              <div className="px-3 py-2 border-b border-card-border bg-muted/20 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Receipt size={14} className="text-primary flex-shrink-0" />
-                  <span className="text-sm font-semibold truncate">Bill Summary</span>
-                </div>
-                {selectedTests.length > 0 && (
-                  <button
-                    className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-                    onClick={fetchSuggestion}
-                    disabled={suggLoading}
-                  >
-                    <Zap size={11} className={suggLoading ? "animate-pulse text-yellow-500" : ""} />
-                    {suggLoading ? "Checking…" : "Auto-discount"}
-                  </button>
                 )}
-              </div>
-
-              <div className="p-2.5 space-y-1.5">
-                {/* Discount suggestion */}
-                {suggestion && suggestion.discount > 0 && (
-                  <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 rounded-lg px-3 py-2 flex items-center gap-2 text-xs">
-                    <Zap size={11} className="text-green-600 flex-shrink-0" />
-                    <span className="text-green-700 flex-1">
-                      Discount rule: <strong>{suggestion.rule?.name}</strong> — {inr(suggestion.discount)} applicable
-                    </span>
-                    <button
-                      className="text-green-700 font-semibold hover:underline"
-                      onClick={() => { setDiscountType("amount"); setDiscountValue(suggestion.discount); setSuggestion(null); }}
-                    >
-                      Apply
-                    </button>
-                    <button onClick={() => setSuggestion(null)} className="text-muted-foreground hover:text-foreground">
-                      <X size={10} />
-                    </button>
-                  </div>
-                )}
-
-                {/* Subtotal row */}
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-medium">{inr(subtotal)}</span>
-                </div>
-
-                {/* Discount row */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-muted-foreground w-14 flex-shrink-0">Discount</span>
-                  <div className="flex items-center border border-card-border rounded-lg overflow-hidden flex-shrink-0">
-                    <button
-                      onClick={() => setDiscountType("amount")}
-                      className={`px-2 py-1 text-xs flex items-center gap-0.5 transition-colors ${discountType === "amount" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
-                    >
-                      <IndianRupee size={10} /> ₹
-                    </button>
-                    <button
-                      onClick={() => setDiscountType("pct")}
-                      className={`px-2 py-1 text-xs flex items-center gap-0.5 transition-colors ${discountType === "pct" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
-                    >
-                      <Percent size={10} /> %
-                    </button>
-                  </div>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={discountType === "pct" ? 100 : subtotal}
-                    step="0.01"
-                    value={discountValue || ""}
-                    onChange={(e) => setDiscountValue(Number(e.target.value))}
-                    placeholder="0"
-                      className="h-7 text-xs flex-1 min-w-0"
-                  />
-                  {discountAmt > 0 && (
-                    <span className="text-xs text-orange-600 font-medium flex-shrink-0">−{inr(discountAmt)}</span>
-                  )}
-                </div>
-
-                {/* Discount reason (only when discount applied) */}
-                {discountAmt > 0 && (
-                  <div className="space-y-1 pl-[62px]">
-                    <select
-                      value={discountReason}
-                      onChange={(e) => setDiscountReason(e.target.value)}
-                      className="w-full h-7 text-xs border border-card-border rounded-md px-2 bg-background"
-                    >
-                      <option value="">— Select reason —</option>
-                      {discountReasons.filter(r => r.isActive).map(r => (
-                        <option key={r.id} value={r.label}>{r.label}</option>
+                {selectedPackages.length > 0 && (
+                  <div className="border-t border-card-border bg-muted/5 px-4 py-3 space-y-2">
+                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Selected Packages</div>
+                    <div className="space-y-2">
+                      {selectedPackages.map((pkg) => (
+                        <div key={pkg.packageId} className="flex items-center justify-between gap-2 rounded-md border border-card-border px-3 py-2">
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium truncate">{pkg.name}</div>
+                            <div className="text-xs text-muted-foreground">{pkg.testIds.length} tests included</div>
+                          </div>
+                          <button onClick={() => removePackage(pkg.packageId)} className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0">
+                            <X size={13} />
+                          </button>
+                        </div>
                       ))}
-                    </select>
-                    <Input
-                      placeholder="Custom note (optional)…"
-                      value={discountNote}
-                      onChange={(e) => setDiscountNote(e.target.value)}
-                      className="h-7 text-xs"
-                      maxLength={200}
-                    />
+                    </div>
                   </div>
                 )}
-
-                {/* Total */}
-                <div className="flex items-center justify-between pt-1 border-t border-card-border">
-                  <span className="font-semibold text-xs">Total</span>
-                  <span className="text-base font-bold text-primary">{inr(total)}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* ── Payment ── */}
-            <div className="flex-shrink-0 bg-card p-2 space-y-2 border-b border-card-border max-h-[52vh] overflow-y-auto">
-              {/* Toggle */}
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <button
-                  onClick={() => setPayNow(!payNow)}
-                  className={`relative inline-flex h-4.5 w-8.5 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors
-                    ${payNow ? "bg-primary" : "bg-muted"}`}
-                >
-                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${payNow ? "translate-x-3.5" : "translate-x-0"}`} />
-                </button>
-                <span className="text-xs font-medium flex-1 min-w-0">Collect Payment Now</span>
-                <div className="text-right">
-                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</div>
-                  <div className="text-sm font-bold text-primary">{inr(total)}</div>
-                </div>
               </div>
 
-              {payNow && (
-                <div className="space-y-2">
-                  {/* Header row */}
-                  <div className="grid grid-cols-[1fr_1fr_16px] gap-1 px-0.5 text-[10px] sm:text-[10px]">
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Mode</span>
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Amount (₹)</span>
-                    <span />
+              <div className="flex-shrink-0 border-b border-card-border bg-card lg:sticky lg:bottom-0 lg:z-10">
+                <div className="px-3 py-2 border-b border-card-border bg-muted/20 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Receipt size={14} className="text-primary flex-shrink-0" />
+                    <span className="text-sm font-semibold truncate">Bill Summary</span>
                   </div>
-
-                  {/* Split rows */}
-                  {paymentSplits.map((split, idx) => (
-                    <div key={idx} className="grid grid-cols-[1fr_1fr_16px] gap-1 items-center">
-                      <Select
-                        value={split.mode}
-                        onValueChange={(v) => setPaymentSplits((prev) => prev.map((s, i) => i === idx ? { ...s, mode: v } : s))}
-                      >
-                        <SelectTrigger className="h-8 sm:h-6.5 text-[11px]"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {PAYMENT_MODES.map((m) => (
-                            <SelectItem key={m} value={m} className="capitalize">{m.toUpperCase()}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        placeholder={idx === 0 ? total.toFixed(2) : "0.00"}
-                        value={split.amount}
-                        onChange={(e) => setPaymentSplits((prev) => prev.map((s, i) => i === idx ? { ...s, amount: e.target.value } : s))}
-                        className="h-8 sm:h-6.5 text-[11px]"
-                      />
-                      {paymentSplits.length > 1 ? (
-                        <button
-                          onClick={() => setPaymentSplits((prev) => prev.filter((_, i) => i !== idx))}
-                          className="text-muted-foreground hover:text-destructive transition-colors"
-                        >
-                          <X size={13} />
-                        </button>
-                      ) : <span />}
-                    </div>
-                  ))}
-
-                  {/* Add split link */}
-                  {paymentSplits.length < PAYMENT_MODES.length && (
+                  {selectedTests.length > 0 && (
                     <button
-                      onClick={() => setPaymentSplits((prev) => [...prev, { mode: "upi", amount: "" }])}
-                      className="text-[10px] text-primary hover:underline flex items-center gap-1"
+                      className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+                      onClick={fetchSuggestion}
+                      disabled={suggLoading}
                     >
-                      <Plus size={11} /> Add another payment method
+                      <Zap size={11} className={suggLoading ? "animate-pulse text-yellow-500" : ""} />
+                      {suggLoading ? "Checking…" : "Auto-discount"}
                     </button>
                   )}
-
-                  {/* Balance / paid status */}
-                  <div className="pt-1 border-t border-card-border space-y-1 text-[10px]">
-                    {balance > 0 ? (
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-muted-foreground">Balance due</span>
-                        <span className="text-orange-600 font-semibold">{inr(balance)}</span>
-                      </div>
-                    ) : paidTotal > 0 && total > 0 ? (
-                      <div className="flex items-center justify-center gap-1 text-green-600 font-medium">
-                        <CheckCircle2 size={11} /> Fully paid — {inr(paidTotal)}
-                      </div>
-                    ) : (
-                      <div className="text-muted-foreground">Enter amount(s) above</div>
-                    )}
-                  </div>
                 </div>
-              )}
-            </div>
+                <div className="p-2.5 space-y-1.5 max-h-[30vh] overflow-y-auto">
+                  {suggestion && suggestion.discount > 0 && (
+                    <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 rounded-lg px-3 py-2 flex items-center gap-2 text-xs">
+                      <Zap size={11} className="text-green-600 flex-shrink-0" />
+                      <span className="text-green-700 flex-1">
+                        Discount rule: <strong>{suggestion.rule?.name}</strong> — {inr(suggestion.discount)} applicable
+                      </span>
+                      <button className="text-green-700 font-semibold hover:underline" onClick={() => { setDiscountType("amount"); setDiscountValue(suggestion.discount); setSuggestion(null); }}>
+                        Apply
+                      </button>
+                      <button onClick={() => setSuggestion(null)} className="text-muted-foreground hover:text-foreground">
+                        <X size={10} />
+                      </button>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between text-xs"><span className="text-muted-foreground">Subtotal</span><span className="font-medium">{inr(subtotal)}</span></div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground w-14 flex-shrink-0">Discount</span>
+                    <div className="flex items-center border border-card-border rounded-lg overflow-hidden flex-shrink-0">
+                      <button onClick={() => setDiscountType("amount")} className={`px-2 py-1 text-xs flex items-center gap-0.5 transition-colors ${discountType === "amount" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}><IndianRupee size={10} /> ₹</button>
+                      <button onClick={() => setDiscountType("pct")} className={`px-2 py-1 text-xs flex items-center gap-0.5 transition-colors ${discountType === "pct" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}><Percent size={10} /> %</button>
+                    </div>
+                    <Input type="number" min={0} max={discountType === "pct" ? 100 : subtotal} step="0.01" value={discountValue || ""} onChange={(e) => setDiscountValue(Number(e.target.value))} placeholder="0" className="h-7 text-xs flex-1 min-w-0" />
+                    {discountAmt > 0 && <span className="text-xs text-orange-600 font-medium flex-shrink-0">−{inr(discountAmt)}</span>}
+                  </div>
+                  {discountAmt > 0 && (
+                    <div className="space-y-1 pl-[62px]">
+                      <select value={discountReason} onChange={(e) => setDiscountReason(e.target.value)} className="w-full h-7 text-xs border border-card-border rounded-md px-2 bg-background">
+                        <option value="">— Select reason —</option>
+                        {discountReasons.filter(r => r.isActive).map(r => <option key={r.id} value={r.label}>{r.label}</option>)}
+                      </select>
+                      <Input placeholder="Custom note (optional)…" value={discountNote} onChange={(e) => setDiscountNote(e.target.value)} className="h-7 text-xs" maxLength={200} />
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between pt-1 border-t border-card-border"><span className="font-semibold text-xs">Total</span><span className="text-base font-bold text-primary">{inr(total)}</span></div>
+                </div>
+              </div>
 
+              <div className="flex-shrink-0 bg-card p-3 space-y-3 border-b border-card-border max-h-[42vh] overflow-y-auto lg:rounded-b-xl">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <button onClick={() => setPayNow(!payNow)} className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${payNow ? "bg-primary" : "bg-muted"}`}>
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${payNow ? "translate-x-4" : "translate-x-0"}`} />
+                  </button>
+                  <span className="text-sm font-medium flex-1 min-w-0">Collect Payment Now</span>
+                  <div className="text-right"><div className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</div><div className="text-base font-bold text-primary">{inr(total)}</div></div>
+                </div>
+                {payNow && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-[1.1fr_1fr_18px] gap-2 px-0.5 text-[10px] sm:text-[10px]"><span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Mode</span><span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Amount (₹)</span><span /></div>
+                    {paymentSplits.map((split, idx) => (
+                      <div key={idx} className="grid grid-cols-[1.1fr_1fr_18px] gap-2 items-center">
+                        <Select value={split.mode} onValueChange={(v) => setPaymentSplits((prev) => prev.map((s, i) => i === idx ? { ...s, mode: v } : s))}>
+                          <SelectTrigger className="h-9 text-[11px]"><SelectValue /></SelectTrigger>
+                          <SelectContent>{PAYMENT_MODES.map((m) => <SelectItem key={m} value={m} className="capitalize">{m.toUpperCase()}</SelectItem>)}</SelectContent>
+                        </Select>
+                        <Input type="number" min={0} step="0.01" placeholder={idx === 0 ? total.toFixed(2) : "0.00"} value={split.amount} onChange={(e) => setPaymentSplits((prev) => prev.map((s, i) => i === idx ? { ...s, amount: e.target.value } : s))} className="h-9 text-[11px]" />
+                        {paymentSplits.length > 1 ? <button onClick={() => setPaymentSplits((prev) => prev.filter((_, i) => i !== idx))} className="text-muted-foreground hover:text-destructive transition-colors"><X size={13} /></button> : <span />}
+                      </div>
+                    ))}
+                    {paymentSplits.length < PAYMENT_MODES.length && <button onClick={() => setPaymentSplits((prev) => [...prev, { mode: "upi", amount: "" }])} className="text-[11px] text-primary hover:underline flex items-center gap-1"><Plus size={11} /> Add another payment method</button>}
+                    <div className="pt-2 border-t border-card-border space-y-1.5 text-[11px]">
+                      {balance > 0 ? <div className="flex items-center justify-between gap-2"><span className="text-muted-foreground">Balance due</span><span className="text-orange-600 font-semibold">{inr(balance)}</span></div> : paidTotal > 0 && total > 0 ? <div className="flex items-center justify-center gap-1 text-green-600 font-medium"><CheckCircle2 size={11} /> Fully paid — {inr(paidTotal)}</div> : <div className="text-muted-foreground">Enter amount(s) above</div>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
             {/* ── Action Footer — Generate / Save & Print ── */}
             <div className="sticky bottom-0 z-10 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/90 p-2 border-t border-card-border">
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5">
