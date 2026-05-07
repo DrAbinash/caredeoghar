@@ -562,17 +562,21 @@ export default function BillingDesk() {
       queryClient.invalidateQueries({ queryKey: ["bill-preview-no"] });
       if (printAfterSaveRef.current) {
         printAfterSaveRef.current = false;
-        // Make sure the clinic-settings query has resolved before we print —
-        // otherwise the receipt header falls back to "Diagnostic Centre"
-        // instead of the configured clinic name/address/logo.
+        // Force a fresh fetch of clinic settings before printing — otherwise
+        // the receipt header falls back to "Diagnostic Centre" instead of
+        // the configured clinic name/address/logo. We always refetch (rather
+        // than ensureQueryData) so a previously-failed/empty cache entry
+        // (e.g. from when this user had no permission) is replaced with the
+        // real data, then wait long enough for React to re-render the
+        // receipt subtree before triggering print.
         void queryClient
-          .ensureQueryData({
+          .fetchQuery({
             queryKey: ["clinic-settings"],
             queryFn: () => api.get("/api/clinic-settings"),
           })
           .catch(() => {})
           .then(() => {
-            window.setTimeout(() => window.print(), 250);
+            window.setTimeout(() => window.print(), 500);
           });
       }
     },
