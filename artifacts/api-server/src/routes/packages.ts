@@ -120,6 +120,101 @@ router.patch("/:id", async (req, res) => {
   return res.json(toNum(updated as unknown as Record<string, unknown>));
 });
 
+// ── Bulk CSV import ───────────────────────────────────────────────────────
+// Upsert packages by `packageCode` if present, otherwise by name. The
+// `testCodes` column is a semicolon-separated list of test codes (e.g.
+// "CBC;LFT;TSH") — we resolve them against the tests table and replace
+// the package's full test set on each import. Unknown test codes are
+// reported per-row but do not fail the row (the package is still
+// upserted; the missing tests are simply not linked).
+router.post("/import", async (req, res) => {
+  const rows = Array.isArray(req.body?.rows) ? (req.body.rows as Record<string, unknown>[]) : null;
+  if (!rows) return res.status(400).json({ error: "Request body must include `rows: []`." });
+  if (rows.length > 5000) return res.status(413).json({ error: "Too many rows in one import (max 5000)." });
+
+  // Pre-load test code → id once for fast lookups.
+  const allTests = await db.select({ id: testsTable.id, code: testsTable.code }).from(testsTable);
+  const testByCode = new Map(allTests.map(t => [t.code.toLowerCase(), t.id]));
+
+  let inserted = 0, updated = 0, skipped = 0;
+  const errors: { row: number; reason: string }[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const name = String(r.name ?? "").trim();
+    const codeInput = typeof r.packageCode === "string" ? r.packageCode.trim() : "";
+    if (!name) {
+      skipped++;
+      errors.push({ row: i + 2, reason: "Missing required field (name)." });
+      continue;
+    }
+    const price = Number(r.price ?? 0);
+    const discountPct = Number(r.discountPct ?? 0);
+    if (!Number.isFinite(price) || price < 0 || !Number.isFinite(discountPct) || discountPct < 0 || discountPct > 100) {
+      skipped++;
+      errors.push({ row: i + 2, reason: "price must be ≥ 0 and discountPct between 0 and 100." });
+      continue;
+    }
+
+    const isActiveStr = typeof r.isActive === "string" ? r.isActive.trim() : "";
+    const isActive = isActiveStr ? !/^(false|0|no|inactive)$/i.test(isActiveStr) : true;
+
+    // Resolve test codes → ids. Track misses for the per-row error message.
+    const codesRaw = typeof r.testCodes === "string" ? r.testCodes : "";
+    const codes = codesRaw.split(";").map(c => c.trim()).filter(Boolean);
+    const testIds: number[] = [];
+    const missing: string[] = [];
+    for (const c of codes) {
+      const id = testByCode.get(c.toLowerCase());
+      if (id !== undefined) testIds.push(id); else missing.push(c);
+    }
+
+    const values = {
+      name,
+      description: typeof r.description === "string" && r.description.trim() ? r.description.trim() : null,
+      price: price.toFixed(2),
+      discountPct: discountPct.toFixed(2),
+      isActive,
+    };
+
+    try {
+      let existingId: number | undefined;
+      if (codeInput) {
+        const [hit] = await db.select({ id: packagesTable.id }).from(packagesTable).where(eq(packagesTable.packageCode, codeInput));
+        existingId = hit?.id;
+      }
+      if (!existingId) {
+        const [hit] = await db.select({ id: packagesTable.id }).from(packagesTable).where(eq(packagesTable.name, name));
+        existingId = hit?.id;
+      }
+
+      if (existingId) {
+        await db.update(packagesTable).set(values).where(eq(packagesTable.id, existingId));
+        await db.delete(packageTestsTable).where(eq(packageTestsTable.packageId, existingId));
+        if (testIds.length > 0) {
+          await db.insert(packageTestsTable).values(testIds.map(tid => ({ packageId: existingId!, testId: tid })));
+        }
+        updated++;
+      } else {
+        const packageCode = codeInput || await generatePackageCode();
+        const [pkg] = await db.insert(packagesTable).values({ ...values, packageCode }).returning();
+        if (testIds.length > 0) {
+          await db.insert(packageTestsTable).values(testIds.map(tid => ({ packageId: pkg.id, testId: tid })));
+        }
+        inserted++;
+      }
+      if (missing.length > 0) {
+        errors.push({ row: i + 2, reason: `Unknown test codes (skipped): ${missing.join(", ")}` });
+      }
+    } catch (e) {
+      skipped++;
+      errors.push({ row: i + 2, reason: (e as Error).message || "Database error" });
+    }
+  }
+
+  return res.json({ inserted, updated, skipped, errors: errors.slice(0, 50) });
+});
+
 // Delete package
 router.delete("/:id", async (req, res) => {
   const id = Number(req.params.id);

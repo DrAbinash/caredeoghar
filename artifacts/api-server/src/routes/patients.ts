@@ -100,6 +100,87 @@ patientsRouter.post("/", async (req, res) => {
   res.status(201).json(sanitizePatient(patient));
 });
 
+// ── Bulk CSV import ───────────────────────────────────────────────────────
+// Upsert by patientId when present (the human-readable "P-00123" key the
+// system itself emits), otherwise fall back to phone + firstName + lastName
+// to detect repeats across imports. Photo and portal PIN are intentionally
+// NOT importable — they are sensitive and have separate UI flows.
+patientsRouter.post("/import", async (req, res) => {
+  const rows = Array.isArray(req.body?.rows) ? (req.body.rows as Record<string, unknown>[]) : null;
+  if (!rows) {
+    res.status(400).json({ error: "Request body must include `rows: []`." });
+    return;
+  }
+  if (rows.length > 5000) {
+    res.status(413).json({ error: "Too many rows in one import (max 5000)." });
+    return;
+  }
+
+  let inserted = 0, updated = 0, skipped = 0;
+  const errors: { row: number; reason: string }[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const firstName = String(r.firstName ?? "").trim();
+    const lastName = String(r.lastName ?? "").trim();
+    const phone = String(r.phone ?? "").trim();
+    const dateOfBirth = String(r.dateOfBirth ?? "").trim();
+    const gender = String(r.gender ?? "").trim().toLowerCase();
+    const patientIdInput = typeof r.patientId === "string" ? r.patientId.trim() : "";
+
+    if (!firstName || !lastName || !phone || !dateOfBirth || !gender) {
+      skipped++;
+      errors.push({ row: i + 2, reason: "Missing required field (firstName, lastName, phone, dateOfBirth, gender)." });
+      continue;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
+      skipped++;
+      errors.push({ row: i + 2, reason: `Invalid dateOfBirth "${dateOfBirth}" — use YYYY-MM-DD.` });
+      continue;
+    }
+    if (!["male", "female", "other"].includes(gender)) {
+      skipped++;
+      errors.push({ row: i + 2, reason: `Invalid gender "${gender}" — use male/female/other.` });
+      continue;
+    }
+
+    const values = {
+      firstName, lastName, phone, dateOfBirth, gender,
+      email: typeof r.email === "string" && r.email.trim() ? r.email.trim() : null,
+      address: typeof r.address === "string" && r.address.trim() ? r.address.trim() : null,
+      bloodGroup: typeof r.bloodGroup === "string" && r.bloodGroup.trim() ? r.bloodGroup.trim() : null,
+    };
+
+    try {
+      let existingId: number | undefined;
+      if (patientIdInput) {
+        const [hit] = await db.select({ id: patientsTable.id }).from(patientsTable).where(eq(patientsTable.patientId, patientIdInput));
+        existingId = hit?.id;
+      }
+      if (!existingId) {
+        const [hit] = await db.select({ id: patientsTable.id }).from(patientsTable).where(
+          sql`${patientsTable.phone} = ${phone} AND lower(${patientsTable.firstName}) = lower(${firstName}) AND lower(${patientsTable.lastName}) = lower(${lastName})`
+        );
+        existingId = hit?.id;
+      }
+
+      if (existingId) {
+        await db.update(patientsTable).set(values).where(eq(patientsTable.id, existingId));
+        updated++;
+      } else {
+        const newPatientId = patientIdInput || await generatePatientId();
+        await db.insert(patientsTable).values({ ...values, patientId: newPatientId });
+        inserted++;
+      }
+    } catch (e) {
+      skipped++;
+      errors.push({ row: i + 2, reason: (e as Error).message || "Database error" });
+    }
+  }
+
+  res.json({ inserted, updated, skipped, errors: errors.slice(0, 50) });
+});
+
 patientsRouter.get("/:id", async (req, res) => {
   const parsed = GetPatientParams.safeParse({ id: Number(req.params.id) });
   if (!parsed.success) {

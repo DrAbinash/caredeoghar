@@ -7,7 +7,7 @@ import {
   testsTable,
   vendorsTable,
 } from "@workspace/db/schema";
-import { eq, desc, lt, and, inArray } from "drizzle-orm";
+import { eq, desc, lt, and, inArray, sql } from "drizzle-orm";
 import {
   ListInventoryItemsByVendorParams,
   CreateInventoryItemBody,
@@ -434,6 +434,95 @@ router.delete("/consumption-rules/:id", async (req, res) => {
   }
   await db.delete(inventoryConsumptionRulesTable).where(eq(inventoryConsumptionRulesTable.id, paramsParsed.data.id));
   res.json({ success: true });
+});
+
+// ── Bulk CSV import ───────────────────────────────────────────────────────
+// Upserts inventory items by `name` (case-insensitive). Stock movements
+// are intentionally NOT imported — they have to flow through the audited
+// stock-in/out endpoints. `vendorCode` (optional) is resolved against the
+// vendors table to set preferredVendorId.
+router.post("/import", async (req, res) => {
+  const rows = Array.isArray(req.body?.rows) ? (req.body.rows as Record<string, unknown>[]) : null;
+  if (!rows) {
+    res.status(400).json({ error: "Request body must include `rows: []`." });
+    return;
+  }
+  if (rows.length > 5000) {
+    res.status(413).json({ error: "Too many rows in one import (max 5000)." });
+    return;
+  }
+
+  // Pre-load the vendor code → id map once so we don't fire one SELECT per row.
+  const vendors = await db.select({ id: vendorsTable.id, code: vendorsTable.code }).from(vendorsTable);
+  const vendorByCode = new Map(vendors.map(v => [v.code.toLowerCase(), v.id]));
+
+  let inserted = 0, updated = 0, skipped = 0;
+  const errors: { row: number; reason: string }[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const name = String(r.name ?? "").trim();
+    const unit = String(r.unit ?? "").trim();
+    if (!name || !unit) {
+      skipped++;
+      errors.push({ row: i + 2, reason: "Missing required field (name or unit)." });
+      continue;
+    }
+
+    const category = (typeof r.category === "string" && r.category.trim()) || "consumable";
+    const currentStock = Number(r.currentStock ?? 0);
+    const minStock = Number(r.minStock ?? 0);
+    const costPrice = Number(r.costPrice ?? 0);
+    if (![currentStock, minStock, costPrice].every(n => Number.isFinite(n) && n >= 0)) {
+      skipped++;
+      errors.push({ row: i + 2, reason: "currentStock, minStock, and costPrice must be non-negative numbers." });
+      continue;
+    }
+
+    let preferredVendorId: number | null = null;
+    const vendorCode = typeof r.vendorCode === "string" ? r.vendorCode.trim() : "";
+    if (vendorCode) {
+      const vid = vendorByCode.get(vendorCode.toLowerCase());
+      if (vid !== undefined) preferredVendorId = vid;
+      // Unknown vendor code → leave preferredVendorId null (don't fail the row).
+    }
+
+    const isActiveStr = typeof r.isActive === "string" ? r.isActive.trim() : "";
+    const isActive = isActiveStr ? !/^(false|0|no|inactive)$/i.test(isActiveStr) : true;
+
+    // On UPDATE we deliberately do NOT touch `currentStock`: stock movements
+    // must flow through the audited stock-in/out endpoints to preserve the
+    // inventory_transactions ledger. `currentStock` is only seeded on INSERT.
+    const updateValues = {
+      name, unit, category,
+      minStock: minStock.toFixed(2),
+      costPrice: costPrice.toFixed(2),
+      preferredVendorId, isActive,
+    };
+
+    try {
+      // Match by name + unit (both case-insensitive). Inventory items have
+      // no unique code, but two rows that share BOTH name and unit are
+      // overwhelmingly the same physical item — `(Surgical Gloves, box)`
+      // and `(Surgical Gloves, pair)` will not collide.
+      const [existing] = await db
+        .select({ id: inventoryItemsTable.id })
+        .from(inventoryItemsTable)
+        .where(sql`lower(${inventoryItemsTable.name}) = lower(${name}) AND lower(${inventoryItemsTable.unit}) = lower(${unit})`);
+      if (existing) {
+        await db.update(inventoryItemsTable).set(updateValues).where(eq(inventoryItemsTable.id, existing.id));
+        updated++;
+      } else {
+        await db.insert(inventoryItemsTable).values({ ...updateValues, currentStock: currentStock.toFixed(2) });
+        inserted++;
+      }
+    } catch (e) {
+      skipped++;
+      errors.push({ row: i + 2, reason: (e as Error).message || "Database error" });
+    }
+  }
+
+  res.json({ inserted, updated, skipped, errors: errors.slice(0, 50) });
 });
 
 function toNum(item: Record<string, unknown>) {

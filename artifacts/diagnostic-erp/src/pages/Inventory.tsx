@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
@@ -30,6 +30,8 @@ import {
   exportInventoryWord,
 } from "@/lib/inventoryExports";
 import { useToast } from "@/hooks/use-toast";
+import { buildCsv, downloadCsv, parseCsv } from "@/lib/csv";
+import { Upload } from "lucide-react";
 
 type Item = {
   id: number; name: string; unit: string; category: string;
@@ -104,6 +106,113 @@ export default function Inventory() {
   const [view, setView] = useState<"cards" | "table">("cards");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [stockFilter, setStockFilter] = useState<"all" | "low" | "out">("all");
+
+  // ── CSV export/import for items + vendors ─────────────────────────────
+  // Two separate file inputs (one per tab) so the user can't accidentally
+  // upload a vendor file on the items tab or vice versa.
+  const [csvBusy, setCsvBusy] = useState<null | "item-export" | "item-import" | "vendor-export" | "vendor-import">(null);
+  const itemImportRef = useRef<HTMLInputElement>(null);
+  const vendorImportRef = useRef<HTMLInputElement>(null);
+
+  const exportItemsCsv = () => {
+    if (csvBusy) return;
+    setCsvBusy("item-export");
+    try {
+      const vendorMap = new Map((vendors ?? []).map((v) => [v.id, v.code]));
+      const rows = items.map((it) => ({
+        name: it.name,
+        unit: it.unit,
+        category: it.category,
+        currentStock: Number(it.currentStock).toFixed(2),
+        minStock: Number(it.minStock).toFixed(2),
+        costPrice: Number(it.costPrice).toFixed(2),
+        vendorCode: it.preferredVendorId ? vendorMap.get(it.preferredVendorId) ?? "" : "",
+        isActive: it.isActive ? "true" : "false",
+      }));
+      const csv = buildCsv(
+        ["name","unit","category","currentStock","minStock","costPrice","vendorCode","isActive"],
+        rows,
+      );
+      downloadCsv(csv, `inventory-items-${new Date().toISOString().slice(0, 10)}.csv`);
+      toast({ title: "Export ready", description: `${rows.length} items downloaded.` });
+    } catch (err) {
+      toast({ title: "Export failed", description: (err as Error).message || "Could not export items.", variant: "destructive" });
+    } finally {
+      setCsvBusy(null);
+    }
+  };
+
+  const onItemsImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; e.target.value = "";
+    if (!file) return;
+    setCsvBusy("item-import");
+    try {
+      const text = await file.text();
+      const rows = parseCsv(text);
+      if (rows.length === 0) { toast({ title: "Empty file", variant: "destructive" }); return; }
+      const result = await api.post<{ inserted: number; updated: number; skipped: number; errors: { row: number; reason: string }[] }>("/api/inventory/import", { rows });
+      qc.invalidateQueries({ queryKey: ["inventory"] });
+      const desc = `${result.inserted} added, ${result.updated} updated`
+        + (result.skipped > 0 ? `, ${result.skipped} skipped` : "")
+        + (result.errors[0] ? ` — first issue: row ${result.errors[0].row}: ${result.errors[0].reason}` : "");
+      toast({ title: result.skipped > 0 ? "Import finished with warnings" : "Import complete", description: desc, variant: result.skipped > 0 ? "destructive" : "default" });
+    } catch (err) {
+      toast({ title: "Import failed", description: (err as Error).message || "Could not import.", variant: "destructive" });
+    } finally { setCsvBusy(null); }
+  };
+
+  const exportVendorsCsv = () => {
+    if (csvBusy) return;
+    setCsvBusy("vendor-export");
+    try {
+      const rows = (vendors ?? []).map((v) => ({
+        code: v.code,
+        name: v.name,
+        contactPerson: v.contactPerson ?? "",
+        phone: v.phone ?? "",
+        email: v.email ?? "",
+        address: v.address ?? "",
+        city: v.city ?? "",
+        state: v.state ?? "",
+        pincode: v.pincode ?? "",
+        gstin: v.gstin ?? "",
+        paymentTerms: v.paymentTerms ?? "",
+        category: v.category ?? "",
+        openingBalance: Number(v.openingBalance ?? 0).toFixed(2),
+        notes: v.notes ?? "",
+        isActive: v.isActive ? "true" : "false",
+      }));
+      const csv = buildCsv(
+        ["code","name","contactPerson","phone","email","address","city","state","pincode","gstin","paymentTerms","category","openingBalance","notes","isActive"],
+        rows,
+      );
+      downloadCsv(csv, `vendors-${new Date().toISOString().slice(0, 10)}.csv`);
+      toast({ title: "Export ready", description: `${rows.length} vendors downloaded.` });
+    } catch (err) {
+      toast({ title: "Export failed", description: (err as Error).message || "Could not export vendors.", variant: "destructive" });
+    } finally {
+      setCsvBusy(null);
+    }
+  };
+
+  const onVendorsImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; e.target.value = "";
+    if (!file) return;
+    setCsvBusy("vendor-import");
+    try {
+      const text = await file.text();
+      const rows = parseCsv(text);
+      if (rows.length === 0) { toast({ title: "Empty file", variant: "destructive" }); return; }
+      const result = await api.post<{ inserted: number; updated: number; skipped: number; errors: { row: number; reason: string }[] }>("/api/vendors/import", { rows });
+      qc.invalidateQueries({ queryKey: ["vendors"] });
+      const desc = `${result.inserted} added, ${result.updated} updated`
+        + (result.skipped > 0 ? `, ${result.skipped} skipped` : "")
+        + (result.errors[0] ? ` — first issue: row ${result.errors[0].row}: ${result.errors[0].reason}` : "");
+      toast({ title: result.skipped > 0 ? "Import finished with warnings" : "Import complete", description: desc, variant: result.skipped > 0 ? "destructive" : "default" });
+    } catch (err) {
+      toast({ title: "Import failed", description: (err as Error).message || "Could not import.", variant: "destructive" });
+    } finally { setCsvBusy(null); }
+  };
 
   const { data: items = [], isLoading } = useQuery<Item[]>({
     queryKey: ["inventory"],
@@ -390,6 +499,13 @@ export default function Inventory() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <input ref={itemImportRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onItemsImportFile} />
+            <Button size="sm" variant="outline" onClick={() => itemImportRef.current?.click()} disabled={csvBusy === "item-import"} title="Upload a CSV to add or update items in bulk (matched by name)">
+              <Upload size={14} className="mr-1.5" /> {csvBusy === "item-import" ? "Importing…" : "Import CSV"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={exportItemsCsv} disabled={csvBusy === "item-export" || items.length === 0} title="Download the full item list as CSV">
+              <Download size={14} className="mr-1.5" /> {csvBusy === "item-export" ? "Exporting…" : "Export CSV"}
+            </Button>
             <Button size="sm" onClick={() => { setAddOpen(true); resetAdd(); }}>
               <Plus size={14} className="mr-1" /> Add Item
             </Button>
@@ -726,9 +842,28 @@ export default function Inventory() {
                 onChange={(e) => setVendorSearch(e.target.value)}
                 className="max-w-xs"
               />
+              <input ref={vendorImportRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onVendorsImportFile} />
               <Button
                 size="sm"
+                variant="outline"
                 className="ml-auto"
+                onClick={() => vendorImportRef.current?.click()}
+                disabled={csvBusy === "vendor-import"}
+                title="Upload a CSV to add or update vendors (matched by code)"
+              >
+                <Upload size={14} className="mr-1.5" /> {csvBusy === "vendor-import" ? "Importing…" : "Import CSV"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={exportVendorsCsv}
+                disabled={csvBusy === "vendor-export" || vendors.length === 0}
+                title="Download all vendors as CSV"
+              >
+                <Download size={14} className="mr-1.5" /> {csvBusy === "vendor-export" ? "Exporting…" : "Export CSV"}
+              </Button>
+              <Button
+                size="sm"
                 onClick={() => setVendorDialog({ mode: "add" })}
               >
                 <Plus size={14} className="mr-1" /> Add Vendor

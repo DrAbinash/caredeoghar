@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Link } from "wouter";
 import {
   useListPatients,
@@ -7,6 +7,8 @@ import {
 } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
+import { buildCsv, downloadCsv, parseCsv } from "@/lib/csv";
+import { useToast } from "@/hooks/use-toast";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, ChevronRight, Upload, X, User, Pencil } from "lucide-react";
+import { Plus, Search, ChevronRight, Upload, X, User, Pencil, Download } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useMutation } from "@tanstack/react-query";
 import { readStaffSession, FULL_ACCESS_ROLES } from "@/lib/staffSession";
@@ -80,6 +82,79 @@ export default function Patients() {
     defaultValues: { gender: "male" },
   });
 
+  const { toast } = useToast();
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  // Export the entire patient roster to CSV. Photos and portal-PIN data are
+  // NOT included — those are sensitive and have separate UI flows.
+  const exportCsv = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const res = await api.get<{ patients: Array<{
+        patientId: string; firstName: string; lastName: string;
+        dateOfBirth: string; gender: string; phone: string;
+        email?: string | null; address?: string | null; bloodGroup?: string | null;
+      }> }>("/api/patients?limit=10000");
+      const rows = (res?.patients ?? []).map((p) => ({
+        patientId: p.patientId,
+        firstName: p.firstName,
+        lastName: p.lastName,
+        dateOfBirth: p.dateOfBirth,
+        gender: p.gender,
+        phone: p.phone,
+        email: p.email ?? "",
+        address: p.address ?? "",
+        bloodGroup: p.bloodGroup ?? "",
+      }));
+      const csv = buildCsv(
+        ["patientId","firstName","lastName","dateOfBirth","gender","phone","email","address","bloodGroup"],
+        rows,
+      );
+      downloadCsv(csv, `patients-${new Date().toISOString().slice(0, 10)}.csv`);
+      toast({ title: "Export ready", description: `${rows.length} patients downloaded.` });
+    } catch (err) {
+      toast({ title: "Export failed", description: (err as Error).message || "Could not export patients.", variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Import a CSV. Patients are upserted by patientId (preferred) or by
+  // phone + name (fallback) so re-importing the same file is safe.
+  const onImportFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const rows = parseCsv(text);
+      if (rows.length === 0) {
+        toast({ title: "Empty file", description: "No data rows found in the CSV.", variant: "destructive" });
+        return;
+      }
+      const result = await api.post<{ inserted: number; updated: number; skipped: number; errors: { row: number; reason: string }[] }>(
+        "/api/patients/import", { rows },
+      );
+      queryClient.invalidateQueries({ queryKey: getListPatientsQueryKey() });
+      const desc = `${result.inserted} added, ${result.updated} updated`
+        + (result.skipped > 0 ? `, ${result.skipped} skipped` : "")
+        + (result.errors[0] ? ` — first issue: row ${result.errors[0].row}: ${result.errors[0].reason}` : "");
+      toast({
+        title: result.skipped > 0 ? "Import finished with warnings" : "Import complete",
+        description: desc,
+        variant: result.skipped > 0 ? "destructive" : "default",
+      });
+    } catch (err) {
+      toast({ title: "Import failed", description: (err as Error).message || "Could not import the file.", variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const onPhotoChange = (file: File | null) => {
     setPhotoErr("");
     if (!file) return;
@@ -107,9 +182,18 @@ export default function Patients() {
         title="Patients"
         subtitle={`${data?.total ?? 0} registered patients`}
         actions={
-          <Button size="sm" onClick={() => setOpen(true)}>
-            <Plus size={14} className="mr-1" /> New Patient
-          </Button>
+          <div className="flex gap-2">
+            <input ref={importInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onImportFileChosen} />
+            <Button size="sm" variant="outline" onClick={() => importInputRef.current?.click()} disabled={importing} title="Upload a CSV to add or update patients in bulk">
+              <Upload size={14} className="mr-1" /> {importing ? "Importing…" : "Import CSV"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={exportCsv} disabled={exporting} title="Download the full patient roster as CSV">
+              <Download size={14} className="mr-1" /> {exporting ? "Exporting…" : "Export CSV"}
+            </Button>
+            <Button size="sm" onClick={() => setOpen(true)}>
+              <Plus size={14} className="mr-1" /> New Patient
+            </Button>
+          </div>
         }
       />
 

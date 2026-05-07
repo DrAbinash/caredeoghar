@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { buildCsv, downloadCsv, parseCsv } from "@/lib/csv";
 import {
   Package,
   Plus,
@@ -27,6 +28,8 @@ import {
   CheckSquare,
   Wand2,
   Calculator,
+  Download,
+  Upload,
 } from "lucide-react";
 
 const inr = (n: number) =>
@@ -210,15 +213,88 @@ export default function Packages() {
   const effectivePrice = (pkg: PackageItem) =>
     pkg.price - (pkg.price * pkg.discountPct) / 100;
 
+  // ── CSV export/import ──────────────────────────────────────────────────
+  // Export packages with their test list as a `;`-separated `testCodes`
+  // column. Re-importing that file rebuilds the same package + test set.
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  const exportCsv = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const rows = packages.map((p) => ({
+        packageCode: p.packageCode,
+        name: p.name,
+        description: p.description ?? "",
+        price: Number(p.price).toFixed(2),
+        discountPct: Number(p.discountPct).toFixed(2),
+        testCodes: p.tests.map((t) => t.code).join(";"),
+        isActive: p.isActive ? "true" : "false",
+      }));
+      const csv = buildCsv(
+        ["packageCode","name","description","price","discountPct","testCodes","isActive"],
+        rows,
+      );
+      downloadCsv(csv, `packages-${new Date().toISOString().slice(0, 10)}.csv`);
+      toast({ title: "Export ready", description: `${rows.length} packages downloaded.` });
+    } catch (err) {
+      toast({ title: "Export failed", description: (err as Error).message || "Could not export packages.", variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const onImportFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const rows = parseCsv(text);
+      if (rows.length === 0) {
+        toast({ title: "Empty file", description: "No data rows found in the CSV.", variant: "destructive" });
+        return;
+      }
+      const result = await api.post<{ inserted: number; updated: number; skipped: number; errors: { row: number; reason: string }[] }>(
+        "/api/packages/import", { rows },
+      );
+      qc.invalidateQueries({ queryKey: ["packages"] });
+      const desc = `${result.inserted} added, ${result.updated} updated`
+        + (result.skipped > 0 ? `, ${result.skipped} skipped` : "")
+        + (result.errors[0] ? ` — first issue: row ${result.errors[0].row}: ${result.errors[0].reason}` : "");
+      toast({
+        title: (result.skipped > 0 || result.errors.length > 0) ? "Import finished with warnings" : "Import complete",
+        description: desc,
+        variant: result.skipped > 0 ? "destructive" : "default",
+      });
+    } catch (err) {
+      toast({ title: "Import failed", description: (err as Error).message || "Could not import the file.", variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       <PageHeader
         title="Test Packages"
         subtitle="Bundle multiple tests into discounted packages"
         actions={
-          <Button onClick={openCreate}>
-            <Plus size={15} className="mr-1.5" /> New Package
-          </Button>
+          <div className="flex gap-2">
+            <input ref={importInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onImportFileChosen} />
+            <Button variant="outline" onClick={() => importInputRef.current?.click()} disabled={importing} title="Upload a CSV to add or update packages (testCodes column is `;`-separated)">
+              <Upload size={15} className="mr-1.5" /> {importing ? "Importing…" : "Import CSV"}
+            </Button>
+            <Button variant="outline" onClick={exportCsv} disabled={exporting} title="Download all packages as CSV">
+              <Download size={15} className="mr-1.5" /> {exporting ? "Exporting…" : "Export CSV"}
+            </Button>
+            <Button onClick={openCreate}>
+              <Plus size={15} className="mr-1.5" /> New Package
+            </Button>
+          </div>
         }
       />
 

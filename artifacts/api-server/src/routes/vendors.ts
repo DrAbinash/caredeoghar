@@ -224,6 +224,69 @@ vendorsRouter.patch("/:id", async (req, res) => {
   }
 });
 
+// ── Bulk CSV import ───────────────────────────────────────────────────────
+// Upsert by `code` (the vendor code is the only true unique key). All
+// optional fields are nullable; isActive defaults to true.
+vendorsRouter.post("/import", async (req, res) => {
+  const rows = Array.isArray(req.body?.rows) ? (req.body.rows as Record<string, unknown>[]) : null;
+  if (!rows) {
+    res.status(400).json({ error: "Request body must include `rows: []`." });
+    return;
+  }
+  if (rows.length > 5000) {
+    res.status(413).json({ error: "Too many rows in one import (max 5000)." });
+    return;
+  }
+
+  let inserted = 0, updated = 0, skipped = 0;
+  const errors: { row: number; reason: string }[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const code = asString(r.code) || "";
+    const name = asString(r.name) || "";
+    if (!code || !name) {
+      skipped++;
+      errors.push({ row: i + 2, reason: "Missing required field (code or name)." });
+      continue;
+    }
+    const opening = Number(r.openingBalance);
+    const isActiveStr = typeof r.isActive === "string" ? r.isActive.trim() : "";
+    const values = {
+      code, name,
+      contactPerson: asTrim(r.contactPerson),
+      phone: asTrim(r.phone),
+      email: asTrim(r.email),
+      address: asTrim(r.address),
+      city: asTrim(r.city),
+      state: asTrim(r.state),
+      pincode: asTrim(r.pincode),
+      gstin: asTrim(r.gstin),
+      paymentTerms: asTrim(r.paymentTerms),
+      category: asTrim(r.category),
+      notes: asTrim(r.notes),
+      openingBalance: String(Number.isFinite(opening) ? opening : 0),
+      isActive: isActiveStr ? !/^(false|0|no|inactive)$/i.test(isActiveStr) : true,
+    };
+
+    try {
+      const [existing] = await db.select({ id: vendorsTable.id }).from(vendorsTable).where(eq(vendorsTable.code, code));
+      if (existing) {
+        await db.update(vendorsTable).set(values).where(eq(vendorsTable.id, existing.id));
+        updated++;
+      } else {
+        await db.insert(vendorsTable).values(values);
+        inserted++;
+      }
+    } catch (e) {
+      skipped++;
+      errors.push({ row: i + 2, reason: isDuplicateError(e) ? `Duplicate vendor code "${code}".` : (e as Error).message || "Database error" });
+    }
+  }
+
+  res.json({ inserted, updated, skipped, errors: errors.slice(0, 50) });
+});
+
 // DELETE /api/vendors/:id - soft refusal if vendor has linked items or purchases
 vendorsRouter.delete("/:id", async (req, res) => {
   const id = Number(req.params.id);
