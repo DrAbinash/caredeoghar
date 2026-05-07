@@ -88,7 +88,17 @@ router.use("/patients", requireStaffAuth, requireStaffPermission("/patients"), p
 router.use("/doctors", requireStaffAuth, requireStaffPermission("/doctors"), doctorsRouter);
 
 // Test catalogue — /tests permission
-router.use("/tests", requireStaffAuth, requireStaffPermission("/tests"), testsRouter);
+// Tests catalog: any authenticated staff can READ (Billing Desk, Packages,
+// Reports, Orders all need the test list). Mutations stay /tests-gated.
+router.use(
+  "/tests",
+  requireStaffAuth,
+  (req, res, next) => {
+    if (req.method === "GET") return next();
+    return requireStaffPermission("/tests")(req, res, next);
+  },
+  testsRouter,
+);
 
 // Order management — /orders permission
 router.use("/orders", requireStaffAuth, requireStaffPermission("/orders"), ordersRouter);
@@ -112,7 +122,17 @@ router.use("/accounting", requireStaffAuth, requireStaffPermission("/accounting"
 router.use("/discounts", requireStaffAuth, requireStaffPermission("/discounts"), discountsRouter);
 
 // Discount reasons — /discounts permission (configuration for the discounts module)
-router.use("/discount-reasons", requireStaffAuth, requireStaffPermission("/discounts"), discountReasonsRouter);
+// Discount reasons — any authenticated staff can READ (the Billing Desk
+// dropdown needs the active reasons). Mutations stay /discounts-gated.
+router.use(
+  "/discount-reasons",
+  requireStaffAuth,
+  (req, res, next) => {
+    if (req.method === "GET") return next();
+    return requireStaffPermission("/discounts")(req, res, next);
+  },
+  discountReasonsRouter,
+);
 
 // Expenses — /accounting permission (financial records)
 router.use("/expenses", requireStaffAuth, requireStaffPermission("/accounting"), expensesRouter);
@@ -144,12 +164,23 @@ router.get(
 
 // Clinic configuration — any authenticated staff can READ (the bill print
 // receipt and many other surfaces need clinic name/address/logo). Writes
-// (PUT) stay restricted to /settings-permitted users via a method gate.
+// (PUT) are normally restricted to /settings-permitted users, EXCEPT when
+// the body only contains billing-desk-owned fields (`quickTestIds`,
+// `billPrintCopies`) which receptionists/billing staff need to update from
+// the Billing Desk itself.
+const BILLING_OWNED_SETTINGS_KEYS = new Set(["quickTestIds", "billPrintCopies"]);
 router.use(
   "/clinic-settings",
   requireStaffAuth,
   (req, res, next) => {
     if (req.method === "GET") return next();
+    if (req.method === "PUT") {
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const keys = Object.keys(body);
+      if (keys.length > 0 && keys.every((k) => BILLING_OWNED_SETTINGS_KEYS.has(k))) {
+        return next();
+      }
+    }
     return requireStaffPermission("/settings")(req, res, next);
   },
   clinicSettingsRouter,
