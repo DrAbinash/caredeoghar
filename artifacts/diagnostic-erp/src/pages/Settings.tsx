@@ -450,6 +450,7 @@ type ClinicSettings = {
   patientPhotoEnabled?: boolean;
   showTatOnBill?: boolean;
   billPrintCopies?: number;
+  qrOnBillEnabled?: boolean;
 };
 
 function ClinicInfoTab() {
@@ -601,6 +602,26 @@ function ClinicInfoTab() {
           </div>
           <p className="text-[11px] text-muted-foreground leading-relaxed">
             Click <strong>Save Changes</strong> after choosing to apply.
+          </p>
+        </div>
+
+        <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+          <div>
+            <h2 className="font-bold text-lg flex items-center gap-2">🔳 Print QR on Bill</h2>
+            <p className="text-sm text-muted-foreground">When enabled, every printed bill receipt embeds a small "Scan to verify" QR code linking to the bill verification page. This replaces the old separate "QR Bill" print button.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setForm({ ...current, qrOnBillEnabled: !(current.qrOnBillEnabled ?? true) })}
+            className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors ${(current.qrOnBillEnabled ?? true) ? "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-800" : "bg-muted/30 border-card-border"}`}
+          >
+            <span className="text-sm font-medium">{(current.qrOnBillEnabled ?? true) ? "Enabled" : "Disabled"}</span>
+            <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${(current.qrOnBillEnabled ?? true) ? "bg-green-500" : "bg-muted-foreground/40"}`}>
+              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${(current.qrOnBillEnabled ?? true) ? "translate-x-5" : "translate-x-1"}`} />
+            </span>
+          </button>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            Click <strong>Save Changes</strong> after toggling to apply.
           </p>
         </div>
 

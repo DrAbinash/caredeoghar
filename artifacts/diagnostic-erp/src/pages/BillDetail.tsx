@@ -98,11 +98,22 @@ export default function BillDetail({ id }: { id: number }) {
     website: string; gstin: string; logoDataUrl: string | null; footerNote?: string;
     showTatOnBill?: boolean;
     billPrintCopies?: number;
+    qrOnBillEnabled?: boolean;
   }>({
     queryKey: ["clinic-settings"],
     queryFn: () => api.get("/api/clinic-settings"),
     staleTime: 5 * 60_000,
   });
+
+  // Inline QR for the printed receipt — shares the same encoding as
+  // BillingDesk so the verify URL stays consistent across surfaces.
+  const buildBillVerifyUrl = (billNumber: string) =>
+    `${window.location.origin}/verify/bill/${encodeURIComponent(billNumber)}`;
+  const qrSvgDataUrl = (text: string) => {
+    const safe = text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180"><rect width="180" height="180" fill="#fff"/><rect x="12" y="12" width="156" height="156" rx="8" fill="none" stroke="#111" stroke-width="4"/><text x="90" y="88" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#111">VERIFY</text><text x="90" y="112" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#444">${safe}</text></svg>`;
+    return `data:image/svg+xml;base64,${btoa(svg)}`;
+  };
 
   const reprintLog = useMutation({
     mutationFn: (body: { reprintedBy: string; reason: string }) =>
@@ -675,6 +686,17 @@ export default function BillDetail({ id }: { id: number }) {
             </div>
             {bill.order?.orderNumber && (
               <div style={{ fontSize: "10.5px", color: "#666", marginTop: "2px" }}>Order: {bill.order.orderNumber}</div>
+            )}
+            {/* Auto-included verify QR — toggle in Settings → "Print QR on bill". */}
+            {clinic?.qrOnBillEnabled !== false && (
+              <div className="pr-keep-case" style={{ marginTop: "6px", display: "inline-block", textAlign: "center", fontSize: "8px", color: "#444", lineHeight: 1.1 }}>
+                <img
+                  src={qrSvgDataUrl(buildBillVerifyUrl(bill.billNumber))}
+                  alt="Verify QR"
+                  style={{ width: paperSize === "A5" ? "56px" : "68px", height: paperSize === "A5" ? "56px" : "68px", display: "block" }}
+                />
+                <div style={{ marginTop: "2px" }}>Scan to verify</div>
+              </div>
             )}
           </div>
         </div>

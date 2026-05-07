@@ -21,6 +21,10 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   // Used by BillingDesk auto-print and BillDetail manual print so a clinic
   // that needs a customer copy + clinic copy doesn't have to hit Print twice.
   billPrintCopies: integer("bill_print_copies").notNull().default(1),
+  // When true, the printed bill receipt embeds a small "Scan to verify"
+  // QR code (links to /verify/bill/:billNumber). Replaces the old
+  // separate "QR Bill" print button on BillingDesk.
+  qrOnBillEnabled: boolean("qr_on_bill_enabled").notNull().default(true),
   portalEnabled: boolean("portal_enabled").notNull().default(false),
   portalHeading: text("portal_heading").notNull().default(""),
   portalWelcomeMessage: text("portal_welcome_message").notNull().default(""),

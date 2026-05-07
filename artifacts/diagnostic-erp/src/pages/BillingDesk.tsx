@@ -19,6 +19,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import {
   Search,
@@ -278,68 +283,10 @@ async function printToken(b: LastBill, clinic: ClinicLite) {
   w.document.open(); w.document.write(html); w.document.close(); w.onload = () => { w.focus(); w.print(); setTimeout(() => w.close(), 400); };
 }
 
-function printBillWithQr(b: LastBill, clinic: ClinicLite) {
-  const verifyUrl = buildBillVerifyUrl(b.billNumber);
-  const qr = qrSvgDataUrl(verifyUrl);
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(b.billNumber)}</title>
-    <style>
-      @page { size: A4; margin: 12mm; }
-      body { font-family: Arial, sans-serif; margin:0; color:#000; }
-      .hdr, .ftr { text-align:center; }
-      .hdr { border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px; }
-      .ftr { border-top: 1px solid #000; padding-top: 8px; margin-top: 14px; font-size: 10px; }
-      .row { display:flex; justify-content:space-between; gap:16px; }
-      .meta, .items, .summary { width:100%; border-collapse:collapse; }
-      .items th, .items td, .summary td { border:1px solid #000; padding:6px; font-size:12px; }
-      .items th { background:#f3f3f3; text-align:left; }
-      .summary { max-width:280px; margin-left:auto; }
-      .sig { margin-top: 28px; display:flex; justify-content:space-between; align-items:flex-end; }
-      .sig-line { border-top:1px solid #000; width:180px; padding-top:4px; text-align:center; font-size:11px; }
-      .qr { display:flex; align-items:center; gap:12px; }
-      .qr img { width:88px; height:88px; }
-      .small { font-size: 11px; color:#444; }
-    </style></head><body>
-    <div class="hdr">
-      <div style="font-size:18px;font-weight:700">${escapeHtml(clinic?.name || "Diagnostic Centre")}</div>
-      <div class="small">${escapeHtml(clinic?.address || "")}</div>
-      <div class="small">${escapeHtml(clinic?.phone || "")}</div>
-      <div style="font-size:14px;font-weight:700;margin-top:6px">BILL</div>
-    </div>
-    <div class="row">
-      <table class="meta">
-        <tr><td><strong>Bill No</strong></td><td>${escapeHtml(b.billNumber)}</td></tr>
-        <tr><td><strong>Patient</strong></td><td>${escapeHtml(b.patient.firstName)} ${escapeHtml(b.patient.lastName)}</td></tr>
-        <tr><td><strong>Patient ID</strong></td><td>${escapeHtml(b.patient.patientId)}</td></tr>
-        <tr><td><strong>Doctor</strong></td><td>${escapeHtml(b.doctorName || "-")}</td></tr>
-      </table>
-      <div class="qr">
-        <img src="${qr}" alt="Bill verification QR" />
-        <div>
-          <div style="font-size:12px;font-weight:700">Scan to verify authenticity</div>
-          <div class="small">${escapeHtml(verifyUrl)}</div>
-        </div>
-      </div>
-    </div>
-    <table class="items" style="margin-top:12px">
-      <thead><tr><th>Test</th><th style="width:90px;text-align:right">Amount</th></tr></thead>
-      <tbody>${b.tests.map((t) => `<tr><td>${escapeHtml(t.name)}</td><td style="text-align:right">${inr(t.price)}</td></tr>`).join("")}</tbody>
-    </table>
-    <table class="summary" style="margin-top:12px">
-      <tr><td>Subtotal</td><td style="text-align:right">${inr(b.subtotal)}</td></tr>
-      <tr><td>Discount</td><td style="text-align:right">${inr(b.discount)}</td></tr>
-      <tr><td><strong>Total</strong></td><td style="text-align:right"><strong>${inr(b.total)}</strong></td></tr>
-    </table>
-    <div class="sig">
-      <div class="sig-line">Receptionist Signature</div>
-      <div class="sig-line">Doctor / Admin Signature</div>
-    </div>
-    <div class="ftr">
-      <div>${escapeHtml(clinic?.footerNote || "")}</div>
-      <div class="small">Printed on ${new Date().toLocaleString("en-IN")}</div>
-    </div>
-  </body></html>`;
-  openPrintWindow(html);
-}
+// NOTE: The standalone "QR Bill" print path was removed in May 2026. The QR
+// code is now embedded directly in the standard receipt template below
+// (gated by the `qrOnBillEnabled` clinic setting). The `qrSvgDataUrl` and
+// `buildBillVerifyUrl` helpers above are still used inline by that template.
 
 export default function BillingDesk() {
   const { toast } = useToast();
@@ -439,6 +386,7 @@ export default function BillingDesk() {
     formFTestIds?: string;
     quickTestIds?: string;
     billPrintCopies?: number;
+    qrOnBillEnabled?: boolean;
   }>({
     queryKey: ["clinic-settings"],
     queryFn: () => api.get("/api/clinic-settings"),
@@ -778,6 +726,16 @@ export default function BillingDesk() {
         </div>
         <div className="ml-auto flex items-center gap-2 w-full sm:w-auto order-last sm:order-none">
           <div className="flex-1 sm:flex-none"><BillSearchBox /></div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground flex-shrink-0">
+                <Receipt size={13} className="mr-1" /> <span className="hidden xs:inline sm:inline">Recent</span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="p-0 w-80">
+              <RecentBillsPanel />
+            </PopoverContent>
+          </Popover>
           <Button variant="ghost" size="sm" onClick={resetAll} className="text-muted-foreground hover:text-foreground flex-shrink-0">
             <RefreshCcw size={13} className="mr-1" /> <span className="hidden xs:inline sm:inline">New Bill</span>
           </Button>
@@ -1094,80 +1052,8 @@ export default function BillingDesk() {
               </div>
             </div>
 
-            {/* ── Today's Recent Bills ── */}
-            <RecentBillsPanel />
-
-            {/* ── Add Package ── */}
+            {/* ── Test Catalog (Quick Tests + Add Tests + Individual Tests) ── */}
             <div className="bg-card border border-card-border rounded-xl overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-card-border flex items-center justify-between bg-muted/20">
-                <div className="flex items-center gap-2 text-sm font-semibold text-rose-700 dark:text-rose-300">
-                  <Package size={14} /> Add Package
-                </div>
-                <button
-                  type="button"
-                  onClick={() => navigate("/packages")}
-                  className="text-[11px] text-muted-foreground hover:text-foreground"
-                >
-                  Manage
-                </button>
-              </div>
-              <div className="p-2.5 space-y-2">
-                <div className="relative">
-                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Search packages by name, code, or test…"
-                    value={packageSearch}
-                    onChange={(e) => setPackageSearch(e.target.value)}
-                    className="pl-9 h-8 text-sm w-full"
-                  />
-                </div>
-                <div className="border border-card-border rounded-lg overflow-hidden bg-background">
-                  {packages.length === 0 ? (
-                    <div className="px-3 py-3 text-xs text-muted-foreground text-center">
-                      No packages created yet.&nbsp;
-                      <button onClick={() => navigate("/packages")} className="text-primary hover:underline">Create one</button>
-                    </div>
-                  ) : filteredPackages.length === 0 ? (
-                    <div className="px-3 py-3 text-xs text-muted-foreground text-center">No packages match "{packageSearch}"</div>
-                  ) : (
-                    <div className="max-h-40 overflow-y-auto divide-y divide-card-border">
-                      {filteredPackages.map((pkg) => {
-                        const added = selectedPackages.some((p) => p.packageId === pkg.id);
-                        const effective = pkg.price - (pkg.price * pkg.discountPct) / 100;
-                        return (
-                          <button
-                            key={pkg.id}
-                            onClick={() => addPackage(pkg)}
-                            disabled={added}
-                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${
-                              added ? "bg-primary/5 text-muted-foreground cursor-default" : "hover:bg-muted/50"
-                            }`}
-                          >
-                            <Package size={11} className="text-muted-foreground flex-shrink-0" />
-                            <span className="flex-1 font-medium truncate">{pkg.name}</span>
-                            <span className="text-xs text-muted-foreground">{pkg.tests.length} tests</span>
-                            <span className="text-xs font-semibold">{inr(effective)}</span>
-                            {added ? <CheckCircle2 size={12} className="text-primary flex-shrink-0" /> : <Plus size={12} className="text-muted-foreground flex-shrink-0" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </div>
-
-        {/* ══════════════════════════════════════════════
-            RIGHT COLUMN — Tests + Bill + Payment
-        ══════════════════════════════════════════════ */}
-        <div className="w-full lg:flex-[1.45] flex flex-col lg:overflow-hidden min-h-0">
-          <div className="lg:flex-1 flex flex-col lg:overflow-hidden min-h-0 overflow-y-auto">
-
-            {/* ── Test Search & Catalog ── */}
-            <div className="flex-shrink-0 border-b border-card-border">
               <div className="p-2.5 space-y-2">
                 {/* ── Quick Test Tabs (6 customizable slots) ── */}
                 <div className="pt-1">
@@ -1253,7 +1139,7 @@ export default function BillingDesk() {
                     <FlaskConical size={11} /> Individual Tests
                   </div>
                   <div className="mt-1 border border-card-border rounded-lg overflow-hidden">
-                    <div className="max-h-28 overflow-y-auto divide-y divide-card-border">
+                    <div className="max-h-48 overflow-y-auto divide-y divide-card-border">
                       {filteredTests.length === 0 ? (
                         <div className="px-3 py-4 text-xs text-muted-foreground text-center">No tests found</div>
                       ) : (
@@ -1289,6 +1175,75 @@ export default function BillingDesk() {
                 </div>
               </div>
             </div>
+
+            {/* ── Add Package ── */}
+            <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-card-border flex items-center justify-between bg-muted/20">
+                <div className="flex items-center gap-2 text-sm font-semibold text-rose-700 dark:text-rose-300">
+                  <Package size={14} /> Add Package
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate("/packages")}
+                  className="text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  Manage
+                </button>
+              </div>
+              <div className="p-2.5 space-y-2">
+                <div className="relative">
+                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search packages by name, code, or test…"
+                    value={packageSearch}
+                    onChange={(e) => setPackageSearch(e.target.value)}
+                    className="pl-9 h-8 text-sm w-full"
+                  />
+                </div>
+                <div className="border border-card-border rounded-lg overflow-hidden bg-background">
+                  {packages.length === 0 ? (
+                    <div className="px-3 py-3 text-xs text-muted-foreground text-center">
+                      No packages created yet.&nbsp;
+                      <button onClick={() => navigate("/packages")} className="text-primary hover:underline">Create one</button>
+                    </div>
+                  ) : filteredPackages.length === 0 ? (
+                    <div className="px-3 py-3 text-xs text-muted-foreground text-center">No packages match "{packageSearch}"</div>
+                  ) : (
+                    <div className="max-h-40 overflow-y-auto divide-y divide-card-border">
+                      {filteredPackages.map((pkg) => {
+                        const added = selectedPackages.some((p) => p.packageId === pkg.id);
+                        const effective = pkg.price - (pkg.price * pkg.discountPct) / 100;
+                        return (
+                          <button
+                            key={pkg.id}
+                            onClick={() => addPackage(pkg)}
+                            disabled={added}
+                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${
+                              added ? "bg-primary/5 text-muted-foreground cursor-default" : "hover:bg-muted/50"
+                            }`}
+                          >
+                            <Package size={11} className="text-muted-foreground flex-shrink-0" />
+                            <span className="flex-1 font-medium truncate">{pkg.name}</span>
+                            <span className="text-xs text-muted-foreground">{pkg.tests.length} tests</span>
+                            <span className="text-xs font-semibold">{inr(effective)}</span>
+                            {added ? <CheckCircle2 size={12} className="text-primary flex-shrink-0" /> : <Plus size={12} className="text-muted-foreground flex-shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        {/* ══════════════════════════════════════════════
+            RIGHT COLUMN — Bill Summary + Payment
+        ══════════════════════════════════════════════ */}
+        <div className="w-full lg:flex-[1.45] flex flex-col lg:overflow-hidden min-h-0">
+          <div className="lg:flex-1 flex flex-col lg:overflow-hidden min-h-0 overflow-y-auto">
 
             <div className="space-y-3">
               {/* ── Selected Tests ── */}
@@ -1437,16 +1392,6 @@ export default function BillingDesk() {
                   <RefreshCcw size={13} className="mr-1" /> Reset
                 </Button>
                 <Button
-                  onClick={() => { printAfterSaveRef.current = false; generateMut.mutate(); }}
-                  disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || (needsFormF && (!husbandName.trim() || !patientAddress.trim()))}
-                  className="h-8 text-[11px] px-2"
-                  variant="secondary"
-                  title={needsFormF && (!husbandName.trim() || !patientAddress.trim()) ? "Fill Husband Name & Address for PCPNDT Form F" : undefined}
-                >
-                  <Receipt size={13} className="mr-1" />
-                  {generateMut.isPending && !printAfterSaveRef.current ? "Generating…" : "Generate Bill"}
-                </Button>
-                <Button
                   onClick={() => { printAfterSaveRef.current = true; generateMut.mutate(); }}
                   disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || (needsFormF && (!husbandName.trim() || !patientAddress.trim()))}
                   className="h-8 text-[11px] px-2"
@@ -1454,9 +1399,6 @@ export default function BillingDesk() {
                 >
                   <Printer size={13} className="mr-1" />
                   {generateMut.isPending && printAfterSaveRef.current ? "Saving…" : "Save & Print"}
-                </Button>
-                <Button variant="outline" onClick={() => { if (lastBill) printBillWithQr(lastBill, clinic); }} disabled={!lastBill} className="h-8 text-[11px] px-2">
-                  QR Bill
                 </Button>
                 <Button
                   variant="outline"
@@ -1544,27 +1486,36 @@ export default function BillingDesk() {
             .bdr-footer { text-align: center; font-size: 10px; color: #666; border-top: 1px solid #ccc; padding-top: 8px; margin-top: 8px; }
           `}</style>
 
-          <div className="bdr-header" style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "center", textAlign: "center" }}>
-            {clinic?.logoDataUrl && (
-              <img src={clinic.logoDataUrl} alt="Logo" style={{ maxHeight: 60, maxWidth: 100, objectFit: "contain" }} />
-            )}
-            <div>
-              <h1 style={{ margin: 0 }}>{clinic?.name || "Diagnostic Centre"}</h1>
-              {clinic?.tagline && <p style={{ margin: "2px 0", fontStyle: "italic", color: "#555" }}>{clinic.tagline}</p>}
-              {clinic?.address && <p style={{ margin: "2px 0" }}>{clinic.address}</p>}
-              <p style={{ margin: "2px 0" }}>
-                {clinic?.phone && <>Ph: {clinic.phone}</>}
-                {clinic?.phone && clinic?.email && " | "}
-                {clinic?.email && <>Email: {clinic.email}</>}
-              </p>
-              {(clinic?.gstin || clinic?.website) && (
-                <p style={{ margin: "2px 0", fontSize: 10 }}>
-                  {clinic?.gstin && <>GSTIN: {clinic.gstin}</>}
-                  {clinic?.gstin && clinic?.website && " | "}
-                  {clinic?.website && <>{clinic.website}</>}
-                </p>
+          <div className="bdr-header" style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "space-between", textAlign: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, justifyContent: "center" }}>
+              {clinic?.logoDataUrl && (
+                <img src={clinic.logoDataUrl} alt="Logo" style={{ maxHeight: 60, maxWidth: 100, objectFit: "contain" }} />
               )}
+              <div>
+                <h1 style={{ margin: 0 }}>{clinic?.name || "Diagnostic Centre"}</h1>
+                {clinic?.tagline && <p style={{ margin: "2px 0", fontStyle: "italic", color: "#555" }}>{clinic.tagline}</p>}
+                {clinic?.address && <p style={{ margin: "2px 0" }}>{clinic.address}</p>}
+                <p style={{ margin: "2px 0" }}>
+                  {clinic?.phone && <>Ph: {clinic.phone}</>}
+                  {clinic?.phone && clinic?.email && " | "}
+                  {clinic?.email && <>Email: {clinic.email}</>}
+                </p>
+                {(clinic?.gstin || clinic?.website) && (
+                  <p style={{ margin: "2px 0", fontSize: 10 }}>
+                    {clinic?.gstin && <>GSTIN: {clinic.gstin}</>}
+                    {clinic?.gstin && clinic?.website && " | "}
+                    {clinic?.website && <>{clinic.website}</>}
+                  </p>
+                )}
+              </div>
             </div>
+            {/* Auto-included verify QR (toggle in Settings → "Print QR on bill"). */}
+            {clinic?.qrOnBillEnabled !== false && (
+              <div className="bdr-keep-case" style={{ flexShrink: 0, textAlign: "center", fontSize: 8, color: "#444", lineHeight: 1.1 }}>
+                <img src={qrSvgDataUrl(buildBillVerifyUrl(lastBill.billNumber))} alt="Verify QR" style={{ width: 64, height: 64, display: "block" }} />
+                <div style={{ marginTop: 2 }}>Scan to verify</div>
+              </div>
+            )}
           </div>
           <div className="bdr-title">Invoice / Receipt</div>
 
