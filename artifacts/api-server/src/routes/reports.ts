@@ -393,7 +393,7 @@ reportsRouter.get("/income-expense", async (req, res) => {
   };
   const incomeByUser = new Map<string, UserIncome>();
   for (const p of payments) {
-    const key = (p.recordedByName && p.recordedByName.trim()) || "Unassigned";
+    const key = (p.recordedByName && p.recordedByName.trim()) || (p.referenceNumber && p.referenceNumber.trim()) || "Unknown User";
     let u = incomeByUser.get(key);
     if (!u) {
       u = { userName: key, count: 0, total: 0, cash: 0, upi: 0, card: 0, bank: 0, insurance: 0, cheque: 0 };
@@ -517,7 +517,7 @@ reportsRouter.get("/daily-summary", async (req, res) => {
   };
   const byUserMap = new Map<string, UserAgg>();
   const ensureUser = (name: string | null | undefined): UserAgg => {
-    const key = (name && name.trim()) || "Unassigned";
+    const key = (name && name.trim()) || "Unknown User";
     let row = byUserMap.get(key);
     if (!row) {
       row = { userName: key, billCount: 0, billed: 0, received: 0, methods: {} };
