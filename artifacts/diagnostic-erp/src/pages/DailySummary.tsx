@@ -129,7 +129,7 @@ export default function DailySummary() {
   const expenseModes = Object.entries(expenses.byMode).sort((a, b) => b[1] - a[1]);
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl mx-auto">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-5xl mx-auto">
       <PageHeader
         title="Daily Summary"
         subtitle={`Collections & expenses for ${staffFilter || "all staff"} on ${date}`}
@@ -189,7 +189,7 @@ export default function DailySummary() {
       ) : (
         <>
           {/* Top summary cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
             <SummaryCard
               icon={<TrendingUp size={14} className="text-green-600" />}
               label="Total Income"
@@ -230,7 +230,7 @@ export default function DailySummary() {
             </div>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid lg:grid-cols-2 gap-4">
             {/* Income breakdown */}
             <div className="bg-card border border-card-border rounded-xl p-4 space-y-3">
               <h3 className="font-semibold flex items-center gap-2 text-sm">
