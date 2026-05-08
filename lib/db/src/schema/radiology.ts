@@ -72,5 +72,21 @@ export const radiologyFilmIssuesTable = pgTable("radiology_film_issues", {
   issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Saved AI prompts for the radiology report modal. A radiologist can store
+// reusable instruction snippets (e.g. "Use RSNA 2.0 structured format") that
+// auto-paste into the dictation pane so the AI generates in a fixed layout.
+// Prompts may be scoped to a specific testName / modality or left global (null).
+export const radiologyPromptsTable = pgTable("radiology_prompts", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  content: text("content").notNull(),
+  testName: text("test_name"),
+  modality: text("modality"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byModality: index("radiology_prompts_modality_idx").on(t.modality),
+}));
+
 export type RadiologyStudy = typeof radiologyStudiesTable.$inferSelect;
 export type RadiologyFilmIssue = typeof radiologyFilmIssuesTable.$inferSelect;
+export type RadiologyPrompt = typeof radiologyPromptsTable.$inferSelect;

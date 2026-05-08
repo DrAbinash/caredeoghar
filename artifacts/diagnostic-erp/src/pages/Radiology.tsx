@@ -18,6 +18,7 @@ import {
   Radio, Search, RefreshCw, UserCircle2, FileText, Disc, Printer, Image,
   CheckCircle2, PlayCircle, Hourglass, Camera, ClipboardEdit, Send,
   Mic, MicOff, Sparkles, Link2, Hand, X, Copy as CopyIcon,
+  BookOpen, Plus, Trash2,
 } from "lucide-react";
 
 type Study = {
@@ -613,9 +614,10 @@ function StudyDetailModal({ id, onClose }: { id: number; onClose: () => void }) 
   );
 }
 
-// ── Reporting modal — voice dictation, AI findings/impression, modality presets
-// and tele-radiology share-link generation. Patient-side delivery is handled
-// upstream when the report is verified (Settings → WhatsApp → Auto-send).
+type RadiologyPrompt = { id: number; name: string; content: string; testName: string | null; modality: string | null };
+
+// ── Reporting modal — voice dictation, AI findings/impression, modality presets,
+// saved AI prompts panel, and tele-radiology share-link generation.
 function ReportModal({ id, onClose }: { id: number; onClose: () => void }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -628,6 +630,10 @@ function ReportModal({ id, onClose }: { id: number; onClose: () => void }) {
     enabled: !!study?.testId,
     queryFn: () => api.get(`/api/radiology/templates/${study!.testId}`),
   });
+  const { data: allPrompts = [], refetch: refetchPrompts } = useQuery<RadiologyPrompt[]>({
+    queryKey: ["radiology-prompts"],
+    queryFn: () => api.get("/api/radiology/prompts"),
+  });
 
   const [body, setBody] = useState("");
   const [bodyTouched, setBodyTouched] = useState(false);
@@ -636,6 +642,11 @@ function ReportModal({ id, onClose }: { id: number; onClose: () => void }) {
   const [templateId, setTemplateId] = useState<number | null>(null);
   const [clinicalHistory, setClinicalHistory] = useState("");
   const [shareLink, setShareLink] = useState<string | null>(null);
+
+  // Prompts panel state
+  const [promptSearch, setPromptSearch] = useState("");
+  const [showSavePrompt, setShowSavePrompt] = useState(false);
+  const [newPromptName, setNewPromptName] = useState("");
 
   // Load existing prelim/final + clinical history when the study loads.
   useEffect(() => {
@@ -648,10 +659,20 @@ function ReportModal({ id, onClose }: { id: number; onClose: () => void }) {
     if (study) setClinicalHistory(study.clinicalHistory ?? "");
   }, [study]);
 
+  // Sort prompts: test-specific first, then modality-specific, then global
+  const sortedPrompts = useMemo(() => {
+    const q = promptSearch.toLowerCase();
+    return allPrompts
+      .filter((p) => !q || p.name.toLowerCase().includes(q) || p.content.toLowerCase().includes(q))
+      .sort((a, b) => {
+        const scoreA = (a.testName === study?.testName ? 2 : 0) + (a.modality === study?.modality ? 1 : 0);
+        const scoreB = (b.testName === study?.testName ? 2 : 0) + (b.modality === study?.modality ? 1 : 0);
+        return scoreB - scoreA;
+      });
+  }, [allPrompts, promptSearch, study]);
+
   const save = useMutation({
     mutationFn: async () => {
-      // Persist clinical history alongside the report so subsequent AI calls
-      // (and the radiologist viewer) keep their context.
       if (clinicalHistory !== (study?.clinicalHistory ?? "")) {
         await api.patch(`/api/radiology/${id}`, { clinicalHistory });
       }
@@ -670,6 +691,34 @@ function ReportModal({ id, onClose }: { id: number; onClose: () => void }) {
     onError: (e: Error) => toast({ title: "Save failed", description: e.message, variant: "destructive" }),
   });
 
+  const createPrompt = useMutation({
+    mutationFn: () => api.post("/api/radiology/prompts", {
+      name: newPromptName.trim(),
+      content: body.trim(),
+      testName: study?.testName ?? null,
+      modality: study?.modality ?? null,
+    }),
+    onSuccess: () => {
+      toast({ title: "Prompt saved" });
+      setShowSavePrompt(false);
+      setNewPromptName("");
+      refetchPrompts();
+    },
+    onError: (e: Error) => toast({ title: "Could not save prompt", description: e.message, variant: "destructive" }),
+  });
+
+  const deletePrompt = useMutation({
+    mutationFn: (promptId: number) => api.delete(`/api/radiology/prompts/${promptId}`),
+    onSuccess: () => refetchPrompts(),
+    onError: (e: Error) => toast({ title: "Delete failed", description: e.message, variant: "destructive" }),
+  });
+
+  function pastePrompt(content: string) {
+    setBody((prev) => (prev?.trim() ? `${prev}\n\n${content}` : content));
+    setBodyTouched(true);
+    toast({ title: "Prompt pasted to dictate area" });
+  }
+
   function applyTemplate(tplId: string) {
     const tpl = templates.find((t) => String(t.id) === tplId);
     if (!tpl) return;
@@ -685,10 +734,42 @@ function ReportModal({ id, onClose }: { id: number; onClose: () => void }) {
     setBodyTouched(true);
   }
 
-  // ── Voice dictation (Web Speech API, on-device when supported) ───────────
-  // Falls back gracefully when SpeechRecognition is unavailable. The voice
-  // feature is opt-in and never auto-starts. We hold the live recognition
-  // handle in a ref so we can tear it down on unmount.
+  function handlePrint() {
+    const win = window.open("", "_blank", "width=820,height=700");
+    if (!win) {
+      toast({ title: "Pop-up blocked", description: "Allow pop-ups for this site to print.", variant: "destructive" });
+      return;
+    }
+    const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    win.document.write(`<!DOCTYPE html><html><head><title>Radiology Report</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;padding:36px 48px;font-size:13px;color:#111;}
+  h1{font-size:17px;margin:0 0 2px;}
+  .sub{font-size:12px;color:#555;margin-bottom:14px;}
+  hr{border:none;border-top:1px solid #ccc;margin:12px 0;}
+  pre{white-space:pre-wrap;font-family:inherit;font-size:13px;line-height:1.7;margin:0;}
+  .badge{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.06em;
+         border:1px solid #999;border-radius:3px;padding:1px 5px;margin-left:6px;vertical-align:middle;}
+  @media print{body{padding:16px 24px;}}
+</style></head><body>
+<h1>${escHtml(study?.testName ?? "Radiology Report")}
+  <span class="badge">${stage === "final" ? "FINAL" : "PRELIMINARY"}</span>
+</h1>
+<div class="sub">
+  Patient: <strong>${escHtml(study?.patientName ?? "")}</strong> &nbsp;|&nbsp;
+  Accession: ${escHtml(study?.accessionNumber ?? "")} &nbsp;|&nbsp;
+  Modality: ${escHtml(study?.modality ?? "")}
+  ${reportedBy ? `<br/>Reported by: ${escHtml(reportedBy)}` : ""}
+  <br/>Printed: ${new Date().toLocaleString("en-IN")}
+</div>
+<hr/>
+<pre>${escHtml(body)}</pre>
+<script>window.onload=function(){window.print();setTimeout(function(){window.close();},500);};<\/script>
+</body></html>`);
+    win.document.close();
+  }
+
+  // ── Voice dictation ───────────────────────────────────────────────────────
   type SR = {
     start: () => void; stop: () => void; abort?: () => void;
     onresult: (e: { results: { isFinal: boolean; 0: { transcript: string } }[] }) => void;
@@ -697,8 +778,6 @@ function ReportModal({ id, onClose }: { id: number; onClose: () => void }) {
   };
   const recognitionRef = useRef<{ rec: SR | null }>({ rec: null });
   const [listening, setListening] = useState(false);
-  // Stop any active recognition when the modal closes — leaving it running
-  // would keep the microphone hot in some browsers.
   useEffect(() => {
     return () => {
       try { recognitionRef.current.rec?.abort?.(); } catch { /* ignore */ }
@@ -715,26 +794,18 @@ function ReportModal({ id, onClose }: { id: number; onClose: () => void }) {
       toast({ title: "Voice dictation unavailable", description: "This browser does not support live transcription.", variant: "destructive" });
       return;
     }
-    if (listening) {
-      recognitionRef.current.rec?.stop();
-      return;
-    }
+    if (listening) { recognitionRef.current.rec?.stop(); return; }
     const w = window as unknown as { SpeechRecognition?: new () => SR; webkitSpeechRecognition?: new () => SR };
     const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
     if (!Ctor) return;
     const rec = new Ctor() as SR & { continuous: boolean; interimResults: boolean; lang: string };
-    rec.continuous = true;
-    rec.interimResults = false;
-    rec.lang = "en-IN";
+    rec.continuous = true; rec.interimResults = false; rec.lang = "en-IN";
     rec.onresult = (e) => {
       const results = e.results as unknown as Array<{ isFinal: boolean; 0: { transcript: string } }>;
       const last = results[results.length - 1];
       if (last?.isFinal) {
         const text = last[0].transcript.trim();
-        if (text) {
-          setBody((prev) => prev + (prev && !prev.endsWith("\n") ? " " : "") + text);
-          setBodyTouched(true);
-        }
+        if (text) { setBody((prev) => prev + (prev && !prev.endsWith("\n") ? " " : "") + text); setBodyTouched(true); }
       }
     };
     rec.onerror = (e) => { toast({ title: "Mic error", description: e.error, variant: "destructive" }); setListening(false); };
@@ -781,7 +852,7 @@ function ReportModal({ id, onClose }: { id: number; onClose: () => void }) {
     onError: (e: Error) => toast({ title: "AI impression failed", description: e.message, variant: "destructive" }),
   });
 
-  // ── Tele-radiology share link (radiologist audience) ─────────────────────
+  // ── Tele-radiology share link ─────────────────────────────────────────────
   const makeShare = useMutation({
     mutationFn: () => api.post<{ url: string }>(`/api/radiology/${id}/share-link`, { audience: "radiologist", expiresInHours: 24 }),
     onSuccess: (res) => {
@@ -795,156 +866,285 @@ function ReportModal({ id, onClose }: { id: number; onClose: () => void }) {
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-4xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileText size={16} />
+      <DialogContent className="max-w-[95vw] w-[1280px] p-0 gap-0 overflow-hidden flex flex-col max-h-[92vh]">
+        {/* ── Header ── */}
+        <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <FileText size={15} />
             Report — {study?.accessionNumber ?? ""}
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs">
             {study?.testName ?? ""} · {study?.patientName ?? ""} · {study?.modality}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={stage} onValueChange={(v) => setStage(v as typeof stage)}>
-              <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="preliminary">Preliminary</SelectItem>
-                <SelectItem value="final">Final</SelectItem>
-              </SelectContent>
-            </Select>
+        {/* ── Two-column body ── */}
+        <div className="flex flex-1 min-h-0 divide-x">
 
-            <Select value={templateId ? String(templateId) : ""} onValueChange={applyTemplate}>
-              <SelectTrigger className="w-56">
-                <SelectValue placeholder={templates.length ? "Test template…" : "No saved template"} />
-              </SelectTrigger>
-              <SelectContent>
-                {templates.map((t) => (
-                  <SelectItem key={t.id} value={String(t.id)}>
-                    {t.isDefault ? "★ " : ""}{t.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value="" onValueChange={applyPreset}>
-              <SelectTrigger className="w-56">
-                <SelectValue placeholder="Modality preset…" />
-              </SelectTrigger>
-              <SelectContent>
-                {MODALITY_PRESETS
-                  .filter((p) => !study?.modality || p.modality === study.modality)
-                  .map((p) => (
-                    <SelectItem key={p.key} value={p.key}>{p.label}</SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-
-            <Input
-              value={reportedBy}
-              onChange={(e) => setReportedBy(e.target.value)}
-              placeholder="Reported by (radiologist)"
-              className="w-56"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs text-muted-foreground">Clinical history (used by AI for context)</label>
-            <Textarea
-              value={clinicalHistory}
-              onChange={(e) => setClinicalHistory(e.target.value)}
-              rows={2}
-              placeholder="e.g. 45F, headache 3 days, no trauma, on antihypertensives. Rule out SAH."
-              className="text-sm"
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button" size="sm"
-              variant={listening ? "destructive" : "outline"}
-              onClick={toggleMic}
-              title={speechSupported ? "Toggle voice dictation" : "Voice dictation not supported in this browser"}
-            >
-              {listening ? <MicOff size={14} className="mr-1" /> : <Mic size={14} className="mr-1" />}
-              {listening ? "Stop" : "Dictate"}
-            </Button>
-            <Button
-              type="button" size="sm" variant="outline"
-              onClick={() => aiFindings.mutate()}
-              disabled={aiFindings.isPending || !study}
-            >
-              <Sparkles size={14} className="mr-1" />
-              {aiFindings.isPending ? "Drafting…" : "AI Suggest Findings"}
-            </Button>
-            <Button
-              type="button" size="sm" variant="outline"
-              onClick={() => aiImpression.mutate()}
-              disabled={aiImpression.isPending || !body.trim()}
-            >
-              <Sparkles size={14} className="mr-1" />
-              {aiImpression.isPending ? "Thinking…" : "AI Suggest Impression"}
-            </Button>
-            <div className="ml-auto inline-flex items-center gap-2">
-              <Button
-                type="button" size="sm" variant="outline"
-                onClick={() => makeShare.mutate()}
-                disabled={makeShare.isPending}
-                title="Generate a 24-hour tele-radiology link to read this study from anywhere"
+          {/* ── LEFT: Saved AI Prompts panel ── */}
+          <div className="w-64 shrink-0 flex flex-col bg-muted/30 overflow-hidden">
+            <div className="px-3 py-2 border-b bg-muted/50 flex items-center gap-1.5">
+              <BookOpen size={13} className="text-muted-foreground shrink-0" />
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex-1">AI Prompts</span>
+              <button
+                type="button"
+                title="Save current dictation text as a new prompt"
+                onClick={() => { setShowSavePrompt((v) => !v); setNewPromptName(""); }}
+                className="hover:text-primary text-muted-foreground"
               >
-                <Link2 size={14} className="mr-1" />
-                Tele-radiology link
-              </Button>
-              {shareLink && (
-                <button
-                  type="button"
-                  onClick={() => { navigator.clipboard?.writeText(shareLink); toast({ title: "Copied" }); }}
-                  className="text-xs text-muted-foreground hover:text-primary inline-flex items-center gap-1"
-                >
-                  <CopyIcon size={11} /> Copy again
-                </button>
+                <Plus size={14} />
+              </button>
+            </div>
+
+            {/* Save new prompt inline form */}
+            {showSavePrompt && (
+              <div className="px-3 py-2 border-b space-y-1.5 bg-background">
+                <p className="text-[10px] text-muted-foreground">Saves the current dictate text as a reusable prompt for this test/modality.</p>
+                <Input
+                  value={newPromptName}
+                  onChange={(e) => setNewPromptName(e.target.value)}
+                  placeholder="Prompt name…"
+                  className="h-7 text-xs"
+                  autoFocus
+                />
+                <div className="flex gap-1">
+                  <Button size="sm" className="h-7 text-xs flex-1"
+                    disabled={!newPromptName.trim() || !body.trim() || createPrompt.isPending}
+                    onClick={() => createPrompt.mutate()}>
+                    Save
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowSavePrompt(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Search */}
+            <div className="px-2 py-1.5 border-b">
+              <div className="relative">
+                <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  value={promptSearch}
+                  onChange={(e) => setPromptSearch(e.target.value)}
+                  placeholder="Filter prompts…"
+                  className="w-full pl-6 pr-2 py-1 text-xs rounded border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+            </div>
+
+            {/* Prompt list */}
+            <div className="flex-1 overflow-y-auto">
+              {sortedPrompts.length === 0 && (
+                <p className="text-[11px] text-muted-foreground text-center px-3 py-6">
+                  {allPrompts.length === 0
+                    ? "No saved prompts yet. Click + to save the current dictation as a prompt."
+                    : "No prompts match your search."}
+                </p>
               )}
+              {sortedPrompts.map((p) => {
+                const isMatch = p.testName === study?.testName || p.modality === study?.modality;
+                return (
+                  <div key={p.id}
+                    className={`group px-3 py-2 border-b last:border-b-0 hover:bg-accent/60 transition-colors ${isMatch ? "bg-primary/5" : ""}`}
+                  >
+                    <div className="flex items-start justify-between gap-1">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium truncate">{p.name}</p>
+                        {isMatch && (
+                          <span className="text-[9px] text-primary font-semibold uppercase tracking-wide">
+                            {p.testName === study?.testName ? "This test" : "This modality"}
+                          </span>
+                        )}
+                        <p className="text-[10px] text-muted-foreground line-clamp-2 mt-0.5">{p.content}</p>
+                      </div>
+                      <button
+                        type="button"
+                        title="Delete prompt"
+                        onClick={() => deletePrompt.mutate(p.id)}
+                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity shrink-0 mt-0.5"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => pastePrompt(p.content)}
+                      className="mt-1.5 text-[10px] font-medium text-primary hover:underline inline-flex items-center gap-1"
+                    >
+                      <CopyIcon size={9} /> Paste to dictate
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="px-3 py-2 border-t bg-muted/40 text-[10px] text-muted-foreground">
+              Click a prompt to paste it into the dictate pane. The AI will use it as its instruction when generating findings.
             </div>
           </div>
 
-          <Textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            rows={16}
-            className="font-mono text-sm"
-            placeholder="Dictate, type, or use the AI / preset buttons above."
-          />
+          {/* ── RIGHT: Report editor ── */}
+          <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
 
-          {listening && (
-            <div className="text-xs text-emerald-600 inline-flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-              </span>
-              Listening — finalised phrases will be appended to the report.
+              {/* Controls row */}
+              <div className="flex flex-wrap items-center gap-2">
+                <Select value={stage} onValueChange={(v) => setStage(v as typeof stage)}>
+                  <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="preliminary">Preliminary</SelectItem>
+                    <SelectItem value="final">Final</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={templateId ? String(templateId) : ""} onValueChange={applyTemplate}>
+                  <SelectTrigger className="w-52">
+                    <SelectValue placeholder={templates.length ? "Test template…" : "No saved template"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {templates.map((t) => (
+                      <SelectItem key={t.id} value={String(t.id)}>
+                        {t.isDefault ? "★ " : ""}{t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value="" onValueChange={applyPreset}>
+                  <SelectTrigger className="w-52">
+                    <SelectValue placeholder="Modality preset…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MODALITY_PRESETS
+                      .filter((p) => !study?.modality || p.modality === study.modality)
+                      .map((p) => (
+                        <SelectItem key={p.key} value={p.key}>{p.label}</SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+
+                <Input
+                  value={reportedBy}
+                  onChange={(e) => setReportedBy(e.target.value)}
+                  placeholder="Reported by (radiologist)"
+                  className="w-52"
+                />
+              </div>
+
+              {/* Clinical history */}
+              <div>
+                <label className="text-xs text-muted-foreground">Clinical history (used by AI for context)</label>
+                <Textarea
+                  value={clinicalHistory}
+                  onChange={(e) => setClinicalHistory(e.target.value)}
+                  rows={2}
+                  placeholder="e.g. 45F, headache 3 days, no trauma, on antihypertensives. Rule out SAH."
+                  className="text-sm"
+                />
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" size="sm"
+                  variant={listening ? "destructive" : "outline"}
+                  onClick={toggleMic}
+                  title={speechSupported ? "Toggle voice dictation" : "Voice dictation not supported in this browser"}
+                >
+                  {listening ? <MicOff size={14} className="mr-1" /> : <Mic size={14} className="mr-1" />}
+                  {listening ? "Stop" : "Dictate"}
+                </Button>
+                <Button type="button" size="sm" variant="outline"
+                  onClick={() => aiFindings.mutate()}
+                  disabled={aiFindings.isPending || !study}
+                >
+                  <Sparkles size={14} className="mr-1" />
+                  {aiFindings.isPending ? "Drafting…" : "AI Suggest Findings"}
+                </Button>
+                <Button type="button" size="sm" variant="outline"
+                  onClick={() => aiImpression.mutate()}
+                  disabled={aiImpression.isPending || !body.trim()}
+                >
+                  <Sparkles size={14} className="mr-1" />
+                  {aiImpression.isPending ? "Thinking…" : "AI Suggest Impression"}
+                </Button>
+                <div className="ml-auto inline-flex items-center gap-2">
+                  <Button type="button" size="sm" variant="outline"
+                    onClick={() => makeShare.mutate()}
+                    disabled={makeShare.isPending}
+                    title="Generate a 24-hour tele-radiology link to read this study from anywhere"
+                  >
+                    <Link2 size={14} className="mr-1" />
+                    Tele-radiology link
+                  </Button>
+                  {shareLink && (
+                    <button
+                      type="button"
+                      onClick={() => { navigator.clipboard?.writeText(shareLink); toast({ title: "Copied" }); }}
+                      className="text-xs text-muted-foreground hover:text-primary inline-flex items-center gap-1"
+                    >
+                      <CopyIcon size={11} /> Copy again
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Dictate pane */}
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Dictate pane — type, speak, or paste a prompt from the left panel. AI will use this text to generate structured findings.
+                </label>
+                <Textarea
+                  value={body}
+                  onChange={(e) => { setBody(e.target.value); setBodyTouched(true); }}
+                  rows={18}
+                  className="font-mono text-sm"
+                  placeholder="Dictate, type, or paste a saved prompt here. Then click AI Suggest Findings to generate a structured report."
+                />
+              </div>
+
+              {listening && (
+                <div className="text-xs text-emerald-600 inline-flex items-center gap-2">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                  </span>
+                  Listening — finalised phrases will be appended to the report.
+                </div>
+              )}
+
+              {study?.hasFinal && stage === "preliminary" && (
+                <div className="text-xs text-amber-700 dark:text-amber-400">
+                  A final report is already on file. Saving a preliminary will keep the existing final intact and won&rsquo;t change the study status.
+                </div>
+              )}
+
+              <p className="text-[11px] text-muted-foreground">
+                AI suggestions are drafts only. The radiologist remains responsible for the final report content and sign-off.
+              </p>
             </div>
-          )}
 
-          {study?.hasFinal && stage === "preliminary" && (
-            <div className="text-xs text-amber-700 dark:text-amber-400">
-              A final report is already on file. Saving a preliminary will keep the existing final intact and won&rsquo;t change the study status.
+            {/* ── Footer ── */}
+            <div className="border-t px-5 py-3 shrink-0 flex items-center justify-between gap-2 bg-background">
+              <Button variant="outline" onClick={onClose}>Cancel</Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handlePrint}
+                  disabled={!body.trim()}
+                  title="Print this report"
+                >
+                  <Printer size={14} className="mr-1" />
+                  Print
+                </Button>
+                <Button onClick={() => save.mutate()} disabled={save.isPending || !body.trim()}>
+                  <Send size={14} className="mr-1" />
+                  Save {stage === "final" ? "Final" : "Preliminary"}
+                </Button>
+              </div>
             </div>
-          )}
-
-          <p className="text-[11px] text-muted-foreground">
-            AI suggestions are drafts only. The radiologist remains responsible for the final report content and sign-off.
-          </p>
+          </div>
         </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => save.mutate()} disabled={save.isPending || !body.trim()}>
-            <Send size={14} className="mr-1" />
-            Save {stage === "final" ? "Final" : "Preliminary"}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import {
   radiologyStudiesTable, radiologyFilmIssuesTable, radiologyShareLinksTable,
   testsTable, patientsTable, ordersTable, orderTestsTable,
-  billsTable, reportTemplatesTable, staffTable,
+  billsTable, reportTemplatesTable, staffTable, radiologyPromptsTable,
 } from "@workspace/db/schema";
 import { and, asc, desc, eq, gte, ilike, isNull, lte, or, sql } from "drizzle-orm";
 import crypto from "node:crypto";
@@ -563,6 +563,40 @@ radiologyRouter.post("/:id/issues", async (req, res) => {
   }
 
   res.status(201).json(row);
+});
+
+// ── Saved AI prompts ─────────────────────────────────────────────────────────
+// GET  /api/radiology/prompts?testName=&modality=
+// POST /api/radiology/prompts   { name, content, testName?, modality? }
+// DELETE /api/radiology/prompts/:id
+
+radiologyRouter.get("/prompts", async (req, res) => {
+  const rows = await db
+    .select()
+    .from(radiologyPromptsTable)
+    .orderBy(asc(radiologyPromptsTable.createdAt));
+  res.json(rows);
+});
+
+radiologyRouter.post("/prompts", async (req, res) => {
+  const body = req.body as { name?: string; content?: string; testName?: string; modality?: string };
+  if (!body.name?.trim() || !body.content?.trim()) {
+    res.status(400).json({ error: "name and content are required" }); return;
+  }
+  const [row] = await db.insert(radiologyPromptsTable).values({
+    name: body.name.trim(),
+    content: body.content.trim(),
+    testName: body.testName?.trim() || null,
+    modality: body.modality?.trim() || null,
+  }).returning();
+  res.status(201).json(row);
+});
+
+radiologyRouter.delete("/prompts/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.delete(radiologyPromptsTable).where(eq(radiologyPromptsTable.id, id));
+  res.json({ ok: true });
 });
 
 // ── Stats for the page header ───────────────────────────────────────────────
