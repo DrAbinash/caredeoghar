@@ -21,8 +21,10 @@ printersRouter.put("/settings", async (req, res) => {
   const body = req.body ?? {};
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (typeof body.billPrinter === "string") updates.billPrinter = body.billPrinter.trim();
+  if (typeof body.billPrinterType === "string" && ["color", "bw"].includes(body.billPrinterType)) updates.billPrinterType = body.billPrinterType;
   if (typeof body.barcodePrinter === "string") updates.barcodePrinter = body.barcodePrinter.trim();
   if (typeof body.tokenPrinter === "string") updates.tokenPrinter = body.tokenPrinter.trim();
+  if (typeof body.tokenPrinterType === "string" && ["color", "bw"].includes(body.tokenPrinterType)) updates.tokenPrinterType = body.tokenPrinterType;
   const [row] = await db.update(printerSettingsTable).set(updates).where({ id: current.id } as never).returning();
   res.json(row);
 });

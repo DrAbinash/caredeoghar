@@ -106,6 +106,13 @@ export default function BillDetail({ id }: { id: number }) {
     staleTime: 5 * 60_000,
   });
 
+  const { data: printerSettings } = useQuery<{ billPrinterType?: string }>({
+    queryKey: ["printer-settings"],
+    queryFn: () => api.get("/api/printers/settings"),
+    staleTime: 5 * 60_000,
+  });
+  const isBW = printerSettings?.billPrinterType === "bw";
+
   // Inline QR for the printed receipt — shares the same encoding as
   // BillingDesk so the verify URL stays consistent across surfaces.
   const buildBillVerifyUrl = (billNumber: string) =>
@@ -604,12 +611,6 @@ export default function BillDetail({ id }: { id: number }) {
       <style>{`
         @media print {
           html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
-          /* Hide everything via visibility so the receipt's ancestors
-             (#root, App layout) stay laid-out — using display:none on
-             siblings of #root would hide the receipt itself. Then re-show
-             only the receipt subtree and pull it to (0,0) with absolute
-             positioning. position:absolute (not fixed!) avoids the
-             "blank trailing page" bug Chrome had with position:fixed. */
           body * { visibility: hidden !important; }
           .print-receipt, .print-receipt * { visibility: visible !important; }
           .print-receipt {
@@ -625,12 +626,20 @@ export default function BillDetail({ id }: { id: number }) {
           }
           .print-receipt .pr-keep-case { text-transform: none !important; }
           @page { size: ${paperSize}; margin: ${paperSize === "A5" ? "5mm 6mm" : "8mm 10mm"}; }
+          ${isBW ? `
+          /* ── B&W mode: high-contrast print for monochrome laser printers ── */
+          .print-receipt-bw {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            filter: grayscale(1) contrast(1.35) !important;
+          }
+          ` : ""}
         }
         @media screen { .print-receipt { display: none; } }
       `}</style>
 
       {Array.from({ length: Math.max(1, Math.min(2, Number(clinic?.billPrintCopies ?? 1) || 1)) }).map((_, copyIdx) => (
-      <div key={copyIdx} className="print-receipt" style={copyIdx > 0 ? { pageBreakBefore: "always" } : undefined}>
+      <div key={copyIdx} className={`print-receipt${isBW ? " print-receipt-bw" : ""}`} style={copyIdx > 0 ? { pageBreakBefore: "always" } : undefined}>
         {/* Clinic header — name + address on left, logo on right */}
         <div style={{
           display: "flex",

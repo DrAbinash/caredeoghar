@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
 import { db } from "@workspace/db";
 import {
   onlineBookingsTable,
@@ -96,7 +97,7 @@ onlineBookingsRouter.post("/:id/cancel", async (req, res): Promise<void> => {
 
 // POST /api/online-bookings/:id/confirm
 // Creates patient (if not existing), order, bill, and queue tokens
-onlineBookingsRouter.post("/:id/confirm", async (req, res): Promise<void> => {
+onlineBookingsRouter.post("/:id/confirm", async (req: StaffAuthRequest, res): Promise<void> => {
   const id = Number(req.params.id);
   const [booking] = await db.select().from(onlineBookingsTable).where(eq(onlineBookingsTable.id, id)).limit(1);
   if (!booking) { res.status(404).json({ error: "Booking not found" }); return; }
@@ -105,7 +106,7 @@ onlineBookingsRouter.post("/:id/confirm", async (req, res): Promise<void> => {
     return;
   }
 
-  const staffName = req.staffSession?.user?.name || "Staff";
+  const staffName = req.staffSession?.subjectName || "Staff";
 
   // Parse test and package IDs
   let testIds: number[] = [];

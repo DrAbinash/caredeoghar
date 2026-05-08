@@ -40,6 +40,7 @@ import {
   Download,
   ChevronRight,
   ShoppingCart,
+  BarChart2,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -74,6 +75,7 @@ const isGroup = (n: NavEntry): n is NavGroup => "children" in n;
 const navItems: NavEntry[] = [
   { path: "/", icon: Zap, label: "Billing Desk" },
   { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { path: "/daily-summary", icon: BarChart2, label: "Daily Summary" },
   { path: "/patients", icon: Users, label: "Patients" },
   { path: "/appointments", icon: CalendarDays, label: "Appointments" },
   { path: "/online-bookings", icon: ShoppingCart, label: "Online Bookings" },

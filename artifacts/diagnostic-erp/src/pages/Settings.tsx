@@ -971,12 +971,12 @@ type WhatsappCfg = {
   includeViewerLink?: boolean;
   reportMessageTemplate?: string;
 };
-type PrinterCfg = { id?: number; billPrinter: string; barcodePrinter: string; tokenPrinter: string };
+type PrinterCfg = { id?: number; billPrinter: string; billPrinterType: string; barcodePrinter: string; tokenPrinter: string; tokenPrinterType: string };
 
-const PRINTER_TABS: { key: keyof Omit<PrinterCfg, "id">; label: string; description: string }[] = [
-  { key: "billPrinter",    label: "Bill Printer",    description: "A4 / A5 receipts and invoice printouts." },
+const PRINTER_TABS: { key: keyof Omit<PrinterCfg, "id">; typeKey?: keyof Omit<PrinterCfg, "id">; label: string; description: string }[] = [
+  { key: "billPrinter",    typeKey: "billPrinterType",   label: "Bill Printer",    description: "A4 / A5 receipts and invoice printouts." },
   { key: "barcodePrinter", label: "Barcode Printer", description: "Small label printer used for sample barcodes." },
-  { key: "tokenPrinter",   label: "Token Printer",   description: "Queue token slip printer at the front desk." },
+  { key: "tokenPrinter",   typeKey: "tokenPrinterType",  label: "Token Printer",   description: "Queue token slip printer at the front desk." },
 ];
 
 const KNOWN_PRINTERS_KEY = "diagnosticErp:knownPrinters";
@@ -1054,6 +1054,8 @@ function PrinterTab() {
 
   const activeMeta = PRINTER_TABS.find((t) => t.key === activeTab)!;
   const activeValue = cur[activeTab] ?? "";
+  const activeTypeKey = activeMeta.typeKey;
+  const activeTypeValue = activeTypeKey ? (cur[activeTypeKey] ?? "color") : null;
 
   return (
     <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
@@ -1130,6 +1132,39 @@ function PrinterTab() {
             </p>
           </div>
         </div>
+
+        {activeTypeKey && (
+          <div className="bg-muted/30 border border-card-border rounded-lg p-3 space-y-2">
+            <Label className="text-xs font-semibold">Printer Type</Label>
+            <p className="text-[11px] text-muted-foreground">
+              Choose <strong>Black &amp; White</strong> to get a higher-contrast, crisper print optimised for B&amp;W laser printers (removes colour backgrounds, boosts contrast). Choose <strong>Colour</strong> for full-colour inkjet/laser output.
+            </p>
+            <div className="flex gap-3 mt-1">
+              {[
+                { value: "color", label: "Colour Printer", hint: "Blue headers, coloured text" },
+                { value: "bw",    label: "Black & White Printer", hint: "High-contrast, no colour backgrounds" },
+              ].map((opt) => {
+                const checked = activeTypeValue === opt.value;
+                return (
+                  <label key={opt.value} className={`flex items-start gap-2.5 rounded-lg border px-3 py-2.5 cursor-pointer flex-1 transition-colors ${checked ? "border-primary bg-primary/5" : "border-card-border hover:bg-muted/30"}`}>
+                    <input
+                      type="radio"
+                      name={`printerType-${activeTypeKey}`}
+                      value={opt.value}
+                      checked={checked}
+                      onChange={() => update(activeTypeKey, opt.value)}
+                      className="mt-0.5 accent-primary"
+                    />
+                    <div>
+                      <div className="text-sm font-medium">{opt.label}</div>
+                      <div className="text-[11px] text-muted-foreground">{opt.hint}</div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Manage workstation printer list */}
         <div className="bg-muted/30 border border-card-border rounded-lg p-4 space-y-3">

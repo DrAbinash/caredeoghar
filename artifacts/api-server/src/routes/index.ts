@@ -52,6 +52,7 @@ import { verifyRouter } from "./verify";
 import internalCronRouter from "./internal-cron";
 import { publicBookingRouter } from "./public-booking";
 import { onlineBookingsRouter } from "./online-bookings";
+import { dailySummaryRouter } from "./daily-summary";
 import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
 import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
 
@@ -258,6 +259,7 @@ router.use("/ai", requireStaffAuth, aiRouter);
 router.use("/samples", requireStaffAuth, samplesRouter);
 router.use("/appointments", requireStaffAuth, appointmentsRouter);
 router.use("/online-bookings", requireStaffAuth, onlineBookingsRouter);
+router.use("/daily-summary", requireStaffAuth, dailySummaryRouter);
 router.use("/packages", requireStaffAuth, packagesRouter);
 router.use("/whatsapp", requireStaffAuth, whatsappRouter);
 router.use("/tokens", requireStaffAuth, tokensRouter);
