@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/select";
 import {
   Hourglass, PlayCircle, CheckCircle2, SkipForward, RefreshCw, Search,
-  Star, ExternalLink, PhoneCall, Tv, MapPin,
+  Star, ExternalLink, PhoneCall, Tv, MapPin, Globe, Crown,
 } from "lucide-react";
 
 type TestToken = {
@@ -32,6 +32,7 @@ type TestToken = {
   billNumber: string | null;
   calledAt: string | null;
   createdAt: string;
+  source: string | null;
 };
 
 type Ledger = { id: number; name: string };
@@ -281,7 +282,9 @@ function TokenCard({
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-baseline gap-1.5 min-w-0">
           <span className="text-2xl font-extrabold tabular-nums text-primary leading-none">#{t.tokenNo}</span>
-          {t.priority > 0 && <Star size={13} className="text-amber-500 fill-amber-500" />}
+          {t.source === "vip" && <span title="VIP booking"><Crown size={13} className="text-amber-500 fill-amber-500" /></span>}
+          {t.source === "online" && <span title="Online booking"><Globe size={13} className="text-blue-500" /></span>}
+          {t.priority > 0 && t.source !== "vip" && t.source !== "online" && <Star size={13} className="text-amber-500 fill-amber-500" />}
         </div>
         <button
           onClick={() => onTogglePriority(t)}
@@ -293,7 +296,19 @@ function TokenCard({
       </div>
 
       <div className="mt-1.5 space-y-0.5">
-        <div className="text-sm font-medium truncate">{t.patientName || "—"}</div>
+        <div className="flex items-center gap-1.5">
+          <div className="text-sm font-medium truncate">{t.patientName || "—"}</div>
+          {t.source === "vip" && (
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0 rounded text-[9px] font-bold bg-amber-100 text-amber-700 border border-amber-300 shrink-0">
+              <Crown size={8} className="fill-amber-600" />VIP
+            </span>
+          )}
+          {t.source === "online" && (
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0 rounded text-[9px] font-bold bg-blue-100 text-blue-700 border border-blue-300 shrink-0">
+              <Globe size={8} />WEB
+            </span>
+          )}
+        </div>
         <div className="text-[11px] text-muted-foreground truncate">{t.testCode} · {t.testName}</div>
         {t.patientPhone && (
           <a href={`tel:${t.patientPhone}`} className="text-[11px] text-muted-foreground inline-flex items-center gap-1 hover:text-primary">

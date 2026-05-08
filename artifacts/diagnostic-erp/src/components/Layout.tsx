@@ -39,6 +39,7 @@ import {
   Globe,
   Download,
   ChevronRight,
+  ShoppingCart,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -75,6 +76,7 @@ const navItems: NavEntry[] = [
   { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { path: "/patients", icon: Users, label: "Patients" },
   { path: "/appointments", icon: CalendarDays, label: "Appointments" },
+  { path: "/online-bookings", icon: ShoppingCart, label: "Online Bookings" },
   { path: "/queue", icon: Ticket, label: "Queue Tokens" },
   { path: "/radiology", icon: Radio, label: "Radiology" },
   {

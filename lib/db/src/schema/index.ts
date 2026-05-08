@@ -40,3 +40,4 @@ export * from "./backupLogs";
 export * from "./siteSettings";
 export * from "./sitePages";
 export * from "./sitePopups";
+export * from "./onlineBookings";

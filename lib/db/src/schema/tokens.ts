@@ -14,6 +14,8 @@ export const tokensTable = pgTable(
     // VIP / family / referred-friend flag — surfaces them at the top of the
     // queue UI and the public display.
     priority: integer("priority").notNull().default(0),
+    // Source of the token: walkin (default), online (paid via website), vip
+    source: text("source").notNull().default("walkin"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({

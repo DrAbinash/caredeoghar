@@ -23,6 +23,8 @@ export async function generateTokenForBill(opts: {
   ledgerId: number;
   billId: number;
   patientId: number;
+  priority?: number;
+  source?: string;
 }): Promise<{ tokenNo: number; tokenDate: string }> {
   const tokenDate = todayISO();
   // Atomic insert: compute next token number inside the INSERT itself so two
@@ -47,6 +49,8 @@ export async function generateTokenForBill(opts: {
       tokenNo: nextNoExpr,
       tokenDate,
       status: "waiting",
+      priority: opts.priority ?? 0,
+      source: opts.source ?? "walkin",
     })
     .returning({ tokenNo: tokensTable.tokenNo });
   return { tokenNo: row.tokenNo, tokenDate };

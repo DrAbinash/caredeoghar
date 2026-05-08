@@ -24,7 +24,7 @@ clinicSettingsRouter.put("/", async (req, res) => {
   for (const f of fields) {
     if (body[f] !== undefined) update[f] = body[f];
   }
-  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit"] as const;
+  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled"] as const;
   for (const f of boolFields) {
     if (body[f] !== undefined) {
       if (typeof body[f] !== "boolean") {
@@ -47,6 +47,21 @@ clinicSettingsRouter.put("/", async (req, res) => {
       }
       update[f] = body[f];
     }
+  }
+  if (body.razorpayKeyId !== undefined) {
+    if (typeof body.razorpayKeyId !== "string") {
+      res.status(400).json({ error: "razorpayKeyId must be a string" });
+      return;
+    }
+    update.razorpayKeyId = body.razorpayKeyId.trim();
+  }
+  if (body.onlineBookingLedgerId !== undefined) {
+    const n = Number(body.onlineBookingLedgerId);
+    if (!Number.isInteger(n) || n <= 0) {
+      res.status(400).json({ error: "onlineBookingLedgerId must be a positive integer" });
+      return;
+    }
+    update.onlineBookingLedgerId = n;
   }
   if (body.billPrintCopies !== undefined) {
     const n = Number(body.billPrintCopies);

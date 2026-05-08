@@ -50,6 +50,8 @@ import { websiteRouter } from "./website";
 import { systemRouter } from "./system";
 import { verifyRouter } from "./verify";
 import internalCronRouter from "./internal-cron";
+import { publicBookingRouter } from "./public-booking";
+import { onlineBookingsRouter } from "./online-bookings";
 import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
 import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
 
@@ -73,6 +75,12 @@ router.use("/teleradiology", teleradiologyRouter);
 // here so anyone (patient, regulator) can confirm the bill is genuine.
 // Read-only, no PII beyond what is already on the printed receipt.
 router.use("/verify", verifyRouter);
+
+// Public online test booking (clinic-site "Book Now" + Razorpay payment).
+// These endpoints are intentionally unauthenticated: the booking form and
+// payment flow run on the public clinic site. Payment is verified server-side
+// via HMAC before any record is persisted.
+router.use("/public/booking", publicBookingRouter);
 
 // Website router: GET endpoints are intentionally public so the clinic-site
 // frontend can fetch settings/pages/faqs/photos/popups without credentials.
@@ -249,6 +257,7 @@ router.use("/ai", requireStaffAuth, aiRouter);
 // roles and do not expose sensitive module-specific data on their own.
 router.use("/samples", requireStaffAuth, samplesRouter);
 router.use("/appointments", requireStaffAuth, appointmentsRouter);
+router.use("/online-bookings", requireStaffAuth, onlineBookingsRouter);
 router.use("/packages", requireStaffAuth, packagesRouter);
 router.use("/whatsapp", requireStaffAuth, whatsappRouter);
 router.use("/tokens", requireStaffAuth, tokensRouter);

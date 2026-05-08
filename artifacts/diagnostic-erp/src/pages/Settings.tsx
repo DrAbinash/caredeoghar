@@ -102,6 +102,7 @@ const TABS = [
   { id: "branches", label: "Branches", icon: MapPin },
   { id: "report-templates", label: "Report Templates", icon: FileCode },
   { id: "portal", label: "Patient Portal", icon: Globe },
+  { id: "online-booking", label: "Online Booking", icon: CreditCard },
   { id: "form-f", label: "Form F Tests", icon: FileText },
   { id: "email", label: "Email Notifications", icon: Mail },
   { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
@@ -188,6 +189,7 @@ export default function Settings() {
         {tab === "branches" && <BranchesTab />}
         {tab === "report-templates" && <ReportTemplatesTab />}
         {tab === "portal" && <PatientPortalTab />}
+        {tab === "online-booking" && <OnlineBookingTab />}
         {tab === "form-f" && <FormFTestsTab />}
         {tab === "email" && <EmailTab />}
         {tab === "whatsapp" && <WhatsappTab />}
@@ -845,6 +847,108 @@ function PatientPortalTab() {
             </Button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Online Booking + Razorpay Settings ──────────────────────────────────────
+type OnlineBookingSettings = {
+  onlineBookingEnabled: boolean;
+  vipQueueEnabled: boolean;
+  razorpayKeyId: string;
+  onlineBookingLedgerId: number;
+};
+
+function OnlineBookingTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data, isLoading } = useQuery<OnlineBookingSettings & { ledgers?: { id: number; name: string }[] }>({
+    queryKey: ["clinic-settings"],
+    queryFn: () => api.get("/api/clinic-settings"),
+  });
+  const { data: ledgersData } = useQuery<{ ledgers: { id: number; name: string }[] }>({
+    queryKey: ["ledgers"],
+    queryFn: () => api.get("/api/ledgers"),
+  });
+  const [form, setForm] = useState<OnlineBookingSettings | null>(null);
+  useEffect(() => { if (data) setForm({ onlineBookingEnabled: data.onlineBookingEnabled, vipQueueEnabled: data.vipQueueEnabled, razorpayKeyId: data.razorpayKeyId || "", onlineBookingLedgerId: data.onlineBookingLedgerId || 1 }); }, [data]);
+
+  const save = useMutation({
+    mutationFn: (body: OnlineBookingSettings) => api.put("/api/clinic-settings", body),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["clinic-settings"] }); toast({ title: "Online booking settings saved" }); },
+    onError: () => toast({ title: "Save failed", variant: "destructive" }),
+  });
+
+  if (isLoading || !form) return <div className="bg-card border border-card-border rounded-xl p-8 text-center text-muted-foreground">Loading…</div>;
+
+  const Toggle = ({ value, onChange, label, hint }: { value: boolean; onChange: (v: boolean) => void; label: string; hint: string }) => (
+    <button type="button" onClick={() => onChange(!value)} className={`w-full text-left flex items-start justify-between gap-3 px-4 py-3 rounded-lg border transition-colors ${value ? "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-800" : "bg-muted/30 border-card-border"}`}>
+      <div><p className="text-sm font-medium">{label}</p><p className="text-xs text-muted-foreground mt-0.5">{hint}</p></div>
+      <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors mt-0.5 shrink-0 ${value ? "bg-green-500" : "bg-muted-foreground/40"}`}>
+        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${value ? "translate-x-5" : "translate-x-1"}`} />
+      </span>
+    </button>
+  );
+
+  const ledgers = ledgersData?.ledgers ?? [];
+
+  return (
+    <div className="space-y-4 max-w-3xl">
+      <div className="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-950/30 dark:to-blue-950/30 border border-indigo-200 dark:border-indigo-900 rounded-xl p-5">
+        <div className="flex items-start gap-3">
+          <div className="h-10 w-10 rounded-lg bg-indigo-600 flex items-center justify-center shrink-0">
+            <CreditCard size={20} className="text-white" />
+          </div>
+          <div>
+            <h2 className="font-bold text-lg">Online Booking & Razorpay</h2>
+            <p className="text-sm text-muted-foreground mt-1">Allow patients to book tests and pay online via your clinic website. Requires a Razorpay account.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Toggles */}
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-3">
+        <h3 className="font-bold">Booking Features</h3>
+        <Toggle value={form.onlineBookingEnabled} onChange={(v) => setForm({ ...form, onlineBookingEnabled: v })} label="Online Booking enabled" hint="Shows the Book Now form on your clinic website and activates payment collection." />
+        <Toggle value={form.vipQueueEnabled} onChange={(v) => setForm({ ...form, vipQueueEnabled: v })} label="VIP Queue enabled" hint="Allows patients to pay a VIP surcharge for priority queue placement." />
+      </div>
+
+      {/* Ledger + Key ID */}
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <h3 className="font-bold">Payment Configuration</h3>
+        <div>
+          <Label>Booking Ledger</Label>
+          <p className="text-xs text-muted-foreground mb-1">Bills created from online bookings will be tagged to this ledger.</p>
+          <Select value={String(form.onlineBookingLedgerId)} onValueChange={(v) => setForm({ ...form, onlineBookingLedgerId: Number(v) })}>
+            <SelectTrigger className="mt-1 max-w-xs"><SelectValue placeholder="Select ledger" /></SelectTrigger>
+            <SelectContent>{ledgers.map((l) => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label>Razorpay Key ID</Label>
+          <p className="text-xs text-muted-foreground mb-1">Your Razorpay API Key ID (starts with <code>rzp_live_</code> or <code>rzp_test_</code>). Safe to expose to browser.</p>
+          <Input value={form.razorpayKeyId} onChange={(e) => setForm({ ...form, razorpayKeyId: e.target.value })} className="mt-1 max-w-md font-mono text-sm" placeholder="rzp_live_XXXXXXXXXXXXXXXXXX" />
+        </div>
+        <div className="flex justify-end gap-2 pt-2 border-t border-card-border">
+          <Button onClick={() => save.mutate(form)} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
+        </div>
+      </div>
+
+      {/* Key Secret — env var only */}
+      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-5 space-y-2">
+        <h3 className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2">
+          <KeyRound size={15} /> Razorpay Key Secret
+        </h3>
+        <p className="text-sm text-amber-800 dark:text-amber-300">
+          The Key Secret is used server-side only for HMAC payment-signature verification. It is <strong>never</strong> sent to the browser. Set it as the environment variable:
+        </p>
+        <div className="font-mono text-sm bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 rounded px-3 py-2 select-all">
+          RAZORPAY_KEY_SECRET=your_secret_here
+        </div>
+        <p className="text-xs text-amber-700 dark:text-amber-400">
+          In Replit: open Secrets (the padlock icon), add <code>RAZORPAY_KEY_SECRET</code> with your Razorpay Secret Key. Then redeploy or restart the API server.
+        </p>
       </div>
     </div>
   );

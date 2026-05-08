@@ -36,6 +36,8 @@ export async function generateTestToken(opts: {
   patientId: number;
   department: string;
   roomNumber: string;
+  priority?: number;
+  source?: string;
 }): Promise<{ tokenNo: number; tokenDate: string; department: string; roomNumber: string }> {
   const tokenDate = todayISO();
   const ledgerMatch = opts.ledgerId === 1
@@ -66,6 +68,8 @@ export async function generateTestToken(opts: {
           tokenNo: nextNoExpr,
           tokenDate,
           status: "waiting",
+          priority: opts.priority ?? 0,
+          source: opts.source ?? "walkin",
         })
         .returning({ tokenNo: testTokensTable.tokenNo });
       return { tokenNo: row.tokenNo, tokenDate, department: opts.department, roomNumber: opts.roomNumber };
@@ -126,6 +130,7 @@ testTokensRouter.get("/today", async (req, res): Promise<void> => {
       billNumber: billsTable.billNumber,
       calledAt: testTokensTable.calledAt,
       createdAt: testTokensTable.createdAt,
+      source: testTokensTable.source,
     })
     .from(testTokensTable)
     .leftJoin(patientsTable, eq(patientsTable.id, testTokensTable.patientId))
@@ -244,6 +249,8 @@ export async function generateTestTokensForOrder(opts: {
   billId: number;
   orderId: number;
   patientId: number;
+  priority?: number;
+  source?: string;
 }): Promise<Array<{ orderTestId: number; testName: string; department: string; roomNumber: string; tokenNo: number }>> {
   const orderTests = await db
     .select({
@@ -269,6 +276,8 @@ export async function generateTestTokensForOrder(opts: {
         patientId: opts.patientId,
         department: ot.department || "Pathology",
         roomNumber: ot.roomNumber || "",
+        priority: opts.priority,
+        source: opts.source,
       });
       out.push({
         orderTestId: ot.orderTestId,

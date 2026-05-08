@@ -25,6 +25,8 @@ export const testTokensTable = pgTable(
     tokenDate: date("token_date").notNull(),
     status: text("status").notNull().default("waiting"),
     priority: integer("priority").notNull().default(0),
+    // Source of the token: walkin (default), online (paid via website), vip
+    source: text("source").notNull().default("walkin"),
     calledAt: timestamp("called_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

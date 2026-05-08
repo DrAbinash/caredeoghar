@@ -43,6 +43,7 @@ const FormF           = lazy(() => import("@/pages/FormF"));
 const Website         = lazy(() => import("@/pages/Website"));
 const Portal          = lazy(() => import("@/pages/Portal"));
 const Display         = lazy(() => import("@/pages/Display"));
+const OnlineBookings  = lazy(() => import("@/pages/OnlineBookings"));
 const NotFound        = lazy(() => import("@/pages/not-found"));
 
 function PageLoader() {
@@ -64,7 +65,7 @@ const queryClient = new QueryClient({
 });
 
 const ERP_NAV_ORDER = [
-  "/", "/dashboard", "/patients", "/appointments", "/queue", "/radiology", "/orders",
+  "/", "/dashboard", "/patients", "/appointments", "/queue", "/online-bookings", "/radiology", "/orders",
   "/tests", "/packages", "/billing", "/payments", "/reports",
   "/report-generator", "/report-hub", "/inventory", "/expenses", "/staff", "/referrals",
   "/accounting", "/discounts", "/form-f", "/pacs", "/machines", "/hr-forms", "/website", "/settings",
@@ -128,6 +129,7 @@ function Router() {
               <Route path="/pacs" component={PACS} />
               <Route path="/dicom-nodes" component={DicomNodes} />
               <Route path="/appointments" component={Appointments} />
+              <Route path="/online-bookings" component={OnlineBookings} />
               <Route path="/queue" component={QueuePage} />
               <Route path="/radiology" component={Radiology} />
               <Route path="/packages" component={Packages} />

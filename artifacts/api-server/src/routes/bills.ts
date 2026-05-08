@@ -78,7 +78,7 @@ async function resolveLedgerForOrder(orderId: number): Promise<number> {
  * `parseBillNumberParts` handles both shapes so the renumber logic keeps
  * working across the migration.
  */
-async function generateBillNumber(ledgerId: number): Promise<string> {
+export async function generateBillNumber(ledgerId: number): Promise<string> {
   const num = (await countBillsForLedger(ledgerId)) + 1;
   const date = new Date();
   return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(num).padStart(4, "0")}`;
