@@ -21,7 +21,7 @@ export default function Display() {
   const ledgerRaw = params.get("ledgerId");
   const ledgerNum = Number(ledgerRaw);
   const ledgerId = ledgerRaw && Number.isInteger(ledgerNum) && ledgerNum > 0 ? ledgerNum : null;
-  const departments = (params.get("departments") ?? "").trim();
+  const departments = (params.get("departments") ?? params.get("defaultDepartment") ?? "").trim();
   const layout = (params.get("layout") ?? "").trim() === "single" ? "single" : "grid";
 
   const { data, isLoading } = useQuery<DisplayPayload>({

@@ -50,6 +50,7 @@ export default function QueuePage() {
   const [ledgerId, setLedgerId] = useState<number>(1);
   const [department, setDepartment] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [defaultDepartment, setDefaultDepartment] = useState<string>("");
 
   const { data: ledgers = [] } = useQuery<Ledger[]>({
     queryKey: ["ledgers"],
@@ -110,7 +111,9 @@ export default function QueuePage() {
   const openDisplay = () => {
     const params = new URLSearchParams();
     params.set("ledgerId", String(ledgerId));
-    if (department !== "all") params.set("departments", department);
+    const selectedDepartment = department !== "all" ? department : defaultDepartment;
+    if (defaultDepartment) params.set("defaultDepartment", defaultDepartment);
+    if (selectedDepartment) params.set("departments", selectedDepartment);
     window.open(`/display?${params.toString()}`, "_blank", "noopener,noreferrer");
   };
 
@@ -144,6 +147,20 @@ export default function QueuePage() {
             <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Departments</SelectItem>
+              {departments.map((d) => (
+                <SelectItem key={d.department} value={d.department}>
+                  {d.department}{d.roomNumber ? ` · ${d.roomNumber}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-muted-foreground">Default</span>
+          <Select value={defaultDepartment || "__all__"} onValueChange={(v) => setDefaultDepartment(v === "__all__" ? "" : v)}>
+            <SelectTrigger className="w-48"><SelectValue placeholder="All / current room" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All / current room</SelectItem>
               {departments.map((d) => (
                 <SelectItem key={d.department} value={d.department}>
                   {d.department}{d.roomNumber ? ` · ${d.roomNumber}` : ""}
