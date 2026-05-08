@@ -33,12 +33,12 @@ function blockSuperAdminEscalation(
 
 const ROLES = ["super_admin", "admin", "manager", "accountant", "billing", "lab", "receptionist"];
 
-const ALL_PATHS = ["/", "/patients", "/orders", "/tests", "/billing", "/payments", "/doctors", "/reports", "/report-generator", "/inventory", "/referrals", "/accounting", "/discounts", "/settings", "/register", "/pacs"];
+const ALL_PATHS = ["/", "/patients", "/orders", "/tests", "/billing", "/payments", "/doctors", "/reports", "/report-generator", "/inventory", "/referrals", "/accounting", "/discounts", "/settings", "/register", "/pacs", "/dicom-nodes"];
 
 const DEFAULT_PERMISSIONS: Record<string, string[]> = {
   super_admin: ALL_PATHS,
-  admin: ["/", "/patients", "/orders", "/tests", "/billing", "/payments", "/doctors", "/reports", "/report-generator", "/inventory", "/referrals", "/accounting", "/discounts", "/settings", "/register"],
-  manager: ["/", "/patients", "/orders", "/billing", "/payments", "/doctors", "/reports", "/referrals", "/accounting", "/discounts", "/register"],
+  admin: ["/", "/patients", "/orders", "/tests", "/billing", "/payments", "/doctors", "/reports", "/report-generator", "/inventory", "/referrals", "/accounting", "/discounts", "/settings", "/register", "/pacs", "/dicom-nodes"],
+  manager: ["/", "/patients", "/orders", "/billing", "/payments", "/doctors", "/reports", "/referrals", "/accounting", "/discounts", "/register", "/pacs", "/dicom-nodes"],
   accountant: ["/", "/accounting", "/reports", "/billing", "/payments"],
   billing: ["/", "/patients", "/billing", "/payments", "/register", "/discounts"],
   lab: ["/orders", "/tests", "/report-generator", "/inventory"],

@@ -144,14 +144,12 @@ function FormFPrint({ form }: FormFPrintProps) {
       style={{
         width: "210mm",
         minHeight: "297mm",
-        maxHeight: "297mm",
         padding: "8mm 10mm 6mm 10mm",
         boxSizing: "border-box",
         fontFamily: "Arial, sans-serif",
         fontSize: 8,
         color: "#000",
         backgroundColor: "#fff",
-        overflow: "hidden",
       }}
     >
       {/* ── HEADER ── */}

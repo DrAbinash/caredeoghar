@@ -199,21 +199,26 @@ export default function Accounting() {
 
   useEffect(() => {
     if (accLoading || setupDone.current) return;
-    if (accounts.length > 0) { setupDone.current = true; return; }
-
-    setSyncing(true);
     setupDone.current = true;
-    api.post("/api/accounting/setup-defaults", {})
-      .then(() => api.post("/api/accounting/sync-billing", {}))
-      .then(() => {
-        qc.invalidateQueries({ queryKey: ["accounts"] });
+    setSyncing(true);
+
+    const doSync = () =>
+      api.post("/api/accounting/sync-billing", {}).then(() => {
         qc.invalidateQueries({ queryKey: ["vouchers"] });
         qc.invalidateQueries({ queryKey: ["ledger"] });
         qc.invalidateQueries({ queryKey: ["trial-balance"] });
         qc.invalidateQueries({ queryKey: ["profit-loss"] });
         qc.invalidateQueries({ queryKey: ["balance-sheet"] });
-      })
-      .finally(() => setSyncing(false));
+      });
+
+    if (accounts.length > 0) {
+      doSync().finally(() => setSyncing(false));
+    } else {
+      api.post("/api/accounting/setup-defaults", {})
+        .then(() => doSync())
+        .then(() => qc.invalidateQueries({ queryKey: ["accounts"] }))
+        .finally(() => setSyncing(false));
+    }
   }, [accLoading, accounts.length]);
 
   const syncBilling = useMutation({

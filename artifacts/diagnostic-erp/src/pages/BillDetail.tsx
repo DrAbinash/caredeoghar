@@ -92,6 +92,7 @@ export default function BillDetail({ id }: { id: number }) {
   const [refundTab, setRefundTab] = useState<"cancel" | "refund" | "cancel-refund">("cancel");
   const [reprintBy, setReprintBy] = useState<string>(() => localStorage.getItem("diagnosticErp:lastReprintBy") || "");
   const [reprintReason, setReprintReason] = useState<string>("");
+  const [isReprint, setIsReprint] = useState(false);
   const [paperSize, setPaperSize] = useState<"A4" | "A5">(() => (localStorage.getItem("diagnosticErp:billPaperSize") as "A4" | "A5") || "A4");
   const queryClient = useQueryClient();
   const superAdmin = useSuperAdmin();
@@ -166,21 +167,28 @@ export default function BillDetail({ id }: { id: number }) {
     }
     setReprintOpen(false);
     setReprintReason("");
+    setIsReprint(true);
     window.setTimeout(() => window.print(), 150);
   };
 
   useEffect(() => {
-    if (!bill) return;
+    if (!bill || !clinic) return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("print") !== "1") return;
-    const timer = setTimeout(() => window.print(), 600);
+    const timer = setTimeout(() => window.print(), 300);
     return () => clearTimeout(timer);
-  }, [bill]);
+  }, [bill, clinic]);
 
   const { data: audits = [], refetch: refetchAudits } = useQuery<BillAudit[]>({
     queryKey: ["bill-audits", id],
     queryFn: () => api.get(`/api/bills/${id}/audits`),
     enabled: auditOpen,
+  });
+
+  const { data: reprintHistory = [] } = useQuery<BillAudit[]>({
+    queryKey: ["bill-reprint-history", id],
+    queryFn: () => api.get(`/api/bills/${id}/audits`),
+    select: (data: BillAudit[]) => data.filter((a) => a.changeType === "reprint"),
   });
 
   const createPayment = useCreatePayment({
@@ -603,6 +611,25 @@ export default function BillDetail({ id }: { id: number }) {
           </div>
         </div>
         )}
+        {reprintHistory.length > 0 && (
+          <div className="border border-amber-200 dark:border-amber-800/60 rounded-xl p-4 bg-amber-50/40 dark:bg-amber-950/20">
+            <div className="flex items-center gap-2 mb-3">
+              <Printer size={14} className="text-amber-600 dark:text-amber-400" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">Reprint History</span>
+              <span className="ml-auto text-xs text-muted-foreground">{reprintHistory.length} reprint{reprintHistory.length !== 1 ? "s" : ""}</span>
+            </div>
+            <div className="space-y-1.5">
+              {reprintHistory.map((r, i) => (
+                <div key={r.id ?? i} className="flex items-start gap-3 text-xs text-muted-foreground">
+                  <span className="font-mono shrink-0">{new Date(r.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                  <span className="text-foreground font-medium shrink-0">{r.editedBy || "—"}</span>
+                  <span className="truncate">{r.reason ?? "—"}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {!superAdmin.isActive && (
           <div className="border border-dashed border-rose-200 dark:border-rose-900/50 rounded-xl p-4 bg-rose-50/30 dark:bg-rose-950/10">
             <div className="flex items-center gap-2 mb-2">
@@ -713,6 +740,21 @@ export default function BillDetail({ id }: { id: number }) {
 
         {/* Bill title + meta — bill number is shown as a pure number
             (the legacy `BILL-` prefix is stripped here). */}
+        {isReprint && (
+          <div style={{
+            textAlign: "center",
+            fontSize: "11px",
+            fontWeight: "700",
+            color: "#dc2626",
+            border: "1.5px solid #dc2626",
+            borderRadius: "4px",
+            padding: "3px 10px",
+            marginBottom: "8px",
+            letterSpacing: "1.5px",
+          }}>
+            ★ DUPLICATE / REPRINT COPY ★
+          </div>
+        )}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
           <div>
             <div style={{ fontSize: "15px", fontWeight: "700", color: "#111" }}>INVOICE / RECEIPT</div>

@@ -263,7 +263,7 @@ export default function Billing() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
                           <a
-                            href={`/billing/${b.id}?print=1`}
+                            href={`/erp/billing/${b.id}?print=1`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-muted-foreground hover:text-foreground inline-flex p-1 rounded hover:bg-muted"

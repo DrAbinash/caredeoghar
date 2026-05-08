@@ -102,6 +102,7 @@ export default function Reports() {
   const { data: dailySummaryData, isLoading: loadingDaily } = useQuery<DailySummaryData>({
     queryKey: ["daily-summary", dailyDate],
     queryFn: () => api.get(`/api/reports/daily-summary?date=${dailyDate}`),
+    enabled: activeTab === "daily",
   });
 
   const formatCurrency = (n: number) =>
