@@ -630,6 +630,7 @@ function ReportModal({ id, onClose }: { id: number; onClose: () => void }) {
   });
 
   const [body, setBody] = useState("");
+  const [bodyTouched, setBodyTouched] = useState(false);
   const [reportedBy, setReportedBy] = useState("");
   const [stage, setStage] = useState<"preliminary" | "final">("preliminary");
   const [templateId, setTemplateId] = useState<number | null>(null);
@@ -639,9 +640,10 @@ function ReportModal({ id, onClose }: { id: number; onClose: () => void }) {
   // Load existing prelim/final + clinical history when the study loads.
   useEffect(() => {
     if (!study) return;
+    if (bodyTouched) return;
     if (stage === "final") setBody(study.finalReport ?? study.prelimReport ?? "");
     else setBody(study.prelimReport ?? "");
-  }, [study, stage]);
+  }, [study, stage, bodyTouched]);
   useEffect(() => {
     if (study) setClinicalHistory(study.clinicalHistory ?? "");
   }, [study]);
@@ -673,12 +675,14 @@ function ReportModal({ id, onClose }: { id: number; onClose: () => void }) {
     if (!tpl) return;
     setTemplateId(tpl.id);
     setBody((prev) => (prev?.trim() ? prev : tpl.content));
+    setBodyTouched(true);
   }
 
   function applyPreset(key: string) {
     const p = MODALITY_PRESETS.find((m) => m.key === key);
     if (!p) return;
     setBody((prev) => (prev?.trim() ? `${prev}\n\n${p.body}` : p.body));
+    setBodyTouched(true);
   }
 
   // ── Voice dictation (Web Speech API, on-device when supported) ───────────
@@ -727,7 +731,10 @@ function ReportModal({ id, onClose }: { id: number; onClose: () => void }) {
       const last = results[results.length - 1];
       if (last?.isFinal) {
         const text = last[0].transcript.trim();
-        if (text) setBody((prev) => prev + (prev && !prev.endsWith("\n") ? " " : "") + text);
+        if (text) {
+          setBody((prev) => prev + (prev && !prev.endsWith("\n") ? " " : "") + text);
+          setBodyTouched(true);
+        }
       }
     };
     rec.onerror = (e) => { toast({ title: "Mic error", description: e.error, variant: "destructive" }); setListening(false); };
@@ -749,6 +756,7 @@ function ReportModal({ id, onClose }: { id: number; onClose: () => void }) {
     onSuccess: (res) => {
       if (!res?.findings) return;
       setBody((prev) => (prev?.trim() ? `${prev}\n\n${res.findings}` : res.findings));
+      setBodyTouched(true);
       toast({ title: "AI findings generated" });
     },
     onError: (e: Error) => toast({ title: "AI findings failed", description: e.message, variant: "destructive" }),
@@ -767,6 +775,7 @@ function ReportModal({ id, onClose }: { id: number; onClose: () => void }) {
         ? "\n\n— AI suggested impression —\n"
         : "\n\nIMPRESSION:\n";
       setBody((prev) => prev + sep + res.impression);
+      setBodyTouched(true);
       toast({ title: "Impression suggested" });
     },
     onError: (e: Error) => toast({ title: "AI impression failed", description: e.message, variant: "destructive" }),
