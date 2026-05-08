@@ -58,6 +58,13 @@ type RefundForm = {
   method: "cash" | "card" | "upi" | "insurance" | "cheque";
 };
 
+type CancelRefundForm = {
+  performedBy: string;
+  reason: string;
+  refundAmount: number;
+  refundMethod: "cash" | "card" | "upi" | "insurance" | "cheque";
+};
+
 type BillAudit = {
   id: number;
   billId: number;
@@ -82,7 +89,7 @@ export default function BillDetail({ id }: { id: number }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [reprintOpen, setReprintOpen] = useState(false);
   const [refundOpen, setRefundOpen] = useState(false);
-  const [refundTab, setRefundTab] = useState<"cancel" | "refund">("cancel");
+  const [refundTab, setRefundTab] = useState<"cancel" | "refund" | "cancel-refund">("cancel");
   const [reprintBy, setReprintBy] = useState<string>(() => localStorage.getItem("diagnosticErp:lastReprintBy") || "");
   const [reprintReason, setReprintReason] = useState<string>("");
   const [paperSize, setPaperSize] = useState<"A4" | "A5">(() => (localStorage.getItem("diagnosticErp:billPaperSize") as "A4" | "A5") || "A4");
@@ -260,6 +267,9 @@ export default function BillDetail({ id }: { id: number }) {
   const { register: regRefund, handleSubmit: handleRefund, reset: resetRefund, watch: watchRefund, setValue: setRefundVal, formState: refundState } = useForm<RefundForm>({
     defaultValues: { performedBy: defaultActor, reason: "", amount: 0, method: "cash" },
   });
+  const { register: regCR, handleSubmit: handleCR, reset: resetCR, watch: watchCR, setValue: setCRVal, formState: crState } = useForm<CancelRefundForm>({
+    defaultValues: { performedBy: defaultActor, reason: "", refundAmount: 0, refundMethod: "cash" },
+  });
 
   const onSubmit = (data: PaymentForm) => {
     createPayment.mutate({ data: { billId: id, amount: Number(data.amount), method: data.method, referenceNumber: data.referenceNumber || undefined, notes: data.notes || undefined } });
@@ -295,6 +305,16 @@ export default function BillDetail({ id }: { id: number }) {
     cancelBill.mutate({ performedBy: d.performedBy.trim(), reason: d.reason.trim() });
   });
 
+  const onCancelRefundSubmit = handleCR(async (d) => {
+    await refundBill.mutateAsync({
+      performedBy: d.performedBy.trim(),
+      reason: d.reason.trim(),
+      amount: Number(d.refundAmount),
+      method: d.refundMethod,
+    });
+    cancelBill.mutate({ performedBy: d.performedBy.trim(), reason: d.reason.trim() });
+  });
+
   const onRefundSubmit = handleRefund((d) => {
     refundBill.mutate({
       performedBy: d.performedBy.trim(),
@@ -306,15 +326,21 @@ export default function BillDetail({ id }: { id: number }) {
 
   const openRefund = () => {
     if (!bill) return;
-    // Pre-pick the most useful starting tab: refund if there's something to refund, cancel otherwise.
     const hasPaid = Number(bill.paidAmount) > 0;
-    setRefundTab(hasPaid ? "refund" : "cancel");
+    // Default: "Refund & Cancel" when money was paid (one-step), plain cancel otherwise.
+    setRefundTab(hasPaid ? "cancel-refund" : "cancel");
     resetCancel({ performedBy: defaultActor, reason: "" });
     resetRefund({
       performedBy: defaultActor,
       reason: "",
       amount: Number(bill.paidAmount) > 0 ? Number(bill.paidAmount) : 0,
       method: "cash",
+    });
+    resetCR({
+      performedBy: defaultActor,
+      reason: "",
+      refundAmount: Number(bill.paidAmount) > 0 ? Number(bill.paidAmount) : 0,
+      refundMethod: "cash",
     });
     setRefundOpen(true);
   };
@@ -1158,7 +1184,7 @@ export default function BillDetail({ id }: { id: number }) {
         </DialogContent>
       </Dialog>
 
-      {/* Cancel / Refund Dialog with two tabs */}
+      {/* Cancel / Refund Dialog with three tabs */}
       <Dialog open={refundOpen} onOpenChange={setRefundOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -1169,6 +1195,18 @@ export default function BillDetail({ id }: { id: number }) {
 
           {/* Tab switcher */}
           <div className="flex gap-1 p-1 bg-muted rounded-lg">
+            {Number(bill.paidAmount) > 0 && (
+              <button
+                type="button"
+                onClick={() => setRefundTab("cancel-refund")}
+                className={`flex-1 text-sm font-medium px-3 py-1.5 rounded-md transition-colors ${
+                  refundTab === "cancel-refund" ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Undo2 size={13} className="inline mr-1" />
+                Refund &amp; Cancel
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setRefundTab("refund")}
@@ -1178,8 +1216,7 @@ export default function BillDetail({ id }: { id: number }) {
               }`}
               title={Number(bill.paidAmount) <= 0 ? "No payments to refund yet" : ""}
             >
-              <Undo2 size={13} className="inline mr-1.5" />
-              Issue Refund
+              Refund Only
             </button>
             <button
               type="button"
@@ -1188,12 +1225,81 @@ export default function BillDetail({ id }: { id: number }) {
                 refundTab === "cancel" ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              <Ban size={13} className="inline mr-1.5" />
-              Cancel Bill
+              <Ban size={13} className="inline mr-1" />
+              Cancel Only
             </button>
           </div>
 
-          {refundTab === "refund" ? (
+          {refundTab === "cancel-refund" ? (
+            <form onSubmit={onCancelRefundSubmit} className="space-y-3 mt-2">
+              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-3 text-xs text-blue-800 dark:text-blue-300 space-y-1">
+                <p className="font-semibold">This will issue a refund AND cancel the bill in one step.</p>
+                <p>The refund is recorded first, then the bill is marked as cancelled.</p>
+              </div>
+              <div className="bg-muted/50 rounded-lg p-3 text-xs text-muted-foreground">
+                <div className="flex justify-between"><span>Paid so far</span><span className="font-semibold text-foreground">{formatCurrency(bill.paidAmount)}</span></div>
+                {Number((bill as { refundAmount?: number | string }).refundAmount ?? 0) > 0 && (
+                  <div className="flex justify-between mt-1"><span>Already refunded</span><span className="font-semibold text-orange-600">{formatCurrency(Number((bill as { refundAmount?: number | string }).refundAmount ?? 0))}</span></div>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Refund Amount (₹) <span className="text-red-500">*</span></Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    max={bill.paidAmount}
+                    {...regCR("refundAmount", { required: true, valueAsNumber: true, min: 0.01, max: bill.paidAmount })}
+                    className="mt-1"
+                  />
+                  {crState.errors.refundAmount && (
+                    <p className="text-xs text-red-500 mt-1">Required</p>
+                  )}
+                </div>
+                <div>
+                  <Label>Refund Via</Label>
+                  <Select value={watchCR("refundMethod")} onValueChange={(v) => setCRVal("refundMethod", v as CancelRefundForm["refundMethod"])}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {PAYMENT_METHODS.map((m) => <SelectItem key={m} value={m} className="capitalize">{m}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div>
+                <Label>Reason <span className="text-red-500">*</span></Label>
+                <textarea
+                  rows={3}
+                  placeholder="e.g. Test cancelled by patient, sample rejected, duplicate bill…"
+                  {...regCR("reason", { required: true, minLength: 3 })}
+                  className="mt-1 w-full px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                />
+                {crState.errors.reason && (
+                  <p className="text-xs text-red-500 mt-1">Please provide a reason (at least 3 characters)</p>
+                )}
+              </div>
+              <div>
+                <Label>Performed By <span className="text-red-500">*</span></Label>
+                <Input {...regCR("performedBy", { required: true })} className="mt-1" placeholder="Your name" />
+              </div>
+              {(refundBill.error || cancelBill.error) && (
+                <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg p-2.5 text-sm text-red-700 dark:text-red-300">
+                  {((refundBill.error ?? cancelBill.error) as Error)?.message}
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={() => setRefundOpen(false)}>Close</Button>
+                <Button
+                  type="submit"
+                  disabled={refundBill.isPending || cancelBill.isPending}
+                  className="bg-orange-600 hover:bg-orange-700 text-white"
+                >
+                  {refundBill.isPending ? "Refunding…" : cancelBill.isPending ? "Cancelling…" : "Refund & Cancel"}
+                </Button>
+              </div>
+            </form>
+          ) : refundTab === "refund" ? (
             <form onSubmit={onRefundSubmit} className="space-y-3 mt-2">
               <div className="bg-muted/50 rounded-lg p-3 text-xs text-muted-foreground">
                 <div className="flex justify-between"><span>Paid so far</span><span className="font-semibold text-foreground">{formatCurrency(bill.paidAmount)}</span></div>
@@ -1257,7 +1363,7 @@ export default function BillDetail({ id }: { id: number }) {
               <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-3 flex gap-2 text-xs text-amber-800 dark:text-amber-300">
                 <AlertTriangle size={14} className="shrink-0 mt-0.5" />
                 <span>
-                  Cancelling marks this bill as void. Existing payments stay recorded — issue a refund separately if money needs to be returned.
+                  Cancelling marks this bill as void. Existing payments stay recorded — use "Refund &amp; Cancel" above if money needs to be returned.
                 </span>
               </div>
               <div>
