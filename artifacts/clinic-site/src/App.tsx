@@ -62,7 +62,7 @@ function PageView({ slug, settings, pages, popups, isPreview }: { slug: string; 
 function AppShell({ settings, pages, popups, isPreview }: { settings: SiteSettings; pages: Page[]; popups: Popup[]; isPreview: boolean }) {
   const [loc] = useLocation();
   const slug = loc === "/" || loc === "" ? "home" : loc.replace(/^\//, "").split("/")[0];
-  const showSiteContent = isPreview || settings.isPublished;
+  const showSiteContent = true;
 
   if (!showSiteContent) {
     return (
