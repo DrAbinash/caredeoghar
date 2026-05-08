@@ -217,7 +217,16 @@ billsRouter.get("/preview-number", async (req, res) => {
     }
     ledgerId = d.ledgerId;
   } else {
-    return res.status(400).json({ error: "Invalid request", details: [{ path: [], message: "Either ledgerId or doctorId is required." }] });
+    // No params given — fall back to the first available ledger (covers Walk-in / Self bills)
+    const [firstLedger] = await db
+      .select({ id: ledgersTable.id })
+      .from(ledgersTable)
+      .orderBy(ledgersTable.id)
+      .limit(1);
+    if (!firstLedger) {
+      return res.status(400).json({ error: "Invalid request", details: [{ path: [], message: "No ledgers configured. Please set up a ledger or specify ledgerId." }] });
+    }
+    ledgerId = firstLedger.id;
   }
   const num = (await countBillsForLedger(ledgerId)) + 1;
   const date = new Date();

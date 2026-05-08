@@ -479,6 +479,21 @@ export default function BillingDesk() {
   const [quickPickerSlot, setQuickPickerSlot] = useState<number | null>(null);
   const [quickPickerSearch, setQuickPickerSearch] = useState("");
 
+  // ── Quick Doctor Slots (3 slots stored in localStorage) ────────────
+  const [quickDoctorIds, setQuickDoctorIds] = useState<(number | null)[]>(() => {
+    try {
+      const stored = localStorage.getItem("billingDesk:quickDoctors");
+      const arr = stored ? JSON.parse(stored) : [null, null, null];
+      const out: (number | null)[] = Array.isArray(arr)
+        ? arr.slice(0, 3).map((v: unknown) => (typeof v === "number" ? v : null))
+        : [];
+      while (out.length < 3) out.push(null);
+      return out;
+    } catch { return [null, null, null]; }
+  });
+  const [quickDoctorPickerSlot, setQuickDoctorPickerSlot] = useState<number | null>(null);
+  const [quickDoctorPickerSearch, setQuickDoctorPickerSearch] = useState("");
+
   const { data: doctors = [] } = useQuery<Doctor[]>({
     queryKey: ["doctors-list"],
     queryFn: () => api.get<{ doctors: Doctor[] }>("/api/doctors").then((d) => d.doctors ?? []),
@@ -780,6 +795,13 @@ export default function BillingDesk() {
     setPatientAddress("");
   }
 
+  function assignQuickDoctor(slotIdx: number, doctorId: number | null) {
+    const next = [...quickDoctorIds];
+    next[slotIdx] = doctorId;
+    setQuickDoctorIds(next);
+    localStorage.setItem("billingDesk:quickDoctors", JSON.stringify(next));
+  }
+
   const canGenerate = !!selectedPatient && selectedTests.length > 0;
 
   // ──────────────────────────────────────────────────────
@@ -1048,46 +1070,86 @@ export default function BillingDesk() {
               </div>
             )}
 
-            {/* ── Referral / Doctor — Walk-in / Self or searchable ── */}
+            {/* ── Referral / Doctor — Walk-in / Self + Quick Doctor Tabs + Search ── */}
             <div className="bg-card border border-card-border rounded-xl overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-card-border bg-muted/20 flex items-center gap-2 text-sm font-semibold">
-                <Stethoscope size={14} className="text-primary" /> Referral Doctor
-                <span className="ml-auto text-xs font-normal text-muted-foreground">optional</span>
+              <div className="px-3 py-2 border-b border-card-border bg-muted/20 flex items-center gap-2 text-xs font-semibold">
+                <Stethoscope size={12} className="text-primary" /> Referral Doctor
+                <span className="ml-auto text-[10px] font-normal text-muted-foreground">optional</span>
               </div>
-              <div className="p-3" ref={doctorRef}>
-                {/* Mode toggle: Walk-in / Self  OR  Select Doctor */}
-                <div className="flex items-center gap-2 mb-2">
+              <div className="p-2.5" ref={doctorRef}>
+                {/* Compact row: Walk-in | 3 Quick Doctor slots | Search */}
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <button
                     type="button"
                     onClick={() => { setDoctorMode("self"); setDoctorId(null); setDoctorSearch(""); setDoctorSearchOpen(false); }}
-                    className={`px-3 py-1.5 rounded-md text-sm border transition-colors ${doctorMode === "self" ? "border-primary bg-primary/10 text-primary font-semibold" : "border-card-border text-muted-foreground hover:bg-muted/30"}`}
+                    className={`px-2 py-1 rounded-md text-[11px] border transition-colors flex-shrink-0 ${doctorMode === "self" ? "border-primary bg-primary/10 text-primary font-semibold" : "border-card-border text-muted-foreground hover:bg-muted/30"}`}
                   >
-                    Walk-in / Self
+                    Walk-in
                   </button>
+                  {/* ── 3 Quick Doctor Slots ── */}
+                  {quickDoctorIds.map((id, i) => {
+                    const doc = id != null ? doctors.find(d => d.id === id) : null;
+                    const isActive = doctorMode === "doctor" && doctorId === id && id != null;
+                    return (
+                      <div key={i} className="relative group flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (id == null) { setQuickDoctorPickerSlot(i); setQuickDoctorPickerSearch(""); return; }
+                            setDoctorMode("doctor"); setDoctorId(id); setDoctorSearch(""); setDoctorSearchOpen(false);
+                          }}
+                          title={doc ? `Dr. ${doc.name} · ${doc.specialization}` : `Assign quick doctor slot ${i + 1}`}
+                          className={`px-2 py-1 rounded-md text-[11px] border transition-colors max-w-[80px] truncate ${
+                            isActive
+                              ? "border-primary bg-primary/10 text-primary font-semibold"
+                              : doc
+                              ? "border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-900 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-100"
+                              : "border-dashed border-card-border bg-muted/10 text-muted-foreground hover:bg-muted/40"
+                          }`}
+                        >
+                          {doc ? `Dr. ${doc.name.split(" ")[0]}` : <span className="text-[9px] opacity-60">+Dr {i + 1}</span>}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setQuickDoctorPickerSlot(i); setQuickDoctorPickerSearch(""); }}
+                          className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-card border border-card-border text-muted-foreground hover:text-foreground hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-sm"
+                          title="Customize this slot"
+                        >
+                          <Pencil size={8} />
+                        </button>
+                      </div>
+                    );
+                  })}
                   <button
                     type="button"
-                    onClick={() => { setDoctorMode("doctor"); setDoctorSearchOpen((v) => !v); }}
-                    className={`px-3 py-1.5 rounded-md text-sm border transition-colors ${doctorMode === "doctor" ? "border-primary bg-primary/10 text-primary font-semibold" : "border-card-border text-muted-foreground hover:bg-muted/30"}`}
+                    onClick={() => { setDoctorMode("doctor"); if (!doctorId) setDoctorSearchOpen((v) => !v); }}
+                    className={`px-2 py-1 rounded-md text-[11px] border transition-colors flex-shrink-0 ${doctorMode === "doctor" && !doctorId ? "border-primary bg-primary/10 text-primary font-semibold" : "border-card-border text-muted-foreground hover:bg-muted/30"}`}
                   >
-                    {doctorMode === "doctor" && doctorId
-                      ? `Dr. ${doctors.find(d => d.id === doctorId)?.name ?? doctorId}`
-                      : "Select Referral Doctor"}
+                    Search…
                   </button>
                   {doctorMode === "doctor" && doctorId && (
                     <button
                       type="button"
                       onClick={() => { setDoctorId(null); setDoctorSearch(""); setDoctorMode("self"); }}
-                      className="text-muted-foreground hover:text-foreground transition-colors ml-auto"
+                      className="text-muted-foreground hover:text-foreground transition-colors"
                       title="Clear doctor"
                     >
-                      <X size={13} />
+                      <X size={12} />
                     </button>
                   )}
                 </div>
-
-                {/* Doctor search dropdown (only shown when mode=doctor) */}
+                {/* Selected doctor info line */}
+                {doctorMode === "doctor" && doctorId && (() => {
+                  const doc = doctors.find(d => d.id === doctorId);
+                  return doc ? (
+                    <div className="mt-1.5 text-[11px] text-primary font-medium truncate">
+                      Dr. {doc.name} · {doc.specialization}
+                    </div>
+                  ) : null;
+                })()}
+                {/* Doctor search dropdown (only shown when mode=doctor and no doctorId selected) */}
                 {doctorMode === "doctor" && !doctorId && (
-                  <div>
+                  <div className="mt-2">
                     <div className="relative">
                       <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                       <Input
@@ -1335,7 +1397,7 @@ export default function BillingDesk() {
             RIGHT COLUMN — Bill Summary + Payment
         ══════════════════════════════════════════════ */}
         <div className="w-full lg:flex-[1.45] flex flex-col lg:overflow-hidden min-h-0">
-          <div className="lg:flex-1 flex flex-col lg:overflow-hidden min-h-0 overflow-y-auto">
+          <div className="flex-1 min-h-0 overflow-y-auto">
 
             <div className="space-y-3">
               {/* ── Selected Tests ── */}
@@ -1477,47 +1539,48 @@ export default function BillingDesk() {
                 )}
               </div>
             </div>
-            {/* ── Action Footer — Generate / Save & Print ── */}
-            <div className="sticky bottom-0 z-10 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/90 p-2 border-t border-card-border">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5">
-                <Button variant="outline" onClick={resetAll} disabled={generateMut.isPending} className="h-8 text-[11px] px-2">
-                  <RefreshCcw size={13} className="mr-1" /> Reset
-                </Button>
-                <Button
-                  onClick={() => { printAfterSaveRef.current = true; generateMut.mutate(); }}
-                  disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || (needsFormF && (!husbandName.trim() || !patientAddress.trim()))}
-                  className="h-8 text-[11px] px-2"
-                  title={needsFormF && (!husbandName.trim() || !patientAddress.trim()) ? "Fill Husband Name & Address for PCPNDT Form F" : undefined}
-                >
-                  <Printer size={13} className="mr-1" />
-                  {generateMut.isPending && printAfterSaveRef.current ? "Saving…" : "Save & Print"}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={async () => {
-                    if (!lastBill) return;
-                    await printBarcode(lastBill);
-                  }}
-                  disabled={!lastBill}
-                  className="h-8 text-[11px] px-2"
-                >
-                  Barcode
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={async () => {
-                    if (!lastBill) return;
-                    await printToken(lastBill, clinic);
-                  }}
-                  disabled={!lastBill || !lastBill.tokenNo}
-                  className="h-8 text-[11px] px-2"
-                >
-                  Token
-                </Button>
-              </div>
-            </div>
-
           </div>
+          {/* ── Action Footer — Generate / Save & Print ── */}
+          <div className="flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/90 p-2 border-t border-card-border">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5">
+              <Button variant="outline" onClick={resetAll} disabled={generateMut.isPending} className="h-8 text-[11px] px-2">
+                <RefreshCcw size={13} className="mr-1" /> Reset
+              </Button>
+              <Button
+                onClick={() => { printAfterSaveRef.current = true; generateMut.mutate(); }}
+                disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || (needsFormF && (!husbandName.trim() || !patientAddress.trim()))}
+                className="h-8 text-[11px] px-2"
+                title={needsFormF && (!husbandName.trim() || !patientAddress.trim()) ? "Fill Husband Name & Address for PCPNDT Form F" : undefined}
+              >
+                <Printer size={13} className="mr-1" />
+                {generateMut.isPending && printAfterSaveRef.current ? "Saving…" : "Save & Print"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  if (!lastBill) return;
+                  await printBarcode(lastBill);
+                }}
+                disabled={!lastBill}
+                className="h-8 text-[11px] px-2"
+              >
+                Barcode
+              </Button>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  if (!lastBill) return;
+                  await printToken(lastBill, clinic);
+                }}
+                disabled={!lastBill || !lastBill.tokenNo}
+                className="h-8 text-[11px] px-2"
+              >
+                Token
+              </Button>
+            </div>
+          </div>
+          {/* ── Today's Collections Panel — dues first for quick payment ── */}
+          <TodayCollectionsPanel />
         </div>
       </div>
       {/* ── Hidden Print Receipt (shown only when printing) ── */}
@@ -1781,6 +1844,79 @@ export default function BillingDesk() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Quick Doctor slot picker dialog ── */}
+      <Dialog
+        open={quickDoctorPickerSlot !== null}
+        onOpenChange={(o) => { if (!o) { setQuickDoctorPickerSlot(null); setQuickDoctorPickerSearch(""); } }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Assign Doctor to Quick Slot {(quickDoctorPickerSlot ?? 0) + 1}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Pick a frequently referred doctor for this quick-select slot. Click the slot in the Referral Doctor section to select instantly.
+            </p>
+            <div className="relative">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                autoFocus
+                placeholder="Search by name or specialization…"
+                value={quickDoctorPickerSearch}
+                onChange={(e) => setQuickDoctorPickerSearch(e.target.value)}
+                className="pl-9 h-9 text-sm"
+              />
+            </div>
+            <div className="border border-card-border rounded-lg max-h-72 overflow-y-auto divide-y divide-card-border">
+              {(() => {
+                const q = quickDoctorPickerSearch.toLowerCase().trim();
+                const list = doctors
+                  .filter((d) => !q || d.name.toLowerCase().includes(q) || d.specialization.toLowerCase().includes(q))
+                  .slice(0, 80);
+                if (list.length === 0) {
+                  return <div className="px-3 py-4 text-xs text-muted-foreground text-center">No doctors match "{quickDoctorPickerSearch}"</div>;
+                }
+                return list.map((d) => (
+                  <button
+                    key={d.id}
+                    onClick={() => {
+                      if (quickDoctorPickerSlot != null) assignQuickDoctor(quickDoctorPickerSlot, d.id);
+                      setQuickDoctorPickerSlot(null);
+                      setQuickDoctorPickerSearch("");
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-left hover:bg-muted/50"
+                  >
+                    <div className="w-9 h-7 rounded bg-primary/10 flex items-center justify-center flex-shrink-0 font-mono text-[11px] text-primary font-semibold">
+                      #{d.id}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium">Dr. {d.name}</div>
+                      <div className="text-xs text-muted-foreground">{d.specialization}</div>
+                    </div>
+                  </button>
+                ));
+              })()}
+            </div>
+            {quickDoctorPickerSlot != null && quickDoctorIds[quickDoctorPickerSlot] != null && (
+              <div className="flex justify-end pt-1">
+                <button
+                  onClick={() => {
+                    if (quickDoctorPickerSlot != null) assignQuickDoctor(quickDoctorPickerSlot, null);
+                    setQuickDoctorPickerSlot(null);
+                    setQuickDoctorPickerSearch("");
+                  }}
+                  className="text-xs text-destructive hover:underline"
+                >
+                  Clear this slot
+                </button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1884,6 +2020,90 @@ function BillSearchBox() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────
+// Today's Collections Panel — right column, below Save & Print
+// Dues shown first for easy payment follow-up
+// ──────────────────────────────────────────────────────
+function TodayCollectionsPanel() {
+  const [, navigate] = useLocation();
+  const { data, isLoading } = useQuery<{ bills: RecentBill[] }>({
+    queryKey: ["today-collections-panel"],
+    queryFn: () => api.get<{ bills: RecentBill[] }>("/api/bills?limit=30&page=1"),
+    staleTime: 20_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
+
+  const todayStr = new Date().toDateString();
+  const allBills = (data?.bills ?? []).filter((b) => new Date(b.createdAt).toDateString() === todayStr);
+  // Dues on top, within each group newest first
+  const sorted = [...allBills].sort((a, b) => {
+    const aDue = a.balanceAmount > 0 ? 0 : 1;
+    const bDue = b.balanceAmount > 0 ? 0 : 1;
+    if (aDue !== bDue) return aDue - bDue;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+
+  const dueCount = sorted.filter((b) => b.balanceAmount > 0).length;
+  const totalDue = sorted.reduce((s, b) => s + b.balanceAmount, 0);
+
+  return (
+    <div className="flex-shrink-0 border-t border-card-border bg-card/50">
+      <div className="px-3 py-1.5 flex items-center gap-2 text-[11px] font-semibold border-b border-card-border bg-muted/20">
+        <Receipt size={11} className="text-primary" />
+        <span>Today's Collections</span>
+        <span className="text-muted-foreground font-normal ml-0.5">{sorted.length}</span>
+        {dueCount > 0 && (
+          <span className="ml-auto text-orange-600 font-semibold tabular-nums">
+            {dueCount} due · {inr(totalDue)}
+          </span>
+        )}
+      </div>
+      <div className="max-h-[210px] overflow-y-auto divide-y divide-card-border" aria-live="polite">
+        {isLoading ? (
+          <div className="px-3 py-4 text-xs text-muted-foreground text-center">Loading…</div>
+        ) : sorted.length === 0 ? (
+          <div className="px-3 py-4 text-xs text-muted-foreground text-center">No bills today yet</div>
+        ) : (
+          sorted.map((b) => {
+            const due = b.balanceAmount > 0;
+            const time = new Date(b.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+            return (
+              <button
+                key={b.id}
+                type="button"
+                onClick={() => navigate(`/billing/${b.id}`)}
+                className={`w-full text-left px-3 py-1.5 transition-colors flex items-center gap-2 ${
+                  due ? "hover:bg-orange-50 dark:hover:bg-orange-950/20" : "hover:bg-muted/40"
+                }`}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-[10px] font-semibold text-primary truncate">{b.billNumber}</span>
+                    {due ? (
+                      <span className="flex-shrink-0 text-[9px] px-1 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 font-semibold">DUE</span>
+                    ) : (
+                      <span className="flex-shrink-0 text-[9px] px-1 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400 font-semibold">PAID</span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground truncate">
+                    {b.patient ? `${b.patient.firstName} ${b.patient.lastName}` : "—"}
+                  </div>
+                </div>
+                <div className="text-right flex-shrink-0 text-[10px]">
+                  <div className="text-muted-foreground">{inr(b.totalAmount)}</div>
+                  {due && <div className="font-semibold text-orange-600">Bal {inr(b.balanceAmount)}</div>}
+                  <div className="text-[9px] text-muted-foreground tabular-nums">{time}</div>
+                </div>
+              </button>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
