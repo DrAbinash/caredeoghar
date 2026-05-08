@@ -170,44 +170,78 @@ function printerWindowFeatures(printerName?: string) {
 function escapeHtml(s: string) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 }
+function calcAge(dateOfBirth: string): string {
+  if (!dateOfBirth) return "";
+  const dob = new Date(dateOfBirth);
+  if (isNaN(dob.getTime())) return "";
+  const now = new Date();
+  let y = now.getFullYear() - dob.getFullYear();
+  const m = now.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < dob.getDate())) y--;
+  return y > 0 ? `${y} Yrs` : "";
+}
 
 async function printBill(b: LastBill, clinic: ClinicLite) {
   const p = await getPrinterSettings();
+  const ageStr = calcAge(b.patient.dateOfBirth);
+  const ageLine = [ageStr, b.patient.gender].filter(Boolean).join(" / ").toUpperCase();
   const rows = b.tests.map((t) => `<tr><td>${escapeHtml(t.name)}</td><td style="text-align:right">₹${t.price.toFixed(2)}</td></tr>`).join("");
-  const payRows = b.payments.map((p) => `<tr><td>${escapeHtml(p.mode.toUpperCase())}</td><td style="text-align:right">₹${Number(p.amount || 0).toFixed(2)}</td></tr>`).join("");
+  const paidAmt = b.payments.reduce((s, p) => s + Number(p.amount || 0), 0);
+  const balAmt  = Math.max(0, b.total - paidAmt);
+  const payRows = b.payments.map((p) => `<tr><td style="text-transform:capitalize">${escapeHtml(p.mode.replace(/_/g," "))}</td><td style="text-align:right">₹${Number(p.amount || 0).toFixed(2)}</td></tr>`).join("");
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Bill ${escapeHtml(b.billNumber)}</title>
     <style>
-      @page { size: A5; margin: 8mm; }
-      body { font-family: Arial, sans-serif; font-size: 11px; color:#000; margin:0; }
-      h1 { margin:0; font-size:16px; text-align:center; }
-      .clinic { text-align:center; border-bottom:2px solid #000; padding-bottom:6px; margin-bottom:8px; }
-      .clinic p { margin:1px 0; font-size:10px; color:#444; }
+      @page { size: A5; margin: 7mm 8mm; }
+      body { font-family: Arial, sans-serif; font-size: 11px; color:#000; margin:0; text-transform:uppercase; }
+      h1 { margin:0; font-size:17px; text-align:center; }
+      .clinic { text-align:center; border-bottom:2px solid #000; padding-bottom:5px; margin-bottom:5px; }
+      .clinic p { margin:1px 0; font-size:10px; color:#444; text-transform:none; }
+      .inv-title { text-align:center; font-size:12px; font-weight:700; letter-spacing:1px; margin:4px 0 6px; }
       table { width:100%; border-collapse:collapse; }
-      th, td { padding:3px 4px; border-bottom:1px solid #ddd; font-size:10px; }
+      th, td { padding:2px 4px; border-bottom:1px solid #ddd; font-size:10px; }
       th { background:#f4f4f4; text-align:left; }
-      .meta td { border:none; padding:1px 0; }
-      .totals td { border:none; padding:0; line-height:1; }
-      .totals .grand td { border-top:1px solid #000; font-weight:700; padding-top:1px; line-height:1; }
+      .meta td { border:none; padding:1px 2px; }
+      .bottom { display:flex; gap:10px; align-items:flex-start; margin-top:4px; }
+      .pay-block { flex:1; font-size:10px; }
+      .pay-block b { display:block; margin-bottom:2px; border-bottom:1px solid #ccc; padding-bottom:1px; }
+      .pay-block td { border:none; padding:1px 3px 1px 0; }
+      .totals { min-width:190px; font-size:10px; }
+      .totals td { border:none; padding:1px 3px; }
+      .totals .grand td { border-top:1px solid #000; font-weight:700; padding-top:2px; }
       .token { margin-top:8px; padding:4px; border:1px dashed #000; text-align:center; font-weight:700; }
     </style></head><body>
     <div class="clinic">
       <h1>${escapeHtml(clinic?.name || "Diagnostic Centre")}</h1>
-      ${clinic?.tagline ? `<p>${escapeHtml(clinic.tagline)}</p>` : ""}
+      ${clinic?.tagline ? `<p style="font-style:italic">${escapeHtml(clinic.tagline)}</p>` : ""}
       ${clinic?.address ? `<p>${escapeHtml(clinic.address)}</p>` : ""}
       ${clinic?.phone ? `<p>Ph: ${escapeHtml(clinic.phone)}</p>` : ""}
     </div>
-    <table class="meta"><tbody>
-      <tr><td><strong>Bill No</strong></td><td>: ${escapeHtml(b.billNumber)}</td><td><strong>Date</strong></td><td>: ${new Date().toLocaleDateString("en-IN")}</td></tr>
-      <tr><td><strong>Patient</strong></td><td colspan="3">: ${escapeHtml(b.patient.firstName)} ${escapeHtml(b.patient.lastName)} (${escapeHtml(b.patient.patientId)})</td></tr>
-      <tr><td><strong>Phone</strong></td><td>: ${escapeHtml(b.patient.phone || "")}</td>${b.doctorName ? `<td><strong>Ref. Dr</strong></td><td>: ${escapeHtml(b.doctorName)}</td>` : "<td></td><td></td>"}</tr>
+    <div class="inv-title">INVOICE / RECEIPT</div>
+    <table class="meta" style="margin-bottom:6px;border-top:1px solid #ccc;border-bottom:1px solid #ccc;padding:3px 0"><tbody>
+      <tr>
+        <td><strong>${escapeHtml(b.patient.firstName)} ${escapeHtml(b.patient.lastName)}</strong></td>
+        <td style="text-align:right">${ageLine ? escapeHtml(ageLine) : ""}</td>
+        <td style="text-align:right">PH: ${escapeHtml(b.patient.phone || "")}</td>
+      </tr>
+      <tr>
+        <td>ID: ${escapeHtml(b.patient.patientId)}</td>
+        <td style="text-align:right">BILL: ${escapeHtml(String(b.billNumber).replace(/^BILL-?/i,"").replace(/-/g,""))}</td>
+        <td style="text-align:right">${new Date().toLocaleDateString("en-IN")} ${new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})}</td>
+      </tr>
+      ${b.doctorName ? `<tr><td colspan="3">REF: DR. ${escapeHtml(b.doctorName)}</td></tr>` : `<tr><td colspan="3">REF: SELF / WALK-IN</td></tr>`}
     </tbody></table>
-    <table style="margin-top:6px"><thead><tr><th>Test</th><th style="text-align:right">Amount</th></tr></thead><tbody>${rows}</tbody></table>
-    <table class="totals" style="margin-top:2px"><tbody>
-      <tr><td>Subtotal</td><td style="text-align:right">₹${b.subtotal.toFixed(2)}</td></tr>
-      ${b.discount > 0 ? `<tr><td>Discount</td><td style="text-align:right">−₹${b.discount.toFixed(2)}</td></tr>` : ""}
-      <tr class="grand"><td>Total</td><td style="text-align:right">₹${b.total.toFixed(2)}</td></tr>
-    </tbody></table>
-    ${payRows ? `<p style="margin:6px 0 2px;font-weight:600">Payments</p><table><tbody>${payRows}</tbody></table>` : ""}
+    <table style="margin-bottom:4px"><thead><tr><th>#</th><th>Test</th><th>Category</th><th style="text-align:right">Amount (₹)</th></tr></thead>
+    <tbody>${b.tests.map((t,i)=>`<tr><td>${i+1}</td><td>${escapeHtml(t.name)}</td><td>${escapeHtml(t.category)}</td><td style="text-align:right">₹${t.price.toFixed(2)}</td></tr>`).join("")}</tbody></table>
+    <div class="bottom">
+      ${payRows ? `<div class="pay-block"><b>PAYMENT DETAILS</b><table><tbody>${payRows}</tbody></table></div>` : "<div></div>"}
+      <table class="totals"><tbody>
+        <tr><td>Subtotal</td><td style="text-align:right">₹${b.subtotal.toFixed(2)}</td></tr>
+        ${b.discount > 0 ? `<tr><td>Discount</td><td style="text-align:right;color:green">−₹${b.discount.toFixed(2)}</td></tr>` : ""}
+        <tr><td><strong>Total</strong></td><td style="text-align:right"><strong>₹${b.total.toFixed(2)}</strong></td></tr>
+        <tr><td>Paid</td><td style="text-align:right;color:green">₹${paidAmt.toFixed(2)}</td></tr>
+        <tr class="grand"><td><strong>Balance Due</strong></td><td style="text-align:right;color:${balAmt>0?"#c62828":"green"}">₹${balAmt.toFixed(2)}${balAmt===0?" (PAID)":""}</td></tr>
+      </tbody></table>
+    </div>
     ${b.tokenNo != null ? `<div class="token">QUEUE TOKEN&nbsp;#${String(b.tokenNo).padStart(3, "0")}</div>` : ""}
   </body></html>`;
   const w = window.open("", "_blank", printerWindowFeatures(p.billPrinter));
@@ -312,7 +346,7 @@ export default function BillingDesk() {
 
   // ── Doctor search state ─────────────────────────────
   const [doctorId, setDoctorId] = useState<number | null>(null);
-  const [doctorMode, setDoctorMode] = useState<"self" | "doctor">("self");
+  const [doctorMode, setDoctorMode] = useState<"self" | "doctor">("doctor");
   const [doctorSearch, setDoctorSearch] = useState("");
   const [doctorSearchOpen, setDoctorSearchOpen] = useState(false);
   const doctorRef = useRef<HTMLDivElement>(null);
@@ -1516,29 +1550,30 @@ export default function BillingDesk() {
               margin: 0 auto;
               padding: 24px;
             }
-            .bdr-patient { border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; padding: 5px 4px; margin-bottom: 10px; font-size: 11px; line-height: 1.35; }
+            .bdr-patient { border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; padding: 4px 4px; margin-bottom: 8px; font-size: 11px; line-height: 1.3; }
             .bdr-patient-line { display: flex; justify-content: space-between; gap: 12px; }
             .bdr-patient-line strong { font-weight: 700; }
-            .bdr-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 14px; }
-            .bdr-header h1 { font-size: 20px; font-weight: 700; margin: 0 0 2px; }
+            .bdr-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 4px; }
+            .bdr-header h1 { font-size: 20px; font-weight: 700; margin: 0 0 1px; }
             .bdr-header p  { margin: 1px 0; font-size: 11px; color: #444; }
-            .bdr-title { text-align: center; font-size: 13px; font-weight: 700; letter-spacing: 1px; margin: 10px 0; text-transform: uppercase; border: 1px solid #000; padding: 4px; }
-            .bdr-meta { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 11px; }
+            .bdr-title { text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 1px; margin: 3px 0 6px; text-transform: uppercase; }
+            .bdr-meta { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 11px; }
             .bdr-meta table td { padding: 1px 4px 1px 0; }
             .bdr-meta table td:first-child { font-weight: 600; color: #444; white-space: nowrap; }
-            .bdr-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 11px; }
-            .bdr-table th { background: #f5f5f5; text-align: left; padding: 5px 6px; border: 1px solid #ccc; font-weight: 600; }
-            .bdr-table td { padding: 4px 6px; border: 1px solid #ccc; vertical-align: top; }
+            .bdr-table { width: 100%; border-collapse: collapse; margin-bottom: 6px; font-size: 11px; }
+            .bdr-table th { background: #f5f5f5; text-align: left; padding: 4px 6px; border: 1px solid #ccc; font-weight: 600; }
+            .bdr-table td { padding: 3px 6px; border: 1px solid #ccc; vertical-align: top; }
             .bdr-table .text-right { text-align: right; }
-            .bdr-summary { margin-left: auto; width: 220px; font-size: 11px; margin-bottom: 12px; }
-            .bdr-summary table { width: 100%; border-collapse: collapse; }
-            .bdr-summary td { padding: 3px 6px; }
-            .bdr-summary tr:last-child td { font-weight: 700; border-top: 1px solid #000; padding-top: 5px; }
-            .bdr-payments { font-size: 11px; margin-bottom: 14px; }
+            .bdr-bottom-row { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 8px; }
+            .bdr-payments { font-size: 11px; flex: 1; }
+            .bdr-payments strong { display: block; margin-bottom: 2px; border-bottom: 1px solid #ccc; padding-bottom: 2px; font-size: 11px; }
             .bdr-payments table { width: 100%; border-collapse: collapse; }
-            .bdr-payments th { text-align: left; border-bottom: 1px solid #ccc; padding: 3px 6px; font-weight: 600; }
-            .bdr-payments td { padding: 3px 6px; border-bottom: 1px solid #eee; }
-            .bdr-footer { text-align: center; font-size: 10px; color: #666; border-top: 1px solid #ccc; padding-top: 8px; margin-top: 8px; }
+            .bdr-payments td { padding: 2px 4px 2px 0; border: none; }
+            .bdr-summary { min-width: 200px; font-size: 11px; }
+            .bdr-summary table { width: 100%; border-collapse: collapse; }
+            .bdr-summary td { padding: 1px 4px; }
+            .bdr-summary tr.bdr-grand td { font-weight: 700; border-top: 1px solid #000; padding-top: 3px; }
+            .bdr-footer { text-align: center; font-size: 10px; color: #666; border-top: 1px solid #ccc; padding-top: 6px; margin-top: 6px; }
           `}</style>
 
           <div className="bdr-header" style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "space-between", textAlign: "center" }}>
@@ -1574,15 +1609,14 @@ export default function BillingDesk() {
           </div>
           <div className="bdr-title">Invoice / Receipt</div>
 
-          {/* Compact 2-line patient block to keep most bills on a single A5
-              page. The .billing-desk-receipt wrapper has text-transform:
-              uppercase so name / gender / doctor render in capital case. */}
+          {/* Compact 2-line patient block. text-transform:uppercase on wrapper
+              forces caps; use bdr-keep-case to opt specific fields out. */}
           <div className="bdr-patient">
             <div className="bdr-patient-line">
               <strong>{lastBill.patient.firstName} {lastBill.patient.lastName}</strong>
               <span>
                 {[
-                  lastBill.patient.gender || null,
+                  (() => { const a = calcAge(lastBill.patient.dateOfBirth); return a && lastBill.patient.gender ? `${a} / ${lastBill.patient.gender}` : a || lastBill.patient.gender || null; })(),
                   lastBill.patient.phone ? `Ph ${lastBill.patient.phone}` : null,
                   `ID ${lastBill.patient.patientId}`,
                 ].filter(Boolean).join("  ·  ")}
@@ -1623,44 +1657,44 @@ export default function BillingDesk() {
             const paidOnReceipt = lastBill.payments.reduce((s, p) => s + Number(p.amount || 0), 0);
             const balanceOnReceipt = Math.max(0, lastBill.total - paidOnReceipt);
             return (
-              <div className="bdr-summary">
-                <table>
-                  <tbody>
-                    <tr><td>Subtotal</td><td style={{ textAlign: "right" }}>₹{lastBill.subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>
-                    {lastBill.discount > 0 && <tr><td>Discount</td><td style={{ textAlign: "right", color: "green" }}>−₹{lastBill.discount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>}
-                    <tr><td><strong>Total</strong></td><td style={{ textAlign: "right" }}><strong>₹{lastBill.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong></td></tr>
-                    <tr><td>Paid</td><td style={{ textAlign: "right", color: "green" }}>₹{paidOnReceipt.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>
-                    <tr>
-                      <td><strong>Balance Due</strong></td>
-                      <td style={{ textAlign: "right", color: balanceOnReceipt > 0 ? "#c62828" : "green", fontWeight: 700 }}>
-                        ₹{balanceOnReceipt.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                        {balanceOnReceipt === 0 && " (PAID)"}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+              <div className="bdr-bottom-row">
+                {/* Left: Payment Details */}
+                {lastBill.payments.length > 0 ? (
+                  <div className="bdr-payments">
+                    <strong>Payment Details</strong>
+                    <table>
+                      <tbody>
+                        {lastBill.payments.map((p, i) => (
+                          <tr key={i}>
+                            <td style={{ textTransform: "capitalize" }}>{p.mode.replace(/_/g, " ")}</td>
+                            <td style={{ textAlign: "right" }}>₹{Number(p.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : <div style={{ flex: 1 }} />}
+                {/* Right: Totals */}
+                <div className="bdr-summary">
+                  <table>
+                    <tbody>
+                      <tr><td>Subtotal</td><td style={{ textAlign: "right" }}>₹{lastBill.subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>
+                      {lastBill.discount > 0 && <tr><td>Discount</td><td style={{ textAlign: "right", color: "green" }}>−₹{lastBill.discount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>}
+                      <tr><td><strong>Total</strong></td><td style={{ textAlign: "right" }}><strong>₹{lastBill.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong></td></tr>
+                      <tr><td>Paid</td><td style={{ textAlign: "right", color: "green" }}>₹{paidOnReceipt.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>
+                      <tr className="bdr-grand">
+                        <td><strong>Balance Due</strong></td>
+                        <td style={{ textAlign: "right", color: balanceOnReceipt > 0 ? "#c62828" : "green" }}>
+                          ₹{balanceOnReceipt.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                          {balanceOnReceipt === 0 && " (PAID)"}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             );
           })()}
-
-          {lastBill.payments.length > 0 && (
-            <div className="bdr-payments">
-              <strong>Payment Details</strong>
-              <table>
-                <thead>
-                  <tr><th>Mode</th><th style={{ textAlign: "right" }}>Amount (₹)</th></tr>
-                </thead>
-                <tbody>
-                  {lastBill.payments.map((p, i) => (
-                    <tr key={i}>
-                      <td style={{ textTransform: "capitalize" }}>{p.mode.replace(/_/g, " ")}</td>
-                      <td style={{ textAlign: "right" }}>{Number(p.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
 
           <div className="bdr-footer">
             <p>{clinic?.footerNote || "Thank you for choosing our diagnostic services."}</p>
