@@ -21,9 +21,11 @@ function getPreviewToken(): string {
 function PageView({ slug, settings, pages, popups, isPreview }: { slug: string; settings: SiteSettings; pages: Page[]; popups: Popup[]; isPreview: boolean }) {
   const page = useMemo(() => {
     const list = isPreview ? pages : pages.filter((p) => p.status === "published");
+    if (slug === "home" && !list.some((p) => p.slug === "home")) {
+      return list[0] ?? null;
+    }
     const exact = list.find((p) => p.slug === slug);
     if (exact) return exact;
-    if (slug === "home") return list.find((p) => p.slug === "home") ?? list[0] ?? null;
     return null;
   }, [pages, slug, isPreview]);
 
