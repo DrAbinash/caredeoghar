@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
-import { Tv, Maximize2 } from "lucide-react";
+import { BellOff, Mic, Maximize2, Tv } from "lucide-react";
 
 type DeptCard = {
   department: string;
@@ -23,6 +23,8 @@ export default function Display() {
   const ledgerId = ledgerRaw && Number.isInteger(ledgerNum) && ledgerNum > 0 ? ledgerNum : null;
   const departments = (params.get("departments") ?? params.get("defaultDepartment") ?? "").trim();
   const layout = (params.get("layout") ?? "").trim() === "single" ? "single" : "grid";
+  const voiceEnabled = (params.get("voice") ?? "1") !== "0";
+  const autoSpeak = (params.get("autoplayVoice") ?? "1") !== "0";
 
   const { data, isLoading } = useQuery<DisplayPayload>({
     queryKey: ["display-queue", ledgerId, departments],
@@ -46,26 +48,48 @@ export default function Display() {
 
   // Speech announcement when "now serving" changes per dept.
   const [lastAnnounced, setLastAnnounced] = useState<Record<string, number>>({});
+  const hasSpokenRef = useRef(false);
+  const voiceMessage = useMemo(() => {
+    if (!data) return "";
+    return data.departments
+      .filter((d) => d.nowServing)
+      .map((d) => `Token ${d.nowServing?.tokenNo} for ${d.department}, please proceed to ${d.roomNumber || "the assigned room"}.`)
+      .join(" ");
+  }, [data]);
+  const speakMessage = (message: string) => {
+    if (!voiceEnabled || !message) return;
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+    try {
+      synth.cancel();
+      const utterance = new SpeechSynthesisUtterance(message);
+      utterance.rate = 0.95;
+      utterance.volume = 0.9;
+      synth.speak(utterance);
+      hasSpokenRef.current = true;
+    } catch {
+      //
+    }
+  };
   useEffect(() => {
-    if (!data) return;
+    if (!data || !voiceEnabled) return;
     const updates: Record<string, number> = { ...lastAnnounced };
     let changed = false;
     for (const d of data.departments) {
       if (d.nowServing && lastAnnounced[d.department] !== d.nowServing.tokenNo) {
-        try {
-          const u = new SpeechSynthesisUtterance(`Token ${d.nowServing.tokenNo} for ${d.department}, please proceed to ${d.roomNumber || "the assigned room"}.`);
-          u.rate = 0.95;
-          u.volume = 0.8;
-          window.speechSynthesis.cancel();
-          window.speechSynthesis.speak(u);
-        } catch { /* tts not available — silently ignore */ }
+        speakMessage(`Token ${d.nowServing.tokenNo} for ${d.department}, please proceed to ${d.roomNumber || "the assigned room"}.`);
         updates[d.department] = d.nowServing.tokenNo;
         changed = true;
       }
     }
     if (changed) setLastAnnounced(updates);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data]);
+  }, [data, voiceEnabled]);
+
+  useEffect(() => {
+    if (!voiceEnabled || !autoSpeak || !voiceMessage || hasSpokenRef.current) return;
+    speakMessage(voiceMessage);
+  }, [autoSpeak, voiceEnabled, voiceMessage]);
 
   const goFullscreen = () => {
     const el = document.documentElement;
@@ -99,6 +123,15 @@ export default function Display() {
           <button onClick={goFullscreen} className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors" title="Fullscreen">
             <Maximize2 size={18} />
           </button>
+          <button
+            onClick={() => {
+              speakMessage(voiceMessage);
+            }}
+            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+            title={voiceEnabled ? "Speak queue now" : "Voice disabled"}
+          >
+            {voiceEnabled ? <Mic size={18} /> : <BellOff size={18} />}
+          </button>
         </div>
       </div>
 
@@ -129,7 +162,7 @@ export default function Display() {
 
       {/* Footer / branding */}
       <div className="px-6 sm:px-10 py-3 text-center text-xs text-white/40 border-t border-white/10">
-        Updates every 4 seconds. Please listen for your token to be called.
+        {voiceEnabled ? "Voice announcements enabled." : "Voice announcements disabled."} Updates every 4 seconds.
       </div>
     </div>
   );
