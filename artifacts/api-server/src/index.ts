@@ -124,7 +124,7 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-const server = app.listen(port, () => {
+const server = app.listen({ port, exclusive: true }, () => {
   logger.info({ port }, "Server listening");
 
   // Cron schedulers must NOT run on autoscale deployments: containers can
