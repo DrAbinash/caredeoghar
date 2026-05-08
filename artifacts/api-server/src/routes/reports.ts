@@ -474,7 +474,7 @@ reportsRouter.get("/daily-summary", async (req, res) => {
   const toDate = new Date(date);
   toDate.setHours(23,59,59,999);
 
-  const [bills, payments, orders] = await Promise.all([
+  const [bills, payments, orders, expenseVouchers] = await Promise.all([
     db.select({ b: billsTable, p: patientsTable })
       .from(billsTable)
       .leftJoin(patientsTable, eq(billsTable.patientId, patientsTable.id))
@@ -484,6 +484,10 @@ reportsRouter.get("/daily-summary", async (req, res) => {
       .where(and(gte(paymentsTable.createdAt, fromDate), lte(paymentsTable.createdAt, toDate))),
     db.select().from(ordersTable)
       .where(and(gte(ordersTable.createdAt, fromDate), lte(ordersTable.createdAt, toDate))),
+    db.select({ v: vouchersTable, a: accountsTable })
+      .from(vouchersTable)
+      .leftJoin(accountsTable, eq(vouchersTable.debitAccountId, accountsTable.id))
+      .where(and(gte(vouchersTable.date, date), lte(vouchersTable.date, date))),
   ]);
 
   const totalBilled   = bills.reduce((s, r) => s + Number(r.b.totalAmount), 0);
@@ -539,12 +543,19 @@ reportsRouter.get("/daily-summary", async (req, res) => {
   }
   const byUser = Array.from(byUserMap.values()).sort((a, b) => b.received - a.received);
 
+  const totalExpense = expenseVouchers
+    .filter(({ a }) => a?.type === "expense")
+    .reduce((s, { v }) => s + Number(v.amount), 0);
+  const grandTotal = totalReceived - totalExpense;
+
   res.json({
     date,
     summary: { totalBilled, totalReceived, outstanding, billCount: bills.length, orderCount: orders.length },
     byMethod,
     billsByStatus,
     byUser,
+    totalExpense,
+    grandTotal,
     bills: bills.map(r => ({
       id: r.b.id,
       billNumber: r.b.billNumber,

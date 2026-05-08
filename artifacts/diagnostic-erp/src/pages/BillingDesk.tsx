@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import QRCode from "qrcode";
 import { api } from "@/lib/fetchApi";
+import { readStaffSession } from "@/lib/staffSession";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -185,6 +186,7 @@ async function printBill(b: LastBill, clinic: ClinicLite) {
   const p = await getPrinterSettings();
   const ageStr = calcAge(b.patient.dateOfBirth);
   const ageLine = [ageStr, b.patient.gender].filter(Boolean).join(" / ").toUpperCase();
+  const billedBy = readStaffSession()?.user?.name ?? "";
   const rows = b.tests.map((t) => `<tr><td>${escapeHtml(t.name)}</td><td style="text-align:right">₹${t.price.toFixed(2)}</td></tr>`).join("");
   const paidAmt = b.payments.reduce((s, p) => s + Number(p.amount || 0), 0);
   const balAmt  = Math.max(0, b.total - paidAmt);
@@ -229,6 +231,7 @@ async function printBill(b: LastBill, clinic: ClinicLite) {
         <td style="text-align:right">${new Date().toLocaleDateString("en-IN")} ${new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})}</td>
       </tr>
       ${b.doctorName ? `<tr><td colspan="3">REF: DR. ${escapeHtml(b.doctorName)}</td></tr>` : `<tr><td colspan="3">REF: SELF / WALK-IN</td></tr>`}
+      ${billedBy ? `<tr><td colspan="3" style="font-size:10px;color:#555">BILLED BY: ${escapeHtml(billedBy)}</td></tr>` : ""}
     </tbody></table>
     <table style="margin-bottom:4px"><thead><tr><th>#</th><th>Test</th><th>Category</th><th style="text-align:right">Amount (₹)</th></tr></thead>
     <tbody>${b.tests.map((t,i)=>`<tr><td>${i+1}</td><td>${escapeHtml(t.name)}</td><td>${escapeHtml(t.category)}</td><td style="text-align:right">₹${t.price.toFixed(2)}</td></tr>`).join("")}</tbody></table>
@@ -1630,6 +1633,11 @@ export default function BillingDesk() {
                 {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })} {new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
               </span>
             </div>
+            {(() => { const n = readStaffSession()?.user?.name; return n ? (
+              <div className="bdr-patient-line" style={{ fontSize: 10, color: "#555", marginTop: 1 }}>
+                <span className="bdr-keep-case">Billed by: <strong>{n}</strong></span>
+              </div>
+            ) : null; })()}
           </div>
 
           <table className="bdr-table">

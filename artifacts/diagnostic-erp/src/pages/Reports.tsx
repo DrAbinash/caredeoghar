@@ -65,12 +65,14 @@ type DailySummaryData = {
   byMethod: Record<string, number>;
   billsByStatus: { paid: number; partial: number; pending: number; cancelled: number };
   byUser?: DailyUserRow[];
+  totalExpense?: number;
+  grandTotal?: number;
   bills: { id: number; billNumber: string; patientName: string; totalAmount: number; paidAmount: number; status: string; createdAt: string; createdByName?: string }[];
 };
 
 export default function Reports() {
   const [period, setPeriod] = useState<"daily" | "weekly" | "monthly">("monthly");
-  const [activeTab, setActiveTab] = useState<string>("overview");
+  const [activeTab, setActiveTab] = useState<string>("daily");
   const [dateFrom, setDateFrom] = useState(() => {
     const d = new Date();
     d.setDate(1);
@@ -100,7 +102,6 @@ export default function Reports() {
   const { data: dailySummaryData, isLoading: loadingDaily } = useQuery<DailySummaryData>({
     queryKey: ["daily-summary", dailyDate],
     queryFn: () => api.get(`/api/reports/daily-summary?date=${dailyDate}`),
-    enabled: activeTab === "daily",
   });
 
   const formatCurrency = (n: number) =>
@@ -266,16 +267,85 @@ export default function Reports() {
             {loadingDaily ? (
               <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-20 bg-muted animate-pulse rounded-xl" />)}</div>
             ) : !dailySummaryData ? (
-              <div className="text-center py-12 text-muted-foreground">Select a date to view the report</div>
+              <div className="text-center py-12 text-muted-foreground">No data</div>
             ) : (
               <div className="space-y-5">
-                {/* KPI Cards */}
+
+                {/* ── MAIN: User-wise breakdown — prominent, matches handwritten report ── */}
+                <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-card-border flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold">Daily Report — {new Date(dailySummaryData.date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">Staff-wise collection breakdown</p>
+                    </div>
+                    <span className="text-xs text-muted-foreground">Bills: {dailySummaryData.summary.billCount}</span>
+                  </div>
+                  {dailySummaryData.byUser && dailySummaryData.byUser.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/50">
+                          <tr>
+                            <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">#</th>
+                            <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">Staff</th>
+                            <th className="text-right px-4 py-2.5 text-xs font-semibold text-blue-600">UPI</th>
+                            <th className="text-right px-4 py-2.5 text-xs font-semibold text-purple-600">Card</th>
+                            <th className="text-right px-4 py-2.5 text-xs font-semibold text-green-700">Cash</th>
+                            <th className="text-right px-4 py-2.5 text-xs font-semibold text-foreground border-l border-card-border">Total</th>
+                            <th className="text-right px-4 py-2.5 text-xs font-semibold text-orange-600">Expense</th>
+                            <th className="text-right px-4 py-2.5 text-xs font-semibold text-green-600">Grand Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dailySummaryData.byUser.map((u, i) => (
+                            <tr key={u.userName} className="border-t border-card-border hover:bg-muted/20">
+                              <td className="px-4 py-2.5 text-xs text-muted-foreground">{i + 1}</td>
+                              <td className="px-4 py-2.5 font-semibold">{u.userName}</td>
+                              <td className="px-4 py-2.5 text-right text-blue-600">{inr2(u.methods.upi || 0)}</td>
+                              <td className="px-4 py-2.5 text-right text-purple-600">{inr2((u.methods.card || 0) + (u.methods.credit_card || 0) + (u.methods.debit_card || 0))}</td>
+                              <td className="px-4 py-2.5 text-right text-green-700">{inr2(u.methods.cash || 0)}</td>
+                              <td className="px-4 py-2.5 text-right font-semibold border-l border-card-border">{inr2(u.received)}</td>
+                              <td className="px-4 py-2.5 text-right text-muted-foreground text-xs">—</td>
+                              <td className="px-4 py-2.5 text-right font-semibold text-green-600">{inr2(u.received)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="border-t-2 border-foreground/30 bg-muted/40">
+                          <tr>
+                            <td className="px-4 py-2.5 text-xs font-bold" colSpan={2}>TOTAL</td>
+                            <td className="px-4 py-2.5 text-right font-bold text-blue-600">
+                              {inr2(dailySummaryData.byUser.reduce((s, u) => s + (u.methods.upi || 0), 0))}
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-bold text-purple-600">
+                              {inr2(dailySummaryData.byUser.reduce((s, u) => s + (u.methods.card || 0) + (u.methods.credit_card || 0) + (u.methods.debit_card || 0), 0))}
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-bold text-green-700">
+                              {inr2(dailySummaryData.byUser.reduce((s, u) => s + (u.methods.cash || 0), 0))}
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-bold border-l border-card-border">
+                              {inr2(dailySummaryData.summary.totalReceived)}
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-bold text-orange-600">
+                              {dailySummaryData.totalExpense != null ? inr2(dailySummaryData.totalExpense) : "—"}
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-bold text-green-600">
+                              {dailySummaryData.grandTotal != null ? inr2(dailySummaryData.grandTotal) : inr2(dailySummaryData.summary.totalReceived)}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="px-4 py-8 text-center text-sm text-muted-foreground">No bills recorded for this date</div>
+                  )}
+                </div>
+
+                {/* KPI summary row */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {[
                     { label: "Billed", value: inr2(dailySummaryData.summary.totalBilled), color: "text-foreground" },
                     { label: "Collected", value: inr2(dailySummaryData.summary.totalReceived), color: "text-green-600" },
                     { label: "Outstanding", value: inr2(dailySummaryData.summary.outstanding), color: "text-red-500" },
-                    { label: "Bills Created", value: String(dailySummaryData.summary.billCount), color: "text-foreground" },
+                    { label: "Expense", value: dailySummaryData.totalExpense != null ? inr2(dailySummaryData.totalExpense) : "—", color: "text-orange-500" },
                   ].map(c => (
                     <div key={c.label} className="bg-card border border-card-border rounded-xl p-4">
                       <p className="text-xs text-muted-foreground">{c.label}</p>
@@ -284,78 +354,11 @@ export default function Reports() {
                   ))}
                 </div>
 
-                {/* Payment Method Breakdown */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="bg-card border border-card-border rounded-xl p-4">
-                    <h3 className="text-sm font-semibold mb-3">Collection by Method</h3>
-                    {Object.keys(dailySummaryData.byMethod).length === 0 ? (
-                      <p className="text-xs text-muted-foreground">No payments collected today</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {Object.entries(dailySummaryData.byMethod).map(([method, amount]) => (
-                          <div key={method} className="flex items-center justify-between text-sm">
-                            <span className="capitalize text-muted-foreground">{methodLabel(method)}</span>
-                            <span className="font-semibold">{inr2(amount)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="bg-card border border-card-border rounded-xl p-4">
-                    <h3 className="text-sm font-semibold mb-3">Bills by Status</h3>
-                    <div className="space-y-2">
-                      {Object.entries(dailySummaryData.billsByStatus).map(([status, count]) => (
-                        <div key={status} className="flex items-center justify-between text-sm">
-                          <span className="capitalize text-muted-foreground">{status}</span>
-                          <span className="font-semibold">{count}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* User-wise breakdown — bills raised + payments collected per staff */}
-                {dailySummaryData.byUser && dailySummaryData.byUser.length > 0 && (
-                  <div className="bg-card border border-card-border rounded-xl overflow-hidden">
-                    <div className="px-4 py-3 border-b border-card-border">
-                      <h3 className="text-sm font-semibold">By User — {dailySummaryData.date}</h3>
-                      <p className="text-xs text-muted-foreground mt-0.5">Bills raised by each staff member and the cash/UPI/card they collected</p>
-                    </div>
-                    <table className="w-full text-sm">
-                      <thead className="bg-muted/50">
-                        <tr>
-                          <th className="text-left px-4 py-2 text-xs text-muted-foreground">User</th>
-                          <th className="text-right px-4 py-2 text-xs text-muted-foreground">Bills</th>
-                          <th className="text-right px-4 py-2 text-xs text-muted-foreground">Billed</th>
-                          <th className="text-right px-4 py-2 text-xs text-muted-foreground">Cash</th>
-                          <th className="text-right px-4 py-2 text-xs text-muted-foreground">UPI</th>
-                          <th className="text-right px-4 py-2 text-xs text-muted-foreground">Card</th>
-                          <th className="text-right px-4 py-2 text-xs text-green-600">Collected</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {dailySummaryData.byUser.map(u => (
-                          <tr key={u.userName} className="border-t border-card-border hover:bg-muted/20">
-                            <td className="px-4 py-2 font-medium">{u.userName}</td>
-                            <td className="px-4 py-2 text-right">{u.billCount}</td>
-                            <td className="px-4 py-2 text-right">{inr2(u.billed)}</td>
-                            <td className="px-4 py-2 text-right text-xs">{inr2(u.methods.cash || 0)}</td>
-                            <td className="px-4 py-2 text-right text-xs">{inr2(u.methods.upi || 0)}</td>
-                            <td className="px-4 py-2 text-right text-xs">{inr2((u.methods.card || 0) + (u.methods.credit_card || 0) + (u.methods.debit_card || 0))}</td>
-                            <td className="px-4 py-2 text-right font-semibold text-green-600">{inr2(u.received)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
                 {/* Bills Table */}
                 {dailySummaryData.bills.length > 0 && (
                   <div className="bg-card border border-card-border rounded-xl overflow-hidden">
                     <div className="px-4 py-3 border-b border-card-border">
-                      <h3 className="text-sm font-semibold">Bills — {dailySummaryData.date}</h3>
+                      <h3 className="text-sm font-semibold">Bill Ledger — {dailySummaryData.date}</h3>
                     </div>
                     <table className="w-full text-sm">
                       <thead className="bg-muted/50">
@@ -365,7 +368,7 @@ export default function Reports() {
                           <th className="text-right px-4 py-2 text-xs text-muted-foreground">Billed</th>
                           <th className="text-right px-4 py-2 text-xs text-muted-foreground">Paid</th>
                           <th className="text-left px-4 py-2 text-xs text-muted-foreground">Status</th>
-                        <th className="text-left px-4 py-2 text-xs text-muted-foreground">By</th>
+                          <th className="text-left px-4 py-2 text-xs text-muted-foreground">By</th>
                         </tr>
                       </thead>
                       <tbody>
