@@ -127,8 +127,19 @@ export default function Tests() {
         toast({ title: "Empty file", description: "No data rows found in the CSV.", variant: "destructive" });
         return;
       }
+      const normalizedRows = rows.map((row) => ({
+        code: row.code ?? row.testCode ?? row.test_code ?? row.Code ?? row["test code"] ?? "",
+        name: row.name ?? row.testName ?? row.test_name ?? row["Test Name"] ?? row["name "] ?? "",
+        category: row.category ?? row.testCategory ?? row.test_category ?? row["Category"] ?? "",
+        department: row.department ?? row.Department ?? "Pathology",
+        price: row.price ?? row.Price ?? "",
+        duration: row.duration ?? row.Duration ?? "30 min",
+        roomNumber: row.roomNumber ?? row.room_number ?? row.room ?? "",
+        description: row.description ?? row.Description ?? "",
+        isActive: row.isActive ?? row.is_active ?? row.active ?? row.Active ?? "true",
+      }));
       const result = await api.post<{ inserted: number; updated: number; skipped: number; errors: { row: number; reason: string }[] }>(
-        "/api/tests/import", { rows },
+        "/api/tests/import", { rows: normalizedRows },
       );
       queryClient.invalidateQueries({ queryKey: getListTestsQueryKey() });
       const desc = `${result.inserted} added, ${result.updated} updated`
