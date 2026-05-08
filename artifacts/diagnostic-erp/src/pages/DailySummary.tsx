@@ -25,21 +25,24 @@ import { FULL_ACCESS_ROLES } from "@/lib/staffSession";
 
 type DailySummaryData = {
   date: string;
-  staffName: string | null;
-  income: {
-    byMethod: Record<string, number>;
-    total: number;
+  summary: {
+    totalBilled: number;
+    totalReceived: number;
+    outstanding: number;
+    billCount: number;
+    orderCount: number;
   };
-  bills: {
-    count: number;
-    totalAmount: number;
-    paidAmount: number;
-  };
-  expenses: {
-    byMode: Record<string, number>;
-    total: number;
-  };
-  netCash: number;
+  byMethod: Record<string, number>;
+  billsByStatus: Record<string, number>;
+  byUser: Array<{
+    userName: string;
+    billCount: number;
+    billed: number;
+    received: number;
+    methods: Record<string, number>;
+  }>;
+  totalExpense: number;
+  grandTotal: number;
   payments: {
     id: number;
     billId: number;
@@ -115,18 +118,16 @@ export default function DailySummary() {
     queryKey: ["daily-summary", date, staffFilter],
     queryFn: () =>
       api.get(
-        `/api/daily-summary?date=${encodeURIComponent(date)}&staffName=${encodeURIComponent(staffFilter)}`
+        `/api/daily-summary?date=${encodeURIComponent(date)}${staffFilter ? `&staffName=${encodeURIComponent(staffFilter)}` : ""}`
       ),
     staleTime: 30_000,
   });
 
-  const income = data?.income ?? { byMethod: {}, total: 0 };
-  const expenses = data?.expenses ?? { byMode: {}, total: 0 };
-  const bills = data?.bills ?? { count: 0, totalAmount: 0, paidAmount: 0 };
-  const netCash = data?.netCash ?? 0;
-
-  const incomeMethods = Object.entries(income.byMethod).sort((a, b) => b[1] - a[1]);
-  const expenseModes = Object.entries(expenses.byMode).sort((a, b) => b[1] - a[1]);
+  const summary = data?.summary ?? { totalBilled: 0, totalReceived: 0, outstanding: 0, billCount: 0, orderCount: 0 };
+  const incomeMethods = Object.entries(data?.byMethod ?? {}).sort((a, b) => b[1] - a[1]);
+  const expenseTotal = data?.totalExpense ?? 0;
+  const netCash = data?.grandTotal ?? 0;
+  const userRows = data?.byUser ?? [];
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-5xl mx-auto">
@@ -193,26 +194,26 @@ export default function DailySummary() {
             <SummaryCard
               icon={<TrendingUp size={14} className="text-green-600" />}
               label="Total Income"
-              value={inr(income.total)}
-              sub={`${bills.count} bill${bills.count === 1 ? "" : "s"} created`}
+              value={inr(summary.totalReceived)}
+              sub={`${summary.billCount} bill${summary.billCount === 1 ? "" : "s"} created`}
               accent="bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800"
             />
             <SummaryCard
               icon={<Banknote size={14} className="text-green-700" />}
               label="Cash Collected"
-              value={inr(income.byMethod["cash"] ?? 0)}
+              value={inr(data?.byMethod["cash"] ?? 0)}
               accent="bg-card border-card-border"
             />
             <SummaryCard
               icon={<Smartphone size={14} className="text-violet-600" />}
               label="UPI Collected"
-              value={inr(income.byMethod["upi"] ?? 0)}
+              value={inr(data?.byMethod["upi"] ?? 0)}
               accent="bg-card border-card-border"
             />
             <SummaryCard
               icon={<TrendingDown size={14} className="text-red-500" />}
               label="Expenses"
-              value={inr(expenses.total)}
+              value={inr(expenseTotal)}
               accent="bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"
             />
           </div>
@@ -223,7 +224,7 @@ export default function DailySummary() {
               <div className="text-sm text-muted-foreground font-medium flex items-center gap-1.5">
                 <Wallet size={14} /> Net Cash in Hand
               </div>
-              <div className="text-xs text-muted-foreground mt-0.5">Cash collected minus cash expenses</div>
+              <div className="text-xs text-muted-foreground mt-0.5">Total received minus expenses</div>
             </div>
             <div className={cn("text-3xl font-bold", netCash >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600")}>
               {inr(netCash)}
@@ -254,36 +255,36 @@ export default function DailySummary() {
                   ))}
                   <div className="flex items-center justify-between border-t border-card-border pt-2 mt-1 text-sm font-bold">
                     <span>Total</span>
-                    <span>{inr(income.total)}</span>
+                    <span>{inr(summary.totalReceived)}</span>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Expense breakdown */}
+            {/* User breakdown */}
             <div className="bg-card border border-card-border rounded-xl p-4 space-y-3">
               <h3 className="font-semibold flex items-center gap-2 text-sm">
-                <ArrowDownCircle size={14} className="text-red-500" /> Expenses by Mode
+                <ArrowDownCircle size={14} className="text-red-500" /> Staff Summary
               </h3>
-              {expenseModes.length === 0 ? (
-                <p className="text-xs text-muted-foreground italic">No expenses recorded today.</p>
+              {userRows.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">No staff activity recorded today.</p>
               ) : (
                 <div className="space-y-2">
-                  {expenseModes.map(([mode, amount]) => (
+                  {userRows.map((row) => (
                     <div
-                      key={mode}
+                      key={row.userName}
                       className="flex items-center justify-between rounded-lg border border-card-border bg-muted/20 px-3 py-2"
                     >
-                      <div className="flex items-center gap-2 text-sm font-medium capitalize">
-                        {methodIcon(mode)}
-                        {mode.toUpperCase()}
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Wallet size={14} className="text-muted-foreground" />
+                        {row.userName}
                       </div>
-                      <div className="font-bold text-sm text-red-600">{inr(amount)}</div>
+                      <div className="font-bold text-sm text-red-600">{inr(row.received)}</div>
                     </div>
                   ))}
                   <div className="flex items-center justify-between border-t border-card-border pt-2 mt-1 text-sm font-bold text-red-600">
                     <span>Total</span>
-                    <span>{inr(expenses.total)}</span>
+                    <span>{inr(expenseTotal)}</span>
                   </div>
                 </div>
               )}
@@ -297,15 +298,15 @@ export default function DailySummary() {
             </h3>
             <div className="grid grid-cols-3 gap-4">
               <div className="text-center">
-                <div className="text-2xl font-bold">{bills.count}</div>
+                <div className="text-2xl font-bold">{summary.billCount}</div>
                 <div className="text-xs text-muted-foreground mt-0.5">Bills</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold">{inr(bills.totalAmount)}</div>
+                <div className="text-2xl font-bold">{inr(summary.totalBilled)}</div>
                 <div className="text-xs text-muted-foreground mt-0.5">Billed Amount</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold text-green-600">{inr(bills.paidAmount)}</div>
+                <div className="text-2xl font-bold text-green-600">{inr(summary.totalReceived)}</div>
                 <div className="text-xs text-muted-foreground mt-0.5">Paid</div>
               </div>
             </div>
