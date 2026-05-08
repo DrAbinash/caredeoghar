@@ -51,6 +51,13 @@ export default function QueuePage() {
   const [department, setDepartment] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [defaultDepartment, setDefaultDepartment] = useState<string>("");
+  const [voiceEnabled, setVoiceEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("queueDisplay:voiceEnabled") !== "0";
+    } catch {
+      return true;
+    }
+  });
 
   const { data: ledgers = [] } = useQuery<Ledger[]>({
     queryKey: ["ledgers"],
@@ -114,6 +121,8 @@ export default function QueuePage() {
     const selectedDepartment = department !== "all" ? department : defaultDepartment;
     if (defaultDepartment) params.set("defaultDepartment", defaultDepartment);
     if (selectedDepartment) params.set("departments", selectedDepartment);
+    params.set("voice", voiceEnabled ? "1" : "0");
+    params.set("autoplayVoice", voiceEnabled ? "1" : "0");
     window.open(`/display?${params.toString()}`, "_blank", "noopener,noreferrer");
   };
 
@@ -169,6 +178,17 @@ export default function QueuePage() {
             </SelectContent>
           </Select>
         </div>
+        <button
+          className={`px-3 py-2 rounded-md border text-sm font-medium ${voiceEnabled ? "bg-emerald-50 border-emerald-300 text-emerald-700" : "bg-muted border-card-border text-muted-foreground"}`}
+          onClick={() => {
+            const next = !voiceEnabled;
+            setVoiceEnabled(next);
+            try { localStorage.setItem("queueDisplay:voiceEnabled", next ? "1" : "0"); } catch {}
+          }}
+          type="button"
+        >
+          Voice {voiceEnabled ? "On" : "Off"}
+        </button>
         <div className="relative flex-1 min-w-[220px] max-w-md">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
