@@ -23,8 +23,7 @@ function PageView({ slug, settings, pages, popups, isPreview }: { slug: string; 
     const list = isPreview ? pages : pages.filter((p) => p.status === "published");
     const exact = list.find((p) => p.slug === slug);
     if (exact) return exact;
-    // Only fall back to home for the root path itself
-    if (slug === "home") return list.find((p) => p.slug === "home") ?? null;
+    if (slug === "home") return list.find((p) => p.slug === "home") ?? list[0] ?? null;
     return null;
   }, [pages, slug, isPreview]);
 

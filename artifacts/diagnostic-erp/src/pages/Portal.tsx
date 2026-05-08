@@ -225,6 +225,14 @@ function PortalLanding() {
           <p className="text-muted-foreground text-sm">
             The patient portal is currently disabled. Please contact reception for assistance.
           </p>
+          <div className="mt-5 flex gap-2 justify-center">
+            <Button asChild>
+              <Link to="/portal/patient-login">Patient Login</Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/portal/staff-login">Staff Login</Link>
+            </Button>
+          </div>
         </div>
       </div>
     );
