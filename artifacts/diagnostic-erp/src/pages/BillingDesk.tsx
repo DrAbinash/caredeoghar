@@ -108,6 +108,7 @@ export default function BillingDesk() {
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const [doctorId, setDoctorId] = useState<number | null>(null);
+  const [doctorMode, setDoctorMode] = useState<"self" | "doctor">("self");
   const [doctorSearch, setDoctorSearch] = useState("");
   const [doctorSearchOpen, setDoctorSearchOpen] = useState(false);
   const doctorRef = useRef<HTMLDivElement>(null);
@@ -187,7 +188,7 @@ export default function BillingDesk() {
   const husbandName = "";
   const patientAddress = "";
   const selectedDoctor = doctorId ? doctors.find((d) => d.id === doctorId) ?? null : null;
-  const doctorLabel = selectedDoctor ? `Dr. ${selectedDoctor.name}` : "Walk-in / Self";
+  const doctorLabel = doctorMode === "self" ? "Walk-in / Self" : selectedDoctor ? `Dr. ${selectedDoctor.name}` : "Walk-in / Self";
 
   useEffect(() => { if (!lastBill) { setBillQrDataUrl(""); return; } let cancelled = false; QRCode.toDataURL(buildBillVerifyUrl(lastBill.billNumber), { errorCorrectionLevel: "M", margin: 1, width: 256, color: { dark: "#000000", light: "#ffffff" } }).then((url) => { if (!cancelled) setBillQrDataUrl(url); }).catch(() => { if (!cancelled) setBillQrDataUrl(""); }); return () => { cancelled = true; }; }, [lastBill]);
 
@@ -202,26 +203,26 @@ export default function BillingDesk() {
           <div className="flex items-center gap-2 mb-2">
             <button
               type="button"
-              onClick={() => { setDoctorId(null); setDoctorSearch(""); setDoctorSearchOpen(true); }}
-              className={`px-3 py-1.5 rounded-md text-sm border ${doctorId === null ? "border-primary bg-primary/5 text-primary font-medium" : "border-card-border text-muted-foreground hover:bg-muted/30"}`}
+              onClick={() => { setDoctorMode("self"); setDoctorId(null); setDoctorSearch(""); setDoctorSearchOpen(false); }}
+              className={`px-3 py-1.5 rounded-md text-sm border ${doctorMode === "self" ? "border-primary bg-primary/5 text-primary font-medium" : "border-card-border text-muted-foreground hover:bg-muted/30"}`}
             >
               Walk-in / Self
             </button>
             <button
               type="button"
-              onClick={() => setDoctorSearchOpen((v) => !v)}
-              className={`px-3 py-1.5 rounded-md text-sm border ${doctorId ? "border-primary bg-primary/5 text-primary font-medium" : "border-card-border text-muted-foreground hover:bg-muted/30"}`}
+              onClick={() => { setDoctorMode("doctor"); setDoctorSearchOpen((v) => !v); }}
+              className={`px-3 py-1.5 rounded-md text-sm border ${doctorMode === "doctor" ? "border-primary bg-primary/5 text-primary font-medium" : "border-card-border text-muted-foreground hover:bg-muted/30"}`}
             >
               {doctorId ? doctorLabel : "Select Referral Doctor"}
             </button>
           </div>
           {doctorSearchOpen && (
             <div className="border border-card-border rounded-lg bg-popover shadow-lg max-h-48 overflow-y-auto">
-              <button className="w-full text-left px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted/50 border-b border-border italic" onMouseDown={(e) => e.preventDefault()} onClick={() => { setDoctorId(null); setDoctorSearch(""); setDoctorSearchOpen(false); }}>
+              <button className="w-full text-left px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted/50 border-b border-border italic" onMouseDown={(e) => e.preventDefault()} onClick={() => { setDoctorMode("self"); setDoctorId(null); setDoctorSearch(""); setDoctorSearchOpen(false); }}>
                 Walk-in / Self (no referral)
               </button>
               {doctors.map((d) => (
-                <button key={d.id} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 transition-colors text-left" onMouseDown={(e) => e.preventDefault()} onClick={() => { setDoctorId(d.id); setDoctorSearch(""); setDoctorSearchOpen(false); }}>
+                <button key={d.id} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 transition-colors text-left" onMouseDown={(e) => e.preventDefault()} onClick={() => { setDoctorMode("doctor"); setDoctorId(d.id); setDoctorSearch(""); setDoctorSearchOpen(false); }}>
                   <div className="w-9 h-7 rounded bg-primary/10 flex items-center justify-center flex-shrink-0 font-mono text-[11px] text-primary font-semibold">#{d.id}</div>
                   <div className="flex-1 min-w-0"><div className="text-sm font-medium">Dr. {d.name}</div><div className="text-xs text-muted-foreground">{d.specialization}</div></div>
                 </button>
