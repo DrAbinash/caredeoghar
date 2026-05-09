@@ -6,9 +6,13 @@ import { eq, desc, gte, lte, and } from "drizzle-orm";
 import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
 import {
   geminiGenerate,
+  geminiTranscribe,
   buildClinicalNotePrompt,
   buildBillingInsightsPrompt,
   buildPatientMessagePrompt,
+  buildRadiologyFindingsPrompt,
+  buildRadiologyImpressionPrompt,
+  MODALITY_NAMES,
   type PatientMessageType,
 } from "@workspace/integrations-gemini-ai";
 
@@ -21,51 +25,6 @@ const router = Router();
 // each endpoint accesses, so that low-privilege staff cannot use AI to
 // exfiltrate data from modules they have not been granted.
 router.use(requireStaffAuth);
-
-const BASE_URL = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com";
-const API_KEY = process.env.AI_INTEGRATIONS_GEMINI_API_KEY ?? "";
-const MODEL = "gemini-2.5-flash";
-
-// Multimodal generate: sends an inline audio part for transcription. The Gemini
-// AI-integrations proxy supports inline data up to ~8 MB — callers must chunk
-// long recordings before invoking this. Returns transcribed plain text.
-async function geminiTranscribe(audioBase64: string, mimeType: string): Promise<string> {
-  const url = `${BASE_URL}/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
-  const prompt = "Transcribe the radiologist's dictation verbatim. Return only the spoken text — no headings, no commentary, no timestamps. Preserve medical terminology exactly as spoken.";
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{
-        role: "user",
-        parts: [
-          { text: prompt },
-          { inlineData: { mimeType, data: audioBase64 } },
-        ],
-      }],
-      generationConfig: { maxOutputTokens: 8192 },
-    }),
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Gemini transcription error: ${res.status} ${err}`);
-  }
-  const data = await res.json() as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
-  };
-  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
-}
-
-// Modality → human-readable expansion used in radiology prompts.
-const MODALITY_NAMES: Record<string, string> = {
-  MR: "MRI",
-  CT: "CT",
-  CR: "X-Ray",
-  US: "Ultrasound",
-  MG: "Mammography",
-  BMD: "DEXA bone density",
-  OT: "Imaging study",
-};
 
 // Generate AI clinical notes for a patient — requires /patients permission
 // (loads patient demographics, orders, and test history from the patients module)
@@ -193,19 +152,7 @@ router.post("/radiology-findings", requireStaffPermission("/orders"), async (req
   if (!modality && !testName) {
     res.status(400).json({ error: "modality or testName required" }); return;
   }
-  const modalityName = MODALITY_NAMES[modality] ?? modality ?? "Imaging";
-  const prompt = `You are a senior radiologist drafting the FINDINGS section of a ${modalityName} report.
-
-Study: ${testName || modalityName}
-Clinical history: ${clinicalHistory || "(none provided)"}
-Radiologist dictation / observations: ${dictation || "(none provided — produce a clean structured template the radiologist can fill in)"}
-
-Write a professional FINDINGS section organised by anatomical region in short clear paragraphs.
-- Use formal medical language and standard radiology phrasing.
-- Quantify measurements where the dictation gives numbers (mm, cm).
-- Use "No abnormality" or "Within normal limits" where the dictation is silent or explicitly normal — do NOT invent pathology.
-- Do NOT include the IMPRESSION section. Do NOT include patient demographics. Do NOT include any disclaimer.
-- Output only the findings narrative, ready to paste into the report.`;
+  const prompt = buildRadiologyFindingsPrompt({ modality, testName, clinicalHistory, dictation });
 
   try {
     const findings = await geminiGenerate(prompt, { maxTokens: 8192 });
@@ -224,18 +171,7 @@ router.post("/radiology-impression", requireStaffPermission("/orders"), async (r
   const modality = String(b.modality ?? "").trim();
   const testName = String(b.testName ?? "").trim();
   if (!findings) { res.status(400).json({ error: "findings required" }); return; }
-  const modalityName = MODALITY_NAMES[modality] ?? modality ?? "imaging study";
-  const prompt = `You are a senior radiologist. Read the FINDINGS below from a ${modalityName} ${testName ? `(${testName}) ` : ""}and write a concise IMPRESSION.
-
-FINDINGS:
-${findings}
-
-Rules:
-- 1 to 4 numbered bullet points.
-- Each bullet ≤ 25 words, plain medical language.
-- Order by clinical significance (most important first).
-- Suggest follow-up imaging or clinical correlation only if findings warrant it.
-- Output only the numbered impression list. No heading, no preamble, no disclaimer.`;
+  const prompt = buildRadiologyImpressionPrompt({ findings, modality, testName });
   try {
     const impression = await geminiGenerate(prompt, { maxTokens: 1024 });
     res.json({ impression });

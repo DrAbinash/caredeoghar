@@ -117,6 +117,126 @@ Provide insights as a numbered list. Be specific, practical, and mention specifi
 }
 
 // ---------------------------------------------------------------------------
+// Radiology helpers
+// ---------------------------------------------------------------------------
+
+/** Modality code → human-readable name used in radiology prompts. */
+export const MODALITY_NAMES: Record<string, string> = {
+  MR: "MRI",
+  CT: "CT",
+  CR: "X-Ray",
+  US: "Ultrasound",
+  MG: "Mammography",
+  BMD: "DEXA bone density",
+  OT: "Imaging study",
+};
+
+export interface GeminiTranscribeOptions {
+  baseUrl?: string;
+  apiKey?: string;
+}
+
+/**
+ * Send a multimodal (text instruction + inline audio) request to Gemini for
+ * verbatim transcription of a radiologist's dictation.
+ * Returns trimmed transcript text, or an empty string when the model produces
+ * no output.  Throws if the HTTP response is not ok.
+ */
+export async function geminiTranscribe(
+  audioBase64: string,
+  mimeType: string,
+  options: GeminiTranscribeOptions = {}
+): Promise<string> {
+  const baseUrl =
+    options.baseUrl ??
+    process.env.AI_INTEGRATIONS_GEMINI_BASE_URL ??
+    "https://generativelanguage.googleapis.com";
+  const apiKey = options.apiKey ?? process.env.AI_INTEGRATIONS_GEMINI_API_KEY ?? "";
+
+  const url = `${baseUrl}/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+  const transcribePrompt =
+    "Transcribe the radiologist's dictation verbatim. Return only the spoken text — no headings, no commentary, no timestamps. Preserve medical terminology exactly as spoken.";
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{
+        role: "user",
+        parts: [
+          { text: transcribePrompt },
+          { inlineData: { mimeType, data: audioBase64 } },
+        ],
+      }],
+      generationConfig: { maxOutputTokens: 8192 },
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Gemini transcription error: ${res.status} ${err}`);
+  }
+
+  const data = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  };
+  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+}
+
+export interface RadiologyFindingsInput {
+  modality: string;
+  testName: string;
+  clinicalHistory: string;
+  dictation: string;
+}
+
+/**
+ * Build the prompt sent to Gemini for generating the FINDINGS section of a
+ * radiology report.  Separated from the route handler so it can be tested.
+ */
+export function buildRadiologyFindingsPrompt(input: RadiologyFindingsInput): string {
+  const modalityName = MODALITY_NAMES[input.modality] ?? input.modality ?? "Imaging";
+  return `You are a senior radiologist drafting the FINDINGS section of a ${modalityName} report.
+
+Study: ${input.testName || modalityName}
+Clinical history: ${input.clinicalHistory || "(none provided)"}
+Radiologist dictation / observations: ${input.dictation || "(none provided — produce a clean structured template the radiologist can fill in)"}
+
+Write a professional FINDINGS section organised by anatomical region in short clear paragraphs.
+- Use formal medical language and standard radiology phrasing.
+- Quantify measurements where the dictation gives numbers (mm, cm).
+- Use "No abnormality" or "Within normal limits" where the dictation is silent or explicitly normal — do NOT invent pathology.
+- Do NOT include the IMPRESSION section. Do NOT include patient demographics. Do NOT include any disclaimer.
+- Output only the findings narrative, ready to paste into the report.`;
+}
+
+export interface RadiologyImpressionInput {
+  findings: string;
+  modality: string;
+  testName: string;
+}
+
+/**
+ * Build the prompt sent to Gemini for generating the IMPRESSION bullet list
+ * from an existing FINDINGS narrative.  Separated from the route handler so
+ * it can be tested.
+ */
+export function buildRadiologyImpressionPrompt(input: RadiologyImpressionInput): string {
+  const modalityName = MODALITY_NAMES[input.modality] ?? input.modality ?? "imaging study";
+  return `You are a senior radiologist. Read the FINDINGS below from a ${modalityName} ${input.testName ? `(${input.testName}) ` : ""}and write a concise IMPRESSION.
+
+FINDINGS:
+${input.findings}
+
+Rules:
+- 1 to 4 numbered bullet points.
+- Each bullet ≤ 25 words, plain medical language.
+- Order by clinical significance (most important first).
+- Suggest follow-up imaging or clinical correlation only if findings warrant it.
+- Output only the numbered impression list. No heading, no preamble, no disclaimer.`;
+}
+
+// ---------------------------------------------------------------------------
 // Patient message prompt builder
 // ---------------------------------------------------------------------------
 
