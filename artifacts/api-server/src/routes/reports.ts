@@ -501,9 +501,10 @@ reportsRouter.get("/daily-summary", async (req, res) => {
       .where(and(gte(vouchersTable.date, date), lte(vouchersTable.date, date))),
   ]);
 
-  const totalBilled   = bills.reduce((s, r) => s + Number(r.b.totalAmount), 0);
+  const activeBills = bills.filter((r) => r.b.status !== "cancelled");
+  const totalBilled   = activeBills.reduce((s, r) => s + Number(r.b.totalAmount), 0);
   const totalReceived = payments.reduce((s, p) => s + Number(p.amount), 0);
-  const outstanding   = totalBilled - totalReceived;
+  const outstanding   = Math.max(0, totalBilled - totalReceived);
 
   const byMethod: Record<string, number> = {};
   for (const p of payments) {
@@ -512,9 +513,9 @@ reportsRouter.get("/daily-summary", async (req, res) => {
   }
 
   const billsByStatus = {
-    paid:     bills.filter(r => r.b.status === "paid").length,
-    partial:  bills.filter(r => r.b.status === "partial").length,
-    pending:  bills.filter(r => r.b.status === "pending").length,
+    paid:     activeBills.filter(r => r.b.status === "paid").length,
+    partial:  activeBills.filter(r => r.b.status === "partial").length,
+    pending:  activeBills.filter(r => r.b.status === "pending").length,
     cancelled:bills.filter(r => r.b.status === "cancelled").length,
   };
 
@@ -540,7 +541,7 @@ reportsRouter.get("/daily-summary", async (req, res) => {
     }
     return row;
   };
-  for (const r of bills) {
+  for (const r of activeBills) {
     const u = ensureUser(r.b.createdByName);
     u.billCount += 1;
     u.billed   += Number(r.b.totalAmount);
@@ -561,7 +562,7 @@ reportsRouter.get("/daily-summary", async (req, res) => {
 
   res.json({
     date,
-    summary: { totalBilled, totalReceived, outstanding, billCount: bills.length, orderCount: orders.length },
+    summary: { totalBilled, totalReceived, outstanding, billCount: activeBills.length, orderCount: orders.length },
     byMethod,
     billsByStatus,
     byUser,
@@ -594,12 +595,13 @@ reportsRouter.get("/daily-summary/pdf", async (req, res) => {
     db.select().from(paymentsTable).where(and(gte(paymentsTable.createdAt, fromDate), lte(paymentsTable.createdAt, toDate))),
   ]);
 
-  const totalBilled = bills.reduce((s, r) => s + Number(r.b.totalAmount), 0);
+  const activeBills = bills.filter((r) => r.b.status !== "cancelled");
+  const totalBilled = activeBills.reduce((s, r) => s + Number(r.b.totalAmount), 0);
   const totalReceived = payments.reduce((s, p) => s + Number(p.amount), 0);
-  const outstanding = totalBilled - totalReceived;
-  const paidBills = bills.filter((r) => r.b.status === "paid").length;
-  const partialBills = bills.filter((r) => r.b.status === "partial").length;
-  const pendingBills = bills.filter((r) => r.b.status === "pending").length;
+  const outstanding = Math.max(0, totalBilled - totalReceived);
+  const paidBills = activeBills.filter((r) => r.b.status === "paid").length;
+  const partialBills = activeBills.filter((r) => r.b.status === "partial").length;
+  const pendingBills = activeBills.filter((r) => r.b.status === "pending").length;
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.send(buildReportHtml(
