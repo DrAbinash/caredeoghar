@@ -497,7 +497,7 @@ reportsRouter.get("/daily-summary", async (req, res) => {
       .where(and(gte(ordersTable.createdAt, fromDate), lte(ordersTable.createdAt, toDate))),
     db.select({ v: vouchersTable, a: accountsTable })
       .from(vouchersTable)
-      .leftJoin(accountsTable, eq(vouchersTable.debitAccountId, accountsTable.id))
+      .leftJoin(accountsTable, sql`${vouchersTable.debitAccountId}::integer = ${accountsTable.id}`)
       .where(and(gte(vouchersTable.date, date), lte(vouchersTable.date, date))),
   ]);
 

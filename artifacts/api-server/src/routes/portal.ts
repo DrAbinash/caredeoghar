@@ -257,8 +257,7 @@ portalRouter.post("/patient-login", patientLoginLimiter, async (req, res) => {
 // PINs are stored as bcrypt hashes; plaintext legacy values are migrated
 // transparently on the first successful login.
 portalRouter.post("/staff-login", staffLoginLimiter, async (req, res) => {
-  if (!(await requirePortalEnabled(res))) return;
-
+  // Staff login is always available regardless of patient-portal toggle.
   // Accept the new `username` field as the primary handle, but keep the
   // older `email` field too so any saved/autofilled creds keep working.
   // Either one can be supplied — we look up by username first, then fall
@@ -336,8 +335,7 @@ portalRouter.post("/staff-login", staffLoginLimiter, async (req, res) => {
 // new one, and we clear the must_change_pin flag in the same write so they
 // can land in the ERP without being bounced again.
 portalRouter.post("/staff-change-pin", async (req, res) => {
-  if (!(await requirePortalEnabled(res))) return;
-
+  // Staff PIN change is always available regardless of patient-portal toggle.
   const auth = req.headers.authorization || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
   if (!token) {

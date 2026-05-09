@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { billsTable, paymentsTable } from "@workspace/db/schema";
+import { billsTable, paymentsTable, ordersTable } from "@workspace/db/schema";
 import { sql, and, eq, gte, lt, ne } from "drizzle-orm";
+import { patientsTable } from "@workspace/db/schema";
 
 export const dailySummaryRouter: IRouter = Router();
 
@@ -9,56 +10,25 @@ function todayIST(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 }
 
-function startOfDayUTC(dateStr: string): Date {
-  // dateStr is YYYY-MM-DD in IST — convert to UTC range
-  const d = new Date(`${dateStr}T00:00:00+05:30`);
-  return d;
-}
-
-function endOfDayUTC(dateStr: string): Date {
-  const d = new Date(`${dateStr}T23:59:59.999+05:30`);
-  return d;
+function dayBoundsIST(dateStr: string): { start: Date; end: Date } {
+  return {
+    start: new Date(`${dateStr}T00:00:00+05:30`),
+    end: new Date(`${dateStr}T23:59:59.999+05:30`),
+  };
 }
 
 dailySummaryRouter.get("/", async (req, res) => {
   const date = typeof req.query.date === "string" ? req.query.date : todayIST();
   const staffName = typeof req.query.staffName === "string" ? req.query.staffName.trim() : "";
 
-  const dayStart = startOfDayUTC(date);
-  const dayEnd = endOfDayUTC(date);
+  const { start: dayStart, end: dayEnd } = dayBoundsIST(date);
 
-  // ── Income: payments recorded in this date range ──────────────────────────
+  // ── Payments in this date range ────────────────────────────────────────────
   const paymentFilters = [
     gte(paymentsTable.createdAt, dayStart),
     lt(paymentsTable.createdAt, dayEnd),
   ];
   if (staffName) paymentFilters.push(eq(paymentsTable.recordedByName, staffName));
-
-  const paymentRows = await db
-    .select({
-      method: paymentsTable.method,
-      total: sql<string>`COALESCE(SUM(${paymentsTable.amount}::numeric), 0)`,
-      count: sql<number>`COUNT(*)::int`,
-    })
-    .from(paymentsTable)
-    .where(and(...paymentFilters))
-    .groupBy(paymentsTable.method);
-
-  const incomeByMethod: Record<string, number> = {};
-  let totalIncome = 0;
-  for (const row of paymentRows) {
-    const m = (row.method ?? "other").toLowerCase();
-    const v = Number(row.total);
-    incomeByMethod[m] = (incomeByMethod[m] ?? 0) + v;
-    totalIncome += v;
-  }
-
-  // Itemized payment list (last 200)
-  const paymentFilters2 = [
-    gte(paymentsTable.createdAt, dayStart),
-    lt(paymentsTable.createdAt, dayEnd),
-  ];
-  if (staffName) paymentFilters2.push(eq(paymentsTable.recordedByName, staffName));
 
   const paymentItems = await db
     .select({
@@ -71,70 +41,141 @@ dailySummaryRouter.get("/", async (req, res) => {
       createdAt: paymentsTable.createdAt,
     })
     .from(paymentsTable)
-    .where(and(...paymentFilters2))
+    .where(and(...paymentFilters))
     .orderBy(sql`${paymentsTable.createdAt} DESC`)
     .limit(200);
 
-  // ── Bills created today ───────────────────────────────────────────────────
+  // ── Bills created in this date range ─────────────────────────────────────
   const billFilters = [
     gte(billsTable.createdAt, dayStart),
     lt(billsTable.createdAt, dayEnd),
-    ne(billsTable.status, "cancelled"),
   ];
   if (staffName) billFilters.push(eq(billsTable.createdByName, staffName));
 
-  const [billsSummary] = await db
+  const allBillRows = await db
     .select({
-      count: sql<number>`COUNT(*)::int`,
-      totalAmount: sql<string>`COALESCE(SUM(${billsTable.totalAmount}::numeric), 0)`,
-      paidAmount: sql<string>`COALESCE(SUM(${billsTable.paidAmount}::numeric), 0)`,
+      id: billsTable.id,
+      billNumber: billsTable.billNumber,
+      totalAmount: billsTable.totalAmount,
+      paidAmount: billsTable.paidAmount,
+      status: billsTable.status,
+      createdAt: billsTable.createdAt,
+      createdByName: billsTable.createdByName,
+      patientId: billsTable.patientId,
+      patientFirstName: patientsTable.firstName,
+      patientLastName: patientsTable.lastName,
     })
     .from(billsTable)
-    .where(and(...billFilters));
+    .leftJoin(patientsTable, eq(billsTable.patientId, patientsTable.id))
+    .where(and(...billFilters))
+    .orderBy(sql`${billsTable.createdAt} DESC`);
+
+  // ── Orders in this date range ──────────────────────────────────────────────
+  const orderCount = await db
+    .select({ count: sql<number>`COUNT(*)::int` })
+    .from(ordersTable)
+    .where(and(gte(ordersTable.createdAt, dayStart), lt(ordersTable.createdAt, dayEnd)));
 
   // ── Expenses for this date ────────────────────────────────────────────────
-  // expenses use expense_date text field (YYYY-MM-DD) so simple equality works
-  const expenseRows = await db.execute<{ payment_mode: string; total: string; count: number }>(
-    sql`SELECT payment_mode, COALESCE(SUM(amount::numeric), 0)::text AS total, COUNT(*)::int AS count
+  const expenseRows = await db.execute<{ payment_mode: string; total: string }>(
+    sql`SELECT payment_mode, COALESCE(SUM(amount::numeric), 0)::text AS total
         FROM expenses
-        WHERE expense_date = ${date}`
+        WHERE expense_date = ${date}
+        GROUP BY payment_mode`
   );
 
-  const expenseByMode: Record<string, number> = {};
-  let totalExpenses = 0;
-  for (const row of expenseRows.rows) {
-    const m = (row.payment_mode ?? "cash").toLowerCase();
-    const v = Number(row.total);
-    expenseByMode[m] = (expenseByMode[m] ?? 0) + v;
-    totalExpenses += v;
+  // ── Aggregate ─────────────────────────────────────────────────────────────
+  const activeBills = allBillRows.filter((r) => r.status !== "cancelled");
+
+  const totalBilled = activeBills.reduce((s, r) => s + Number(r.totalAmount), 0);
+  const totalReceived = paymentItems.reduce((s, p) => s + Number(p.amount), 0);
+  const outstanding = Math.max(0, totalBilled - totalReceived);
+
+  const byMethod: Record<string, number> = {};
+  for (const p of paymentItems) {
+    const m = (p.method ?? "other").toLowerCase();
+    byMethod[m] = (byMethod[m] ?? 0) + Number(p.amount);
   }
+
+  const billsByStatus = {
+    paid: activeBills.filter((r) => r.status === "paid").length,
+    partial: activeBills.filter((r) => r.status === "partial").length,
+    pending: activeBills.filter((r) => r.status === "pending").length,
+    cancelled: allBillRows.filter((r) => r.status === "cancelled").length,
+  };
+
+  // ── Per-user breakdown ────────────────────────────────────────────────────
+  type UserAgg = {
+    userName: string;
+    billCount: number;
+    billed: number;
+    received: number;
+    methods: Record<string, number>;
+  };
+  const byUserMap = new Map<string, UserAgg>();
+  const ensureUser = (name: string | null | undefined): UserAgg => {
+    const key = (name && name.trim()) || "Unknown User";
+    let row = byUserMap.get(key);
+    if (!row) {
+      row = { userName: key, billCount: 0, billed: 0, received: 0, methods: {} };
+      byUserMap.set(key, row);
+    }
+    return row;
+  };
+  for (const r of activeBills) {
+    const u = ensureUser(r.createdByName);
+    u.billCount += 1;
+    u.billed += Number(r.totalAmount);
+  }
+  for (const p of paymentItems) {
+    const u = ensureUser(p.recordedByName);
+    const amt = Number(p.amount);
+    u.received += amt;
+    const m = (p.method ?? "cash").toLowerCase();
+    u.methods[m] = (u.methods[m] ?? 0) + amt;
+  }
+  const byUser = Array.from(byUserMap.values()).sort((a, b) => b.received - a.received);
+
+  // ── Expenses ──────────────────────────────────────────────────────────────
+  let totalExpense = 0;
+  for (const row of expenseRows.rows) {
+    totalExpense += Number(row.total);
+  }
+  const grandTotal = totalReceived - totalExpense;
 
   res.json({
     date,
     staffName: staffName || null,
-    income: {
-      byMethod: incomeByMethod,
-      total: totalIncome,
+    summary: {
+      totalBilled,
+      totalReceived,
+      outstanding,
+      billCount: activeBills.length,
+      orderCount: orderCount[0]?.count ?? 0,
     },
-    bills: {
-      count: billsSummary?.count ?? 0,
-      totalAmount: Number(billsSummary?.totalAmount ?? 0),
-      paidAmount: Number(billsSummary?.paidAmount ?? 0),
-    },
-    expenses: {
-      byMode: expenseByMode,
-      total: totalExpenses,
-    },
-    netCash:
-      (incomeByMethod["cash"] ?? 0) - (expenseByMode["cash"] ?? 0),
+    byMethod,
+    billsByStatus,
+    byUser,
+    totalExpense,
+    grandTotal,
+    bills: allBillRows.map((r) => ({
+      id: r.id,
+      billNumber: r.billNumber,
+      patientName: r.patientFirstName ? `${r.patientFirstName} ${r.patientLastName ?? ""}`.trim() : "Unknown",
+      totalAmount: Number(r.totalAmount),
+      paidAmount: Number(r.paidAmount),
+      status: r.status,
+      createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
+      createdByName: r.createdByName ?? "",
+    })),
     payments: paymentItems.map((p) => ({
       id: p.id,
       billId: p.billId,
       amount: Number(p.amount),
-      method: p.method,
+      method: p.method ?? "cash",
       referenceNumber: p.referenceNumber,
       recordedByName: p.recordedByName,
-      createdAt: p.createdAt,
+      createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : String(p.createdAt),
     })),
   });
 });
