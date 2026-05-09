@@ -112,11 +112,11 @@ export async function batchProcessWithSSE<T, R>(
           minTimeout,
           maxTimeout,
           factor: 2,
-          onFailedAttempt: (error) => {
-            if (!isRateLimitError(error)) {
-              throw new AbortError(
-                error instanceof Error ? error : new Error(String(error))
-              );
+          // p-retry v7: onFailedAttempt receives a RetryContext, not the Error.
+          // Use context.error to access the underlying error object.
+          onFailedAttempt: (context) => {
+            if (!isRateLimitError(context.error)) {
+              throw new AbortError(context.error);
             }
           },
         }
