@@ -39,7 +39,7 @@ type Session = {
 };
 
 function getErpBaseUrl(): string {
-  return `${window.location.origin}/`;
+  return `${window.location.origin}/erp/`;
 }
 
 function formatExpiry(iso: string): string {
