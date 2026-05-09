@@ -54,6 +54,7 @@ import { publicBookingRouter } from "./public-booking";
 import { onlineBookingsRouter } from "./online-bookings";
 import { dailySummaryRouter } from "./daily-summary";
 import { outsourcedLabsRouter } from "./outsourced-labs";
+import { kioskRouter } from "./kiosk";
 import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
 import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
 
@@ -83,6 +84,11 @@ router.use("/verify", verifyRouter);
 // payment flow run on the public clinic site. Payment is verified server-side
 // via HMAC before any record is persisted.
 router.use("/public/booking", publicBookingRouter);
+
+// Self-registration kiosk — public, rate-limited. Patients register and pay
+// via UPI at an unattended kiosk without a staff login. Rate-limited at the
+// route level; no sensitive staff data is accessible from these endpoints.
+router.use("/kiosk", kioskRouter);
 
 // Website router: GET endpoints are intentionally public so the clinic-site
 // frontend can fetch settings/pages/faqs/photos/popups without credentials.

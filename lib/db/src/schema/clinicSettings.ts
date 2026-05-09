@@ -27,5 +27,11 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   razorpayKeyId: text("razorpay_key_id").notNull().default(""),
   onlineBookingLedgerId: integer("online_booking_ledger_id").notNull().default(1),
   vipQueueEnabled: boolean("vip_queue_enabled").notNull().default(false),
+  // Self-registration kiosk
+  kioskEnabled: boolean("kiosk_enabled").notNull().default(false),
+  kioskUpiVpa: text("kiosk_upi_vpa").notNull().default(""),
+  kioskUpiName: text("kiosk_upi_name").notNull().default(""),
+  kioskWelcomeMessage: text("kiosk_welcome_message").notNull().default(""),
+  kioskAllowedTestIds: text("kiosk_allowed_test_ids").notNull().default("[]"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

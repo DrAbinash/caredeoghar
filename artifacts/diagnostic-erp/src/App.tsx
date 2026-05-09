@@ -46,6 +46,7 @@ const Display         = lazy(() => import("@/pages/Display"));
 const OnlineBookings  = lazy(() => import("@/pages/OnlineBookings"));
 const DailySummary    = lazy(() => import("@/pages/DailySummary"));
 const OutsourcedLabs  = lazy(() => import("@/pages/OutsourcedLabs"));
+const Kiosk           = lazy(() => import("@/pages/Kiosk"));
 const NotFound        = lazy(() => import("@/pages/not-found"));
 
 function PageLoader() {
@@ -101,6 +102,7 @@ function Router() {
         <Route path="/portal" component={Portal} />
         <Route path="/portal/:rest*" component={Portal} />
         <Route path="/display" component={Display} />
+        <Route path="/kiosk" component={Kiosk} />
         <Route>
           <PermissionGuard />
           <Layout>

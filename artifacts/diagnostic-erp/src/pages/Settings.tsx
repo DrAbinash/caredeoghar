@@ -19,7 +19,7 @@ import {
   FlaskConical, Boxes, ShieldCheck, FileDown, KeyRound, Eye, EyeOff,
   Tag, Building2, Image as ImageIcon, Upload, MessageCircle, Printer,
   Search, Globe, Copy, ExternalLink, Check, Network, MapPin, Database,
-  RefreshCcw, FileCode, Send,
+  RefreshCcw, FileCode, Send, QrCode,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -103,6 +103,7 @@ const TABS = [
   { id: "report-templates", label: "Report Templates", icon: FileCode },
   { id: "portal", label: "Patient Portal", icon: Globe },
   { id: "online-booking", label: "Online Booking", icon: CreditCard },
+  { id: "kiosk", label: "Self-Reg Kiosk", icon: QrCode },
   { id: "form-f", label: "Form F Tests", icon: FileText },
   { id: "email", label: "Email Notifications", icon: Mail },
   { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
@@ -190,6 +191,7 @@ export default function Settings() {
         {tab === "report-templates" && <ReportTemplatesTab />}
         {tab === "portal" && <PatientPortalTab />}
         {tab === "online-booking" && <OnlineBookingTab />}
+        {tab === "kiosk" && <KioskSettingsTab />}
         {tab === "form-f" && <FormFTestsTab />}
         {tab === "email" && <EmailTab />}
         {tab === "whatsapp" && <WhatsappTab />}
@@ -2234,6 +2236,158 @@ function BackupTab() {
               ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// KIOSK SETTINGS TAB
+// ============================================================
+type KioskSettings = {
+  kioskEnabled: boolean;
+  kioskUpiVpa: string;
+  kioskUpiName: string;
+  kioskWelcomeMessage: string;
+  kioskAllowedTestIds: string;
+};
+
+function KioskSettingsTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: settings } = useQuery<KioskSettings & Record<string, unknown>>({
+    queryKey: ["clinic-settings"],
+    queryFn: () => api.get("/api/clinic-settings"),
+  });
+
+  const [enabled, setEnabled] = useState(false);
+  const [upiVpa, setUpiVpa] = useState("");
+  const [upiName, setUpiName] = useState("");
+  const [welcomeMsg, setWelcomeMsg] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!settings) return;
+    setEnabled(settings.kioskEnabled ?? false);
+    setUpiVpa(settings.kioskUpiVpa ?? "");
+    setUpiName(settings.kioskUpiName ?? "");
+    setWelcomeMsg(settings.kioskWelcomeMessage ?? "");
+  }, [settings]);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await api.put("/api/clinic-settings", {
+        kioskEnabled: enabled,
+        kioskUpiVpa: upiVpa.trim(),
+        kioskUpiName: upiName.trim(),
+        kioskWelcomeMessage: welcomeMsg.trim(),
+      });
+      qc.invalidateQueries({ queryKey: ["clinic-settings"] });
+      toast({ title: "Kiosk settings saved" });
+    } catch {
+      toast({ title: "Failed to save", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const kioskUrl = `${window.location.origin}${import.meta.env.BASE_URL ?? "/erp/"}kiosk`;
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <div className="bg-card border border-border rounded-xl p-5 space-y-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-base">Self-Registration Kiosk</h3>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              A touch-friendly screen where patients self-register, select tests, pay via UPI QR code, and get a bill + queue token automatically.
+            </p>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <span className="text-sm font-medium">{enabled ? "Enabled" : "Disabled"}</span>
+            <div
+              onClick={() => setEnabled(e => !e)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${enabled ? "bg-primary" : "bg-muted"}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${enabled ? "translate-x-6" : "translate-x-1"}`} />
+            </div>
+          </label>
+        </div>
+
+        {/* Kiosk URL */}
+        <div className="bg-muted/40 rounded-lg p-3 flex items-center gap-3">
+          <QrCode size={18} className="text-muted-foreground shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-muted-foreground font-medium mb-0.5">Kiosk URL — open this on the kiosk device</p>
+            <p className="text-sm font-mono truncate">{kioskUrl}</p>
+          </div>
+          <a href={kioskUrl} target="_blank" rel="noopener noreferrer">
+            <Button variant="outline" size="sm"><ExternalLink size={13} className="mr-1" />Open</Button>
+          </a>
+        </div>
+
+        {/* UPI Settings */}
+        <div className="space-y-4">
+          <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">UPI Payment</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <Label className="text-xs">UPI VPA / ID *</Label>
+              <Input
+                className="mt-1"
+                placeholder="e.g. clinic@paytm or 9876543210@upi"
+                value={upiVpa}
+                onChange={e => setUpiVpa(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">The UPI ID that patients will pay to. Leave blank to disable QR payments.</p>
+            </div>
+            <div>
+              <Label className="text-xs">UPI Holder Name</Label>
+              <Input
+                className="mt-1"
+                placeholder="e.g. DiagnoCenter"
+                value={upiName}
+                onChange={e => setUpiName(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">Name shown in the patient's UPI app.</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Welcome message */}
+        <div>
+          <Label className="text-xs">Welcome Message (optional)</Label>
+          <Textarea
+            className="mt-1"
+            rows={2}
+            placeholder="e.g. Welcome! Please register yourself here and select the tests recommended by your doctor."
+            value={welcomeMsg}
+            onChange={e => setWelcomeMsg(e.target.value)}
+          />
+        </div>
+
+        <Button onClick={handleSave} disabled={saving}>
+          {saving ? "Saving…" : "Save Kiosk Settings"}
+        </Button>
+      </div>
+
+      {/* Instructions */}
+      <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl p-5 text-sm space-y-2">
+        <h4 className="font-semibold text-blue-900 dark:text-blue-200 flex items-center gap-2">
+          <QrCode size={16} />How the Kiosk Works
+        </h4>
+        <ol className="list-decimal list-inside space-y-1 text-blue-800 dark:text-blue-300">
+          <li>Patient opens the kiosk URL on a touchscreen and taps <strong>Start Self-Registration</strong>.</li>
+          <li>They fill in their name, mobile number, and gender.</li>
+          <li>They select the tests they need from the test catalogue.</li>
+          <li>A UPI QR code is shown for the total amount — they scan and pay using any UPI app.</li>
+          <li>After paying, they enter the UPI Transaction ID shown in their payment app.</li>
+          <li>The system automatically creates a patient record, order, bill, and queue token.</li>
+          <li>A confirmation screen appears with their token number and an option to print the receipt.</li>
+        </ol>
+        <p className="text-blue-700 dark:text-blue-400 text-xs mt-2">
+          <strong>Tip:</strong> Use a tablet or touchscreen in landscape mode for best experience. Bills are marked as "paid via UPI" with the UTR reference for easy reconciliation.
+        </p>
       </div>
     </div>
   );

@@ -131,6 +131,11 @@ async function runStartupMigrations(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS kiosk_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS kiosk_upi_vpa TEXT NOT NULL DEFAULT '';
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS kiosk_upi_name TEXT NOT NULL DEFAULT '';
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS kiosk_welcome_message TEXT NOT NULL DEFAULT '';
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS kiosk_allowed_test_ids TEXT NOT NULL DEFAULT '[]';
     `);
     logger.info("Startup migrations applied");
   } catch (err) {
