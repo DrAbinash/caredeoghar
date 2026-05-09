@@ -479,17 +479,17 @@ export default function BillingDesk() {
   const [quickPickerSlot, setQuickPickerSlot] = useState<number | null>(null);
   const [quickPickerSearch, setQuickPickerSearch] = useState("");
 
-  // ── Quick Doctor Slots (3 slots stored in localStorage) ────────────
+  // ── Quick Doctor Slots (6 slots stored in localStorage) ────────────
   const [quickDoctorIds, setQuickDoctorIds] = useState<(number | null)[]>(() => {
     try {
       const stored = localStorage.getItem("billingDesk:quickDoctors");
-      const arr = stored ? JSON.parse(stored) : [null, null, null];
+      const arr = stored ? JSON.parse(stored) : [null, null, null, null, null, null];
       const out: (number | null)[] = Array.isArray(arr)
-        ? arr.slice(0, 3).map((v: unknown) => (typeof v === "number" ? v : null))
+        ? arr.slice(0, 6).map((v: unknown) => (typeof v === "number" ? v : null))
         : [];
-      while (out.length < 3) out.push(null);
+      while (out.length < 6) out.push(null);
       return out;
-    } catch { return [null, null, null]; }
+    } catch { return [null, null, null, null, null, null]; }
   });
   const [quickDoctorPickerSlot, setQuickDoctorPickerSlot] = useState<number | null>(null);
   const [quickDoctorPickerSearch, setQuickDoctorPickerSearch] = useState("");
@@ -1077,7 +1077,7 @@ export default function BillingDesk() {
                 <span className="ml-auto text-[10px] font-normal text-muted-foreground">optional</span>
               </div>
               <div className="p-2.5" ref={doctorRef}>
-                {/* Compact row: Walk-in | 3 Quick Doctor slots | Search */}
+                {/* Compact row: Walk-in | 6 Quick Doctor slots | Search */}
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <button
                     type="button"
@@ -1086,7 +1086,7 @@ export default function BillingDesk() {
                   >
                     Walk-in
                   </button>
-                  {/* ── 3 Quick Doctor Slots ── */}
+                  {/* ── 6 Quick Doctor Slots ── */}
                   {quickDoctorIds.map((id, i) => {
                     const doc = id != null ? doctors.find(d => d.id === id) : null;
                     const isActive = doctorMode === "doctor" && doctorId === id && id != null;
