@@ -81,31 +81,37 @@ const rawStaticDir = process.env["SERVE_STATIC_DIR"];
 const staticDir = rawStaticDir ? path.resolve(rawStaticDir) : undefined;
 if (staticDir) {
   const erpDir = path.join(staticDir, "erp");
+  const erpLegacyDir = path.join(staticDir, "web/erp");
   const siteDir = path.join(staticDir, "site");
+  const siteLegacyDir = path.join(staticDir, "web/site");
   const adminDir = path.join(staticDir, "super-admin-portal");
+  const adminLegacyDir = path.join(staticDir, "web/super-admin-portal");
+  const resolvedErpDir = existsSync(erpDir) ? erpDir : (existsSync(erpLegacyDir) ? erpLegacyDir : null);
+  const resolvedSiteDir = existsSync(siteDir) ? siteDir : (existsSync(siteLegacyDir) ? siteLegacyDir : null);
+  const resolvedAdminDir = existsSync(adminDir) ? adminDir : (existsSync(adminLegacyDir) ? adminLegacyDir : null);
 
-  if (!existsSync(erpDir) || !existsSync(adminDir)) {
+  if (!resolvedErpDir || !resolvedAdminDir) {
     logger.warn(
-      { staticDir, erpDir, adminDir },
+      { staticDir, erpDir, erpLegacyDir, adminDir, adminLegacyDir },
       "SERVE_STATIC_DIR is set but expected sub-folders are missing; static serving disabled",
     );
   } else {
-    const hasSite = existsSync(siteDir);
-    logger.info({ erpDir, siteDir, adminDir, hasSite }, "Serving frontends from disk");
+    const hasSite = Boolean(resolvedSiteDir);
+    logger.info({ erpDir: resolvedErpDir, siteDir: resolvedSiteDir, adminDir: resolvedAdminDir, hasSite }, "Serving frontends from disk");
 
     // Super Admin Portal (built with BASE_PATH=/super-admin-portal/)
-    app.use("/super-admin-portal", express.static(adminDir, { index: false, fallthrough: true }));
+    app.use("/super-admin-portal", express.static(resolvedAdminDir, { index: false, fallthrough: true }));
     app.get(/^\/super-admin-portal(\/.*)?$/, (_req: Request, res: Response, next: NextFunction) => {
-      res.sendFile(path.join(adminDir, "index.html"), (err) => {
+      res.sendFile(path.join(resolvedAdminDir, "index.html"), (err) => {
         if (err) next(err);
       });
     });
 
     // Diagnostic ERP — staff app, mounted under /erp (built with BASE_PATH=/erp/).
     // The patient/staff portal lives at /erp/portal as a route inside this SPA.
-    app.use("/erp", express.static(erpDir, { index: false, fallthrough: true }));
+    app.use("/erp", express.static(resolvedErpDir, { index: false, fallthrough: true }));
     app.get(/^\/erp(\/.*)?$/, (_req: Request, res: Response, next: NextFunction) => {
-      res.sendFile(path.join(erpDir, "index.html"), (err) => {
+      res.sendFile(path.join(resolvedErpDir, "index.html"), (err) => {
         if (err) next(err);
       });
     });
@@ -114,11 +120,11 @@ if (staticDir) {
     // Excludes /api/, /erp, /uploads, and /super-admin-portal so those routes
     // are handled by their own handlers above (and not swallowed by the SPA).
     if (hasSite) {
-      app.use(express.static(siteDir, { index: false, fallthrough: true }));
+      app.use(express.static(resolvedSiteDir!, { index: false, fallthrough: true }));
       app.get(
         /^\/(?!api\/|erp\/|erp$|uploads\/|super-admin-portal\/|super-admin-portal$).*/,
         (_req: Request, res: Response, next: NextFunction) => {
-          res.sendFile(path.join(siteDir, "index.html"), (err) => {
+          res.sendFile(path.join(resolvedSiteDir!, "index.html"), (err) => {
             if (err) next(err);
           });
         },
