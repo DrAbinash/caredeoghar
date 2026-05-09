@@ -212,6 +212,8 @@ export default function Dues() {
                 ) : (
                   bills.map((b) => {
                     const dueOverdue = b.dueDate && new Date(b.dueDate) < new Date(today());
+                    const isCancelled = b.status === "cancelled";
+                    const displayBalance = isCancelled ? 0 : b.balanceAmount;
                     return (
                       <tr key={b.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
                         <td className="px-4 py-3 font-mono text-xs font-medium text-primary">{b.billNumber}</td>
@@ -241,8 +243,8 @@ export default function Dues() {
                         </td>
                         <td className="px-4 py-3 text-right font-semibold">{formatCurrency(b.totalAmount)}</td>
                         <td className="px-4 py-3 text-right text-green-600 dark:text-green-400 font-medium">{formatCurrency(b.paidAmount)}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-red-600 dark:text-red-400">{formatCurrency(b.balanceAmount)}</td>
-                        <td className="px-4 py-3"><StatusBadge status={b.status} /></td>
+                        <td className="px-4 py-3 text-right font-semibold text-red-600 dark:text-red-400">{formatCurrency(displayBalance)}</td>
+                        <td className="px-4 py-3">{isCancelled ? <span className="text-xs text-muted-foreground">—</span> : <StatusBadge status={b.status} />}</td>
                         <td className="px-4 py-3">
                           <Link href={`/billing/${b.id}`} className="text-muted-foreground hover:text-foreground inline-flex p-1 rounded hover:bg-muted" title="Open bill">
                             <ChevronRight size={16} />
@@ -259,7 +261,7 @@ export default function Dues() {
                     <td className="px-4 py-3" colSpan={4}>Page Subtotal ({bills.length} of {totalCount})</td>
                     <td className="px-4 py-3 text-right">{formatCurrency(bills.reduce((s, b) => s + b.totalAmount, 0))}</td>
                     <td className="px-4 py-3 text-right text-green-600 dark:text-green-400">{formatCurrency(bills.reduce((s, b) => s + b.paidAmount, 0))}</td>
-                    <td className="px-4 py-3 text-right text-red-600 dark:text-red-400">{formatCurrency(bills.reduce((s, b) => s + b.balanceAmount, 0))}</td>
+                    <td className="px-4 py-3 text-right text-red-600 dark:text-red-400">{formatCurrency(bills.reduce((s, b) => s + (b.status === "cancelled" ? 0 : b.balanceAmount), 0))}</td>
                     <td colSpan={2} />
                   </tr>
                 </tfoot>
