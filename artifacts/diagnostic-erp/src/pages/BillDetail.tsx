@@ -1478,7 +1478,7 @@ function TestsTable({
       return api.post(`/api/bills/${billId}/cancel-test`, {
         orderTestId: cancelTestId,
         reason,
-        cancelledByName: cancelBy,
+        performedBy: cancelBy,
       });
     },
     onSuccess: () => {

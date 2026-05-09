@@ -136,6 +136,18 @@ async function runStartupMigrations(): Promise<void> {
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS kiosk_upi_name TEXT NOT NULL DEFAULT '';
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS kiosk_welcome_message TEXT NOT NULL DEFAULT '';
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS kiosk_allowed_test_ids TEXT NOT NULL DEFAULT '[]';
+      CREATE TABLE IF NOT EXISTS kiosk_payment_sessions (
+        id SERIAL PRIMARY KEY,
+        payment_link_id TEXT NOT NULL UNIQUE,
+        session_ref TEXT NOT NULL,
+        test_ids TEXT NOT NULL,
+        amount_paise INTEGER NOT NULL,
+        patient_name TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        razorpay_payment_id TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 minutes'
+      );
     `);
     logger.info("Startup migrations applied");
   } catch (err) {
