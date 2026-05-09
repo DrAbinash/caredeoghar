@@ -1351,11 +1351,6 @@ export type GetDoctorLedgerDetailParams = {
   to?: string;
 };
 
-export type ExportDoctorLedgerParams = {
-  from?: string;
-  to?: string;
-};
-
 export type DeleteDoctorPayout200 = {
   success: boolean;
 };

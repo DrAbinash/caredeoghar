@@ -21,6 +21,8 @@ import {
   useUpdateCommissionRule,
   useDeleteCommissionRule,
   type CommissionRule,
+  type CommissionRuleType,
+  type CommissionRuleScope,
 } from "@workspace/api-client-react";
 
 const CATEGORIES = ["hematology", "biochemistry", "microbiology", "serology", "radiology", "cardiology", "urine analysis", "other"];

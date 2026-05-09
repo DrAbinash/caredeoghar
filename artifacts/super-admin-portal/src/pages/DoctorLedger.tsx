@@ -25,6 +25,9 @@ import {
   getGetDoctorLedgerDetailQueryKey,
   useCreateDoctorPayout,
   useDeleteDoctorPayout,
+  type DoctorLedgerSummary,
+  type DoctorLedgerDetail,
+  type DoctorLedgerRow,
   type DoctorPayout,
 } from "@workspace/api-client-react";
 
@@ -147,11 +150,11 @@ export default function DoctorLedger({ onBack }: { onBack: () => void }) {
     },
   });
 
-  const filteredRows = useMemo(() => {
+  const filteredRows = useMemo((): DoctorLedgerRow[] => {
     if (!data) return [];
     const term = search.trim().toLowerCase();
     if (!term) return data.rows;
-    return data.rows.filter(r =>
+    return data.rows.filter((r: DoctorLedgerRow) =>
       r.doctorName.toLowerCase().includes(term) ||
       (r.specialization || "").toLowerCase().includes(term),
     );
@@ -183,20 +186,23 @@ export default function DoctorLedger({ onBack }: { onBack: () => void }) {
     deletePayoutMutation.mutate({ id: deletingPayout.id });
   };
 
-  const exportCSV = async () => {
-    if (!detail) return;
+  // CSV export uses a raw fetch instead of a generated hook because the
+  // endpoint returns a binary file (text/csv). A generated query hook would
+  // parse the response as JSON, mangling the file. saAuthHeaders() injects the
+  // USB key + SA token headers that the generated custom-fetch also uses.
+  const exportCSV = async (currentDetail: DoctorLedgerDetail) => {
     try {
       const params = new URLSearchParams();
       if (from) params.set("from", from);
       if (to) params.set("to", to);
-      const url = `/api/doctor-ledger/${detail.doctor.id}/export?${params.toString()}`;
+      const url = `/api/doctor-ledger/${currentDetail.doctor.id}/export?${params.toString()}`;
       const res = await fetch(url, { headers: saAuthHeaders() });
       if (!res.ok) throw new Error(`Export failed: ${res.status} ${res.statusText}`);
       const blob = await res.blob();
       const dlUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = dlUrl;
-      a.download = `doctor_ledger_${detail.doctor.name.replace(/[^a-z0-9]+/gi, "_")}_${from || "all"}_${to || "all"}.csv`;
+      a.download = `doctor_ledger_${currentDetail.doctor.name.replace(/[^a-z0-9]+/gi, "_")}_${from || "all"}_${to || "all"}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -368,7 +374,7 @@ export default function DoctorLedger({ onBack }: { onBack: () => void }) {
                 <Button onClick={() => setPayDialogOpen(true)}>
                   <Plus size={14} className="mr-1" /> Record Payment
                 </Button>
-                <Button variant="outline" onClick={exportCSV}>
+                <Button variant="outline" onClick={() => detail && exportCSV(detail)}>
                   <Download size={14} className="mr-1" /> Export CSV
                 </Button>
                 <div className="flex-1" />

@@ -94,7 +94,6 @@ export * from "./doctorList";
 export * from "./doctorPayout";
 export * from "./expense";
 export * from "./expenseSummaryRow";
-export * from "./exportDoctorLedgerParams";
 export * from "./getDetailedCommissionReportParams";
 export * from "./getDoctorLedgerDetailParams";
 export * from "./getDoctorLedgerSummaryParams";

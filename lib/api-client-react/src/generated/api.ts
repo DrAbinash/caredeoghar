@@ -78,7 +78,6 @@ import type {
   DoctorPayout,
   Expense,
   ExpenseSummaryRow,
-  ExportDoctorLedgerParams,
   GetDetailedCommissionReportParams,
   GetDoctorLedgerDetailParams,
   GetDoctorLedgerSummaryParams,
@@ -7501,123 +7500,6 @@ export function useGetDoctorLedgerDetail<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetDoctorLedgerDetailQueryOptions(
-    doctorId,
-    params,
-    options,
-  );
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-/**
- * @summary Export doctor ledger as CSV
- */
-export const getExportDoctorLedgerUrl = (
-  doctorId: number,
-  params?: ExportDoctorLedgerParams,
-) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? "null" : value.toString());
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0
-    ? `/api/doctor-ledger/${doctorId}/export?${stringifiedParams}`
-    : `/api/doctor-ledger/${doctorId}/export`;
-};
-
-export const exportDoctorLedger = async (
-  doctorId: number,
-  params?: ExportDoctorLedgerParams,
-  options?: RequestInit,
-): Promise<Blob> => {
-  return customFetch<Blob>(getExportDoctorLedgerUrl(doctorId, params), {
-    ...options,
-    method: "GET",
-  });
-};
-
-export const getExportDoctorLedgerQueryKey = (
-  doctorId: number,
-  params?: ExportDoctorLedgerParams,
-) => {
-  return [
-    `/api/doctor-ledger/${doctorId}/export`,
-    ...(params ? [params] : []),
-  ] as const;
-};
-
-export const getExportDoctorLedgerQueryOptions = <
-  TData = Awaited<ReturnType<typeof exportDoctorLedger>>,
-  TError = ErrorType<unknown>,
->(
-  doctorId: number,
-  params?: ExportDoctorLedgerParams,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof exportDoctorLedger>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ?? getExportDoctorLedgerQueryKey(doctorId, params);
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof exportDoctorLedger>>
-  > = ({ signal }) =>
-    exportDoctorLedger(doctorId, params, { signal, ...requestOptions });
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: !!doctorId,
-    ...queryOptions,
-  } as UseQueryOptions<
-    Awaited<ReturnType<typeof exportDoctorLedger>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type ExportDoctorLedgerQueryResult = NonNullable<
-  Awaited<ReturnType<typeof exportDoctorLedger>>
->;
-export type ExportDoctorLedgerQueryError = ErrorType<unknown>;
-
-/**
- * @summary Export doctor ledger as CSV
- */
-
-export function useExportDoctorLedger<
-  TData = Awaited<ReturnType<typeof exportDoctorLedger>>,
-  TError = ErrorType<unknown>,
->(
-  doctorId: number,
-  params?: ExportDoctorLedgerParams,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof exportDoctorLedger>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getExportDoctorLedgerQueryOptions(
     doctorId,
     params,
     options,

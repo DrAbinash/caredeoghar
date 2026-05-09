@@ -2959,18 +2959,6 @@ export const GetDoctorLedgerDetailResponse = zod.object({
 });
 
 /**
- * @summary Export doctor ledger as CSV
- */
-export const ExportDoctorLedgerParams = zod.object({
-  doctorId: zod.coerce.number(),
-});
-
-export const ExportDoctorLedgerQueryParams = zod.object({
-  from: zod.coerce.string().optional(),
-  to: zod.coerce.string().optional(),
-});
-
-/**
  * @summary Record a payout to a doctor
  */
 export const CreateDoctorPayoutParams = zod.object({
