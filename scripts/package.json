@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "generate:features": "tsx ./src/generate-features.ts",
     "hello": "tsx ./src/hello.ts",
     "trigger:cron": "tsx ./src/trigger-cron.ts",
     "test:preinstall-guard": "node ./src/test-preinstall-guard.cjs",
