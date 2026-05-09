@@ -117,6 +117,42 @@ Provide insights as a numbered list. Be specific, practical, and mention specifi
 }
 
 // ---------------------------------------------------------------------------
+// Patient message prompt builder
+// ---------------------------------------------------------------------------
+
+export type PatientMessageType = "followup" | "results" | "payment";
+
+export interface PatientMessagePatient {
+  firstName: string;
+  lastName: string;
+}
+
+const PATIENT_MESSAGE_PURPOSES: Record<PatientMessageType, string> = {
+  followup: "a follow-up reminder to come in for their scheduled tests",
+  results: "a notification that their test results are ready for collection",
+  payment: "a gentle payment reminder for outstanding dues",
+};
+
+/**
+ * Build the prompt sent to Gemini for drafting a patient SMS/WhatsApp message.
+ * Separated from the route handler so it can be unit-tested independently.
+ */
+export function buildPatientMessagePrompt(
+  patient: PatientMessagePatient,
+  messageType: PatientMessageType
+): string {
+  const purpose = PATIENT_MESSAGE_PURPOSES[messageType] ?? PATIENT_MESSAGE_PURPOSES.followup;
+  return `Draft a short, professional and warm SMS/WhatsApp message (max 60 words) for a diagnostic center to send a patient.
+
+Patient Name: ${patient.firstName} ${patient.lastName}
+Center Name: DiagnoCenter
+
+Message purpose: ${purpose}
+
+Keep it brief, friendly, and professional. Include the center name. Do not include any placeholder brackets.`;
+}
+
+// ---------------------------------------------------------------------------
 // High-level generators — combine prompt building + Gemini call
 // ---------------------------------------------------------------------------
 
@@ -145,4 +181,17 @@ export async function generateBillingInsights(
 ): Promise<string> {
   const prompt = buildBillingInsightsPrompt(metrics);
   return geminiGenerate(prompt, options);
+}
+
+/**
+ * Draft a short patient SMS/WhatsApp message via Gemini.
+ * Caps output at 200 tokens to match the route's usage and keep messages brief.
+ */
+export async function generatePatientMessage(
+  patient: PatientMessagePatient,
+  messageType: PatientMessageType,
+  options?: GeminiGenerateOptions
+): Promise<string> {
+  const prompt = buildPatientMessagePrompt(patient, messageType);
+  return geminiGenerate(prompt, { maxTokens: 200, ...options });
 }

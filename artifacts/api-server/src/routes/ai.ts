@@ -8,6 +8,8 @@ import {
   geminiGenerate,
   buildClinicalNotePrompt,
   buildBillingInsightsPrompt,
+  buildPatientMessagePrompt,
+  type PatientMessageType,
 } from "@workspace/integrations-gemini-ai";
 
 const router = Router();
@@ -161,21 +163,10 @@ router.post("/patient-message", requireStaffPermission("/patients"), async (req,
   const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, patientId));
   if (!patient) { res.status(404).json({ error: "Patient not found" }); return; }
 
-  const typeMessages: Record<string, string> = {
-    followup: "a follow-up reminder to come in for their scheduled tests",
-    results: "a notification that their test results are ready for collection",
-    payment: "a gentle payment reminder for outstanding dues",
-  };
-  const msgType = typeMessages[type] ?? typeMessages.followup;
-
-  const prompt = `Draft a short, professional and warm SMS/WhatsApp message (max 60 words) for a diagnostic center to send a patient.
-
-Patient Name: ${patient.firstName} ${patient.lastName}
-Center Name: DiagnoCenter
-
-Message purpose: ${msgType}
-
-Keep it brief, friendly, and professional. Include the center name. Do not include any placeholder brackets.`;
+  const prompt = buildPatientMessagePrompt(
+    { firstName: patient.firstName, lastName: patient.lastName },
+    (type as PatientMessageType) ?? "followup"
+  );
 
   try {
     const message = await geminiGenerate(prompt, { maxTokens: 200 });

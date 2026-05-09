@@ -3,10 +3,14 @@ import {
   geminiGenerate,
   buildClinicalNotePrompt,
   buildBillingInsightsPrompt,
+  buildPatientMessagePrompt,
   generateClinicalNote,
   generateBillingInsights,
+  generatePatientMessage,
   type ClinicalNotePatient,
   type BillingInsightsMetrics,
+  type PatientMessagePatient,
+  type PatientMessageType,
 } from "./helpers.js";
 
 // ---------------------------------------------------------------------------
@@ -354,6 +358,175 @@ describe("generateClinicalNote", () => {
         apiKey: "k",
       })
     ).rejects.toThrow("Gemini API error: 503");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildPatientMessagePrompt
+// ---------------------------------------------------------------------------
+
+const SAMPLE_MSG_PATIENT: PatientMessagePatient = {
+  firstName: "Priya",
+  lastName: "Mehta",
+};
+
+describe("buildPatientMessagePrompt", () => {
+  it("includes the patient's full name in the prompt", () => {
+    const prompt = buildPatientMessagePrompt(SAMPLE_MSG_PATIENT, "followup");
+
+    expect(prompt).toContain("Priya Mehta");
+  });
+
+  it("includes the center name DiagnoCenter", () => {
+    const prompt = buildPatientMessagePrompt(SAMPLE_MSG_PATIENT, "followup");
+
+    expect(prompt).toContain("DiagnoCenter");
+  });
+
+  it("includes follow-up purpose text for 'followup' type", () => {
+    const prompt = buildPatientMessagePrompt(SAMPLE_MSG_PATIENT, "followup");
+
+    expect(prompt).toContain("follow-up");
+    expect(prompt).toContain("scheduled tests");
+  });
+
+  it("includes results-ready purpose text for 'results' type", () => {
+    const prompt = buildPatientMessagePrompt(SAMPLE_MSG_PATIENT, "results");
+
+    expect(prompt).toContain("test results are ready");
+  });
+
+  it("includes payment-reminder purpose text for 'payment' type", () => {
+    const prompt = buildPatientMessagePrompt(SAMPLE_MSG_PATIENT, "payment");
+
+    expect(prompt).toContain("payment reminder");
+    expect(prompt).toContain("outstanding dues");
+  });
+
+  it("instructs the model to keep the message under 60 words", () => {
+    const prompt = buildPatientMessagePrompt(SAMPLE_MSG_PATIENT, "followup");
+
+    expect(prompt).toContain("60 words");
+  });
+
+  it("instructs the model not to use placeholder brackets", () => {
+    const prompt = buildPatientMessagePrompt(SAMPLE_MSG_PATIENT, "payment");
+
+    expect(prompt.toLowerCase()).toContain("placeholder");
+  });
+
+  it("produces different prompts for different message types", () => {
+    const followupPrompt = buildPatientMessagePrompt(SAMPLE_MSG_PATIENT, "followup");
+    const resultsPrompt  = buildPatientMessagePrompt(SAMPLE_MSG_PATIENT, "results");
+    const paymentPrompt  = buildPatientMessagePrompt(SAMPLE_MSG_PATIENT, "payment");
+
+    expect(followupPrompt).not.toBe(resultsPrompt);
+    expect(resultsPrompt).not.toBe(paymentPrompt);
+    expect(followupPrompt).not.toBe(paymentPrompt);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// generatePatientMessage (end-to-end: prompt build + geminiGenerate)
+// ---------------------------------------------------------------------------
+
+describe("generatePatientMessage", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("returns the drafted message text from a valid AI response", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: "Dear Priya, your results are ready at DiagnoCenter." }] } }],
+      }),
+    } as unknown as Response);
+
+    const result = await generatePatientMessage(SAMPLE_MSG_PATIENT, "results", {
+      baseUrl: "https://api.example.com",
+      apiKey: "test-key",
+    });
+
+    expect(result).toBe("Dear Priya, your results are ready at DiagnoCenter.");
+
+    const [, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string);
+    expect(body.contents[0].parts[0].text).toContain("Priya Mehta");
+    expect(body.contents[0].parts[0].text).toContain("DiagnoCenter");
+  });
+
+  it("sends the request with maxTokens capped at 200 by default", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: "Hi Priya!" }] } }],
+      }),
+    } as unknown as Response);
+
+    await generatePatientMessage(SAMPLE_MSG_PATIENT, "followup", {
+      baseUrl: "https://api.example.com",
+      apiKey: "k",
+    });
+
+    const [, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string);
+    expect(body.generationConfig.maxOutputTokens).toBe(200);
+  });
+
+  it("includes the correct message purpose in the prompt for 'payment' type", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: "Payment reminder sent." }] } }],
+      }),
+    } as unknown as Response);
+
+    await generatePatientMessage(SAMPLE_MSG_PATIENT, "payment", {
+      baseUrl: "https://api.example.com",
+      apiKey: "k",
+    });
+
+    const [, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string);
+    expect(body.contents[0].parts[0].text).toContain("outstanding dues");
+  });
+
+  it("returns empty string when the model produces no output", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ candidates: [] }),
+    } as unknown as Response);
+
+    const result = await generatePatientMessage(SAMPLE_MSG_PATIENT, "followup", {
+      baseUrl: "https://api.example.com",
+      apiKey: "k",
+    });
+
+    expect(result).toBe("");
+  });
+
+  it("propagates errors from the AI API", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+      text: async () => "Rate limit exceeded",
+    } as unknown as Response);
+
+    await expect(
+      generatePatientMessage(SAMPLE_MSG_PATIENT, "results", {
+        baseUrl: "https://api.example.com",
+        apiKey: "k",
+      })
+    ).rejects.toThrow("Gemini API error: 429");
   });
 });
 
