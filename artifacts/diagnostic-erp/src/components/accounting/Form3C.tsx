@@ -33,8 +33,8 @@ function fmtMoney(n: number): string {
 }
 
 /**
- * Form 3C — Form of daily case register
- * (See rule 6F(3); maintained by practitioners of any system of medicine.)
+ * FORM 25 (Income-tax Act, 2025) — Form of daily case register
+ * (Maintained by practitioners of any system of medicine.)
  *
  * Auto-fetches every paid / partial bill in the selected date range and
  * renders the regulatory 6-column register. Printable on A4.
@@ -151,8 +151,7 @@ export default function Form3C() {
         style={{ maxWidth: "210mm", padding: "12mm 10mm", fontFamily: "'Times New Roman', Times, serif" }}
       >
         <div style={{ textAlign: "center", marginBottom: 8 }}>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>FORM NO. 3C</div>
-          <div style={{ fontSize: 11, fontStyle: "italic" }}>[See rule 6F(3)]</div>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>FORM 25 (Income-tax Act, 2025)</div>
           <div style={{ fontSize: 14, fontWeight: 700, marginTop: 2 }}>Form of daily case register</div>
           <div style={{ fontSize: 9, marginTop: 4 }}>
             [TO BE MAINTAINED BY PRACTITIONERS OF ANY SYSTEM OF MEDICINE, I.E., PHYSICIANS, SURGEONS,
