@@ -804,13 +804,13 @@ export default function BillDetail({ id }: { id: number }) {
           const ageYrs = bill.patient.dateOfBirth
             ? Math.floor((Date.now() - new Date(bill.patient.dateOfBirth).getTime()) / (365.25 * 24 * 3600 * 1000))
             : null;
-          const infoRows = [
+          const rightRows = [
             bill.patient.phone ? `PH ${bill.patient.phone}` : null,
             `ID ${bill.patient.patientId}`,
           ].filter(Boolean);
           const ageSex = [
-            bill.patient.gender ? `SEX ${bill.patient.gender}` : null,
             ageYrs && ageYrs > 0 ? `AGE ${ageYrs} YRS` : null,
+            bill.patient.gender ? `SEX ${bill.patient.gender}` : null,
           ].filter(Boolean).join("  ·  ");
           const ref = bill.order?.doctor
             ? `Dr. ${bill.order.doctor.name}${bill.order.doctor.specialization ? ` (${bill.order.doctor.specialization})` : ""}`
@@ -818,14 +818,16 @@ export default function BillDetail({ id }: { id: number }) {
           return (
             <div style={{ marginBottom: "10px", padding: "6px 8px", borderTop: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0", lineHeight: 1.25 }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: "18px", fontWeight: 900, color: "#111", lineHeight: 1.05 }}>
+                <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                  <div style={{ fontSize: "20px", fontWeight: 900, color: "#111", lineHeight: 1.02, letterSpacing: "-0.2px" }}>
                     {bill.patient.firstName} {bill.patient.lastName}
                   </div>
+                  <div style={{ fontSize: "15px", fontWeight: 800, color: "#111", lineHeight: 1.05, marginTop: "2px" }}>
+                    {ageSex}
+                  </div>
                 </div>
-                <div style={{ textAlign: "right", fontSize: "12.5px", color: "#111", fontWeight: 800, lineHeight: 1.3 }}>
-                  {ageSex && <div>{ageSex}</div>}
-                  {infoRows.map((row) => <div key={row}>{row}</div>)}
+                <div style={{ textAlign: "right", fontSize: "12.5px", color: "#111", fontWeight: 700, lineHeight: 1.3 }}>
+                  {rightRows.map((row) => <div key={row}>{row}</div>)}
                 </div>
               </div>
               <div style={{ fontSize: "11px", color: "#555", marginTop: "2px" }}>
