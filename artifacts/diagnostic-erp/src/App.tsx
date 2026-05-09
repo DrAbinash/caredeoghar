@@ -60,7 +60,10 @@ const queryClient = new QueryClient({
     queries: {
       retry: 1,
       staleTime: 5 * 60_000,
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+      refetchInterval: 60_000,
+      refetchIntervalInBackground: false,
     },
   },
 });
