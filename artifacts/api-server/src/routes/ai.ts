@@ -4,6 +4,11 @@ import { patientsTable, ordersTable } from "@workspace/db";
 import { orderTestsTable, testsTable, billsTable, paymentsTable } from "@workspace/db";
 import { eq, desc, gte, lte, and } from "drizzle-orm";
 import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
+import {
+  geminiGenerate,
+  buildClinicalNotePrompt,
+  buildBillingInsightsPrompt,
+} from "@workspace/integrations-gemini-ai";
 
 const router = Router();
 
@@ -18,26 +23,6 @@ router.use(requireStaffAuth);
 const BASE_URL = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com";
 const API_KEY = process.env.AI_INTEGRATIONS_GEMINI_API_KEY ?? "";
 const MODEL = "gemini-2.5-flash";
-
-async function geminiGenerate(prompt: string, maxTokens = 512): Promise<string> {
-  const url = `${BASE_URL}/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: maxTokens },
-    }),
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Gemini API error: ${res.status} ${err}`);
-  }
-  const data = await res.json() as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
-  };
-  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
-}
 
 // Multimodal generate: sends an inline audio part for transcription. The Gemini
 // AI-integrations proxy supports inline data up to ~8 MB — callers must chunk
@@ -103,18 +88,17 @@ router.post("/clinical-note", requireStaffPermission("/patients"), async (req, r
     .map(o => `${o.testCode} (${o.testName}) — ${o.category} — Status: ${o.order.status}`)
     .join("\n");
 
-  const prompt = `You are a clinical documentation assistant for a diagnostic center.
-
-Patient: ${patient.firstName} ${patient.lastName}
-ID: ${patient.patientId}
-Gender: ${patient.gender}
-Date of Birth: ${patient.dateOfBirth}
-Blood Group: ${(patient as Record<string, unknown>).bloodGroup ?? "Not specified"}
-
-Recent Diagnostic Tests:
-${testHistory || "No tests recorded yet"}
-
-Please generate a concise professional clinical summary note (3-4 sentences) suitable for a referring physician. Include patient demographics, recent test profile, and any notable patterns. Use formal medical language.`;
+  const prompt = buildClinicalNotePrompt(
+    {
+      firstName: patient.firstName,
+      lastName: patient.lastName,
+      patientId: patient.patientId,
+      gender: patient.gender ?? "",
+      dateOfBirth: patient.dateOfBirth ?? "",
+      bloodGroup: (patient as Record<string, unknown>).bloodGroup as string | null | undefined,
+    },
+    testHistory,
+  );
 
   try {
     const note = await geminiGenerate(prompt);
@@ -146,20 +130,18 @@ router.post("/billing-insights", requireStaffPermission("/reports"), async (req,
   const collectionRate = bills.length > 0 ? ((paidCount / bills.length) * 100).toFixed(1) : "0";
   const avgBill = bills.length > 0 ? (bills.reduce((s, b) => s + Number(b.totalAmount), 0) / bills.length).toFixed(0) : "0";
 
-  const prompt = `You are a healthcare financial analyst. Analyze this diagnostic center billing data and provide 3-5 actionable business insights.
-
-Period: ${fromDate.toLocaleDateString("en-IN")} to ${toDate.toLocaleDateString("en-IN")}
-
-Key Metrics:
-- Total Bills: ${bills.length}
-- Total Revenue Collected: ₹${totalRevenue.toLocaleString("en-IN")}
-- Paid Bills: ${paidCount} (${collectionRate}% collection rate)
-- Pending Bills: ${pendingCount}
-- Partial Payments: ${partialCount}
-- Total Discounts Given: ₹${totalDiscount.toLocaleString("en-IN")}
-- Average Bill Amount: ₹${avgBill}
-
-Provide insights as a numbered list. Be specific, practical, and mention specific numbers where relevant. Focus on collection efficiency, revenue optimization, and discount management. Keep each insight to 1-2 sentences.`;
+  const prompt = buildBillingInsightsPrompt({
+    fromLabel: fromDate.toLocaleDateString("en-IN"),
+    toLabel: toDate.toLocaleDateString("en-IN"),
+    totalBills: bills.length,
+    totalRevenue,
+    paidCount,
+    pendingCount,
+    partialCount,
+    totalDiscount,
+    collectionRate,
+    avgBill,
+  });
 
   try {
     const insights = await geminiGenerate(prompt);
@@ -196,7 +178,7 @@ Message purpose: ${msgType}
 Keep it brief, friendly, and professional. Include the center name. Do not include any placeholder brackets.`;
 
   try {
-    const message = await geminiGenerate(prompt, 200);
+    const message = await geminiGenerate(prompt, { maxTokens: 200 });
     res.json({ message });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -235,7 +217,7 @@ Write a professional FINDINGS section organised by anatomical region in short cl
 - Output only the findings narrative, ready to paste into the report.`;
 
   try {
-    const findings = await geminiGenerate(prompt, 8192);
+    const findings = await geminiGenerate(prompt, { maxTokens: 8192 });
     res.json({ findings });
   } catch (err: unknown) {
     req.log?.error({ err }, "ai radiology-findings failed");
@@ -264,7 +246,7 @@ Rules:
 - Suggest follow-up imaging or clinical correlation only if findings warrant it.
 - Output only the numbered impression list. No heading, no preamble, no disclaimer.`;
   try {
-    const impression = await geminiGenerate(prompt, 1024);
+    const impression = await geminiGenerate(prompt, { maxTokens: 1024 });
     res.json({ impression });
   } catch (err: unknown) {
     req.log?.error({ err }, "ai radiology-impression failed");
