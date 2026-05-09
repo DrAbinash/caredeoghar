@@ -199,6 +199,9 @@ export default function Dashboard() {
   const overdueAlerts = (stats as any)?.overdueAlerts ?? [];
   const totalBills = (stats as any)?.totalBills ?? 0;
   const pendingReports = (stats as any)?.pendingReports ?? 0;
+  const todayBillCount = (stats as any)?.todayBillCount ?? 0;
+  const allPendingDues = (stats as any)?.pendingPayments ?? 0;
+  const todayPendingDues = (stats as any)?.todayPendingPayments ?? 0;
 
   return (
     <div className="pb-10">
@@ -219,7 +222,7 @@ export default function Dashboard() {
             icon={FileText}
             label="Total Bills"
             value={totalBills}
-            sub={`${(stats as any)?.todayBillCount ?? "—"} today`}
+            sub={`${todayBillCount} today · ${totalBills} all time`}
             iconBg="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
           />
           {/* Module B: Pending Dues tile pulses red whenever outstanding balance > 0
@@ -229,15 +232,15 @@ export default function Dashboard() {
           <KpiCard
             icon={AlertCircle}
             label="Pending Dues"
-            value={fmt(stats?.pendingPayments ?? 0)}
-            sub={Number(stats?.pendingPayments ?? 0) > 0 ? "Action required — collect today" : "All clear ✓"}
+            value={fmt(allPendingDues)}
+            sub={`${fmt(todayPendingDues)} today · ${fmt(allPendingDues)} all time`}
             iconBg={
-              Number(stats?.pendingPayments ?? 0) > 0
+              Number(allPendingDues) > 0
                 ? "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400 animate-pulse"
                 : "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"
             }
             cardClass={
-              Number(stats?.pendingPayments ?? 0) > 0
+              Number(allPendingDues) > 0
                 ? "ring-2 ring-red-300 dark:ring-red-900/60 shadow-red-200/40 dark:shadow-red-900/30"
                 : ""
             }
