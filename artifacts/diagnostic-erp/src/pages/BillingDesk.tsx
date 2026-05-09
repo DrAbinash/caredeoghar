@@ -1077,7 +1077,7 @@ export default function BillingDesk() {
                 <span className="ml-auto text-[10px] font-normal text-muted-foreground">optional</span>
               </div>
               <div className="p-2.5" ref={doctorRef}>
-                {/* Compact row: Walk-in | 6 Quick Doctor slots | Search */}
+                {/* Walk-in + Search row */}
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <button
                     type="button"
@@ -1086,40 +1086,6 @@ export default function BillingDesk() {
                   >
                     Walk-in
                   </button>
-                  {/* ── 6 Quick Doctor Slots ── */}
-                  {quickDoctorIds.map((id, i) => {
-                    const doc = id != null ? doctors.find(d => d.id === id) : null;
-                    const isActive = doctorMode === "doctor" && doctorId === id && id != null;
-                    return (
-                      <div key={i} className="relative group flex-shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (id == null) { setQuickDoctorPickerSlot(i); setQuickDoctorPickerSearch(""); return; }
-                            setDoctorMode("doctor"); setDoctorId(id); setDoctorSearch(""); setDoctorSearchOpen(false);
-                          }}
-                          title={doc ? `Dr. ${doc.name} · ${doc.specialization}` : `Assign quick doctor slot ${i + 1}`}
-                          className={`px-2 py-1 rounded-md text-[11px] border transition-colors max-w-[80px] truncate ${
-                            isActive
-                              ? "border-primary bg-primary/10 text-primary font-semibold"
-                              : doc
-                              ? "border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-900 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-100"
-                              : "border-dashed border-card-border bg-muted/10 text-muted-foreground hover:bg-muted/40"
-                          }`}
-                        >
-                          {doc ? `Dr. ${doc.name.split(" ")[0]}` : <span className="text-[9px] opacity-60">+Dr {i + 1}</span>}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); setQuickDoctorPickerSlot(i); setQuickDoctorPickerSearch(""); }}
-                          className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-card border border-card-border text-muted-foreground hover:text-foreground hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-sm"
-                          title="Customize this slot"
-                        >
-                          <Pencil size={8} />
-                        </button>
-                      </div>
-                    );
-                  })}
                   <button
                     type="button"
                     onClick={() => { setDoctorMode("doctor"); if (!doctorId) setDoctorSearchOpen((v) => !v); }}
@@ -1137,6 +1103,52 @@ export default function BillingDesk() {
                       <X size={12} />
                     </button>
                   )}
+                </div>
+                {/* ── 6 Quick Doctor Slots (grid matching quick test style) ── */}
+                <div className="mt-1.5 grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                  {quickDoctorIds.map((id, i) => {
+                    const doc = id != null ? doctors.find(d => d.id === id) : null;
+                    const isActive = doctorMode === "doctor" && doctorId === id && id != null;
+                    return (
+                      <div key={i} className="relative group">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (id == null) { setQuickDoctorPickerSlot(i); setQuickDoctorPickerSearch(""); return; }
+                            setDoctorMode("doctor"); setDoctorId(id); setDoctorSearch(""); setDoctorSearchOpen(false);
+                          }}
+                          title={doc ? `${doc.name} · ${doc.specialization}` : `Assign quick doctor slot ${i + 1}`}
+                          className={`w-full h-12 rounded-md border text-[10px] leading-tight px-1 py-1 flex flex-col items-center justify-center text-center transition-colors overflow-hidden ${
+                            isActive
+                              ? "border-primary bg-primary/10 text-primary"
+                              : doc
+                              ? "border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-900 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-100"
+                              : "border-dashed border-card-border bg-muted/20 text-muted-foreground hover:bg-muted/40"
+                          }`}
+                        >
+                          {doc ? (
+                            <>
+                              <span className="font-semibold w-full truncate leading-tight">{doc.name.split(" ")[0]}</span>
+                              <span className="text-[9px] opacity-70 w-full truncate">{doc.specialization}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Plus size={12} />
+                              <span className="opacity-70">Dr {i + 1}</span>
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setQuickDoctorPickerSlot(i); setQuickDoctorPickerSearch(""); }}
+                          className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-card border border-card-border text-muted-foreground hover:text-foreground hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-sm"
+                          title="Customize this slot"
+                        >
+                          <Pencil size={8} />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
                 {/* Selected doctor info line */}
                 {doctorMode === "doctor" && doctorId && (() => {
