@@ -90,7 +90,7 @@ export default function BillDetail({ id }: { id: number }) {
   const [reprintOpen, setReprintOpen] = useState(false);
   const [refundOpen, setRefundOpen] = useState(false);
   const [refundTab, setRefundTab] = useState<"cancel" | "refund" | "cancel-refund">("cancel");
-  const [reprintBy, setReprintBy] = useState<string>(() => localStorage.getItem("diagnosticErp:lastReprintBy") || "");
+  const [reprintBy] = useState<string>(() => readStaffSession()?.user.name || localStorage.getItem("diagnosticErp:lastReprintBy") || "");
   const [reprintReason, setReprintReason] = useState<string>("");
   const [isReprint, setIsReprint] = useState(false);
   const [paperSize, setPaperSize] = useState<"A4" | "A5">(() => (localStorage.getItem("diagnosticErp:billPaperSize") as "A4" | "A5") || "A4");
@@ -1397,7 +1397,7 @@ export default function BillDetail({ id }: { id: number }) {
               </div>
               <div>
                 <Label>Refunded By <span className="text-red-500">*</span></Label>
-                <Input {...regRefund("performedBy", { required: true })} className="mt-1" placeholder="Your name" />
+                <Input value={reprintBy} readOnly tabIndex={-1} className="mt-1 bg-muted/50" />
               </div>
               {refundBill.error && (
                 <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg p-2.5 text-sm text-red-700 dark:text-red-300">
@@ -1433,7 +1433,7 @@ export default function BillDetail({ id }: { id: number }) {
               </div>
               <div>
                 <Label>Cancelled By <span className="text-red-500">*</span></Label>
-                <Input {...regCancel("performedBy", { required: true })} className="mt-1" placeholder="Your name" />
+                <Input value={reprintBy} readOnly tabIndex={-1} className="mt-1 bg-muted/50" />
               </div>
               {cancelBill.error && (
                 <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg p-2.5 text-sm text-red-700 dark:text-red-300">
