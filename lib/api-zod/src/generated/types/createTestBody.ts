@@ -5,6 +5,7 @@
  * Diagnostic Center Billing ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { CreateTestBodyTestType } from "./createTestBodyTestType";
 
 export interface CreateTestBody {
   code: string;
@@ -14,4 +15,6 @@ export interface CreateTestBody {
   duration: string;
   description?: string | null;
   isActive?: boolean;
+  testType?: CreateTestBodyTestType;
+  outsourcedLabId?: number | null;
 }

@@ -181,11 +181,17 @@ export const GetPatientHistoryResponse = zod.object({
             duration: zod.string(),
             description: zod.string().nullish(),
             isActive: zod.boolean(),
+            testType: zod.enum(["inhouse", "outsourced"]).nullish(),
+            outsourcedLabId: zod.number().nullish(),
             createdAt: zod.string(),
           }),
           price: zod.number(),
           result: zod.string().nullish(),
           resultStatus: zod.string().nullish(),
+          status: zod.enum(["active", "cancelled"]).nullish(),
+          cancelledByName: zod.string().nullish(),
+          cancelledAt: zod.string().nullish(),
+          cancellationReason: zod.string().nullish(),
         }),
       ),
       totalAmount: zod.number(),
@@ -219,6 +225,8 @@ export const ListTestsResponse = zod.object({
       duration: zod.string(),
       description: zod.string().nullish(),
       isActive: zod.boolean(),
+      testType: zod.enum(["inhouse", "outsourced"]).nullish(),
+      outsourcedLabId: zod.number().nullish(),
       createdAt: zod.string(),
     }),
   ),
@@ -236,6 +244,8 @@ export const CreateTestBody = zod.object({
   duration: zod.string(),
   description: zod.string().nullish(),
   isActive: zod.boolean().optional(),
+  testType: zod.enum(["inhouse", "outsourced"]).nullish(),
+  outsourcedLabId: zod.number().nullish(),
 });
 
 /**
@@ -254,6 +264,8 @@ export const GetTestResponse = zod.object({
   duration: zod.string(),
   description: zod.string().nullish(),
   isActive: zod.boolean(),
+  testType: zod.enum(["inhouse", "outsourced"]).nullish(),
+  outsourcedLabId: zod.number().nullish(),
   createdAt: zod.string(),
 });
 
@@ -272,6 +284,8 @@ export const UpdateTestBody = zod.object({
   duration: zod.string(),
   description: zod.string().nullish(),
   isActive: zod.boolean().optional(),
+  testType: zod.enum(["inhouse", "outsourced"]).nullish(),
+  outsourcedLabId: zod.number().nullish(),
 });
 
 export const UpdateTestResponse = zod.object({
@@ -283,7 +297,107 @@ export const UpdateTestResponse = zod.object({
   duration: zod.string(),
   description: zod.string().nullish(),
   isActive: zod.boolean(),
+  testType: zod.enum(["inhouse", "outsourced"]).nullish(),
+  outsourcedLabId: zod.number().nullish(),
   createdAt: zod.string(),
+});
+
+/**
+ * @summary List outsourced labs
+ */
+export const ListOutsourcedLabsResponseItem = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  contactPerson: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  email: zod.string().nullish(),
+  address: zod.string().nullish(),
+  gstin: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  isActive: zod.boolean(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+export const ListOutsourcedLabsResponse = zod.array(
+  ListOutsourcedLabsResponseItem,
+);
+
+/**
+ * @summary Create a new outsourced lab
+ */
+export const CreateOutsourcedLabBody = zod.object({
+  name: zod.string(),
+  contactPerson: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  email: zod.string().nullish(),
+  address: zod.string().nullish(),
+  gstin: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  isActive: zod.boolean().optional(),
+});
+
+/**
+ * @summary Get outsourced lab by ID
+ */
+export const GetOutsourcedLabParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetOutsourcedLabResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  contactPerson: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  email: zod.string().nullish(),
+  address: zod.string().nullish(),
+  gstin: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  isActive: zod.boolean(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary Update an outsourced lab
+ */
+export const UpdateOutsourcedLabParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateOutsourcedLabBody = zod.object({
+  name: zod.string(),
+  contactPerson: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  email: zod.string().nullish(),
+  address: zod.string().nullish(),
+  gstin: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  isActive: zod.boolean().optional(),
+});
+
+export const UpdateOutsourcedLabResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  contactPerson: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  email: zod.string().nullish(),
+  address: zod.string().nullish(),
+  gstin: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  isActive: zod.boolean(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary Delete an outsourced lab
+ */
+export const DeleteOutsourcedLabParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteOutsourcedLabResponse = zod.object({
+  success: zod.boolean(),
 });
 
 /**
@@ -378,11 +492,17 @@ export const ListOrdersResponse = zod.object({
             duration: zod.string(),
             description: zod.string().nullish(),
             isActive: zod.boolean(),
+            testType: zod.enum(["inhouse", "outsourced"]).nullish(),
+            outsourcedLabId: zod.number().nullish(),
             createdAt: zod.string(),
           }),
           price: zod.number(),
           result: zod.string().nullish(),
           resultStatus: zod.string().nullish(),
+          status: zod.enum(["active", "cancelled"]).nullish(),
+          cancelledByName: zod.string().nullish(),
+          cancelledAt: zod.string().nullish(),
+          cancellationReason: zod.string().nullish(),
         }),
       ),
       totalAmount: zod.number(),
@@ -498,11 +618,17 @@ export const GetOrderResponse = zod.object({
         duration: zod.string(),
         description: zod.string().nullish(),
         isActive: zod.boolean(),
+        testType: zod.enum(["inhouse", "outsourced"]).nullish(),
+        outsourcedLabId: zod.number().nullish(),
         createdAt: zod.string(),
       }),
       price: zod.number(),
       result: zod.string().nullish(),
       resultStatus: zod.string().nullish(),
+      status: zod.enum(["active", "cancelled"]).nullish(),
+      cancelledByName: zod.string().nullish(),
+      cancelledAt: zod.string().nullish(),
+      cancellationReason: zod.string().nullish(),
     }),
   ),
   totalAmount: zod.number(),
@@ -588,11 +714,17 @@ export const UpdateOrderResponse = zod.object({
         duration: zod.string(),
         description: zod.string().nullish(),
         isActive: zod.boolean(),
+        testType: zod.enum(["inhouse", "outsourced"]).nullish(),
+        outsourcedLabId: zod.number().nullish(),
         createdAt: zod.string(),
       }),
       price: zod.number(),
       result: zod.string().nullish(),
       resultStatus: zod.string().nullish(),
+      status: zod.enum(["active", "cancelled"]).nullish(),
+      cancelledByName: zod.string().nullish(),
+      cancelledAt: zod.string().nullish(),
+      cancellationReason: zod.string().nullish(),
     }),
   ),
   totalAmount: zod.number(),
@@ -695,11 +827,17 @@ export const ListBillsResponse = zod.object({
               duration: zod.string(),
               description: zod.string().nullish(),
               isActive: zod.boolean(),
+              testType: zod.enum(["inhouse", "outsourced"]).nullish(),
+              outsourcedLabId: zod.number().nullish(),
               createdAt: zod.string(),
             }),
             price: zod.number(),
             result: zod.string().nullish(),
             resultStatus: zod.string().nullish(),
+            status: zod.enum(["active", "cancelled"]).nullish(),
+            cancelledByName: zod.string().nullish(),
+            cancelledAt: zod.string().nullish(),
+            cancellationReason: zod.string().nullish(),
           }),
         ),
         totalAmount: zod.number(),
@@ -829,11 +967,17 @@ export const GetBillResponse = zod.object({
           duration: zod.string(),
           description: zod.string().nullish(),
           isActive: zod.boolean(),
+          testType: zod.enum(["inhouse", "outsourced"]).nullish(),
+          outsourcedLabId: zod.number().nullish(),
           createdAt: zod.string(),
         }),
         price: zod.number(),
         result: zod.string().nullish(),
         resultStatus: zod.string().nullish(),
+        status: zod.enum(["active", "cancelled"]).nullish(),
+        cancelledByName: zod.string().nullish(),
+        cancelledAt: zod.string().nullish(),
+        cancellationReason: zod.string().nullish(),
       }),
     ),
     totalAmount: zod.number(),
@@ -957,11 +1101,17 @@ export const UpdateBillResponse = zod.object({
           duration: zod.string(),
           description: zod.string().nullish(),
           isActive: zod.boolean(),
+          testType: zod.enum(["inhouse", "outsourced"]).nullish(),
+          outsourcedLabId: zod.number().nullish(),
           createdAt: zod.string(),
         }),
         price: zod.number(),
         result: zod.string().nullish(),
         resultStatus: zod.string().nullish(),
+        status: zod.enum(["active", "cancelled"]).nullish(),
+        cancelledByName: zod.string().nullish(),
+        cancelledAt: zod.string().nullish(),
+        cancellationReason: zod.string().nullish(),
       }),
     ),
     totalAmount: zod.number(),
@@ -1135,11 +1285,147 @@ export const CancelBillResponse = zod.object({
           duration: zod.string(),
           description: zod.string().nullish(),
           isActive: zod.boolean(),
+          testType: zod.enum(["inhouse", "outsourced"]).nullish(),
+          outsourcedLabId: zod.number().nullish(),
           createdAt: zod.string(),
         }),
         price: zod.number(),
         result: zod.string().nullish(),
         resultStatus: zod.string().nullish(),
+        status: zod.enum(["active", "cancelled"]).nullish(),
+        cancelledByName: zod.string().nullish(),
+        cancelledAt: zod.string().nullish(),
+        cancellationReason: zod.string().nullish(),
+      }),
+    ),
+    totalAmount: zod.number(),
+    notes: zod.string().nullish(),
+    collectedAt: zod.string().nullish(),
+    completedAt: zod.string().nullish(),
+    createdAt: zod.string(),
+  }),
+  patientId: zod.number(),
+  patient: zod.object({
+    id: zod.number(),
+    patientId: zod.string(),
+    firstName: zod.string(),
+    lastName: zod.string(),
+    dateOfBirth: zod.string(),
+    gender: zod.enum(["male", "female", "other"]),
+    phone: zod.string(),
+    email: zod.string().nullish(),
+    address: zod.string().nullish(),
+    bloodGroup: zod.string().nullish(),
+    createdAt: zod.string(),
+  }),
+  subtotal: zod.number(),
+  discount: zod.number(),
+  taxAmount: zod.number(),
+  totalAmount: zod.number(),
+  paidAmount: zod.number(),
+  balanceAmount: zod.number(),
+  status: zod.enum(["draft", "pending", "partial", "paid", "cancelled"]),
+  dueDate: zod.string().nullish(),
+  payments: zod.array(
+    zod.object({
+      id: zod.number(),
+      billId: zod.number(),
+      amount: zod.number(),
+      method: zod.enum(["cash", "card", "upi", "insurance", "cheque"]),
+      referenceNumber: zod.string().nullish(),
+      notes: zod.string().nullish(),
+      createdAt: zod.string(),
+    }),
+  ),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Cancel a single test on a bill
+ */
+export const CancelBillTestParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const CancelBillTestBody = zod.object({
+  orderTestId: zod.number(),
+  reason: zod.string(),
+  performedBy: zod.string(),
+});
+
+export const CancelBillTestResponse = zod.object({
+  id: zod.number(),
+  billNumber: zod.string(),
+  orderId: zod.number(),
+  order: zod.object({
+    id: zod.number(),
+    orderNumber: zod.string(),
+    patientId: zod.number(),
+    patient: zod.object({
+      id: zod.number(),
+      patientId: zod.string(),
+      firstName: zod.string(),
+      lastName: zod.string(),
+      dateOfBirth: zod.string(),
+      gender: zod.enum(["male", "female", "other"]),
+      phone: zod.string(),
+      email: zod.string().nullish(),
+      address: zod.string().nullish(),
+      bloodGroup: zod.string().nullish(),
+      createdAt: zod.string(),
+    }),
+    doctorId: zod.number().nullish(),
+    doctor: zod
+      .object({
+        id: zod.number(),
+        name: zod.string(),
+        specialization: zod.string(),
+        phone: zod.string().nullish(),
+        email: zod.string().nullish(),
+        hospitalAffiliation: zod.string().nullish(),
+        registrationNumber: zod
+          .string()
+          .nullish()
+          .describe(
+            "State medical council registration number — printed on PCPNDT Form F.",
+          ),
+        defaultCommission: zod.union([zod.number(), zod.string()]).nullish(),
+        defaultCommissionType: zod.string().nullish(),
+        ledgerId: zod.number().nullish(),
+        createdAt: zod.string(),
+      })
+      .nullish(),
+    status: zod.enum([
+      "pending",
+      "collected",
+      "processing",
+      "completed",
+      "cancelled",
+    ]),
+    tests: zod.array(
+      zod.object({
+        id: zod.number(),
+        testId: zod.number(),
+        test: zod.object({
+          id: zod.number(),
+          code: zod.string(),
+          name: zod.string(),
+          category: zod.string(),
+          price: zod.number(),
+          duration: zod.string(),
+          description: zod.string().nullish(),
+          isActive: zod.boolean(),
+          testType: zod.enum(["inhouse", "outsourced"]).nullish(),
+          outsourcedLabId: zod.number().nullish(),
+          createdAt: zod.string(),
+        }),
+        price: zod.number(),
+        result: zod.string().nullish(),
+        resultStatus: zod.string().nullish(),
+        status: zod.enum(["active", "cancelled"]).nullish(),
+        cancelledByName: zod.string().nullish(),
+        cancelledAt: zod.string().nullish(),
+        cancellationReason: zod.string().nullish(),
       }),
     ),
     totalAmount: zod.number(),
@@ -1268,11 +1554,17 @@ export const RefundBillResponse = zod.object({
           duration: zod.string(),
           description: zod.string().nullish(),
           isActive: zod.boolean(),
+          testType: zod.enum(["inhouse", "outsourced"]).nullish(),
+          outsourcedLabId: zod.number().nullish(),
           createdAt: zod.string(),
         }),
         price: zod.number(),
         result: zod.string().nullish(),
         resultStatus: zod.string().nullish(),
+        status: zod.enum(["active", "cancelled"]).nullish(),
+        cancelledByName: zod.string().nullish(),
+        cancelledAt: zod.string().nullish(),
+        cancellationReason: zod.string().nullish(),
       }),
     ),
     totalAmount: zod.number(),
@@ -1394,11 +1686,17 @@ export const SuperEditBillResponse = zod.object({
           duration: zod.string(),
           description: zod.string().nullish(),
           isActive: zod.boolean(),
+          testType: zod.enum(["inhouse", "outsourced"]).nullish(),
+          outsourcedLabId: zod.number().nullish(),
           createdAt: zod.string(),
         }),
         price: zod.number(),
         result: zod.string().nullish(),
         resultStatus: zod.string().nullish(),
+        status: zod.enum(["active", "cancelled"]).nullish(),
+        cancelledByName: zod.string().nullish(),
+        cancelledAt: zod.string().nullish(),
+        cancellationReason: zod.string().nullish(),
       }),
     ),
     totalAmount: zod.number(),
@@ -2658,6 +2956,18 @@ export const GetDoctorLedgerDetailResponse = zod.object({
       id: zod.number().nullish(),
     }),
   ),
+});
+
+/**
+ * @summary Export doctor ledger as CSV
+ */
+export const ExportDoctorLedgerParams = zod.object({
+  doctorId: zod.coerce.number(),
+});
+
+export const ExportDoctorLedgerQueryParams = zod.object({
+  from: zod.coerce.string().optional(),
+  to: zod.coerce.string().optional(),
 });
 
 /**

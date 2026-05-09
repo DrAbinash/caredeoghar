@@ -122,7 +122,7 @@ reportsRouter.get("/dashboard", async (_req, res) => {
     db.select({ count: sql<number>`count(*)` }).from(ordersTable).where(eq(ordersTable.status, "completed")),
     db.select({ status: ordersTable.status, count: sql<number>`count(*)` }).from(ordersTable).groupBy(ordersTable.status),
     db.select({ count: sql<number>`count(*)` }).from(billsTable),
-    db.select({ count: sql<number>`count(*)` }).from(billsTable).where(and(gte(billsTable.createdAt, startOfTodayIso), lte(billsTable.createdAt, endOfTodayIso))),
+    db.select({ count: sql<number>`count(*)` }).from(billsTable).where(and(gte(billsTable.createdAt, today), lte(billsTable.createdAt, endOfDay))),
     db.select({ sum: sql<number>`coalesce(sum(o.total_amount), 0)` })
       .from(sql`orders o`)
       .where(sql`o.doctor_id IS NOT NULL`),

@@ -211,8 +211,8 @@ export default function Tests() {
     }
   };
 
-  const openEdit = (t: { id: number; code: string; name: string; category: string; price: number; duration: string; description?: string | null; isActive: boolean; department?: string; roomNumber?: string; testType?: string; outsourcedLabId?: number | null }) => {
-    const tx = t as typeof t & { department?: string; roomNumber?: string; testType?: string; outsourcedLabId?: number | null };
+  const openEdit = (t: { id: number; code: string; name: string; category: string; price: number; duration: string; description?: string | null; isActive: boolean; department?: string; roomNumber?: string; testType?: string | null; outsourcedLabId?: number | null }) => {
+    const tx = t as typeof t & { department?: string; roomNumber?: string; testType?: string | null; outsourcedLabId?: number | null };
     setEditTest({ id: t.id, code: t.code, name: t.name, category: t.category, price: t.price, duration: t.duration, description: t.description ?? "", isActive: t.isActive, department: tx.department, roomNumber: tx.roomNumber, testType: tx.testType ?? "inhouse", outsourcedLabId: tx.outsourcedLabId ?? null });
     setValue("code", t.code);
     setValue("name", t.name);

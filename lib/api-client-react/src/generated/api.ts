@@ -30,6 +30,7 @@ import type {
   Book,
   Branch,
   CancelBillBody,
+  CancelBillTestBody,
   CommissionRule,
   CommissionRuleBody,
   CreateAbnormalFindingBody,
@@ -44,6 +45,7 @@ import type {
   CreateInventoryItemBody,
   CreateLedgerBody,
   CreateOrderBody,
+  CreateOutsourcedLabBody,
   CreatePatientBody,
   CreatePaymentBody,
   CreatePayoutBody,
@@ -64,6 +66,7 @@ import type {
   DeleteInventoryConsumptionRulesByTest200,
   DeleteLedger200,
   DeleteLedgerBody,
+  DeleteOutsourcedLab200,
   DeleteReportTemplate200,
   Department,
   DetailedCommissionReport,
@@ -75,6 +78,7 @@ import type {
   DoctorPayout,
   Expense,
   ExpenseSummaryRow,
+  ExportDoctorLedgerParams,
   GetDetailedCommissionReportParams,
   GetDoctorLedgerDetailParams,
   GetDoctorLedgerSummaryParams,
@@ -101,6 +105,7 @@ import type {
   LogBillReprintBody,
   Order,
   OrderList,
+  OutsourcedLab,
   Patient,
   PatientList,
   Payment,
@@ -999,6 +1004,425 @@ export const useUpdateTest = <
   TContext
 > => {
   return useMutation(getUpdateTestMutationOptions(options));
+};
+
+/**
+ * @summary List outsourced labs
+ */
+export const getListOutsourcedLabsUrl = () => {
+  return `/api/outsourced-labs`;
+};
+
+export const listOutsourcedLabs = async (
+  options?: RequestInit,
+): Promise<OutsourcedLab[]> => {
+  return customFetch<OutsourcedLab[]>(getListOutsourcedLabsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListOutsourcedLabsQueryKey = () => {
+  return [`/api/outsourced-labs`] as const;
+};
+
+export const getListOutsourcedLabsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listOutsourcedLabs>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listOutsourcedLabs>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListOutsourcedLabsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listOutsourcedLabs>>
+  > = ({ signal }) => listOutsourcedLabs({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listOutsourcedLabs>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListOutsourcedLabsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listOutsourcedLabs>>
+>;
+export type ListOutsourcedLabsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List outsourced labs
+ */
+
+export function useListOutsourcedLabs<
+  TData = Awaited<ReturnType<typeof listOutsourcedLabs>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listOutsourcedLabs>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListOutsourcedLabsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a new outsourced lab
+ */
+export const getCreateOutsourcedLabUrl = () => {
+  return `/api/outsourced-labs`;
+};
+
+export const createOutsourcedLab = async (
+  createOutsourcedLabBody: CreateOutsourcedLabBody,
+  options?: RequestInit,
+): Promise<OutsourcedLab> => {
+  return customFetch<OutsourcedLab>(getCreateOutsourcedLabUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createOutsourcedLabBody),
+  });
+};
+
+export const getCreateOutsourcedLabMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createOutsourcedLab>>,
+    TError,
+    { data: BodyType<CreateOutsourcedLabBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createOutsourcedLab>>,
+  TError,
+  { data: BodyType<CreateOutsourcedLabBody> },
+  TContext
+> => {
+  const mutationKey = ["createOutsourcedLab"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createOutsourcedLab>>,
+    { data: BodyType<CreateOutsourcedLabBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createOutsourcedLab(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateOutsourcedLabMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createOutsourcedLab>>
+>;
+export type CreateOutsourcedLabMutationBody = BodyType<CreateOutsourcedLabBody>;
+export type CreateOutsourcedLabMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a new outsourced lab
+ */
+export const useCreateOutsourcedLab = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createOutsourcedLab>>,
+    TError,
+    { data: BodyType<CreateOutsourcedLabBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createOutsourcedLab>>,
+  TError,
+  { data: BodyType<CreateOutsourcedLabBody> },
+  TContext
+> => {
+  return useMutation(getCreateOutsourcedLabMutationOptions(options));
+};
+
+/**
+ * @summary Get outsourced lab by ID
+ */
+export const getGetOutsourcedLabUrl = (id: number) => {
+  return `/api/outsourced-labs/${id}`;
+};
+
+export const getOutsourcedLab = async (
+  id: number,
+  options?: RequestInit,
+): Promise<OutsourcedLab> => {
+  return customFetch<OutsourcedLab>(getGetOutsourcedLabUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetOutsourcedLabQueryKey = (id: number) => {
+  return [`/api/outsourced-labs/${id}`] as const;
+};
+
+export const getGetOutsourcedLabQueryOptions = <
+  TData = Awaited<ReturnType<typeof getOutsourcedLab>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getOutsourcedLab>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetOutsourcedLabQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getOutsourcedLab>>
+  > = ({ signal }) => getOutsourcedLab(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getOutsourcedLab>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetOutsourcedLabQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getOutsourcedLab>>
+>;
+export type GetOutsourcedLabQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get outsourced lab by ID
+ */
+
+export function useGetOutsourcedLab<
+  TData = Awaited<ReturnType<typeof getOutsourcedLab>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getOutsourcedLab>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetOutsourcedLabQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update an outsourced lab
+ */
+export const getUpdateOutsourcedLabUrl = (id: number) => {
+  return `/api/outsourced-labs/${id}`;
+};
+
+export const updateOutsourcedLab = async (
+  id: number,
+  createOutsourcedLabBody: CreateOutsourcedLabBody,
+  options?: RequestInit,
+): Promise<OutsourcedLab> => {
+  return customFetch<OutsourcedLab>(getUpdateOutsourcedLabUrl(id), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createOutsourcedLabBody),
+  });
+};
+
+export const getUpdateOutsourcedLabMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateOutsourcedLab>>,
+    TError,
+    { id: number; data: BodyType<CreateOutsourcedLabBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateOutsourcedLab>>,
+  TError,
+  { id: number; data: BodyType<CreateOutsourcedLabBody> },
+  TContext
+> => {
+  const mutationKey = ["updateOutsourcedLab"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateOutsourcedLab>>,
+    { id: number; data: BodyType<CreateOutsourcedLabBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateOutsourcedLab(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateOutsourcedLabMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateOutsourcedLab>>
+>;
+export type UpdateOutsourcedLabMutationBody = BodyType<CreateOutsourcedLabBody>;
+export type UpdateOutsourcedLabMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update an outsourced lab
+ */
+export const useUpdateOutsourcedLab = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateOutsourcedLab>>,
+    TError,
+    { id: number; data: BodyType<CreateOutsourcedLabBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateOutsourcedLab>>,
+  TError,
+  { id: number; data: BodyType<CreateOutsourcedLabBody> },
+  TContext
+> => {
+  return useMutation(getUpdateOutsourcedLabMutationOptions(options));
+};
+
+/**
+ * @summary Delete an outsourced lab
+ */
+export const getDeleteOutsourcedLabUrl = (id: number) => {
+  return `/api/outsourced-labs/${id}`;
+};
+
+export const deleteOutsourcedLab = async (
+  id: number,
+  options?: RequestInit,
+): Promise<DeleteOutsourcedLab200> => {
+  return customFetch<DeleteOutsourcedLab200>(getDeleteOutsourcedLabUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteOutsourcedLabMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteOutsourcedLab>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteOutsourcedLab>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteOutsourcedLab"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteOutsourcedLab>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteOutsourcedLab(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteOutsourcedLabMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteOutsourcedLab>>
+>;
+
+export type DeleteOutsourcedLabMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete an outsourced lab
+ */
+export const useDeleteOutsourcedLab = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteOutsourcedLab>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteOutsourcedLab>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteOutsourcedLabMutationOptions(options));
 };
 
 /**
@@ -2043,6 +2467,93 @@ export const useCancelBill = <
   TContext
 > => {
   return useMutation(getCancelBillMutationOptions(options));
+};
+
+/**
+ * @summary Cancel a single test on a bill
+ */
+export const getCancelBillTestUrl = (id: number) => {
+  return `/api/bills/${id}/cancel-test`;
+};
+
+export const cancelBillTest = async (
+  id: number,
+  cancelBillTestBody: CancelBillTestBody,
+  options?: RequestInit,
+): Promise<Bill> => {
+  return customFetch<Bill>(getCancelBillTestUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(cancelBillTestBody),
+  });
+};
+
+export const getCancelBillTestMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof cancelBillTest>>,
+    TError,
+    { id: number; data: BodyType<CancelBillTestBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof cancelBillTest>>,
+  TError,
+  { id: number; data: BodyType<CancelBillTestBody> },
+  TContext
+> => {
+  const mutationKey = ["cancelBillTest"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof cancelBillTest>>,
+    { id: number; data: BodyType<CancelBillTestBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return cancelBillTest(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CancelBillTestMutationResult = NonNullable<
+  Awaited<ReturnType<typeof cancelBillTest>>
+>;
+export type CancelBillTestMutationBody = BodyType<CancelBillTestBody>;
+export type CancelBillTestMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Cancel a single test on a bill
+ */
+export const useCancelBillTest = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof cancelBillTest>>,
+    TError,
+    { id: number; data: BodyType<CancelBillTestBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof cancelBillTest>>,
+  TError,
+  { id: number; data: BodyType<CancelBillTestBody> },
+  TContext
+> => {
+  return useMutation(getCancelBillTestMutationOptions(options));
 };
 
 /**
@@ -6990,6 +7501,123 @@ export function useGetDoctorLedgerDetail<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetDoctorLedgerDetailQueryOptions(
+    doctorId,
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Export doctor ledger as CSV
+ */
+export const getExportDoctorLedgerUrl = (
+  doctorId: number,
+  params?: ExportDoctorLedgerParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/doctor-ledger/${doctorId}/export?${stringifiedParams}`
+    : `/api/doctor-ledger/${doctorId}/export`;
+};
+
+export const exportDoctorLedger = async (
+  doctorId: number,
+  params?: ExportDoctorLedgerParams,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getExportDoctorLedgerUrl(doctorId, params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getExportDoctorLedgerQueryKey = (
+  doctorId: number,
+  params?: ExportDoctorLedgerParams,
+) => {
+  return [
+    `/api/doctor-ledger/${doctorId}/export`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getExportDoctorLedgerQueryOptions = <
+  TData = Awaited<ReturnType<typeof exportDoctorLedger>>,
+  TError = ErrorType<unknown>,
+>(
+  doctorId: number,
+  params?: ExportDoctorLedgerParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof exportDoctorLedger>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getExportDoctorLedgerQueryKey(doctorId, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof exportDoctorLedger>>
+  > = ({ signal }) =>
+    exportDoctorLedger(doctorId, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!doctorId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof exportDoctorLedger>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ExportDoctorLedgerQueryResult = NonNullable<
+  Awaited<ReturnType<typeof exportDoctorLedger>>
+>;
+export type ExportDoctorLedgerQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Export doctor ledger as CSV
+ */
+
+export function useExportDoctorLedger<
+  TData = Awaited<ReturnType<typeof exportDoctorLedger>>,
+  TError = ErrorType<unknown>,
+>(
+  doctorId: number,
+  params?: ExportDoctorLedgerParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof exportDoctorLedger>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getExportDoctorLedgerQueryOptions(
     doctorId,
     params,
     options,

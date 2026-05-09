@@ -237,6 +237,102 @@ paths:
               schema:
                 $ref: "#/components/schemas/DiagnosticTest"
 
+  # Outsourced Labs
+  /outsourced-labs:
+    get:
+      operationId: listOutsourcedLabs
+      tags: [outsourced-labs]
+      summary: List outsourced labs
+      responses:
+        "200":
+          description: List of outsourced labs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OutsourcedLab"
+    post:
+      operationId: createOutsourcedLab
+      tags: [outsourced-labs]
+      summary: Create a new outsourced lab
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOutsourcedLabBody"
+      responses:
+        "201":
+          description: Created outsourced lab
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OutsourcedLab"
+
+  /outsourced-labs/{id}:
+    get:
+      operationId: getOutsourcedLab
+      tags: [outsourced-labs]
+      summary: Get outsourced lab by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Outsourced lab
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OutsourcedLab"
+    put:
+      operationId: updateOutsourcedLab
+      tags: [outsourced-labs]
+      summary: Update an outsourced lab
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOutsourcedLabBody"
+      responses:
+        "200":
+          description: Updated outsourced lab
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OutsourcedLab"
+    delete:
+      operationId: deleteOutsourcedLab
+      tags: [outsourced-labs]
+      summary: Delete an outsourced lab
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required: [success]
+
   # Orders
   /orders:
     get:
@@ -550,6 +646,31 @@ paths:
       responses:
         "200":
           description: Cancelled bill
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bill"
+
+  /bills/{id}/cancel-test:
+    post:
+      operationId: cancelBillTest
+      tags: [bills]
+      summary: Cancel a single test on a bill
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelBillTestBody"
+      responses:
+        "200":
+          description: Updated bill after partial cancellation
           content:
             application/json:
               schema:
@@ -1778,6 +1899,34 @@ paths:
               schema:
                 $ref: "#/components/schemas/DoctorLedgerDetail"
 
+  /doctor-ledger/{doctorId}/export:
+    get:
+      operationId: exportDoctorLedger
+      tags: [super-admin]
+      summary: Export doctor ledger as CSV
+      parameters:
+        - name: doctorId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: from
+          in: query
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: CSV file download
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+
   /doctor-ledger/{doctorId}/payouts:
     post:
       operationId: createDoctorPayout
@@ -2241,6 +2390,13 @@ components:
           nullable: true
         isActive:
           type: boolean
+        testType:
+          type: string
+          enum: [inhouse, outsourced]
+          nullable: true
+        outsourcedLabId:
+          type: integer
+          nullable: true
         createdAt:
           type: string
       required: [id, code, name, category, price, duration, isActive, createdAt]
@@ -2274,6 +2430,13 @@ components:
           nullable: true
         isActive:
           type: boolean
+        testType:
+          type: string
+          enum: [inhouse, outsourced]
+          nullable: true
+        outsourcedLabId:
+          type: integer
+          nullable: true
       required: [code, name, category, price, duration]
 
     Order:
@@ -2330,6 +2493,19 @@ components:
           type: string
           nullable: true
         resultStatus:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, cancelled]
+          nullable: true
+        cancelledByName:
+          type: string
+          nullable: true
+        cancelledAt:
+          type: string
+          nullable: true
+        cancellationReason:
           type: string
           nullable: true
       required: [id, testId, test, price]
@@ -3941,3 +4117,74 @@ components:
           items:
             $ref: "#/components/schemas/ConsumptionRuleItem"
       required: [items]
+
+    CancelBillTestBody:
+      type: object
+      properties:
+        orderTestId:
+          type: integer
+        reason:
+          type: string
+        performedBy:
+          type: string
+      required: [orderTestId, reason, performedBy]
+
+    OutsourcedLab:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        contactPerson:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        gstin:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, name, isActive, createdAt, updatedAt]
+
+    CreateOutsourcedLabBody:
+      type: object
+      properties:
+        name:
+          type: string
+        contactPerson:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        gstin:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+      required: [name]

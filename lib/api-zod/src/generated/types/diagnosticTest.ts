@@ -5,6 +5,7 @@
  * Diagnostic Center Billing ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { DiagnosticTestTestType } from "./diagnosticTestTestType";
 
 export interface DiagnosticTest {
   id: number;
@@ -15,5 +16,7 @@ export interface DiagnosticTest {
   duration: string;
   description?: string | null;
   isActive: boolean;
+  testType?: DiagnosticTestTestType;
+  outsourcedLabId?: number | null;
   createdAt: string;
 }

@@ -112,6 +112,15 @@ export interface CreatePatientBody {
   bloodGroup?: string | null;
 }
 
+export type DiagnosticTestTestType =
+  | (typeof DiagnosticTestTestType)[keyof typeof DiagnosticTestTestType]
+  | null;
+
+export const DiagnosticTestTestType = {
+  inhouse: "inhouse",
+  outsourced: "outsourced",
+} as const;
+
 export interface DiagnosticTest {
   id: number;
   code: string;
@@ -121,6 +130,8 @@ export interface DiagnosticTest {
   duration: string;
   description?: string | null;
   isActive: boolean;
+  testType?: DiagnosticTestTestType;
+  outsourcedLabId?: number | null;
   createdAt: string;
 }
 
@@ -128,6 +139,15 @@ export interface TestList {
   tests: DiagnosticTest[];
   total: number;
 }
+
+export type CreateTestBodyTestType =
+  | (typeof CreateTestBodyTestType)[keyof typeof CreateTestBodyTestType]
+  | null;
+
+export const CreateTestBodyTestType = {
+  inhouse: "inhouse",
+  outsourced: "outsourced",
+} as const;
 
 export interface CreateTestBody {
   code: string;
@@ -137,6 +157,8 @@ export interface CreateTestBody {
   duration: string;
   description?: string | null;
   isActive?: boolean;
+  testType?: CreateTestBodyTestType;
+  outsourcedLabId?: number | null;
 }
 
 export type OrderStatus = (typeof OrderStatus)[keyof typeof OrderStatus];
@@ -164,6 +186,15 @@ export interface Doctor {
   createdAt: string;
 }
 
+export type OrderTestStatus =
+  | (typeof OrderTestStatus)[keyof typeof OrderTestStatus]
+  | null;
+
+export const OrderTestStatus = {
+  active: "active",
+  cancelled: "cancelled",
+} as const;
+
 export interface OrderTest {
   id: number;
   testId: number;
@@ -171,6 +202,10 @@ export interface OrderTest {
   price: number;
   result?: string | null;
   resultStatus?: string | null;
+  status?: OrderTestStatus;
+  cancelledByName?: string | null;
+  cancelledAt?: string | null;
+  cancellationReason?: string | null;
 }
 
 export interface Order {
@@ -1073,6 +1108,37 @@ export interface ReplaceConsumptionRulesBody {
   items: ConsumptionRuleItem[];
 }
 
+export interface CancelBillTestBody {
+  orderTestId: number;
+  reason: string;
+  performedBy: string;
+}
+
+export interface OutsourcedLab {
+  id: number;
+  name: string;
+  contactPerson?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  gstin?: string | null;
+  notes?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateOutsourcedLabBody {
+  name: string;
+  contactPerson?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  gstin?: string | null;
+  notes?: string | null;
+  isActive?: boolean;
+}
+
 export type ListPatientsParams = {
   search?: string;
   page?: number;
@@ -1082,6 +1148,10 @@ export type ListPatientsParams = {
 export type ListTestsParams = {
   search?: string;
   category?: string;
+};
+
+export type DeleteOutsourcedLab200 = {
+  success: boolean;
 };
 
 export type ListOrdersParams = {
@@ -1277,6 +1347,11 @@ export type GetDoctorLedgerSummaryParams = {
 };
 
 export type GetDoctorLedgerDetailParams = {
+  from?: string;
+  to?: string;
+};
+
+export type ExportDoctorLedgerParams = {
   from?: string;
   to?: string;
 };

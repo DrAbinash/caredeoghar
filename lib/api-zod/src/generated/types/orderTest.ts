@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DiagnosticTest } from "./diagnosticTest";
+import type { OrderTestStatus } from "./orderTestStatus";
 
 export interface OrderTest {
   id: number;
@@ -14,4 +15,8 @@ export interface OrderTest {
   price: number;
   result?: string | null;
   resultStatus?: string | null;
+  status?: OrderTestStatus;
+  cancelledByName?: string | null;
+  cancelledAt?: string | null;
+  cancellationReason?: string | null;
 }

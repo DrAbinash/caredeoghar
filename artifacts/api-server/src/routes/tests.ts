@@ -87,6 +87,8 @@ testsRouter.post("/", async (req, res) => {
       ...parsed.data,
       price: String(parsed.data.price),
       isActive: parsed.data.isActive ?? true,
+      testType: parsed.data.testType ?? undefined,
+      outsourcedLabId: parsed.data.outsourcedLabId ?? undefined,
       ...(extra.department !== undefined ? { department: extra.department } : {}),
       ...(extra.roomNumber !== undefined ? { roomNumber: extra.roomNumber } : {}),
     }).returning();
