@@ -35,10 +35,10 @@ import bcrypt from "bcryptjs";
 // after the next publish so subsequent restarts don't keep overwriting
 // PIN changes made through the UI.
 //
-// Defaults: role=admin, PIN=1234. Override via BOOTSTRAP_ADMIN_EMAIL /
+// Defaults: role=super_admin, PIN=1234. Override via BOOTSTRAP_ADMIN_EMAIL /
 // BOOTSTRAP_ADMIN_NAME / BOOTSTRAP_ADMIN_PIN / BOOTSTRAP_ADMIN_ROLE.
-// "admin" gives full access to every module without requiring the USB
-// pen-drive that "super_admin" needs.
+// "super_admin" is the initial privileged account used to bootstrap the
+// super-admin portal; it can then create or manage additional accounts.
 async function seedBootstrapAdminIfNeeded(): Promise<void> {
   try {
     const force =
@@ -51,7 +51,7 @@ async function seedBootstrapAdminIfNeeded(): Promise<void> {
     const email = (process.env["BOOTSTRAP_ADMIN_EMAIL"] || "abinashsingh@gmail.com").toLowerCase();
     const name = process.env["BOOTSTRAP_ADMIN_NAME"] || "Dr Abinash Kumar";
     const plainPin = process.env["BOOTSTRAP_ADMIN_PIN"] || "1234";
-    const role = process.env["BOOTSTRAP_ADMIN_ROLE"] || "admin";
+    const role = process.env["BOOTSTRAP_ADMIN_ROLE"] || "super_admin";
     const hash = await bcrypt.hash(plainPin, 12);
 
     const allModulePermissions = [
