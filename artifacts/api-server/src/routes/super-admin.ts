@@ -118,7 +118,7 @@ superAdminRouter.post("/login", requireSuperAdminUsb, loginLimiter, async (req, 
   const { name, pin } = parsed.data;
 
   const [user] = await db.select().from(usersTable)
-    .where(and(eq(usersTable.name, name), eq(usersTable.isActive, true)));
+    .where(and(sql`lower(${usersTable.name}) = lower(${name})`, eq(usersTable.isActive, true)));
 
   if (!user) { res.status(401).json({ error: "Invalid credentials" }); return; }
   if (user.role !== "super_admin") { res.status(403).json({ error: "Access denied — not a super admin" }); return; }
