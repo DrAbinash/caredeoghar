@@ -819,11 +819,11 @@ export default function BillDetail({ id }: { id: number }) {
             <div style={{ marginBottom: "10px", padding: "6px 8px", borderTop: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0", lineHeight: 1.25 }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: "16px", fontWeight: 800, color: "#111", lineHeight: 1.1 }}>
+                  <div style={{ fontSize: "18px", fontWeight: 900, color: "#111", lineHeight: 1.05 }}>
                     {bill.patient.firstName} {bill.patient.lastName}
                   </div>
                 </div>
-                <div style={{ textAlign: "right", fontSize: "11.5px", color: "#333", fontWeight: 600, lineHeight: 1.35 }}>
+                <div style={{ textAlign: "right", fontSize: "12.5px", color: "#111", fontWeight: 800, lineHeight: 1.3 }}>
                   {ageSex && <div>{ageSex}</div>}
                   {infoRows.map((row) => <div key={row}>{row}</div>)}
                 </div>
