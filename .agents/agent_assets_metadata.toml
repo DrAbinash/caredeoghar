@@ -42,3 +42,9 @@ id = "RSfpUwLkxaYdWvWKv4j-T"
 uri = "file://FEATURES.md"
 type = "text"
 title = "DiagnoCenter ERP — Complete Feature Reference"
+
+[[outputs]]
+id = "au1TM2v4p3UBTxTknonYM"
+uri = "file://.local/superadmin_key.txt"
+type = "text"
+title = "superadmin.key — download and rename"
