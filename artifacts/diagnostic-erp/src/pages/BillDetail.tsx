@@ -804,22 +804,31 @@ export default function BillDetail({ id }: { id: number }) {
           const ageYrs = bill.patient.dateOfBirth
             ? Math.floor((Date.now() - new Date(bill.patient.dateOfBirth).getTime()) / (365.25 * 24 * 3600 * 1000))
             : null;
-          const meta = [
-            bill.patient.gender || null,
-            ageYrs && ageYrs > 0 ? `${ageYrs} YRS` : null,
+          const infoRows = [
             bill.patient.phone ? `PH ${bill.patient.phone}` : null,
             `ID ${bill.patient.patientId}`,
+          ].filter(Boolean);
+          const ageSex = [
+            bill.patient.gender ? `SEX ${bill.patient.gender}` : null,
+            ageYrs && ageYrs > 0 ? `AGE ${ageYrs} YRS` : null,
           ].filter(Boolean).join("  ·  ");
           const ref = bill.order?.doctor
             ? `Dr. ${bill.order.doctor.name}${bill.order.doctor.specialization ? ` (${bill.order.doctor.specialization})` : ""}`
             : "Self / Walk-in";
           return (
-            <div style={{ marginBottom: "10px", padding: "6px 8px", borderTop: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0", lineHeight: 1.35 }}>
-              <div style={{ fontSize: "12.5px" }}>
-                <strong>{bill.patient.firstName} {bill.patient.lastName}</strong>
-                <span style={{ color: "#555", marginLeft: 8, fontWeight: 400 }}>{meta}</span>
+            <div style={{ marginBottom: "10px", padding: "6px 8px", borderTop: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0", lineHeight: 1.25 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: "16px", fontWeight: 800, color: "#111", lineHeight: 1.1 }}>
+                    {bill.patient.firstName} {bill.patient.lastName}
+                  </div>
+                </div>
+                <div style={{ textAlign: "right", fontSize: "11.5px", color: "#333", fontWeight: 600, lineHeight: 1.35 }}>
+                  {ageSex && <div>{ageSex}</div>}
+                  {infoRows.map((row) => <div key={row}>{row}</div>)}
+                </div>
               </div>
-              <div style={{ fontSize: "11px", color: "#555" }}>
+              <div style={{ fontSize: "11px", color: "#555", marginTop: "2px" }}>
                 Ref: <strong>{ref}</strong>
               </div>
             </div>
