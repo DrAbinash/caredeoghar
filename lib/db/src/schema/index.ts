@@ -41,3 +41,4 @@ export * from "./siteSettings";
 export * from "./sitePages";
 export * from "./sitePopups";
 export * from "./onlineBookings";
+export * from "./outsourcedLabs";

@@ -27,6 +27,11 @@ export const orderTestsTable = pgTable("order_tests", {
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
   result: text("result"),
   resultStatus: text("result_status"),
+  // Partial cancellation support — individual tests can be cancelled from a bill
+  status: text("status").notNull().default("active"), // 'active' | 'cancelled'
+  cancelledByName: text("cancelled_by_name"),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  cancellationReason: text("cancellation_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

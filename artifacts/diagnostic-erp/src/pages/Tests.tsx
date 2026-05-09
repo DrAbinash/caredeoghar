@@ -40,7 +40,11 @@ type TestForm = {
   isActive: boolean;
   department?: string;
   roomNumber?: string;
+  testType?: string;
+  outsourcedLabId?: number | null;
 };
+
+type OutsourcedLab = { id: number; name: string; isActive: boolean };
 
 const DEPARTMENT_OPTIONS = [
   "Pathology", "X-Ray", "USG", "MRI", "CT", "ECG",
@@ -55,6 +59,7 @@ type TestCategory = {
 };
 
 const TEST_CATEGORIES_KEY = ["test-categories"] as const;
+const OUTSOURCED_LABS_KEY = ["outsourced-labs"] as const;
 
 function useTestCategories() {
   return useQuery<TestCategory[]>({
@@ -63,9 +68,17 @@ function useTestCategories() {
   });
 }
 
+function useOutsourcedLabs() {
+  return useQuery<OutsourcedLab[]>({
+    queryKey: OUTSOURCED_LABS_KEY,
+    queryFn: () => api.get<OutsourcedLab[]>("/api/outsourced-labs"),
+  });
+}
+
 export default function Tests() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
   const [open, setOpen] = useState(false);
   const [editTest, setEditTest] = useState<{ id: number } & TestForm | null>(null);
   const [manageOpen, setManageOpen] = useState(false);
@@ -73,7 +86,9 @@ export default function Tests() {
 
   const { data, isLoading } = useListTests({ search: search || undefined, category: category || undefined });
   const { data: allCategories = [] } = useTestCategories();
+  const { data: outsourcedLabs = [] } = useOutsourcedLabs();
   const activeCategories = allCategories.filter((c) => c.isActive);
+  const activeOutsourcedLabs = outsourcedLabs.filter((l) => l.isActive);
 
   const [submitErr, setSubmitErr] = useState("");
   const [exporting, setExporting] = useState(false);
@@ -196,9 +211,9 @@ export default function Tests() {
     }
   };
 
-  const openEdit = (t: { id: number; code: string; name: string; category: string; price: number; duration: string; description?: string | null; isActive: boolean; department?: string; roomNumber?: string }) => {
-    const tx = t as typeof t & { department?: string; roomNumber?: string };
-    setEditTest({ id: t.id, code: t.code, name: t.name, category: t.category, price: t.price, duration: t.duration, description: t.description ?? "", isActive: t.isActive, department: tx.department, roomNumber: tx.roomNumber });
+  const openEdit = (t: { id: number; code: string; name: string; category: string; price: number; duration: string; description?: string | null; isActive: boolean; department?: string; roomNumber?: string; testType?: string; outsourcedLabId?: number | null }) => {
+    const tx = t as typeof t & { department?: string; roomNumber?: string; testType?: string; outsourcedLabId?: number | null };
+    setEditTest({ id: t.id, code: t.code, name: t.name, category: t.category, price: t.price, duration: t.duration, description: t.description ?? "", isActive: t.isActive, department: tx.department, roomNumber: tx.roomNumber, testType: tx.testType ?? "inhouse", outsourcedLabId: tx.outsourcedLabId ?? null });
     setValue("code", t.code);
     setValue("name", t.name);
     setValue("category", t.category);
@@ -208,6 +223,8 @@ export default function Tests() {
     setValue("isActive", t.isActive);
     setValue("department", tx.department ?? "Pathology");
     setValue("roomNumber", tx.roomNumber ?? "");
+    setValue("testType", tx.testType ?? "inhouse");
+    setValue("outsourcedLabId", tx.outsourcedLabId ?? null);
     setOpen(true);
   };
 
@@ -250,6 +267,16 @@ export default function Tests() {
               {activeCategories.map((c) => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
             </SelectContent>
           </Select>
+          <Select value={typeFilter || "all"} onValueChange={(v) => setTypeFilter(v === "all" ? "" : v)}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="All Types" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="inhouse">In-House</SelectItem>
+              <SelectItem value="outsourced">Outsourced</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="bg-card border border-card-border rounded-xl shadow-sm overflow-hidden">
@@ -260,6 +287,7 @@ export default function Tests() {
                   <th className="px-4 py-3 font-medium">Code</th>
                   <th className="px-4 py-3 font-medium">Test Name</th>
                   <th className="px-4 py-3 font-medium">Category</th>
+                  <th className="px-4 py-3 font-medium">Type</th>
                   <th className="px-4 py-3 font-medium text-right">Price</th>
                   <th className="px-4 py-3 font-medium">Duration</th>
                   <th className="px-4 py-3 font-medium">Status</th>
@@ -270,13 +298,19 @@ export default function Tests() {
                 {isLoading ? (
                   [...Array(5)].map((_, i) => (
                     <tr key={i} className="border-b border-border/50 animate-pulse">
-                      {[...Array(7)].map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 bg-muted rounded w-20" /></td>)}
+                      {[...Array(8)].map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 bg-muted rounded w-20" /></td>)}
                     </tr>
                   ))
                 ) : data?.tests?.length === 0 ? (
-                  <tr><td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">No tests found</td></tr>
+                  <tr><td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">No tests found</td></tr>
                 ) : (
-                  data?.tests?.map((t) => (
+                  data?.tests?.filter((t) => {
+                    if (!typeFilter) return true;
+                    const tt = (t as { testType?: string }).testType ?? "inhouse";
+                    return tt === typeFilter;
+                  }).map((t) => {
+                    const testType = (t as { testType?: string }).testType ?? "inhouse";
+                    return (
                     <tr key={t.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
                       <td className="px-4 py-3 font-mono text-xs font-bold text-primary">{t.code}</td>
                       <td className="px-4 py-3">
@@ -285,6 +319,11 @@ export default function Tests() {
                       </td>
                       <td className="px-4 py-3">
                         <span className="px-2 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded text-xs">{t.category}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${testType === "outsourced" ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" : "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400"}`}>
+                          {testType === "outsourced" ? "Outsourced" : "In-House"}
+                        </span>
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-foreground">₹{Number(t.price).toFixed(2)}</td>
                       <td className="px-4 py-3 text-muted-foreground">{t.duration}</td>
@@ -297,7 +336,8 @@ export default function Tests() {
                         <button onClick={() => openEdit(t)} className="text-muted-foreground hover:text-foreground"><Pencil size={14} /></button>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -361,6 +401,39 @@ export default function Tests() {
                 <Label>Room Number</Label>
                 <Input {...register("roomNumber")} className="mt-1" placeholder="Room 4" />
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Test Type</Label>
+                <Select value={watch("testType") ?? "inhouse"} onValueChange={(v) => {
+                  setValue("testType", v);
+                  if (v === "inhouse") setValue("outsourcedLabId", null);
+                }}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="inhouse">In-House</SelectItem>
+                    <SelectItem value="outsourced">Outsourced</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {watch("testType") === "outsourced" && (
+                <div>
+                  <Label>Outsourced Lab</Label>
+                  <Select
+                    value={String(watch("outsourcedLabId") ?? "")}
+                    onValueChange={(v) => setValue("outsourcedLabId", v ? Number(v) : null)}
+                  >
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="Select lab…" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">None</SelectItem>
+                      {activeOutsourcedLabs.map((l) => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  {activeOutsourcedLabs.length === 0 && (
+                    <p className="text-[11px] text-muted-foreground mt-1">No labs yet — add one in "Outsourced Labs".</p>
+                  )}
+                </div>
+              )}
             </div>
             <div>
               <Label>Description</Label>

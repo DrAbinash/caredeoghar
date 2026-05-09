@@ -1005,6 +1005,97 @@ paymentsRouter.get("/", async (req, res) => {
   res.json({ payments: payments.map(p => ({ ...p, amount: Number(p.amount) })), total: Number(countResult[0]?.count ?? 0), page, limit });
 });
 
+// ── Cancel a single test on a bill (partial cancellation) ────────────────────
+// Marks one order_test row as cancelled, recalculates bill totals, and audits.
+// Requires at least one active test to remain — to cancel everything, use the
+// full-bill cancel endpoint instead.
+billsRouter.post("/:id/cancel-test", async (req: StaffAuthRequest, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) {
+    res.status(400).json({ error: "Invalid bill id" });
+    return;
+  }
+  const { orderTestId, performedBy, reason } = req.body as { orderTestId?: unknown; performedBy?: unknown; reason?: unknown };
+  if (!orderTestId || !performedBy || !reason) {
+    res.status(400).json({ error: "orderTestId, performedBy, and reason are required" });
+    return;
+  }
+  const otId = Number(orderTestId);
+  const actor = String(performedBy).trim();
+  const why = String(reason).trim();
+  if (!Number.isInteger(otId) || otId < 1) {
+    res.status(400).json({ error: "orderTestId must be a positive integer" });
+    return;
+  }
+  if (!actor) { res.status(400).json({ error: "performedBy is required" }); return; }
+  if (!why)   { res.status(400).json({ error: "reason is required" }); return; }
+
+  const result = await db.transaction(async (tx) => {
+    const [bill] = await tx.select().from(billsTable).where(eq(billsTable.id, id)).for("update");
+    if (!bill) throw Object.assign(new Error("Bill not found"), { httpStatus: 404 });
+    if (bill.status === "cancelled") throw Object.assign(new Error("Bill is already cancelled"), { httpStatus: 409 });
+
+    const [orderTest] = await tx.select().from(orderTestsTable).where(eq(orderTestsTable.id, otId));
+    if (!orderTest) throw Object.assign(new Error("Test not found"), { httpStatus: 404 });
+    if (orderTest.orderId !== bill.orderId) throw Object.assign(new Error("Test does not belong to this bill's order"), { httpStatus: 400 });
+    if ((orderTest as { status?: string }).status === "cancelled") throw Object.assign(new Error("Test is already cancelled"), { httpStatus: 409 });
+
+    // Get all tests on this order to check we won't remove the last active one
+    const allTests = await tx.select().from(orderTestsTable).where(eq(orderTestsTable.orderId, bill.orderId));
+    const remainingActive = allTests.filter((t) => t.id !== otId && (t as { status?: string }).status !== "cancelled");
+    if (remainingActive.length === 0) {
+      throw Object.assign(
+        new Error("Cannot cancel the last active test. Use 'Cancel Bill' to cancel the whole bill."),
+        { httpStatus: 400 },
+      );
+    }
+
+    // Mark the test as cancelled
+    await tx.update(orderTestsTable).set({
+      status: "cancelled",
+      cancelledByName: actor,
+      cancelledAt: new Date(),
+      cancellationReason: why,
+    } as Partial<typeof orderTestsTable.$inferSelect>).where(eq(orderTestsTable.id, otId));
+
+    // Recalculate totals from remaining active tests
+    const newSubtotal = remainingActive.reduce((sum, t) => sum + Number(t.price), 0);
+    const oldDiscount = Number(bill.discount);
+    const newDiscount = Math.min(oldDiscount, newSubtotal); // cap discount at new subtotal
+    const newTotal = Math.max(0, Math.round((newSubtotal - newDiscount + Number(bill.taxAmount)) * 100) / 100);
+    const newPaid = Number(bill.paidAmount);
+    const newBalance = Math.max(0, Math.round((newTotal - newPaid) * 100) / 100);
+    const newStatus = newBalance <= 0 && newPaid > 0 ? "paid"
+      : newPaid > 0 ? "partial"
+      : "pending";
+
+    const [updated] = await tx.update(billsTable).set({
+      subtotal: String(Math.round(newSubtotal * 100) / 100),
+      discount: String(Math.round(newDiscount * 100) / 100),
+      totalAmount: String(newTotal),
+      balanceAmount: String(newBalance),
+      status: newStatus,
+    }).where(eq(billsTable.id, id)).returning();
+
+    await tx.insert(billAuditsTable).values({
+      billId: id,
+      editedBy: actor,
+      reason: why,
+      changeType: "test-cancelled",
+      oldValue: `testId=${otId}, price=₹${Number(orderTest.price).toFixed(2)}`,
+      newValue: `subtotal=₹${newSubtotal.toFixed(2)}, total=₹${newTotal.toFixed(2)}`,
+    });
+
+    return updated;
+  }).catch((err: Error & { httpStatus?: number }) => {
+    if (err.httpStatus) { res.status(err.httpStatus).json({ error: err.message }); return null; }
+    throw err;
+  });
+
+  if (!result) return;
+  res.json(await buildBill(result));
+});
+
 paymentsRouter.post("/", async (req, res) => {
   const parsed = CreatePaymentBody.safeParse(req.body);
   if (!parsed.success) {

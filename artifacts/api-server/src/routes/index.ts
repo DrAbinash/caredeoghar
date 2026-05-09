@@ -53,6 +53,7 @@ import internalCronRouter from "./internal-cron";
 import { publicBookingRouter } from "./public-booking";
 import { onlineBookingsRouter } from "./online-bookings";
 import { dailySummaryRouter } from "./daily-summary";
+import { outsourcedLabsRouter } from "./outsourced-labs";
 import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
 import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
 
@@ -231,6 +232,17 @@ router.use("/departments", requireStaffAuth, requireStaffPermission("/settings")
 router.use("/branches", requireStaffAuth, requireStaffPermission("/settings"), branchesRouter);
 router.use("/printers", requireStaffAuth, requireStaffPermission("/settings"), printersRouter);
 router.use("/vendors", requireStaffAuth, requireStaffPermission("/settings"), vendorsRouter);
+
+// Outsourced labs — /tests permission (test catalog management)
+router.use(
+  "/outsourced-labs",
+  requireStaffAuth,
+  (req, res, next) => {
+    if (req.method === "GET") return next();
+    return requireStaffPermission("/tests")(req, res, next);
+  },
+  outsourcedLabsRouter,
+);
 
 // DICOM / PACS — /dicom-nodes permission
 router.use("/pacs", requireStaffAuth, requireStaffPermission("/dicom-nodes"), pacsRouter);

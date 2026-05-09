@@ -15,10 +15,11 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Plus, Pencil, History, Clock, ShieldAlert, Trash2, AlertTriangle, ExternalLink, Printer, Ban, Undo2 } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, History, Clock, ShieldAlert, Trash2, AlertTriangle, ExternalLink, Printer, Ban, Undo2, XCircle } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useSuperAdmin, getSuperAdminToken } from "@/hooks/useSuperAdmin";
 import { readStaffSession } from "@/lib/staffSession";
+import { useToast } from "@/hooks/use-toast";
 
 type PaymentForm = {
   amount: number;
@@ -90,7 +91,7 @@ export default function BillDetail({ id }: { id: number }) {
   const [reprintOpen, setReprintOpen] = useState(false);
   const [refundOpen, setRefundOpen] = useState(false);
   const [refundTab, setRefundTab] = useState<"cancel" | "refund" | "cancel-refund">("cancel");
-  const [reprintBy] = useState<string>(() => readStaffSession()?.user.name || localStorage.getItem("diagnosticErp:lastReprintBy") || "");
+  const [reprintBy, setReprintBy] = useState<string>(() => readStaffSession()?.user.name || localStorage.getItem("diagnosticErp:lastReprintBy") || "");
   const [reprintReason, setReprintReason] = useState<string>("");
   const [isReprint, setIsReprint] = useState(false);
   const [paperSize, setPaperSize] = useState<"A4" | "A5">(() => (localStorage.getItem("diagnosticErp:billPaperSize") as "A4" | "A5") || "A4");
@@ -526,31 +527,14 @@ export default function BillDetail({ id }: { id: number }) {
 
         {/* Tests */}
         {bill.order?.tests && bill.order.tests.length > 0 && (
-          <div>
-            <h2 className="text-sm font-semibold mb-3">Tests Billed</h2>
-            <div className="bg-card border border-card-border rounded-xl shadow-sm overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-muted-foreground border-b border-border bg-muted/30">
-                    <th className="px-4 py-3 font-medium">Code</th>
-                    <th className="px-4 py-3 font-medium">Test</th>
-                    <th className="px-4 py-3 font-medium">Category</th>
-                    <th className="px-4 py-3 font-medium text-right">Price</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bill.order.tests.map((ot) => (
-                    <tr key={ot.id} className="border-b border-border/50 last:border-0">
-                      <td className="px-4 py-3 font-mono text-xs font-bold text-primary">{ot.test?.code}</td>
-                      <td className="px-4 py-3 font-medium">{ot.test?.name}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{ot.test?.category}</td>
-                      <td className="px-4 py-3 text-right font-semibold">₹{Number(ot.price).toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <TestsTable
+            bill={bill as Parameters<typeof TestsTable>[0]["bill"]}
+            billId={id}
+            onUpdated={() => {
+              queryClient.invalidateQueries({ queryKey: getGetBillQueryKey(id) });
+              queryClient.invalidateQueries({ queryKey: getListBillsQueryKey() });
+            }}
+          />
         )}
 
         {/* Payments */}
@@ -1448,6 +1432,177 @@ export default function BillDetail({ id }: { id: number }) {
               </div>
             </form>
           )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ─── TestsTable (per-test cancel) ──────────────────────────────────────────
+
+type OrderTest = {
+  id: number;
+  testId: number;
+  price: number;
+  status?: string | null;
+  cancelledAt?: string | null;
+  cancelledByName?: string | null;
+  cancellationReason?: string | null;
+  test?: { code?: string; name?: string; category?: string } | null;
+};
+
+type BillForTestsTable = {
+  status?: string;
+  order?: { tests?: OrderTest[] } | null;
+};
+
+function TestsTable({
+  bill,
+  billId,
+  onUpdated,
+}: {
+  bill: BillForTestsTable;
+  billId: number;
+  onUpdated: () => void;
+}) {
+  const { toast } = useToast();
+  const [cancelTestId, setCancelTestId] = useState<number | null>(null);
+  const [reason, setReason] = useState("");
+  const [cancelBy, setCancelBy] = useState<string>(
+    () => readStaffSession()?.user.name || ""
+  );
+
+  const cancelTest = useMutation<unknown, Error, void>({
+    mutationFn: async () => {
+      if (!cancelTestId) throw new Error("No test selected");
+      return api.post(`/api/bills/${billId}/cancel-test`, {
+        orderTestId: cancelTestId,
+        reason,
+        cancelledByName: cancelBy,
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Test cancelled", description: "The test has been removed from this bill." });
+      setCancelTestId(null);
+      setReason("");
+      onUpdated();
+    },
+    onError: (e) => {
+      toast({ title: "Failed to cancel test", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const tests = bill.order?.tests ?? [];
+  const activeTests = tests.filter((t) => (t.status ?? "active") === "active");
+  const isBillCancelled = bill.status === "cancelled";
+
+  return (
+    <div>
+      <h2 className="text-sm font-semibold mb-3">Tests Billed</h2>
+      <div className="bg-card border border-card-border rounded-xl shadow-sm overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs text-muted-foreground border-b border-border bg-muted/30">
+              <th className="px-4 py-3 font-medium">Code</th>
+              <th className="px-4 py-3 font-medium">Test</th>
+              <th className="px-4 py-3 font-medium">Category</th>
+              <th className="px-4 py-3 font-medium text-right">Price</th>
+              <th className="px-4 py-3 font-medium">Status</th>
+              <th className="px-4 py-3 font-medium w-10" />
+            </tr>
+          </thead>
+          <tbody>
+            {tests.map((ot) => {
+              const isCancelled = (ot.status ?? "active") === "cancelled";
+              return (
+                <tr
+                  key={ot.id}
+                  className={`border-b border-border/50 last:border-0 ${isCancelled ? "opacity-50" : ""}`}
+                >
+                  <td className="px-4 py-3 font-mono text-xs font-bold text-primary">{ot.test?.code}</td>
+                  <td className="px-4 py-3 font-medium">
+                    {ot.test?.name}
+                    {isCancelled && ot.cancelledByName && (
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
+                        Cancelled by {ot.cancelledByName}
+                        {ot.cancellationReason ? ` — ${ot.cancellationReason}` : ""}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">{ot.test?.category}</td>
+                  <td className={`px-4 py-3 text-right font-semibold ${isCancelled ? "line-through text-muted-foreground" : ""}`}>
+                    ₹{Number(ot.price).toFixed(2)}
+                  </td>
+                  <td className="px-4 py-3">
+                    {isCancelled ? (
+                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400">
+                        Cancelled
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400">
+                        Active
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {!isCancelled && !isBillCancelled && activeTests.length > 1 && (
+                      <button
+                        title="Cancel this test"
+                        onClick={() => { setCancelTestId(ot.id); setReason(""); }}
+                        className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950/30 text-muted-foreground hover:text-red-600"
+                      >
+                        <XCircle size={15} />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Cancel-test dialog */}
+      <Dialog open={cancelTestId !== null} onOpenChange={(o) => { if (!o) setCancelTestId(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Test</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-1">
+            <p className="text-sm text-muted-foreground">
+              Cancelling this test will remove it from the bill and recalculate the total. The bill stays open for remaining tests.
+            </p>
+            {activeTests.length <= 1 && (
+              <div className="flex gap-2 items-start rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                <span>This is the last active test. Use "Cancel Bill" instead to void the entire bill.</span>
+              </div>
+            )}
+            <div>
+              <Label>Reason <span className="text-red-500">*</span></Label>
+              <textarea
+                rows={2}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="e.g. Test not performed, patient refused…"
+                className="mt-1 w-full px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+              />
+            </div>
+            <div>
+              <Label>Cancelled By</Label>
+              <Input className="mt-1" value={cancelBy} onChange={(e) => setCancelBy(e.target.value)} />
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" onClick={() => setCancelTestId(null)}>Close</Button>
+              <Button
+                disabled={!reason.trim() || !cancelBy.trim() || cancelTest.isPending}
+                onClick={() => cancelTest.mutate()}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {cancelTest.isPending ? "Cancelling…" : "Cancel Test"}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -45,6 +45,7 @@ const Portal          = lazy(() => import("@/pages/Portal"));
 const Display         = lazy(() => import("@/pages/Display"));
 const OnlineBookings  = lazy(() => import("@/pages/OnlineBookings"));
 const DailySummary    = lazy(() => import("@/pages/DailySummary"));
+const OutsourcedLabs  = lazy(() => import("@/pages/OutsourcedLabs"));
 const NotFound        = lazy(() => import("@/pages/not-found"));
 
 function PageLoader() {
@@ -144,6 +145,7 @@ function Router() {
               <Route path="/form-f" component={FormF} />
               <Route path="/machines" component={Machines} />
               <Route path="/website" component={Website} />
+              <Route path="/outsourced-labs" component={OutsourcedLabs} />
               <Route path="/settings" component={Settings} />
               <Route path="/system-update" component={SystemUpdate} />
               <Route component={NotFound} />

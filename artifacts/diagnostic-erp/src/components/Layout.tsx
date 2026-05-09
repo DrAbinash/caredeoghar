@@ -41,6 +41,7 @@ import {
   ChevronRight,
   ShoppingCart,
   BarChart2,
+  Building2,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -98,6 +99,7 @@ const navItems: NavEntry[] = [
     label: "Test Catalog",
     children: [
       { path: "/tests", icon: FlaskConical, label: "Tests" },
+      { path: "/outsourced-labs", icon: Building2, label: "Outsourced Labs" },
       { path: "/packages", icon: Boxes, label: "Packages" },
     ],
   },

@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, numeric, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, numeric, boolean, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -17,6 +17,11 @@ export const testsTable = pgTable("diagnostic_tests", {
   department: text("department").notNull().default("Pathology"),
   // Room/counter where this test is performed (e.g. "Room 4").
   roomNumber: text("room_number").notNull().default(""),
+  // Whether the test is performed in-house or sent to an outsourced lab.
+  // 'inhouse' (default) | 'outsourced'
+  testType: text("test_type").notNull().default("inhouse"),
+  // FK to outsourced_labs.id — only set when testType = 'outsourced'
+  outsourcedLabId: integer("outsourced_lab_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -17,6 +17,7 @@ import { startCronScheduler } from "./cron";
 import { ensureDefaultLedger } from "./routes/ledgers";
 import { backfillExpirePublicTokens } from "./routes/patient-reports";
 import { db, usersTable } from "@workspace/db";
+import { pool } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
@@ -103,6 +104,42 @@ async function seedBootstrapAdminIfNeeded(): Promise<void> {
   }
 }
 
+// ── Startup schema migrations ──────────────────────────────────────────────────
+// Idempotent ALTER TABLE / CREATE TABLE IF NOT EXISTS statements that extend
+// the schema without requiring a full Drizzle migration pipeline. Safe to run
+// on every startup because every clause uses IF NOT EXISTS / ADD COLUMN IF.
+async function runStartupMigrations(): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      ALTER TABLE order_tests ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+      ALTER TABLE order_tests ADD COLUMN IF NOT EXISTS cancelled_by_name TEXT;
+      ALTER TABLE order_tests ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
+      ALTER TABLE order_tests ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
+      ALTER TABLE diagnostic_tests ADD COLUMN IF NOT EXISTS test_type TEXT NOT NULL DEFAULT 'inhouse';
+      ALTER TABLE diagnostic_tests ADD COLUMN IF NOT EXISTS outsourced_lab_id INTEGER;
+      CREATE TABLE IF NOT EXISTS outsourced_labs (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        contact_person TEXT,
+        phone TEXT,
+        email TEXT,
+        address TEXT,
+        gstin TEXT,
+        notes TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    logger.info("Startup migrations applied");
+  } catch (err) {
+    logger.error({ err }, "Startup migration failed — partial-cancel / outsourced-labs features may not work");
+  } finally {
+    client.release();
+  }
+}
+
 process.on("uncaughtException", (err) => {
   logger.error({ err }, "Uncaught exception — exiting");
   process.exit(1);
@@ -138,6 +175,7 @@ const server = app.listen({ port, exclusive: true }, () => {
     logger.info("Cron schedulers disabled (set ENABLE_SCHEDULERS=1 to enable)");
   }
 
+  runStartupMigrations().catch((e) => logger.error({ err: e }, "Failed to run startup migrations"));
   ensureDefaultLedger().catch((e) => logger.error({ err: e }, "Failed to seed default ledger"));
   backfillExpirePublicTokens().catch((e) => logger.error({ err: e }, "Failed to backfill public token expiry"));
   seedBootstrapAdminIfNeeded().catch((e) => logger.error({ err: e }, "Failed to seed/update bootstrap admin"));
