@@ -514,6 +514,21 @@ describe("generatePatientMessage", () => {
     expect(result).toBe("");
   });
 
+  it("returns empty string when the model returns null-ish nested fields", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ candidates: [{ content: null }] }),
+    } as unknown as Response);
+
+    const result = await generatePatientMessage(SAMPLE_MSG_PATIENT, "followup", {
+      baseUrl: "https://api.example.com",
+      apiKey: "k",
+    });
+
+    expect(result).toBe("");
+  });
+
   it("propagates errors from the AI API", async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: false,

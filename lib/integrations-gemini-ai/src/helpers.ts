@@ -193,5 +193,5 @@ export async function generatePatientMessage(
   options?: GeminiGenerateOptions
 ): Promise<string> {
   const prompt = buildPatientMessagePrompt(patient, messageType);
-  return geminiGenerate(prompt, { maxTokens: 200, ...options });
+  return geminiGenerate(prompt, { ...options, maxTokens: 200 });
 }
