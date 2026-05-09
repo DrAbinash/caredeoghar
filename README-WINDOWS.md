@@ -102,6 +102,16 @@ in your browser.
 
 To stop everything, press `Ctrl + C` in the PowerShell window.
 
+### Auto-restart mode
+
+If you want the three dev services to relaunch automatically after a crash, use:
+
+```powershell
+pnpm dev:restart
+```
+
+This keeps the API server, ERP frontend, and Super Admin portal running and restarts any one that exits unexpectedly.
+
 ### Running services individually
 
 You can also start them one at a time in separate PowerShell windows:
