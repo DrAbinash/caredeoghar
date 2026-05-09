@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,9 +9,6 @@ import {
   Calendar, AlertTriangle, Check, X, Loader2, Star,
 } from "lucide-react";
 import {
-  useListDoctors,
-  getListDoctorsQueryKey,
-  useListLedgers,
   useCreateLedger,
   useUpdateLedger,
   useDeleteLedger,
@@ -22,6 +19,10 @@ import {
   type CreateLedgerBody,
   type UpdateLedgerBody,
 } from "@workspace/api-client-react";
+import { saAuthHeaders } from "@/lib/saApi";
+
+const SA_BOOKS_KEY = ["/api/super-admin/books"] as const;
+const SA_DOCTORS_KEY = ["/api/super-admin/doctors-list"] as const;
 
 export default function BooksManager({ token, onBack }: { token: string; onBack: () => void }) {
   const { toast } = useToast();
@@ -35,7 +36,14 @@ export default function BooksManager({ token, onBack }: { token: string; onBack:
   const [resetReason, setResetReason] = useState("");
   const [resetConfirm, setResetConfirm] = useState("");
 
-  const { data: booksData, isLoading, error: booksError, queryKey: booksQueryKey } = useListLedgers();
+  const { data: booksData, isLoading, error: booksError } = useQuery({
+    queryKey: SA_BOOKS_KEY,
+    queryFn: async () => {
+      const res = await fetch("/api/super-admin/books", { headers: saAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to load books");
+      return res.json() as Promise<Book[]>;
+    },
+  });
   const books: Book[] = Array.isArray(booksData) ? booksData : [];
 
   useEffect(() => {
@@ -44,15 +52,22 @@ export default function BooksManager({ token, onBack }: { token: string; onBack:
     }
   }, [booksError, toast]);
 
-  const { data: doctorsData } = useListDoctors();
-  const doctors = doctorsData?.doctors ?? [];
+  const { data: doctorsData } = useQuery({
+    queryKey: SA_DOCTORS_KEY,
+    queryFn: async () => {
+      const res = await fetch("/api/super-admin/doctors-list", { headers: saAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to load doctors");
+      return res.json() as Promise<{ doctors: Doctor[] }>;
+    },
+  });
+  const doctors: Doctor[] = doctorsData?.doctors ?? [];
 
   const createMutation = useCreateLedger({
     mutation: {
       onSuccess: (_, { data: { name } }) => {
         toast({ title: "Book created", description: name });
         setNewName("");
-        queryClient.invalidateQueries({ queryKey: booksQueryKey });
+        queryClient.invalidateQueries({ queryKey: SA_BOOKS_KEY });
       },
       onError: (e: unknown) => {
         toast({ title: "Could not create", description: (e as Error).message, variant: "destructive" });
@@ -64,7 +79,7 @@ export default function BooksManager({ token, onBack }: { token: string; onBack:
     mutation: {
       onSuccess: () => {
         setEditingId(null);
-        queryClient.invalidateQueries({ queryKey: booksQueryKey });
+        queryClient.invalidateQueries({ queryKey: SA_BOOKS_KEY });
       },
       onError: (e: unknown) => {
         toast({ title: "Rename failed", description: (e as Error).message, variant: "destructive" });
@@ -77,8 +92,8 @@ export default function BooksManager({ token, onBack }: { token: string; onBack:
       onSuccess: (_, { data: _body, id }) => {
         const book = books.find(b => b.id === id);
         toast({ title: "Book deleted", description: book?.name });
-        queryClient.invalidateQueries({ queryKey: booksQueryKey });
-        queryClient.invalidateQueries({ queryKey: getListDoctorsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: SA_BOOKS_KEY });
+        queryClient.invalidateQueries({ queryKey: SA_DOCTORS_KEY });
       },
       onError: (e: unknown) => {
         toast({ title: "Cannot delete", description: (e as Error).message, variant: "destructive" });
@@ -96,7 +111,7 @@ export default function BooksManager({ token, onBack }: { token: string; onBack:
         setResetTarget(null);
         setResetReason("");
         setResetConfirm("");
-        queryClient.invalidateQueries({ queryKey: booksQueryKey });
+        queryClient.invalidateQueries({ queryKey: SA_BOOKS_KEY });
       },
       onError: (e: unknown) => {
         toast({ title: "Reset failed", description: (e as Error).message, variant: "destructive" });
@@ -254,8 +269,8 @@ export default function BooksManager({ token, onBack }: { token: string; onBack:
           onClose={() => setAssignTarget(null)}
           onSaved={() => {
             setAssignTarget(null);
-            queryClient.invalidateQueries({ queryKey: booksQueryKey });
-            queryClient.invalidateQueries({ queryKey: getListDoctorsQueryKey() });
+            queryClient.invalidateQueries({ queryKey: SA_BOOKS_KEY });
+            queryClient.invalidateQueries({ queryKey: SA_DOCTORS_KEY });
           }}
         />
       )}

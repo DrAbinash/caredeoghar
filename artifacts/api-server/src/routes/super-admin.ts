@@ -4,13 +4,24 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { z } from "zod/v4";
 import { db } from "@workspace/db";
-import { usersTable, superAdminSessionsTable } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import {
+  usersTable,
+  superAdminSessionsTable,
+  doctorsTable,
+  testsTable,
+  ledgersTable,
+  billsTable,
+  patientsTable,
+  ordersTable,
+  appointmentsTable,
+} from "@workspace/db/schema";
+import { eq, and, asc, isNull, or, sql } from "drizzle-orm";
 import {
   requireSuperAdminUsb,
   isValidUsbKey,
   isUsbGateEnforced,
 } from "../middleware/requireSuperAdminUsb";
+import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
 
 export const superAdminRouter = Router();
 
@@ -190,4 +201,84 @@ superAdminRouter.post("/verify", async (req, res): Promise<void> => {
   }
 
   res.json({ active: true, userName: session.userName, expiresAt: session.expiresAt });
+});
+
+// ── GET /api/super-admin/doctors-list — thin read for SA portal pages ─────────
+// Returns id, name, ledgerId, specialization — all fields the portal dropdowns
+// and the AssignDoctors modal need. Protected by requireSuperAdmin (which also
+// checks the USB key when the gate is enforced).
+superAdminRouter.get("/doctors-list", requireSuperAdmin, async (_req, res): Promise<void> => {
+  const doctors = await db
+    .select({
+      id: doctorsTable.id,
+      name: doctorsTable.name,
+      specialization: doctorsTable.specialization,
+      ledgerId: doctorsTable.ledgerId,
+      defaultCommission: doctorsTable.defaultCommission,
+      defaultCommissionType: doctorsTable.defaultCommissionType,
+    })
+    .from(doctorsTable)
+    .orderBy(asc(doctorsTable.name));
+  res.json({ doctors });
+});
+
+// ── GET /api/super-admin/tests-list — thin read for SA portal pages ───────────
+superAdminRouter.get("/tests-list", requireSuperAdmin, async (_req, res): Promise<void> => {
+  const tests = await db
+    .select({
+      id: testsTable.id,
+      name: testsTable.name,
+      category: testsTable.category,
+    })
+    .from(testsTable)
+    .where(eq(testsTable.isActive, true))
+    .orderBy(asc(testsTable.name));
+  res.json({ tests });
+});
+
+// ── GET /api/super-admin/books — ledgers with stats for Books page ────────────
+// Mirrors the GET /api/ledgers logic but protected by SA auth instead of staff
+// auth, since the Books page lives in the super-admin portal.
+superAdminRouter.get("/books", requireSuperAdmin, async (_req, res): Promise<void> => {
+  // Ensure default ledger exists
+  const [existing] = await db.select({ id: ledgersTable.id }).from(ledgersTable).where(eq(ledgersTable.id, 1));
+  if (!existing) {
+    await db.execute(sql`
+      INSERT INTO ledgers (id, name, is_default, created_at)
+      VALUES (1, 'Default / Walk-in', true, NOW())
+      ON CONFLICT (id) DO NOTHING
+    `);
+  }
+
+  const ledgers = await db.select().from(ledgersTable).orderBy(ledgersTable.id);
+
+  // For id=1 (default), also count rows where ledger_id IS NULL (legacy rows).
+  // Each table gets its own typed condition to avoid Drizzle's strict column brand checks.
+  const result = await Promise.all(
+    ledgers.map(async (l) => {
+      const isDefault = l.id === 1;
+      const [doctorCount, patientCount, billCount, orderCount, appointmentCount] = await Promise.all([
+        db.select({ c: sql<number>`count(*)` }).from(doctorsTable)
+          .where(isDefault ? or(eq(doctorsTable.ledgerId, 1), isNull(doctorsTable.ledgerId))! : eq(doctorsTable.ledgerId, l.id)),
+        db.select({ c: sql<number>`count(*)` }).from(patientsTable)
+          .where(isDefault ? or(eq(patientsTable.ledgerId, 1), isNull(patientsTable.ledgerId))! : eq(patientsTable.ledgerId, l.id)),
+        db.select({ c: sql<number>`count(*)` }).from(billsTable)
+          .where(isDefault ? or(eq(billsTable.ledgerId, 1), isNull(billsTable.ledgerId))! : eq(billsTable.ledgerId, l.id)),
+        db.select({ c: sql<number>`count(*)` }).from(ordersTable)
+          .where(isDefault ? or(eq(ordersTable.ledgerId, 1), isNull(ordersTable.ledgerId))! : eq(ordersTable.ledgerId, l.id)),
+        db.select({ c: sql<number>`count(*)` }).from(appointmentsTable)
+          .where(isDefault ? or(eq(appointmentsTable.ledgerId, 1), isNull(appointmentsTable.ledgerId))! : eq(appointmentsTable.ledgerId, l.id)),
+      ]);
+      return {
+        ...l,
+        doctorCount: Number(doctorCount[0]?.c ?? 0),
+        patientCount: Number(patientCount[0]?.c ?? 0),
+        billCount: Number(billCount[0]?.c ?? 0),
+        orderCount: Number(orderCount[0]?.c ?? 0),
+        appointmentCount: Number(appointmentCount[0]?.c ?? 0),
+      };
+    }),
+  );
+
+  res.json(result);
 });

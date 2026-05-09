@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,8 +14,6 @@ import { useForm } from "react-hook-form";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Plus, Trash2, Stethoscope, Star } from "lucide-react";
 import {
-  useListDoctors,
-  useListTests,
   useListCommissionRules,
   useCreateCommissionRule,
   useUpdateCommissionRule,
@@ -24,6 +22,20 @@ import {
   type CommissionRuleType,
   type CommissionRuleScope,
 } from "@workspace/api-client-react";
+import { saAuthHeaders } from "@/lib/saApi";
+
+type SaDoctor = {
+  id: number;
+  name: string;
+  specialization: string;
+  ledgerId: number | null;
+  defaultCommission: string | null;
+  defaultCommissionType: string;
+};
+type SaTest = { id: number; name: string; category: string | null };
+
+const SA_DOCTORS_KEY = ["/api/super-admin/doctors-list"] as const;
+const SA_TESTS_KEY = ["/api/super-admin/tests-list"] as const;
 
 const CATEGORIES = ["hematology", "biochemistry", "microbiology", "serology", "radiology", "cardiology", "urine analysis", "other"];
 const inr = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -36,11 +48,25 @@ export default function CommissionRules({ onBack }: { onBack: () => void }) {
   const [ruleOpen, setRuleOpen] = useState(false);
   const [editRule, setEditRule] = useState<CommissionRule | null>(null);
 
-  const { data: doctorsData } = useListDoctors();
-  const doctors = doctorsData?.doctors ?? [];
+  const { data: doctorsData } = useQuery({
+    queryKey: SA_DOCTORS_KEY,
+    queryFn: async () => {
+      const res = await fetch("/api/super-admin/doctors-list", { headers: saAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to load doctors");
+      return res.json() as Promise<{ doctors: SaDoctor[] }>;
+    },
+  });
+  const doctors: SaDoctor[] = doctorsData?.doctors ?? [];
 
-  const { data: testsData } = useListTests();
-  const tests = testsData?.tests ?? [];
+  const { data: testsData } = useQuery({
+    queryKey: SA_TESTS_KEY,
+    queryFn: async () => {
+      const res = await fetch("/api/super-admin/tests-list", { headers: saAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to load tests");
+      return res.json() as Promise<{ tests: SaTest[] }>;
+    },
+  });
+  const tests: SaTest[] = testsData?.tests ?? [];
 
   const { data: rulesData, queryKey: rulesQueryKey, error: rulesError } = useListCommissionRules(
     selectedDoctorId !== null ? { doctorId: selectedDoctorId } : undefined,

@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,12 +9,15 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Printer, Stethoscope } from "lucide-react";
 import {
-  useListDoctors,
   useGetDetailedCommissionReport,
   type DetailedCommissionReport,
   type CommissionTestGroupRow,
   type CommissionDoctorEntry,
 } from "@workspace/api-client-react";
+import { saAuthHeaders } from "@/lib/saApi";
+
+type SaDoctor = { id: number; name: string };
+const SA_DOCTORS_KEY = ["/api/super-admin/doctors-list"] as const;
 
 const inr = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const ALPHA = ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p"];
@@ -28,8 +32,15 @@ export default function CommissionReport({ onBack }: { onBack: () => void }) {
   });
   const [to, setTo] = useState(new Date().toISOString().split("T")[0]);
 
-  const { data: doctorsData } = useListDoctors();
-  const doctors = doctorsData?.doctors ?? [];
+  const { data: doctorsData } = useQuery({
+    queryKey: SA_DOCTORS_KEY,
+    queryFn: async () => {
+      const res = await fetch("/api/super-admin/doctors-list", { headers: saAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to load doctors");
+      return res.json() as Promise<{ doctors: SaDoctor[] }>;
+    },
+  });
+  const doctors: SaDoctor[] = doctorsData?.doctors ?? [];
 
   const { data, isLoading, error: reportError } = useGetDetailedCommissionReport({
     from,
