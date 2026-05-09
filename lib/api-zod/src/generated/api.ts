@@ -2728,6 +2728,8 @@ export const DeleteExpenseResponse = zod.object({
 });
 
 /**
+ * Returns all commission rules, optionally filtered by doctor. Each rule defines a percentage or fixed-amount commission earned by a referring doctor for specific tests, categories, or all orders.
+
  * @summary List commission rules
  */
 export const ListCommissionRulesQueryParams = zod.object({
@@ -2751,6 +2753,8 @@ export const ListCommissionRulesResponse = zod.array(
 );
 
 /**
+ * Creates a new commission rule for a doctor. Scope controls whether the rule applies to all orders, a specific test category, or a specific test. Only one rule per doctor+scope combination is allowed.
+
  * @summary Create a commission rule
  */
 export const CreateCommissionRuleBody = zod.object({
@@ -2807,6 +2811,8 @@ export const DeleteCommissionRuleResponse = zod.object({
 });
 
 /**
+ * Returns earned commission per doctor, optionally filtered by date range and doctor. Results can be grouped by test or category. Used by the commission report print view in the super-admin portal.
+
  * @summary Detailed commission report grouped by test
  */
 export const GetDetailedCommissionReportQueryParams = zod.object({
@@ -2857,6 +2863,8 @@ export const GetDetailedCommissionReportResponse = zod.object({
 });
 
 /**
+ * Returns a summary row per doctor showing total commission earned within the date window, total paid, window due, and lifetime outstanding balance.
+
  * @summary Summary of earned/paid/due commission per doctor
  */
 export const GetDoctorLedgerSummaryQueryParams = zod.object({
@@ -3016,6 +3024,8 @@ export const DeleteDoctorPayoutResponse = zod.object({
 });
 
 /**
+ * Returns all accounting books. Each book groups one or more doctors for batch payout tracking. Used in the Books tab of the super-admin portal.
+
  * @summary List books (ledger groups)
  */
 export const ListLedgersResponseItem = zod.object({

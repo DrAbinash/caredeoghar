@@ -1731,12 +1731,17 @@ paths:
                     type: boolean
                 required: [success]
 
-  # Super Admin — Commission Rules
+  # ─── Commission ──────────────────────────────────────────────────────────────
+  # Requires super-admin token (X-SA-Token) + USB key (X-SA-USB-Key).
   /commission/rules:
     get:
       operationId: listCommissionRules
       tags: [super-admin]
       summary: List commission rules
+      description: >
+        Returns all commission rules, optionally filtered by doctor.
+        Each rule defines a percentage or fixed-amount commission earned
+        by a referring doctor for specific tests, categories, or all orders.
       parameters:
         - name: doctorId
           in: query
@@ -1755,6 +1760,10 @@ paths:
       operationId: createCommissionRule
       tags: [super-admin]
       summary: Create a commission rule
+      description: >
+        Creates a new commission rule for a doctor. Scope controls whether
+        the rule applies to all orders, a specific test category, or a
+        specific test. Only one rule per doctor+scope combination is allowed.
       requestBody:
         required: true
         content:
@@ -1820,6 +1829,10 @@ paths:
       operationId: getDetailedCommissionReport
       tags: [super-admin]
       summary: Detailed commission report grouped by test
+      description: >
+        Returns earned commission per doctor, optionally filtered by date range
+        and doctor. Results can be grouped by test or category. Used by the
+        commission report print view in the super-admin portal.
       parameters:
         - name: from
           in: query
@@ -1845,12 +1858,16 @@ paths:
               schema:
                 $ref: "#/components/schemas/DetailedCommissionReport"
 
-  # Super Admin — Doctor Ledger
+  # ─── Doctor Ledger ───────────────────────────────────────────────────────────
+  # Requires super-admin token + USB key. Tracks earned vs paid commissions.
   /doctor-ledger:
     get:
       operationId: getDoctorLedgerSummary
       tags: [super-admin]
       summary: Summary of earned/paid/due commission per doctor
+      description: >
+        Returns a summary row per doctor showing total commission earned within
+        the date window, total paid, window due, and lifetime outstanding balance.
       parameters:
         - name: from
           in: query
@@ -1970,12 +1987,16 @@ paths:
                     type: boolean
                 required: [success]
 
-  # Books / Ledgers
+  # ─── Books / Ledgers ─────────────────────────────────────────────────────────
+  # Requires super-admin token + USB key. A Book groups doctors for bulk payouts.
   /ledgers:
     get:
       operationId: listLedgers
       tags: [ledgers]
       summary: List books (ledger groups)
+      description: >
+        Returns all accounting books. Each book groups one or more doctors for
+        batch payout tracking. Used in the Books tab of the super-admin portal.
       responses:
         "200":
           description: List of books

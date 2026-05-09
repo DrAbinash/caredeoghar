@@ -6823,6 +6823,8 @@ export const useDeleteExpense = <
 };
 
 /**
+ * Returns all commission rules, optionally filtered by doctor. Each rule defines a percentage or fixed-amount commission earned by a referring doctor for specific tests, categories, or all orders.
+
  * @summary List commission rules
  */
 export const getListCommissionRulesUrl = (
@@ -6923,6 +6925,8 @@ export function useListCommissionRules<
 }
 
 /**
+ * Creates a new commission rule for a doctor. Scope controls whether the rule applies to all orders, a specific test category, or a specific test. Only one rule per doctor+scope combination is allowed.
+
  * @summary Create a commission rule
  */
 export const getCreateCommissionRuleUrl = () => {
@@ -7180,6 +7184,8 @@ export const useDeleteCommissionRule = <
 };
 
 /**
+ * Returns earned commission per doctor, optionally filtered by date range and doctor. Results can be grouped by test or category. Used by the commission report print view in the super-admin portal.
+
  * @summary Detailed commission report grouped by test
  */
 export const getGetDetailedCommissionReportUrl = (
@@ -7289,6 +7295,8 @@ export function useGetDetailedCommissionReport<
 }
 
 /**
+ * Returns a summary row per doctor showing total commission earned within the date window, total paid, window due, and lifetime outstanding balance.
+
  * @summary Summary of earned/paid/due commission per doctor
  */
 export const getGetDoctorLedgerSummaryUrl = (
@@ -7771,6 +7779,8 @@ export const useDeleteDoctorPayout = <
 };
 
 /**
+ * Returns all accounting books. Each book groups one or more doctors for batch payout tracking. Used in the Books tab of the super-admin portal.
+
  * @summary List books (ledger groups)
  */
 export const getListLedgersUrl = () => {

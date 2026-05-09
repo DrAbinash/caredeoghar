@@ -10,6 +10,7 @@ import { ArrowLeft, Printer, Stethoscope } from "lucide-react";
 import {
   useListDoctors,
   useGetDetailedCommissionReport,
+  type DetailedCommissionReport,
   type CommissionTestGroupRow,
   type CommissionDoctorEntry,
 } from "@workspace/api-client-react";

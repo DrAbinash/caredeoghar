@@ -19,6 +19,8 @@ import {
   useResetLedger,
   type Book,
   type Doctor,
+  type CreateLedgerBody,
+  type UpdateLedgerBody,
 } from "@workspace/api-client-react";
 
 export default function BooksManager({ token, onBack }: { token: string; onBack: () => void }) {
