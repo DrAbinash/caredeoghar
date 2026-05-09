@@ -12,7 +12,6 @@ import {
   buildPatientMessagePrompt,
   buildRadiologyFindingsPrompt,
   buildRadiologyImpressionPrompt,
-  MODALITY_NAMES,
   type PatientMessageType,
 } from "@workspace/integrations-gemini-ai";
 
