@@ -78,10 +78,23 @@ async function resolveLedgerForOrder(orderId: number): Promise<number> {
  * `parseBillNumberParts` handles both shapes so the renumber logic keeps
  * working across the migration.
  */
-export async function generateBillNumber(ledgerId: number): Promise<string> {
-  const num = (await countBillsForLedger(ledgerId)) + 1;
+export async function generateBillNumber(_ledgerId: number): Promise<string> {
   const date = new Date();
-  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(num).padStart(4, "0")}`;
+  const yyyymm = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}`;
+  // Use the global MAX across ALL numeric bills, not a per-ledger count.
+  // COUNT per ledger breaks when multiple ledgers share the same bill_number
+  // unique space — ledger A and B independently arrive at the same sequence
+  // number and collide on the UNIQUE constraint.
+  const [row] = await db
+    .select({ maxBill: sql<string | null>`MAX(bill_number)` })
+    .from(billsTable)
+    .where(sql`bill_number ~ '^[0-9]+$'`);
+  let seq = 1;
+  if (row?.maxBill) {
+    const parts = parseBillNumberParts(row.maxBill);
+    if (parts) seq = parts.seq + 1;
+  }
+  return `${yyyymm}${String(seq).padStart(4, "0")}`;
 }
 
 function parseBillNumberParts(billNumber: string): { monthPrefix: string; seq: number } | null {
@@ -228,9 +241,7 @@ billsRouter.get("/preview-number", async (req, res) => {
     }
     ledgerId = firstLedger.id;
   }
-  const num = (await countBillsForLedger(ledgerId)) + 1;
-  const date = new Date();
-  const next = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(num).padStart(4, "0")}`;
+  const next = await generateBillNumber(ledgerId);
   return res.json({ next, ledgerId });
 });
 
