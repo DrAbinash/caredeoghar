@@ -2039,7 +2039,7 @@ function TodayCollectionsPanel() {
   });
 
   const todayStr = new Date().toDateString();
-  const allBills = (data?.bills ?? []).filter((b) => new Date(b.createdAt).toDateString() === todayStr);
+  const allBills = (data?.bills ?? []).filter((b) => new Date(b.createdAt).toDateString() === todayStr && b.status !== "cancelled");
   // Dues on top, within each group newest first
   const sorted = [...allBills].sort((a, b) => {
     const aDue = a.balanceAmount > 0 ? 0 : 1;
@@ -2048,8 +2048,8 @@ function TodayCollectionsPanel() {
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
-  const dueCount = sorted.filter((b) => b.balanceAmount > 0).length;
-  const totalDue = sorted.reduce((s, b) => s + b.balanceAmount, 0);
+  const dueCount = sorted.filter((b) => b.balanceAmount > 0 && b.status !== "cancelled").length;
+  const totalDue = sorted.reduce((s, b) => s + (b.status === "cancelled" ? 0 : b.balanceAmount), 0);
 
   return (
     <div className="flex-shrink-0 border-t border-card-border bg-card/50">
@@ -2070,7 +2070,7 @@ function TodayCollectionsPanel() {
           <div className="px-3 py-4 text-xs text-muted-foreground text-center">No bills today yet</div>
         ) : (
           sorted.map((b) => {
-            const due = b.balanceAmount > 0;
+            const due = b.balanceAmount > 0 && b.status !== "cancelled";
             const time = new Date(b.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
             return (
               <button
@@ -2131,7 +2131,7 @@ function RecentBillsPanel() {
   });
 
   const today = new Date().toDateString();
-  const bills = (data?.bills ?? []).filter((b) => new Date(b.createdAt).toDateString() === today);
+  const bills = (data?.bills ?? []).filter((b) => new Date(b.createdAt).toDateString() === today && b.status !== "cancelled");
 
   return (
     <div className="bg-card border border-card-border rounded-xl overflow-hidden">

@@ -121,6 +121,7 @@ export default function BillDetail({ id }: { id: number }) {
     staleTime: 5 * 60_000,
   });
   const isBW = printerSettings?.billPrinterType === "bw";
+  const isCancelled = bill?.status === "cancelled";
 
   // Inline QR for the printed receipt — shares the same encoding as
   // BillingDesk so the verify URL stays consistent across surfaces.
@@ -517,10 +518,12 @@ export default function BillDetail({ id }: { id: number }) {
                   <span>{formatCurrency(Number((bill as { refundAmount?: number | string }).refundAmount ?? 0))}</span>
                 </div>
               )}
-              <div className={`flex justify-between text-base font-bold border-t border-border pt-2 ${bill.balanceAmount > 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}>
-                <span>Balance Due</span>
-                <span>{formatCurrency(bill.balanceAmount)}</span>
-              </div>
+              {!isCancelled && (
+                <div className={`flex justify-between text-base font-bold border-t border-border pt-2 ${bill.balanceAmount > 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}>
+                  <span>Balance Due</span>
+                  <span>{formatCurrency(bill.balanceAmount)}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -882,10 +885,12 @@ export default function BillDetail({ id }: { id: number }) {
                 <td style={{ padding: "4px 10px" }}>Amount Paid</td>
                 <td style={{ padding: "4px 10px", textAlign: "right" }}>- ₹{Number(bill.paidAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
               </tr>
-              <tr style={{ fontWeight: "700", color: bill.balanceAmount > 0 ? "#dc2626" : "#16a34a", borderTop: "2px solid #e2e8f0" }}>
-                <td style={{ padding: "6px 10px" }}>Balance Due</td>
-                <td style={{ padding: "6px 10px", textAlign: "right" }}>₹{Number(bill.balanceAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-              </tr>
+              {!isCancelled && (
+                <tr style={{ fontWeight: "700", color: bill.balanceAmount > 0 ? "#dc2626" : "#16a34a", borderTop: "2px solid #e2e8f0" }}>
+                  <td style={{ padding: "6px 10px" }}>Balance Due</td>
+                  <td style={{ padding: "6px 10px", textAlign: "right" }}>₹{Number(bill.balanceAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -919,7 +924,7 @@ export default function BillDetail({ id }: { id: number }) {
 
         {/* Footer */}
         <div style={{ borderTop: "1px dashed #cbd5e1", paddingTop: "12px", textAlign: "center" }}>
-          {bill.balanceAmount <= 0 ? (
+          {isCancelled || bill.balanceAmount <= 0 ? (
             <div style={{ fontSize: "12px", color: "#16a34a", fontWeight: "600", marginBottom: "6px" }}>✓ Payment Received in Full — Thank You!</div>
           ) : (
             <div style={{ fontSize: "12px", color: "#dc2626", fontWeight: "600", marginBottom: "6px" }}>Balance of ₹{Number(bill.balanceAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })} is pending</div>
