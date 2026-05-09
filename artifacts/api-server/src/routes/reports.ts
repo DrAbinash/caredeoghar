@@ -90,6 +90,8 @@ reportsRouter.get("/dashboard", async (_req, res) => {
   const endOfDay = new Date();
   endOfDay.setHours(23, 59, 59, 999);
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const startOfTodayIso = today.toISOString();
+  const endOfTodayIso = endOfDay.toISOString();
 
   const [
     totalPatients,
@@ -103,6 +105,7 @@ reportsRouter.get("/dashboard", async (_req, res) => {
     completedTests,
     ordersByStatus,
     totalBills,
+    todayBills,
     referralOrders,
     pendingReports,
     overdueAlerts,
@@ -119,6 +122,7 @@ reportsRouter.get("/dashboard", async (_req, res) => {
     db.select({ count: sql<number>`count(*)` }).from(ordersTable).where(eq(ordersTable.status, "completed")),
     db.select({ status: ordersTable.status, count: sql<number>`count(*)` }).from(ordersTable).groupBy(ordersTable.status),
     db.select({ count: sql<number>`count(*)` }).from(billsTable),
+    db.select({ count: sql<number>`count(*)` }).from(billsTable).where(and(gte(billsTable.createdAt, startOfTodayIso), lte(billsTable.createdAt, endOfTodayIso))),
     db.select({ sum: sql<number>`coalesce(sum(o.total_amount), 0)` })
       .from(sql`orders o`)
       .where(sql`o.doctor_id IS NOT NULL`),
@@ -163,6 +167,7 @@ reportsRouter.get("/dashboard", async (_req, res) => {
     completedTests: Number(completedTests[0]?.count ?? 0),
     ordersByStatus: ordersByStatus.map((row) => ({ status: row.status, count: Number(row.count) })),
     totalBills: Number(totalBills[0]?.count ?? 0),
+    todayBills: Number(todayBills[0]?.count ?? 0),
     referralPayouts: Number(referralOrders[0]?.sum ?? 0),
     pendingReports: Number(pendingReports[0]?.count ?? 0),
     overdueAlerts: overdueAlerts.map((a) => ({
