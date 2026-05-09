@@ -36,3 +36,9 @@ id = "hPNumB1HuTY-QdlDyLLc0"
 uri = "file://windows-build/dist/DiagnosticERP-Windows-All.zip"
 type = "unspecified"
 title = "DiagnosticERP-Windows-All.zip (Setup + Portable + Update + SuperAdmin)"
+
+[[outputs]]
+id = "RSfpUwLkxaYdWvWKv4j-T"
+uri = "file://FEATURES.md"
+type = "text"
+title = "DiagnoCenter ERP — Complete Feature Reference"
