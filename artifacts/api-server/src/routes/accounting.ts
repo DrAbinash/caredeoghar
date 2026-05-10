@@ -516,26 +516,43 @@ router.get("/balance-sheet", async (req, res) => {
   const assets: { name: string; group: string; amount: number }[] = [];
   const liabilities: { name: string; group: string; amount: number }[] = [];
 
+  let netIncomeTotal = 0;
+  let netExpenseTotal = 0;
+
   for (const account of allAccounts) {
     const grp = account.tallyGroup || "";
     const { dr, cr } = compute(account);
     const balance = dr - cr;
-    if (balance === 0) continue;
 
-    const isAsset = grp.includes("Asset") || grp.includes("Debtors") || grp === "Cash-in-Hand" || grp === "Bank Accounts" || account.type === "asset" || account.type === "cash" || account.type === "bank";
-    const isLiability = grp.includes("Liabilities") || grp.includes("Creditors") || grp.includes("Capital") || grp.includes("Reserves") || account.type === "liability";
+    const isIncome = grp.includes("Income") || account.type === "income";
+    const isExpense = grp.includes("Expense") || account.type === "expense";
+    const isAsset = !isIncome && !isExpense && (grp.includes("Asset") || grp.includes("Debtors") || grp === "Cash-in-Hand" || grp === "Bank Accounts" || account.type === "asset" || account.type === "cash" || account.type === "bank");
+    const isLiability = !isIncome && !isExpense && (grp.includes("Liabilities") || grp.includes("Creditors") || grp.includes("Capital") || grp.includes("Reserves") || account.type === "liability");
 
-    if (isAsset && balance > 0) {
+    if (isIncome) {
+      netIncomeTotal += cr - dr;
+    } else if (isExpense) {
+      netExpenseTotal += dr - cr;
+    } else if (balance === 0) {
+      continue;
+    } else if (isAsset && balance > 0) {
       assets.push({ name: account.name, group: grp || account.type, amount: balance });
     } else if (isLiability && balance < 0) {
       liabilities.push({ name: account.name, group: grp || account.type, amount: Math.abs(balance) });
     }
   }
 
+  const netProfit = netIncomeTotal - netExpenseTotal;
+  if (netProfit > 0) {
+    liabilities.push({ name: "Net Profit for the Period", group: "Capital Account", amount: netProfit });
+  } else if (netProfit < 0) {
+    assets.push({ name: "Net Loss for the Period", group: "Capital Account", amount: Math.abs(netProfit) });
+  }
+
   const totalAssets = assets.reduce((s, r) => s + r.amount, 0);
   const totalLiabilities = liabilities.reduce((s, r) => s + r.amount, 0);
 
-  res.json({ assets, liabilities, totalAssets, totalLiabilities });
+  res.json({ assets, liabilities, totalAssets, totalLiabilities, netProfit, balanced: Math.abs(totalAssets - totalLiabilities) < 0.01 });
   return;
 });
 

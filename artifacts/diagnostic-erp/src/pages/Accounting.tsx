@@ -59,6 +59,7 @@ type BalanceSheet = {
   assets: { name: string; group: string; amount: number }[];
   liabilities: { name: string; group: string; amount: number }[];
   totalAssets: number; totalLiabilities: number;
+  netProfit?: number; balanced?: boolean;
 };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -138,8 +139,12 @@ export default function Accounting() {
   // Voucher audit system report filters
   const [auditFilters, setAuditFilters] = useState({ from: "", to: "", editedBy: "", voucherNumber: "" });
 
-  // Report date range
-  const defaultFrom = (() => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); })();
+  // Report date range — default to the current Indian financial year (Apr 1 – Mar 31)
+  const defaultFrom = (() => {
+    const now = new Date();
+    const fy = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+    return `${fy}-04-01`;
+  })();
   const defaultTo = new Date().toISOString().slice(0, 10);
   const [rptFrom, setRptFrom] = useState(defaultFrom);
   const [rptTo, setRptTo] = useState(defaultTo);
@@ -257,7 +262,13 @@ export default function Accounting() {
   });
   const deleteVoucher = useMutation({
     mutationFn: (id: number) => api.delete(`/api/accounting/vouchers/${id}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["vouchers"] }); qc.invalidateQueries({ queryKey: ["ledger"] }); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["vouchers"] });
+      qc.invalidateQueries({ queryKey: ["ledger"] });
+      qc.invalidateQueries({ queryKey: ["trial-balance"] });
+      qc.invalidateQueries({ queryKey: ["profit-loss"] });
+      qc.invalidateQueries({ queryKey: ["balance-sheet"] });
+    },
   });
 
   // ── Forms ────────────────────────────────────────────────────────────────────
@@ -954,9 +965,20 @@ export default function Accounting() {
             </div>
             {balanceSheet && (
               <>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div className="bg-blue-50 border border-blue-200 rounded-xl p-4"><p className="text-xs text-muted-foreground">Total Assets</p><p className="text-2xl font-bold text-blue-700">{inr(balanceSheet.totalAssets)}</p></div>
-                  <div className="bg-purple-50 border border-purple-200 rounded-xl p-4"><p className="text-xs text-muted-foreground">Total Liabilities</p><p className="text-2xl font-bold text-purple-700">{inr(balanceSheet.totalLiabilities)}</p></div>
+                  <div className="bg-purple-50 border border-purple-200 rounded-xl p-4"><p className="text-xs text-muted-foreground">Total Liabilities &amp; Capital</p><p className="text-2xl font-bold text-purple-700">{inr(balanceSheet.totalLiabilities)}</p></div>
+                  <div className={`border rounded-xl p-4 col-span-2 md:col-span-1 ${balanceSheet.balanced ? "bg-green-50 border-green-200" : "bg-amber-50 border-amber-200"}`}>
+                    <p className="text-xs text-muted-foreground">Balance Check</p>
+                    <p className={`text-lg font-bold mt-1 ${balanceSheet.balanced ? "text-green-700" : "text-amber-700"}`}>
+                      {balanceSheet.balanced ? "✓ Balanced" : "⚠ Difference: " + inr(Math.abs(balanceSheet.totalAssets - balanceSheet.totalLiabilities))}
+                    </p>
+                    {balanceSheet.netProfit !== undefined && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Net {balanceSheet.netProfit >= 0 ? "Profit" : "Loss"}: <span className={balanceSheet.netProfit >= 0 ? "text-green-600 font-semibold" : "text-red-600 font-semibold"}>{inr(Math.abs(balanceSheet.netProfit))}</span>
+                      </p>
+                    )}
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div className="bg-card border border-card-border rounded-xl overflow-hidden">
