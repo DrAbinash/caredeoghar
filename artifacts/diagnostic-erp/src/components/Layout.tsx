@@ -45,10 +45,12 @@ import {
   Palette,
   PanelLeftClose,
   PanelLeftOpen,
+  WifiOff,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useVersionCheck } from "@/hooks/useVersionCheck";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { api } from "@/lib/fetchApi";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -215,6 +217,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const theme = resolveTheme(effectiveThemeId);
 
   const { updateAvailable, dismiss: dismissUpdate } = useVersionCheck();
+  const isOnline = useOnlineStatus();
 
   // Mini sidebar theme picker state
   const [themePickerOpen, setThemePickerOpen] = useState(false);
@@ -730,6 +733,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <ThemeToggle />
           </div>
         </header>
+
+        {/* Offline indicator — shown when the browser loses network connectivity.
+            Data is still visible from the service-worker cache; writes are blocked. */}
+        {!isOnline && (
+          <div className="flex items-center gap-2 bg-slate-800 dark:bg-slate-900 border-b border-slate-600 px-4 py-2 text-sm text-slate-100">
+            <WifiOff size={14} className="shrink-0 text-slate-300" />
+            <span className="font-medium">You are offline.</span>
+            <span className="text-slate-300 text-xs hidden sm:inline">
+              Cached data is shown — changes will not save until the connection is restored.
+            </span>
+          </div>
+        )}
 
         {/* New-version notification bar — shown when a deployment has been pushed
             since the user opened this tab. Soft prompt, never auto-reloads. */}
