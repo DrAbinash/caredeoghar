@@ -48,6 +48,7 @@ import {
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useVersionCheck } from "@/hooks/useVersionCheck";
 import { api } from "@/lib/fetchApi";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -212,6 +213,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { userTheme, setTheme: setUserTheme } = useUserTheme(session?.user.id, session?.user.sidebarTheme);
   const effectiveThemeId = userTheme ?? clinic?.sidebarTheme ?? "navy";
   const theme = resolveTheme(effectiveThemeId);
+
+  const { updateAvailable, dismiss: dismissUpdate } = useVersionCheck();
 
   // Mini sidebar theme picker state
   const [themePickerOpen, setThemePickerOpen] = useState(false);
@@ -728,6 +731,30 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <ThemeToggle />
           </div>
         </header>
+
+        {/* New-version notification bar — shown when a deployment has been pushed
+            since the user opened this tab. Soft prompt, never auto-reloads. */}
+        {updateAvailable && (
+          <div className="flex items-center justify-between gap-3 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800 px-4 py-2 text-sm">
+            <span className="text-amber-800 dark:text-amber-200 font-medium">
+              A new version of the ERP is available.
+            </span>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => window.location.reload()}
+                className="rounded-md bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold px-3 py-1 transition-colors"
+              >
+                Reload now
+              </button>
+              <button
+                onClick={dismissUpdate}
+                className="rounded-md border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30 text-xs px-3 py-1 transition-colors"
+              >
+                Later
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">
