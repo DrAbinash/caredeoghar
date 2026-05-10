@@ -54,6 +54,11 @@ type DailySummaryData = {
   }[];
 };
 
+type ReportRow = {
+  label: string;
+  value: number;
+};
+
 function todayIST(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 }
@@ -105,6 +110,10 @@ function SummaryCard({
   );
 }
 
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return <h3 className="font-semibold flex items-center gap-2 text-sm">{children}</h3>;
+}
+
 export default function DailySummary() {
   const session = readStaffSession();
   const isAdmin = session ? FULL_ACCESS_ROLES.has(session.user.role) : false;
@@ -128,6 +137,15 @@ export default function DailySummary() {
   const expenseTotal = data?.totalExpense ?? 0;
   const netCash = data?.grandTotal ?? 0;
   const userRows = data?.byUser ?? [];
+  const detailedRows = data?.payments ?? [];
+  const consolidatedRows: ReportRow[] = [
+    { label: "Cash", value: data?.byMethod?.cash ?? 0 },
+    { label: "UPI", value: data?.byMethod?.upi ?? 0 },
+    { label: "Card", value: data?.byMethod?.card ?? 0 },
+    { label: "Online", value: data?.byMethod?.online ?? 0 },
+    { label: "Expenses", value: expenseTotal },
+    { label: "Grand Total", value: netCash },
+  ];
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-5xl mx-auto">
@@ -232,20 +250,59 @@ export default function DailySummary() {
           </div>
 
           <div className="grid lg:grid-cols-2 gap-4">
-            {/* Income breakdown */}
             <div className="bg-card border border-card-border rounded-xl p-4 space-y-3">
-              <h3 className="font-semibold flex items-center gap-2 text-sm">
-                <TrendingUp size={14} className="text-green-600" /> Income by Mode
-              </h3>
+              <SectionTitle>
+                <TrendingUp size={14} className="text-green-600" /> Consolidated Summary
+              </SectionTitle>
+              <div className="space-y-2">
+                {consolidatedRows.map((row) => (
+                  <div key={row.label} className={cn("flex items-center justify-between rounded-lg border px-3 py-2", row.label === "Grand Total" ? "bg-amber-50 border-amber-200" : "bg-muted/20 border-card-border")}>
+                    <div className="text-sm font-medium">{row.label}</div>
+                    <div className={cn("font-bold text-sm", row.label === "Expenses" ? "text-red-600" : row.label === "Grand Total" ? "text-green-700" : "")}>
+                      {inr(row.value)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-card border border-card-border rounded-xl p-4 space-y-3">
+              <SectionTitle>
+                <ArrowDownCircle size={14} className="text-red-500" /> User-wise Summary
+              </SectionTitle>
+              {userRows.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">No staff activity recorded today.</p>
+              ) : (
+                <div className="space-y-2">
+                  {userRows.map((row) => (
+                    <div key={row.userName} className="rounded-lg border border-card-border bg-muted/20 px-3 py-2 space-y-1">
+                      <div className="flex items-center justify-between text-sm font-medium">
+                        <span>{row.userName}</span>
+                        <span>{inr(row.received)}</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground">
+                        <span>Bills: {row.billCount}</span>
+                        <span>Billed: {inr(row.billed)}</span>
+                        <span>Received: {inr(row.received)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-4">
+            <div className="bg-card border border-card-border rounded-xl p-4 space-y-3">
+              <SectionTitle>
+                <TrendingUp size={14} className="text-green-600" /> Detailed Income by Mode
+              </SectionTitle>
               {incomeMethods.length === 0 ? (
                 <p className="text-xs text-muted-foreground italic">No payments recorded yet.</p>
               ) : (
                 <div className="space-y-2">
                   {incomeMethods.map(([method, amount]) => (
-                    <div
-                      key={method}
-                      className={cn("flex items-center justify-between rounded-lg border px-3 py-2", methodColor(method))}
-                    >
+                    <div key={method} className={cn("flex items-center justify-between rounded-lg border px-3 py-2", methodColor(method))}>
                       <div className="flex items-center gap-2 text-sm font-medium capitalize">
                         {methodIcon(method)}
                         {method.toUpperCase()}
@@ -261,31 +318,34 @@ export default function DailySummary() {
               )}
             </div>
 
-            {/* User breakdown */}
             <div className="bg-card border border-card-border rounded-xl p-4 space-y-3">
-              <h3 className="font-semibold flex items-center gap-2 text-sm">
-                <ArrowDownCircle size={14} className="text-red-500" /> Staff Summary
-              </h3>
-              {userRows.length === 0 ? (
-                <p className="text-xs text-muted-foreground italic">No staff activity recorded today.</p>
+              <SectionTitle>
+                <Wallet size={14} className="text-primary" /> Detailed Collections
+              </SectionTitle>
+              {detailedRows.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">No payment entries found.</p>
               ) : (
-                <div className="space-y-2">
-                  {userRows.map((row) => (
-                    <div
-                      key={row.userName}
-                      className="flex items-center justify-between rounded-lg border border-card-border bg-muted/20 px-3 py-2"
-                    >
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        <Wallet size={14} className="text-muted-foreground" />
-                        {row.userName}
-                      </div>
-                      <div className="font-bold text-sm text-red-600">{inr(row.received)}</div>
-                    </div>
-                  ))}
-                  <div className="flex items-center justify-between border-t border-card-border pt-2 mt-1 text-sm font-bold text-red-600">
-                    <span>Total</span>
-                    <span>{inr(expenseTotal)}</span>
-                  </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/40">
+                      <tr>
+                        <th className="px-2 py-2 text-left">Time</th>
+                        <th className="px-2 py-2 text-left">Patient</th>
+                        <th className="px-2 py-2 text-left">Mode</th>
+                        <th className="px-2 py-2 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-card-border">
+                      {detailedRows.map((p) => (
+                        <tr key={p.id}>
+                          <td className="px-2 py-2">{new Date(p.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}</td>
+                          <td className="px-2 py-2">{p.referenceNumber || `Bill #${p.billId}`}</td>
+                          <td className="px-2 py-2 uppercase">{p.method}</td>
+                          <td className="px-2 py-2 text-right font-semibold">{inr(p.amount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
