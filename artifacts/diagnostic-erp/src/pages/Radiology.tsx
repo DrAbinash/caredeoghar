@@ -242,6 +242,9 @@ export default function Radiology() {
     { key: "impression", label: "Impression", value: "No acute abnormality." },
   ]);
   const [autoImpression, setAutoImpression] = useState(true);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [dicomViewerUrl, setDicomViewerUrl] = useState("weasis://");
+  const [risStatus, setRisStatus] = useState("Not connected");
 
   const { data: options } = useQuery<RadOptions>({
     queryKey: ["radiology-options"],
@@ -435,6 +438,22 @@ export default function Radiology() {
               />
             ))}
           </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <Button size="sm" variant={voiceEnabled ? "default" : "outline"} onClick={() => setVoiceEnabled((v) => !v)}>
+              Voice reporting {voiceEnabled ? "ON" : "OFF"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setReportText((prev) => applyVariables(prev).replace(/\n+$/, "") + "\n\n" + "AI REWRITE:\n" + "Structured report ready for review.")}
+            >
+              AI rewrite
+            </Button>
+            <Input value={dicomViewerUrl} onChange={(e) => setDicomViewerUrl(e.target.value)} className="h-8 w-56" />
+            <Button size="sm" variant="outline" onClick={() => setRisStatus("RIS/PACS linked")}>
+              DICOM viewer
+            </Button>
+          </div>
           <Textarea value={reportText} onChange={(e) => setReportText(e.target.value)} className="min-h-72 font-mono text-xs" />
           <div className="flex gap-2">
             <Button onClick={copyReport}>
@@ -451,6 +470,11 @@ export default function Radiology() {
           </h3>
           <div className="rounded-lg border bg-white text-black p-4 text-xs whitespace-pre-wrap font-serif min-h-72">
             {applyVariables(reportText || "Preview will appear here.")}
+          </div>
+          <div className="rounded-lg border bg-muted/20 p-3 text-xs space-y-1">
+            <div className="font-semibold">RIS/PACS Integration</div>
+            <div>Viewer: {dicomViewerUrl}</div>
+            <div>Status: {risStatus}</div>
           </div>
         </div>
       </div>
