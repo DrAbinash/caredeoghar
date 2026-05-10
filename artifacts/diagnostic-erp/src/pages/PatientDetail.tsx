@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   ArrowLeft, User, Phone, MapPin, Droplet, Sparkles,
-  Copy, CheckCheck, MessageSquare, FileText, Upload, X, ShieldCheck, ShieldOff,
+  Copy, CheckCheck, MessageSquare, FileText, Upload, X, ShieldCheck, ShieldOff, ClipboardList,
 } from "lucide-react";
 
 type AIType = "clinical-note" | "patient-message";
@@ -122,7 +122,7 @@ export default function PatientDetail({ id }: { id: number }) {
   const age = new Date().getFullYear() - new Date(patient.dateOfBirth).getFullYear();
 
   return (
-    <div className="pb-8">
+    <div className="pb-8 bg-slate-50 dark:bg-slate-900/20 min-h-full">
       <div className="px-6 pt-4">
         <Link href="/patients" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4">
           <ArrowLeft size={14} /> Back to Patients
@@ -141,7 +141,12 @@ export default function PatientDetail({ id }: { id: number }) {
               <Sparkles size={14} className="mr-1.5" />Clinical Note
             </Button>
             <Link href={`/orders?patientId=${id}`} asChild>
-              <Button size="sm">New Order</Button>
+              <Button
+                size="sm"
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0 shadow-md"
+              >
+                New Order
+              </Button>
             </Link>
           </div>
         }
@@ -149,7 +154,12 @@ export default function PatientDetail({ id }: { id: number }) {
 
       <div className="px-6 space-y-5">
         {/* Patient info card */}
-        <div className="bg-card border border-card-border rounded-xl p-5 shadow-sm">
+        <div className="bg-white dark:bg-card border border-slate-200 dark:border-border rounded-xl shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-100 dark:border-border bg-gradient-to-r from-cyan-50 to-transparent border-l-4 border-l-cyan-500">
+            <User size={14} className="text-cyan-600" />
+            <span className="text-sm font-semibold text-slate-700 dark:text-foreground">Patient Information</span>
+          </div>
+          <div className="p-5">
           <div className="flex flex-col md:flex-row gap-5">
             {photoEnabled && (
               <div className="flex flex-col items-center md:items-start gap-2 shrink-0">
@@ -234,24 +244,25 @@ export default function PatientDetail({ id }: { id: number }) {
             )}
             </div>
           </div>
+          </div>
         </div>
 
         {/* Portal Access Management */}
-        <div className="bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-950/30 dark:to-blue-950/20 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-2">
-              {portalStatus?.hasPortalAccess ? (
-                <ShieldCheck size={15} className="text-green-600 dark:text-green-400" />
-              ) : (
-                <ShieldOff size={15} className="text-amber-500" />
-              )}
-              <p className="text-sm font-semibold">
-                Patient Portal Access:{" "}
-                <span className={portalStatus?.hasPortalAccess ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}>
-                  {portalStatus === undefined ? "Loading…" : portalStatus.hasPortalAccess ? "Active" : "Not activated"}
-                </span>
-              </p>
-            </div>
+        <div className="bg-white dark:bg-card border border-slate-200 dark:border-border rounded-xl shadow-sm overflow-hidden">
+          <div className={`flex items-center gap-2 px-4 py-2.5 border-b border-slate-100 dark:border-border bg-gradient-to-r border-l-4 ${portalStatus?.hasPortalAccess ? "from-emerald-50 to-transparent border-l-emerald-500" : "from-amber-50 to-transparent border-l-amber-400"}`}>
+            {portalStatus?.hasPortalAccess ? (
+              <ShieldCheck size={14} className="text-emerald-600" />
+            ) : (
+              <ShieldOff size={14} className="text-amber-500" />
+            )}
+            <span className="text-sm font-semibold text-slate-700 dark:text-foreground">
+              Patient Portal Access:{" "}
+              <span className={portalStatus?.hasPortalAccess ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}>
+                {portalStatus === undefined ? "Loading…" : portalStatus.hasPortalAccess ? "Active" : "Not activated"}
+              </span>
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-3 flex-wrap px-4 py-3">
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={() => { setPortalPinMsg(""); setPortalPinErr(""); setNewPortalPin(""); setPortalPinOpen(true); }}>
                 {portalStatus?.hasPortalAccess ? "Reset Access Code" : "Set Access Code"}
@@ -268,18 +279,18 @@ export default function PatientDetail({ id }: { id: number }) {
                 </Button>
               )}
             </div>
+            {portalPinMsg && <p className="text-xs text-emerald-600 dark:text-emerald-400">{portalPinMsg}</p>}
+            {portalPinErr && <p className="text-xs text-destructive">{portalPinErr}</p>}
           </div>
-          {portalPinMsg && <p className="text-xs text-green-600 dark:text-green-400 mt-2">{portalPinMsg}</p>}
-          {portalPinErr && <p className="text-xs text-destructive mt-2">{portalPinErr}</p>}
         </div>
 
         {/* AI Message quick buttons */}
-        <div className="bg-gradient-to-r from-violet-50 to-blue-50 dark:from-violet-950/20 dark:to-blue-950/20 border border-violet-200 dark:border-violet-800 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles size={15} className="text-violet-600" />
-            <p className="text-sm font-semibold text-violet-800 dark:text-violet-300">AI Patient Communication</p>
+        <div className="bg-white dark:bg-card border border-slate-200 dark:border-border rounded-xl shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-100 dark:border-border bg-gradient-to-r from-violet-50 to-transparent border-l-4 border-l-violet-500">
+            <Sparkles size={14} className="text-violet-600" />
+            <span className="text-sm font-semibold text-slate-700 dark:text-foreground">AI Patient Communication</span>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 px-4 py-3">
             {([
               { type: "followup" as MessageType, label: "Follow-up Reminder" },
               { type: "results" as MessageType, label: "Results Ready" },
@@ -295,15 +306,18 @@ export default function PatientDetail({ id }: { id: number }) {
         </div>
 
         {/* Order history */}
-        <div>
-          <h2 className="text-sm font-semibold text-foreground mb-3">Test Order History</h2>
-          <div className="bg-card border border-card-border rounded-xl shadow-sm overflow-hidden">
+        <div className="bg-white dark:bg-card border border-slate-200 dark:border-border rounded-xl shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-100 dark:border-border bg-gradient-to-r from-blue-50 to-transparent border-l-4 border-l-blue-500">
+            <ClipboardList size={14} className="text-blue-600" />
+            <span className="text-sm font-semibold text-slate-700 dark:text-foreground">Test Order History</span>
+          </div>
+          <div>
             {!history?.orders?.length ? (
               <div className="p-8 text-center text-sm text-muted-foreground">No orders yet</div>
             ) : (
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-xs text-muted-foreground border-b border-border bg-muted/30">
+                  <tr className="text-left text-xs text-muted-foreground border-b border-slate-200 dark:border-border bg-slate-50 dark:bg-muted/30">
                     <th className="px-4 py-3 font-medium">Order No.</th>
                     <th className="px-4 py-3 font-medium">Tests</th>
                     <th className="px-4 py-3 font-medium">Status</th>
