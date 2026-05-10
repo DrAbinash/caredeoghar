@@ -1547,8 +1547,8 @@ export default function BillingDesk() {
                       </div>
                     ))}
                     {paymentSplits.length < PAYMENT_MODES.length && <button onClick={() => setPaymentSplits((prev) => [...prev, { mode: "upi", amount: "" }])} className="text-[11px] text-primary hover:underline flex items-center gap-1"><Plus size={11} /> Add another payment method</button>}
-                    <div className="pt-2 border-t border-card-border space-y-1.5 text-[11px]">
-                      {balance > 0 ? <div className="flex items-center justify-between gap-2"><span className="text-muted-foreground">Balance due</span><span className="text-orange-600 font-semibold">{inr(balance)}</span></div> : paidTotal > 0 && total > 0 ? <div className="flex items-center justify-center gap-1 text-green-600 font-medium"><CheckCircle2 size={11} /> Fully paid — {inr(paidTotal)}</div> : <div className="text-muted-foreground">Enter amount(s) above</div>}
+                  <div className="pt-2 border-t border-card-border space-y-1.5 text-[11px]">
+                      {balance > 0 ? <div className="flex items-center justify-between gap-2 animate-pulse"><span className="text-muted-foreground">Balance due</span><span className="text-red-600 text-lg sm:text-xl font-extrabold">{inr(balance)}</span></div> : paidTotal > 0 && total > 0 ? <div className="flex items-center justify-center gap-1 animate-pulse text-green-600 font-semibold text-base sm:text-lg"><CheckCircle2 size={13} /> Fully paid — {inr(paidTotal)}</div> : <div className="text-muted-foreground">Enter amount(s) above</div>}
                     </div>
                   </div>
                 )}
