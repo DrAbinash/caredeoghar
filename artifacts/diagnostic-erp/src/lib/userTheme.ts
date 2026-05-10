@@ -13,10 +13,8 @@ export function getUserTheme(userId: number | string): string | null {
   }
 }
 
-// Keep the in-memory ERP session object in sync so that after a within-session
-// theme write or clear the next render sees the correct session.user.sidebarTheme.
-// This is what allows the "account value first" precedence to work correctly even
-// between the moment the user clicks a swatch and the next login.
+// Keep the in-memory ERP session in sync so the next render passes an updated
+// serverTheme and re-resolves the effective theme without requiring a re-login.
 function syncSessionTheme(userId: number | string, themeId: string | null): void {
   try {
     const sess = readStaffSession();
@@ -26,15 +24,20 @@ function syncSessionTheme(userId: number | string, themeId: string | null): void
   } catch { /* ignore */ }
 }
 
+// Seed the per-user localStorage cache from a server-provided value.
+// Does NOT dispatch CHANGE_EVENT — callers that need reactivity call setLocal directly.
+function seedLocalCache(userId: number | string, themeId: string): void {
+  try {
+    window.localStorage.setItem(LS_PREFIX + userId, themeId);
+  } catch { /* ignore */ }
+}
+
 export function setUserTheme(userId: number | string, themeId: string): void {
   try {
     window.localStorage.setItem(LS_PREFIX + userId, themeId);
     window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: { userId: String(userId), themeId } }));
   } catch { /* ignore */ }
-  // Keep session current for the precedence chain on next render.
   syncSessionTheme(userId, themeId);
-  // Persist to DB in background — localStorage + session are the immediate cache.
-  // Failure is silently swallowed so a network hiccup never breaks theming.
   void api.patch(`/api/users/${userId}/sidebar-theme`, { sidebarTheme: themeId }).catch(() => {});
 }
 
@@ -43,30 +46,26 @@ export function clearUserTheme(userId: number | string): void {
     window.localStorage.removeItem(LS_PREFIX + userId);
     window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: { userId: String(userId), themeId: null } }));
   } catch { /* ignore */ }
-  // Null the session theme so the UI immediately falls back to clinic default.
   syncSessionTheme(userId, null);
-  // Reset on server so the next login on any device also falls back to clinic default.
   void api.patch(`/api/users/${userId}/sidebar-theme`, { sidebarTheme: null }).catch(() => {});
 }
 
 /**
  * React hook for the per-user sidebar theme.
  *
- * Precedence (highest to lowest):
- *   1. `serverTheme` — the DB value passed in from the staff-login session.
- *      When provided (even as `null`) it is always authoritative: a non-null
- *      value wins over stale localStorage; an explicit `null` (user reset) is
- *      NOT overridden by a stale local cache.
- *      After a write/clear, `syncSessionTheme` keeps the session current so
- *      the next render always has an up-to-date `serverTheme`.
- *   2. localStorage (`sidebar_theme_user_<id>`) — fallback when no session
- *      exists (e.g. ERP opened without logging in through the portal).
- *   3. Callers should fall back to the clinic-wide default and then "navy".
+ * Precedence (highest → lowest):
+ *   1. Account value (`serverTheme`, non-null) — the DB-persisted preference
+ *      passed in from `session.user.sidebarTheme`. A non-null server value always
+ *      wins over a stale local cache, ensuring cross-device consistency.
+ *      When `serverTheme` is non-null it is also written into localStorage so the
+ *      cache stays warm for offline / no-session loads.
+ *   2. localStorage (`sidebar_theme_user_<id>`) — used when the account has no
+ *      stored preference (`serverTheme` is null or unavailable).
+ *   3. Callers should then fall back to the clinic-wide default and "navy".
  *
- * @param userId       The authenticated user's id (or null/undefined).
- * @param serverTheme  `session.user.sidebarTheme` — the DB value at login,
- *                     kept current by `syncSessionTheme` on every write/clear.
- *                     Pass `undefined` (or omit) when there is no session.
+ * @param userId       Authenticated user id (or null/undefined when not signed in).
+ * @param serverTheme  `session.user.sidebarTheme` from the staff-login response.
+ *                     Kept current by `syncSessionTheme` after every write/clear.
  */
 export function useUserTheme(
   userId: number | string | null | undefined,
@@ -76,32 +75,36 @@ export function useUserTheme(
   setTheme: (id: string) => void;
   clearTheme: () => void;
 } {
-  // Resolve with account value first; only fall back to localStorage when
-  // serverTheme is undefined (no active session at all).
+  // serverTheme ?? localStorage ?? null
+  // • non-null serverTheme (account preference set) → account wins
+  // • null/undefined serverTheme (no preference or no session) → fall back to local cache
   function resolve(): string | null {
     if (userId == null) return null;
-    return serverTheme !== undefined ? serverTheme : (getUserTheme(userId) ?? null);
+    return serverTheme ?? getUserTheme(userId) ?? null;
   }
 
   const [userTheme, setLocal] = useState<string | null>(resolve);
 
   useEffect(() => {
-    // Re-resolve whenever userId or the account value changes.
-    // serverTheme is kept fresh by syncSessionTheme after every write/clear.
-    setLocal(resolve());
+    if (userId == null) { setLocal(null); return; }
 
-    if (userId == null) return;
+    // When the server provides a concrete value, seed localStorage so the cache
+    // stays populated for offline use and CHANGE_EVENT handlers stay consistent.
+    if (serverTheme != null) {
+      seedLocalCache(userId, serverTheme);
+    }
+
+    setLocal(resolve());
 
     const handler = (e: Event) => {
       const { userId: uid } = (e as CustomEvent<{ userId: string; themeId: string | null }>).detail;
       if (uid !== String(userId)) return;
-      // After setUserTheme/clearUserTheme:
-      //   • localStorage has been updated (or removed) already.
-      //   • syncSessionTheme has updated session.user.sidebarTheme.
-      // Read localStorage here; the next render will pass the updated
-      // serverTheme so the effect re-runs and confirms the resolved value.
+      // After setUserTheme/clearUserTheme both localStorage and the session have
+      // been updated. Read localStorage here; the next render will deliver the
+      // refreshed serverTheme so the effect re-runs and confirms the resolved value.
       setLocal(getUserTheme(userId));
     };
+
     window.addEventListener(CHANGE_EVENT, handler);
     return () => window.removeEventListener(CHANGE_EVENT, handler);
   }, [userId, serverTheme]); // eslint-disable-line react-hooks/exhaustive-deps
