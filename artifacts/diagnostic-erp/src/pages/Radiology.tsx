@@ -142,6 +142,7 @@ type Template = { id: number; testId: number; name: string; format: string; cont
 type FilmIssue = { id: number; studyId: number; issueType: string; quantity: number; issuedBy: string | null; receivedBy: string | null; notes: string | null; issuedAt: string };
 type RadOptions = { modalities: Array<{ department: string; code: string }>; statuses: string[] };
 type ReportTemplate = { id: string; category: string; name: string; body: string };
+type ReportVariable = { key: string; label: string; value: string };
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
   scheduled:            { label: "Scheduled",   color: "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/40 dark:text-amber-200 dark:border-amber-700" },
@@ -235,6 +236,12 @@ export default function Radiology() {
   const [selectedTemplateId, setSelectedTemplateId] = useState(REPORT_TEMPLATES[0]?.id ?? "");
   const [reportText, setReportText] = useState(REPORT_TEMPLATES[0]?.body ?? "");
   const [copied, setCopied] = useState(false);
+  const [variables, setVariables] = useState<ReportVariable[]>([
+    { key: "patient", label: "Patient", value: "John Doe" },
+    { key: "study", label: "Study", value: "MRI Brain" },
+    { key: "impression", label: "Impression", value: "No acute abnormality." },
+  ]);
+  const [autoImpression, setAutoImpression] = useState(true);
 
   const { data: options } = useQuery<RadOptions>({
     queryKey: ["radiology-options"],
@@ -326,6 +333,15 @@ export default function Radiology() {
     window.setTimeout(() => setCopied(false), 1200);
   };
 
+  const applyVariables = (text: string) =>
+    variables.reduce((acc, v) => acc.replaceAll(`{{${v.key}}}`, v.value), text);
+
+  const smartShortcuts = [
+    { label: "Normal Brain", insert: "No focal abnormality. Ventricles are normal. No midline shift." },
+    { label: "Mild Spondylosis", insert: "Mild degenerative changes noted without significant canal stenosis." },
+    { label: "Add Impression", insert: "\n\nIMPRESSION:\n{{impression}}" },
+  ];
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -381,7 +397,10 @@ export default function Radiology() {
               <button
                 key={t.id}
                 type="button"
-                onClick={() => { setSelectedTemplateId(t.id); setReportText(t.body); }}
+                onClick={() => {
+                  setSelectedTemplateId(t.id);
+                  setReportText(t.body);
+                }}
                 className={`w-full text-left rounded-lg border px-3 py-2 text-sm ${selectedTemplateId === t.id ? "border-primary bg-primary/5" : "bg-muted/20"}`}
               >
                 {t.name}
@@ -396,6 +415,26 @@ export default function Radiology() {
           <h3 className="font-semibold text-sm flex items-center gap-2">
             <ClipboardEdit size={14} className="text-primary" /> Report Editor
           </h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant={autoImpression ? "default" : "outline"} onClick={() => setAutoImpression((v) => !v)}>
+              Auto impression {autoImpression ? "ON" : "OFF"}
+            </Button>
+            {smartShortcuts.map((s) => (
+              <Button key={s.label} size="sm" variant="outline" onClick={() => setReportText((prev) => `${prev}\n\n${s.insert}`.trim())}>
+                {s.label}
+              </Button>
+            ))}
+          </div>
+          <div className="grid gap-2 md:grid-cols-3">
+            {variables.map((v, idx) => (
+              <Input
+                key={v.key}
+                value={v.value}
+                onChange={(e) => setVariables((prev) => prev.map((item, i) => i === idx ? { ...item, value: e.target.value } : item))}
+                placeholder={v.label}
+              />
+            ))}
+          </div>
           <Textarea value={reportText} onChange={(e) => setReportText(e.target.value)} className="min-h-72 font-mono text-xs" />
           <div className="flex gap-2">
             <Button onClick={copyReport}>
@@ -411,7 +450,7 @@ export default function Radiology() {
             <Eye size={14} className="text-primary" /> Print Preview
           </h3>
           <div className="rounded-lg border bg-white text-black p-4 text-xs whitespace-pre-wrap font-serif min-h-72">
-            {reportText || "Preview will appear here."}
+            {applyVariables(reportText || "Preview will appear here.")}
           </div>
         </div>
       </div>
