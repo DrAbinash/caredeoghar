@@ -1081,7 +1081,7 @@ export default function Accounting() {
             </div>
           </TabsContent>
 
-          {/* ── Form 3C Tab ── */}
+          {/* ── Form 25 (Formerly 3C) Tab ── */}
           <TabsContent value="form-3c" className="space-y-4">
             <Form3C />
           </TabsContent>

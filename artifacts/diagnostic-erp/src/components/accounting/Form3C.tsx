@@ -33,7 +33,7 @@ function fmtMoney(n: number): string {
 }
 
 /**
- * FORM 25 (Income-tax Act, 2025) — Form of daily case register
+ * FORM 25 (Formerly 3C) (Income-tax Act, 2025) — Form of daily case register
  * (Maintained by practitioners of any system of medicine.)
  *
  * Auto-fetches every paid / partial bill in the selected date range and
@@ -151,7 +151,7 @@ export default function Form3C() {
         style={{ maxWidth: "210mm", padding: "12mm 10mm", fontFamily: "'Times New Roman', Times, serif" }}
       >
         <div style={{ textAlign: "center", marginBottom: 8 }}>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>FORM 25 (Income-tax Act, 2025)</div>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>FORM 25 (Formerly 3C) (Income-tax Act, 2025)</div>
           <div style={{ fontSize: 14, fontWeight: 700, marginTop: 2 }}>Form of daily case register</div>
           <div style={{ fontSize: 9, marginTop: 4 }}>
             [TO BE MAINTAINED BY PRACTITIONERS OF ANY SYSTEM OF MEDICINE, I.E., PHYSICIANS, SURGEONS,
