@@ -1613,12 +1613,12 @@ export default function BillingDesk() {
                 position: absolute !important;
                 top: 0 !important; left: 0 !important; right: 0 !important;
                 margin: 0 !important;
-                padding: 8mm 8mm !important;
+                padding: 4mm 5mm !important;
                 max-width: none !important;
                 text-transform: uppercase;
               }
               .billing-desk-receipt .bdr-keep-case { text-transform: none !important; }
-              @page { margin: 6mm 8mm; }
+              @page { size: A5; margin: 4mm 5mm; }
             }
             .billing-desk-receipt {
               display: none;
@@ -1681,7 +1681,7 @@ export default function BillingDesk() {
             {/* Auto-included verify QR (toggle in Settings → "Print QR on bill"). */}
             {clinic?.qrOnBillEnabled !== false && (
               <div className="bdr-keep-case" style={{ flexShrink: 0, textAlign: "center", fontSize: 8, color: "#444", lineHeight: 1.1 }}>
-                <img src={billQrDataUrl || qrSvgDataUrl(buildBillVerifyUrl(lastBill.billNumber))} alt="Verify QR" style={{ width: 64, height: 64, display: "block" }} />
+                <img src={billQrDataUrl || qrSvgDataUrl(buildBillVerifyUrl(lastBill.billNumber))} alt="Verify QR" style={{ width: 56, height: 56, display: "block" }} />
                 <div style={{ marginTop: 2 }}>Scan to verify</div>
               </div>
             )}
@@ -1691,8 +1691,8 @@ export default function BillingDesk() {
           {/* Compact 2-line patient block. text-transform:uppercase on wrapper
               forces caps; use bdr-keep-case to opt specific fields out. */}
           <div className="bdr-patient">
-            <div className="bdr-patient-line">
-              <strong>{lastBill.patient.firstName} {lastBill.patient.lastName}</strong>
+              <div className="bdr-patient-line">
+              <strong style={{ fontSize: 18, fontWeight: 900, lineHeight: 1.02 }}>{lastBill.patient.firstName} {lastBill.patient.lastName}</strong>
               <span>
                 {[
                   (() => { const a = calcAge(lastBill.patient.dateOfBirth); return a && lastBill.patient.gender ? `${a} / ${lastBill.patient.gender}` : a || lastBill.patient.gender || null; })(),
@@ -1701,7 +1701,7 @@ export default function BillingDesk() {
                 ].filter(Boolean).join("  ·  ")}
               </span>
             </div>
-            <div className="bdr-patient-line">
+              <div className="bdr-patient-line">
               <span>Ref: <strong>{lastBill.doctorName ? `Dr. ${lastBill.doctorName}` : "Self / Walk-in"}</strong></span>
               <span>
                 Bill No: <strong>{String(lastBill.billNumber).replace(/^BILL-?/i, "").replace(/-/g, "")}</strong>
@@ -1716,7 +1716,7 @@ export default function BillingDesk() {
             ) : null; })()}
           </div>
 
-          <table className="bdr-table">
+            <table className="bdr-table" style={{ fontSize: 10 }}>
             <thead>
               <tr>
                 <th>#</th>
@@ -1729,7 +1729,7 @@ export default function BillingDesk() {
               {lastBill.tests.map((t, i) => (
                 <tr key={t.testId}>
                   <td>{i + 1}</td>
-                  <td>{t.name}</td>
+                  <td style={{ fontWeight: 600 }}>{t.name}</td>
                   <td>{t.category}</td>
                   <td className="text-right">{t.price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                 </tr>

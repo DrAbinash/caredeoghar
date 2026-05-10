@@ -657,15 +657,15 @@ export default function BillDetail({ id }: { id: number }) {
             position: absolute !important;
             top: 0 !important; left: 0 !important; right: 0 !important;
             margin: 0 !important;
-            padding: ${paperSize === "A5" ? "6px 10px" : "16px 22px"} !important;
+            padding: ${paperSize === "A5" ? "4px 8px" : "16px 22px"} !important;
             background: white !important;
             color: black !important;
             font-family: Arial, sans-serif !important;
-            font-size: ${paperSize === "A5" ? "10.5px" : "12.5px"} !important;
+            font-size: ${paperSize === "A5" ? "9.5px" : "12.5px"} !important;
             text-transform: uppercase !important;
           }
           .print-receipt .pr-keep-case { text-transform: none !important; }
-          @page { size: ${paperSize}; margin: ${paperSize === "A5" ? "5mm 6mm" : "8mm 10mm"}; }
+          @page { size: ${paperSize}; margin: ${paperSize === "A5" ? "4mm 5mm" : "8mm 10mm"}; }
           ${isBW ? `
           /* ── B&W mode: high-contrast print for monochrome laser printers ── */
           .print-receipt-bw {
@@ -691,7 +691,7 @@ export default function BillDetail({ id }: { id: number }) {
           marginBottom: "12px",
         }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: paperSize === "A5" ? "16px" : "20px", fontWeight: 800, color: "#1e40af", letterSpacing: "0.3px", lineHeight: 1.15 }}>
+            <div style={{ fontSize: paperSize === "A5" ? "15px" : "20px", fontWeight: 800, color: "#1e40af", letterSpacing: "0.3px", lineHeight: 1.15 }}>
               {clinic?.name || "DiagnoCenter"}
             </div>
             {clinic?.tagline && (
@@ -806,10 +806,10 @@ export default function BillDetail({ id }: { id: number }) {
             <div style={{ marginBottom: "10px", padding: "6px 8px", borderTop: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0", lineHeight: 1.25 }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }}>
                 <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                  <div style={{ fontSize: "20px", fontWeight: 900, color: "#111", lineHeight: 1.02, letterSpacing: "-0.2px" }}>
+                  <div style={{ fontSize: paperSize === "A5" ? "18px" : "20px", fontWeight: 900, color: "#111", lineHeight: 1.02, letterSpacing: "-0.2px" }}>
                     {bill.patient.firstName} {bill.patient.lastName}
                   </div>
-                  <div style={{ fontSize: "15px", fontWeight: 800, color: "#111", lineHeight: 1.05, marginTop: "2px" }}>
+                  <div style={{ fontSize: paperSize === "A5" ? "13px" : "15px", fontWeight: 800, color: "#111", lineHeight: 1.05, marginTop: "2px" }}>
                     {ageSex}
                   </div>
                 </div>
@@ -828,7 +828,7 @@ export default function BillDetail({ id }: { id: number }) {
         {bill.order?.tests && bill.order.tests.length > 0 && (
           <div style={{ marginBottom: "16px" }}>
             <div style={{ fontSize: "10px", fontWeight: "700", textTransform: "uppercase", color: "#64748b", marginBottom: "6px" }}>Tests / Services</div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: paperSize === "A5" ? "10px" : "12px" }}>
               <thead>
                 <tr style={{ background: "#1e40af", color: "white" }}>
                   <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: "600" }}>Code</th>
@@ -844,7 +844,7 @@ export default function BillDetail({ id }: { id: number }) {
                 {bill.order.tests.map((ot, i) => (
                   <tr key={ot.id} style={{ background: i % 2 === 0 ? "#f8fafc" : "white", borderBottom: "1px solid #e2e8f0" }}>
                     <td style={{ padding: "6px 10px", fontFamily: "monospace", fontWeight: "700", color: "#1e40af" }}>{ot.test?.code}</td>
-                    <td style={{ padding: "6px 10px", fontWeight: "500" }}>{ot.test?.name}</td>
+                    <td style={{ padding: "6px 10px", fontWeight: "600" }}>{ot.test?.name}</td>
                     <td style={{ padding: "6px 10px", color: "#666" }}>{ot.test?.category}</td>
                     {clinic?.showTatOnBill && (
                       <td style={{ padding: "6px 10px", color: "#444" }}>{ot.test?.duration || "—"}</td>
