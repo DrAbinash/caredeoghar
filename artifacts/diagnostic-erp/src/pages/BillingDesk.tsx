@@ -1120,7 +1120,7 @@ export default function BillingDesk() {
                             setDoctorMode("doctor"); setDoctorId(id); setDoctorSearch(""); setDoctorSearchOpen(false);
                           }}
                           title={doc ? `${doc.name} · ${doc.specialization}` : `Assign quick doctor slot ${i + 1}`}
-                          className={`w-full h-12 rounded-md border text-[10px] leading-tight px-1 py-1 flex flex-col items-center justify-center text-center transition-all overflow-hidden shadow-sm ${
+                          className={`w-full h-12 rounded-md border text-[10px] leading-tight px-2 py-1 flex flex-col items-start justify-center text-left transition-all overflow-hidden shadow-sm ${
                             isActive
                               ? "border-primary bg-primary/10 text-primary shadow-md"
                               : doc
