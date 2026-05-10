@@ -26,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, ChevronRight, Printer, Search, X } from "lucide-react";
+import { Plus, ChevronRight, Printer, Search, X, Receipt } from "lucide-react";
 import { useForm } from "react-hook-form";
 
 type BillSearchResult = {
@@ -110,74 +110,87 @@ export default function Billing() {
     new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(n);
 
   return (
-    <div className="pb-8">
+    <div className="pb-8 bg-slate-50 dark:bg-slate-900/20 min-h-full">
       <PageHeader
         title="Billing"
         subtitle={`${data?.total ?? 0} bills`}
         actions={
-          <Button size="sm" onClick={() => { setOpen(true); reset(); }}>
+          <Button
+            size="sm"
+            onClick={() => { setOpen(true); reset(); }}
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0 shadow-md"
+          >
             <Plus size={14} className="mr-1" /> New Bill
           </Button>
         }
       />
 
       <div className="px-6 space-y-4">
-        {/* Search bar — primary action, always visible */}
-        <div className="relative">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by patient name, patient ID, or bill number…"
-            className="pl-9 pr-9"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X size={14} />
-            </button>
-          )}
-        </div>
-
-        {/* Date / status filters — collapsed when searching */}
-        {!isSearching && (
-          <div className="flex flex-wrap items-end gap-3">
-            <div>
-              <Label className="text-xs text-muted-foreground">Status</Label>
-              <Select value={status || "all"} onValueChange={(v) => { setPage(1); setStatus(v === "all" ? "" : v); }}>
-                <SelectTrigger className="w-40 mt-1">
-                  <SelectValue placeholder="All Statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  {STATUSES.map((s) => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
+        {/* Bills card */}
+        <div className="bg-white dark:bg-card border border-slate-200 dark:border-border rounded-xl shadow-sm overflow-hidden">
+          {/* Section header with search + filters */}
+          <div className="border-b border-slate-100 dark:border-border bg-gradient-to-r from-indigo-50 to-transparent border-l-4 border-l-indigo-500 px-4 py-2.5 space-y-2">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Receipt size={15} className="text-indigo-600" />
+                <span className="text-sm font-semibold text-slate-700 dark:text-foreground">Bills</span>
+              </div>
+              {/* Search bar */}
+              <div className="relative flex-1 min-w-[200px] max-w-sm">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search by patient name, ID, or bill number…"
+                  className="pl-8 pr-8 h-8 text-sm"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
             </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">From</Label>
-              <Input type="date" value={dateFrom} onChange={(e) => { setPage(1); setDateFrom(e.target.value); }} className="w-40 mt-1" />
-            </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">To</Label>
-              <Input type="date" value={dateTo} onChange={(e) => { setPage(1); setDateTo(e.target.value); }} className="w-40 mt-1" />
-            </div>
-            {(dateFrom || dateTo) && (
-              <Button variant="outline" size="sm" className="mt-5" onClick={() => { setPage(1); setDateFrom(""); setDateTo(""); }}>
-                Clear dates
-              </Button>
+            {/* Date / status filters — collapsed when searching */}
+            {!isSearching && (
+              <div className="flex flex-wrap items-end gap-2">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Status</Label>
+                  <Select value={status || "all"} onValueChange={(v) => { setPage(1); setStatus(v === "all" ? "" : v); }}>
+                    <SelectTrigger className="w-36 mt-0.5 h-8 text-sm">
+                      <SelectValue placeholder="All Statuses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      {STATUSES.map((s) => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">From</Label>
+                  <Input type="date" value={dateFrom} onChange={(e) => { setPage(1); setDateFrom(e.target.value); }} className="w-36 mt-0.5 h-8 text-sm" />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">To</Label>
+                  <Input type="date" value={dateTo} onChange={(e) => { setPage(1); setDateTo(e.target.value); }} className="w-36 mt-0.5 h-8 text-sm" />
+                </div>
+                {(dateFrom || dateTo) && (
+                  <Button variant="outline" size="sm" className="h-8 mt-4" onClick={() => { setPage(1); setDateFrom(""); setDateTo(""); }}>
+                    Clear dates
+                  </Button>
+                )}
+              </div>
             )}
           </div>
-        )}
 
-        <div className="bg-card border border-card-border rounded-xl shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs text-muted-foreground border-b border-border bg-muted/30">
+                <tr className="text-left text-xs text-muted-foreground border-b border-slate-200 dark:border-border bg-slate-50 dark:bg-muted/30">
                   <th className="px-4 py-3 font-medium">Bill No.</th>
                   <th className="px-4 py-3 font-medium">Patient</th>
                   {!isSearching && <th className="px-4 py-3 font-medium">Order</th>}

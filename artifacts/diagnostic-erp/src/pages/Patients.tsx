@@ -26,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, ChevronRight, Upload, X, User, Pencil, Download } from "lucide-react";
+import { Plus, Search, ChevronRight, Upload, X, User, Pencil, Download, Users } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useMutation } from "@tanstack/react-query";
 import { readStaffSession, FULL_ACCESS_ROLES } from "@/lib/staffSession";
@@ -177,7 +177,7 @@ export default function Patients() {
   const bloodGroups = BLOOD_GROUPS;
 
   return (
-    <div className="pb-8">
+    <div className="pb-8 bg-slate-50 dark:bg-slate-900/20 min-h-full">
       <PageHeader
         title="Patients"
         subtitle={`${data?.total ?? 0} registered patients`}
@@ -190,7 +190,11 @@ export default function Patients() {
             <Button size="sm" variant="outline" onClick={exportCsv} disabled={exporting} title="Download the full patient roster as CSV">
               <Download size={14} className="mr-1" /> {exporting ? "Exporting…" : "Export CSV"}
             </Button>
-            <Button size="sm" onClick={() => setOpen(true)}>
+            <Button
+              size="sm"
+              onClick={() => setOpen(true)}
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0 shadow-md"
+            >
               <Plus size={14} className="mr-1" /> New Patient
             </Button>
           </div>
@@ -198,23 +202,29 @@ export default function Patients() {
       />
 
       <div className="px-6 space-y-4">
-        {/* Search */}
-        <div className="relative max-w-md">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search by name, ID, or phone..."
-            className="pl-9"
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          />
-        </div>
+        {/* Patients card */}
+        <div className="bg-white dark:bg-card border border-slate-200 dark:border-border rounded-xl shadow-sm overflow-hidden">
+          {/* Section header */}
+          <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-slate-100 dark:border-border bg-gradient-to-r from-cyan-50 to-transparent border-l-4 border-l-cyan-500">
+            <div className="flex items-center gap-2">
+              <Users size={15} className="text-cyan-600" />
+              <span className="text-sm font-semibold text-slate-700 dark:text-foreground">Patient Registry</span>
+            </div>
+            <div className="relative max-w-xs w-full">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search by name, ID, or phone..."
+                className="pl-8 h-8 text-sm"
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              />
+            </div>
+          </div>
 
-        {/* Table */}
-        <div className="bg-card border border-card-border rounded-xl shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs text-muted-foreground border-b border-border bg-muted/30">
+                <tr className="text-left text-xs text-muted-foreground border-b border-slate-200 dark:border-border bg-slate-50 dark:bg-muted/30">
                   {photoEnabled && <th className="px-4 py-3 font-medium w-12"></th>}
                   <th className="px-4 py-3 font-medium">Patient ID</th>
                   <th className="px-4 py-3 font-medium">Name</th>
