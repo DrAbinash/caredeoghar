@@ -542,7 +542,8 @@ reportsRouter.get("/daily-summary", async (req, res) => {
     return row;
   };
   for (const r of activeBills) {
-    const u = ensureUser(r.b.createdByName);
+    const fallbackName = payments.find((p) => p.billId === r.b.id)?.recordedByName ?? null;
+    const u = ensureUser(r.b.createdByName ?? fallbackName);
     u.billCount += 1;
     u.billed   += Number(r.b.totalAmount);
   }

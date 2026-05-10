@@ -366,6 +366,7 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
   }
 
   const session = req.staffSession;
+  const actorName = session?.subjectName?.trim() || "";
   if (session && !FULL_ACCESS_ROLES.has(session.role) && discountAmt > 0) {
     const maxPct = session.maxDiscount ?? 0;
     const maxAllowed = Math.round((subtotal * maxPct / 100) * 100) / 100;
@@ -411,6 +412,7 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
       status: "pending",
       ledgerId,
       dueDate: dueDate ?? null,
+      createdByName: actorName || null,
     }).returning();
 
     return { bill: billRow, pat: patRow };
