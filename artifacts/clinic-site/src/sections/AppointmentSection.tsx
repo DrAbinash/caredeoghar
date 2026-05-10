@@ -37,6 +37,7 @@ export default function AppointmentSection({ section, settings }: { section: Sec
   const c = section.config;
   const heading = get(c, "heading", "Book an Appointment");
   const subheading = get(c, "subheading");
+  const bookingPhone = (settings.whatsappNumber || "").replace(/[^0-9]/g, "");
 
   const [config, setConfig] = useState<BookingConfig | null>(null);
   const [tests, setTests] = useState<TestItem[]>([]);
@@ -80,6 +81,12 @@ export default function AppointmentSection({ section, settings }: { section: Sec
       window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, "_blank");
     }
     setStep("done");
+  }
+
+  function openWhatsAppBooking() {
+    if (!bookingPhone) return;
+    const msg = `Hi, I want to book a test.\nName: \nPhone: \nPreferred date: \nTests needed: `;
+    window.open(`https://wa.me/${bookingPhone}?text=${encodeURIComponent(msg)}`, "_blank");
   }
 
   async function handlePay() {
@@ -264,6 +271,15 @@ export default function AppointmentSection({ section, settings }: { section: Sec
                 {paying ? "Processing…" : `Pay ₹${total.toLocaleString("en-IN")} via Razorpay`}
               </button>
             </div>
+            {bookingPhone && (
+              <button
+                type="button"
+                onClick={openWhatsAppBooking}
+                style={{ marginTop: ".75rem", width: "100%", background: "#25d366", color: "#fff", border: "none", borderRadius: "var(--site-radius)", padding: ".65rem 1rem", fontWeight: 700, cursor: "pointer" }}
+              >
+                Book on WhatsApp
+              </button>
+            )}
             <p className="subtle" style={{ fontSize: ".78rem", marginTop: "1rem", textAlign: "center" }}>Payments are processed securely via Razorpay</p>
           </div>
         )}

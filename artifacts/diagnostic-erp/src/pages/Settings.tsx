@@ -1615,6 +1615,7 @@ function WhatsappTab() {
   const { data: cfg } = useQuery<WhatsappCfg>({ queryKey: ["whatsapp-settings"], queryFn: () => api.get("/api/whatsapp/settings") });
   const [form, setForm] = useState<WhatsappCfg | null>(null);
   const [testPhone, setTestPhone] = useState("");
+  const [bookingPhone, setBookingPhone] = useState("");
   const [showToken, setShowToken] = useState(false);
   const cur = form ?? cfg ?? null;
   const save = useMutation({
@@ -1677,6 +1678,28 @@ function WhatsappTab() {
         <div className="flex justify-end gap-2 pt-2 border-t border-card-border">
           <Button variant="outline" type="button" onClick={() => setForm(cfg ?? null)}>Reset</Button>
           <Button onClick={() => save.mutate(cur)} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
+        </div>
+      </div>
+
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-3">
+        <div>
+          <h3 className="font-semibold flex items-center gap-2"><MessageCircle size={14} /> WhatsApp Booking Link</h3>
+          <p className="text-xs text-muted-foreground mt-1">Use this link on the website, Facebook ads, QR posters, and share buttons.</p>
+        </div>
+        <div className="grid md:grid-cols-[1fr_auto] gap-2">
+          <Input value={bookingPhone} onChange={(e) => setBookingPhone(e.target.value)} placeholder="Clinic WhatsApp number (with country code)" />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!bookingPhone.trim()}
+            onClick={() => {
+              const num = bookingPhone.replace(/[^0-9]/g, "");
+              const msg = encodeURIComponent("Hi, I want to book a test.");
+              window.open(`https://wa.me/${num}?text=${msg}`, "_blank", "noopener,noreferrer");
+            }}
+          >
+            Open Link
+          </Button>
         </div>
       </div>
 
