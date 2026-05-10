@@ -6,6 +6,7 @@ import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -18,7 +19,7 @@ import {
   Radio, Search, RefreshCw, UserCircle2, FileText, Disc, Printer, Image,
   CheckCircle2, PlayCircle, Hourglass, Camera, ClipboardEdit, Send,
   Mic, MicOff, Sparkles, Link2, Hand, X, Copy as CopyIcon,
-  BookOpen, Plus, Trash2,
+  BookOpen, Plus, Trash2, Eye,
 } from "lucide-react";
 
 type Study = {
@@ -140,6 +141,7 @@ type Technician = { id: number; name: string; role: string | null; department: s
 type Template = { id: number; testId: number; name: string; format: string; content: string; isDefault: boolean; modality: string | null };
 type FilmIssue = { id: number; studyId: number; issueType: string; quantity: number; issuedBy: string | null; receivedBy: string | null; notes: string | null; issuedAt: string };
 type RadOptions = { modalities: Array<{ department: string; code: string }>; statuses: string[] };
+type ReportTemplate = { id: string; category: string; name: string; body: string };
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
   scheduled:            { label: "Scheduled",   color: "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/40 dark:text-amber-200 dark:border-amber-700" },
@@ -150,6 +152,51 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
   delivered:            { label: "Delivered",   color: "bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-900/40 dark:text-teal-200 dark:border-teal-700" },
   cancelled:            { label: "Cancelled",   color: "bg-zinc-100 text-zinc-700 border-zinc-300 dark:bg-zinc-800/60 dark:text-zinc-300 dark:border-zinc-700" },
 };
+
+const REPORT_TEMPLATES: ReportTemplate[] = [
+  {
+    id: "mri-brain",
+    category: "MRI",
+    name: "MRI Brain",
+    body: `CLINICAL HISTORY: Headache / seizure / neurological deficit.
+
+TECHNIQUE: MRI brain sequences obtained.
+
+FINDINGS:
+Brain parenchyma is unremarkable. No acute infarct, bleed, mass effect, or midline shift.
+
+IMPRESSION:
+No acute intracranial abnormality.`,
+  },
+  {
+    id: "mri-ls-spine",
+    category: "MRI",
+    name: "MRI LS Spine",
+    body: `CLINICAL HISTORY: Low back pain / radiculopathy.
+
+TECHNIQUE: MRI lumbosacral spine obtained.
+
+FINDINGS:
+Mild degenerative changes noted. No significant canal or foraminal stenosis.
+
+IMPRESSION:
+Mild lumbar spondylotic changes.`,
+  },
+  {
+    id: "mri-c-spine",
+    category: "MRI",
+    name: "MRI Cervical Spine",
+    body: `CLINICAL HISTORY: Neck pain / arm symptoms.
+
+TECHNIQUE: MRI cervical spine obtained.
+
+FINDINGS:
+Mild cervical spondylosis. No cord signal abnormality.
+
+IMPRESSION:
+Mild degenerative cervical spine changes.`,
+  },
+];
 
 function StatusPill({ status }: { status: string }) {
   const meta = STATUS_META[status] ?? STATUS_META.scheduled;
@@ -184,6 +231,10 @@ export default function Radiology() {
   const [studyModalId, setStudyModalId] = useState<number | null>(null);
   const [reportModalId, setReportModalId] = useState<number | null>(null);
   const [filmModalId, setFilmModalId] = useState<number | null>(null);
+  const [roadmapCategory, setRoadmapCategory] = useState("MRI");
+  const [selectedTemplateId, setSelectedTemplateId] = useState(REPORT_TEMPLATES[0]?.id ?? "");
+  const [reportText, setReportText] = useState(REPORT_TEMPLATES[0]?.body ?? "");
+  const [copied, setCopied] = useState(false);
 
   const { data: options } = useQuery<RadOptions>({
     queryKey: ["radiology-options"],
@@ -264,6 +315,17 @@ export default function Radiology() {
     onError: (e: Error) => toast({ title: "Could not assign technician", description: e.message, variant: "destructive" }),
   });
 
+  const roadmapTemplates = useMemo(
+    () => REPORT_TEMPLATES.filter((t) => t.category === roadmapCategory),
+    [roadmapCategory],
+  );
+
+  const copyReport = async () => {
+    await navigator.clipboard.writeText(reportText);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  };
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -279,6 +341,79 @@ export default function Radiology() {
             <div className="text-2xl font-semibold">{counts[s] ?? 0}</div>
           </div>
         ))}
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-4">
+        <div className="rounded-xl border border-card-border bg-card p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-sm flex items-center gap-2">
+              <Sparkles size={14} className="text-primary" /> AI Reporting Roadmap
+            </h3>
+            <Badge variant="secondary">Phase 1</Badge>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Build only the highest-volume studies first, then expand.
+          </p>
+          <div className="grid gap-2 text-sm">
+            <div className="rounded-lg border px-3 py-2 bg-muted/20">1. Prompt saver</div>
+            <div className="rounded-lg border px-3 py-2 bg-muted/20">2. Template categories</div>
+            <div className="rounded-lg border px-3 py-2 bg-muted/20">3. Report editor</div>
+            <div className="rounded-lg border px-3 py-2 bg-muted/20">4. Copy button</div>
+            <div className="rounded-lg border px-3 py-2 bg-muted/20">5. Print preview</div>
+          </div>
+        </div>
+        <div className="rounded-xl border border-card-border bg-card p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-sm flex items-center gap-2">
+              <FileText size={14} className="text-primary" /> Quick Start Templates
+            </h3>
+            <Badge variant="outline">{roadmapTemplates.length} templates</Badge>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {["MRI", "CT"].map((cat) => (
+              <Button key={cat} size="sm" variant={roadmapCategory === cat ? "default" : "outline"} onClick={() => setRoadmapCategory(cat)}>
+                {cat}
+              </Button>
+            ))}
+          </div>
+          <div className="space-y-2">
+            {roadmapTemplates.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => { setSelectedTemplateId(t.id); setReportText(t.body); }}
+                className={`w-full text-left rounded-lg border px-3 py-2 text-sm ${selectedTemplateId === t.id ? "border-primary bg-primary/5" : "bg-muted/20"}`}
+              >
+                {t.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-4">
+        <div className="rounded-xl border border-card-border bg-card p-4 space-y-3">
+          <h3 className="font-semibold text-sm flex items-center gap-2">
+            <ClipboardEdit size={14} className="text-primary" /> Report Editor
+          </h3>
+          <Textarea value={reportText} onChange={(e) => setReportText(e.target.value)} className="min-h-72 font-mono text-xs" />
+          <div className="flex gap-2">
+            <Button onClick={copyReport}>
+              <CopyIcon size={14} className="mr-1.5" /> {copied ? "Copied" : "Copy"}
+            </Button>
+            <Button variant="outline" onClick={() => window.print()}>
+              <Printer size={14} className="mr-1.5" /> Print preview
+            </Button>
+          </div>
+        </div>
+        <div className="rounded-xl border border-card-border bg-card p-4 space-y-3">
+          <h3 className="font-semibold text-sm flex items-center gap-2">
+            <Eye size={14} className="text-primary" /> Print Preview
+          </h3>
+          <div className="rounded-lg border bg-white text-black p-4 text-xs whitespace-pre-wrap font-serif min-h-72">
+            {reportText || "Preview will appear here."}
+          </div>
+        </div>
       </div>
 
       {/* Filters */}
