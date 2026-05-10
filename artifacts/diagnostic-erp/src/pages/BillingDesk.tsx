@@ -808,10 +808,10 @@ export default function BillingDesk() {
   // RENDER
   // ──────────────────────────────────────────────────────
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-900/20">
 
       {/* ── TOP BAR ── */}
-      <div className="flex-shrink-0 bg-card border-b border-card-border px-3 sm:px-6 py-2 sm:py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="flex-shrink-0 bg-card border-b border-card-border px-3 sm:px-6 py-2 sm:py-3 flex flex-wrap items-center gap-x-4 gap-y-2 shadow-sm">
         <div className="flex items-center gap-2">
           <Receipt size={18} className="text-primary" />
           <span className="font-bold text-base">Billing Desk</span>
@@ -855,10 +855,10 @@ export default function BillingDesk() {
           <div className="lg:flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
 
             {/* ── Patient Section — Search ── */}
-            <div className="bg-card border border-card-border rounded-xl overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-card-border flex items-center justify-between bg-muted/20">
+            <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
+              <div className="px-4 py-2.5 border-b border-card-border flex items-center justify-between bg-gradient-to-r from-blue-50 to-transparent dark:from-blue-950/20 border-l-[3px] border-l-blue-500">
                 <div className="flex items-center gap-2 text-sm font-semibold">
-                  <User size={14} className="text-primary" /> Search Patient
+                  <User size={14} className="text-blue-600 dark:text-blue-400" /> Search Patient
                 </div>
                 {selectedPatient && (
                   <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => { setSelectedPatient(null); setPatientSearch(""); }}>
@@ -979,9 +979,9 @@ export default function BillingDesk() {
 
             {/* ── Add New Patient ── */}
             {!selectedPatient && (
-              <div className="bg-card border border-card-border rounded-xl overflow-hidden">
-                <div className="w-full px-4 py-2.5 border-b border-card-border bg-muted/20 flex items-center gap-2 text-sm font-semibold">
-                  <UserPlus size={14} className="text-primary" />
+              <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
+                <div className="w-full px-4 py-2.5 border-b border-card-border bg-gradient-to-r from-indigo-50 to-transparent dark:from-indigo-950/20 border-l-[3px] border-l-indigo-500 flex items-center gap-2 text-sm font-semibold">
+                  <UserPlus size={14} className="text-indigo-600 dark:text-indigo-400" />
                   <span>Register New Patient</span>
                 </div>
                 <div className="p-3 space-y-2">
@@ -1071,9 +1071,9 @@ export default function BillingDesk() {
             )}
 
             {/* ── Referral / Doctor — Walk-in / Self + Quick Doctor Tabs + Search ── */}
-            <div className="bg-card border border-card-border rounded-xl overflow-hidden">
-              <div className="px-3 py-2 border-b border-card-border bg-muted/20 flex items-center gap-2 text-xs font-semibold">
-                <Stethoscope size={12} className="text-primary" /> Referral Doctor
+            <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
+              <div className="px-3 py-2 border-b border-card-border bg-gradient-to-r from-blue-50 to-transparent dark:from-blue-950/20 border-l-[3px] border-l-blue-400 flex items-center gap-2 text-xs font-semibold">
+                <Stethoscope size={12} className="text-blue-600 dark:text-blue-400" /> Referral Doctor
                 <span className="ml-auto text-[10px] font-normal text-muted-foreground">optional</span>
               </div>
               <div className="p-2.5" ref={doctorRef}>
@@ -1118,11 +1118,11 @@ export default function BillingDesk() {
                             setDoctorMode("doctor"); setDoctorId(id); setDoctorSearch(""); setDoctorSearchOpen(false);
                           }}
                           title={doc ? `${doc.name} · ${doc.specialization}` : `Assign quick doctor slot ${i + 1}`}
-                          className={`w-full h-12 rounded-md border text-[10px] leading-tight px-1 py-1 flex flex-col items-center justify-center text-center transition-colors overflow-hidden ${
+                          className={`w-full h-12 rounded-md border text-[10px] leading-tight px-1 py-1 flex flex-col items-center justify-center text-center transition-all overflow-hidden shadow-sm ${
                             isActive
-                              ? "border-primary bg-primary/10 text-primary"
+                              ? "border-primary bg-primary/10 text-primary shadow-md"
                               : doc
-                              ? "border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-900 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-100"
+                              ? "border-blue-300 bg-blue-50 hover:bg-blue-100 hover:shadow-md text-blue-900 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-100"
                               : "border-dashed border-card-border bg-muted/20 text-muted-foreground hover:bg-muted/40"
                           }`}
                         >
@@ -1219,15 +1219,16 @@ export default function BillingDesk() {
             </div>
 
             {/* ── Test Catalog (Quick Tests + Add Tests + Individual Tests) ── */}
-            <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+            <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
+              <div className="px-3 py-2 border-b border-card-border bg-gradient-to-r from-violet-50 to-transparent dark:from-violet-950/20 border-l-[3px] border-l-violet-500 flex items-center gap-2 text-xs font-semibold">
+                <FlaskConical size={12} className="text-violet-600 dark:text-violet-400" /> Test Catalog
+                <span className="ml-auto text-[10px] font-normal text-muted-foreground">Hover ✏️ to customize slots</span>
+              </div>
               <div className="p-2.5 space-y-2">
                 {/* ── Quick Test Tabs (6 customizable slots) ── */}
                 <div className="pt-1">
-                  <div className="flex items-center justify-between gap-2 text-xs font-semibold text-violet-700 dark:text-violet-300 mb-1">
-                    <div className="flex items-center gap-1.5">
-                      <Zap size={12} /> Quick Tests
-                    </div>
-                    <span className="text-[10px] font-normal text-muted-foreground">Hover ✏️ to customize</span>
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-violet-700 dark:text-violet-300 mb-1">
+                    <Zap size={12} /> Quick Tests
                   </div>
                   <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                     {quickTestIds.map((id, i) => {
@@ -1240,11 +1241,11 @@ export default function BillingDesk() {
                             onClick={() => handleQuickTabClick(i)}
                             disabled={added}
                             title={t ? `${t.name} · ${t.code} · ${inr(t.price)}` : `Slot ${i + 1} — click to assign a test`}
-                            className={`w-full h-12 rounded-md border text-[10px] leading-tight px-1 py-1 flex flex-col items-center justify-center text-center transition-colors overflow-hidden ${
+                            className={`w-full h-12 rounded-md border text-[10px] leading-tight px-1 py-1 flex flex-col items-center justify-center text-center transition-all overflow-hidden shadow-sm ${
                               t
                                 ? added
                                   ? "border-primary/40 bg-primary/10 text-primary cursor-default"
-                                  : "border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-900 dark:bg-violet-950/30 dark:border-violet-800 dark:text-violet-100"
+                                  : "border-violet-300 bg-violet-50 hover:bg-violet-100 hover:shadow-md text-violet-900 dark:bg-violet-950/30 dark:border-violet-800 dark:text-violet-100"
                                 : "border-dashed border-card-border bg-muted/20 text-muted-foreground hover:bg-muted/40"
                             }`}
                           >
@@ -1343,8 +1344,8 @@ export default function BillingDesk() {
             </div>
 
             {/* ── Add Package ── */}
-            <div className="bg-card border border-card-border rounded-xl overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-card-border flex items-center justify-between bg-muted/20">
+            <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
+              <div className="px-4 py-2.5 border-b border-card-border flex items-center justify-between bg-gradient-to-r from-rose-50 to-transparent dark:from-rose-950/20 border-l-[3px] border-l-rose-500">
                 <div className="flex items-center gap-2 text-sm font-semibold text-rose-700 dark:text-rose-300">
                   <Package size={14} /> Add Package
                 </div>
@@ -1414,7 +1415,7 @@ export default function BillingDesk() {
             <div className="space-y-3">
               {/* ── Selected Tests ── */}
               <div className="lg:flex-1 min-h-0 overflow-y-auto border-b border-card-border max-h-[34vh] lg:max-h-none">
-                <div className="px-4 py-2 bg-muted/10 flex items-center justify-between">
+                <div className="px-4 py-2 bg-gradient-to-r from-slate-50 to-transparent dark:from-slate-800/30 border-l-[3px] border-l-slate-400 flex items-center justify-between">
                   <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                     Selected Tests ({selectedTests.length})
                   </span>
@@ -1467,10 +1468,10 @@ export default function BillingDesk() {
                 )}
               </div>
 
-              <div className="flex-shrink-0 border-b border-card-border bg-card lg:sticky lg:bottom-0 lg:z-10">
-                <div className="px-3 py-2 border-b border-card-border bg-muted/20 flex items-center justify-between gap-2">
+              <div className="flex-shrink-0 border-b border-card-border bg-card lg:sticky lg:bottom-0 lg:z-10 shadow-sm">
+                <div className="px-3 py-2 border-b border-card-border bg-gradient-to-r from-indigo-50 to-transparent dark:from-indigo-950/20 border-l-[3px] border-l-indigo-500 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
-                    <Receipt size={14} className="text-primary flex-shrink-0" />
+                    <Receipt size={14} className="text-indigo-600 dark:text-indigo-400 flex-shrink-0" />
                     <span className="text-sm font-semibold truncate">Bill Summary</span>
                   </div>
                   {selectedTests.length > 0 && (
@@ -1553,7 +1554,7 @@ export default function BillingDesk() {
             </div>
           </div>
           {/* ── Action Footer — Generate / Save & Print ── */}
-          <div className="flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/90 p-2 border-t border-card-border">
+          <div className="flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/90 p-2 border-t border-card-border shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5">
               <Button variant="outline" onClick={resetAll} disabled={generateMut.isPending} className="h-8 text-[11px] px-2">
                 <RefreshCcw size={13} className="mr-1" /> Reset
@@ -1561,7 +1562,7 @@ export default function BillingDesk() {
               <Button
                 onClick={() => { printAfterSaveRef.current = true; generateMut.mutate(); }}
                 disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || (needsFormF && (!husbandName.trim() || !patientAddress.trim()))}
-                className="h-8 text-[11px] px-2"
+                className="h-8 text-[11px] px-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0 shadow-md disabled:from-muted disabled:to-muted disabled:text-muted-foreground disabled:shadow-none"
                 title={needsFormF && (!husbandName.trim() || !patientAddress.trim()) ? "Fill Husband Name & Address for PCPNDT Form F" : undefined}
               >
                 <Printer size={13} className="mr-1" />
@@ -2065,8 +2066,8 @@ function TodayCollectionsPanel() {
 
   return (
     <div className="flex-shrink-0 border-t border-card-border bg-card/50">
-      <div className="px-3 py-1.5 flex items-center gap-2 text-[11px] font-semibold border-b border-card-border bg-muted/20">
-        <Receipt size={11} className="text-primary" />
+      <div className="px-3 py-1.5 flex items-center gap-2 text-[11px] font-semibold border-b border-card-border bg-gradient-to-r from-blue-50 to-transparent dark:from-blue-950/20 border-l-[3px] border-l-blue-400">
+        <Receipt size={11} className="text-blue-600 dark:text-blue-400" />
         <span>Today's Collections</span>
         <span className="text-muted-foreground font-normal ml-0.5">{sorted.length}</span>
         {dueCount > 0 && (
