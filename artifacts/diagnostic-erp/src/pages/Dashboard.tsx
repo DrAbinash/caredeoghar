@@ -57,8 +57,7 @@ function KpiCard({
 }) {
   return (
     <div
-      className={`bg-white dark:bg-card border border-card-border rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow border-l-4 ${accentBorder ?? "border-l-primary"} ${cardClass ?? ""}`}
-      style={{ boxShadow: "0 2px 8px 0 rgba(0,0,0,.07), 0 1px 2px 0 rgba(0,0,0,.04)" }}
+      className={`bg-white dark:bg-card border border-card-border rounded-xl p-5 card-shadow hover:shadow-md transition-shadow border-l-4 ${accentBorder ?? "border-l-primary"} ${cardClass ?? ""}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -264,7 +263,7 @@ export default function Dashboard() {
         </div>
 
         {/* ── Date Range Snapshot ── */}
-        <div className="bg-white dark:bg-card border border-card-border rounded-xl p-4 space-y-4" style={{ boxShadow: "0 2px 8px 0 rgba(0,0,0,.07), 0 1px 2px 0 rgba(0,0,0,.04)" }}>
+        <div className="bg-white dark:bg-card border border-card-border rounded-xl p-4 space-y-4 card-shadow">
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex items-center gap-2 mr-2">
               <Calendar size={16} className="text-primary" />
@@ -336,8 +335,7 @@ export default function Dashboard() {
           ].map(({ label, value, icon: Icon, color, accent }) => (
             <div
               key={label}
-              className={`bg-white dark:bg-card border border-card-border rounded-lg px-4 py-3 flex items-center gap-3 shadow-sm border-l-4 ${accent}`}
-              style={{ boxShadow: "0 1px 4px 0 rgba(0,0,0,.06)" }}
+              className={`bg-white dark:bg-card border border-card-border rounded-lg px-4 py-3 flex items-center gap-3 chip-shadow border-l-4 ${accent}`}
             >
               <Icon size={16} className={color} />
               <div>
@@ -417,7 +415,7 @@ export default function Dashboard() {
           </div>
 
           {/* ── Revenue Chart ── */}
-          <div className="lg:col-span-2 bg-white dark:bg-card border border-card-border rounded-xl p-5 shadow-sm" style={{ boxShadow: "0 2px 8px 0 rgba(0,0,0,.07), 0 1px 2px 0 rgba(0,0,0,.04)" }}>
+          <div className="lg:col-span-2 bg-white dark:bg-card border border-card-border rounded-xl p-5 card-shadow">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-foreground">Monthly Revenue</h3>
               {revenue && (
@@ -455,7 +453,7 @@ export default function Dashboard() {
             <h3 className="text-sm font-semibold text-foreground">Recent Transactions</h3>
             <Link href="/billing" className="text-xs text-primary hover:underline">View all bills →</Link>
           </div>
-          <div className="bg-white dark:bg-card border border-card-border rounded-xl shadow-sm overflow-hidden" style={{ boxShadow: "0 2px 8px 0 rgba(0,0,0,.07), 0 1px 2px 0 rgba(0,0,0,.04)" }}>
+          <div className="bg-white dark:bg-card border border-card-border rounded-xl card-shadow overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -528,7 +526,7 @@ export default function Dashboard() {
         {popular?.tests && popular.tests.length > 0 && (
           <div>
             <h3 className="text-sm font-semibold text-foreground mb-3">Most Ordered Tests</h3>
-            <div className="bg-white dark:bg-card border border-card-border rounded-xl p-5 shadow-sm overflow-x-auto" style={{ boxShadow: "0 2px 8px 0 rgba(0,0,0,.07), 0 1px 2px 0 rgba(0,0,0,.04)" }}>
+            <div className="bg-white dark:bg-card border border-card-border rounded-xl p-5 card-shadow overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs text-muted-foreground border-b border-border">

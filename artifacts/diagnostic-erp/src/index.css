@@ -132,6 +132,10 @@
   --shadow-xl: 0 20px 25px -5px rgba(0,0,0,.08), 0 8px 10px -6px rgba(0,0,0,.06);
   --shadow-2xl: 0 25px 50px -12px rgba(0,0,0,.15);
 
+  /* Card elevation shadow — light-mode tuned */
+  --card-shadow: 0 2px 8px 0 rgba(0,0,0,.07), 0 1px 2px 0 rgba(0,0,0,.04);
+  --chip-shadow: 0 1px 4px 0 rgba(0,0,0,.06);
+
   --primary-border: hsl(252 90% 52%);
   --secondary-border: hsl(210 16% 86%);
   --muted-border: hsl(210 16% 86%);
@@ -201,6 +205,10 @@
   --shadow-xl: 0 20px 25px -5px rgba(0,0,0,.4), 0 8px 10px -6px rgba(0,0,0,.3);
   --shadow-2xl: 0 25px 50px -12px rgba(0,0,0,.6);
 
+  /* Card elevation shadow — softened for dark mode (borders carry separation) */
+  --card-shadow: 0 2px 8px 0 rgba(0,0,0,.04), 0 1px 2px 0 rgba(0,0,0,.02);
+  --chip-shadow: 0 1px 4px 0 rgba(0,0,0,.03);
+
   --primary-border: hsl(215 90% 55%);
   --secondary-border: hsl(218 18% 26%);
   --muted-border: hsl(218 18% 24%);
@@ -221,6 +229,11 @@
   h2 { @apply text-2xl font-bold tracking-tight; }
   h3 { @apply text-xl font-semibold; }
 }
+
+/* Card elevation helpers — use these instead of hardcoded inline boxShadow
+   so light/dark values swap automatically via CSS custom properties above. */
+.card-shadow { box-shadow: var(--card-shadow); }
+.chip-shadow  { box-shadow: var(--chip-shadow); }
 
 /* Pretty scrollbar accent */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
