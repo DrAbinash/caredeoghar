@@ -404,23 +404,22 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     ? session.user.name.split(/\s+/).map((p) => p.charAt(0)).slice(0, 2).join("").toUpperCase()
     : "";
 
-  const showMobileShell = isMobile;
-
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Mobile overlay */}
-      {showMobileShell && sidebarOpen && (
+      {isMobile && sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-20 lg:hidden"
+          className="fixed inset-0 bg-black/50 z-20"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
+      {/* Desktop sidebar — hidden on mobile via conditional render so there's
+          no Tailwind display-utility conflict between "flex" and "hidden" */}
+      {!isMobile && (
       <aside
         className={cn(
           "fixed lg:static inset-y-0 left-0 z-30 flex flex-col border-r border-sidebar-border transition-all duration-200 relative overflow-hidden",
-          showMobileShell ? "hidden lg:flex" : "",
           sidebarCollapsed ? "w-14" : "w-60",
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
@@ -708,8 +707,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </aside>
+      )}
 
-      {showMobileShell && (
+      {isMobile && (
         <div
           className={cn(
             "fixed inset-y-0 left-0 z-30 flex flex-col border-r border-sidebar-border transition-transform duration-200 overflow-hidden w-60",
@@ -807,7 +807,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top bar (mobile/tablet) */}
-        <header className="lg:hidden sticky top-0 z-10 flex items-center gap-3 px-4 py-3 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+        <header className={cn(!isMobile && "hidden", "sticky top-0 z-10 flex items-center gap-3 px-4 py-3 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80")}>
           <button
             onClick={() => setSidebarOpen(true)}
             className="text-foreground p-1.5 -ml-1.5 rounded-md hover:bg-muted active:bg-muted/80 transition-colors"
