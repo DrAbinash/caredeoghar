@@ -37,8 +37,9 @@ export function setUserTheme(userId: number | string, themeId: string): void {
     window.localStorage.setItem(LS_PREFIX + userId, themeId);
     window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: { userId: String(userId), themeId } }));
   } catch { /* ignore */ }
-  syncSessionTheme(userId, themeId);
-  void api.patch(`/api/users/${userId}/sidebar-theme`, { sidebarTheme: themeId }).catch(() => {});
+  void api.patch(`/api/users/${userId}/sidebar-theme`, { sidebarTheme: themeId })
+    .then(() => syncSessionTheme(userId, themeId))
+    .catch(() => {});
 }
 
 export function clearUserTheme(userId: number | string): void {
@@ -46,8 +47,9 @@ export function clearUserTheme(userId: number | string): void {
     window.localStorage.removeItem(LS_PREFIX + userId);
     window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: { userId: String(userId), themeId: null } }));
   } catch { /* ignore */ }
-  syncSessionTheme(userId, null);
-  void api.patch(`/api/users/${userId}/sidebar-theme`, { sidebarTheme: null }).catch(() => {});
+  void api.patch(`/api/users/${userId}/sidebar-theme`, { sidebarTheme: null })
+    .then(() => syncSessionTheme(userId, null))
+    .catch(() => {});
 }
 
 /**
