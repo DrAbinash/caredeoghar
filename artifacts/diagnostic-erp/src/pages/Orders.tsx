@@ -87,41 +87,50 @@ export default function Orders() {
   const total = selectedTests.reduce((sum, t) => sum + Number(t.price), 0);
 
   return (
-    <div className="pb-8">
+    <div className="pb-8 bg-slate-50 dark:bg-slate-900/20 min-h-full">
       <PageHeader
         title="Orders"
         subtitle={`${data?.total ?? 0} total orders`}
         actions={
-          <Button size="sm" onClick={() => { setOpen(true); reset(); setSelectedTestIds([]); }}>
+          <Button
+            size="sm"
+            onClick={() => { setOpen(true); reset(); setSelectedTestIds([]); }}
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0 shadow-md"
+          >
             <Plus size={14} className="mr-1" /> New Order
           </Button>
         }
       />
 
       <div className="px-6 space-y-4">
-        <div className="flex gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Search orders..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <div className="bg-white dark:bg-card border border-slate-200 dark:border-border rounded-xl shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-slate-100 dark:border-border bg-gradient-to-r from-blue-50 to-transparent border-l-4 border-l-blue-500">
+            <div className="flex items-center gap-2">
+              <Search size={15} className="text-blue-600" />
+              <span className="text-sm font-semibold text-slate-700 dark:text-foreground">Test Orders</span>
+            </div>
+            <div className="flex gap-2 flex-wrap items-center">
+              <div className="relative min-w-[200px] max-w-sm">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input placeholder="Search orders..." className="pl-9 h-8 text-sm" value={search} onChange={(e) => setSearch(e.target.value)} />
+              </div>
+              <Select value={status || "all"} onValueChange={(v) => setStatus(v === "all" ? "" : v)}>
+                <SelectTrigger className="w-36 h-8 text-sm">
+                  <SelectValue placeholder="All Statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  {STATUSES.map((s) => (
+                    <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <Select value={status || "all"} onValueChange={(v) => setStatus(v === "all" ? "" : v)}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="All Statuses" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              {STATUSES.map((s) => (
-                <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="bg-card border border-card-border rounded-xl shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs text-muted-foreground border-b border-border bg-muted/30">
+                <tr className="text-left text-xs text-muted-foreground border-b border-slate-200 dark:border-border bg-slate-50 dark:bg-muted/30">
                   <th className="px-4 py-3 font-medium">Order No.</th>
                   <th className="px-4 py-3 font-medium">Patient</th>
                   <th className="px-4 py-3 font-medium">Doctor</th>

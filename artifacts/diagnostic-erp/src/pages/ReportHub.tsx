@@ -195,45 +195,56 @@ export default function ReportHub() {
   }
 
   return (
-    <div className="p-6 space-y-4 max-w-[1400px] mx-auto">
+    <div className="p-6 space-y-4 max-w-[1400px] mx-auto bg-slate-50 dark:bg-slate-900/20 min-h-full">
       <PageHeader title="Report Generation" subtitle="Pathology + radiology reports — sign, verify, mark critical, print, share." />
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <KpiCard label="Total" value={stats.totalReports} accent="bg-slate-100" />
-        <KpiCard label="Drafts" value={stats.drafts} accent="bg-slate-100" />
-        <KpiCard label="Pending Verify" value={stats.pendingVerification} accent="bg-amber-50" />
-        <KpiCard label="Delivered (24h)" value={stats.deliveredToday} accent="bg-emerald-50" />
-        <KpiCard label="Critical Alerts" value={stats.criticalUnack} accent="bg-rose-50" highlight={stats.criticalUnack > 0} />
+        <KpiCard label="Total" value={stats.totalReports} borderColor="border-l-slate-400" />
+        <KpiCard label="Drafts" value={stats.drafts} borderColor="border-l-blue-400" />
+        <KpiCard label="Pending Verify" value={stats.pendingVerification} borderColor="border-l-amber-500" />
+        <KpiCard label="Delivered (24h)" value={stats.deliveredToday} borderColor="border-l-emerald-500" />
+        <KpiCard label="Critical Alerts" value={stats.criticalUnack} borderColor="border-l-rose-500" highlight={stats.criticalUnack > 0} />
       </div>
 
-      {/* Action bar */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[220px] max-w-md">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search by patient, report #, title…" className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} />
+      {/* Action bar card */}
+      <div className="bg-white dark:bg-card border border-slate-200 dark:border-border rounded-xl shadow-sm overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-100 dark:border-border bg-gradient-to-r from-violet-50 to-transparent border-l-4 border-l-violet-500">
+          <FileText className="h-4 w-4 text-violet-600" />
+          <span className="text-sm font-semibold text-slate-700 dark:text-foreground">Reports</span>
         </div>
-        <Select value={filterType} onValueChange={setFilterType}>
-          <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            <SelectItem value="pathology">Pathology</SelectItem>
-            <SelectItem value="radiology">Radiology</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-[170px]"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="draft">Draft</SelectItem>
-            <SelectItem value="pending_verification">Pending Verify</SelectItem>
-            <SelectItem value="verified">Verified</SelectItem>
-            <SelectItem value="delivered">Delivered</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button variant="outline" onClick={refresh} disabled={loading}><RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} /> Refresh</Button>
-        <Button variant="outline" onClick={() => setSigManagerOpen(true)}><Stamp className="h-4 w-4 mr-1" /> Signatures</Button>
-        <Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4 mr-1" /> New Report</Button>
+        <div className="flex flex-wrap items-center gap-2 p-3">
+          <div className="relative flex-1 min-w-[220px] max-w-md">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search by patient, report #, title…" className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+          <Select value={filterType} onValueChange={setFilterType}>
+            <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="pathology">Pathology</SelectItem>
+              <SelectItem value="radiology">Radiology</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-[170px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="pending_verification">Pending Verify</SelectItem>
+              <SelectItem value="verified">Verified</SelectItem>
+              <SelectItem value="delivered">Delivered</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" onClick={refresh} disabled={loading}><RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} /> Refresh</Button>
+          <Button variant="outline" onClick={() => setSigManagerOpen(true)}><Stamp className="h-4 w-4 mr-1" /> Signatures</Button>
+          <Button
+            onClick={() => setCreateOpen(true)}
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0 shadow-md"
+          >
+            <Plus className="h-4 w-4 mr-1" /> New Report
+          </Button>
+        </div>
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
@@ -245,9 +256,9 @@ export default function ReportHub() {
         </TabsList>
 
         <TabsContent value={tab} className="mt-3">
-          <div className="rounded-lg border bg-card overflow-x-auto">
+          <div className="rounded-xl border border-slate-200 dark:border-border bg-white dark:bg-card shadow-sm overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-muted/50">
+              <thead className="bg-slate-50 dark:bg-muted/50 border-b border-slate-200 dark:border-border">
                 <tr className="text-left">
                   <th className="px-3 py-2 font-semibold">Report #</th>
                   <th className="px-3 py-2 font-semibold">Patient</th>
@@ -320,11 +331,11 @@ export default function ReportHub() {
   );
 }
 
-function KpiCard({ label, value, accent, highlight }: { label: string; value: number; accent: string; highlight?: boolean }) {
+function KpiCard({ label, value, borderColor, highlight }: { label: string; value: number; borderColor: string; highlight?: boolean }) {
   return (
-    <div className={`rounded-lg border ${accent} p-3 ${highlight ? "ring-2 ring-rose-300 animate-pulse" : ""}`}>
-      <div className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</div>
-      <div className="text-2xl font-bold">{value}</div>
+    <div className={`rounded-xl border border-slate-200 dark:border-border bg-white dark:bg-card shadow-sm border-l-4 ${borderColor} p-3 ${highlight ? "ring-2 ring-rose-300 animate-pulse" : ""}`}>
+      <div className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{label}</div>
+      <div className="text-2xl font-bold mt-0.5">{value}</div>
     </div>
   );
 }
