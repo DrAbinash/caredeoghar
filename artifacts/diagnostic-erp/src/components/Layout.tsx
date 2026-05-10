@@ -43,6 +43,8 @@ import {
   BarChart2,
   Building2,
   Palette,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -200,6 +202,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const [location] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [autoMinimise] = useState(() => localStorage.getItem("sidebarAutoMinimise") === "1");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("sidebarAutoMinimise") === "1");
   const session = readStaffSession();
 
   const { userTheme, setTheme: setUserTheme } = useUserTheme(session?.user.id);
@@ -402,7 +406,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed lg:static inset-y-0 left-0 z-30 w-60 flex flex-col border-r border-sidebar-border transition-transform duration-200 relative overflow-hidden",
+          "fixed lg:static inset-y-0 left-0 z-30 flex flex-col border-r border-sidebar-border transition-all duration-200 relative overflow-hidden",
+          sidebarCollapsed ? "w-14" : "w-60",
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
         style={{ background: theme.gradient }}
@@ -415,21 +420,31 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           style={{ background: theme.bottomHint }} />
 
         {/* Logo */}
-        <div className="flex items-center gap-3 px-5 py-5 border-b border-sidebar-border relative z-10" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
+        <div className={cn("flex items-center border-b border-sidebar-border relative z-10", sidebarCollapsed ? "justify-center px-0 py-4 flex-col gap-2" : "gap-3 px-5 py-5")} style={{ borderColor: "rgba(255,255,255,0.1)" }}>
           <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)", boxShadow: "0 4px 14px rgba(59,130,246,0.4)" }}>
             <Activity size={20} className="text-white" />
           </div>
-          <div>
-            <div className="text-base font-bold text-sidebar-foreground leading-tight tracking-tight">{clinic?.name || "DiagnoCenter"}</div>
-            <div className="text-[11px] uppercase tracking-wider text-sidebar-foreground/60 font-medium">{clinic?.tagline || "Billing ERP"}</div>
-          </div>
-          <button className="ml-auto lg:hidden text-sidebar-foreground" onClick={() => setSidebarOpen(false)}>
+          {!sidebarCollapsed && (
+            <div className="flex-1 min-w-0">
+              <div className="text-base font-bold text-sidebar-foreground leading-tight tracking-tight truncate">{clinic?.name || "DiagnoCenter"}</div>
+              <div className="text-[11px] uppercase tracking-wider text-sidebar-foreground/60 font-medium">{clinic?.tagline || "Billing ERP"}</div>
+            </div>
+          )}
+          {/* Collapse toggle — desktop only */}
+          <button
+            className={cn("hidden lg:flex items-center justify-center text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-white/10 transition-colors rounded-md p-1", sidebarCollapsed ? "" : "ml-auto")}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            onClick={() => setSidebarCollapsed((c) => !c)}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+          </button>
+          <button className={cn("lg:hidden text-sidebar-foreground", sidebarCollapsed ? "" : "ml-auto")} onClick={() => setSidebarOpen(false)}>
             <X size={16} />
           </button>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto relative z-10">
+        <nav className={cn("flex-1 py-4 space-y-0.5 overflow-y-auto relative z-10", sidebarCollapsed ? "px-1" : "px-3")}>
           {visibleNav.map((entry) => {
             if (!isGroup(entry)) {
               const { path, icon: Icon, label } = entry;
@@ -438,9 +453,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <Link
                   key={path}
                   href={path}
-                  onClick={() => setSidebarOpen(false)}
+                  title={sidebarCollapsed ? label : undefined}
+                  onClick={() => { setSidebarOpen(false); if (autoMinimise) setSidebarCollapsed(true); }}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer",
+                    "flex items-center rounded-lg text-sm font-medium transition-all cursor-pointer",
+                    sidebarCollapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5",
                     isActive
                       ? "text-white font-semibold"
                       : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-white/10",
@@ -448,8 +465,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   style={isActive ? { background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.2)" } : { border: "1px solid transparent" }}
                 >
                   <Icon size={15} />
-                  {label}
-                  {isActive && <div className="ml-auto w-1.5 h-4 rounded-full" style={{ background: theme.accent, boxShadow: `0 0 6px ${theme.accent}b0` }} />}
+                  {!sidebarCollapsed && label}
+                  {!sidebarCollapsed && isActive && <div className="ml-auto w-1.5 h-4 rounded-full" style={{ background: theme.accent, boxShadow: `0 0 6px ${theme.accent}b0` }} />}
                 </Link>
               );
             }
@@ -459,6 +476,33 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               c.path === "/" ? location === "/" : location === c.path || location.startsWith(c.path + "/"),
             );
             const open = openGroups[id] ?? groupActive;
+
+            if (sidebarCollapsed) {
+              // Collapsed: show each child as an icon-only link (no group header)
+              return (
+                <div key={id} className="space-y-0.5">
+                  {children.map(({ path, icon: ChildIcon, label: childLabel }) => {
+                    const isActive = path === "/" ? location === "/" : location === path || location.startsWith(path + "/");
+                    return (
+                      <Link
+                        key={path}
+                        href={path}
+                        title={childLabel}
+                        onClick={() => { setSidebarOpen(false); if (autoMinimise) setSidebarCollapsed(true); }}
+                        className={cn(
+                          "flex items-center justify-center px-0 py-2 rounded-md transition-all cursor-pointer",
+                          isActive ? "text-white font-semibold" : "text-sidebar-foreground/55 hover:text-sidebar-foreground hover:bg-white/10",
+                        )}
+                        style={isActive ? { background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.2)" } : { border: "1px solid transparent" }}
+                      >
+                        <ChildIcon size={13} />
+                      </Link>
+                    );
+                  })}
+                </div>
+              );
+            }
+
             return (
               <div key={id}>
                 <button
@@ -488,7 +532,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                         <Link
                           key={path}
                           href={path}
-                          onClick={() => setSidebarOpen(false)}
+                          onClick={() => { setSidebarOpen(false); if (autoMinimise) setSidebarCollapsed(true); }}
                           className={cn(
                             "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] font-medium transition-all cursor-pointer",
                             isActive
@@ -530,15 +574,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Signed-in user profile block — theme picker lives here when logged in */}
         {session && (
-          <div className="px-3 py-3 border-t relative z-10" ref={themePickerRef} style={{ borderColor: "rgba(255,255,255,0.1)" }}>
-            <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.08)" }}>
+          <div className={cn("py-3 border-t relative z-10", sidebarCollapsed ? "px-1" : "px-3")} ref={themePickerRef} style={{ borderColor: "rgba(255,255,255,0.1)" }}>
+            <div className={cn("flex items-center rounded-lg", sidebarCollapsed ? "flex-col gap-1 px-0 py-1" : "gap-2.5 px-2 py-2")} style={{ background: "rgba(255,255,255,0.08)" }}>
               <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0" style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)", boxShadow: "0 0 10px rgba(59,130,246,0.35)" }}>
                 {initials}
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-sidebar-foreground truncate">{session.user.name}</p>
-                <p className="text-[10px] text-sidebar-foreground/60 capitalize truncate">{session.user.role.replace("_", " ")}</p>
-              </div>
+              {!sidebarCollapsed && (
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-sidebar-foreground truncate">{session.user.name}</p>
+                  <p className="text-[10px] text-sidebar-foreground/60 capitalize truncate">{session.user.role.replace("_", " ")}</p>
+                </div>
+              )}
               {/* Per-user theme picker — profile menu affordance */}
               <button
                 onClick={() => setThemePickerOpen((o) => !o)}
@@ -600,8 +646,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         )}
 
         {/* Footer */}
-        <div className="px-4 py-3 border-t flex items-center justify-between relative z-10" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
-          <span className="text-xs text-sidebar-foreground/40">v1.0.0</span>
+        <div className={cn("py-3 border-t flex items-center relative z-10", sidebarCollapsed ? "px-1 justify-center" : "px-4 justify-between")} style={{ borderColor: "rgba(255,255,255,0.1)" }}>
+          {!sidebarCollapsed && <span className="text-xs text-sidebar-foreground/40">v1.0.0</span>}
           <div className="flex items-center gap-1">
             {/* Palette button shown in footer only when no session (profile block has it when logged in) */}
             {!session && (

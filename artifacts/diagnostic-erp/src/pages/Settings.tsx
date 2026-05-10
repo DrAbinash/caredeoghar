@@ -566,6 +566,40 @@ function CustomColorPicker({
   );
 }
 
+function SidebarBehaviourCard() {
+  const [autoMinimise, setAutoMinimise] = useState(() => localStorage.getItem("sidebarAutoMinimise") === "1");
+  const toggle = () => {
+    const next = !autoMinimise;
+    setAutoMinimise(next);
+    if (next) localStorage.setItem("sidebarAutoMinimise", "1");
+    else localStorage.removeItem("sidebarAutoMinimise");
+  };
+  return (
+    <div className="bg-card border border-card-border rounded-xl p-5 space-y-3">
+      <div>
+        <h2 className="font-bold text-lg flex items-center gap-2">🗂 Sidebar Behaviour</h2>
+        <p className="text-sm text-muted-foreground">Personal preference for this device — not synced across staff accounts.</p>
+      </div>
+      <div>
+        <p className="text-sm font-medium mb-1">Auto-minimise sidebar on navigation</p>
+        <button
+          type="button"
+          onClick={toggle}
+          className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors ${autoMinimise ? "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-800" : "bg-muted/30 border-card-border"}`}
+        >
+          <span className="text-sm font-medium">{autoMinimise ? "Enabled" : "Disabled"}</span>
+          <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${autoMinimise ? "bg-green-500" : "bg-muted-foreground/40"}`}>
+            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${autoMinimise ? "translate-x-5" : "translate-x-1"}`} />
+          </span>
+        </button>
+        <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
+          When enabled, the sidebar collapses to an icon rail after you click any menu item, giving more screen space for your work. Click the <strong>arrow button</strong> at the top of the sidebar to expand it again at any time.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function AppearanceTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -680,6 +714,9 @@ function AppearanceTab() {
           </div>
         )}
       </div>
+
+      {/* Sidebar behaviour (localStorage, per-device) */}
+      <SidebarBehaviourCard />
 
       {/* Clinic-wide default (admin only) */}
       {isAdmin && (
