@@ -44,6 +44,7 @@ function KpiCard({
   iconBg,
   trend,
   cardClass,
+  accentBorder,
 }: {
   icon: React.ElementType;
   label: string;
@@ -52,9 +53,13 @@ function KpiCard({
   iconBg: string;
   trend?: { label: string; positive: boolean };
   cardClass?: string;
+  accentBorder?: string;
 }) {
   return (
-    <div className={`bg-card border border-card-border rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow ${cardClass ?? ""}`}>
+    <div
+      className={`bg-white dark:bg-card border border-card-border rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow border-l-4 ${accentBorder ?? "border-l-primary"} ${cardClass ?? ""}`}
+      style={{ boxShadow: "0 2px 8px 0 rgba(0,0,0,.07), 0 1px 2px 0 rgba(0,0,0,.04)" }}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
@@ -216,14 +221,16 @@ export default function Dashboard() {
             label="Today's Revenue"
             value={fmt(stats?.todayRevenue ?? 0)}
             sub={`Month: ${fmt(stats?.monthRevenue ?? 0)}`}
-            iconBg="bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400"
+            iconBg="bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400"
+            accentBorder="border-l-violet-500"
           />
           <KpiCard
             icon={FileText}
             label="Total Bills"
             value={totalBills}
             sub={`${todayBillCount} today · ${totalBills} all time`}
-            iconBg="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
+            iconBg="bg-cyan-100 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-400"
+            accentBorder="border-l-cyan-500"
           />
           {/* Module B: Pending Dues tile pulses red whenever outstanding balance > 0
               so the front desk can never miss it. Replaces the prior "Referral Payouts"
@@ -239,6 +246,7 @@ export default function Dashboard() {
                 ? "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400 animate-pulse"
                 : "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"
             }
+            accentBorder={Number(allPendingDues) > 0 ? "border-l-red-500" : "border-l-emerald-500"}
             cardClass={
               Number(allPendingDues) > 0
                 ? "ring-2 ring-red-300 dark:ring-red-900/60 shadow-red-200/40 dark:shadow-red-900/30"
@@ -250,12 +258,13 @@ export default function Dashboard() {
             label="Pending Reports"
             value={pendingReports}
             sub="Orders awaiting completion"
-            iconBg="bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400"
+            iconBg="bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400"
+            accentBorder="border-l-red-500"
           />
         </div>
 
         {/* ── Date Range Snapshot ── */}
-        <div className="bg-card border border-card-border rounded-xl p-4 space-y-4">
+        <div className="bg-white dark:bg-card border border-card-border rounded-xl p-4 space-y-4" style={{ boxShadow: "0 2px 8px 0 rgba(0,0,0,.07), 0 1px 2px 0 rgba(0,0,0,.04)" }}>
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex items-center gap-2 mr-2">
               <Calendar size={16} className="text-primary" />
@@ -299,11 +308,17 @@ export default function Dashboard() {
             <div className="h-48 -mx-1">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartRows}>
+                  <defs>
+                    <linearGradient id="incomeBarGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="hsl(252 90% 62%)" stopOpacity={1} />
+                      <stop offset="100%" stopColor="hsl(230 80% 52%)" stopOpacity={0.82} />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                   <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip formatter={(v: number) => fmt(v)} />
-                  <Bar dataKey="income" fill="#10b981" name="Income" />
+                  <Bar dataKey="income" fill="url(#incomeBarGrad)" name="Income" />
                   <Bar dataKey="expense" fill="#f43f5e" name="Expense" />
                 </BarChart>
               </ResponsiveContainer>
@@ -314,12 +329,16 @@ export default function Dashboard() {
         {/* ── Secondary KPIs ── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: "Total Patients", value: stats?.totalPatients ?? 0, icon: Users, color: "text-blue-500" },
-            { label: "Today's Orders", value: stats?.todayOrders ?? 0, icon: ClipboardList, color: "text-purple-500" },
-            { label: "Completed Tests", value: stats?.completedTests ?? 0, icon: TrendingUp, color: "text-green-500" },
-            { label: "Pending Orders", value: stats?.pendingOrders ?? 0, icon: AlertTriangle, color: "text-yellow-500" },
-          ].map(({ label, value, icon: Icon, color }) => (
-            <div key={label} className="bg-card border border-card-border rounded-lg px-4 py-3 flex items-center gap-3 shadow-sm">
+            { label: "Total Patients", value: stats?.totalPatients ?? 0, icon: Users, color: "text-cyan-600 dark:text-cyan-400", accent: "border-l-cyan-400" },
+            { label: "Today's Orders", value: stats?.todayOrders ?? 0, icon: ClipboardList, color: "text-violet-600 dark:text-violet-400", accent: "border-l-violet-400" },
+            { label: "Completed Tests", value: stats?.completedTests ?? 0, icon: TrendingUp, color: "text-green-600 dark:text-green-400", accent: "border-l-green-400" },
+            { label: "Pending Orders", value: stats?.pendingOrders ?? 0, icon: AlertTriangle, color: "text-amber-500 dark:text-amber-400", accent: "border-l-amber-400" },
+          ].map(({ label, value, icon: Icon, color, accent }) => (
+            <div
+              key={label}
+              className={`bg-white dark:bg-card border border-card-border rounded-lg px-4 py-3 flex items-center gap-3 shadow-sm border-l-4 ${accent}`}
+              style={{ boxShadow: "0 1px 4px 0 rgba(0,0,0,.06)" }}
+            >
               <Icon size={16} className={color} />
               <div>
                 <p className="text-xs text-muted-foreground">{label}</p>
@@ -398,7 +417,7 @@ export default function Dashboard() {
           </div>
 
           {/* ── Revenue Chart ── */}
-          <div className="lg:col-span-2 bg-card border border-card-border rounded-xl p-5 shadow-sm">
+          <div className="lg:col-span-2 bg-white dark:bg-card border border-card-border rounded-xl p-5 shadow-sm" style={{ boxShadow: "0 2px 8px 0 rgba(0,0,0,.07), 0 1px 2px 0 rgba(0,0,0,.04)" }}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-foreground">Monthly Revenue</h3>
               {revenue && (
@@ -408,6 +427,12 @@ export default function Dashboard() {
             {revenue?.data && revenue.data.length > 0 ? (
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={revenue.data} margin={{ top: 0, right: 0, left: -10, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="revenueBarGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="hsl(252 90% 62%)" stopOpacity={1} />
+                      <stop offset="100%" stopColor="hsl(230 80% 52%)" stopOpacity={0.85} />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
                   <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
@@ -415,7 +440,7 @@ export default function Dashboard() {
                     formatter={(v: number) => [fmt(v), "Revenue"]}
                     contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }}
                   />
-                  <Bar dataKey="revenue" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="revenue" fill="url(#revenueBarGrad)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -430,7 +455,7 @@ export default function Dashboard() {
             <h3 className="text-sm font-semibold text-foreground">Recent Transactions</h3>
             <Link href="/billing" className="text-xs text-primary hover:underline">View all bills →</Link>
           </div>
-          <div className="bg-card border border-card-border rounded-xl shadow-sm overflow-hidden">
+          <div className="bg-white dark:bg-card border border-card-border rounded-xl shadow-sm overflow-hidden" style={{ boxShadow: "0 2px 8px 0 rgba(0,0,0,.07), 0 1px 2px 0 rgba(0,0,0,.04)" }}>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -503,7 +528,7 @@ export default function Dashboard() {
         {popular?.tests && popular.tests.length > 0 && (
           <div>
             <h3 className="text-sm font-semibold text-foreground mb-3">Most Ordered Tests</h3>
-            <div className="bg-card border border-card-border rounded-xl p-5 shadow-sm overflow-x-auto">
+            <div className="bg-white dark:bg-card border border-card-border rounded-xl p-5 shadow-sm overflow-x-auto" style={{ boxShadow: "0 2px 8px 0 rgba(0,0,0,.07), 0 1px 2px 0 rgba(0,0,0,.04)" }}>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs text-muted-foreground border-b border-border">
