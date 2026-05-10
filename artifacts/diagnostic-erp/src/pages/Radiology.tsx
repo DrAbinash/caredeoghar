@@ -232,6 +232,7 @@ export default function Radiology() {
   const [studyModalId, setStudyModalId] = useState<number | null>(null);
   const [reportModalId, setReportModalId] = useState<number | null>(null);
   const [filmModalId, setFilmModalId] = useState<number | null>(null);
+  const [pacsBusyId, setPacsBusyId] = useState<number | null>(null);
   const [roadmapCategory, setRoadmapCategory] = useState("MRI");
   const [selectedTemplateId, setSelectedTemplateId] = useState(REPORT_TEMPLATES[0]?.id ?? "");
   const [reportText, setReportText] = useState(REPORT_TEMPLATES[0]?.body ?? "");
@@ -295,6 +296,17 @@ export default function Radiology() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["radiology-worklist"] }),
     onError: (e: Error) => toast({ title: "Could not release", description: e.message, variant: "destructive" }),
   });
+
+  const openPacsViewer = async (studyId: number) => {
+    setPacsBusyId(studyId);
+    try {
+      const data = await api.get<{ weasisUrl: string; orthancViewerUrl: string; ohifUrl: string | null }>(`/api/radiology/studies/${studyId}/pacs-url`);
+      const url = data.ohifUrl ?? data.weasisUrl ?? data.orthancViewerUrl;
+      window.open(url, "_blank", "noopener,noreferrer");
+    } finally {
+      setPacsBusyId(null);
+    }
+  };
 
   const reportingQueue = useMemo(
     () => studies.filter((s) => ["acquired", "reported_preliminary"].includes(s.status)),
@@ -538,6 +550,8 @@ export default function Radiology() {
             technicians={technicians}
             meId={me?.id ?? null}
             onOpen={(id) => setStudyModalId(id)}
+            onPacs={openPacsViewer}
+            pacsBusyId={pacsBusyId}
             onReport={(id) => setReportModalId(id)}
             onFilm={(id) => setFilmModalId(id)}
             onStatus={(id, s) => setStudyStatus.mutate({ id, status: s })}
@@ -553,6 +567,8 @@ export default function Radiology() {
             technicians={technicians}
             meId={me?.id ?? null}
             onOpen={(id) => setStudyModalId(id)}
+            onPacs={openPacsViewer}
+            pacsBusyId={pacsBusyId}
             onReport={(id) => setReportModalId(id)}
             onFilm={(id) => setFilmModalId(id)}
             onStatus={(id, s) => setStudyStatus.mutate({ id, status: s })}
@@ -569,6 +585,8 @@ export default function Radiology() {
             technicians={technicians}
             meId={me?.id ?? null}
             onOpen={(id) => setStudyModalId(id)}
+            onPacs={openPacsViewer}
+            pacsBusyId={pacsBusyId}
             onReport={(id) => setReportModalId(id)}
             onFilm={(id) => setFilmModalId(id)}
             onStatus={(id, s) => setStudyStatus.mutate({ id, status: s })}
@@ -598,6 +616,8 @@ function WorklistTable(props: {
   technicians: Technician[];
   meId: number | null;
   onOpen: (id: number) => void;
+  onPacs: (id: number) => void;
+  pacsBusyId: number | null;
   onReport: (id: number) => void;
   onFilm: (id: number) => void;
   onStatus: (id: number, status: string) => void;
@@ -606,7 +626,7 @@ function WorklistTable(props: {
   onUnclaim: (id: number) => void;
   emptyMsg?: string;
 }) {
-  const { rows, technicians, meId, onOpen, onReport, onFilm, onStatus, onAssign, onClaim, onUnclaim, emptyMsg } = props;
+  const { rows, technicians, meId, onOpen, onPacs, pacsBusyId, onReport, onFilm, onStatus, onAssign, onClaim, onUnclaim, emptyMsg } = props;
   if (rows.length === 0) {
     return (
       <div className="border rounded-lg p-8 text-center text-sm text-muted-foreground">
@@ -710,6 +730,9 @@ function WorklistTable(props: {
                 )}
               </td>
               <td className="p-2 text-right whitespace-nowrap">
+                <Button size="sm" variant="outline" className="h-7 px-2 mr-1" onClick={() => onPacs(s.id)} disabled={pacsBusyId === s.id}>
+                  <Link2 size={12} className="mr-1" />PACS
+                </Button>
                 {s.status === "scheduled" && (
                   <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => onStatus(s.id, "in_progress")}>
                     <PlayCircle size={12} className="mr-1" />Start

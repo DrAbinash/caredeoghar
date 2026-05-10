@@ -228,6 +228,37 @@ radiologyRouter.get("/options", (_req, res) => {
   });
 });
 
+radiologyRouter.get("/:id/pacs-url", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const [study] = await db
+    .select({
+      id: radiologyStudiesTable.id,
+      studyInstanceUid: radiologyStudiesTable.studyInstanceUid,
+    })
+    .from(radiologyStudiesTable)
+    .where(eq(radiologyStudiesTable.id, id));
+  if (!study) {
+    res.status(404).json({ error: "Study not found" });
+    return;
+  }
+  const orthancUrl = (process.env.ORTHANC_URL || "").replace(/\/$/, "");
+  const studyInstanceUID = study.studyInstanceUid || "";
+  res.json({
+    studyInstanceUID,
+    orthancViewerUrl: orthancUrl ? `${orthancUrl}/app/explorer.html#study?uuid=${study.id}` : "",
+    weasisUrl: orthancUrl && studyInstanceUID
+      ? `weasis://$dicom:get -r "${process.env.WADO_URL || `${orthancUrl}/wado`}?requestType=WADO&studyUID=${studyInstanceUID}&contentType=application/dicom"`
+      : "",
+    ohifUrl: process.env.OHIF_URL && studyInstanceUID
+      ? `${process.env.OHIF_URL}/viewer?StudyInstanceUIDs=${studyInstanceUID}`
+      : null,
+  });
+});
+
 // GET /api/radiology/technicians — radiology technicians for assignment dropdown
 radiologyRouter.get("/technicians", async (_req, res) => {
   const rows = await db
