@@ -197,13 +197,24 @@ export default function Tests() {
       setSubmitErr("Please pick a category. Click 'Categories' to add one if the list is empty.");
       return;
     }
+    const testType = data.testType ?? "inhouse";
+    const outsourcedLabId = testType === "outsourced" ? data.outsourcedLabId ?? null : null;
+    if (testType === "outsourced" && !outsourcedLabId) {
+      setSubmitErr("Please select an outsourced lab for outsourced tests.");
+      return;
+    }
     if (!Number.isFinite(Number(data.price)) || Number(data.price) < 0) {
       setSubmitErr("Price must be a positive number.");
       return;
     }
     // Cast through unknown so the codegen'd zod doesn't reject the new
     // department/roomNumber fields. The server reads them off req.body.
-    const payload = { ...data, price: Number(data.price) } as unknown as Parameters<typeof createTest.mutate>[0]["data"];
+    const payload = {
+      ...data,
+      price: Number(data.price),
+      testType,
+      outsourcedLabId,
+    } as unknown as Parameters<typeof createTest.mutate>[0]["data"];
     if (editTest) {
       updateTest.mutate({ id: editTest.id, data: payload as unknown as Parameters<typeof updateTest.mutate>[0]["data"] });
     } else {
