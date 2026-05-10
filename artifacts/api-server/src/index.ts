@@ -140,6 +140,7 @@ async function runStartupMigrations(): Promise<void> {
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS bill_default_paper_size TEXT NOT NULL DEFAULT 'A5';
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS bill_show_code BOOLEAN NOT NULL DEFAULT TRUE;
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS bill_show_category BOOLEAN NOT NULL DEFAULT TRUE;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS sidebar_theme TEXT;
       CREATE TABLE IF NOT EXISTS kiosk_payment_sessions (
         id SERIAL PRIMARY KEY,
         payment_link_id TEXT NOT NULL UNIQUE,

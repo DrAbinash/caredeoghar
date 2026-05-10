@@ -614,13 +614,16 @@ function AppearanceTab() {
   });
   const clinicDefaultTheme = clinicPublic?.sidebarTheme ?? "navy";
 
-  // ── Per-user theme (localStorage) ──────────────────────────────────────
+  // ── Per-user theme (localStorage cache + DB source-of-truth) ───────────
   const { userTheme, setTheme: saveUserTheme, clearTheme } = useUserTheme(session?.user.id);
-  const [myActiveTheme, setMyActiveTheme] = useState<string>(userTheme ?? clinicDefaultTheme);
+  // session.user.sidebarTheme is the DB value at login time — used as fallback when localStorage
+  // is empty (e.g. first login on a fresh device).
+  const sessionTheme = session?.user.sidebarTheme ?? null;
+  const [myActiveTheme, setMyActiveTheme] = useState<string>(userTheme ?? sessionTheme ?? clinicDefaultTheme);
 
   useEffect(() => {
-    setMyActiveTheme(userTheme ?? clinicDefaultTheme);
-  }, [userTheme, clinicDefaultTheme]);
+    setMyActiveTheme(userTheme ?? sessionTheme ?? clinicDefaultTheme);
+  }, [userTheme, sessionTheme, clinicDefaultTheme]);
 
   const applyMyTheme = (id: string) => {
     setMyActiveTheme(id);

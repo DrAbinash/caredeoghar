@@ -207,7 +207,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const session = readStaffSession();
 
   const { userTheme, setTheme: setUserTheme } = useUserTheme(session?.user.id);
-  const effectiveThemeId = userTheme ?? clinic?.sidebarTheme ?? "navy";
+  // Priority: live localStorage (same-session cache) → DB value from login session → clinic default → hard fallback
+  const effectiveThemeId = userTheme ?? session?.user.sidebarTheme ?? clinic?.sidebarTheme ?? "navy";
   const theme = resolveTheme(effectiveThemeId);
 
   // Mini sidebar theme picker state

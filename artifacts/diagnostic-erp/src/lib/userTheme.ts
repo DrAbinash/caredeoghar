@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { api } from "./fetchApi";
 
 const LS_PREFIX = "sidebar_theme_user_";
 const CHANGE_EVENT = "user-theme-change";
@@ -16,6 +17,9 @@ export function setUserTheme(userId: number | string, themeId: string): void {
     window.localStorage.setItem(LS_PREFIX + userId, themeId);
     window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: { userId: String(userId), themeId } }));
   } catch { /* ignore */ }
+  // Persist to server in background — localStorage is the immediate cache.
+  // Failure is silently swallowed so a network hiccup never breaks theming.
+  void api.patch(`/api/users/${userId}/sidebar-theme`, { sidebarTheme: themeId }).catch(() => {});
 }
 
 export function clearUserTheme(userId: number | string): void {
@@ -23,6 +27,8 @@ export function clearUserTheme(userId: number | string): void {
     window.localStorage.removeItem(LS_PREFIX + userId);
     window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: { userId: String(userId), themeId: null } }));
   } catch { /* ignore */ }
+  // Reset on server too so the next login on any device falls back to clinic default.
+  void api.patch(`/api/users/${userId}/sidebar-theme`, { sidebarTheme: null }).catch(() => {});
 }
 
 export function useUserTheme(userId: number | string | null | undefined): {

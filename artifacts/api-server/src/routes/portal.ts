@@ -323,6 +323,7 @@ portalRouter.post("/staff-login", staffLoginLimiter, async (req, res) => {
       permissions,
       maxDiscount: user.maxDiscount ?? null,
       photoDataUrl: user.photoDataUrl ?? null,
+      sidebarTheme: user.sidebarTheme ?? null,
       // Frontend uses this to force a PIN-change screen before letting
       // the user into the ERP. The flag is cleared by /staff-change-pin.
       mustChangePin: user.mustChangePin === true,

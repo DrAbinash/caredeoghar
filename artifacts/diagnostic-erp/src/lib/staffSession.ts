@@ -18,6 +18,9 @@ export type StaffUser = {
   permissions: string[];
   maxDiscount: number | null;
   photoDataUrl?: string | null;
+  // Per-user sidebar theme synced from the server. Seeded into localStorage
+  // on login so the local useUserTheme hook picks it up immediately.
+  sidebarTheme?: string | null;
   // Server-issued flag — when true the staff-login flow forces the user
   // through the change-PIN screen before persisting this session.
   mustChangePin?: boolean;

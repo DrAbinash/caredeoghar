@@ -57,6 +57,7 @@ import { outsourcedLabsRouter } from "./outsourced-labs";
 import { kioskRouter } from "./kiosk";
 import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
 import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
+import userPreferencesRouter from "./userPreferences";
 
 const router: IRouter = Router();
 
@@ -292,6 +293,9 @@ router.use("/system", requireSuperAdmin, systemRouter);
 // (and anyone else granted /settings) need to add staff and reset PINs
 // without holding a super-admin session. The route stays inside the
 // staff-auth fence so unauthenticated public callers still cannot touch it.
+// Self-service preferences (no /settings permission required — any staff can update their own theme).
+// Must be registered before the /settings-gated usersRouter so the PATCH handler is reachable.
+router.use("/users", requireStaffAuth, userPreferencesRouter);
 router.use("/users", requireStaffAuth, requireStaffPermission("/settings"), usersRouter);
 router.use("/commission", requireSuperAdmin, commissionRouter);
 router.use("/doctor-ledger", requireSuperAdmin, doctorLedgerRouter);

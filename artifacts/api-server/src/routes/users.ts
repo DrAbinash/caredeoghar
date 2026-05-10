@@ -170,6 +170,10 @@ router.patch("/:id", async (req: StaffAuthRequest, res) => {
     updates.photoDataUrl = photoCheck as string | null;
   }
 
+  if (req.body.sidebarTheme !== undefined) {
+    updates.sidebarTheme = typeof req.body.sidebarTheme === "string" ? req.body.sidebarTheme : null;
+  }
+
   // Hash the PIN before storing when an admin sets/resets it
   if (req.body.pin !== undefined) {
     if (req.body.pin === null || req.body.pin === "") {
