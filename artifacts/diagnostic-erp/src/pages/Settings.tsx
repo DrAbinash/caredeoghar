@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
@@ -1229,7 +1229,7 @@ type OnlineBookingSettings = {
 function OnlineBookingTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { data, isLoading } = useQuery<OnlineBookingSettings & { ledgers?: { id: number; name: string }[] }>({
+  const { data, isLoading } = useQuery<OnlineBookingSettings & { ledgers?: { id: number; name: string }[]; whatsappNumber?: string }>({
     queryKey: ["clinic-settings"],
     queryFn: () => api.get("/api/clinic-settings"),
   });
@@ -1238,6 +1238,11 @@ function OnlineBookingTab() {
     queryFn: () => api.get("/api/ledgers"),
   });
   const [form, setForm] = useState<OnlineBookingSettings | null>(null);
+  const bookingQrUrl = useMemo(() => {
+    const number = (data?.whatsappNumber || "").replace(/[^0-9]/g, "");
+    if (!number) return "";
+    return `https://wa.me/${number}?text=${encodeURIComponent("Hi, I want to book an appointment.")}`;
+  }, [data?.whatsappNumber]);
   useEffect(() => { if (data) setForm({ onlineBookingEnabled: data.onlineBookingEnabled, vipQueueEnabled: data.vipQueueEnabled, razorpayKeyId: data.razorpayKeyId || "", onlineBookingLedgerId: data.onlineBookingLedgerId || 1 }); }, [data]);
 
   const save = useMutation({
@@ -1300,6 +1305,24 @@ function OnlineBookingTab() {
           <Button onClick={() => save.mutate(form)} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
         </div>
       </div>
+
+      {bookingQrUrl && (
+        <div className="bg-card border border-card-border rounded-xl p-5 space-y-3">
+          <h3 className="font-bold">QR Fallback for Website Booking</h3>
+          <p className="text-sm text-muted-foreground">Print this QR code and place it on counters, posters, and the website until Razorpay booking is active.</p>
+          <div className="flex flex-col md:flex-row gap-4 md:items-center">
+            <img
+              alt="WhatsApp booking QR"
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(bookingQrUrl)}`}
+              className="w-[180px] h-[180px] rounded-xl border bg-white p-2"
+            />
+            <div className="space-y-2 text-sm">
+              <div className="font-mono break-all text-xs bg-muted/40 border border-card-border rounded px-3 py-2">{bookingQrUrl}</div>
+              <p className="text-muted-foreground">Use this as a temporary booking entry point while online payment is being configured.</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Key Secret — env var only */}
       <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-5 space-y-2">

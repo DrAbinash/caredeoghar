@@ -51,6 +51,11 @@ export default function AppointmentSection({ section, settings }: { section: Sec
   const [pd, setPd] = useState({ name: "", phone: "", email: "", date: "", notes: "", isVip: false });
   const [selTests, setSelTests] = useState<Set<number>>(new Set());
   const [selPkgs, setSelPkgs] = useState<Set<number>>(new Set());
+  const qrBookingUrl = useMemo(() => {
+    const phone = (settings.whatsappNumber || "").replace(/[^0-9]/g, "");
+    if (!phone) return "";
+    return `https://wa.me/${phone}?text=${encodeURIComponent("Hi, I want to book an appointment.")}`;
+  }, [settings.whatsappNumber]);
 
   useEffect(() => {
     bookingGet<BookingConfig>("/api/public/booking/config").then(setConfig).catch(() => setConfig({ enabled: false, keyId: "", vipEnabled: false }));
@@ -279,6 +284,17 @@ export default function AppointmentSection({ section, settings }: { section: Sec
               >
                 Book on WhatsApp
               </button>
+            )}
+            {qrBookingUrl && (
+              <div style={{ marginTop: "1rem", padding: "1rem", borderRadius: "var(--site-radius)", border: "1px dashed hsl(var(--site-muted))", background: "hsl(var(--site-muted) / .25)", textAlign: "center" }}>
+                <div style={{ fontWeight: 700, marginBottom: ".35rem" }}>QR booking fallback</div>
+                <p className="subtle" style={{ fontSize: ".85rem", marginBottom: ".75rem" }}>Scan this QR to start booking on WhatsApp until Razorpay is live.</p>
+                <img
+                  alt="WhatsApp booking QR"
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrBookingUrl)}`}
+                  style={{ width: 180, height: 180, margin: "0 auto", display: "block", background: "#fff", padding: 8, borderRadius: 12 }}
+                />
+              </div>
             )}
             <p className="subtle" style={{ fontSize: ".78rem", marginTop: "1rem", textAlign: "center" }}>Payments are processed securely via Razorpay</p>
           </div>
