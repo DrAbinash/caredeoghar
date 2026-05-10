@@ -29,28 +29,28 @@ export function DesignAB() {
   return (
     <div className="flex h-screen overflow-hidden" style={{ fontFamily: "'Inter', sans-serif", background: "#f1f5f9" }}>
 
-      {/* ── Sidebar: Direction A gradient depth ── */}
+      {/* ── Sidebar: Between A & B — rich navy-indigo, not near-black ── */}
       <div className="w-56 flex-shrink-0 flex flex-col relative overflow-hidden" style={{
-        background: "linear-gradient(160deg, #1e1040 0%, #0f172a 100%)",
+        background: "linear-gradient(160deg, #1e3a8a 0%, #1e2462 100%)",
       }}>
-        {/* Top glow orb */}
+        {/* Soft top glow — blue rather than deep purple */}
         <div className="absolute top-0 left-0 w-full h-48 pointer-events-none" style={{
-          background: "radial-gradient(ellipse at 50% 0%, rgba(139,92,246,0.35) 0%, transparent 70%)"
+          background: "radial-gradient(ellipse at 50% 0%, rgba(99,179,237,0.2) 0%, transparent 70%)"
         }} />
-        {/* Bottom teal hint */}
+        {/* Subtle bottom violet hint */}
         <div className="absolute bottom-0 left-0 w-full h-32 pointer-events-none" style={{
-          background: "radial-gradient(ellipse at 30% 100%, rgba(14,165,233,0.15) 0%, transparent 70%)"
+          background: "radial-gradient(ellipse at 30% 100%, rgba(124,58,237,0.12) 0%, transparent 70%)"
         }} />
 
         {/* Logo */}
         <div className="px-5 py-4 flex items-center gap-3 border-b relative z-10" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
           <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-bold flex-shrink-0" style={{
-            background: "linear-gradient(135deg, #7c3aed, #4f46e5)",
-            boxShadow: "0 4px 14px rgba(124,58,237,0.5)"
+            background: "linear-gradient(135deg, #3b82f6, #6366f1)",
+            boxShadow: "0 4px 14px rgba(59,130,246,0.45)"
           }}>D</div>
           <div>
             <div className="text-white font-bold text-sm tracking-tight">DiagnoCenter</div>
-            <div className="text-[10px] font-medium" style={{ color: "#a78bfa" }}>Medical ERP</div>
+            <div className="text-[10px] font-medium" style={{ color: "#93c5fd" }}>Medical ERP</div>
           </div>
         </div>
 
@@ -60,34 +60,34 @@ export function DesignAB() {
             <div key={item.label}
               className="flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer text-[13px] transition-all"
               style={item.active ? {
-                background: "linear-gradient(90deg, rgba(139,92,246,0.3), rgba(79,70,229,0.15))",
-                border: "1px solid rgba(139,92,246,0.35)",
-                color: "#e9d5ff",
+                background: "rgba(255,255,255,0.15)",
+                border: "1px solid rgba(255,255,255,0.2)",
+                color: "#ffffff",
                 fontWeight: 600,
               } : {
-                color: "rgba(255,255,255,0.4)",
+                color: "rgba(255,255,255,0.5)",
                 border: "1px solid transparent",
               }}
             >
               <span className="text-base leading-none">{item.icon}</span>
               <span>{item.label}</span>
               {item.active && (
-                <div className="ml-auto w-1.5 h-4 rounded-full" style={{ background: "#a78bfa", boxShadow: "0 0 8px rgba(167,139,250,0.8)" }} />
+                <div className="ml-auto w-1.5 h-4 rounded-full" style={{ background: "#93c5fd", boxShadow: "0 0 6px rgba(147,197,253,0.7)" }} />
               )}
             </div>
           ))}
         </nav>
 
         {/* User row */}
-        <div className="px-4 py-4 border-t relative z-10" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+        <div className="px-4 py-4 border-t relative z-10" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{
-              background: "linear-gradient(135deg, #7c3aed, #ec4899)",
-              boxShadow: "0 0 10px rgba(124,58,237,0.4)"
+              background: "linear-gradient(135deg, #3b82f6, #6366f1)",
+              boxShadow: "0 0 10px rgba(59,130,246,0.35)"
             }}>A</div>
             <div className="min-w-0">
               <div className="text-white text-xs font-semibold truncate">Dr. Abinash Kumar</div>
-              <div className="text-[10px]" style={{ color: "#a78bfa" }}>Super Admin</div>
+              <div className="text-[10px]" style={{ color: "#93c5fd" }}>Super Admin</div>
             </div>
             <div className="ml-auto w-2 h-2 rounded-full flex-shrink-0" style={{ background: "#34d399", boxShadow: "0 0 6px rgba(52,211,153,0.7)" }} />
           </div>
