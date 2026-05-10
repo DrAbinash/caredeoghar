@@ -44,6 +44,8 @@ type TestForm = {
   outsourcedLabId?: number | null;
 };
 
+const NO_OUTSOURCED_LAB = "__none__";
+
 type OutsourcedLab = { id: number; name: string; isActive: boolean };
 
 const DEPARTMENT_OPTIONS = [
@@ -436,7 +438,7 @@ export default function Tests() {
                   >
                     <SelectTrigger className="mt-1"><SelectValue placeholder="Select lab…" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value={NO_OUTSOURCED_LAB}>None</SelectItem>
                       {activeOutsourcedLabs.map((l) => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
