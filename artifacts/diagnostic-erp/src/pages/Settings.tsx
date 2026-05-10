@@ -460,7 +460,7 @@ type ClinicSettings = {
   sidebarTheme?: string;
 };
 
-import { SIDEBAR_THEMES as SIDEBAR_THEME_PRESETS } from "@/lib/sidebarThemes";
+import { SIDEBAR_THEMES as SIDEBAR_THEME_PRESETS, parseCustomHex, buildCustomTheme } from "@/lib/sidebarThemes";
 import { useUserTheme } from "@/lib/userTheme";
 import { readStaffSession } from "@/lib/staffSession";
 
@@ -504,6 +504,61 @@ function ThemeGrid({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function CustomColorPicker({
+  activeId,
+  onSelect,
+}: {
+  activeId: string;
+  onSelect: (id: string) => void;
+}) {
+  const customHex = parseCustomHex(activeId);
+  const isActive = customHex !== null;
+  const previewHex = customHex ?? "#7b2d2d";
+  const previewTheme = buildCustomTheme(previewHex);
+
+  return (
+    <div className="mt-1">
+      <p className="text-xs font-medium text-muted-foreground mb-2">Or pick a custom color</p>
+      <div
+        className={`flex items-center gap-3 rounded-xl border-2 p-3 transition-all ${
+          isActive ? "border-primary shadow-md" : "border-transparent hover:border-muted-foreground/30"
+        } bg-card`}
+      >
+        <div
+          className="h-14 w-14 shrink-0 rounded-lg overflow-hidden"
+          style={{ background: previewTheme.gradient }}
+        >
+          <div className="h-full w-full flex flex-col justify-end p-1.5">
+            <div className="flex gap-0.5 mb-0.5">
+              {[55, 35, 25].map((w, i) => (
+                <div key={i} className="h-1 rounded-full bg-white/30" style={{ width: `${w}%` }} />
+              ))}
+            </div>
+            <div className="h-1 rounded-full bg-white/50 w-2/3" />
+          </div>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium">Custom Color</label>
+            {isActive && <Check size={13} className="text-primary" />}
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">Pick any brand color for the sidebar</p>
+          <div className="flex items-center gap-2 mt-2">
+            <input
+              type="color"
+              value={previewHex}
+              onChange={(e) => onSelect(`custom:${e.target.value}`)}
+              className="h-8 w-10 cursor-pointer rounded border border-input bg-background p-0.5"
+              title="Pick a custom sidebar color"
+            />
+            <span className="text-xs font-mono text-muted-foreground">{previewHex}</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -607,6 +662,12 @@ function AppearanceTab() {
 
         <ThemeGrid themes={SIDEBAR_THEME_PRESETS} activeId={myActiveTheme} onSelect={applyMyTheme} />
 
+        {/* Custom color picker */}
+        <CustomColorPicker
+          activeId={myActiveTheme}
+          onSelect={applyMyTheme}
+        />
+
         {userTheme && (
           <div className="flex items-center justify-between pt-2 border-t border-card-border">
             <span className="text-xs text-muted-foreground">You have a personal preference set.</span>
@@ -628,7 +689,13 @@ function AppearanceTab() {
           {isLoading ? (
             <div className="text-sm text-muted-foreground">Loading…</div>
           ) : (
-            <ThemeGrid themes={SIDEBAR_THEME_PRESETS} activeId={activeClinicTheme} onSelect={applyClinicPreview} />
+            <>
+              <ThemeGrid themes={SIDEBAR_THEME_PRESETS} activeId={activeClinicTheme} onSelect={applyClinicPreview} />
+              <CustomColorPicker
+                activeId={activeClinicTheme}
+                onSelect={applyClinicPreview}
+              />
+            </>
           )}
 
           <div className="flex items-center justify-between pt-2 border-t border-card-border">

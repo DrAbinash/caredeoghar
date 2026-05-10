@@ -66,7 +66,7 @@ import {
   tryReadKeyFromPairedDir,
   ensurePairedDirPermission,
 } from "@/lib/usbKey";
-import { SIDEBAR_THEME_MAP, SIDEBAR_THEMES, DEFAULT_THEME } from "@/lib/sidebarThemes";
+import { SIDEBAR_THEMES, DEFAULT_THEME, resolveTheme } from "@/lib/sidebarThemes";
 
 type NavLeaf = { path: string; icon: typeof Zap; label: string };
 type NavGroup = { id: string; icon: typeof Zap; label: string; children: NavLeaf[] };
@@ -204,7 +204,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const { userTheme, setTheme: setUserTheme } = useUserTheme(session?.user.id);
   const effectiveThemeId = userTheme ?? clinic?.sidebarTheme ?? "navy";
-  const theme = SIDEBAR_THEME_MAP[effectiveThemeId] ?? DEFAULT_THEME;
+  const theme = resolveTheme(effectiveThemeId);
 
   // Mini sidebar theme picker state
   const [themePickerOpen, setThemePickerOpen] = useState(false);

@@ -26,8 +26,9 @@ clinicSettingsRouter.put("/", async (req, res) => {
   }
   if (body.sidebarTheme !== undefined) {
     const VALID_THEMES = ["navy", "violet", "teal", "charcoal", "forest"];
-    if (typeof body.sidebarTheme !== "string" || !VALID_THEMES.includes(body.sidebarTheme)) {
-      res.status(400).json({ error: `sidebarTheme must be one of: ${VALID_THEMES.join(", ")}` });
+    const isCustom = typeof body.sidebarTheme === "string" && /^custom:#[0-9a-fA-F]{6}$/.test(body.sidebarTheme);
+    if (typeof body.sidebarTheme !== "string" || (!VALID_THEMES.includes(body.sidebarTheme) && !isCustom)) {
+      res.status(400).json({ error: `sidebarTheme must be one of: ${VALID_THEMES.join(", ")} or custom:#rrggbb` });
       return;
     }
     update.sidebarTheme = body.sidebarTheme;
