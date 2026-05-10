@@ -107,8 +107,20 @@ export function useUserTheme(
       setLocal(getUserTheme(userId));
     };
 
+    // Cross-tab sync: the `storage` event fires in every OTHER tab when
+    // localStorage is written. This lets a theme change in one tab propagate
+    // instantly to all sibling tabs without a reload.
+    const storageHandler = (e: StorageEvent) => {
+      if (e.key !== LS_PREFIX + String(userId)) return;
+      setLocal(e.newValue ?? null);
+    };
+
     window.addEventListener(CHANGE_EVENT, handler);
-    return () => window.removeEventListener(CHANGE_EVENT, handler);
+    window.addEventListener("storage", storageHandler);
+    return () => {
+      window.removeEventListener(CHANGE_EVENT, handler);
+      window.removeEventListener("storage", storageHandler);
+    };
   }, [userId, serverTheme]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setTheme = useCallback((id: string) => {
