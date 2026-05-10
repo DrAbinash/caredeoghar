@@ -61,33 +61,27 @@ export default function Form3C() {
 
   const rows = useMemo(() => {
     const all: Bill[] = billsQuery.data?.bills ?? [];
-    // Only bills with money received (paid or partial).
-    const eligible = all.filter(
-      (b) => (b.paidAmount ?? 0) > 0 && b.status !== "cancelled" && b.status !== "draft",
-    );
-    // Sort by createdAt ascending so Sl. No. flows in chronological order.
-    eligible.sort(
-      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-    );
+    const eligible = all.filter((b) => b.status !== "cancelled" && b.status !== "draft");
+    eligible.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     return eligible.map((b, i) => {
       const services = (b.order?.tests ?? [])
         .map((ot) => ot.test?.name)
         .filter(Boolean)
         .join(", ");
-      // Date of receipt = latest payment; fall back to bill createdAt for safety.
       const lastPaymentISO = (b.payments ?? [])
         .map((p) => p.createdAt)
         .filter(Boolean)
         .sort()
         .pop();
+      const received = Number(b.paidAmount ?? 0);
       return {
         slNo: i + 1,
-        date: b.createdAt,
+        date: lastPaymentISO ?? b.createdAt,
         patientName: b.patient
           ? `${b.patient.firstName ?? ""} ${b.patient.lastName ?? ""}`.trim() || "—"
           : "—",
         services: services || "Diagnostic services",
-        feesReceived: Number(b.paidAmount ?? 0),
+        feesReceived: received,
         receiptDate: lastPaymentISO ?? b.createdAt,
         billNumber: b.billNumber,
       };
@@ -212,7 +206,7 @@ export default function Form3C() {
             {!billsQuery.isLoading && rows.length === 0 && (
               <tr>
                 <td colSpan={6} style={{ ...td(), textAlign: "center", padding: 12 }}>
-                  No paid bills in the selected period.
+                  No bills found in the selected period.
                 </td>
               </tr>
             )}
