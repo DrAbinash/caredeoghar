@@ -458,6 +458,9 @@ type ClinicSettings = {
   billPrintCopies?: number;
   qrOnBillEnabled?: boolean;
   sidebarTheme?: string;
+  billDefaultPaperSize?: string;
+  billShowCode?: boolean;
+  billShowCategory?: boolean;
 };
 
 import { SIDEBAR_THEMES as SIDEBAR_THEME_PRESETS, parseCustomHex, buildCustomTheme } from "@/lib/sidebarThemes";
@@ -871,6 +874,63 @@ function ClinicInfoTab() {
           </button>
           <p className="text-[11px] text-muted-foreground leading-relaxed">
             Click <strong>Save Changes</strong> after toggling to apply.
+          </p>
+        </div>
+
+        <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+          <div>
+            <h2 className="font-bold text-lg flex items-center gap-2">📄 Bill Print Format</h2>
+            <p className="text-sm text-muted-foreground">Control what appears on the printed bill receipt — paper size, columns, and layout.</p>
+          </div>
+          {/* Default paper size */}
+          <div>
+            <p className="text-sm font-medium mb-2">Default Paper Size</p>
+            <div className="grid grid-cols-2 gap-3">
+              {(["A5", "A4"] as const).map((sz) => {
+                const active = (current.billDefaultPaperSize ?? "A5") === sz;
+                return (
+                  <button
+                    key={sz}
+                    type="button"
+                    onClick={() => setForm({ ...current, billDefaultPaperSize: sz })}
+                    className={`px-4 py-3 rounded-lg border text-sm font-medium transition-colors ${active ? "bg-blue-50 border-blue-400 text-blue-700 dark:bg-blue-950/30 dark:border-blue-700 dark:text-blue-300" : "bg-muted/30 border-card-border text-muted-foreground hover:bg-muted/50"}`}
+                  >
+                    {sz} {sz === "A5" ? "(recommended)" : ""}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {/* Show test code */}
+          <div>
+            <p className="text-sm font-medium mb-1">Show Test Code Column</p>
+            <button
+              type="button"
+              onClick={() => setForm({ ...current, billShowCode: !(current.billShowCode ?? true) })}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors ${(current.billShowCode ?? true) ? "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-800" : "bg-muted/30 border-card-border"}`}
+            >
+              <span className="text-sm font-medium">{(current.billShowCode ?? true) ? "Shown" : "Hidden"}</span>
+              <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${(current.billShowCode ?? true) ? "bg-green-500" : "bg-muted-foreground/40"}`}>
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${(current.billShowCode ?? true) ? "translate-x-5" : "translate-x-1"}`} />
+              </span>
+            </button>
+          </div>
+          {/* Show category */}
+          <div>
+            <p className="text-sm font-medium mb-1">Show Category Column</p>
+            <button
+              type="button"
+              onClick={() => setForm({ ...current, billShowCategory: !(current.billShowCategory ?? true) })}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors ${(current.billShowCategory ?? true) ? "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-800" : "bg-muted/30 border-card-border"}`}
+            >
+              <span className="text-sm font-medium">{(current.billShowCategory ?? true) ? "Shown" : "Hidden"}</span>
+              <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${(current.billShowCategory ?? true) ? "bg-green-500" : "bg-muted-foreground/40"}`}>
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${(current.billShowCategory ?? true) ? "translate-x-5" : "translate-x-1"}`} />
+              </span>
+            </button>
+          </div>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            Click <strong>Save Changes</strong> after adjusting to apply.
           </p>
         </div>
 

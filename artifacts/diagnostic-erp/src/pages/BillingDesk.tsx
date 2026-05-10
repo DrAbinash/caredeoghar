@@ -451,6 +451,8 @@ export default function BillingDesk() {
     quickTestIds?: string;
     billPrintCopies?: number;
     qrOnBillEnabled?: boolean;
+    billShowCode?: boolean;
+    billShowCategory?: boolean;
   }>({
     queryKey: ["clinic-settings"],
     queryFn: () => api.get("/api/clinic-settings"),
@@ -1691,29 +1693,28 @@ export default function BillingDesk() {
           {/* Compact 2-line patient block. text-transform:uppercase on wrapper
               forces caps; use bdr-keep-case to opt specific fields out. */}
           <div className="bdr-patient">
-              <div className="bdr-patient-line">
-              <strong style={{ fontSize: 18, fontWeight: 900, lineHeight: 1.02 }}>{lastBill.patient.firstName} {lastBill.patient.lastName}</strong>
-              <span>
-                {[
-                  (() => { const a = calcAge(lastBill.patient.dateOfBirth); return a && lastBill.patient.gender ? `${a} / ${lastBill.patient.gender}` : a || lastBill.patient.gender || null; })(),
-                  lastBill.patient.phone ? `Ph ${lastBill.patient.phone}` : null,
-                  `ID ${lastBill.patient.patientId}`,
-                ].filter(Boolean).join("  ·  ")}
-              </span>
+            <div className="bdr-patient-line">
+              <div>
+                <strong style={{ fontSize: 15, fontWeight: 900, lineHeight: 1.05 }}>{lastBill.patient.firstName} {lastBill.patient.lastName}</strong>
+                {(() => {
+                  const a = calcAge(lastBill.patient.dateOfBirth);
+                  const ageSex = [a, lastBill.patient.gender].filter(Boolean).join(" / ");
+                  return ageSex ? <div style={{ fontSize: 12, fontWeight: 800, marginTop: 1 }}>{ageSex}</div> : null;
+                })()}
+              </div>
+              <div style={{ textAlign: "right", fontSize: 11, lineHeight: 1.4 }}>
+                {lastBill.patient.phone && <div>Ph: {lastBill.patient.phone}</div>}
+                <div>ID: {lastBill.patient.patientId}</div>
+              </div>
             </div>
-              <div className="bdr-patient-line">
+            <div className="bdr-patient-line" style={{ marginTop: 2 }}>
               <span>Ref: <strong>{lastBill.doctorName ? `Dr. ${lastBill.doctorName}` : "Self / Walk-in"}</strong></span>
               <span>
                 Bill No: <strong>{String(lastBill.billNumber).replace(/^BILL-?/i, "").replace(/-/g, "")}</strong>
-                {"   "}·{"   "}
+                {"  ·  "}
                 {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })} {new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
               </span>
             </div>
-            {(() => { const n = readStaffSession()?.user?.name; return n ? (
-              <div className="bdr-patient-line" style={{ fontSize: 10, color: "#555", marginTop: 1 }}>
-                <span className="bdr-keep-case">Billed by: <strong>{n}</strong></span>
-              </div>
-            ) : null; })()}
           </div>
 
             <table className="bdr-table" style={{ fontSize: 10 }}>
@@ -1721,7 +1722,7 @@ export default function BillingDesk() {
               <tr>
                 <th>#</th>
                 <th>Test Name</th>
-                <th>Category</th>
+                {(clinic?.billShowCategory ?? true) && <th>Category</th>}
                 <th className="text-right">Amount (₹)</th>
               </tr>
             </thead>
@@ -1730,7 +1731,7 @@ export default function BillingDesk() {
                 <tr key={t.testId}>
                   <td>{i + 1}</td>
                   <td style={{ fontWeight: 600 }}>{t.name}</td>
-                  <td>{t.category}</td>
+                  {(clinic?.billShowCategory ?? true) && <td>{t.category}</td>}
                   <td className="text-right">{t.price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                 </tr>
               ))}
@@ -1781,8 +1782,11 @@ export default function BillingDesk() {
           })()}
 
           <div className="bdr-footer">
-            <p>{clinic?.footerNote || "Thank you for choosing our diagnostic services."}</p>
-            <p>This is a computer-generated invoice. No signature required.</p>
+            <p>
+              {clinic?.footerNote || "Thank you for choosing our diagnostic services."}
+              {(() => { const n = readStaffSession()?.user?.name; return n ? `  •  Billed by: ${n}` : ""; })()}
+              {"  •  Computer-generated invoice. No signature required."}
+            </p>
           </div>
         </div>
       ))}

@@ -34,5 +34,8 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   kioskWelcomeMessage: text("kiosk_welcome_message").notNull().default(""),
   kioskAllowedTestIds: text("kiosk_allowed_test_ids").notNull().default("[]"),
   sidebarTheme: text("sidebar_theme").notNull().default("navy"),
+  billDefaultPaperSize: text("bill_default_paper_size").notNull().default("A5"),
+  billShowCode: boolean("bill_show_code").notNull().default(true),
+  billShowCategory: boolean("bill_show_category").notNull().default(true),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

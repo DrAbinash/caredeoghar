@@ -94,7 +94,7 @@ export default function BillDetail({ id }: { id: number }) {
   const [reprintBy, setReprintBy] = useState<string>(() => readStaffSession()?.user.name || localStorage.getItem("diagnosticErp:lastReprintBy") || "");
   const [reprintReason, setReprintReason] = useState<string>("");
   const [isReprint, setIsReprint] = useState(false);
-  const [paperSize, setPaperSize] = useState<"A4" | "A5">(() => (localStorage.getItem("diagnosticErp:billPaperSize") as "A4" | "A5") || "A4");
+  const [paperSize, setPaperSize] = useState<"A4" | "A5">(() => (localStorage.getItem("diagnosticErp:billPaperSize") as "A4" | "A5") || "A5");
   const queryClient = useQueryClient();
   const superAdmin = useSuperAdmin();
 
@@ -109,6 +109,8 @@ export default function BillDetail({ id }: { id: number }) {
     showTatOnBill?: boolean;
     billPrintCopies?: number;
     qrOnBillEnabled?: boolean;
+    billShowCode?: boolean;
+    billShowCategory?: boolean;
   }>({
     queryKey: ["clinic-settings"],
     queryFn: () => api.get("/api/clinic-settings"),
@@ -796,9 +798,9 @@ export default function BillDetail({ id }: { id: number }) {
             `ID ${bill.patient.patientId}`,
           ].filter(Boolean);
           const ageSex = [
-            ageYrs && ageYrs > 0 ? `AGE ${ageYrs} YRS` : null,
-            bill.patient.gender ? `SEX ${bill.patient.gender}` : null,
-          ].filter(Boolean).join("  ·  ");
+            ageYrs && ageYrs > 0 ? `${ageYrs} Yrs` : null,
+            bill.patient.gender ? bill.patient.gender : null,
+          ].filter(Boolean).join(" / ");
           const ref = bill.order?.doctor
             ? `Dr. ${bill.order.doctor.name}${bill.order.doctor.specialization ? ` (${bill.order.doctor.specialization})` : ""}`
             : "Self / Walk-in";
@@ -806,10 +808,10 @@ export default function BillDetail({ id }: { id: number }) {
             <div style={{ marginBottom: "10px", padding: "6px 8px", borderTop: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0", lineHeight: 1.25 }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }}>
                 <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                  <div style={{ fontSize: paperSize === "A5" ? "18px" : "20px", fontWeight: 900, color: "#111", lineHeight: 1.02, letterSpacing: "-0.2px" }}>
+                  <div style={{ fontSize: paperSize === "A5" ? "15px" : "17px", fontWeight: 900, color: "#111", lineHeight: 1.05, letterSpacing: "-0.1px" }}>
                     {bill.patient.firstName} {bill.patient.lastName}
                   </div>
-                  <div style={{ fontSize: paperSize === "A5" ? "13px" : "15px", fontWeight: 800, color: "#111", lineHeight: 1.05, marginTop: "2px" }}>
+                  <div style={{ fontSize: paperSize === "A5" ? "12px" : "13px", fontWeight: 800, color: "#111", lineHeight: 1.05, marginTop: "2px" }}>
                     {ageSex}
                   </div>
                 </div>
@@ -831,9 +833,9 @@ export default function BillDetail({ id }: { id: number }) {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: paperSize === "A5" ? "10px" : "12px" }}>
               <thead>
                 <tr style={{ background: "#1e40af", color: "white" }}>
-                  <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: "600" }}>Code</th>
+                  {(clinic?.billShowCode ?? true) && <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: "600" }}>Code</th>}
                   <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: "600" }}>Test / Service</th>
-                  <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: "600" }}>Category</th>
+                  {(clinic?.billShowCategory ?? true) && <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: "600" }}>Category</th>}
                   {clinic?.showTatOnBill && (
                     <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: "600" }}>TAT</th>
                   )}
@@ -843,9 +845,9 @@ export default function BillDetail({ id }: { id: number }) {
               <tbody>
                 {bill.order.tests.map((ot, i) => (
                   <tr key={ot.id} style={{ background: i % 2 === 0 ? "#f8fafc" : "white", borderBottom: "1px solid #e2e8f0" }}>
-                    <td style={{ padding: "6px 10px", fontFamily: "monospace", fontWeight: "700", color: "#1e40af" }}>{ot.test?.code}</td>
+                    {(clinic?.billShowCode ?? true) && <td style={{ padding: "6px 10px", fontFamily: "monospace", fontWeight: "700", color: "#1e40af" }}>{ot.test?.code}</td>}
                     <td style={{ padding: "6px 10px", fontWeight: "600" }}>{ot.test?.name}</td>
-                    <td style={{ padding: "6px 10px", color: "#666" }}>{ot.test?.category}</td>
+                    {(clinic?.billShowCategory ?? true) && <td style={{ padding: "6px 10px", color: "#666" }}>{ot.test?.category}</td>}
                     {clinic?.showTatOnBill && (
                       <td style={{ padding: "6px 10px", color: "#444" }}>{ot.test?.duration || "—"}</td>
                     )}
@@ -922,16 +924,24 @@ export default function BillDetail({ id }: { id: number }) {
           </div>
         )}
 
-        {/* Footer */}
-        <div style={{ borderTop: "1px dashed #cbd5e1", paddingTop: "12px", textAlign: "center" }}>
-          {isCancelled || bill.balanceAmount <= 0 ? (
-            <div style={{ fontSize: "12px", color: "#16a34a", fontWeight: "600", marginBottom: "6px" }}>✓ Payment Received in Full — Thank You!</div>
-          ) : (
-            <div style={{ fontSize: "12px", color: "#dc2626", fontWeight: "600", marginBottom: "6px" }}>Balance of ₹{Number(bill.balanceAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })} is pending</div>
-          )}
-          <div style={{ fontSize: "10px", color: "#94a3b8" }}>This is a computer-generated invoice. No signature required.</div>
-          <div style={{ fontSize: "10px", color: "#94a3b8", marginTop: "2px" }}>Reports will be available as per turnaround time. For queries, please call us.</div>
-        </div>
+        {/* Footer — single condensed line */}
+        {(() => {
+          const billedBy = readStaffSession()?.user?.name ?? "";
+          return (
+            <div style={{ borderTop: "1px dashed #cbd5e1", paddingTop: "8px", textAlign: "center" }}>
+              {isCancelled || bill.balanceAmount <= 0 ? (
+                <div style={{ fontSize: "11px", color: "#16a34a", fontWeight: "700", marginBottom: "4px" }}>✓ Payment Received in Full — Thank You!</div>
+              ) : (
+                <div style={{ fontSize: "11px", color: "#dc2626", fontWeight: "700", marginBottom: "4px" }}>Balance of ₹{Number(bill.balanceAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })} is pending</div>
+              )}
+              <div style={{ fontSize: "9.5px", color: "#94a3b8" }}>
+                {clinic?.footerNote || "Thank you for choosing our diagnostic services."}
+                {billedBy ? `  •  Billed by: ${billedBy}` : ""}
+                {"  •  Computer-generated invoice. No signature required."}
+              </div>
+            </div>
+          );
+        })()}
       </div>
       ))}
 

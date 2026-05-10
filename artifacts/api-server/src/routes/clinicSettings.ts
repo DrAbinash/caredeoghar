@@ -33,7 +33,7 @@ clinicSettingsRouter.put("/", async (req, res) => {
     }
     update.sidebarTheme = body.sidebarTheme;
   }
-  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled"] as const;
+  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "billShowCode", "billShowCategory"] as const;
   for (const f of boolFields) {
     if (body[f] !== undefined) {
       if (typeof body[f] !== "boolean") {
@@ -71,6 +71,13 @@ clinicSettingsRouter.put("/", async (req, res) => {
       return;
     }
     update.onlineBookingLedgerId = n;
+  }
+  if (body.billDefaultPaperSize !== undefined) {
+    if (body.billDefaultPaperSize !== "A4" && body.billDefaultPaperSize !== "A5") {
+      res.status(400).json({ error: "billDefaultPaperSize must be A4 or A5" });
+      return;
+    }
+    update.billDefaultPaperSize = body.billDefaultPaperSize;
   }
   if (body.billPrintCopies !== undefined) {
     const n = Number(body.billPrintCopies);
