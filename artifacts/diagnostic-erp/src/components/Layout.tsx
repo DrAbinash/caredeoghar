@@ -42,6 +42,7 @@ import {
   ShoppingCart,
   BarChart2,
   Building2,
+  Palette,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -49,6 +50,7 @@ import { api } from "@/lib/fetchApi";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { readStaffSession, clearStaffSession, canAccess } from "@/lib/staffSession";
+import { useUserTheme, clearUserTheme } from "@/lib/userTheme";
 import {
   getStoredUsbKey,
   storeUsbKey,
@@ -64,7 +66,7 @@ import {
   tryReadKeyFromPairedDir,
   ensurePairedDirPermission,
 } from "@/lib/usbKey";
-import { SIDEBAR_THEME_MAP, DEFAULT_THEME } from "@/lib/sidebarThemes";
+import { SIDEBAR_THEME_MAP, SIDEBAR_THEMES, DEFAULT_THEME } from "@/lib/sidebarThemes";
 
 type NavLeaf = { path: string; icon: typeof Zap; label: string };
 type NavGroup = { id: string; icon: typeof Zap; label: string; children: NavLeaf[] };
@@ -196,10 +198,27 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     staleTime: 60_000,
   });
 
-  const theme = SIDEBAR_THEME_MAP[clinic?.sidebarTheme ?? "navy"] ?? DEFAULT_THEME;
   const [location] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const session = readStaffSession();
+
+  const { userTheme, setTheme: setUserTheme } = useUserTheme(session?.user.id);
+  const effectiveThemeId = userTheme ?? clinic?.sidebarTheme ?? "navy";
+  const theme = SIDEBAR_THEME_MAP[effectiveThemeId] ?? DEFAULT_THEME;
+
+  // Mini sidebar theme picker state
+  const [themePickerOpen, setThemePickerOpen] = useState(false);
+  const themePickerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!themePickerOpen) return;
+    const close = (e: MouseEvent) => {
+      if (themePickerRef.current && !themePickerRef.current.contains(e.target as Node)) {
+        setThemePickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [themePickerOpen]);
 
   // Filter nav by permissions when a staff session exists. For groups, drop
   // children the user can't access; hide the group entirely if nothing left.
@@ -509,9 +528,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        {/* Signed-in user (only shown when a portal staff session exists) */}
+        {/* Signed-in user profile block — theme picker lives here when logged in */}
         {session && (
-          <div className="px-3 py-3 border-t relative z-10" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
+          <div className="px-3 py-3 border-t relative z-10" ref={themePickerRef} style={{ borderColor: "rgba(255,255,255,0.1)" }}>
             <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.08)" }}>
               <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0" style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)", boxShadow: "0 0 10px rgba(59,130,246,0.35)" }}>
                 {initials}
@@ -520,6 +539,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <p className="text-xs font-semibold text-sidebar-foreground truncate">{session.user.name}</p>
                 <p className="text-[10px] text-sidebar-foreground/60 capitalize truncate">{session.user.role.replace("_", " ")}</p>
               </div>
+              {/* Per-user theme picker — profile menu affordance */}
+              <button
+                onClick={() => setThemePickerOpen((o) => !o)}
+                className="p-1.5 rounded-md text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors shrink-0"
+                title="My sidebar color"
+                aria-label="Pick my sidebar theme"
+              >
+                <Palette size={14} />
+              </button>
               <button
                 onClick={onLogout}
                 title="Sign out"
@@ -528,6 +556,46 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <LogOut size={14} />
               </button>
             </div>
+            {/* Theme picker popup — positioned above the profile block */}
+            {themePickerOpen && (
+              <div
+                className="absolute bottom-full left-3 right-3 mb-2 z-50 rounded-xl border border-white/20 p-3 shadow-2xl"
+                style={{ background: "rgba(15,20,40,0.96)", backdropFilter: "blur(10px)" }}
+              >
+                <p className="text-[11px] font-semibold text-sidebar-foreground/60 uppercase tracking-wider mb-2 px-1">My Sidebar Color</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {SIDEBAR_THEMES.map((preset) => {
+                    const active = effectiveThemeId === preset.id;
+                    const isPersonal = userTheme === preset.id;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        title={preset.label}
+                        onClick={() => { setUserTheme(preset.id); setThemePickerOpen(false); }}
+                        className="relative rounded-lg overflow-hidden focus:outline-none"
+                        style={{ border: active ? "2px solid rgba(255,255,255,0.8)" : "2px solid rgba(255,255,255,0.15)", transition: "border-color 0.15s" }}
+                      >
+                        <div className="h-10 w-full" style={{ background: preset.gradient }} />
+                        <div className="py-1 px-1 text-center" style={{ background: "rgba(0,0,0,0.4)" }}>
+                          <span className="text-[9px] font-medium text-white/80 truncate block leading-tight">{preset.label}</span>
+                          {isPersonal && <span className="text-[8px] text-blue-300 leading-tight block">mine</span>}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                {userTheme && (
+                  <button
+                    type="button"
+                    onClick={() => { clearUserTheme(session.user.id); setThemePickerOpen(false); }}
+                    className="mt-2 w-full text-[10px] text-sidebar-foreground/50 hover:text-sidebar-foreground/80 transition-colors text-center"
+                  >
+                    Reset to clinic default
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -535,6 +603,47 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div className="px-4 py-3 border-t flex items-center justify-between relative z-10" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
           <span className="text-xs text-sidebar-foreground/40">v1.0.0</span>
           <div className="flex items-center gap-1">
+            {/* Palette button shown in footer only when no session (profile block has it when logged in) */}
+            {!session && (
+              <div className="relative" ref={themePickerRef}>
+                <button
+                  onClick={() => setThemePickerOpen((o) => !o)}
+                  className="p-2 rounded-md text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+                  title="My sidebar theme"
+                  aria-label="Pick my sidebar theme"
+                >
+                  <Palette size={16} />
+                </button>
+                {themePickerOpen && (
+                  <div
+                    className="absolute bottom-full mb-2 right-0 z-50 rounded-xl border border-white/20 p-3 shadow-2xl"
+                    style={{ background: "rgba(15,20,40,0.96)", backdropFilter: "blur(10px)", minWidth: 220 }}
+                  >
+                    <p className="text-[11px] font-semibold text-sidebar-foreground/60 uppercase tracking-wider mb-2 px-1">Sidebar Color</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {SIDEBAR_THEMES.map((preset) => {
+                        const active = effectiveThemeId === preset.id;
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            title={preset.label}
+                            onClick={() => { setThemePickerOpen(false); }}
+                            className="relative rounded-lg overflow-hidden focus:outline-none"
+                            style={{ border: active ? "2px solid rgba(255,255,255,0.8)" : "2px solid rgba(255,255,255,0.15)", transition: "border-color 0.15s" }}
+                          >
+                            <div className="h-10 w-full" style={{ background: preset.gradient }} />
+                            <div className="py-1 px-1 text-center" style={{ background: "rgba(0,0,0,0.4)" }}>
+                              <span className="text-[9px] font-medium text-white/80 truncate block leading-tight">{preset.label}</span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             <FullscreenToggle />
             <ThemeToggle />
           </div>
