@@ -380,13 +380,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed lg:static inset-y-0 left-0 z-30 w-60 flex flex-col bg-sidebar border-r border-sidebar-border transition-transform duration-200",
+          "fixed lg:static inset-y-0 left-0 z-30 w-60 flex flex-col border-r border-sidebar-border transition-transform duration-200 relative overflow-hidden",
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
+        style={{ background: "linear-gradient(160deg, #1e3a8a 0%, #1e2462 100%)" }}
       >
+        {/* Soft top glow orb */}
+        <div className="absolute top-0 left-0 w-full h-48 pointer-events-none z-0"
+          style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(99,179,237,0.18) 0%, transparent 70%)" }} />
+        {/* Subtle bottom violet hint */}
+        <div className="absolute bottom-0 left-0 w-full h-32 pointer-events-none z-0"
+          style={{ background: "radial-gradient(ellipse at 30% 100%, rgba(124,58,237,0.10) 0%, transparent 70%)" }} />
+
         {/* Logo */}
-        <div className="flex items-center gap-3 px-5 py-5 border-b border-sidebar-border bg-gradient-to-br from-violet-600/30 via-indigo-600/20 to-fuchsia-600/20">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 via-indigo-500 to-fuchsia-500 flex items-center justify-center flex-shrink-0 shadow-lg shadow-violet-500/30">
+        <div className="flex items-center gap-3 px-5 py-5 border-b border-sidebar-border relative z-10" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)", boxShadow: "0 4px 14px rgba(59,130,246,0.4)" }}>
             <Activity size={20} className="text-white" />
           </div>
           <div>
@@ -399,7 +407,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto relative z-10">
           {visibleNav.map((entry) => {
             if (!isGroup(entry)) {
               const { path, icon: Icon, label } = entry;
@@ -410,14 +418,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   href={path}
                   onClick={() => setSidebarOpen(false)}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer",
+                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer",
                     isActive
-                      ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent",
+                      ? "text-white font-semibold"
+                      : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-white/10",
                   )}
+                  style={isActive ? { background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.2)" } : { border: "1px solid transparent" }}
                 >
                   <Icon size={15} />
                   {label}
+                  {isActive && <div className="ml-auto w-1.5 h-4 rounded-full" style={{ background: "#93c5fd", boxShadow: "0 0 6px rgba(147,197,253,0.7)" }} />}
                 </Link>
               );
             }
@@ -433,11 +443,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   type="button"
                   onClick={() => setOpenGroups((prev) => ({ ...prev, [id]: !open }))}
                   className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer",
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer",
                     groupActive
-                      ? "text-sidebar-foreground bg-sidebar-accent/60"
-                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent",
+                      ? "text-white"
+                      : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-white/10",
                   )}
+                  style={groupActive ? { background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" } : { border: "1px solid transparent" }}
                   aria-expanded={open}
                 >
                   <GroupIcon size={15} />
@@ -448,7 +459,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   />
                 </button>
                 {open && (
-                  <div className="mt-0.5 ml-4 pl-2 border-l border-sidebar-border space-y-0.5">
+                  <div className="mt-0.5 ml-4 pl-2 border-l space-y-0.5" style={{ borderColor: "rgba(255,255,255,0.12)" }}>
                     {children.map(({ path, icon: ChildIcon, label: childLabel }) => {
                       const isActive = path === "/" ? location === "/" : location === path || location.startsWith(path + "/");
                       return (
@@ -457,11 +468,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                           href={path}
                           onClick={() => setSidebarOpen(false)}
                           className={cn(
-                            "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] font-medium transition-colors cursor-pointer",
+                            "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] font-medium transition-all cursor-pointer",
                             isActive
-                              ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                              : "text-sidebar-foreground/65 hover:text-sidebar-foreground hover:bg-sidebar-accent",
+                              ? "text-white font-semibold"
+                              : "text-sidebar-foreground/55 hover:text-sidebar-foreground hover:bg-white/10",
                           )}
+                          style={isActive ? { background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.2)" } : { border: "1px solid transparent" }}
                         >
                           <ChildIcon size={13} />
                           {childLabel}
@@ -479,7 +491,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             currently plugged in and superadmin.key validates. There is no
             "insert" button: the auto-detect loop handles everything. */}
         {usbGateEnforced && usbKeyPresent && (
-          <div className="px-3 py-2 border-t border-sidebar-border">
+          <div className="px-3 py-2 border-t border-sidebar-border relative z-10" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
             <button
               onClick={openSuperAdmin}
               className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-semibold bg-amber-500/15 border border-amber-500/30 text-amber-200 hover:bg-amber-500/25 transition-colors"
@@ -496,9 +508,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Signed-in user (only shown when a portal staff session exists) */}
         {session && (
-          <div className="px-3 py-3 border-t border-sidebar-border">
-            <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg bg-sidebar-accent/40">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center text-xs font-bold text-white shrink-0">
+          <div className="px-3 py-3 border-t relative z-10" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
+            <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.08)" }}>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0" style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)", boxShadow: "0 0 10px rgba(59,130,246,0.35)" }}>
                 {initials}
               </div>
               <div className="flex-1 min-w-0">
@@ -517,7 +529,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         )}
 
         {/* Footer */}
-        <div className="px-4 py-3 border-t border-sidebar-border flex items-center justify-between">
+        <div className="px-4 py-3 border-t flex items-center justify-between relative z-10" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
           <span className="text-xs text-sidebar-foreground/40">v1.0.0</span>
           <div className="flex items-center gap-1">
             <FullscreenToggle />
@@ -538,7 +550,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <Menu size={22} />
           </button>
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 via-indigo-500 to-fuchsia-500 flex items-center justify-center flex-shrink-0">
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}>
               <Activity size={14} className="text-white" />
             </div>
             <span className="font-semibold text-sm truncate">
