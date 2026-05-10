@@ -19,7 +19,7 @@ import {
   FlaskConical, Boxes, ShieldCheck, FileDown, KeyRound, Eye, EyeOff,
   Tag, Building2, Image as ImageIcon, Upload, MessageCircle, Printer,
   Search, Globe, Copy, ExternalLink, Check, Network, MapPin, Database,
-  RefreshCcw, FileCode, Send, QrCode,
+  RefreshCcw, FileCode, Send, QrCode, Palette,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -97,6 +97,7 @@ const DEFAULT_PERMISSIONS: Record<string, string[]> = {
 
 const TABS = [
   { id: "clinic", label: "Clinic Info", icon: Building2 },
+  { id: "appearance", label: "Appearance", icon: Palette },
   { id: "users", label: "Users", icon: Users },
   { id: "departments", label: "Departments", icon: Network },
   { id: "branches", label: "Branches", icon: MapPin },
@@ -185,6 +186,7 @@ export default function Settings() {
           })}
         </div>
         {tab === "clinic" && <ClinicInfoTab />}
+        {tab === "appearance" && <AppearanceTab />}
         {tab === "users" && <UsersTab qc={qc} />}
         {tab === "departments" && <DepartmentsTab />}
         {tab === "branches" && <BranchesTab />}
@@ -455,7 +457,135 @@ type ClinicSettings = {
   showTatOnBill?: boolean;
   billPrintCopies?: number;
   qrOnBillEnabled?: boolean;
+  sidebarTheme?: string;
 };
+
+import { SIDEBAR_THEMES as SIDEBAR_THEME_PRESETS } from "@/lib/sidebarThemes";
+
+function AppearanceTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: settings, isLoading } = useQuery<ClinicSettings>({
+    queryKey: ["clinic-settings"],
+    queryFn: () => api.get("/api/clinic-settings"),
+  });
+
+  const persistedTheme = settings?.sidebarTheme ?? "navy";
+  const [activeTheme, setActiveTheme] = useState<string>(persistedTheme);
+  const [unsaved, setUnsaved] = useState(false);
+
+  // Sync local state when server data arrives (e.g. first load).
+  useEffect(() => {
+    setActiveTheme(persistedTheme);
+    setUnsaved(false);
+  }, [persistedTheme]);
+
+  // On unmount, if the user navigated away with an unsaved preview, restore
+  // the sidebar to the last persisted theme so the cache doesn't stay stale.
+  useEffect(() => {
+    return () => {
+      qc.setQueryData(["clinic-settings-public"], (old: Record<string, unknown> | undefined) =>
+        old ? { ...old, sidebarTheme: persistedTheme } : { sidebarTheme: persistedTheme },
+      );
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [persistedTheme]);
+
+  // Live-preview a preset by updating the clinic-settings-public cache that
+  // Layout reads from — the sidebar gradient changes immediately, no save needed.
+  const applyPreview = (themeId: string) => {
+    setActiveTheme(themeId);
+    setUnsaved(themeId !== persistedTheme);
+    qc.setQueryData(["clinic-settings-public"], (old: Record<string, unknown> | undefined) =>
+      old ? { ...old, sidebarTheme: themeId } : { sidebarTheme: themeId },
+    );
+  };
+
+  const save = useMutation({
+    mutationFn: (sidebarTheme: string) => api.put("/api/clinic-settings", { sidebarTheme }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clinic-settings"] });
+      qc.invalidateQueries({ queryKey: ["clinic-settings-public"] });
+      setUnsaved(false);
+      toast({ title: "Theme saved" });
+    },
+    onError: (e: Error) => {
+      // Restore the persisted theme in the cache on failure.
+      qc.setQueryData(["clinic-settings-public"], (old: Record<string, unknown> | undefined) =>
+        old ? { ...old, sidebarTheme: persistedTheme } : { sidebarTheme: persistedTheme },
+      );
+      setActiveTheme(persistedTheme);
+      setUnsaved(false);
+      toast({ variant: "destructive", title: "Error", description: e.message });
+    },
+  });
+
+  if (isLoading) {
+    return <div className="bg-card border border-card-border rounded-xl p-8 text-center text-muted-foreground">Loading…</div>;
+  }
+
+  return (
+    <div className="max-w-2xl space-y-6">
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-5">
+        <div>
+          <h2 className="font-bold text-lg flex items-center gap-2"><Palette size={16} /> Sidebar Theme</h2>
+          <p className="text-sm text-muted-foreground mt-1">Click a preset to preview it live in the sidebar, then save to keep the change.</p>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {SIDEBAR_THEME_PRESETS.map((preset) => {
+            const isActive = activeTheme === preset.id;
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => applyPreview(preset.id)}
+                className={`relative rounded-xl overflow-hidden border-2 transition-all focus:outline-none ${isActive ? "border-primary shadow-md scale-[1.03]" : "border-transparent hover:border-muted-foreground/40"}`}
+                aria-pressed={isActive}
+                title={preset.label}
+              >
+                <div
+                  className="h-20 w-full flex flex-col justify-end p-2.5"
+                  style={{ background: preset.gradient }}
+                >
+                  <div className="flex gap-1 mb-1">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="h-1.5 rounded-full bg-white/30" style={{ width: i === 0 ? "55%" : i === 1 ? "35%" : "25%" }} />
+                    ))}
+                  </div>
+                  <div className="h-1.5 rounded-full bg-white/50 w-2/3" />
+                </div>
+                <div className="flex items-center justify-between px-2.5 py-2 bg-card">
+                  <span className="text-xs font-medium truncate">{preset.label}</span>
+                  {isActive && <Check size={13} className="text-primary shrink-0" />}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center justify-between pt-2 border-t border-card-border">
+          {unsaved && (
+            <span className="text-xs text-muted-foreground">Unsaved preview — click Save to keep this theme.</span>
+          )}
+          <div className="ml-auto flex gap-2">
+            {unsaved && (
+              <Button variant="outline" type="button" onClick={() => applyPreview(persistedTheme)} disabled={save.isPending}>
+                Discard
+              </Button>
+            )}
+            <Button
+              onClick={() => save.mutate(activeTheme)}
+              disabled={save.isPending || !unsaved}
+            >
+              {save.isPending ? "Saving…" : "Save Theme"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ClinicInfoTab() {
   const qc = useQueryClient();

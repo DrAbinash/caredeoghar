@@ -64,6 +64,7 @@ import {
   tryReadKeyFromPairedDir,
   ensurePairedDirPermission,
 } from "@/lib/usbKey";
+import { SIDEBAR_THEME_MAP, DEFAULT_THEME } from "@/lib/sidebarThemes";
 
 type NavLeaf = { path: string; icon: typeof Zap; label: string };
 type NavGroup = { id: string; icon: typeof Zap; label: string; children: NavLeaf[] };
@@ -189,11 +190,13 @@ function FullscreenToggle() {
 export default function Layout({ children }: { children: React.ReactNode }) {
   // Module B: clinic name centralization — pull from /api/clinic-settings so the
   // sidebar branding matches every other clinic-aware surface (BillDetail, Display, FormF).
-  const { data: clinic } = useQuery<{ name?: string; tagline?: string }>({
+  const { data: clinic } = useQuery<{ name?: string; tagline?: string; sidebarTheme?: string }>({
     queryKey: ["clinic-settings-public"],
     queryFn: () => api.get("/api/clinic-settings"),
     staleTime: 60_000,
   });
+
+  const theme = SIDEBAR_THEME_MAP[clinic?.sidebarTheme ?? "navy"] ?? DEFAULT_THEME;
   const [location] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const session = readStaffSession();
@@ -383,14 +386,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           "fixed lg:static inset-y-0 left-0 z-30 w-60 flex flex-col border-r border-sidebar-border transition-transform duration-200 relative overflow-hidden",
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
-        style={{ background: "linear-gradient(160deg, #1e3a8a 0%, #1e2462 100%)" }}
+        style={{ background: theme.gradient }}
       >
         {/* Soft top glow orb */}
         <div className="absolute top-0 left-0 w-full h-48 pointer-events-none z-0"
-          style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(99,179,237,0.18) 0%, transparent 70%)" }} />
-        {/* Subtle bottom violet hint */}
+          style={{ background: theme.glow }} />
+        {/* Subtle bottom color hint */}
         <div className="absolute bottom-0 left-0 w-full h-32 pointer-events-none z-0"
-          style={{ background: "radial-gradient(ellipse at 30% 100%, rgba(124,58,237,0.10) 0%, transparent 70%)" }} />
+          style={{ background: theme.bottomHint }} />
 
         {/* Logo */}
         <div className="flex items-center gap-3 px-5 py-5 border-b border-sidebar-border relative z-10" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
@@ -427,7 +430,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 >
                   <Icon size={15} />
                   {label}
-                  {isActive && <div className="ml-auto w-1.5 h-4 rounded-full" style={{ background: "#93c5fd", boxShadow: "0 0 6px rgba(147,197,253,0.7)" }} />}
+                  {isActive && <div className="ml-auto w-1.5 h-4 rounded-full" style={{ background: theme.accent, boxShadow: `0 0 6px ${theme.accent}b0` }} />}
                 </Link>
               );
             }

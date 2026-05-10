@@ -136,6 +136,7 @@ async function runStartupMigrations(): Promise<void> {
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS kiosk_upi_name TEXT NOT NULL DEFAULT '';
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS kiosk_welcome_message TEXT NOT NULL DEFAULT '';
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS kiosk_allowed_test_ids TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS sidebar_theme TEXT NOT NULL DEFAULT 'navy';
       CREATE TABLE IF NOT EXISTS kiosk_payment_sessions (
         id SERIAL PRIMARY KEY,
         payment_link_id TEXT NOT NULL UNIQUE,

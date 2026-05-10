@@ -24,6 +24,14 @@ clinicSettingsRouter.put("/", async (req, res) => {
   for (const f of fields) {
     if (body[f] !== undefined) update[f] = body[f];
   }
+  if (body.sidebarTheme !== undefined) {
+    const VALID_THEMES = ["navy", "violet", "teal", "charcoal", "forest"];
+    if (typeof body.sidebarTheme !== "string" || !VALID_THEMES.includes(body.sidebarTheme)) {
+      res.status(400).json({ error: `sidebarTheme must be one of: ${VALID_THEMES.join(", ")}` });
+      return;
+    }
+    update.sidebarTheme = body.sidebarTheme;
+  }
   const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled"] as const;
   for (const f of boolFields) {
     if (body[f] !== undefined) {
