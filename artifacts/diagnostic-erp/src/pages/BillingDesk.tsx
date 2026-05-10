@@ -193,24 +193,24 @@ async function printBill(b: LastBill, clinic: ClinicLite) {
   const payRows = b.payments.map((p) => `<tr><td style="text-transform:capitalize">${escapeHtml(p.mode.replace(/_/g," "))}</td><td style="text-align:right">₹${Number(p.amount || 0).toFixed(2)}</td></tr>`).join("");
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Bill ${escapeHtml(b.billNumber)}</title>
     <style>
-      @page { size: A5; margin: 7mm 8mm; }
+      @page { size: A5; margin: 3mm; }
       body { font-family: Arial, sans-serif; font-size: 11px; color:#000; margin:0; text-transform:uppercase; }
       h1 { margin:0; font-size:17px; text-align:center; }
-      .clinic { text-align:center; border-bottom:2px solid #000; padding-bottom:5px; margin-bottom:5px; }
+      .clinic { text-align:center; border-bottom:2px solid #000; padding-bottom:2px; margin-bottom:2px; }
       .clinic p { margin:1px 0; font-size:10px; color:#444; text-transform:none; }
-      .inv-title { text-align:center; font-size:12px; font-weight:700; letter-spacing:1px; margin:4px 0 6px; }
+      .inv-title { text-align:center; font-size:12px; font-weight:700; letter-spacing:1px; margin:2px 0 4px; }
       table { width:100%; border-collapse:collapse; }
-      th, td { padding:2px 4px; border-bottom:1px solid #ddd; font-size:10px; }
+      th, td { padding:1px 3px; border-bottom:1px solid #ddd; font-size:10px; }
       th { background:#f4f4f4; text-align:left; }
       .meta td { border:none; padding:1px 2px; }
-      .bottom { display:flex; gap:10px; align-items:flex-start; margin-top:4px; }
+      .bottom { display:flex; gap:6px; align-items:flex-start; margin-top:2px; }
       .pay-block { flex:1; font-size:10px; }
       .pay-block b { display:block; margin-bottom:2px; border-bottom:1px solid #ccc; padding-bottom:1px; }
-      .pay-block td { border:none; padding:1px 3px 1px 0; }
-      .totals { min-width:190px; font-size:10px; }
+      .pay-block td { border:none; padding:0 2px 0 0; }
+      .totals { min-width:170px; font-size:10px; }
       .totals td { border:none; padding:1px 3px; }
       .totals .grand td { border-top:1px solid #000; font-weight:700; padding-top:2px; }
-      .token { margin-top:8px; padding:4px; border:1px dashed #000; text-align:center; font-weight:700; }
+      .token { margin-top:5px; padding:3px; border:1px dashed #000; text-align:center; font-weight:700; }
     </style></head><body>
     <div class="clinic">
       <h1>${escapeHtml(clinic?.name || "Diagnostic Centre")}</h1>

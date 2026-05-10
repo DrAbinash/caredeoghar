@@ -142,7 +142,7 @@ export default function Form3C() {
       <div
         id="form3c-print"
         className="bg-white text-black mx-auto"
-        style={{ maxWidth: "210mm", padding: "12mm 10mm", fontFamily: "'Times New Roman', Times, serif" }}
+        style={{ width: "100%", maxWidth: "100%", padding: "4mm 2mm", fontFamily: "'Times New Roman', Times, serif", boxSizing: "border-box" }}
       >
         <div style={{ textAlign: "center", marginBottom: 8 }}>
           <div style={{ fontSize: 16, fontWeight: 700 }}>FORM 25 (Formerly 3C) (Income-tax Act, 2025)</div>
@@ -245,8 +245,8 @@ export default function Form3C() {
         @media print {
           body * { visibility: hidden !important; }
           #form3c-print, #form3c-print * { visibility: visible !important; }
-          #form3c-print { position: absolute; left: 0; top: 0; width: 100%; padding: 8mm; }
-          @page { size: A4; margin: 8mm; }
+          #form3c-print { position: absolute; left: 0; top: 0; width: 100%; max-width: 100%; padding: 0; box-sizing: border-box; }
+          @page { size: A4; margin: 4mm; }
         }
       `}</style>
     </div>
