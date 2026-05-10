@@ -50,6 +50,7 @@ import {
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useVersionCheck } from "@/hooks/useVersionCheck";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { api } from "@/lib/fetchApi";
 import { cn } from "@/lib/utils";
@@ -205,6 +206,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const [location] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const isMobile = useIsMobile();
   const [autoMinimise] = useState(() => localStorage.getItem("sidebarAutoMinimise") === "1");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("sidebarAutoMinimise") === "1");
   const session = readStaffSession();
@@ -402,10 +404,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     ? session.user.name.split(/\s+/).map((p) => p.charAt(0)).slice(0, 2).join("").toUpperCase()
     : "";
 
+  const showMobileShell = isMobile;
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Mobile overlay */}
-      {sidebarOpen && (
+      {showMobileShell && sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-20 lg:hidden"
           onClick={() => setSidebarOpen(false)}
@@ -416,6 +420,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <aside
         className={cn(
           "fixed lg:static inset-y-0 left-0 z-30 flex flex-col border-r border-sidebar-border transition-all duration-200 relative overflow-hidden",
+          showMobileShell ? "hidden lg:flex" : "",
           sidebarCollapsed ? "w-14" : "w-60",
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
@@ -703,6 +708,101 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </aside>
+
+      {showMobileShell && (
+        <div
+          className={cn(
+            "fixed inset-y-0 left-0 z-30 flex flex-col border-r border-sidebar-border transition-transform duration-200 overflow-hidden w-60",
+            sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          )}
+          style={{ background: theme.gradient }}
+        >
+          <div className="absolute top-0 left-0 w-full h-48 pointer-events-none z-0" style={{ background: theme.glow }} />
+          <div className="absolute bottom-0 left-0 w-full h-32 pointer-events-none z-0" style={{ background: theme.bottomHint }} />
+          <div className="flex items-center gap-3 px-5 py-5 border-b border-sidebar-border relative z-10" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)", boxShadow: "0 4px 14px rgba(59,130,246,0.4)" }}>
+              <Activity size={20} className="text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-base font-bold text-sidebar-foreground leading-tight tracking-tight truncate">{clinic?.name || "DiagnoCenter"}</div>
+              <div className="text-[11px] uppercase tracking-wider text-sidebar-foreground/60 font-medium">{clinic?.tagline || "Billing ERP"}</div>
+            </div>
+            <button className="text-sidebar-foreground ml-auto" onClick={() => setSidebarOpen(false)}>
+              <X size={16} />
+            </button>
+          </div>
+          <nav className="flex-1 py-4 space-y-0.5 overflow-y-auto relative z-10 px-3">
+            {visibleNav.map((entry) => {
+              if (!isGroup(entry)) {
+                const { path, icon: Icon, label } = entry;
+                const isActive = path === "/" ? location === "/" : location === path || location.startsWith(path + "/");
+                return (
+                  <Link
+                    key={path}
+                    href={path}
+                    onClick={() => setSidebarOpen(false)}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer",
+                      isActive ? "text-white font-semibold" : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-white/10"
+                    )}
+                    style={isActive ? { background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.2)" } : { border: "1px solid transparent" }}
+                  >
+                    <Icon size={15} />
+                    {label}
+                  </Link>
+                );
+              }
+
+              const { id, icon: GroupIcon, label, children } = entry;
+              const groupActive = children.some((c) =>
+                c.path === "/" ? location === "/" : location === c.path || location.startsWith(c.path + "/"),
+              );
+              const open = openGroups[id] ?? groupActive;
+
+              return (
+                <div key={id}>
+                  <button
+                    type="button"
+                    onClick={() => setOpenGroups((prev) => ({ ...prev, [id]: !open }))}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer",
+                      groupActive ? "text-white" : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-white/10",
+                    )}
+                    style={groupActive ? { background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" } : { border: "1px solid transparent" }}
+                    aria-expanded={open}
+                  >
+                    <GroupIcon size={15} />
+                    <span className="flex-1 text-left">{label}</span>
+                    <ChevronRight size={13} className={cn("transition-transform duration-150", open && "rotate-90")} />
+                  </button>
+                  {open && (
+                    <div className="mt-0.5 ml-4 pl-2 border-l space-y-0.5" style={{ borderColor: "rgba(255,255,255,0.12)" }}>
+                      {children.map(({ path, icon: ChildIcon, label: childLabel }) => {
+                        const isActive = path === "/" ? location === "/" : location === path || location.startsWith(path + "/");
+                        return (
+                          <Link
+                            key={path}
+                            href={path}
+                            onClick={() => setSidebarOpen(false)}
+                            className={cn(
+                              "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] font-medium transition-all cursor-pointer",
+                              isActive ? "text-white font-semibold" : "text-sidebar-foreground/55 hover:text-sidebar-foreground hover:bg-white/10",
+                            )}
+                            style={isActive ? { background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.2)" } : { border: "1px solid transparent" }}
+                          >
+                            <ChildIcon size={13} />
+                            {childLabel}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </nav>
+        </div>
+      )}
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
