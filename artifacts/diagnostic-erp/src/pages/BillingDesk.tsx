@@ -1129,7 +1129,7 @@ export default function BillingDesk() {
                             if (id == null) { setQuickDoctorPickerSlot(i); setQuickDoctorPickerSearch(""); return; }
                             setDoctorMode("doctor"); setDoctorId(id); setDoctorSearch(""); setDoctorSearchOpen(false);
                           }}
-                          title={doc ? `${doc.name} · ${doc.specialization}` : `Assign quick doctor slot ${i + 1}`}
+                          title={doc ? doc.name : `Assign quick doctor slot ${i + 1}`}
                           className={`w-full h-12 rounded-md border text-[10px] leading-tight px-2 py-1 flex flex-col items-start justify-center text-left transition-all overflow-hidden shadow-sm ${
                             isActive
                               ? "border-primary bg-primary/10 text-primary shadow-md"
@@ -1140,8 +1140,7 @@ export default function BillingDesk() {
                         >
                           {doc ? (
                             <>
-                              <span className="font-semibold w-full truncate leading-tight">{doc.name.split(" ")[0]}</span>
-                              <span className="text-[9px] opacity-70 w-full truncate">{doc.specialization}</span>
+                              <span className="text-[9px] font-semibold w-full truncate leading-tight">{doc.name}</span>
                             </>
                           ) : (
                             <>
@@ -1166,8 +1165,8 @@ export default function BillingDesk() {
                 {doctorMode === "doctor" && doctorId && (() => {
                   const doc = doctors.find(d => d.id === doctorId);
                   return doc ? (
-                    <div className="mt-1.5 text-[11px] text-primary font-medium truncate">
-                      Dr. {doc.name} · {doc.specialization}
+                    <div className="mt-1.5 text-[10px] text-primary font-medium truncate">
+                      {doc.name}
                     </div>
                   ) : null;
                 })()}
