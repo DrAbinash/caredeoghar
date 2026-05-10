@@ -1,4 +1,4 @@
-import { useState, Fragment, useEffect, useRef } from "react";
+import { useState, Fragment, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
@@ -19,7 +19,7 @@ import {
   TrendingUp, TrendingDown, ArrowRightLeft, BarChart3,
   BookOpen, Scale, ChevronDown, ChevronUp, CheckCircle2, AlertTriangle,
   RefreshCw, Pencil, History, Building2, ArrowUpDown, Search, Clock,
-  CreditCard, Filter,
+  CreditCard, Filter, Camera, Upload, ScanLine, Banknote, X, Check,
 } from "lucide-react";
 import Form3C from "@/components/accounting/Form3C";
 
@@ -384,6 +384,7 @@ export default function Accounting() {
             <TabsTrigger value="voucher-edits">Voucher Edits</TabsTrigger>
             <TabsTrigger value="export">Tally Export</TabsTrigger>
             <TabsTrigger value="form-3c" data-testid="tab-form-3c">Form 3C</TabsTrigger>
+            <TabsTrigger value="scan-import" className="flex items-center gap-1"><ScanLine size={13} /> Scan &amp; Import</TabsTrigger>
           </TabsList>
 
           {/* ── Vouchers Tab ── */}
@@ -1085,6 +1086,17 @@ export default function Accounting() {
           <TabsContent value="form-3c" className="space-y-4">
             <Form3C />
           </TabsContent>
+
+          {/* ── Scan & Import Tab ── */}
+          <TabsContent value="scan-import">
+            <ScanImportTab accounts={accounts} onImported={() => {
+              qc.invalidateQueries({ queryKey: ["vouchers"] });
+              qc.invalidateQueries({ queryKey: ["ledger"] });
+              qc.invalidateQueries({ queryKey: ["trial-balance"] });
+              qc.invalidateQueries({ queryKey: ["profit-loss"] });
+              qc.invalidateQueries({ queryKey: ["balance-sheet"] });
+            }} />
+          </TabsContent>
         </Tabs>
       </div>
 
@@ -1240,6 +1252,479 @@ export default function Accounting() {
           </form>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scan & Import Tab — Bill OCR + Bank Statement Importer
+// ─────────────────────────────────────────────────────────────────────────────
+
+type BillOcrResult = {
+  vendor: string; date: string; amount: number; gstAmount: number;
+  category: string; description: string; paymentMode: string;
+  confidence: "high" | "medium" | "low";
+};
+
+type BankTxn = {
+  date: string; description: string; debit: number; credit: number;
+  balance: number; reference: string; selected: boolean;
+};
+
+const EXPENSE_CATEGORIES = [
+  "Salaries", "Rent", "Utilities", "Office Supplies", "Medical Supplies",
+  "Lab Reagents", "Equipment", "Maintenance", "Travel", "Food",
+  "Marketing", "Professional Fees", "Taxes", "Insurance", "Miscellaneous",
+];
+
+function ScanImportTab({ accounts, onImported }: { accounts: Account[]; onImported: () => void }) {
+  const [subTab, setSubTab] = useState<"bill" | "bank">("bill");
+  return (
+    <div className="space-y-4">
+      <div className="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-950/30 dark:to-blue-950/30 border border-indigo-200 dark:border-indigo-800 rounded-xl p-5">
+        <h2 className="font-bold text-lg flex items-center gap-2"><ScanLine size={18} className="text-indigo-600" /> AI-Powered Scan &amp; Import</h2>
+        <p className="text-sm text-muted-foreground mt-1">Scan physical bills with your phone camera to auto-capture expenses, or import bank statements into your ledger automatically.</p>
+      </div>
+      <div className="flex gap-2">
+        <button onClick={() => setSubTab("bill")} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border transition-colors ${subTab === "bill" ? "bg-primary text-primary-foreground border-primary" : "bg-card border-card-border hover:bg-accent"}`}>
+          <Camera size={15} /> Bill / Receipt Scanner
+        </button>
+        <button onClick={() => setSubTab("bank")} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border transition-colors ${subTab === "bank" ? "bg-primary text-primary-foreground border-primary" : "bg-card border-card-border hover:bg-accent"}`}>
+          <Banknote size={15} /> Bank Statement Import
+        </button>
+      </div>
+      {subTab === "bill" ? <BillScanPanel /> : <BankStatementPanel accounts={accounts} onImported={onImported} />}
+    </div>
+  );
+}
+
+function BillScanPanel() {
+  const [preview, setPreview] = useState<string | null>(null);
+  const [imageBase64, setImageBase64] = useState("");
+  const [mimeType, setMimeType] = useState("image/jpeg");
+  const [scanning, setScanning] = useState(false);
+  const [result, setResult] = useState<BillOcrResult | null>(null);
+  const [draft, setDraft] = useState<BillOcrResult | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+  const qc = useQueryClient();
+
+  const handleFile = useCallback((file: File) => {
+    setError(""); setResult(null); setDraft(null); setSaved(false);
+    const mt = file.type || "image/jpeg";
+    setMimeType(mt);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      setPreview(dataUrl);
+      // Strip "data:image/...;base64," prefix
+      setImageBase64(dataUrl.split(",")[1] ?? "");
+    };
+    reader.readAsDataURL(file);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  }, [handleFile]);
+
+  const scan = async () => {
+    if (!imageBase64) return;
+    setScanning(true); setError("");
+    try {
+      const data = await api.post<BillOcrResult>("/api/expenses/scan-bill", { imageBase64, mimeType });
+      setResult(data);
+      setDraft({ ...data });
+    } catch (e: unknown) {
+      setError((e as Error).message || "Scan failed");
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const saveExpense = async () => {
+    if (!draft) return;
+    setSaving(true); setError("");
+    try {
+      await api.post("/api/expenses", {
+        category: draft.category,
+        description: draft.description || draft.vendor || "Scanned bill",
+        amount: draft.amount,
+        expenseDate: draft.date || new Date().toISOString().slice(0, 10),
+        paymentMode: draft.paymentMode || "cash",
+        paidTo: draft.vendor || undefined,
+        notes: draft.gstAmount > 0 ? `GST: ₹${draft.gstAmount}` : undefined,
+      });
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+      setSaved(true);
+    } catch (e: unknown) {
+      setError((e as Error).message || "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reset = () => {
+    setPreview(null); setImageBase64(""); setResult(null); setDraft(null);
+    setSaved(false); setError(""); setScanning(false);
+  };
+
+  const confidenceColor = (c: string) => c === "high" ? "text-green-600" : c === "medium" ? "text-amber-600" : "text-red-500";
+
+  return (
+    <div className="grid md:grid-cols-2 gap-6">
+      {/* Left — upload / camera */}
+      <div className="space-y-3">
+        <div className="bg-card border border-card-border rounded-xl p-5 space-y-3">
+          <h3 className="font-semibold flex items-center gap-2"><Camera size={15} /> Capture Bill Image</h3>
+          <p className="text-xs text-muted-foreground">Take a photo on your mobile or upload an existing image. Supports JPG, PNG, WebP, HEIC.</p>
+
+          {/* Drop zone */}
+          <div
+            onDrop={handleDrop}
+            onDragOver={e => e.preventDefault()}
+            onClick={() => fileRef.current?.click()}
+            className="relative border-2 border-dashed border-card-border rounded-xl overflow-hidden cursor-pointer hover:border-primary transition-colors"
+            style={{ minHeight: 200 }}
+          >
+            {preview ? (
+              <>
+                <img src={preview} alt="Bill preview" className="w-full object-contain max-h-72" />
+                <button onClick={e => { e.stopPropagation(); reset(); }} className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-1">
+                  <X size={14} />
+                </button>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-52 gap-3 text-muted-foreground">
+                <Upload size={32} className="opacity-40" />
+                <div className="text-center text-sm">
+                  <p className="font-medium">Drag &amp; drop or click to upload</p>
+                  <p className="text-xs mt-1">Or use your phone camera to take a photo</p>
+                </div>
+              </div>
+            )}
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+            capture="environment"
+            className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+          />
+
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => fileRef.current?.click()} disabled={scanning}>
+              <Upload size={14} className="mr-1" /> Upload
+            </Button>
+            <Button className="flex-1" onClick={scan} disabled={!imageBase64 || scanning}>
+              <ScanLine size={14} className="mr-1" /> {scanning ? "Scanning…" : "Scan with AI"}
+            </Button>
+          </div>
+          {error && <p className="text-xs text-red-500 bg-red-50 border border-red-200 rounded p-2">{error}</p>}
+        </div>
+
+        <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl p-4 text-xs text-blue-800 dark:text-blue-300 space-y-1">
+          <p className="font-semibold">Tips for best results</p>
+          <ul className="list-disc pl-4 space-y-0.5">
+            <li>Place the bill on a flat, well-lit surface</li>
+            <li>Ensure all four corners of the bill are visible</li>
+            <li>Avoid glare and shadows on the text</li>
+            <li>Printed invoices work better than handwritten ones</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Right — extracted data */}
+      <div className="space-y-3">
+        {saved ? (
+          <div className="bg-green-50 border border-green-200 rounded-xl p-8 text-center space-y-3">
+            <CheckCircle2 size={40} className="text-green-500 mx-auto" />
+            <p className="font-bold text-green-800">Expense Saved!</p>
+            <p className="text-sm text-green-700">The expense has been added to your records.</p>
+            <Button onClick={reset} variant="outline">Scan Another Bill</Button>
+          </div>
+        ) : draft ? (
+          <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold flex items-center gap-2"><CheckCircle2 size={15} className="text-green-500" /> Extracted Data</h3>
+              <span className={`text-xs font-semibold ${confidenceColor(draft.confidence)}`}>
+                {draft.confidence.toUpperCase()} confidence
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">Review and edit the extracted fields before saving to expenses.</p>
+
+            <div className="grid gap-3">
+              <div>
+                <Label className="text-xs">Vendor / Supplier</Label>
+                <Input className="mt-1 h-8 text-sm" value={draft.vendor} onChange={e => setDraft({ ...draft, vendor: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs">Date</Label>
+                  <Input className="mt-1 h-8 text-sm" type="date" value={draft.date} onChange={e => setDraft({ ...draft, date: e.target.value })} />
+                </div>
+                <div>
+                  <Label className="text-xs">Total Amount (₹)</Label>
+                  <Input className="mt-1 h-8 text-sm" type="number" step="0.01" value={draft.amount} onChange={e => setDraft({ ...draft, amount: Number(e.target.value) })} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs">GST Amount (₹)</Label>
+                  <Input className="mt-1 h-8 text-sm" type="number" step="0.01" value={draft.gstAmount} onChange={e => setDraft({ ...draft, gstAmount: Number(e.target.value) })} />
+                </div>
+                <div>
+                  <Label className="text-xs">Payment Mode</Label>
+                  <select className="mt-1 h-8 text-sm w-full border border-input rounded-md px-2 bg-background" value={draft.paymentMode} onChange={e => setDraft({ ...draft, paymentMode: e.target.value })}>
+                    {["cash", "card", "upi", "cheque", "other"].map(m => <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs">Category</Label>
+                <select className="mt-1 h-8 text-sm w-full border border-input rounded-md px-2 bg-background" value={draft.category} onChange={e => setDraft({ ...draft, category: e.target.value })}>
+                  {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <Label className="text-xs">Description</Label>
+                <Input className="mt-1 h-8 text-sm" value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })} />
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2 border-t border-border">
+              <Button variant="outline" onClick={reset} className="flex-1">Clear</Button>
+              <Button onClick={saveExpense} disabled={saving} className="flex-1">
+                {saving ? "Saving…" : "Save to Expense Ledger"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-card border border-dashed border-card-border rounded-xl p-10 text-center text-muted-foreground space-y-2">
+            <ScanLine size={36} className="mx-auto opacity-30" />
+            <p className="text-sm font-medium">Upload a bill image and click Scan</p>
+            <p className="text-xs">AI will extract vendor, date, amount, GST, and category automatically.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BankStatementPanel({ accounts, onImported }: { accounts: Account[]; onImported: () => void }) {
+  const [inputMode, setInputMode] = useState<"text" | "image">("text");
+  const [csvText, setCsvText] = useState("");
+  const [imageBase64, setImageBase64] = useState("");
+  const [imageMime, setImageMime] = useState("image/jpeg");
+  const [imagePreview, setImagePreview] = useState("");
+  const [parsing, setParsing] = useState(false);
+  const [txns, setTxns] = useState<BankTxn[]>([]);
+  const [bankAccountId, setBankAccountId] = useState("");
+  const [contraAccountId, setContraAccountId] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [imported, setImported] = useState(0);
+  const [error, setError] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const bankAccounts = accounts.filter(a => a.type === "bank" || a.type === "cash");
+  const expenseAccounts = accounts.filter(a => a.type === "expense" || a.type === "income" || a.type === "asset" || a.type === "liability");
+
+  const handleImageFile = (file: File) => {
+    setError(""); setTxns([]); setImported(0);
+    const mt = file.type || "image/jpeg";
+    setImageMime(mt);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      setImagePreview(dataUrl);
+      setImageBase64(dataUrl.split(",")[1] ?? "");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const parse = async () => {
+    setParsing(true); setError(""); setTxns([]); setImported(0);
+    try {
+      const payload =
+        inputMode === "text"
+          ? { text: csvText }
+          : { imageBase64, mimeType: imageMime };
+      const data = await api.post<{ transactions: Omit<BankTxn, "selected">[] }>("/api/accounting/bank-statement/parse", payload);
+      setTxns(data.transactions.map(t => ({ ...t, selected: true })));
+    } catch (e: unknown) {
+      setError((e as Error).message || "Parsing failed");
+    } finally {
+      setParsing(false);
+    }
+  };
+
+  const toggleAll = (v: boolean) => setTxns(ts => ts.map(t => ({ ...t, selected: v })));
+
+  const importTxns = async () => {
+    if (!bankAccountId || !contraAccountId) { setError("Select both accounts before importing."); return; }
+    setImporting(true); setError("");
+    try {
+      const data = await api.post<{ imported: number }>("/api/accounting/bank-statement/import", {
+        bankAccountId: Number(bankAccountId),
+        contraAccountId: Number(contraAccountId),
+        transactions: txns,
+      });
+      setImported(data.imported);
+      onImported();
+      setTxns([]);
+    } catch (e: unknown) {
+      setError((e as Error).message || "Import failed");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const inr = (n: number) => n === 0 ? "—" : `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+  const selectedCount = txns.filter(t => t.selected).length;
+
+  return (
+    <div className="space-y-4">
+      {imported > 0 && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
+          <CheckCircle2 size={20} className="text-green-500 shrink-0" />
+          <div>
+            <p className="font-semibold text-green-800">{imported} transactions imported successfully!</p>
+            <p className="text-sm text-green-700">They have been added to the vouchers ledger.</p>
+          </div>
+          <Button variant="outline" size="sm" className="ml-auto" onClick={() => setImported(0)}>Import More</Button>
+        </div>
+      )}
+
+      {imported === 0 && (
+        <>
+          {/* Input Mode */}
+          <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold flex items-center gap-2"><Banknote size={15} /> Upload Bank Statement</h3>
+              <div className="flex gap-1 text-xs">
+                <button onClick={() => setInputMode("text")} className={`px-3 py-1 rounded-md border transition-colors ${inputMode === "text" ? "bg-primary text-primary-foreground border-primary" : "border-card-border hover:bg-accent"}`}>
+                  CSV / Text
+                </button>
+                <button onClick={() => setInputMode("image")} className={`px-3 py-1 rounded-md border transition-colors ${inputMode === "image" ? "bg-primary text-primary-foreground border-primary" : "border-card-border hover:bg-accent"}`}>
+                  Image / PDF scan
+                </button>
+              </div>
+            </div>
+
+            {inputMode === "text" ? (
+              <div className="space-y-2">
+                <Label className="text-xs">Paste CSV or copied statement text</Label>
+                <textarea
+                  value={csvText}
+                  onChange={e => setCsvText(e.target.value)}
+                  className="w-full border border-input rounded-lg p-3 text-xs font-mono bg-muted/30 resize-y"
+                  rows={8}
+                  placeholder={"Date,Description,Debit,Credit,Balance\n01-05-2026,Opening Balance,,,50000\n02-05-2026,NEFT Transfer Out,5000,,45000\n03-05-2026,Salary Credit,,20000,65000"}
+                />
+                <p className="text-xs text-muted-foreground">Supports CSV, tab-separated, or any standard Indian bank statement format. You can also paste directly from Excel or a PDF viewer.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label className="text-xs">Upload a scanned statement image (JPG, PNG, HEIC)</Label>
+                <div
+                  onClick={() => fileRef.current?.click()}
+                  onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleImageFile(f); }}
+                  onDragOver={e => e.preventDefault()}
+                  className="border-2 border-dashed border-card-border rounded-xl overflow-hidden cursor-pointer hover:border-primary transition-colors flex items-center justify-center min-h-32"
+                >
+                  {imagePreview ? (
+                    <img src={imagePreview} alt="Statement preview" className="max-h-48 object-contain" />
+                  ) : (
+                    <div className="text-center p-6 text-muted-foreground">
+                      <Camera size={28} className="mx-auto opacity-40 mb-2" />
+                      <p className="text-sm">Click or drag to upload statement image</p>
+                    </div>
+                  )}
+                </div>
+                <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleImageFile(f); }} />
+              </div>
+            )}
+
+            {error && <p className="text-xs text-red-500 bg-red-50 border border-red-200 rounded p-2">{error}</p>}
+
+            <Button onClick={parse} disabled={parsing || (inputMode === "text" ? !csvText.trim() : !imageBase64)} className="w-full">
+              <ScanLine size={14} className="mr-2" /> {parsing ? "Parsing with AI…" : "Parse Statement"}
+            </Button>
+          </div>
+
+          {/* Transactions review */}
+          {txns.length > 0 && (
+            <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <h3 className="font-semibold">{txns.length} Transactions Detected</h3>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => toggleAll(true)}>Select All</Button>
+                  <Button size="sm" variant="outline" onClick={() => toggleAll(false)}>Deselect All</Button>
+                </div>
+              </div>
+
+              {/* Account mapping */}
+              <div className="bg-muted/30 border border-card-border rounded-lg p-4 grid md:grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs">Bank Account (this account)</Label>
+                  <select className="mt-1 w-full h-8 text-sm border border-input rounded-md px-2 bg-background" value={bankAccountId} onChange={e => setBankAccountId(e.target.value)}>
+                    <option value="">Select bank account…</option>
+                    {bankAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-xs">Contra / Expense Account (the other side)</Label>
+                  <select className="mt-1 w-full h-8 text-sm border border-input rounded-md px-2 bg-background" value={contraAccountId} onChange={e => setContraAccountId(e.target.value)}>
+                    <option value="">Select account…</option>
+                    {[...bankAccounts, ...expenseAccounts].map(a => <option key={a.id} value={a.id}>{a.name} ({a.type})</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Transaction table */}
+              <div className="overflow-x-auto rounded-lg border border-card-border">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/40 border-b border-card-border">
+                    <tr>
+                      <th className="w-8 px-3 py-2 text-left"><input type="checkbox" checked={selectedCount === txns.length} onChange={e => toggleAll(e.target.checked)} /></th>
+                      <th className="px-3 py-2 text-left">Date</th>
+                      <th className="px-3 py-2 text-left">Description</th>
+                      <th className="px-3 py-2 text-right">Debit</th>
+                      <th className="px-3 py-2 text-right">Credit</th>
+                      <th className="px-3 py-2 text-right">Balance</th>
+                      <th className="px-3 py-2 text-left">Reference</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {txns.map((t, i) => (
+                      <tr key={i} className={`border-b border-card-border last:border-0 ${t.selected ? "" : "opacity-40"}`}>
+                        <td className="px-3 py-1.5"><input type="checkbox" checked={t.selected} onChange={e => setTxns(ts => ts.map((r, j) => j === i ? { ...r, selected: e.target.checked } : r))} /></td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{t.date}</td>
+                        <td className="px-3 py-1.5 max-w-[200px] truncate" title={t.description}>{t.description}</td>
+                        <td className="px-3 py-1.5 text-right text-red-600 font-medium">{inr(t.debit)}</td>
+                        <td className="px-3 py-1.5 text-right text-green-600 font-medium">{inr(t.credit)}</td>
+                        <td className="px-3 py-1.5 text-right">{inr(t.balance)}</td>
+                        <td className="px-3 py-1.5 text-muted-foreground">{t.reference}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-border">
+                <p className="text-sm text-muted-foreground">{selectedCount} of {txns.length} selected for import</p>
+                <Button onClick={importTxns} disabled={importing || selectedCount === 0 || !bankAccountId || !contraAccountId}>
+                  <Download size={14} className="mr-2" /> {importing ? "Importing…" : `Import ${selectedCount} Transactions`}
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

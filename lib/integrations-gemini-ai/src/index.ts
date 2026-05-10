@@ -12,6 +12,8 @@ export {
   generateClinicalNote,
   generateBillingInsights,
   generatePatientMessage,
+  geminiOcrBill,
+  geminiParseBankStatement,
   MODALITY_NAMES,
   type GeminiGenerateOptions,
   type GeminiTranscribeOptions,
@@ -21,4 +23,6 @@ export {
   type PatientMessageType,
   type RadiologyFindingsInput,
   type RadiologyImpressionInput,
+  type BillOcrResult,
+  type BankTransaction,
 } from "./helpers";

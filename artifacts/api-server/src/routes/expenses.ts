@@ -7,6 +7,7 @@ import {
   UpdateExpenseBody,
   UpdateExpenseParams,
 } from "@workspace/api-zod";
+import { geminiOcrBill } from "@workspace/integrations-gemini-ai";
 
 const router = Router();
 
@@ -135,6 +136,32 @@ router.patch("/:id", async (req, res) => {
     .returning();
   if (!expense) return res.status(404).json({ error: "Expense not found" });
   return res.json(toNum(expense as unknown as Record<string, unknown>));
+});
+
+// ── Bill scan via Gemini Vision ────────────────────────────────────────────
+// POST /api/expenses/scan-bill
+// Body: { imageBase64: string; mimeType: string }
+// Returns the extracted expense fields so the client can review before saving.
+router.post("/scan-bill", async (req, res) => {
+  const { imageBase64, mimeType } = req.body as { imageBase64?: string; mimeType?: string };
+  if (!imageBase64 || !mimeType) {
+    return res.status(400).json({ error: "imageBase64 and mimeType are required" });
+  }
+  const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
+  if (!allowedTypes.includes(mimeType)) {
+    return res.status(400).json({ error: "Unsupported image type. Use JPEG, PNG, WebP, or HEIC." });
+  }
+  // Reject images >8 MB (base64 is ~33% larger than raw bytes)
+  if (imageBase64.length > 11_000_000) {
+    return res.status(400).json({ error: "Image too large. Maximum 8 MB." });
+  }
+  try {
+    const result = await geminiOcrBill(imageBase64, mimeType);
+    return res.json(result);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return res.status(502).json({ error: "AI extraction failed: " + msg });
+  }
 });
 
 // Delete expense

@@ -4,6 +4,7 @@ import { accountsTable, vouchersTable, voucherAuditsTable } from "@workspace/db/
 import { eq, desc, and, gte, lte, like, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { apiError, apiErrorFromZod } from "../lib/api-error";
+import { geminiParseBankStatement, type BankTransaction } from "@workspace/integrations-gemini-ai";
 
 const router = Router();
 
@@ -740,6 +741,105 @@ router.post("/sync-billing", async (req, res) => {
   }
 
   return res.json({ message: `Synced ${created} new payments to accounting`, created });
+});
+
+// ── Bank Statement Import ─────────────────────────────────────────────────
+
+// POST /api/accounting/bank-statement/parse
+// Body: { text?: string } | { imageBase64: string; mimeType: string }
+// Returns: { transactions: BankTransaction[] }
+router.post("/bank-statement/parse", async (req, res): Promise<void> => {
+  const body = req.body as {
+    text?: string;
+    imageBase64?: string;
+    mimeType?: string;
+  };
+
+  if (!body.text && !body.imageBase64) {
+    apiError(res, 400, "Provide either text (CSV/copied statement) or imageBase64+mimeType.");
+    return;
+  }
+
+  const input: Parameters<typeof geminiParseBankStatement>[0] =
+    body.text
+      ? { text: body.text }
+      : { imageBase64: body.imageBase64!, mimeType: body.mimeType! };
+
+  try {
+    const transactions = await geminiParseBankStatement(input);
+    res.json({ transactions });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    apiError(res, 502, "AI parsing failed: " + msg);
+  }
+});
+
+// POST /api/accounting/bank-statement/import
+// Body: { bankAccountId: number; contraAccountId: number; transactions: BankTransaction[] }
+// Bulk-inserts vouchers for each transaction row.
+const BankImportBody = z.object({
+  bankAccountId: z.union([z.number().int().positive(), z.string().regex(/^\d+$/)]).transform(Number),
+  contraAccountId: z.union([z.number().int().positive(), z.string().regex(/^\d+$/)]).transform(Number),
+  transactions: z.array(z.object({
+    date: z.string().min(1),
+    description: z.string(),
+    debit: z.number().min(0),
+    credit: z.number().min(0),
+    balance: z.number(),
+    reference: z.string(),
+    selected: z.boolean().optional(),
+  })).min(1),
+});
+
+router.post("/bank-statement/import", async (req, res): Promise<void> => {
+  const parsed = BankImportBody.safeParse(req.body);
+  if (!parsed.success) { apiErrorFromZod(res, 400, "Invalid body", parsed.error); return; }
+
+  const { bankAccountId, contraAccountId, transactions } = parsed.data;
+
+  // Verify both accounts exist
+  const [bankAcc, contraAcc] = await Promise.all([
+    db.select().from(accountsTable).where(eq(accountsTable.id, bankAccountId)).then(r => r[0]),
+    db.select().from(accountsTable).where(eq(accountsTable.id, contraAccountId)).then(r => r[0]),
+  ]);
+  if (!bankAcc) { apiError(res, 404, "Bank account not found"); return; }
+  if (!contraAcc) { apiError(res, 404, "Contra account not found"); return; }
+
+  // Only import selected rows (or all if selected field absent)
+  const toImport = transactions.filter(t => t.selected !== false && (t.debit > 0 || t.credit > 0));
+  if (toImport.length === 0) { apiError(res, 400, "No transactions selected for import"); return; }
+
+  let created = 0;
+  for (const txn of toImport) {
+    const isDebit = txn.debit > 0;
+    const amount = isDebit ? txn.debit : txn.credit;
+    const vType = isDebit ? "payment" : "receipt";
+    const prefix = isDebit ? "PV" : "RV";
+    const monthKey = (txn.date || new Date().toISOString().slice(0, 7)).slice(0, 7).replace("-", "");
+
+    const monthCount = await db
+      .select({ c: sql<number>`count(*)` })
+      .from(vouchersTable)
+      .where(like(vouchersTable.voucherNumber, `${prefix}-${monthKey}%`))
+      .then(r => Number(r[0]?.c ?? 0));
+
+    const voucherNumber = `${prefix}-${monthKey}-${String(monthCount + created + 1).padStart(4, "0")}`;
+
+    await db.insert(vouchersTable).values({
+      voucherNumber,
+      type: vType,
+      date: txn.date || new Date().toISOString().slice(0, 10),
+      debitAccountId: isDebit ? String(contraAccountId) : String(bankAccountId),
+      creditAccountId: isDebit ? String(bankAccountId) : String(contraAccountId),
+      amount: String(amount),
+      particular: txn.description || "Bank statement import",
+      reference: txn.reference || null,
+      narration: `Bank import — balance ₹${txn.balance.toLocaleString("en-IN")}`,
+    });
+    created++;
+  }
+
+  res.json({ imported: created });
 });
 
 function escapeXml(s: string): string {

@@ -273,6 +273,180 @@ Keep it brief, friendly, and professional. Include the center name. Do not inclu
 }
 
 // ---------------------------------------------------------------------------
+// Multimodal OCR — bill / receipt scanning
+// ---------------------------------------------------------------------------
+
+export interface BillOcrResult {
+  vendor: string;
+  date: string;           // YYYY-MM-DD or empty
+  amount: number;         // total payable
+  gstAmount: number;
+  category: string;       // best-guess expense category
+  description: string;    // concise line-item summary
+  paymentMode: string;    // cash | card | upi | cheque | other
+  confidence: "high" | "medium" | "low";
+}
+
+/**
+ * Send a bill/receipt image to Gemini Vision and extract key expense fields.
+ * Returns a BillOcrResult; numeric fields default to 0 on parse failure.
+ */
+export async function geminiOcrBill(
+  imageBase64: string,
+  mimeType: string,
+  options: GeminiGenerateOptions = {}
+): Promise<BillOcrResult> {
+  const baseUrl =
+    options.baseUrl ?? process.env.AI_INTEGRATIONS_GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com";
+  const apiKey = options.apiKey ?? process.env.AI_INTEGRATIONS_GEMINI_API_KEY ?? "";
+
+  const prompt = `You are an accounting assistant. Extract the following fields from this bill / invoice / receipt image and return ONLY valid JSON — no markdown fences, no explanation.
+
+JSON schema:
+{
+  "vendor": "string — shop / supplier name",
+  "date": "string — date in YYYY-MM-DD format, empty string if not found",
+  "amount": number — total payable amount (after tax, inclusive of GST),
+  "gstAmount": number — GST / tax portion only (0 if not shown),
+  "category": "string — one of: Salaries, Rent, Utilities, Office Supplies, Medical Supplies, Lab Reagents, Equipment, Maintenance, Travel, Food, Marketing, Professional Fees, Taxes, Insurance, Miscellaneous",
+  "description": "string — brief 1-line description of what was purchased",
+  "paymentMode": "string — one of: cash, card, upi, cheque, other",
+  "confidence": "string — one of: high, medium, low — your confidence in the extracted data"
+}
+
+Return ONLY the JSON object.`;
+
+  const url = `${baseUrl}/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{
+        role: "user",
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType, data: imageBase64 } },
+        ],
+      }],
+      generationConfig: { maxOutputTokens: 1024, temperature: 0.1 },
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Gemini OCR error: ${res.status} ${err}`);
+  }
+
+  const data = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  };
+  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "{}";
+
+  let parsed: Partial<BillOcrResult> = {};
+  try {
+    // Strip markdown fences if the model wraps them anyway
+    const clean = raw.replace(/^```[a-z]*\n?/, "").replace(/```$/, "").trim();
+    parsed = JSON.parse(clean) as Partial<BillOcrResult>;
+  } catch { /* fall through to defaults */ }
+
+  return {
+    vendor: parsed.vendor ?? "",
+    date: parsed.date ?? "",
+    amount: Number(parsed.amount ?? 0),
+    gstAmount: Number(parsed.gstAmount ?? 0),
+    category: parsed.category ?? "Miscellaneous",
+    description: parsed.description ?? "",
+    paymentMode: parsed.paymentMode ?? "cash",
+    confidence: parsed.confidence ?? "low",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Multimodal OCR — bank statement parsing
+// ---------------------------------------------------------------------------
+
+export interface BankTransaction {
+  date: string;          // YYYY-MM-DD
+  description: string;
+  debit: number;         // amount going out (positive number, 0 if credit)
+  credit: number;        // amount coming in (positive number, 0 if debit)
+  balance: number;       // running balance after this row (0 if not shown)
+  reference: string;     // cheque no / UTR / ref
+}
+
+/**
+ * Parse a bank statement from plain CSV/text or from an image.
+ * Pass either `text` (raw CSV or copied text) or `imageBase64 + mimeType`.
+ */
+export async function geminiParseBankStatement(
+  input: { text: string } | { imageBase64: string; mimeType: string },
+  options: GeminiGenerateOptions = {}
+): Promise<BankTransaction[]> {
+  const baseUrl =
+    options.baseUrl ?? process.env.AI_INTEGRATIONS_GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com";
+  const apiKey = options.apiKey ?? process.env.AI_INTEGRATIONS_GEMINI_API_KEY ?? "";
+
+  const prompt = `You are a bank statement parser. Extract every transaction row and return ONLY a JSON array — no markdown fences, no explanation.
+
+Each element must follow this schema:
+{
+  "date": "YYYY-MM-DD",
+  "description": "narration / merchant name",
+  "debit": number (amount withdrawn/paid, positive, 0 if this row is a credit),
+  "credit": number (amount deposited/received, positive, 0 if this row is a debit),
+  "balance": number (running balance after this row, 0 if not shown),
+  "reference": "cheque number / UTR / transaction ID if present, else empty string"
+}
+
+Rules:
+- Parse every data row; skip header rows and totals rows.
+- For Indian formats: Dr = debit, Cr = credit.
+- Dates may be in various formats — convert all to YYYY-MM-DD.
+- Return ONLY the JSON array.`;
+
+  const url = `${baseUrl}/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+
+  const parts: unknown[] =
+    "text" in input
+      ? [{ text: prompt }, { text: input.text }]
+      : [{ text: prompt }, { inlineData: { mimeType: input.mimeType, data: input.imageBase64 } }];
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts }],
+      generationConfig: { maxOutputTokens: 8192, temperature: 0.1 },
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Gemini bank statement error: ${res.status} ${err}`);
+  }
+
+  const data = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  };
+  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "[]";
+
+  try {
+    const clean = raw.replace(/^```[a-z]*\n?/, "").replace(/```$/, "").trim();
+    const arr = JSON.parse(clean) as Partial<BankTransaction>[];
+    return arr.map((r) => ({
+      date: r.date ?? "",
+      description: r.description ?? "",
+      debit: Number(r.debit ?? 0),
+      credit: Number(r.credit ?? 0),
+      balance: Number(r.balance ?? 0),
+      reference: r.reference ?? "",
+    }));
+  } catch {
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
 // High-level generators — combine prompt building + Gemini call
 // ---------------------------------------------------------------------------
 
