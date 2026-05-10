@@ -591,15 +591,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   <p className="text-[10px] text-sidebar-foreground/60 capitalize truncate">{session.user.role.replace("_", " ")}</p>
                 </div>
               )}
-              {/* Per-user theme picker — profile menu affordance */}
+              {/* Per-user theme swatch — visible to all staff; click to open picker */}
               <button
                 onClick={() => setThemePickerOpen((o) => !o)}
-                className="p-1.5 rounded-md text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors shrink-0"
-                title="My sidebar color"
+                className="w-5 h-5 rounded-full shrink-0 ring-2 ring-white/30 hover:ring-white/70 transition-all cursor-pointer"
+                style={{ background: theme.gradient }}
+                title="My sidebar color — click to change"
                 aria-label="Pick my sidebar theme"
-              >
-                <Palette size={14} />
-              </button>
+              />
               <button
                 onClick={onLogout}
                 title="Sign out"
