@@ -206,9 +206,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("sidebarAutoMinimise") === "1");
   const session = readStaffSession();
 
-  const { userTheme, setTheme: setUserTheme } = useUserTheme(session?.user.id);
-  // Priority: live localStorage (same-session cache) → DB value from login session → clinic default → hard fallback
-  const effectiveThemeId = userTheme ?? session?.user.sidebarTheme ?? clinic?.sidebarTheme ?? "navy";
+  // Pass the login-time DB value so the hook seeds localStorage on a fresh device.
+  // Effective theme reads purely from localStorage (via userTheme) after seeding so
+  // changes and resets take effect immediately without re-login.
+  const { userTheme, setTheme: setUserTheme } = useUserTheme(session?.user.id, session?.user.sidebarTheme);
+  const effectiveThemeId = userTheme ?? clinic?.sidebarTheme ?? "navy";
   const theme = resolveTheme(effectiveThemeId);
 
   // Mini sidebar theme picker state
