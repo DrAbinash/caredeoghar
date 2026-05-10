@@ -187,39 +187,49 @@ async function printBill(b: LastBill, clinic: ClinicLite) {
   const ageStr = calcAge(b.patient.dateOfBirth);
   const ageLine = [ageStr, b.patient.gender].filter(Boolean).join(" / ").toUpperCase();
   const billedBy = readStaffSession()?.user?.name ?? "";
+  const testCount = b.tests.length;
+  const density = testCount <= 3 ? "spacious" : testCount <= 6 ? "balanced" : "dense";
+  const pageMargin = density === "spacious" ? "3mm" : density === "balanced" ? "2.5mm" : "2mm";
+  const headerGap = density === "spacious" ? "2px" : density === "balanced" ? "1px" : "0";
+  const rowPad = density === "spacious" ? "1px 3px" : density === "balanced" ? "1px 2px" : "0 2px";
+  const sectionGap = density === "spacious" ? "4px" : density === "balanced" ? "3px" : "2px";
+  const tableGap = density === "spacious" ? "4px" : density === "balanced" ? "3px" : "2px";
+  const totalWidth = density === "spacious" ? "170px" : density === "balanced" ? "160px" : "150px";
+  const titleSize = density === "spacious" ? "12px" : density === "balanced" ? "11px" : "10px";
   const rows = b.tests.map((t) => `<tr><td>${escapeHtml(t.name)}</td><td style="text-align:right">₹${t.price.toFixed(2)}</td></tr>`).join("");
   const paidAmt = b.payments.reduce((s, p) => s + Number(p.amount || 0), 0);
   const balAmt  = Math.max(0, b.total - paidAmt);
   const payRows = b.payments.map((p) => `<tr><td style="text-transform:capitalize">${escapeHtml(p.mode.replace(/_/g," "))}</td><td style="text-align:right">₹${Number(p.amount || 0).toFixed(2)}</td></tr>`).join("");
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Bill ${escapeHtml(b.billNumber)}</title>
     <style>
-      @page { size: A5; margin: 3mm; }
-      body { font-family: Arial, sans-serif; font-size: 11px; color:#000; margin:0; text-transform:uppercase; }
+      @page { size: A5; margin: ${pageMargin}; }
+      body { font-family: Arial, sans-serif; font-size: ${density === "dense" ? "10px" : "11px"}; color:#000; margin:0; text-transform:uppercase; }
       h1 { margin:0; font-size:17px; text-align:center; }
-      .clinic { text-align:center; border-bottom:2px solid #000; padding-bottom:2px; margin-bottom:2px; }
-      .clinic p { margin:1px 0; font-size:10px; color:#444; text-transform:none; }
-      .inv-title { text-align:center; font-size:12px; font-weight:700; letter-spacing:1px; margin:2px 0 4px; }
+      .clinic { text-align:center; border-bottom:2px solid #000; padding-bottom:${headerGap}; margin-bottom:${headerGap}; }
+      .clinic p { margin:${density === "dense" ? "0" : "1px"} 0; font-size:${density === "dense" ? "9px" : "10px"}; color:#444; text-transform:none; }
+      .inv-title { text-align:center; font-size:${titleSize}; font-weight:700; letter-spacing:1px; margin:${headerGap} 0 ${sectionGap}; }
       table { width:100%; border-collapse:collapse; }
-      th, td { padding:1px 3px; border-bottom:1px solid #ddd; font-size:10px; }
+      th, td { padding:${rowPad}; border-bottom:1px solid #ddd; font-size:10px; }
       th { background:#f4f4f4; text-align:left; }
-      .meta td { border:none; padding:1px 2px; }
-      .bottom { display:flex; gap:6px; align-items:flex-start; margin-top:2px; }
+      .meta td { border:none; padding:${density === "dense" ? "0" : "1px"} 2px; }
+      .bottom { display:flex; gap:${density === "dense" ? "4px" : "6px"}; align-items:flex-start; margin-top:${sectionGap}; }
       .pay-block { flex:1; font-size:10px; }
       .pay-block b { display:block; margin-bottom:2px; border-bottom:1px solid #ccc; padding-bottom:1px; }
       .pay-block td { border:none; padding:0 2px 0 0; }
-      .totals { min-width:170px; font-size:10px; }
+      .totals { min-width:${totalWidth}; font-size:10px; }
       .totals td { border:none; padding:1px 3px; }
       .totals .grand td { border-top:1px solid #000; font-weight:700; padding-top:2px; }
-      .token { margin-top:5px; padding:3px; border:1px dashed #000; text-align:center; font-weight:700; }
+      .token { margin-top:${tableGap}; padding:${density === "dense" ? "2px" : "3px"}; border:1px dashed #000; text-align:center; font-weight:700; }
+      .compact-multiline { line-height:${density === "dense" ? 1.15 : 1.25}; }
     </style></head><body>
     <div class="clinic">
       <h1>${escapeHtml(clinic?.name || "Diagnostic Centre")}</h1>
-      ${clinic?.tagline ? `<p style="font-style:italic">${escapeHtml(clinic.tagline)}</p>` : ""}
-      ${clinic?.address ? `<p>${escapeHtml(clinic.address)}</p>` : ""}
+      ${clinic?.tagline ? `<p class="compact-multiline" style="font-style:italic">${escapeHtml(clinic.tagline)}</p>` : ""}
+      ${clinic?.address ? `<p class="compact-multiline">${escapeHtml(clinic.address)}</p>` : ""}
       ${clinic?.phone ? `<p>Ph: ${escapeHtml(clinic.phone)}</p>` : ""}
     </div>
     <div class="inv-title">INVOICE / RECEIPT</div>
-    <table class="meta" style="margin-bottom:6px;border-top:1px solid #ccc;border-bottom:1px solid #ccc;padding:3px 0"><tbody>
+    <table class="meta" style="margin-bottom:${density === "dense" ? "3px" : "6px"};border-top:1px solid #ccc;border-bottom:1px solid #ccc;padding:${density === "dense" ? "1px 0" : "3px 0"}"><tbody>
       <tr>
         <td><strong>${escapeHtml(b.patient.firstName)} ${escapeHtml(b.patient.lastName)}</strong></td>
         <td style="text-align:right">${ageLine ? escapeHtml(ageLine) : ""}</td>
@@ -233,7 +243,7 @@ async function printBill(b: LastBill, clinic: ClinicLite) {
       ${b.doctorName ? `<tr><td colspan="3">REF: DR. ${escapeHtml(b.doctorName)}</td></tr>` : `<tr><td colspan="3">REF: SELF / WALK-IN</td></tr>`}
       ${billedBy ? `<tr><td colspan="3" style="font-size:10px;color:#555">BILLED BY: ${escapeHtml(billedBy)}</td></tr>` : ""}
     </tbody></table>
-    <table style="margin-bottom:4px"><thead><tr><th>#</th><th>Test</th><th>Category</th><th style="text-align:right">Amount (₹)</th></tr></thead>
+    <table style="margin-bottom:${tableGap}"><thead><tr><th>#</th><th>Test</th><th>Category</th><th style="text-align:right">Amount (₹)</th></tr></thead>
     <tbody>${b.tests.map((t,i)=>`<tr><td>${i+1}</td><td>${escapeHtml(t.name)}</td><td>${escapeHtml(t.category)}</td><td style="text-align:right">₹${t.price.toFixed(2)}</td></tr>`).join("")}</tbody></table>
     <div class="bottom">
       ${payRows ? `<div class="pay-block"><b>PAYMENT DETAILS</b><table><tbody>${payRows}</tbody></table></div>` : "<div></div>"}
