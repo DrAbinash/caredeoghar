@@ -153,6 +153,8 @@ async function runStartupMigrations(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 minutes'
       );
+      ALTER TABLE radiology_worklist ADD COLUMN IF NOT EXISTS dicom_patient_id TEXT;
+      ALTER TABLE radiology_worklist ADD COLUMN IF NOT EXISTS patient_match_status TEXT NOT NULL DEFAULT 'UNMATCHED';
       CREATE TABLE IF NOT EXISTS pacs_settings (
         id SERIAL PRIMARY KEY,
         key TEXT NOT NULL,

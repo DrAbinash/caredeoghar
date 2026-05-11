@@ -11,7 +11,9 @@ export const radiologyWorklistTable = pgTable(
   {
     id: serial("id").primaryKey(),
     studyId: integer("study_id"),              // optional FK → radiology_studies.id
-    patientId: integer("patient_id"),          // optional FK → patients.id
+    patientId: integer("patient_id"),          // resolved FK → patients.id (null if unmatched)
+    dicomPatientId: text("dicom_patient_id"),  // raw DICOM PatientID field (any string format)
+    patientMatchStatus: text("patient_match_status").notNull().default("UNMATCHED"), // MATCHED | UNMATCHED
     patientName: text("patient_name").notNull(),
     age: text("age"),
     sex: text("sex"),

@@ -3,7 +3,7 @@ import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Activity, CheckCircle2, Clock, AlertCircle, ScanSearch, Send, Layers } from "lucide-react";
+import { RefreshCw, Activity, CheckCircle2, Clock, AlertCircle, ScanSearch, Send, Layers, Wifi, WifiOff, RadioTower } from "lucide-react";
 
 type DashboardStats = {
   worklist: {
@@ -23,6 +23,13 @@ type DashboardStats = {
     modality: string | null;
     createdAt: string;
   }>;
+};
+
+type ConquestStatus = {
+  configured: boolean;
+  status: "ready" | "not-configured" | "no-activity";
+  lastStudyReceived: string | null;
+  lastAccessionNumber: string | null;
 };
 
 const STATUS_META: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -52,11 +59,56 @@ function StatCard({ title, value, sub, icon }: { title: string; value: string | 
   );
 }
 
+function ConquestBadge({ conquest }: { conquest: ConquestStatus | undefined }) {
+  if (!conquest) return null;
+
+  if (conquest.status === "ready") {
+    const ago = conquest.lastStudyReceived
+      ? new Date(conquest.lastStudyReceived).toLocaleString()
+      : null;
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 dark:bg-green-900/20 dark:border-green-800 px-3 py-2 text-sm">
+        <Wifi size={15} className="text-green-600 dark:text-green-400 shrink-0" />
+        <span className="font-medium text-green-700 dark:text-green-300">CONQUEST Integration: Ready</span>
+        {ago && (
+          <span className="text-green-600/70 dark:text-green-400/70 text-xs ml-1">
+            · Last study {ago}
+            {conquest.lastAccessionNumber ? ` (${conquest.lastAccessionNumber})` : ""}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  if (conquest.status === "no-activity") {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-yellow-200 bg-yellow-50 dark:bg-yellow-900/20 dark:border-yellow-800 px-3 py-2 text-sm">
+        <RadioTower size={15} className="text-yellow-600 dark:text-yellow-400 shrink-0" />
+        <span className="font-medium text-yellow-700 dark:text-yellow-300">CONQUEST Integration: Configured — no studies received yet</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 dark:bg-gray-800/40 dark:border-gray-700 px-3 py-2 text-sm">
+      <WifiOff size={15} className="text-gray-500 shrink-0" />
+      <span className="font-medium text-gray-600 dark:text-gray-300">CONQUEST Integration: Not configured</span>
+      <span className="text-gray-500 text-xs ml-1">— add host/AE title in PACS Settings</span>
+    </div>
+  );
+}
+
 export default function PacsDashboard() {
   const { data, isLoading, refetch, isFetching } = useQuery<DashboardStats>({
     queryKey: ["pacs-dashboard"],
     queryFn: () => api.get("/api/radiology/pacs-dashboard"),
     refetchInterval: 30_000,
+  });
+
+  const { data: conquest } = useQuery<ConquestStatus>({
+    queryKey: ["conquest-status"],
+    queryFn: () => api.get("/api/radiology/conquest-status"),
+    refetchInterval: 60_000,
   });
 
   const stats = data?.worklist;
@@ -68,12 +120,14 @@ export default function PacsDashboard() {
         title="PACS Dashboard"
         subtitle="Live RIS/PACS status overview"
         actions={
-          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+          <Button variant="outline" size="sm" onClick={() => { void refetch(); }} disabled={isFetching}>
             <RefreshCw size={14} className={isFetching ? "animate-spin" : ""} />
             Refresh
           </Button>
         }
       />
+
+      <ConquestBadge conquest={conquest} />
 
       {isLoading ? (
         <div className="text-muted-foreground text-sm">Loading dashboard…</div>

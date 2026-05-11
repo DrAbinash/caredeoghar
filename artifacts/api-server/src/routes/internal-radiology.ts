@@ -34,9 +34,17 @@ const router = Router();
 function requireInternalApiKey(req: Request, res: Response, next: NextFunction): void {
   const expected = process.env["INTERNAL_API_KEY"];
   if (!expected) {
-    // Key not configured — gate is open with a warning so existing deployments
-    // keep working before the secret is provisioned. Log loudly.
-    logger.warn("INTERNAL_API_KEY not set — internal radiology endpoints are unprotected");
+    if (process.env["NODE_ENV"] === "production") {
+      // In production the key MUST be set. Fail closed to prevent accidental
+      // exposure of internal endpoints on a misconfigured deployment.
+      logger.error("INTERNAL_API_KEY is not set in production — internal radiology endpoints are disabled");
+      res.status(503).json({
+        error: "Service unavailable: INTERNAL_API_KEY is not configured. Set this secret before using internal radiology endpoints.",
+      });
+      return;
+    }
+    // Development / staging: allow without key but log loudly.
+    logger.warn("INTERNAL_API_KEY not set — internal radiology endpoints are unprotected (non-production only)");
     next();
     return;
   }
@@ -136,13 +144,15 @@ router.get("/patients/:patientId/contact", async (req, res) => {
 router.post("/radiology/studies", async (req, res) => {
   const b = (req.body ?? {}) as {
     studyId?: number;
-    patientId?: number;
+    // patientId from DICOM can be a text UHID ("PAT001", "CARE001") or a
+    // numeric string. Never trust it as an integer DB id directly.
+    patientId?: string | number;
     patientName?: string;
     age?: string;
     sex?: string;
     modality?: string;
     studyDescription?: string;
-    studyDate?: string;
+    studyDate?: string;      // DICOM format YYYYMMDD is accepted as-is (stored as text)
     accessionNumber?: string;
     studyInstanceUID?: string;
     aeTitle?: string;
@@ -164,11 +174,34 @@ router.post("/radiology/studies", async (req, res) => {
   const accessionNumber = b.accessionNumber.trim();
   const studyInstanceUID = b.studyInstanceUID?.trim() || null;
 
-  // Try to find existing entry to decide insert vs update.
-  const conds = [];
-  if (studyInstanceUID) conds.push(eq(radiologyWorklistTable.studyInstanceUID, studyInstanceUID));
-  conds.push(eq(radiologyWorklistTable.accessionNumber, accessionNumber));
+  // ── Patient matching ──────────────────────────────────────────────────────
+  // Conquest sends PatientID as a free-text string (UHID, care number, etc.).
+  // We store the raw value in dicom_patient_id, then try to resolve it to an
+  // internal patients.id integer. If unresolvable, the row stays UNMATCHED so
+  // radiologists can still see and report the study.
+  const rawDicomPatientId = b.patientId !== undefined ? String(b.patientId).trim() : null;
+  let resolvedPatientId: number | null = null;
+  let patientMatchStatus = "UNMATCHED";
 
+  if (rawDicomPatientId) {
+    const numericId = Number(rawDicomPatientId);
+    const matchCond = Number.isInteger(numericId) && numericId > 0
+      ? or(eq(patientsTable.id, numericId), eq(patientsTable.patientId, rawDicomPatientId))
+      : eq(patientsTable.patientId, rawDicomPatientId);
+
+    const [matched] = await db
+      .select({ id: patientsTable.id })
+      .from(patientsTable)
+      .where(matchCond!)
+      .limit(1);
+
+    if (matched) {
+      resolvedPatientId = matched.id;
+      patientMatchStatus = "MATCHED";
+    }
+  }
+
+  // ── Deduplication ─────────────────────────────────────────────────────────
   let existing: typeof radiologyWorklistTable.$inferSelect | undefined;
   if (studyInstanceUID) {
     const rows = await db
@@ -189,7 +222,9 @@ router.post("/radiology/studies", async (req, res) => {
 
   const values = {
     studyId: b.studyId ?? null,
-    patientId: b.patientId ?? null,
+    patientId: resolvedPatientId,
+    dicomPatientId: rawDicomPatientId,
+    patientMatchStatus,
     patientName: b.patientName.trim(),
     age: b.age ?? null,
     sex: b.sex ?? null,

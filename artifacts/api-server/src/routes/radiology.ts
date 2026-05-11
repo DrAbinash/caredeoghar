@@ -709,6 +709,35 @@ radiologyRouter.get("/pacs-dashboard", async (_req, res) => {
   });
 });
 
+// ── Conquest integration status ────────────────────────────────────────────
+// GET /api/radiology/conquest-status
+// Staff-gated health probe used by the PACS Dashboard badge.
+// Returns whether Conquest host is configured and when the last study arrived.
+radiologyRouter.get("/conquest-status", async (_req, res) => {
+  const [hostSetting] = await db
+    .select({ value: pacsSettingsTable.value })
+    .from(pacsSettingsTable)
+    .where(and(eq(pacsSettingsTable.key, "conquest_host"), eq(pacsSettingsTable.category, "conquest")))
+    .limit(1);
+
+  const configured = !!(hostSetting?.value?.trim());
+
+  const [lastStudy] = await db
+    .select({ createdAt: radiologyWorklistTable.createdAt, accessionNumber: radiologyWorklistTable.accessionNumber })
+    .from(radiologyWorklistTable)
+    .orderBy(desc(radiologyWorklistTable.createdAt))
+    .limit(1);
+
+  const lastReceived = lastStudy?.createdAt ?? null;
+  const lastAccession = lastStudy?.accessionNumber ?? null;
+
+  const status: "ready" | "not-configured" | "no-activity" = configured
+    ? lastReceived ? "ready" : "no-activity"
+    : "not-configured";
+
+  res.json({ configured, status, lastStudyReceived: lastReceived, lastAccessionNumber: lastAccession });
+});
+
 // ── PACS Logs ──────────────────────────────────────────────────────────────
 // GET /api/radiology/pacs-logs?severity=&limit=
 radiologyRouter.get("/pacs-logs", async (req, res) => {

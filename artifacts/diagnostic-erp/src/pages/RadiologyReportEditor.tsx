@@ -323,12 +323,16 @@ export default function RadiologyReportEditor({ studyId }: { studyId: number }) 
             <div className="flex flex-wrap gap-2 items-end">
               <div className="flex flex-col gap-1.5 flex-1 min-w-[180px]">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Template</label>
-                <Select value={selectedTemplate} onValueChange={setSelectedTemplate} disabled={isFinal}>
+                <Select
+                  value={selectedTemplate || "__auto__"}
+                  onValueChange={(v) => setSelectedTemplate(v === "__auto__" ? "" : v)}
+                  disabled={isFinal}
+                >
                   <SelectTrigger className="text-sm">
                     <SelectValue placeholder="Auto-detect from modality" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Auto-detect</SelectItem>
+                    <SelectItem value="__auto__">Auto-detect</SelectItem>
                     {TEMPLATE_NAMES.map((t) => (
                       <SelectItem key={t} value={t}>{t}</SelectItem>
                     ))}
