@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import QRCode from "qrcode";
 import { api } from "@/lib/fetchApi";
 import { readStaffSession } from "@/lib/staffSession";
+import { getBillPrintLayout, getLayoutStyles } from "@/lib/billPrintLayout";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1599,7 +1600,9 @@ export default function BillingDesk() {
         </div>
       </div>
       {/* ── Hidden Print Receipt (shown only when printing) ── */}
-      {lastBill && Array.from({ length: Math.max(1, Math.min(2, Number(clinic?.billPrintCopies ?? 1) || 1)) }).map((_, copyIdx) => (
+      {lastBill && Array.from({ length: Math.max(1, Math.min(2, Number(clinic?.billPrintCopies ?? 1) || 1)) }).map((_, copyIdx) => {
+        const bdLs = getLayoutStyles(getBillPrintLayout());
+        return (
         <div key={copyIdx} className="billing-desk-receipt" style={copyIdx > 0 ? { pageBreakBefore: "always" } : undefined}>
           <style>{`
             @media print {
@@ -1615,12 +1618,12 @@ export default function BillingDesk() {
                 position: absolute !important;
                 top: 0 !important; left: 0 !important; right: 0 !important;
                 margin: 0 !important;
-                padding: 4mm 5mm !important;
+                padding: 0 3mm !important;
                 max-width: none !important;
                 text-transform: uppercase;
               }
               .billing-desk-receipt .bdr-keep-case { text-transform: none !important; }
-              @page { size: A5; margin: 4mm 5mm; }
+              @page { size: A5; margin: 2mm 3mm; }
             }
             .billing-desk-receipt {
               display: none;
@@ -1719,16 +1722,16 @@ export default function BillingDesk() {
 
             <table className="bdr-table" style={{ fontSize: 10 }}>
             <thead>
-              <tr>
-                <th>#</th>
-                <th>Test Name</th>
-                {(clinic?.billShowCategory ?? true) && <th>Category</th>}
-                <th className="text-right">Amount (₹)</th>
+              <tr style={{ background: bdLs.tableHeaderBg, color: bdLs.tableHeaderColor, borderBottom: bdLs.tableRowBorderBottom }}>
+                <th style={{ padding: bdLs.tableHeaderPad }}>#</th>
+                <th style={{ padding: bdLs.tableHeaderPad }}>Test Name</th>
+                {(clinic?.billShowCategory ?? true) && <th style={{ padding: bdLs.tableHeaderPad }}>Category</th>}
+                <th className="text-right" style={{ padding: bdLs.tableHeaderPad }}>Amount (₹)</th>
               </tr>
             </thead>
             <tbody>
               {lastBill.tests.map((t, i) => (
-                <tr key={t.testId}>
+                <tr key={t.testId} style={{ background: bdLs.tableRowAltBg(i), borderBottom: bdLs.tableRowBorderBottom }}>
                   <td>{i + 1}</td>
                   <td style={{ fontWeight: 600 }}>{t.name}</td>
                   {(clinic?.billShowCategory ?? true) && <td>{t.category}</td>}
@@ -1782,14 +1785,20 @@ export default function BillingDesk() {
           })()}
 
           <div className="bdr-footer">
-            <p>
-              {clinic?.footerNote || "Thank you for choosing our diagnostic services."}
-              {(() => { const n = readStaffSession()?.user?.name; return n ? `  •  Billed by: ${n}` : ""; })()}
-              {"  •  Computer-generated invoice. No signature required."}
-            </p>
+            {(() => {
+              const n = readStaffSession()?.user?.name;
+              const meta = [n ? `Billed by: ${n}` : null, "Computer-generated — No signature required"].filter(Boolean).join(" · ");
+              return (
+                <>
+                  <p className="bdr-keep-case">{clinic?.footerNote || "Thank you for choosing our diagnostic services."}</p>
+                  <p className="bdr-keep-case">{meta}</p>
+                </>
+              );
+            })()}
           </div>
         </div>
-      ))}
+        );
+      })}
 
       {/* ── Quick Test slot picker dialog ── */}
       <Dialog

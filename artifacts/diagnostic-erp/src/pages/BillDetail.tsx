@@ -20,6 +20,7 @@ import { useForm } from "react-hook-form";
 import { useSuperAdmin, getSuperAdminToken } from "@/hooks/useSuperAdmin";
 import { readStaffSession } from "@/lib/staffSession";
 import { useToast } from "@/hooks/use-toast";
+import { getBillPrintLayout, getLayoutStyles } from "@/lib/billPrintLayout";
 
 type PaymentForm = {
   amount: number;
@@ -95,6 +96,8 @@ export default function BillDetail({ id }: { id: number }) {
   const [reprintReason, setReprintReason] = useState<string>("");
   const [isReprint, setIsReprint] = useState(false);
   const [paperSize, setPaperSize] = useState<"A4" | "A5">(() => (localStorage.getItem("diagnosticErp:billPaperSize") as "A4" | "A5") || "A5");
+  const billPrintLayout = getBillPrintLayout();
+  const ls = getLayoutStyles(billPrintLayout);
   const queryClient = useQueryClient();
   const superAdmin = useSuperAdmin();
 
@@ -659,7 +662,7 @@ export default function BillDetail({ id }: { id: number }) {
             position: absolute !important;
             top: 0 !important; left: 0 !important; right: 0 !important;
             margin: 0 !important;
-            padding: ${paperSize === "A5" ? "4px 8px" : "16px 22px"} !important;
+            padding: ${paperSize === "A5" ? "0 4px" : "8px 12px"} !important;
             background: white !important;
             color: black !important;
             font-family: Arial, sans-serif !important;
@@ -667,7 +670,7 @@ export default function BillDetail({ id }: { id: number }) {
             text-transform: uppercase !important;
           }
           .print-receipt .pr-keep-case { text-transform: none !important; }
-          @page { size: ${paperSize}; margin: ${paperSize === "A5" ? "4mm 5mm" : "8mm 10mm"}; }
+          @page { size: ${paperSize}; margin: ${paperSize === "A5" ? "2mm 3mm" : "4mm 6mm"}; }
           ${isBW ? `
           /* ── B&W mode: high-contrast print for monochrome laser printers ── */
           .print-receipt-bw {
@@ -832,20 +835,20 @@ export default function BillDetail({ id }: { id: number }) {
             <div style={{ fontSize: "10px", fontWeight: "700", textTransform: "uppercase", color: "#64748b", marginBottom: "6px" }}>Tests / Services</div>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: paperSize === "A5" ? "10px" : "12px" }}>
               <thead>
-                <tr style={{ background: "#1e40af", color: "white" }}>
-                  {(clinic?.billShowCode ?? true) && <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: "600" }}>Code</th>}
-                  <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: "600" }}>Test / Service</th>
-                  {(clinic?.billShowCategory ?? true) && <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: "600" }}>Category</th>}
+                <tr style={{ background: ls.tableHeaderBg, color: ls.tableHeaderColor }}>
+                  {(clinic?.billShowCode ?? true) && <th style={{ padding: ls.tableHeaderPad, textAlign: "left", fontWeight: "600" }}>Code</th>}
+                  <th style={{ padding: ls.tableHeaderPad, textAlign: "left", fontWeight: "600" }}>Test / Service</th>
+                  {(clinic?.billShowCategory ?? true) && <th style={{ padding: ls.tableHeaderPad, textAlign: "left", fontWeight: "600" }}>Category</th>}
                   {clinic?.showTatOnBill && (
-                    <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: "600" }}>TAT</th>
+                    <th style={{ padding: ls.tableHeaderPad, textAlign: "left", fontWeight: "600" }}>TAT</th>
                   )}
-                  <th style={{ padding: "7px 10px", textAlign: "right", fontWeight: "600" }}>Amount (₹)</th>
+                  <th style={{ padding: ls.tableHeaderPad, textAlign: "right", fontWeight: "600" }}>Amount (₹)</th>
                 </tr>
               </thead>
               <tbody>
                 {bill.order.tests.map((ot, i) => (
-                  <tr key={ot.id} style={{ background: i % 2 === 0 ? "#f8fafc" : "white", borderBottom: "1px solid #e2e8f0" }}>
-                    {(clinic?.billShowCode ?? true) && <td style={{ padding: "6px 10px", fontFamily: "monospace", fontWeight: "700", color: "#1e40af" }}>{ot.test?.code}</td>}
+                  <tr key={ot.id} style={{ background: ls.tableRowAltBg(i), borderBottom: ls.tableRowBorderBottom }}>
+                    {(clinic?.billShowCode ?? true) && <td style={{ padding: "6px 10px", fontFamily: "monospace", fontWeight: "700", color: ls.accentColor }}>{ot.test?.code}</td>}
                     <td style={{ padding: "6px 10px", fontWeight: "600" }}>{ot.test?.name}</td>
                     {(clinic?.billShowCategory ?? true) && <td style={{ padding: "6px 10px", color: "#666" }}>{ot.test?.category}</td>}
                     {clinic?.showTatOnBill && (
@@ -879,7 +882,7 @@ export default function BillDetail({ id }: { id: number }) {
                   <td style={{ padding: "4px 10px", textAlign: "right" }}>₹{Number(bill.taxAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                 </tr>
               )}
-              <tr style={{ background: "#1e40af", color: "white", fontWeight: "700" }}>
+              <tr style={{ background: ls.totalRowBg, color: ls.totalRowColor, fontWeight: "700", borderTop: ls.totalRowBorder }}>
                 <td style={{ padding: "7px 10px", fontSize: "13px" }}>Total Amount</td>
                 <td style={{ padding: "7px 10px", textAlign: "right", fontSize: "13px" }}>₹{Number(bill.totalAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
               </tr>
@@ -924,20 +927,21 @@ export default function BillDetail({ id }: { id: number }) {
           </div>
         )}
 
-        {/* Footer — single condensed line */}
+        {/* Footer */}
         {(() => {
           const billedBy = readStaffSession()?.user?.name ?? "";
+          const footerMeta = [billedBy ? `Billed by: ${billedBy}` : null, "Computer-generated — No signature required"].filter(Boolean).join(" · ");
           return (
-            <div style={{ borderTop: "1px dashed #cbd5e1", paddingTop: "8px", textAlign: "center" }}>
-              {isCancelled || bill.balanceAmount <= 0 ? (
-                <div style={{ fontSize: "11px", color: "#16a34a", fontWeight: "700", marginBottom: "4px" }}>✓ Payment Received in Full — Thank You!</div>
-              ) : (
-                <div style={{ fontSize: "11px", color: "#dc2626", fontWeight: "700", marginBottom: "4px" }}>Balance of ₹{Number(bill.balanceAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })} is pending</div>
+            <div style={{ borderTop: "1px solid #d1d5db", paddingTop: "5px", marginTop: "4px" }}>
+              {!isCancelled && bill.balanceAmount <= 0 && (
+                <div style={{ fontSize: "10px", color: "#16a34a", fontWeight: "700", textAlign: "center", marginBottom: "2px" }}>✓ PAID IN FULL — THANK YOU!</div>
               )}
-              <div style={{ fontSize: "9.5px", color: "#94a3b8" }}>
-                {clinic?.footerNote || "Thank you for choosing our diagnostic services."}
-                {billedBy ? `  •  Billed by: ${billedBy}` : ""}
-                {"  •  Computer-generated invoice. No signature required."}
+              {!isCancelled && bill.balanceAmount > 0 && (
+                <div style={{ fontSize: "10px", color: "#dc2626", fontWeight: "700", textAlign: "center", marginBottom: "2px" }}>BALANCE DUE: ₹{Number(bill.balanceAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div>
+              )}
+              <div className="pr-keep-case" style={{ fontSize: "8.5px", color: "#888", textAlign: "center", lineHeight: 1.6 }}>
+                <div>{clinic?.footerNote || "Thank you for choosing our diagnostic services."}</div>
+                <div>{footerMeta}</div>
               </div>
             </div>
           );

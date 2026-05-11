@@ -467,6 +467,7 @@ type ClinicSettings = {
 import { SIDEBAR_THEMES as SIDEBAR_THEME_PRESETS, parseCustomHex, buildCustomTheme } from "@/lib/sidebarThemes";
 import { useUserTheme } from "@/lib/userTheme";
 import { readStaffSession } from "@/lib/staffSession";
+import { getBillPrintLayout, setBillPrintLayout, BILL_LAYOUTS, type BillLayout } from "@/lib/billPrintLayout";
 
 function ThemeGrid({
   themes,
@@ -773,6 +774,7 @@ function ClinicInfoTab() {
   });
   const [form, setForm] = useState<ClinicSettings | null>(null);
   const [uploadErr, setUploadErr] = useState("");
+  const [billLayout, setBillLayoutLocal] = useState<BillLayout>(() => getBillPrintLayout());
 
   const current = form ?? settings ?? null;
 
@@ -969,8 +971,110 @@ function ClinicInfoTab() {
               </span>
             </button>
           </div>
+          {/* Receipt Layout Style */}
+          <div>
+            <p className="text-sm font-medium mb-1">Receipt Layout Style</p>
+            <p className="text-xs text-muted-foreground mb-3">Choose how the printed bill looks. Saved instantly on this device — no Save required.</p>
+            <div className="grid grid-cols-3 gap-3">
+              {BILL_LAYOUTS.map((preset) => {
+                const active = billLayout === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => { setBillLayoutLocal(preset.id); setBillPrintLayout(preset.id); }}
+                    className={`rounded-lg border p-2 text-left transition-all ${active ? "border-blue-400 ring-2 ring-blue-200 dark:ring-blue-900" : "border-card-border hover:border-muted-foreground/40"}`}
+                  >
+                    {/* Mini dummy bill preview */}
+                    <div className="w-full rounded overflow-hidden border border-border mb-2" style={{ background: "#fff", fontFamily: "Arial, sans-serif", fontSize: "4px", lineHeight: 1.4, color: "#222" }}>
+                      {/* Header bar */}
+                      <div style={{
+                        borderBottom: preset.id === "classic" ? "2px solid #1e40af" : preset.id === "compact" ? "2px solid #111" : "1px solid #888",
+                        padding: "4px 5px 3px",
+                        display: "flex", alignItems: "flex-start", gap: 3, justifyContent: "space-between",
+                      }}>
+                        <div>
+                          <div style={{ fontSize: "6px", fontWeight: 800, color: preset.id === "classic" ? "#1e40af" : "#111" }}>CARE DIAGNOSTICS</div>
+                          <div style={{ fontSize: "4px", color: "#666" }}>Subhash Chowk, Castair's Town</div>
+                          <div style={{ fontSize: "4px", color: "#666" }}>Ph: 9973497200</div>
+                        </div>
+                        <div style={{ width: 12, height: 12, background: "#f0f0f0", border: "1px solid #ccc", borderRadius: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 3, color: "#999" }}>QR</div>
+                      </div>
+                      {/* Bill title + patient */}
+                      <div style={{ padding: "2px 5px", borderBottom: "1px solid #e2e8f0" }}>
+                        <div style={{ fontSize: "5px", fontWeight: 700, letterSpacing: "0.5px" }}>INVOICE / RECEIPT</div>
+                        <div style={{ fontSize: "4px", color: "#444" }}>AJMAL KHAN · 38 YRS / M</div>
+                        <div style={{ fontSize: "4px", color: "#666" }}>Ref: Self / Walk-in · Bill: 2026050206</div>
+                      </div>
+                      {/* Tests table */}
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "4px" }}>
+                        <thead>
+                          <tr style={{
+                            background: preset.id === "classic" ? "#1e40af" : preset.id === "compact" ? "#f0f0f0" : "transparent",
+                            color: preset.id === "classic" ? "#fff" : "#111",
+                            borderBottom: preset.id === "minimal" ? "1px solid #888" : "none",
+                          }}>
+                            <th style={{ padding: "2px 4px", textAlign: "left", fontWeight: 600 }}>#</th>
+                            <th style={{ padding: "2px 4px", textAlign: "left", fontWeight: 600 }}>Test Name</th>
+                            <th style={{ padding: "2px 4px", textAlign: "right", fontWeight: 600 }}>Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {["USG WHOLE ABDOMEN", "BLOOD COUNT"].map((name, i) => (
+                            <tr key={name} style={{
+                              background: preset.id === "classic" ? (i % 2 === 0 ? "#f8fafc" : "#fff") : "#fff",
+                              borderBottom: preset.id === "minimal" ? "1px solid #eee" : preset.id === "compact" ? "1px solid #bbb" : "1px solid #e2e8f0",
+                            }}>
+                              <td style={{ padding: "1.5px 4px" }}>{i + 1}</td>
+                              <td style={{ padding: "1.5px 4px", fontWeight: 600 }}>{name}</td>
+                              <td style={{ padding: "1.5px 4px", textAlign: "right" }}>₹{i === 0 ? "1,500" : "350"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {/* Total row */}
+                      <div style={{ display: "flex", justifyContent: "flex-end", padding: "2px 4px" }}>
+                        <table style={{ fontSize: "4px", borderCollapse: "collapse" }}>
+                          <tbody>
+                            <tr>
+                              <td style={{ padding: "1px 4px", color: "#666" }}>Subtotal</td>
+                              <td style={{ padding: "1px 4px", textAlign: "right" }}>₹1,850.00</td>
+                            </tr>
+                            <tr style={{
+                              background: preset.id === "classic" ? "#1e40af" : preset.id === "compact" ? "#e8e8e8" : "transparent",
+                              color: preset.id === "classic" ? "#fff" : "#111",
+                              fontWeight: 700,
+                              borderTop: preset.id === "minimal" ? "1.5px solid #555" : preset.id === "compact" ? "1px solid #999" : "none",
+                            }}>
+                              <td style={{ padding: "2px 4px" }}>Total</td>
+                              <td style={{ padding: "2px 4px", textAlign: "right" }}>₹1,850.00</td>
+                            </tr>
+                            <tr>
+                              <td style={{ padding: "1px 4px", color: "#16a34a" }}>Paid</td>
+                              <td style={{ padding: "1px 4px", textAlign: "right", color: "#16a34a" }}>₹1,850.00</td>
+                            </tr>
+                            <tr style={{ fontWeight: 700, color: "#16a34a", borderTop: "1px solid #ddd" }}>
+                              <td style={{ padding: "1.5px 4px" }}>Balance</td>
+                              <td style={{ padding: "1.5px 4px", textAlign: "right" }}>₹0.00</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      {/* Footer */}
+                      <div style={{ borderTop: "1px dashed #ccc", padding: "2px 4px", textAlign: "center", color: "#999", fontSize: "3.5px" }}>
+                        Thank you for choosing our services. · Computer-generated invoice.
+                      </div>
+                    </div>
+                    <div className={`text-xs font-semibold ${active ? "text-blue-700 dark:text-blue-300" : "text-foreground"}`}>{preset.label}</div>
+                    <div className="text-[10px] text-muted-foreground leading-snug mt-0.5">{preset.description}</div>
+                    {active && <div className="mt-1 text-[10px] font-semibold text-blue-600 dark:text-blue-400">✓ Active</div>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <p className="text-[11px] text-muted-foreground leading-relaxed">
-            Click <strong>Save Changes</strong> after adjusting to apply.
+            Layout applies immediately to new prints. Click <strong>Save Changes</strong> after adjusting paper size / columns.
           </p>
         </div>
 
