@@ -4,6 +4,8 @@ import {
   radiologyStudiesTable, radiologyFilmIssuesTable, radiologyShareLinksTable,
   testsTable, patientsTable, ordersTable, orderTestsTable,
   billsTable, reportTemplatesTable, staffTable, radiologyPromptsTable,
+  radiologyWorklistTable,
+  pacsSettingsTable, dicomModalitiesTable, pacsLogsTable,
 } from "@workspace/db/schema";
 import { and, asc, desc, eq, gte, ilike, isNull, lte, or, sql } from "drizzle-orm";
 import crypto from "node:crypto";
@@ -652,5 +654,199 @@ void or;
 void gte;
 void lte;
 void ordersTable;
+
+// ── PACS Dashboard ─────────────────────────────────────────────────────────
+// GET /api/radiology/pacs-dashboard
+radiologyRouter.get("/pacs-dashboard", async (_req, res) => {
+  const today = todayISO();
+
+  // Worklist status breakdown (all time)
+  const statusRows = await db
+    .select({ status: radiologyWorklistTable.status, count: sql<number>`count(*)::int` })
+    .from(radiologyWorklistTable)
+    .groupBy(radiologyWorklistTable.status);
+
+  // Modality breakdown (all time)
+  const modalityRows = await db
+    .select({ modality: radiologyWorklistTable.modality, count: sql<number>`count(*)::int` })
+    .from(radiologyWorklistTable)
+    .groupBy(radiologyWorklistTable.modality);
+
+  // Today's counts
+  const todayRows = await db
+    .select({ status: radiologyWorklistTable.status, count: sql<number>`count(*)::int` })
+    .from(radiologyWorklistTable)
+    .where(sql`DATE(${radiologyWorklistTable.createdAt}) = ${today}::date`)
+    .groupBy(radiologyWorklistTable.status);
+
+  const byStatus: Record<string, number> = {};
+  for (const r of statusRows) byStatus[r.status] = r.count;
+
+  const byModality: Record<string, number> = {};
+  for (const r of modalityRows) byModality[r.modality] = r.count;
+
+  const todayTotal = todayRows.reduce((s, r) => s + r.count, 0);
+  const todayReported = todayRows
+    .filter((r) => r.status === "REPORT_FINAL" || r.status === "DELIVERED")
+    .reduce((s, r) => s + r.count, 0);
+
+  // Recent PACS log events
+  const recentEvents = await db
+    .select()
+    .from(pacsLogsTable)
+    .orderBy(sql`created_at DESC`)
+    .limit(30);
+
+  res.json({
+    worklist: {
+      total: Object.values(byStatus).reduce((s, n) => s + n, 0),
+      byStatus,
+      byModality,
+      todayTotal,
+      todayReported,
+    },
+    recentEvents,
+  });
+});
+
+// ── PACS Logs ──────────────────────────────────────────────────────────────
+// GET /api/radiology/pacs-logs?severity=&limit=
+radiologyRouter.get("/pacs-logs", async (req, res) => {
+  const severity = (req.query.severity as string) || "all";
+  const limit = Math.min(Number(req.query.limit) || 200, 500);
+
+  const conds = severity && severity !== "all"
+    ? [eq(pacsLogsTable.severity, severity)]
+    : [];
+
+  const rows = await db
+    .select()
+    .from(pacsLogsTable)
+    .where(conds.length > 0 ? and(...conds) : undefined)
+    .orderBy(sql`created_at DESC`)
+    .limit(limit);
+
+  res.json(rows);
+});
+
+// POST /api/radiology/pacs-logs
+radiologyRouter.post("/pacs-logs", async (req, res) => {
+  const b = (req.body ?? {}) as {
+    message?: string; severity?: string; source?: string; eventType?: string;
+    logType?: string; studyInstanceUid?: string; accessionNumber?: string;
+    patientId?: string; modality?: string; payload?: string; errorStack?: string;
+  };
+  if (!b.message?.trim()) { res.status(400).json({ error: "message is required" }); return; }
+
+  const VALID_SEV = ["info", "warning", "error", "debug"];
+  const [row] = await db.insert(pacsLogsTable).values({
+    message:          b.message.trim(),
+    severity:         VALID_SEV.includes(b.severity ?? "") ? b.severity! : "info",
+    source:           b.source ?? null,
+    eventType:        b.eventType ?? null,
+    logType:          b.logType ?? null,
+    studyInstanceUid: b.studyInstanceUid ?? null,
+    accessionNumber:  b.accessionNumber ?? null,
+    patientId:        b.patientId ?? null,
+    modality:         b.modality ?? null,
+    payload:          b.payload ?? null,
+    errorStack:       b.errorStack ?? null,
+  }).returning();
+  res.status(201).json(row);
+});
+
+// ── PACS Settings ──────────────────────────────────────────────────────────
+// GET /api/radiology/pacs-settings
+radiologyRouter.get("/pacs-settings", async (_req, res) => {
+  const rows = await db.select().from(pacsSettingsTable).orderBy(pacsSettingsTable.category, pacsSettingsTable.key);
+  res.json(rows);
+});
+
+// POST /api/radiology/pacs-settings  (upsert by key+category)
+radiologyRouter.post("/pacs-settings", async (req, res) => {
+  const b = (req.body ?? {}) as { key?: string; value?: string; category?: string; isSecret?: boolean; id?: number };
+  if (!b.key?.trim()) { res.status(400).json({ error: "key is required" }); return; }
+
+  const key = b.key.trim();
+  const category = b.category?.trim() || "general";
+
+  // If id provided, update that row; otherwise upsert by key+category
+  if (b.id) {
+    const [row] = await db.update(pacsSettingsTable)
+      .set({ value: b.value ?? null, isSecret: b.isSecret ?? false, updatedAt: new Date() })
+      .where(eq(pacsSettingsTable.id, b.id))
+      .returning();
+    res.json(row);
+  } else {
+    const [row] = await db.insert(pacsSettingsTable)
+      .values({ key, value: b.value ?? null, category, isSecret: b.isSecret ?? false })
+      .onConflictDoUpdate({
+        target: [pacsSettingsTable.key, pacsSettingsTable.category],
+        set: { value: b.value ?? null, isSecret: b.isSecret ?? false, updatedAt: new Date() },
+      })
+      .returning();
+    res.status(201).json(row);
+  }
+});
+
+// DELETE /api/radiology/pacs-settings/:id
+radiologyRouter.delete("/pacs-settings/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.delete(pacsSettingsTable).where(eq(pacsSettingsTable.id, id));
+  res.json({ ok: true });
+});
+
+// ── DICOM Modalities ───────────────────────────────────────────────────────
+// GET /api/radiology/modalities
+radiologyRouter.get("/modalities", async (_req, res) => {
+  const rows = await db.select().from(dicomModalitiesTable).orderBy(dicomModalitiesTable.machineName);
+  res.json(rows);
+});
+
+// POST /api/radiology/modalities  (insert or update)
+radiologyRouter.post("/modalities", async (req, res) => {
+  const b = (req.body ?? {}) as {
+    id?: number; machineName?: string; modality?: string; aeTitle?: string;
+    ipAddress?: string; port?: number; location?: string;
+    autoSendEnabled?: boolean; isActive?: boolean;
+  };
+
+  if (b.id) {
+    // Partial update of an existing modality
+    const updates: Partial<typeof dicomModalitiesTable.$inferInsert> = { updatedAt: new Date() };
+    if (b.machineName !== undefined) updates.machineName = b.machineName;
+    if (b.modality !== undefined) updates.modality = b.modality;
+    if (b.aeTitle !== undefined) updates.aeTitle = b.aeTitle;
+    if (b.ipAddress !== undefined) updates.ipAddress = b.ipAddress;
+    if (b.port !== undefined) updates.port = b.port;
+    if (b.location !== undefined) updates.location = b.location;
+    if (b.autoSendEnabled !== undefined) updates.autoSendEnabled = b.autoSendEnabled;
+    if (b.isActive !== undefined) updates.isActive = b.isActive;
+    const [row] = await db.update(dicomModalitiesTable).set(updates).where(eq(dicomModalitiesTable.id, b.id)).returning();
+    res.json(row);
+  } else {
+    if (!b.machineName?.trim()) { res.status(400).json({ error: "machineName is required" }); return; }
+    const [row] = await db.insert(dicomModalitiesTable).values({
+      machineName:     b.machineName.trim(),
+      modality:        b.modality ?? null,
+      aeTitle:         b.aeTitle ?? null,
+      ipAddress:       b.ipAddress ?? null,
+      port:            b.port ?? null,
+      location:        b.location ?? null,
+      autoSendEnabled: b.autoSendEnabled ?? true,
+      isActive:        b.isActive ?? true,
+    }).returning();
+    res.status(201).json(row);
+  }
+});
+
+// DELETE /api/radiology/modalities/:id
+radiologyRouter.delete("/modalities/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.delete(dicomModalitiesTable).where(eq(dicomModalitiesTable.id, id));
+  res.json({ ok: true });
+});
 
 export default radiologyRouter;

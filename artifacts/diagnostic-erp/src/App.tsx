@@ -39,6 +39,9 @@ const QueuePage       = lazy(() => import("@/pages/Queue"));
 const Radiology       = lazy(() => import("@/pages/Radiology"));
 const RadiologyWorklist = lazy(() => import("@/pages/RadiologyWorklist"));
 const RadiologyReportEditor = lazy(() => import("@/pages/RadiologyReportEditor"));
+const PacsDashboard   = lazy(() => import("@/pages/PacsDashboard"));
+const PacsSettings    = lazy(() => import("@/pages/PacsSettings"));
+const PacsLogs        = lazy(() => import("@/pages/PacsLogs"));
 const ReportHub       = lazy(() => import("@/pages/ReportHub"));
 const Machines        = lazy(() => import("@/pages/Machines"));
 const FormF           = lazy(() => import("@/pages/FormF"));
@@ -73,8 +76,9 @@ const queryClient = new QueryClient({
 });
 
 const ERP_NAV_ORDER = [
-  "/", "/dashboard", "/daily-summary", "/patients", "/appointments", "/queue", "/online-bookings", "/radiology", "/radiology/worklist", "/orders",
-  "/tests", "/packages", "/billing", "/payments", "/reports",
+  "/", "/dashboard", "/daily-summary", "/patients", "/appointments", "/queue", "/online-bookings",
+  "/radiology", "/radiology/worklist", "/radiology/pacs-dashboard", "/radiology/pacs-settings", "/radiology/pacs-logs",
+  "/orders", "/tests", "/packages", "/billing", "/payments", "/reports",
   "/report-generator", "/report-hub", "/inventory", "/expenses", "/staff", "/referrals",
   "/accounting", "/discounts", "/form-f", "/pacs", "/machines", "/hr-forms", "/website", "/settings",
 ];
@@ -146,6 +150,9 @@ function Router() {
               <Route path="/radiology/report/:studyId">
                 {(params) => <RadiologyReportEditor studyId={Number(params.studyId)} />}
               </Route>
+              <Route path="/radiology/pacs-dashboard" component={PacsDashboard} />
+              <Route path="/radiology/pacs-settings" component={PacsSettings} />
+              <Route path="/radiology/pacs-logs" component={PacsLogs} />
               <Route path="/packages" component={Packages} />
               <Route path="/expenses" component={Expenses} />
               <Route path="/staff" component={Staff} />

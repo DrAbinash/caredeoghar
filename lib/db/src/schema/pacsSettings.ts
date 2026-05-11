@@ -1,0 +1,54 @@
+import { pgTable, serial, text, boolean, integer, timestamp } from "drizzle-orm/pg-core";
+
+// pacs_settings — key/value store for PACS-level configuration (Conquest host,
+// port, AE title, auto-send toggles, report delivery settings, etc.)
+export const pacsSettingsTable = pgTable("pacs_settings", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull(),
+  value: text("value"),
+  category: text("category").notNull().default("general"),
+  isSecret: boolean("is_secret").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+// dicom_modalities — individual imaging machines (CT, MRI, X-Ray, USG) that
+// push studies to Conquest. Separate from dicom_nodes (which are PACS pull targets).
+export const dicomModalitiesTable = pgTable("dicom_modalities", {
+  id: serial("id").primaryKey(),
+  machineName: text("machine_name").notNull(),
+  modality: text("modality"),
+  aeTitle: text("ae_title"),
+  ipAddress: text("ip_address"),
+  port: integer("port"),
+  location: text("location"),
+  autoSendEnabled: boolean("auto_send_enabled").notNull().default(true),
+  isActive: boolean("is_active").notNull().default(true),
+  lastConnectionStatus: text("last_connection_status"),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+// pacs_logs — append-only event log written by Conquest Lua hooks and the
+// Python PACS agent. Also writable from the internal API for custom events.
+export const pacsLogsTable = pgTable("pacs_logs", {
+  id: serial("id").primaryKey(),
+  logType: text("log_type"),
+  severity: text("severity").notNull().default("info"),
+  source: text("source"),
+  eventType: text("event_type"),
+  message: text("message").notNull(),
+  studyInstanceUid: text("study_instance_uid"),
+  accessionNumber: text("accession_number"),
+  patientId: text("patient_id"),
+  modality: text("modality"),
+  payload: text("payload"),
+  errorStack: text("error_stack"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type PacsSettings = typeof pacsSettingsTable.$inferSelect;
+export type DicomModality = typeof dicomModalitiesTable.$inferSelect;
+export type PacsLog = typeof pacsLogsTable.$inferSelect;

@@ -153,6 +153,47 @@ async function runStartupMigrations(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 minutes'
       );
+      CREATE TABLE IF NOT EXISTS pacs_settings (
+        id SERIAL PRIMARY KEY,
+        key TEXT NOT NULL,
+        value TEXT,
+        category TEXT NOT NULL DEFAULT 'general',
+        is_secret BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(key, category)
+      );
+      CREATE TABLE IF NOT EXISTS dicom_modalities (
+        id SERIAL PRIMARY KEY,
+        machine_name TEXT NOT NULL,
+        modality TEXT,
+        ae_title TEXT,
+        ip_address TEXT,
+        port INTEGER,
+        location TEXT,
+        auto_send_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        last_connection_status TEXT,
+        last_seen_at TIMESTAMPTZ,
+        last_error TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS pacs_logs (
+        id SERIAL PRIMARY KEY,
+        log_type TEXT,
+        severity TEXT NOT NULL DEFAULT 'info',
+        source TEXT,
+        event_type TEXT,
+        message TEXT NOT NULL,
+        study_instance_uid TEXT,
+        accession_number TEXT,
+        patient_id TEXT,
+        modality TEXT,
+        payload TEXT,
+        error_stack TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
     `);
     logger.info("Startup migrations applied");
   } catch (err) {

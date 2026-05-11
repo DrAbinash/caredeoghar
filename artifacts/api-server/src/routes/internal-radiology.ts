@@ -22,6 +22,7 @@ import {
   radiologyAuditLogTable,
   dicomNodesTable,
   dicomPullJobsTable,
+  pacsLogsTable,
 } from "@workspace/db/schema";
 import { and, eq, or, sql, inArray } from "drizzle-orm";
 import { logger } from "../lib/logger";
@@ -701,6 +702,53 @@ Respond ONLY with the JSON object, no markdown fences.`;
   }
 
   res.json(draft);
+});
+
+// ── DICOM event ingestion ─────────────────────────────────────────────────────
+// POST /api/internal/radiology/dicom-event
+// Called by Conquest Lua hooks and the Python PACS agent to log events.
+// Any actor with INTERNAL_API_KEY can write; logs are then visible in PacsLogs.
+
+router.post("/radiology/dicom-event", async (req, res) => {
+  const b = (req.body ?? {}) as {
+    message?: string;
+    severity?: string;
+    source?: string;
+    eventType?: string;
+    logType?: string;
+    studyInstanceUid?: string;
+    accessionNumber?: string;
+    patientId?: string;
+    modality?: string;
+    payload?: unknown;
+    errorStack?: string;
+  };
+
+  if (!b.message?.trim()) {
+    res.status(400).json({ error: "message is required" });
+    return;
+  }
+
+  const VALID_SEV = ["info", "warning", "error", "debug"];
+  const payloadStr = b.payload != null
+    ? (typeof b.payload === "string" ? b.payload : JSON.stringify(b.payload))
+    : null;
+
+  const [row] = await db.insert(pacsLogsTable).values({
+    message:          b.message.trim(),
+    severity:         VALID_SEV.includes(b.severity ?? "") ? b.severity! : "info",
+    source:           b.source ?? null,
+    eventType:        b.eventType ?? null,
+    logType:          b.logType ?? "dicom-event",
+    studyInstanceUid: b.studyInstanceUid ?? null,
+    accessionNumber:  b.accessionNumber ?? null,
+    patientId:        b.patientId ?? null,
+    modality:         b.modality ?? null,
+    payload:          payloadStr,
+    errorStack:       b.errorStack ?? null,
+  }).returning();
+
+  res.status(201).json(row);
 });
 
 // ── Worklist read endpoints ───────────────────────────────────────────────────

@@ -44,3 +44,4 @@ export * from "./onlineBookings";
 export * from "./outsourcedLabs";
 export * from "./radiologyWorklist";
 export * from "./whatsappConversations";
+export * from "./pacsSettings";
