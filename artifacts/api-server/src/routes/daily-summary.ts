@@ -129,7 +129,14 @@ dailySummaryRouter.get("/", async (req, res) => {
     u.billed += Number(r.totalAmount);
   }
   for (const p of paymentItems) {
-    const u = ensureUser(p.recordedByName);
+    // Fall back to the bill's creator when the payment has no recorder name
+    // (happens for payments recorded before the recordedByName column was added,
+    //  or when the billing desk auto-print path omitted the field).
+    const recorder =
+      (p.recordedByName && p.recordedByName.trim())
+        ? p.recordedByName
+        : (allBillRows.find((b) => b.id === p.billId)?.createdByName ?? null);
+    const u = ensureUser(recorder);
     const amt = Number(p.amount);
     u.received += amt;
     const m = (p.method ?? "cash").toLowerCase();

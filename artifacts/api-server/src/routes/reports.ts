@@ -548,7 +548,12 @@ reportsRouter.get("/daily-summary", async (req, res) => {
     u.billed   += Number(r.b.totalAmount);
   }
   for (const p of payments) {
-    const u = ensureUser(p.recordedByName);
+    // Fall back to the bill's creator when the payment has no recorder name.
+    const recorder =
+      (p.recordedByName && p.recordedByName.trim())
+        ? p.recordedByName
+        : (activeBills.find((r) => r.b.id === p.billId)?.b.createdByName ?? null);
+    const u = ensureUser(recorder);
     const amt = Number(p.amount);
     u.received += amt;
     const m = p.method || "cash";
