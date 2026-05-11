@@ -81,18 +81,15 @@ const rawStaticDir = process.env["SERVE_STATIC_DIR"];
 const staticDir = rawStaticDir ? path.resolve(rawStaticDir) : undefined;
 if (staticDir) {
   const erpDir = path.join(staticDir, "erp");
-  const erpLegacyDir = path.join(staticDir, "web/erp");
   const siteDir = path.join(staticDir, "site");
-  const siteLegacyDir = path.join(staticDir, "web/site");
   const adminDir = path.join(staticDir, "super-admin-portal");
-  const adminLegacyDir = path.join(staticDir, "web/super-admin-portal");
-  const resolvedErpDir = existsSync(erpDir) ? erpDir : (existsSync(erpLegacyDir) ? erpLegacyDir : null);
-  const resolvedSiteDir = existsSync(siteDir) ? siteDir : (existsSync(siteLegacyDir) ? siteLegacyDir : null);
-  const resolvedAdminDir = existsSync(adminDir) ? adminDir : (existsSync(adminLegacyDir) ? adminLegacyDir : null);
+  const resolvedErpDir = existsSync(erpDir) ? erpDir : null;
+  const resolvedSiteDir = existsSync(siteDir) ? siteDir : null;
+  const resolvedAdminDir = existsSync(adminDir) ? adminDir : null;
 
   if (!resolvedErpDir || !resolvedAdminDir) {
     logger.warn(
-      { staticDir, erpDir, erpLegacyDir, adminDir, adminLegacyDir },
+      { staticDir, erpDir, siteDir, adminDir },
       "SERVE_STATIC_DIR is set but expected sub-folders are missing; static serving disabled",
     );
   } else {
