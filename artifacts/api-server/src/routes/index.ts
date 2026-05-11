@@ -50,6 +50,7 @@ import { websiteRouter } from "./website";
 import { systemRouter } from "./system";
 import { verifyRouter } from "./verify";
 import internalCronRouter from "./internal-cron";
+import internalRadiologyRouter from "./internal-radiology";
 import { publicBookingRouter } from "./public-booking";
 import { onlineBookingsRouter } from "./online-bookings";
 import { dailySummaryRouter } from "./daily-summary";
@@ -67,6 +68,9 @@ router.use(healthRouter);
 // Hit by a Replit Scheduled deployment (see scripts/src/trigger-cron.ts) so cron emails
 // keep firing on autoscale where in-process schedulers are disabled.
 router.use("/internal/cron", internalCronRouter);
+// Internal RIS/PACS automation endpoints — auth via INTERNAL_API_KEY bearer token.
+// Called by Conquest PACS scripts and other server-to-server automations.
+router.use("/internal", internalRadiologyRouter);
 router.use("/super-admin", superAdminRouter);
 router.use("/portal", portalRouter);
 router.use("/display", displayRouter);

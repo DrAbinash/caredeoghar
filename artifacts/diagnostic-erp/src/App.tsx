@@ -37,6 +37,8 @@ const Staff           = lazy(() => import("@/pages/Staff"));
 const HRForms         = lazy(() => import("@/pages/HRForms"));
 const QueuePage       = lazy(() => import("@/pages/Queue"));
 const Radiology       = lazy(() => import("@/pages/Radiology"));
+const RadiologyWorklist = lazy(() => import("@/pages/RadiologyWorklist"));
+const RadiologyReportEditor = lazy(() => import("@/pages/RadiologyReportEditor"));
 const ReportHub       = lazy(() => import("@/pages/ReportHub"));
 const Machines        = lazy(() => import("@/pages/Machines"));
 const FormF           = lazy(() => import("@/pages/FormF"));
@@ -71,7 +73,7 @@ const queryClient = new QueryClient({
 });
 
 const ERP_NAV_ORDER = [
-  "/", "/dashboard", "/daily-summary", "/patients", "/appointments", "/queue", "/online-bookings", "/radiology", "/orders",
+  "/", "/dashboard", "/daily-summary", "/patients", "/appointments", "/queue", "/online-bookings", "/radiology", "/radiology/worklist", "/orders",
   "/tests", "/packages", "/billing", "/payments", "/reports",
   "/report-generator", "/report-hub", "/inventory", "/expenses", "/staff", "/referrals",
   "/accounting", "/discounts", "/form-f", "/pacs", "/machines", "/hr-forms", "/website", "/settings",
@@ -140,6 +142,10 @@ function Router() {
               <Route path="/online-bookings" component={OnlineBookings} />
               <Route path="/queue" component={QueuePage} />
               <Route path="/radiology" component={Radiology} />
+              <Route path="/radiology/worklist" component={RadiologyWorklist} />
+              <Route path="/radiology/report/:studyId">
+                {(params) => <RadiologyReportEditor studyId={Number(params.studyId)} />}
+              </Route>
               <Route path="/packages" component={Packages} />
               <Route path="/expenses" component={Expenses} />
               <Route path="/staff" component={Staff} />

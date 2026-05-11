@@ -46,6 +46,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   WifiOff,
+  ScanSearch,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -90,7 +91,15 @@ const navItems: NavEntry[] = [
   { path: "/appointments", icon: CalendarDays, label: "Appointments" },
   { path: "/online-bookings", icon: ShoppingCart, label: "Online Bookings" },
   { path: "/queue", icon: Ticket, label: "Queue Tokens" },
-  { path: "/radiology", icon: Radio, label: "Radiology" },
+  {
+    id: "radiology-grp",
+    icon: Radio,
+    label: "Radiology",
+    children: [
+      { path: "/radiology", icon: Radio, label: "Study Workflow" },
+      { path: "/radiology/worklist", icon: ScanSearch, label: "PACS Worklist" },
+    ],
+  },
   {
     id: "billing-grp",
     icon: Receipt,
