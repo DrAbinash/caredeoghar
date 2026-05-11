@@ -20,6 +20,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { FULL_ACCESS_ROLES } from "@/lib/staffSession";
 
@@ -52,6 +59,11 @@ type DailySummaryData = {
     recordedByName: string | null;
     createdAt: string;
   }[];
+};
+
+type StaffOption = {
+  name: string;
+  billCount: number;
 };
 
 type ReportRow = {
@@ -120,14 +132,14 @@ export default function DailySummary() {
   const myName = session?.user.name ?? "";
 
   const [date, setDate] = useState(todayIST());
-  const [staffFilter, setStaffFilter] = useState(myName);
+  const [staffFilter, setStaffFilter] = useState("all");
   const [showPayments, setShowPayments] = useState(false);
 
   const { data, isLoading, refetch, isFetching } = useQuery<DailySummaryData>({
     queryKey: ["daily-summary", date, staffFilter],
     queryFn: () =>
       api.get(
-        `/api/daily-summary?date=${encodeURIComponent(date)}${staffFilter ? `&staffName=${encodeURIComponent(staffFilter)}` : ""}`
+        `/api/daily-summary?date=${encodeURIComponent(date)}${staffFilter !== "all" ? `&staffName=${encodeURIComponent(staffFilter)}` : ""}`
       ),
     staleTime: 30_000,
   });
@@ -138,6 +150,10 @@ export default function DailySummary() {
   const netCash = data?.grandTotal ?? 0;
   const userRows = data?.byUser ?? [];
   const detailedRows = data?.payments ?? [];
+  const staffOptions: StaffOption[] = [
+    { name: "All Staff", billCount: data?.summary.billCount ?? 0 },
+    ...userRows.map((u) => ({ name: u.userName, billCount: u.billCount })),
+  ];
   const consolidatedRows: ReportRow[] = [
     { label: "Cash", value: data?.byMethod?.cash ?? 0 },
     { label: "UPI", value: data?.byMethod?.upi ?? 0 },
@@ -151,7 +167,7 @@ export default function DailySummary() {
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-5xl mx-auto">
       <PageHeader
         title="Daily Summary"
-        subtitle={`Collections & expenses for ${staffFilter || "all staff"} on ${date}`}
+        subtitle={`Collections & expenses for ${staffFilter === "all" ? "all staff" : staffFilter} on ${date}`}
       />
 
       {/* Filters */}
@@ -167,13 +183,19 @@ export default function DailySummary() {
         </div>
         {isAdmin ? (
           <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Staff name (leave blank for all)</label>
-            <Input
-              value={staffFilter}
-              onChange={(e) => setStaffFilter(e.target.value)}
-              placeholder="All staff"
-              className="h-9 w-52"
-            />
+            <label className="text-xs font-medium text-muted-foreground">Staff name</label>
+            <Select value={staffFilter} onValueChange={setStaffFilter}>
+              <SelectTrigger className="h-9 w-52">
+                <SelectValue placeholder="All Staff" />
+              </SelectTrigger>
+              <SelectContent>
+                {staffOptions.map((s) => (
+                  <SelectItem key={s.name} value={s.name === "All Staff" ? "all" : s.name}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         ) : (
           <div className="space-y-1">
@@ -280,10 +302,12 @@ export default function DailySummary() {
                         <span>{row.userName}</span>
                         <span>{inr(row.received)}</span>
                       </div>
-                      <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground">
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs text-muted-foreground">
                         <span>Bills: {row.billCount}</span>
                         <span>Billed: {inr(row.billed)}</span>
-                        <span>Received: {inr(row.received)}</span>
+                        <span>Cash: {inr(row.methods.cash ?? 0)}</span>
+                        <span>UPI: {inr(row.methods.upi ?? 0)}</span>
+                        <span>Dues & Expense: {inr(Math.max(0, row.billed - row.received))}</span>
                       </div>
                     </div>
                   ))}

@@ -104,6 +104,7 @@ export default function Reports() {
     queryFn: () => api.get(`/api/reports/daily-summary?date=${dailyDate}`),
     enabled: activeTab === "daily",
   });
+  const todayBills = dailySummaryData?.summary.billCount ?? 0;
 
   const formatCurrency = (n: number) =>
     new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
@@ -279,7 +280,7 @@ export default function Reports() {
                       <h3 className="text-sm font-semibold">Daily Report — {new Date(dailySummaryData.date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</h3>
                       <p className="text-xs text-muted-foreground mt-0.5">Staff-wise collection breakdown</p>
                     </div>
-                    <span className="text-xs text-muted-foreground">Bills: {dailySummaryData.summary.billCount}</span>
+                    <span className="text-xs text-muted-foreground">Bills: {todayBills}</span>
                   </div>
                   {dailySummaryData.byUser && dailySummaryData.byUser.length > 0 ? (
                     <div className="overflow-x-auto">

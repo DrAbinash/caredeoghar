@@ -123,7 +123,8 @@ dailySummaryRouter.get("/", async (req, res) => {
     return row;
   };
   for (const r of activeBills) {
-    const u = ensureUser(r.createdByName);
+    const fallbackName = paymentItems.find((p) => p.billId === r.id)?.recordedByName ?? null;
+    const u = ensureUser(r.createdByName ?? fallbackName);
     u.billCount += 1;
     u.billed += Number(r.totalAmount);
   }
