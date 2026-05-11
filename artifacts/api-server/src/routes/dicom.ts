@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, dicomNodesTable, insertDicomNodeSchema } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, dicomNodesTable, dicomPullJobsTable, insertDicomNodeSchema } from "@workspace/db";
+import { eq, desc, and } from "drizzle-orm";
 import { z } from "zod/v4";
 import { getPacsProvider, tcpProbe } from "../lib/pacs/providers";
 import { requireStaffAuth } from "../middleware/requireStaffAuth";
@@ -74,6 +74,13 @@ const createOrUpdateBody = insertDicomNodeSchema.extend({
   modality: z.string().refine((m) => VALID_MODALITIES.has(m.toUpperCase()), {
     message: `Modality must be one of ${[...VALID_MODALITIES].join(", ")}`,
   }),
+  // Auto-pull fields — all optional so old clients don't break
+  autoPull: z.boolean().optional(),
+  pullIntervalMinutes: z.number().int().min(1).max(1440).optional(),
+  pullQueryDays: z.number().int().min(1).max(30).optional(),
+  conquestAeTitle: z.string().max(16).optional(),
+  conquestHost: z.string().max(253).optional(),
+  conquestPort: z.number().int().min(1).max(65535).optional(),
 });
 
 router.post("/nodes", async (req, res) => {
@@ -189,6 +196,91 @@ router.post("/test-connection", async (req, res) => {
   }
   const result = await tcpProbe(body.data.host, body.data.port, 4000);
   res.json(result);
+});
+
+// ─── Pull Jobs ───────────────────────────────────────────────────────────────
+// Staff-accessible pull job management. The actual execution happens in the
+// DICOM Pull Agent (dicom-pull-agent/) via the /api/internal/dicom/* endpoints.
+
+// List all pull jobs, optionally filtered by nodeId
+router.get("/pull-jobs", async (req, res) => {
+  const nodeId = req.query.nodeId ? Number(req.query.nodeId) : null;
+  const limit = Math.min(Number(req.query.limit ?? 50), 200);
+
+  const rows = nodeId
+    ? await db.select().from(dicomPullJobsTable)
+        .where(eq(dicomPullJobsTable.nodeId, nodeId))
+        .orderBy(desc(dicomPullJobsTable.createdAt))
+        .limit(limit)
+    : await db.select().from(dicomPullJobsTable)
+        .orderBy(desc(dicomPullJobsTable.createdAt))
+        .limit(limit);
+
+  res.json({ jobs: rows });
+});
+
+// Manually trigger a pull job for a node
+router.post("/nodes/:id/pull", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const [node] = await db.select().from(dicomNodesTable).where(eq(dicomNodesTable.id, id));
+  if (!node) {
+    res.status(404).json({ error: "DICOM node not found" });
+    return;
+  }
+  if (!node.isActive) {
+    res.status(409).json({ error: "Node is disabled" });
+    return;
+  }
+
+  // Check for already-pending job on this node to avoid duplicate queuing
+  const [existing] = await db.select().from(dicomPullJobsTable)
+    .where(and(eq(dicomPullJobsTable.nodeId, id), eq(dicomPullJobsTable.status, "pending")))
+    .limit(1);
+  if (existing) {
+    res.json({ job: existing, alreadyQueued: true });
+    return;
+  }
+
+  const today = new Date().toISOString().split("T")[0];
+  const daysBack = (node.pullQueryDays ?? 1) - 1;
+  const fromDate = new Date();
+  fromDate.setDate(fromDate.getDate() - daysBack);
+  const fromStr = fromDate.toISOString().split("T")[0];
+
+  const [job] = await db.insert(dicomPullJobsTable).values({
+    nodeId: id,
+    triggerType: "manual",
+    status: "pending",
+    queryDateFrom: fromStr,
+    queryDateTo: today,
+  }).returning();
+
+  res.status(201).json({ job });
+});
+
+// Cancel a pending job
+router.delete("/pull-jobs/:jobId", async (req, res) => {
+  const jobId = Number(req.params.jobId);
+  if (!Number.isFinite(jobId)) {
+    res.status(400).json({ error: "Invalid jobId" });
+    return;
+  }
+  const [job] = await db.select().from(dicomPullJobsTable).where(eq(dicomPullJobsTable.id, jobId));
+  if (!job) {
+    res.status(404).json({ error: "Job not found" });
+    return;
+  }
+  if (job.status !== "pending") {
+    res.status(409).json({ error: `Cannot cancel job in status '${job.status}'` });
+    return;
+  }
+  await db.update(dicomPullJobsTable).set({ status: "failed", errorMessage: "Cancelled by staff" })
+    .where(eq(dicomPullJobsTable.id, jobId));
+  res.json({ ok: true });
 });
 
 export default router;

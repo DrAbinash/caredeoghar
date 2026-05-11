@@ -1,8 +1,12 @@
 import cron from "node-cron";
 import { db } from "@workspace/db";
-import { emailSettingsTable, billsTable, billAuditsTable, paymentsTable, doctorsTable, commissionRulesTable, orderTestsTable, ordersTable, testsTable } from "@workspace/db/schema";
+import {
+  emailSettingsTable, billsTable, billAuditsTable, paymentsTable,
+  doctorsTable, commissionRulesTable, orderTestsTable, ordersTable, testsTable,
+  dicomNodesTable, dicomPullJobsTable,
+} from "@workspace/db/schema";
 import { sendDailySummaryEmail, sendCommissionMonthEndEmail } from "./email";
-import { gte, and, lte, eq, inArray } from "drizzle-orm";
+import { gte, and, lte, eq, inArray, isNull, or, lt } from "drizzle-orm";
 
 let currentTask: ReturnType<typeof cron.schedule> | null = null;
 // Track already-fired events per day to avoid double-firing
@@ -11,6 +15,75 @@ const firedToday = new Set<string>();
 export function startCronScheduler() {
   scheduleDaily();
   scheduleMonthEndCommission();
+  scheduleDicomAutoPull();
+}
+
+// ── DICOM Auto-Pull scheduler ────────────────────────────────────────────────
+// Every 5 minutes: find all active nodes with autoPull=true whose last pull
+// is older than their configured pullIntervalMinutes (or never pulled), and
+// create a new dicom_pull_job for each. The local DICOM Pull Agent picks these
+// jobs up and executes the actual findscu + movescu commands.
+
+function scheduleDicomAutoPull() {
+  cron.schedule("*/5 * * * *", async () => {
+    try {
+      await fireDicomAutoPull();
+    } catch (err) {
+      console.error("[cron] DICOM auto-pull check failed:", err);
+    }
+  });
+  console.log("[cron] DICOM auto-pull scheduler started (checks every 5 minutes)");
+}
+
+async function fireDicomAutoPull() {
+  const now = new Date();
+
+  // Fetch all active nodes with autoPull enabled
+  const nodes = await db.select().from(dicomNodesTable)
+    .where(and(eq(dicomNodesTable.isActive, true), eq(dicomNodesTable.autoPull, true)));
+
+  if (nodes.length === 0) return;
+
+  for (const node of nodes) {
+    const intervalMs = (node.pullIntervalMinutes ?? 15) * 60 * 1000;
+    const lastPull   = node.lastPullAt ? new Date(node.lastPullAt).getTime() : 0;
+    const dueAt      = lastPull + intervalMs;
+
+    if (now.getTime() < dueAt) continue; // not yet due
+
+    // Check if there's already a pending or running job for this node
+    const [existing] = await db.select({ id: dicomPullJobsTable.id })
+      .from(dicomPullJobsTable)
+      .where(
+        and(
+          eq(dicomPullJobsTable.nodeId, node.id),
+          or(
+            eq(dicomPullJobsTable.status, "pending"),
+            eq(dicomPullJobsTable.status, "running"),
+          ),
+        ),
+      )
+      .limit(1);
+
+    if (existing) continue; // already queued
+
+    // Calculate date range
+    const todayStr = now.toISOString().split("T")[0];
+    const daysBack = (node.pullQueryDays ?? 1) - 1;
+    const fromDate = new Date(now);
+    fromDate.setDate(fromDate.getDate() - daysBack);
+    const fromStr = fromDate.toISOString().split("T")[0];
+
+    await db.insert(dicomPullJobsTable).values({
+      nodeId:       node.id,
+      triggerType:  "auto",
+      status:       "pending",
+      queryDateFrom: fromStr,
+      queryDateTo:   todayStr,
+    });
+
+    console.log(`[cron] Created auto pull job for DICOM node ${node.aeTitle} (${node.modality})`);
+  }
 }
 
 function scheduleDaily() {

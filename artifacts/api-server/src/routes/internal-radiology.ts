@@ -20,8 +20,10 @@ import {
   patientsTable,
   radiologyWorklistTable,
   radiologyAuditLogTable,
+  dicomNodesTable,
+  dicomPullJobsTable,
 } from "@workspace/db/schema";
-import { and, eq, or, sql } from "drizzle-orm";
+import { and, eq, or, sql, inArray } from "drizzle-orm";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -745,6 +747,106 @@ router.get("/radiology/audit/:worklistId", async (req, res) => {
 // GET /api/internal/radiology/templates — list available template names
 router.get("/radiology/templates", (_req, res) => {
   res.json(Object.keys(RADIOLOGY_TEMPLATES).map((name) => ({ name })));
+});
+
+// ── DICOM Pull Job Agent Endpoints ────────────────────────────────────────────
+// These are called by the dicom-pull-agent service running on the Conquest
+// server machine. Auth: same INTERNAL_API_KEY bearer token.
+
+
+// GET /api/internal/dicom/pull-jobs/pending
+// The pull agent calls this every POLL_INTERVAL_MS to get queued jobs.
+// Returns jobs with status='pending', including the parent node details
+// so the agent has host/port/aeTitle/conquestAeTitle in one round-trip.
+router.get("/dicom/pull-jobs/pending", async (_req, res) => {
+  const jobs = await db.select().from(dicomPullJobsTable)
+    .where(eq(dicomPullJobsTable.status, "pending"))
+    .orderBy(dicomPullJobsTable.createdAt)
+    .limit(10);
+
+  if (jobs.length === 0) {
+    res.json({ jobs: [] });
+    return;
+  }
+
+  // Attach node details to each job
+  const nodeIds = [...new Set(jobs.map((j) => j.nodeId))];
+  const nodes = await db.select().from(dicomNodesTable)
+    .where(inArray(dicomNodesTable.id, nodeIds));
+  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+
+  res.json({
+    jobs: jobs.map((j) => ({ ...j, node: nodeMap.get(j.nodeId) ?? null })),
+  });
+});
+
+// PATCH /api/internal/dicom/pull-jobs/:jobId/claim
+// Agent calls this immediately before starting work to prevent duplicate processing.
+router.patch("/dicom/pull-jobs/:jobId/claim", async (req, res) => {
+  const jobId = Number(req.params.jobId);
+  if (!Number.isFinite(jobId)) {
+    res.status(400).json({ error: "Invalid jobId" });
+    return;
+  }
+  const [job] = await db.select().from(dicomPullJobsTable)
+    .where(eq(dicomPullJobsTable.id, jobId));
+  if (!job) {
+    res.status(404).json({ error: "Job not found" });
+    return;
+  }
+  if (job.status !== "pending") {
+    // Another agent already claimed it
+    res.status(409).json({ error: `Job already in status '${job.status}'` });
+    return;
+  }
+  const agentId = String(req.body?.agentId ?? "unknown");
+  const [updated] = await db.update(dicomPullJobsTable).set({
+    status: "running",
+    agentId,
+    startedAt: new Date(),
+  }).where(eq(dicomPullJobsTable.id, jobId)).returning();
+  res.json(updated);
+});
+
+// PATCH /api/internal/dicom/pull-jobs/:jobId
+// Agent calls this when the job finishes (success, failed, or partial).
+router.patch("/dicom/pull-jobs/:jobId", async (req, res) => {
+  const jobId = Number(req.params.jobId);
+  if (!Number.isFinite(jobId)) {
+    res.status(400).json({ error: "Invalid jobId" });
+    return;
+  }
+  const [job] = await db.select().from(dicomPullJobsTable)
+    .where(eq(dicomPullJobsTable.id, jobId));
+  if (!job) {
+    res.status(404).json({ error: "Job not found" });
+    return;
+  }
+  const b = req.body ?? {};
+  const status = ["completed", "failed", "partial"].includes(b.status) ? b.status : "failed";
+  const [updated] = await db.update(dicomPullJobsTable).set({
+    status,
+    studiesFound:       typeof b.studiesFound  === "number" ? b.studiesFound  : job.studiesFound,
+    studiesPulled:      typeof b.studiesPulled === "number" ? b.studiesPulled : job.studiesPulled,
+    studiesFailed:      typeof b.studiesFailed === "number" ? b.studiesFailed : job.studiesFailed,
+    studyInstanceUIDs:  typeof b.studyInstanceUIDs === "string" ? b.studyInstanceUIDs : job.studyInstanceUIDs,
+    errorMessage:       typeof b.errorMessage === "string" ? b.errorMessage : job.errorMessage,
+    agentId:            typeof b.agentId === "string" ? b.agentId : job.agentId,
+    completedAt:        new Date(),
+  }).where(eq(dicomPullJobsTable.id, jobId)).returning();
+
+  // Update the node's lastPullAt / lastPullStatus
+  const pullStatus = status === "completed" ? "success" : status === "partial" ? "partial" : "failed";
+  const pullMsg = status === "completed"
+    ? `${updated.studiesPulled ?? 0} studies pulled`
+    : updated.errorMessage ?? status;
+  await db.update(dicomNodesTable).set({
+    lastPullAt: new Date(),
+    lastPullStatus: pullStatus,
+    lastPullMessage: pullMsg,
+  }).where(eq(dicomNodesTable.id, job.nodeId));
+
+  res.json(updated);
 });
 
 export default router;
