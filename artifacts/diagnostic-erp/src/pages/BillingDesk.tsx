@@ -1549,50 +1549,47 @@ export default function BillingDesk() {
                     ))}
                     {paymentSplits.length < PAYMENT_MODES.length && <button onClick={() => setPaymentSplits((prev) => [...prev, { mode: "upi", amount: "" }])} className="text-[11px] text-primary hover:underline flex items-center gap-1"><Plus size={11} /> Add another payment method</button>}
                   <div className="pt-2 border-t border-card-border space-y-1.5 text-[11px]">
-                      {balance > 0 ? <div className="flex items-center justify-between gap-2 animate-pulse"><span className="text-muted-foreground">Balance due</span><span className="text-red-600 text-lg sm:text-xl font-extrabold">{inr(balance)}</span></div> : paidTotal > 0 && total > 0 ? <div className="flex items-center justify-center gap-1 animate-pulse text-green-600 font-semibold text-base sm:text-lg"><CheckCircle2 size={13} /> Fully paid — {inr(paidTotal)}</div> : <div className="text-muted-foreground">Enter amount(s) above</div>}
+                    {balance > 0 ? <div className="flex items-center justify-between gap-2 animate-pulse"><span className="text-muted-foreground">Balance due</span><span className="text-red-600 text-lg sm:text-xl font-extrabold">{inr(balance)}</span></div> : paidTotal > 0 && total > 0 ? <div className="flex items-center justify-center gap-1 animate-pulse text-green-600 font-semibold text-base sm:text-lg"><CheckCircle2 size={13} /> Fully paid — {inr(paidTotal)}</div> : <div className="text-muted-foreground">Enter amount(s) above</div>}
+                    <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                      <Button variant="outline" onClick={resetAll} disabled={generateMut.isPending} className="h-8 text-[11px] px-2">
+                        <RefreshCcw size={13} className="mr-1" /> Reset
+                      </Button>
+                      <Button
+                        onClick={() => { printAfterSaveRef.current = true; generateMut.mutate(); }}
+                        disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || (needsFormF && (!husbandName.trim() || !patientAddress.trim()))}
+                        className="h-8 text-[11px] px-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0 shadow-md disabled:from-muted disabled:to-muted disabled:text-muted-foreground disabled:shadow-none"
+                        title={needsFormF && (!husbandName.trim() || !patientAddress.trim()) ? "Fill Husband Name & Address for PCPNDT Form F" : undefined}
+                      >
+                        <Printer size={13} className="mr-1" />
+                        {generateMut.isPending && printAfterSaveRef.current ? "Saving…" : "Save & Print"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={async () => {
+                          if (!lastBill) return;
+                          await printBarcode(lastBill);
+                        }}
+                        disabled={!lastBill}
+                        className="h-8 text-[11px] px-2"
+                      >
+                        Barcode
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={async () => {
+                          if (!lastBill) return;
+                          await printToken(lastBill, clinic);
+                        }}
+                        disabled={!lastBill || !lastBill.tokenNo}
+                        className="h-8 text-[11px] px-2"
+                      >
+                        Token
+                      </Button>
                     </div>
                   </div>
+                </div>
                 )}
               </div>
-            </div>
-          </div>
-          {/* ── Action Footer — Generate / Save & Print ── */}
-          <div className="flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/90 p-2 border-t border-card-border shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5">
-              <Button variant="outline" onClick={resetAll} disabled={generateMut.isPending} className="h-8 text-[11px] px-2">
-                <RefreshCcw size={13} className="mr-1" /> Reset
-              </Button>
-              <Button
-                onClick={() => { printAfterSaveRef.current = true; generateMut.mutate(); }}
-                disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || (needsFormF && (!husbandName.trim() || !patientAddress.trim()))}
-                className="h-8 text-[11px] px-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0 shadow-md disabled:from-muted disabled:to-muted disabled:text-muted-foreground disabled:shadow-none"
-                title={needsFormF && (!husbandName.trim() || !patientAddress.trim()) ? "Fill Husband Name & Address for PCPNDT Form F" : undefined}
-              >
-                <Printer size={13} className="mr-1" />
-                {generateMut.isPending && printAfterSaveRef.current ? "Saving…" : "Save & Print"}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  if (!lastBill) return;
-                  await printBarcode(lastBill);
-                }}
-                disabled={!lastBill}
-                className="h-8 text-[11px] px-2"
-              >
-                Barcode
-              </Button>
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  if (!lastBill) return;
-                  await printToken(lastBill, clinic);
-                }}
-                disabled={!lastBill || !lastBill.tokenNo}
-                className="h-8 text-[11px] px-2"
-              >
-                Token
-              </Button>
             </div>
           </div>
           {/* ── Today's Collections Panel — dues first for quick payment ── */}
@@ -1660,22 +1657,22 @@ export default function BillingDesk() {
             .bdr-footer { text-align: center; font-size: 10px; color: #666; border-top: 1px solid #ccc; padding-top: 6px; margin-top: 6px; }
           `}</style>
 
-          <div className="bdr-header" style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "space-between", textAlign: "center" }}>
+          <div className="bdr-header" style={{ display: "flex", alignItems: "center", gap: 14, justifyContent: "space-between", textAlign: "center", paddingBottom: 8, marginBottom: 6 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, justifyContent: "center" }}>
               {clinic?.logoDataUrl && (
-                <img src={clinic.logoDataUrl} alt="Logo" style={{ maxHeight: 60, maxWidth: 100, objectFit: "contain" }} />
+                <img src={clinic.logoDataUrl} alt="Logo" style={{ maxHeight: 66, maxWidth: 108, objectFit: "contain" }} />
               )}
               <div>
-                <h1 style={{ margin: 0 }}>{clinic?.name || "Diagnostic Centre"}</h1>
-                {clinic?.tagline && <p style={{ margin: "2px 0", fontStyle: "italic", color: "#555" }}>{clinic.tagline}</p>}
-                {clinic?.address && <p style={{ margin: "2px 0" }}>{clinic.address}</p>}
-                <p style={{ margin: "2px 0" }}>
+                <h1 style={{ margin: 0, fontSize: 22, lineHeight: 1.05 }}>{clinic?.name || "Diagnostic Centre"}</h1>
+                {clinic?.tagline && <p style={{ margin: "2px 0", fontStyle: "italic", color: "#555", fontSize: 11.5 }}>{clinic.tagline}</p>}
+                {clinic?.address && <p style={{ margin: "2px 0", fontSize: 11.5 }}>{clinic.address}</p>}
+                <p style={{ margin: "2px 0", fontSize: 11.5 }}>
                   {clinic?.phone && <>Ph: {clinic.phone}</>}
                   {clinic?.phone && clinic?.email && " | "}
                   {clinic?.email && <>Email: {clinic.email}</>}
                 </p>
                 {(clinic?.gstin || clinic?.website) && (
-                  <p style={{ margin: "2px 0", fontSize: 10 }}>
+                  <p style={{ margin: "2px 0", fontSize: 10.5 }}>
                     {clinic?.gstin && <>GSTIN: {clinic.gstin}</>}
                     {clinic?.gstin && clinic?.website && " | "}
                     {clinic?.website && <>{clinic.website}</>}
@@ -1745,10 +1742,9 @@ export default function BillingDesk() {
             const paidOnReceipt = lastBill.payments.reduce((s, p) => s + Number(p.amount || 0), 0);
             const balanceOnReceipt = Math.max(0, lastBill.total - paidOnReceipt);
             return (
-              <div className="bdr-bottom-row">
-                {/* Left: Payment Details */}
+              <div className="bdr-bottom-row" style={{ alignItems: "stretch", gap: 16 }}>
                 {lastBill.payments.length > 0 ? (
-                  <div className="bdr-payments">
+                  <div className="bdr-payments" style={{ flex: 1.35 }}>
                     <strong>Payment Details</strong>
                     <table>
                       <tbody>
@@ -1762,8 +1758,7 @@ export default function BillingDesk() {
                     </table>
                   </div>
                 ) : <div style={{ flex: 1 }} />}
-                {/* Right: Totals */}
-                <div className="bdr-summary">
+                <div className="bdr-summary" style={{ minWidth: 170, flex: 0.75 }}>
                   <table>
                     <tbody>
                       <tr><td>Subtotal</td><td style={{ textAlign: "right" }}>₹{lastBill.subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>
@@ -1784,7 +1779,7 @@ export default function BillingDesk() {
             );
           })()}
 
-          <div className="bdr-footer">
+          <div className="bdr-footer" style={{ marginTop: 8, paddingTop: 8 }}>
             {(() => {
               const n = readStaffSession()?.user?.name;
               const meta = [n ? `Billed by: ${n}` : null, "Computer-generated — No signature required"].filter(Boolean).join(" · ");
