@@ -142,6 +142,8 @@ export default function DailySummary() {
         `/api/daily-summary?date=${encodeURIComponent(date)}${staffFilter !== "all" ? `&staffName=${encodeURIComponent(staffFilter)}` : ""}`
       ),
     staleTime: 30_000,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: true,
   });
 
   const summary = data?.summary ?? { totalBilled: 0, totalReceived: 0, outstanding: 0, billCount: 0, orderCount: 0 };
@@ -255,6 +257,12 @@ export default function DailySummary() {
               label="Expenses"
               value={inr(expenseTotal)}
               accent="bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"
+            />
+            <SummaryCard
+              icon={<Receipt size={14} className="text-amber-600" />}
+              label="Dues"
+              value={inr(summary.outstanding)}
+              accent="bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800"
             />
           </div>
 
