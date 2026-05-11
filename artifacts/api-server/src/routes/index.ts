@@ -28,7 +28,7 @@ import { tokensRouter } from "./tokens";
 import { testTokensRouter } from "./test-tokens";
 import { radiologyRouter } from "./radiology";
 import displayRouter from "./display";
-import { whatsappRouter } from "./whatsapp";
+import { whatsappRouter, whatsappWebhookRouter } from "./whatsapp";
 import { printersRouter } from "./printers";
 import { staffRouter } from "./staff";
 import hrFormsRouter, { staffScopedHrFormsHandler } from "./hr-forms";
@@ -94,6 +94,11 @@ router.use("/public/booking", publicBookingRouter);
 // via UPI at an unattended kiosk without a staff login. Rate-limited at the
 // route level; no sensitive staff data is accessible from these endpoints.
 router.use("/kiosk", kioskRouter);
+
+// WhatsApp Business webhook — public, validated by Meta's hub.verify_token.
+// GET: Meta verification challenge. POST: incoming messages + AI auto-reply.
+// Must be mounted BEFORE the staff-auth whatsapp router below.
+router.use("/whatsapp/webhook", whatsappWebhookRouter);
 
 // Website router: GET endpoints are intentionally public so the clinic-site
 // frontend can fetch settings/pages/faqs/photos/popups without credentials.

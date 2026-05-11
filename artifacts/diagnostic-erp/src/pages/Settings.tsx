@@ -19,7 +19,8 @@ import {
   FlaskConical, Boxes, ShieldCheck, FileDown, KeyRound, Eye, EyeOff,
   Tag, Building2, Image as ImageIcon, Upload, MessageCircle, Printer,
   Search, Globe, Copy, ExternalLink, Check, Network, MapPin, Database,
-  RefreshCcw, FileCode, Send, QrCode, Palette,
+  RefreshCcw, FileCode, Send, QrCode, Palette, Bot, Inbox, ChevronRight,
+  ArrowLeft, Phone,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -1359,6 +1360,17 @@ type WhatsappCfg = {
   autoSendOnVerify?: boolean;
   includeViewerLink?: boolean;
   reportMessageTemplate?: string;
+  // Webhook + AI Assistant (new fields)
+  wabaId?: string;
+  webhookVerifyToken?: string;
+  aiAssistantEnabled?: boolean;
+  aiAssistantName?: string;
+  aiSystemPrompt?: string;
+};
+type WaConversation = {
+  id: number; phone: string; customerName: string;
+  direction: string; messageBody: string; waMessageId: string;
+  aiHandled: boolean; status: string; createdAt: string;
 };
 type PrinterCfg = { id?: number; billPrinter: string; billPrinterType: string; barcodePrinter: string; tokenPrinter: string; tokenPrinterType: string };
 
@@ -1633,6 +1645,19 @@ function PrinterTab() {
     </div>
   );
 }
+function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      aria-label={label ?? "toggle"}
+      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${checked ? "bg-primary" : "bg-muted"}`}
+    >
+      <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${checked ? "translate-x-5" : "translate-x-0"}`} />
+    </button>
+  );
+}
+
 function WhatsappTab() {
   const qc = useQueryClient();
   const { data: cfg } = useQuery<WhatsappCfg>({ queryKey: ["whatsapp-settings"], queryFn: () => api.get("/api/whatsapp/settings") });
@@ -1640,7 +1665,10 @@ function WhatsappTab() {
   const [testPhone, setTestPhone] = useState("");
   const [bookingPhone, setBookingPhone] = useState("");
   const [showToken, setShowToken] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [waSubTab, setWaSubTab] = useState<"config" | "webhook" | "ai" | "inbox">("config");
   const cur = form ?? cfg ?? null;
+
   const save = useMutation({
     mutationFn: (body: WhatsappCfg) => api.put("/api/whatsapp/settings", body),
     onSuccess: (saved) => { qc.invalidateQueries({ queryKey: ["whatsapp-settings"] }); setForm(saved as WhatsappCfg); },
@@ -1648,146 +1676,442 @@ function WhatsappTab() {
   const test = useMutation({
     mutationFn: (phone: string) => api.post<{ ok: boolean; error?: string; messageId?: string }>("/api/whatsapp/test", { phone }),
   });
+
   if (!cur) return <div className="bg-card border border-card-border rounded-xl p-8 text-center text-muted-foreground">Loading WhatsApp settings…</div>;
   const update = (k: keyof WhatsappCfg, v: string | boolean) => setForm({ ...(cur as WhatsappCfg), [k]: v });
+
+  const webhookUrl = `${window.location.origin}/api/whatsapp/webhook`;
+
+  const copyWebhook = () => {
+    navigator.clipboard.writeText(webhookUrl).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  };
+
+  const WA_SUB_TABS = [
+    { id: "config",  label: "Cloud API",      icon: MessageCircle },
+    { id: "webhook", label: "Webhook Setup",   icon: Globe },
+    { id: "ai",      label: "AI Assistant",    icon: Bot },
+    { id: "inbox",   label: "Inbox",           icon: Inbox },
+  ] as const;
+
   return (
     <div className="space-y-4">
-      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="font-bold text-lg flex items-center gap-2"><MessageCircle size={16} /> WhatsApp Cloud API</h2>
-            <p className="text-sm text-muted-foreground mt-1">When enabled, every new bill auto-sends a WhatsApp template message to the patient with bill number, amount, and queue token.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => update("enabled", !cur.enabled)}
-            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${cur.enabled ? "bg-primary" : "bg-muted"}`}
-            aria-label="Toggle WhatsApp"
-          >
-            <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${cur.enabled ? "translate-x-5" : "translate-x-0"}`} />
-          </button>
-        </div>
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <Label>Phone Number ID *</Label>
-            <Input value={cur.phoneNumberId} onChange={(e) => update("phoneNumberId", e.target.value)} className="mt-1" placeholder="e.g. 105296888774421" />
-            <p className="text-[11px] text-muted-foreground mt-1">From Meta Business → WhatsApp Manager → API Setup.</p>
-          </div>
-          <div>
-            <Label>Permanent Access Token *</Label>
-            <div className="relative">
-              <Input type={showToken ? "text" : "password"} value={cur.accessToken} onChange={(e) => update("accessToken", e.target.value)} className="mt-1 pr-10" placeholder="EAAJk..." />
-              <button type="button" onClick={() => setShowToken(s => !s)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground" aria-label="Show/hide token">
-                {showToken ? <EyeOff size={14} /> : <Eye size={14} />}
-              </button>
-            </div>
-          </div>
-          <div>
-            <Label>Template Name *</Label>
-            <Input value={cur.templateName} onChange={(e) => update("templateName", e.target.value)} className="mt-1" placeholder="e.g. bill_notification" />
-            <p className="text-[11px] text-muted-foreground mt-1">Template body must accept 4 variables: {"{{1}}"} name, {"{{2}}"} bill no, {"{{3}}"} amount, {"{{4}}"} token.</p>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Template Language</Label>
-              <Input value={cur.templateLang} onChange={(e) => update("templateLang", e.target.value)} className="mt-1" placeholder="en" />
-            </div>
-            <div>
-              <Label>Default Country Code</Label>
-              <Input value={cur.defaultCountryCode} onChange={(e) => update("defaultCountryCode", e.target.value)} className="mt-1" placeholder="91" />
-            </div>
-          </div>
-        </div>
-        <div className="flex justify-end gap-2 pt-2 border-t border-card-border">
-          <Button variant="outline" type="button" onClick={() => setForm(cfg ?? null)}>Reset</Button>
-          <Button onClick={() => save.mutate(cur)} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
-        </div>
+      {/* Sub-tab bar */}
+      <div className="flex gap-1 bg-muted p-1 rounded-lg w-fit">
+        {WA_SUB_TABS.map(t => {
+          const Icon = t.icon;
+          return (
+            <button key={t.id} onClick={() => setWaSubTab(t.id)} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${waSubTab === t.id ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+              <Icon size={13} />{t.label}
+            </button>
+          );
+        })}
       </div>
 
-      <div className="bg-card border border-card-border rounded-xl p-5 space-y-3">
-        <div>
-          <h3 className="font-semibold flex items-center gap-2"><MessageCircle size={14} /> WhatsApp Booking Link</h3>
-          <p className="text-xs text-muted-foreground mt-1">Use this link on the website, Facebook ads, QR posters, and share buttons.</p>
+      {/* ── Cloud API Config ── */}
+      {waSubTab === "config" && (
+        <div className="space-y-4">
+          <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="font-bold text-lg flex items-center gap-2"><MessageCircle size={16} /> WhatsApp Cloud API</h2>
+                <p className="text-sm text-muted-foreground mt-1">When enabled, every new bill auto-sends a WhatsApp template message to the patient with bill number, amount, and queue token.</p>
+              </div>
+              <Toggle checked={cur.enabled} onChange={(v) => update("enabled", v)} label="Toggle WhatsApp" />
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <Label>Phone Number ID *</Label>
+                <Input value={cur.phoneNumberId} onChange={(e) => update("phoneNumberId", e.target.value)} className="mt-1" placeholder="e.g. 105296888774421" />
+                <p className="text-[11px] text-muted-foreground mt-1">From Meta Business → WhatsApp Manager → API Setup.</p>
+              </div>
+              <div>
+                <Label>Permanent Access Token *</Label>
+                <div className="relative">
+                  <Input type={showToken ? "text" : "password"} value={cur.accessToken} onChange={(e) => update("accessToken", e.target.value)} className="mt-1 pr-10" placeholder="EAAJk..." />
+                  <button type="button" onClick={() => setShowToken(s => !s)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground" aria-label="Show/hide token">
+                    {showToken ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <Label>Template Name *</Label>
+                <Input value={cur.templateName} onChange={(e) => update("templateName", e.target.value)} className="mt-1" placeholder="e.g. bill_notification" />
+                <p className="text-[11px] text-muted-foreground mt-1">Template body must accept 4 variables: {"{{1}}"} name, {"{{2}}"} bill no, {"{{3}}"} amount, {"{{4}}"} token.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Template Language</Label>
+                  <Input value={cur.templateLang} onChange={(e) => update("templateLang", e.target.value)} className="mt-1" placeholder="en" />
+                </div>
+                <div>
+                  <Label>Default Country Code</Label>
+                  <Input value={cur.defaultCountryCode} onChange={(e) => update("defaultCountryCode", e.target.value)} className="mt-1" placeholder="91" />
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-card-border">
+              <Button variant="outline" type="button" onClick={() => setForm(cfg ?? null)}>Reset</Button>
+              <Button onClick={() => save.mutate(cur as WhatsappCfg)} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
+            </div>
+          </div>
+
+          <div className="bg-card border border-card-border rounded-xl p-5 space-y-3">
+            <div>
+              <h3 className="font-semibold flex items-center gap-2"><MessageCircle size={14} /> WhatsApp Booking Link</h3>
+              <p className="text-xs text-muted-foreground mt-1">Use this link on the website, Facebook ads, QR posters, and share buttons.</p>
+            </div>
+            <div className="grid md:grid-cols-[1fr_auto] gap-2">
+              <Input value={bookingPhone} onChange={(e) => setBookingPhone(e.target.value)} placeholder="Clinic WhatsApp number (with country code)" />
+              <Button type="button" variant="outline" disabled={!bookingPhone.trim()} onClick={() => {
+                const num = bookingPhone.replace(/[^0-9]/g, "");
+                const msg = encodeURIComponent("Hi, I want to book a test.");
+                window.open(`https://wa.me/${num}?text=${msg}`, "_blank", "noopener,noreferrer");
+              }}>Open Link</Button>
+            </div>
+          </div>
+
+          <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+            <div>
+              <h3 className="font-semibold flex items-center gap-2"><Send size={14} /> Patient Report Auto-Delivery</h3>
+              <p className="text-xs text-muted-foreground mt-1">When a verifier finalises a patient report, automatically send the patient a WhatsApp message with the PDF download link.</p>
+            </div>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <Label className="font-medium">Auto-send on verify</Label>
+                <p className="text-[11px] text-muted-foreground">Off by default — turn on once your delivery template is approved.</p>
+              </div>
+              <Toggle checked={!!cur.autoSendOnVerify} onChange={(v) => update("autoSendOnVerify", v)} label="Toggle auto-send" />
+            </div>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <Label className="font-medium">Include image-viewer link (radiology)</Label>
+                <p className="text-[11px] text-muted-foreground">Adds a tokenised tele-radiology viewer URL (7-day expiry) for radiology reports.</p>
+              </div>
+              <Toggle checked={cur.includeViewerLink !== false} onChange={(v) => update("includeViewerLink", v)} label="Toggle viewer link" />
+            </div>
+            <div>
+              <Label>Custom delivery message (optional)</Label>
+              <Textarea
+                value={cur.reportMessageTemplate ?? ""}
+                onChange={(e) => update("reportMessageTemplate", e.target.value)}
+                rows={4}
+                className="mt-1 font-mono text-xs"
+                placeholder={`Leave empty to use the default. Placeholders:\n  {{name}} {{reportNumber}} {{testName}} {{reportUrl}} {{viewerUrl}}`}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-card-border">
+              <Button variant="outline" type="button" onClick={() => setForm(cfg ?? null)}>Reset</Button>
+              <Button onClick={() => save.mutate(cur as WhatsappCfg)} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
+            </div>
+          </div>
+
+          <div className="bg-card border border-card-border rounded-xl p-5">
+            <h3 className="font-semibold mb-2">Send Test Message</h3>
+            <p className="text-xs text-muted-foreground mb-3">Sends the configured template using placeholder values to verify your credentials and template approval.</p>
+            <div className="flex gap-2">
+              <Input value={testPhone} onChange={(e) => setTestPhone(e.target.value)} placeholder="10-digit phone (or full intl. format)" className="flex-1" />
+              <Button type="button" disabled={!testPhone || test.isPending || !cur.enabled} onClick={() => test.mutate(testPhone)}>
+                {test.isPending ? "Sending…" : "Send Test"}
+              </Button>
+            </div>
+            {test.data && (
+              <p className={`text-xs mt-3 ${test.data.ok ? "text-green-600" : "text-destructive"}`}>
+                {test.data.ok ? `Sent ✓  (msg id: ${test.data.messageId ?? "—"})` : `Failed: ${test.data.error}`}
+              </p>
+            )}
+            {!cur.enabled && <p className="text-xs text-muted-foreground mt-3">Enable WhatsApp above to send test messages.</p>}
+          </div>
         </div>
-        <div className="grid md:grid-cols-[1fr_auto] gap-2">
-          <Input value={bookingPhone} onChange={(e) => setBookingPhone(e.target.value)} placeholder="Clinic WhatsApp number (with country code)" />
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!bookingPhone.trim()}
-            onClick={() => {
-              const num = bookingPhone.replace(/[^0-9]/g, "");
-              const msg = encodeURIComponent("Hi, I want to book a test.");
-              window.open(`https://wa.me/${num}?text=${msg}`, "_blank", "noopener,noreferrer");
-            }}
-          >
-            Open Link
+      )}
+
+      {/* ── Webhook Setup ── */}
+      {waSubTab === "webhook" && (
+        <div className="space-y-4">
+          <div className="bg-card border border-card-border rounded-xl p-5 space-y-5">
+            <div>
+              <h2 className="font-bold text-lg flex items-center gap-2"><Globe size={16} /> Webhook Setup</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Configure a webhook in Meta Business Manager so the ERP receives incoming WhatsApp messages from patients in real time.
+                This is also required for the AI Business Assistant to reply automatically.
+              </p>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-1 text-sm">
+              <p className="font-semibold text-blue-900">How to set up in Meta Business Manager:</p>
+              <ol className="list-decimal list-inside text-blue-800 space-y-1 text-xs mt-2">
+                <li>Go to <strong>developers.facebook.com</strong> → Your App → WhatsApp → Configuration</li>
+                <li>Click <strong>Edit</strong> on the Webhook section</li>
+                <li>Paste the Callback URL below into the <strong>Callback URL</strong> field</li>
+                <li>Paste your Verify Token below into the <strong>Verify token</strong> field</li>
+                <li>Click <strong>Verify and Save</strong></li>
+                <li>Subscribe to the <strong>messages</strong> webhook field</li>
+              </ol>
+            </div>
+
+            <div>
+              <Label>Webhook Callback URL (copy this into Meta)</Label>
+              <div className="flex gap-2 mt-1">
+                <Input value={webhookUrl} readOnly className="font-mono text-xs bg-muted" />
+                <Button type="button" variant="outline" size="sm" onClick={copyWebhook}>
+                  {copied ? <Check size={13} className="text-green-600" /> : <Copy size={13} />}
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">This URL must be publicly reachable. In production (Replit deployed), it already is.</p>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <Label>WhatsApp Business Account ID (WABA ID)</Label>
+                <Input value={cur.wabaId ?? ""} onChange={(e) => update("wabaId", e.target.value)} className="mt-1" placeholder="e.g. 102390128739012" />
+                <p className="text-[11px] text-muted-foreground mt-1">From Meta Business Manager → WhatsApp accounts.</p>
+              </div>
+              <div>
+                <Label>Webhook Verify Token *</Label>
+                <Input
+                  value={cur.webhookVerifyToken ?? ""}
+                  onChange={(e) => update("webhookVerifyToken", e.target.value)}
+                  className="mt-1 font-mono"
+                  placeholder="e.g. diagnocenter_wh_secret_2026"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">A secret string you choose — must match exactly in Meta's webhook config.</p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-card-border">
+              <Button variant="outline" type="button" onClick={() => setForm(cfg ?? null)}>Reset</Button>
+              <Button onClick={() => save.mutate(cur as WhatsappCfg)} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Meta AI Business Assistant ── */}
+      {waSubTab === "ai" && (
+        <div className="space-y-4">
+          <div className="bg-card border border-card-border rounded-xl p-5 space-y-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="font-bold text-lg flex items-center gap-2"><Bot size={16} /> Meta AI Business Assistant</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  When enabled, incoming WhatsApp messages from patients are automatically answered by an AI assistant powered by Gemini.
+                  The assistant is given context about your clinic and answers questions about tests, appointments, and timings.
+                  Requires the Webhook to be set up first.
+                </p>
+              </div>
+              <Toggle checked={!!cur.aiAssistantEnabled} onChange={(v) => update("aiAssistantEnabled", v)} label="Toggle AI assistant" />
+            </div>
+
+            {!cur.webhookVerifyToken && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+                Webhook is not configured yet. Go to the <button type="button" onClick={() => setWaSubTab("webhook")} className="underline font-semibold">Webhook Setup</button> tab first so incoming messages reach the ERP.
+              </div>
+            )}
+
+            <div>
+              <Label>Assistant Name</Label>
+              <Input
+                value={cur.aiAssistantName ?? ""}
+                onChange={(e) => update("aiAssistantName", e.target.value)}
+                className="mt-1"
+                placeholder="e.g. DiagnoCenter Assistant"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">Shown to patients as the sender name in the AI's greeting context.</p>
+            </div>
+
+            <div>
+              <Label>Custom System Prompt (optional)</Label>
+              <Textarea
+                value={cur.aiSystemPrompt ?? ""}
+                onChange={(e) => update("aiSystemPrompt", e.target.value)}
+                rows={8}
+                className="mt-1 font-mono text-xs"
+                placeholder={`Leave empty to use the auto-generated default. The default includes:\n- Your clinic name, address, phone, and email\n- Instructions to handle appointment booking, test info, report queries\n- A directive to keep replies concise and professional\n\nExample custom additions:\n  We are open Monday–Saturday 7am–8pm and Sunday 8am–2pm.\n  Pathology results are ready in 4–6 hours. Radiology same day.\n  For emergencies, please call +91-XXXXXXXXXX.`}
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                If you fill this in, it completely replaces the default prompt. Include all relevant clinic info here.
+                Clinic name and address are automatically included when left blank.
+              </p>
+            </div>
+
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-xs text-green-800 space-y-1">
+              <p className="font-semibold">What the AI can handle automatically:</p>
+              <ul className="list-disc list-inside space-y-0.5 mt-1">
+                <li>Test availability and general pricing questions</li>
+                <li>Appointment booking guidance (directs to call/visit)</li>
+                <li>Report readiness and collection times</li>
+                <li>Clinic hours, location, and contact info</li>
+                <li>General FAQs about the diagnostic center</li>
+              </ul>
+              <p className="mt-2 text-green-700">The AI will never share specific patient data, diagnosis details, or make medical decisions.</p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-card-border">
+              <Button variant="outline" type="button" onClick={() => setForm(cfg ?? null)}>Reset</Button>
+              <Button onClick={() => save.mutate(cur as WhatsappCfg)} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Inbox ── */}
+      {waSubTab === "inbox" && <WhatsappInbox />}
+    </div>
+  );
+}
+
+function WhatsappInbox() {
+  const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [replyErr, setReplyErr] = useState("");
+
+  const { data: convData, isLoading, refetch } = useQuery<{
+    conversations: WaConversation[]; total: number; page: number;
+  }>({
+    queryKey: ["wa-conversations"],
+    queryFn: () => api.get("/api/whatsapp/conversations"),
+    refetchInterval: 30_000,
+  });
+
+  const { data: threadMsgs = [], refetch: refetchThread } = useQuery<WaConversation[]>({
+    queryKey: ["wa-thread", selectedPhone],
+    queryFn: () => api.get(`/api/whatsapp/conversations/${encodeURIComponent(selectedPhone!)}`),
+    enabled: !!selectedPhone,
+    refetchInterval: 15_000,
+  });
+
+  const reply = useMutation({
+    mutationFn: ({ phone, message }: { phone: string; message: string }) =>
+      api.post(`/api/whatsapp/conversations/${encodeURIComponent(phone)}/reply`, { message }),
+    onSuccess: () => { setReplyText(""); setReplyErr(""); refetchThread(); },
+    onError: (e: Error) => setReplyErr(e.message || "Failed to send reply"),
+  });
+
+  // Group conversations by phone (show latest message per phone)
+  const threads = convData?.conversations
+    ? Object.values(
+        convData.conversations.reduce<Record<string, WaConversation>>((acc, m) => {
+          if (!acc[m.phone] || new Date(m.createdAt) > new Date(acc[m.phone].createdAt)) {
+            acc[m.phone] = m;
+          }
+          return acc;
+        }, {})
+      ).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    : [];
+
+  const formatTime = (iso: string) => {
+    const d = new Date(iso);
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    return isToday
+      ? d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
+      : d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  };
+
+  if (selectedPhone) {
+    const threadName = threadMsgs[0]?.customerName || selectedPhone;
+    return (
+      <div className="bg-card border border-card-border rounded-xl overflow-hidden flex flex-col" style={{ minHeight: 500 }}>
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-card-border bg-muted/30">
+          <button onClick={() => setSelectedPhone(null)} className="text-muted-foreground hover:text-foreground">
+            <ArrowLeft size={16} />
+          </button>
+          <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold text-sm">
+            {(threadName[0] ?? "?").toUpperCase()}
+          </div>
+          <div>
+            <p className="font-medium text-sm">{threadName}</p>
+            <p className="text-xs text-muted-foreground flex items-center gap-1"><Phone size={10} /> {selectedPhone}</p>
+          </div>
+          <Button size="sm" variant="ghost" className="ml-auto" onClick={() => refetchThread()}>
+            <RefreshCcw size={13} />
           </Button>
         </div>
-      </div>
 
-      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
-        <div>
-          <h3 className="font-semibold flex items-center gap-2"><Send size={14} /> Patient Report Auto-Delivery</h3>
-          <p className="text-xs text-muted-foreground mt-1">When a verifier finalises a patient report, automatically send the patient a WhatsApp message with the PDF download link (and, for radiology, a tokenised image-viewer link).</p>
+        <div className="flex-1 overflow-y-auto p-4 space-y-3" style={{ maxHeight: 380 }}>
+          {[...threadMsgs].reverse().map((m) => (
+            <div key={m.id} className={`flex ${m.direction === "outgoing" ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${m.direction === "outgoing" ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-muted rounded-bl-sm"}`}>
+                <p>{m.messageBody}</p>
+                <p className={`text-[10px] mt-0.5 ${m.direction === "outgoing" ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                  {formatTime(m.createdAt)}
+                  {m.aiHandled && " · AI"}
+                </p>
+              </div>
+            </div>
+          ))}
+          {threadMsgs.length === 0 && <p className="text-center text-muted-foreground text-sm py-8">No messages</p>}
         </div>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <Label className="font-medium">Auto-send on verify</Label>
-            <p className="text-[11px] text-muted-foreground">Off by default — turn on once your delivery template is approved.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => update("autoSendOnVerify", !cur.autoSendOnVerify)}
-            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${cur.autoSendOnVerify ? "bg-primary" : "bg-muted"}`}
-            aria-label="Toggle auto-send"
-          >
-            <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${cur.autoSendOnVerify ? "translate-x-5" : "translate-x-0"}`} />
-          </button>
-        </div>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <Label className="font-medium">Include image-viewer link (radiology)</Label>
-            <p className="text-[11px] text-muted-foreground">Adds a tokenised tele-radiology viewer URL (7-day expiry) for radiology reports.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => update("includeViewerLink", cur.includeViewerLink === false)}
-            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${cur.includeViewerLink !== false ? "bg-primary" : "bg-muted"}`}
-            aria-label="Toggle viewer link"
-          >
-            <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${cur.includeViewerLink !== false ? "translate-x-5" : "translate-x-0"}`} />
-          </button>
-        </div>
-        <div>
-          <Label>Custom delivery message (optional)</Label>
-          <Textarea
-            value={cur.reportMessageTemplate ?? ""}
-            onChange={(e) => update("reportMessageTemplate", e.target.value)}
-            rows={4}
-            className="mt-1 font-mono text-xs"
-            placeholder={`Leave empty to use the default. Placeholders:\n  {{name}} {{reportNumber}} {{testName}} {{reportUrl}} {{viewerUrl}}`}
-          />
-          <p className="text-[11px] text-muted-foreground mt-1">Sent as a plain WhatsApp text (not a template). Requires the patient to have messaged you within 24h, or for your number to be approved for proactive utility messages.</p>
-        </div>
-      </div>
 
-      <div className="bg-card border border-card-border rounded-xl p-5">
-        <h3 className="font-semibold mb-2">Send Test Message</h3>
-        <p className="text-xs text-muted-foreground mb-3">Sends the configured template using placeholder values to verify your credentials and template approval.</p>
-        <div className="flex gap-2">
-          <Input value={testPhone} onChange={(e) => setTestPhone(e.target.value)} placeholder="10-digit phone (or full intl. format)" className="flex-1" />
-          <Button type="button" disabled={!testPhone || test.isPending || !cur.enabled} onClick={() => test.mutate(testPhone)}>
-            {test.isPending ? "Sending…" : "Send Test"}
-          </Button>
+        <div className="p-3 border-t border-card-border space-y-2">
+          <div className="flex gap-2">
+            <Input
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+              placeholder="Type a reply…"
+              className="flex-1"
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && replyText.trim()) { e.preventDefault(); reply.mutate({ phone: selectedPhone, message: replyText.trim() }); } }}
+            />
+            <Button
+              type="button"
+              disabled={!replyText.trim() || reply.isPending}
+              onClick={() => reply.mutate({ phone: selectedPhone, message: replyText.trim() })}
+            >
+              <Send size={14} />
+            </Button>
+          </div>
+          {replyErr && <p className="text-xs text-destructive">{replyErr}</p>}
         </div>
-        {test.data && (
-          <p className={`text-xs mt-3 ${test.data.ok ? "text-green-600" : "text-destructive"}`}>
-            {test.data.ok ? `Sent ✓  (msg id: ${test.data.messageId ?? "—"})` : `Failed: ${test.data.error}`}
-          </p>
-        )}
-        {!cur.enabled && <p className="text-xs text-muted-foreground mt-3">Enable WhatsApp above to send test messages.</p>}
       </div>
+    );
+  }
+
+  return (
+    <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-card-border">
+        <h3 className="font-semibold flex items-center gap-2"><Inbox size={15} /> Patient Inbox</h3>
+        <Button size="sm" variant="ghost" onClick={() => refetch()}><RefreshCcw size={13} /></Button>
+      </div>
+      {isLoading ? (
+        <div className="space-y-0">
+          {[...Array(5)].map((_, i) => <div key={i} className="h-16 bg-muted/30 border-b border-card-border animate-pulse" />)}
+        </div>
+      ) : threads.length === 0 ? (
+        <div className="py-16 text-center text-muted-foreground">
+          <MessageCircle size={36} className="mx-auto mb-3 opacity-30" />
+          <p className="text-sm">No conversations yet.</p>
+          <p className="text-xs mt-1">Incoming messages will appear here once the webhook is configured.</p>
+        </div>
+      ) : (
+        <div>
+          {threads.map((m) => (
+            <button
+              key={m.phone}
+              onClick={() => setSelectedPhone(m.phone)}
+              className="w-full flex items-center gap-3 px-4 py-3 border-b border-card-border hover:bg-muted/30 transition-colors text-left"
+            >
+              <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold text-sm flex-shrink-0">
+                {(m.customerName?.[0] ?? m.phone[0] ?? "?").toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium text-sm truncate">{m.customerName || m.phone}</p>
+                  <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatTime(m.createdAt)}</span>
+                </div>
+                <p className="text-xs text-muted-foreground truncate mt-0.5">{m.messageBody}</p>
+              </div>
+              <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                {m.direction === "incoming" && (
+                  <span className="w-2 h-2 rounded-full bg-green-500" title="Incoming" />
+                )}
+                {m.aiHandled && (
+                  <span title="AI handled"><Bot size={11} className="text-blue-500" /></span>
+                )}
+              </div>
+              <ChevronRight size={14} className="text-muted-foreground flex-shrink-0" />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

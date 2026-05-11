@@ -8,15 +8,16 @@ export const whatsappSettingsTable = pgTable("whatsapp_settings", {
   templateName: text("template_name").notNull().default(""),
   templateLang: text("template_lang").notNull().default("en"),
   defaultCountryCode: text("default_country_code").notNull().default("91"),
-  // When true, verifying a patient report auto-sends a WhatsApp delivery message
-  // to the patient (PDF link + optional image-viewer link for radiology).
   autoSendOnVerify: boolean("auto_send_on_verify").notNull().default(false),
-  // Custom message body for report delivery. Supports placeholders:
-  //   {{name}} {{reportNumber}} {{testName}} {{reportUrl}} {{viewerUrl}}
-  // If empty, a sensible default is used.
   reportMessageTemplate: text("report_message_template").notNull().default(""),
-  // Whether to include a tokenized DICOM viewer link for radiology reports.
   includeViewerLink: boolean("include_viewer_link").notNull().default(true),
+  // WhatsApp Business webhook (Meta Cloud API)
+  wabaId: text("waba_id").notNull().default(""),
+  webhookVerifyToken: text("webhook_verify_token").notNull().default(""),
+  // Meta AI Business Assistant (Gemini-powered auto-reply)
+  aiAssistantEnabled: boolean("ai_assistant_enabled").notNull().default(false),
+  aiAssistantName: text("ai_assistant_name").notNull().default("DiagnoCenter Assistant"),
+  aiSystemPrompt: text("ai_system_prompt").notNull().default(""),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
