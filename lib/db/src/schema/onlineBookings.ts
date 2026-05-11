@@ -15,6 +15,8 @@ export const onlineBookingsTable = pgTable("online_bookings", {
   razorpayOrderId: text("razorpay_order_id"),
   razorpayPaymentId: text("razorpay_payment_id"),
   razorpaySignature: text("razorpay_signature"),
+  payuTxnId: text("payu_txn_id"),
+  payuPaymentId: text("payu_payment_id"),
   status: text("status").notNull().default("pending_payment"),
   patientId: integer("patient_id"),
   billId: integer("bill_id"),

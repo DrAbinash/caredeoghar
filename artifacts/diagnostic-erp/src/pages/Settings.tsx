@@ -1219,12 +1219,14 @@ function PatientPortalTab() {
   );
 }
 
-// ─── Online Booking + Razorpay Settings ──────────────────────────────────────
+// ─── Online Booking + Payment Gateway Settings ────────────────────────────────
 type OnlineBookingSettings = {
   onlineBookingEnabled: boolean;
   vipQueueEnabled: boolean;
   razorpayKeyId: string;
   onlineBookingLedgerId: number;
+  payuEnabled: boolean;
+  payuMerchantKey: string;
 };
 
 function OnlineBookingTab() {
@@ -1244,7 +1246,16 @@ function OnlineBookingTab() {
     if (!number) return "";
     return `https://wa.me/${number}?text=${encodeURIComponent("Hi, I want to book an appointment.")}`;
   }, [data?.whatsappNumber]);
-  useEffect(() => { if (data) setForm({ onlineBookingEnabled: data.onlineBookingEnabled, vipQueueEnabled: data.vipQueueEnabled, razorpayKeyId: data.razorpayKeyId || "", onlineBookingLedgerId: data.onlineBookingLedgerId || 1 }); }, [data]);
+  useEffect(() => {
+    if (data) setForm({
+      onlineBookingEnabled: data.onlineBookingEnabled,
+      vipQueueEnabled: data.vipQueueEnabled,
+      razorpayKeyId: data.razorpayKeyId || "",
+      onlineBookingLedgerId: data.onlineBookingLedgerId || 1,
+      payuEnabled: data.payuEnabled ?? false,
+      payuMerchantKey: data.payuMerchantKey || "",
+    });
+  }, [data]);
 
   const save = useMutation({
     mutationFn: (body: OnlineBookingSettings) => api.put("/api/clinic-settings", body),
@@ -1273,8 +1284,8 @@ function OnlineBookingTab() {
             <CreditCard size={20} className="text-white" />
           </div>
           <div>
-            <h2 className="font-bold text-lg">Online Booking & Razorpay</h2>
-            <p className="text-sm text-muted-foreground mt-1">Allow patients to book tests and pay online via your clinic website. Requires a Razorpay account.</p>
+            <h2 className="font-bold text-lg">Online Booking & Payment Gateway</h2>
+            <p className="text-sm text-muted-foreground mt-1">Allow patients to book tests and pay online via your clinic website. Configure PayU or Razorpay below.</p>
           </div>
         </div>
       </div>
@@ -1286,16 +1297,75 @@ function OnlineBookingTab() {
         <Toggle value={form.vipQueueEnabled} onChange={(v) => setForm({ ...form, vipQueueEnabled: v })} label="VIP Queue enabled" hint="Allows patients to pay a VIP surcharge for priority queue placement." />
       </div>
 
-      {/* Ledger + Key ID */}
+      {/* Ledger */}
       <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
-        <h3 className="font-bold">Payment Configuration</h3>
+        <h3 className="font-bold">Booking Ledger</h3>
         <div>
-          <Label>Booking Ledger</Label>
+          <Label>Ledger</Label>
           <p className="text-xs text-muted-foreground mb-1">Bills created from online bookings will be tagged to this ledger.</p>
           <Select value={String(form.onlineBookingLedgerId)} onValueChange={(v) => setForm({ ...form, onlineBookingLedgerId: Number(v) })}>
             <SelectTrigger className="mt-1 max-w-xs"><SelectValue placeholder="Select ledger" /></SelectTrigger>
             <SelectContent>{ledgers.map((l) => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}</SelectContent>
           </Select>
+        </div>
+        <div className="flex justify-end gap-2 pt-2 border-t border-card-border">
+          <Button onClick={() => save.mutate(form)} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
+        </div>
+      </div>
+
+      {/* PayU India */}
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg bg-[#002E6E] flex items-center justify-center shrink-0">
+            <CreditCard size={16} className="text-white" />
+          </div>
+          <div>
+            <h3 className="font-bold">PayU India (Recommended)</h3>
+            <p className="text-xs text-muted-foreground">Works with all Indian banks, UPI, credit/debit cards, netbanking, and wallets.</p>
+          </div>
+        </div>
+        <Toggle
+          value={form.payuEnabled}
+          onChange={(v) => setForm({ ...form, payuEnabled: v })}
+          label="Use PayU as active payment gateway"
+          hint="When enabled, PayU takes priority over Razorpay for online bookings."
+        />
+        <div>
+          <Label>PayU Merchant Key</Label>
+          <p className="text-xs text-muted-foreground mb-1">Your PayU Merchant Key from the PayU dashboard. Safe to store here — visible to browser.</p>
+          <Input
+            value={form.payuMerchantKey}
+            onChange={(e) => setForm({ ...form, payuMerchantKey: e.target.value })}
+            className="mt-1 max-w-md font-mono text-sm"
+            placeholder="e.g. JP****"
+          />
+        </div>
+        <div className="flex justify-end gap-2 pt-2 border-t border-card-border">
+          <Button onClick={() => save.mutate(form)} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
+        </div>
+      </div>
+
+      {/* PayU Salt — env var */}
+      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-5 space-y-2">
+        <h3 className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2">
+          <KeyRound size={15} /> PayU Merchant Salt (Secret)
+        </h3>
+        <p className="text-sm text-amber-800 dark:text-amber-300">
+          The Salt is used server-side only for SHA-512 hash generation and verification. It is <strong>never</strong> sent to the browser. Add it as an environment secret:
+        </p>
+        <div className="font-mono text-sm bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 rounded px-3 py-2 select-all">
+          PAYU_MERCHANT_SALT=your_salt_here
+        </div>
+        <p className="text-xs text-amber-700 dark:text-amber-400">
+          In Replit: open Secrets (the padlock icon on the left sidebar), add <code>PAYU_MERCHANT_SALT</code> with your PayU Salt. Then restart the API server. Your Merchant Key and Salt are both available in the PayU dashboard under <strong>My Account → Profile</strong>.
+        </p>
+      </div>
+
+      {/* Razorpay (legacy / fallback) */}
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <h3 className="font-bold">Razorpay (Fallback / Legacy)</h3>
+          <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">Used when PayU is disabled</span>
         </div>
         <div>
           <Label>Razorpay Key ID</Label>
@@ -1307,10 +1377,22 @@ function OnlineBookingTab() {
         </div>
       </div>
 
+      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-5 space-y-2">
+        <h3 className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2">
+          <KeyRound size={15} /> Razorpay Key Secret
+        </h3>
+        <p className="text-sm text-amber-800 dark:text-amber-300">
+          Server-side only for HMAC signature verification. Set as environment secret:
+        </p>
+        <div className="font-mono text-sm bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 rounded px-3 py-2 select-all">
+          RAZORPAY_KEY_SECRET=your_secret_here
+        </div>
+      </div>
+
       {bookingQrUrl && (
         <div className="bg-card border border-card-border rounded-xl p-5 space-y-3">
-          <h3 className="font-bold">QR Fallback for Website Booking</h3>
-          <p className="text-sm text-muted-foreground">Print this QR code and place it on counters, posters, and the website until Razorpay booking is active.</p>
+          <h3 className="font-bold">WhatsApp Booking QR (Fallback)</h3>
+          <p className="text-sm text-muted-foreground">Print this QR code and place it on counters or posters as a booking fallback.</p>
           <div className="flex flex-col md:flex-row gap-4 md:items-center">
             <img
               alt="WhatsApp booking QR"
@@ -1324,22 +1406,6 @@ function OnlineBookingTab() {
           </div>
         </div>
       )}
-
-      {/* Key Secret — env var only */}
-      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-5 space-y-2">
-        <h3 className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2">
-          <KeyRound size={15} /> Razorpay Key Secret
-        </h3>
-        <p className="text-sm text-amber-800 dark:text-amber-300">
-          The Key Secret is used server-side only for HMAC payment-signature verification. It is <strong>never</strong> sent to the browser. Set it as the environment variable:
-        </p>
-        <div className="font-mono text-sm bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 rounded px-3 py-2 select-all">
-          RAZORPAY_KEY_SECRET=your_secret_here
-        </div>
-        <p className="text-xs text-amber-700 dark:text-amber-400">
-          In Replit: open Secrets (the padlock icon), add <code>RAZORPAY_KEY_SECRET</code> with your Razorpay Secret Key. Then redeploy or restart the API server.
-        </p>
-      </div>
     </div>
   );
 }

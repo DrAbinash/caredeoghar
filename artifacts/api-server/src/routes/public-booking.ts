@@ -41,23 +41,64 @@ function generateBookingRef(): string {
   return `${prefix}${rand}`;
 }
 
-// GET /api/public/booking/config
-// Returns whether online booking is enabled and the Razorpay key_id (safe to expose)
+// ── PayU helpers ──────────────────────────────────────────────────────────────
+
+const PAYU_PROD_URL = "https://secure.payu.in/_payment";
+const PAYU_TEST_URL = "https://test.payu.in/_payment";
+
+function payuRequestHash(params: {
+  key: string; txnid: string; amount: string; productinfo: string;
+  firstname: string; email: string; salt: string;
+}): string {
+  const { key, txnid, amount, productinfo, firstname, email, salt } = params;
+  const str = `${key}|${txnid}|${amount}|${productinfo}|${firstname}|${email}|||||||||${salt}`;
+  return crypto.createHash("sha512").update(str).digest("hex");
+}
+
+function payuResponseHash(params: {
+  key: string; txnid: string; amount: string; productinfo: string;
+  firstname: string; email: string; status: string; salt: string;
+}): string {
+  const { key, txnid, amount, productinfo, firstname, email, status, salt } = params;
+  const str = `${salt}|${status}||||||||||${email}|${firstname}|${productinfo}|${amount}|${txnid}|${key}`;
+  return crypto.createHash("sha512").update(str).digest("hex");
+}
+
+function getPublicBase(req: { headers: Record<string, string | string[] | undefined> }): string {
+  const domains = process.env.REPLIT_DOMAINS;
+  if (domains) return `https://${domains.split(",")[0]}`;
+  const host = String(req.headers["host"] || "localhost");
+  const proto = String(req.headers["x-forwarded-proto"] || "http");
+  return `${proto}://${host}`;
+}
+
+// ── GET /api/public/booking/config ────────────────────────────────────────────
 publicBookingRouter.get("/config", async (_req, res): Promise<void> => {
   const settings = await getSettings();
   if (!settings) {
-    res.json({ enabled: false, keyId: "", vipEnabled: false });
+    res.json({ enabled: false, keyId: "", vipEnabled: false, gateway: null });
     return;
   }
+
+  const razorpayKeyId = settings.razorpayKeyId || "";
+  const razorpaySecret = process.env.RAZORPAY_KEY_SECRET || "";
+  const payuSalt = process.env.PAYU_MERCHANT_SALT || "";
+  const payuKey = settings.payuMerchantKey || "";
+
+  let gateway: "razorpay" | "payu" | null = null;
+  if (settings.payuEnabled && payuKey && payuSalt) gateway = "payu";
+  else if (razorpayKeyId && razorpaySecret) gateway = "razorpay";
+
   res.json({
     enabled: settings.onlineBookingEnabled,
-    keyId: settings.razorpayKeyId || "",
+    keyId: razorpayKeyId,
     vipEnabled: settings.vipQueueEnabled,
+    gateway,
+    payuMerchantKey: payuKey,
   });
 });
 
 // GET /api/public/booking/tests
-// Returns active tests with prices — public, no auth required
 publicBookingRouter.get("/tests", async (_req, res): Promise<void> => {
   const tests = await db
     .select({
@@ -76,7 +117,6 @@ publicBookingRouter.get("/tests", async (_req, res): Promise<void> => {
 });
 
 // GET /api/public/booking/packages
-// Returns active packages — public, no auth required
 publicBookingRouter.get("/packages", async (_req, res): Promise<void> => {
   const pkgs = await db
     .select({
@@ -92,8 +132,168 @@ publicBookingRouter.get("/packages", async (_req, res): Promise<void> => {
   res.json({ packages: pkgs });
 });
 
-// POST /api/public/booking/create-order
-// Creates a Razorpay order and a pending booking record
+// ── POST /api/public/booking/payu-initiate ────────────────────────────────────
+// Creates a pending booking and returns PayU form fields for the frontend to submit.
+publicBookingRouter.post("/payu-initiate", createOrderLimiter, async (req, res): Promise<void> => {
+  const settings = await getSettings();
+  if (!settings?.onlineBookingEnabled) {
+    res.status(403).json({ error: "Online booking is not enabled." });
+    return;
+  }
+
+  const merchantKey = settings.payuMerchantKey || "";
+  const merchantSalt = process.env.PAYU_MERCHANT_SALT || "";
+  if (!merchantKey || !merchantSalt) {
+    res.status(503).json({ error: "PayU not configured. Please contact the clinic." });
+    return;
+  }
+
+  const {
+    name, phone, email = "", selectedDate,
+    testIds = [], packageIds = [], totalAmount,
+    notes = "", isVip = false,
+  } = req.body as {
+    name: string; phone: string; email?: string; selectedDate: string;
+    testIds?: number[]; packageIds?: number[]; totalAmount: number;
+    notes?: string; isVip?: boolean;
+  };
+
+  if (!name?.trim() || !phone?.trim() || !selectedDate) {
+    res.status(400).json({ error: "Name, phone, and selected date are required." });
+    return;
+  }
+  if (!Array.isArray(testIds) || !Array.isArray(packageIds) || (testIds.length + packageIds.length) === 0) {
+    res.status(400).json({ error: "Please select at least one test or package." });
+    return;
+  }
+  const amount = Number(totalAmount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    res.status(400).json({ error: "Invalid total amount." });
+    return;
+  }
+
+  const bookingRef = generateBookingRef();
+  const txnid = bookingRef;
+  const amountStr = amount.toFixed(2);
+  const productinfo = "DiagnoCenter Test Booking";
+  const firstname = name.trim().split(" ")[0] ?? name.trim();
+  const emailStr = email.trim();
+
+  const hash = payuRequestHash({ key: merchantKey, txnid, amount: amountStr, productinfo, firstname, email: emailStr, salt: merchantSalt });
+
+  const base = getPublicBase(req as Parameters<typeof getPublicBase>[0]);
+  const surl = `${base}/api/public/booking/payu-success`;
+  const furl = `${base}/api/public/booking/payu-failure`;
+
+  const isTest = merchantKey.startsWith("gtKFFx") || process.env.NODE_ENV !== "production";
+  const payuUrl = isTest ? PAYU_TEST_URL : PAYU_PROD_URL;
+
+  // Save pending booking
+  await db.insert(onlineBookingsTable).values({
+    bookingRef,
+    name: name.trim(),
+    phone: phone.trim(),
+    email: emailStr,
+    selectedDate,
+    testIds: JSON.stringify(testIds),
+    packageIds: JSON.stringify(packageIds),
+    totalAmount: String(amount),
+    notes: notes.trim(),
+    isVip: Boolean(isVip) && Boolean(settings.vipQueueEnabled),
+    payuTxnId: txnid,
+    status: "pending_payment",
+  });
+
+  res.json({
+    payuUrl,
+    fields: {
+      key: merchantKey,
+      txnid,
+      amount: amountStr,
+      productinfo,
+      firstname,
+      lastname: name.trim().split(" ").slice(1).join(" "),
+      email: emailStr,
+      phone: phone.trim().replace(/[^0-9]/g, "").slice(0, 10),
+      surl,
+      furl,
+      hash,
+    },
+  });
+});
+
+// ── POST /api/public/booking/payu-success ─────────────────────────────────────
+// PayU redirects here after successful payment (form POST, urlencoded body).
+// Must be reachable publicly without CSRF.
+publicBookingRouter.post("/payu-success", async (req, res): Promise<void> => {
+  const body = req.body as Record<string, string>;
+  const { txnid, mihpayid, status, hash: returnedHash, amount, productinfo, firstname, email } = body;
+
+  const salt = process.env.PAYU_MERCHANT_SALT || "";
+  const settings = await getSettings();
+  const merchantKey = settings?.payuMerchantKey || "";
+
+  const base = getPublicBase(req as Parameters<typeof getPublicBase>[0]);
+  const clinicSiteBase = base;
+
+  // Verify hash
+  if (salt && merchantKey && txnid) {
+    const expected = payuResponseHash({ key: merchantKey, txnid, amount: amount ?? "", productinfo: productinfo ?? "", firstname: firstname ?? "", email: email ?? "", status: status ?? "", salt });
+    if (expected !== returnedHash) {
+      res.redirect(`${clinicSiteBase}/?booking=failed&reason=hash_mismatch`);
+      return;
+    }
+  }
+
+  if (status !== "success") {
+    res.redirect(`${clinicSiteBase}/?booking=failed&reason=${encodeURIComponent(status ?? "unknown")}`);
+    return;
+  }
+
+  // Find booking by txnid
+  const [booking] = await db
+    .select()
+    .from(onlineBookingsTable)
+    .where(eq(onlineBookingsTable.payuTxnId, txnid))
+    .limit(1);
+
+  if (!booking) {
+    res.redirect(`${clinicSiteBase}/?booking=failed&reason=not_found`);
+    return;
+  }
+
+  if (booking.status === "paid" || booking.status === "confirmed") {
+    res.redirect(`${clinicSiteBase}/?booking=success&ref=${encodeURIComponent(booking.bookingRef)}`);
+    return;
+  }
+
+  await db
+    .update(onlineBookingsTable)
+    .set({ payuPaymentId: mihpayid ?? "", status: "paid" })
+    .where(eq(onlineBookingsTable.id, booking.id));
+
+  res.redirect(`${clinicSiteBase}/?booking=success&ref=${encodeURIComponent(booking.bookingRef)}`);
+});
+
+// ── POST /api/public/booking/payu-failure ─────────────────────────────────────
+publicBookingRouter.post("/payu-failure", async (req, res): Promise<void> => {
+  const body = req.body as Record<string, string>;
+  const { txnid, error_Message } = body;
+
+  const base = getPublicBase(req as Parameters<typeof getPublicBase>[0]);
+  const clinicSiteBase = base;
+
+  if (txnid) {
+    const [booking] = await db.select().from(onlineBookingsTable).where(eq(onlineBookingsTable.payuTxnId, txnid)).limit(1);
+    if (booking && booking.status === "pending_payment") {
+      await db.update(onlineBookingsTable).set({ status: "payment_failed" }).where(eq(onlineBookingsTable.id, booking.id));
+    }
+  }
+
+  res.redirect(`${clinicSiteBase}/?booking=failed&reason=${encodeURIComponent(error_Message ?? "Payment cancelled")}`);
+});
+
+// ── POST /api/public/booking/create-order (Razorpay — kept for backwards compat) ──
 publicBookingRouter.post("/create-order", createOrderLimiter, async (req, res): Promise<void> => {
   const settings = await getSettings();
   if (!settings?.onlineBookingEnabled) {
@@ -135,25 +335,15 @@ publicBookingRouter.post("/create-order", createOrderLimiter, async (req, res): 
   const bookingRef = generateBookingRef();
   const amountPaise = Math.round(amount * 100);
 
-  // Create Razorpay order via their REST API
   const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
   let razorpayOrderId = "";
   try {
     const rpRes = await fetch("https://api.razorpay.com/v1/orders", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Basic ${auth}`,
-      },
+      headers: { "Content-Type": "application/json", Authorization: `Basic ${auth}` },
       body: JSON.stringify({
-        amount: amountPaise,
-        currency: "INR",
-        receipt: bookingRef,
-        notes: {
-          patient_name: name,
-          patient_phone: phone,
-          booking_ref: bookingRef,
-        },
+        amount: amountPaise, currency: "INR", receipt: bookingRef,
+        notes: { patient_name: name, patient_phone: phone, booking_ref: bookingRef },
       }),
     });
     if (!rpRes.ok) {
@@ -168,27 +358,18 @@ publicBookingRouter.post("/create-order", createOrderLimiter, async (req, res): 
     return;
   }
 
-  // Save pending booking
   await db.insert(onlineBookingsTable).values({
-    bookingRef,
-    name: name.trim(),
-    phone: phone.trim(),
-    email: email.trim(),
-    selectedDate,
-    testIds: JSON.stringify(testIds),
-    packageIds: JSON.stringify(packageIds),
-    totalAmount: String(amount),
-    notes: notes.trim(),
+    bookingRef, name: name.trim(), phone: phone.trim(), email: email.trim(),
+    selectedDate, testIds: JSON.stringify(testIds), packageIds: JSON.stringify(packageIds),
+    totalAmount: String(amount), notes: notes.trim(),
     isVip: Boolean(isVip) && Boolean(settings.vipQueueEnabled),
-    razorpayOrderId,
-    status: "pending_payment",
+    razorpayOrderId, status: "pending_payment",
   });
 
   res.json({ bookingRef, razorpayOrderId, amountPaise, keyId });
 });
 
-// POST /api/public/booking/verify-payment
-// Verifies Razorpay payment signature, marks booking as paid
+// ── POST /api/public/booking/verify-payment (Razorpay) ───────────────────────
 publicBookingRouter.post("/verify-payment", bookingLimiter, async (req, res): Promise<void> => {
   const settings = await getSettings();
   if (!settings?.onlineBookingEnabled) {
@@ -203,9 +384,7 @@ publicBookingRouter.post("/verify-payment", bookingLimiter, async (req, res): Pr
   }
 
   const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body as {
-    razorpayOrderId: string;
-    razorpayPaymentId: string;
-    razorpaySignature: string;
+    razorpayOrderId: string; razorpayPaymentId: string; razorpaySignature: string;
   };
 
   if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
@@ -213,41 +392,19 @@ publicBookingRouter.post("/verify-payment", bookingLimiter, async (req, res): Pr
     return;
   }
 
-  // HMAC-SHA256 signature verification
-  const expected = crypto
-    .createHmac("sha256", keySecret)
-    .update(`${razorpayOrderId}|${razorpayPaymentId}`)
-    .digest("hex");
-
+  const expected = crypto.createHmac("sha256", keySecret).update(`${razorpayOrderId}|${razorpayPaymentId}`).digest("hex");
   if (expected !== razorpaySignature) {
     res.status(400).json({ error: "Payment verification failed. Please contact the clinic." });
     return;
   }
 
-  // Find and update the booking
-  const [booking] = await db
-    .select()
-    .from(onlineBookingsTable)
-    .where(eq(onlineBookingsTable.razorpayOrderId, razorpayOrderId))
-    .limit(1);
-
-  if (!booking) {
-    res.status(404).json({ error: "Booking not found." });
-    return;
-  }
+  const [booking] = await db.select().from(onlineBookingsTable).where(eq(onlineBookingsTable.razorpayOrderId, razorpayOrderId)).limit(1);
+  if (!booking) { res.status(404).json({ error: "Booking not found." }); return; }
   if (booking.status === "paid" || booking.status === "confirmed") {
     res.json({ success: true, bookingRef: booking.bookingRef, alreadyPaid: true });
     return;
   }
 
-  await db
-    .update(onlineBookingsTable)
-    .set({
-      razorpayPaymentId,
-      razorpaySignature,
-      status: "paid",
-    })
-    .where(eq(onlineBookingsTable.id, booking.id));
-
+  await db.update(onlineBookingsTable).set({ razorpayPaymentId, razorpaySignature, status: "paid" }).where(eq(onlineBookingsTable.id, booking.id));
   res.json({ success: true, bookingRef: booking.bookingRef });
 });

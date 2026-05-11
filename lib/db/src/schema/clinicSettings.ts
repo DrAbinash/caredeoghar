@@ -22,11 +22,14 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   portalWelcomeMessage: text("portal_welcome_message").notNull().default(""),
   portalAllowAppointmentBooking: boolean("portal_allow_appointment_booking").notNull().default(true),
   portalAllowProfileEdit: boolean("portal_allow_profile_edit").notNull().default(true),
-  // Online booking (public "Book Now" with Razorpay payment)
+  // Online booking
   onlineBookingEnabled: boolean("online_booking_enabled").notNull().default(false),
   razorpayKeyId: text("razorpay_key_id").notNull().default(""),
   onlineBookingLedgerId: integer("online_booking_ledger_id").notNull().default(1),
   vipQueueEnabled: boolean("vip_queue_enabled").notNull().default(false),
+  // PayU India
+  payuEnabled: boolean("payu_enabled").notNull().default(false),
+  payuMerchantKey: text("payu_merchant_key").notNull().default(""),
   // Self-registration kiosk
   kioskEnabled: boolean("kiosk_enabled").notNull().default(false),
   kioskUpiVpa: text("kiosk_upi_vpa").notNull().default(""),

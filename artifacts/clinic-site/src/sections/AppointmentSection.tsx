@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import type { Section, SiteSettings } from "../types";
 import { buttonClass } from "../theme";
 
@@ -6,7 +6,7 @@ function get(c: Record<string, unknown>, k: string, fb = ""): string {
   return typeof c[k] === "string" ? (c[k] as string) : fb;
 }
 
-type BookingConfig = { enabled: boolean; keyId: string; vipEnabled: boolean };
+type BookingConfig = { enabled: boolean; keyId: string; vipEnabled: boolean; gateway: "payu" | "razorpay" | null; payuMerchantKey?: string };
 type TestItem = { id: number; code: string; name: string; category: string; price: string };
 type PkgItem  = { id: number; code: string; name: string; price: string; description: string };
 
@@ -33,6 +33,23 @@ function loadRazorpay(): Promise<boolean> {
   });
 }
 
+/** Submit a hidden form to PayU — redirect-based payment */
+function submitPayuForm(payuUrl: string, fields: Record<string, string>) {
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = payuUrl;
+  form.style.display = "none";
+  for (const [k, v] of Object.entries(fields)) {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = k;
+    input.value = v;
+    form.appendChild(input);
+  }
+  document.body.appendChild(form);
+  form.submit();
+}
+
 export default function AppointmentSection({ section, settings }: { section: Section; settings: SiteSettings }) {
   const c = section.config;
   const heading = get(c, "heading", "Book an Appointment");
@@ -42,23 +59,48 @@ export default function AppointmentSection({ section, settings }: { section: Sec
   const [config, setConfig] = useState<BookingConfig | null>(null);
   const [tests, setTests] = useState<TestItem[]>([]);
   const [pkgs, setPkgs] = useState<PkgItem[]>([]);
-  const [step, setStep] = useState<"form" | "select" | "pay" | "done">("form");
+  const [step, setStep] = useState<"form" | "select" | "pay" | "done" | "failed">("form");
   const [error, setError] = useState("");
   const [paying, setPaying] = useState(false);
   const [successRef, setSuccessRef] = useState("");
+  const [failReason, setFailReason] = useState("");
   const [catFilter, setCatFilter] = useState("all");
+  const urlChecked = useRef(false);
 
   const [pd, setPd] = useState({ name: "", phone: "", email: "", date: "", notes: "", isVip: false });
   const [selTests, setSelTests] = useState<Set<number>>(new Set());
   const [selPkgs, setSelPkgs] = useState<Set<number>>(new Set());
+
   const qrBookingUrl = useMemo(() => {
     const phone = (settings.whatsappNumber || "").replace(/[^0-9]/g, "");
     if (!phone) return "";
     return `https://wa.me/${phone}?text=${encodeURIComponent("Hi, I want to book an appointment.")}`;
   }, [settings.whatsappNumber]);
 
+  // Check URL params for PayU redirect-back result
   useEffect(() => {
-    bookingGet<BookingConfig>("/api/public/booking/config").then(setConfig).catch(() => setConfig({ enabled: false, keyId: "", vipEnabled: false }));
+    if (urlChecked.current) return;
+    urlChecked.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const bookingStatus = params.get("booking");
+    if (bookingStatus === "success") {
+      setSuccessRef(params.get("ref") ?? "");
+      setStep("done");
+    } else if (bookingStatus === "failed") {
+      setFailReason(params.get("reason") ?? "Payment was not completed.");
+      setStep("failed");
+    }
+    // Clean up URL params without reloading
+    if (bookingStatus) {
+      const clean = window.location.pathname;
+      window.history.replaceState({}, "", clean);
+    }
+  }, []);
+
+  useEffect(() => {
+    bookingGet<BookingConfig>("/api/public/booking/config")
+      .then(setConfig)
+      .catch(() => setConfig({ enabled: false, keyId: "", vipEnabled: false, gateway: null }));
   }, []);
 
   const loadCatalog = () => {
@@ -76,7 +118,7 @@ export default function AppointmentSection({ section, settings }: { section: Sec
   const filteredTests = useMemo(() => catFilter === "all" ? tests : tests.filter((t) => t.category === catFilter), [tests, catFilter]);
 
   const toggleTest = (id: number) => setSelTests((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const togglePkg  = (id: number) => setSelPkgs((s)  => { const n = new Set(s);  n.has(id) ? n.delete(id) : n.add(id);  return n;  });
+  const togglePkg  = (id: number) => setSelPkgs((s) => { const n = new Set(s);  n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   function handleWhatsApp(e: React.FormEvent) {
     e.preventDefault();
@@ -94,8 +136,24 @@ export default function AppointmentSection({ section, settings }: { section: Sec
     window.open(`https://wa.me/${bookingPhone}?text=${encodeURIComponent(msg)}`, "_blank");
   }
 
-  async function handlePay() {
-    if (selTests.size === 0 && selPkgs.size === 0) { setError("Please select at least one test or package."); return; }
+  async function handlePayU() {
+    setError(""); setPaying(true);
+    try {
+      const res = await bookingPost<{ payuUrl: string; fields: Record<string, string> }>("/api/public/booking/payu-initiate", {
+        name: pd.name, phone: pd.phone, email: pd.email, selectedDate: pd.date,
+        testIds: Array.from(selTests), packageIds: Array.from(selPkgs),
+        totalAmount: total, notes: pd.notes, isVip: pd.isVip,
+      });
+      // Redirect to PayU — page will come back via surl/furl
+      submitPayuForm(res.payuUrl, res.fields);
+      // Don't reset paying — the page will redirect away
+    } catch (e: unknown) {
+      const msg = (e as { message?: string }).message || "Something went wrong.";
+      setError(msg); setPaying(false);
+    }
+  }
+
+  async function handleRazorpay() {
     setError(""); setPaying(true);
     try {
       const loaded = await loadRazorpay();
@@ -140,6 +198,14 @@ export default function AppointmentSection({ section, settings }: { section: Sec
     }
   }
 
+  async function handlePay() {
+    if (selTests.size === 0 && selPkgs.size === 0) { setError("Please select at least one test or package."); return; }
+    if (config?.gateway === "payu") return handlePayU();
+    return handleRazorpay();
+  }
+
+  const gatewayLabel = config?.gateway === "payu" ? "PayU" : "Razorpay";
+
   if (!config || !config.enabled) {
     return (
       <section className="section">
@@ -168,7 +234,14 @@ export default function AppointmentSection({ section, settings }: { section: Sec
         <h2 className="h-section text-center" style={{ marginBottom: ".5rem" }}>{heading}</h2>
         {subheading && <p className="subtle text-center" style={{ marginBottom: "2rem" }}>{subheading}</p>}
 
-        {step === "done" ? (
+        {step === "failed" ? (
+          <div className="card-soft text-center" style={{ maxWidth: 480, margin: "0 auto" }}>
+            <div style={{ fontSize: "3rem", marginBottom: ".5rem" }}>❌</div>
+            <h3 style={{ fontWeight: 700, fontSize: "1.15rem", marginBottom: ".5rem" }}>Payment Not Completed</h3>
+            <p className="subtle" style={{ marginBottom: "1rem" }}>{failReason || "Your payment was not completed."}</p>
+            <button type="button" className={buttonClass(settings, "primary")} onClick={() => { setStep("pay"); setFailReason(""); }} style={{ justifyContent: "center" }}>Try Again</button>
+          </div>
+        ) : step === "done" ? (
           <div className="card-soft text-center" style={{ maxWidth: 480, margin: "0 auto" }}>
             <div style={{ fontSize: "3rem", marginBottom: ".5rem" }}>✅</div>
             <h3 style={{ fontWeight: 700, fontSize: "1.15rem", marginBottom: ".5rem" }}>Payment Successful!</h3>
@@ -273,7 +346,9 @@ export default function AppointmentSection({ section, settings }: { section: Sec
             <div style={{ display: "flex", gap: ".75rem", flexWrap: "wrap" }}>
               <button type="button" onClick={() => setStep("select")} style={{ background: "hsl(var(--site-muted))", color: "inherit", border: "none", borderRadius: "var(--site-radius)", padding: ".6rem 1.1rem", cursor: "pointer", fontWeight: 600 }}>← Back</button>
               <button type="button" className={buttonClass(settings, "primary")} onClick={handlePay} disabled={paying} style={{ flex: 1, justifyContent: "center" }}>
-                {paying ? "Processing…" : `Pay ₹${total.toLocaleString("en-IN")} via Razorpay`}
+                {paying
+                  ? (config?.gateway === "payu" ? "Redirecting to PayU…" : "Processing…")
+                  : `Pay ₹${total.toLocaleString("en-IN")} via ${gatewayLabel}`}
               </button>
             </div>
             {bookingPhone && (
@@ -282,13 +357,13 @@ export default function AppointmentSection({ section, settings }: { section: Sec
                 onClick={openWhatsAppBooking}
                 style={{ marginTop: ".75rem", width: "100%", background: "#25d366", color: "#fff", border: "none", borderRadius: "var(--site-radius)", padding: ".65rem 1rem", fontWeight: 700, cursor: "pointer" }}
               >
-                Book on WhatsApp
+                Book on WhatsApp instead
               </button>
             )}
             {qrBookingUrl && (
               <div style={{ marginTop: "1rem", padding: "1rem", borderRadius: "var(--site-radius)", border: "1px dashed hsl(var(--site-muted))", background: "hsl(var(--site-muted) / .25)", textAlign: "center" }}>
-                <div style={{ fontWeight: 700, marginBottom: ".35rem" }}>QR booking fallback</div>
-                <p className="subtle" style={{ fontSize: ".85rem", marginBottom: ".75rem" }}>Scan this QR to start booking on WhatsApp until Razorpay is live.</p>
+                <div style={{ fontWeight: 700, marginBottom: ".35rem" }}>WhatsApp booking QR</div>
+                <p className="subtle" style={{ fontSize: ".85rem", marginBottom: ".75rem" }}>Scan to book via WhatsApp.</p>
                 <img
                   alt="WhatsApp booking QR"
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrBookingUrl)}`}
@@ -296,7 +371,9 @@ export default function AppointmentSection({ section, settings }: { section: Sec
                 />
               </div>
             )}
-            <p className="subtle" style={{ fontSize: ".78rem", marginTop: "1rem", textAlign: "center" }}>Payments are processed securely via Razorpay</p>
+            <p className="subtle" style={{ fontSize: ".78rem", marginTop: "1rem", textAlign: "center" }}>
+              Payments are processed securely via {gatewayLabel}
+            </p>
           </div>
         )}
       </div>

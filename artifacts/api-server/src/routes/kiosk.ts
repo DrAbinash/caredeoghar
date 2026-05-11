@@ -202,6 +202,8 @@ kioskRouter.get("/config", async (_req, res): Promise<void> => {
   const settings = s as Record<string, unknown>;
   const keyId = process.env.RAZORPAY_KEY_ID || (s.razorpayKeyId ?? "");
   const keySecret = process.env.RAZORPAY_KEY_SECRET ?? "";
+  const payuKey = s.payuMerchantKey ?? "";
+  const payuSalt = process.env.PAYU_MERCHANT_SALT ?? "";
   res.json({
     enabled: (settings["kioskEnabled"] as boolean | null) ?? false,
     upiVpa: (settings["kioskUpiVpa"] as string | null) ?? "",
@@ -213,6 +215,7 @@ kioskRouter.get("/config", async (_req, res): Promise<void> => {
     address: s.address ?? "",
     phone: s.phone ?? "",
     razorpayEnabled: Boolean(keyId && keySecret),
+    payuEnabled: Boolean(s.payuEnabled && payuKey && payuSalt),
   });
 });
 
