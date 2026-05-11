@@ -1,5 +1,5 @@
 import { Router, type Response } from "express";
-import { db, billsTable, paymentsTable } from "@workspace/db";
+import { db, billsTable, paymentsTable, patientsTable } from "@workspace/db";
 import { accountsTable, vouchersTable, voucherAuditsTable } from "@workspace/db/schema";
 import { eq, desc, and, gte, lte, like, sql } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -165,19 +165,50 @@ function isUniqueViolation(err: unknown): boolean {
 router.get("/vouchers", async (req, res) => {
   const { type, from, to, q, billId } = req.query as Record<string, string>;
 
-  let query = db.select().from(vouchersTable).$dynamic();
   const conditions = [];
-
   if (type && type !== "all") conditions.push(eq(vouchersTable.type, type));
   if (from) conditions.push(gte(vouchersTable.date, from));
   if (to) conditions.push(lte(vouchersTable.date, to));
   if (q) conditions.push(like(vouchersTable.particular, `%${q}%`));
   if (billId) conditions.push(eq(vouchersTable.billId, Number(billId)));
 
-  if (conditions.length) query = query.where(and(...conditions));
+  // JOIN bills → patients so each voucher row carries patient identity.
+  // Both joins are LEFT so vouchers without a linked bill still appear.
+  const rows = await db
+    .select({
+      id: vouchersTable.id,
+      voucherNumber: vouchersTable.voucherNumber,
+      type: vouchersTable.type,
+      date: vouchersTable.date,
+      creditAccountId: vouchersTable.creditAccountId,
+      debitAccountId: vouchersTable.debitAccountId,
+      amount: vouchersTable.amount,
+      particular: vouchersTable.particular,
+      remark: vouchersTable.remark,
+      performedBy: vouchersTable.performedBy,
+      reference: vouchersTable.reference,
+      narration: vouchersTable.narration,
+      billId: vouchersTable.billId,
+      createdAt: vouchersTable.createdAt,
+      billNumber: billsTable.billNumber,
+      patientFirstName: patientsTable.firstName,
+      patientLastName: patientsTable.lastName,
+      patientUhid: patientsTable.patientId,
+      patientPhone: patientsTable.phone,
+    })
+    .from(vouchersTable)
+    .leftJoin(billsTable, eq(vouchersTable.billId, billsTable.id))
+    .leftJoin(patientsTable, eq(billsTable.patientId, patientsTable.id))
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(vouchersTable.createdAt));
 
-  const rows = await query.orderBy(desc(vouchersTable.createdAt));
-  res.json(rows.map(v => ({ ...v, amount: Number(v.amount) })));
+  res.json(rows.map((v) => ({
+    ...v,
+    amount: Number(v.amount),
+    patientName: v.patientFirstName && v.patientLastName
+      ? `${v.patientFirstName} ${v.patientLastName}`.trim()
+      : null,
+  })));
   return;
 });
 

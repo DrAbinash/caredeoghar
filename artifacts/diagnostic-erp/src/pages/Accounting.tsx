@@ -36,6 +36,11 @@ type Voucher = {
   creditAccountId: string; debitAccountId: string; amount: number;
   particular: string; remark?: string; performedBy?: string; reference?: string;
   narration?: string; billId?: number | null; createdAt: string;
+  // Patient linkage (resolved server-side via bill → patient join)
+  billNumber?: string | null;
+  patientName?: string | null;
+  patientUhid?: string | null;
+  patientPhone?: string | null;
 };
 type VoucherAudit = {
   id: number; voucherId: number; voucherNumber: string;
@@ -452,6 +457,7 @@ export default function Accounting() {
                       <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Voucher #</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Date</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Type</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Patient</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Particular</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Debit</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Credit</th>
@@ -469,12 +475,25 @@ export default function Accounting() {
                             <td className="px-4 py-3 font-mono text-xs">
                               <div className="flex items-center gap-1">
                                 {v.voucherNumber}
-                                {v.billId && <span className="text-[10px] bg-blue-100 text-blue-600 px-1 py-0.5 rounded">Bill#{v.billId}</span>}
+                                {v.billNumber
+                                  ? <a href={`/erp/billing/${v.billId}`} target="_blank" rel="noreferrer" className="text-[10px] bg-blue-100 text-blue-600 px-1 py-0.5 rounded hover:bg-blue-200 transition-colors" title="Open bill">{v.billNumber}</a>
+                                  : v.billId
+                                    ? <span className="text-[10px] bg-blue-100 text-blue-600 px-1 py-0.5 rounded">Bill#{v.billId}</span>
+                                    : null
+                                }
                               </div>
                             </td>
                             <td className="px-4 py-3 text-muted-foreground">{v.date}</td>
                             <td className="px-4 py-3"><VoucherBadge type={v.type} /></td>
-                            <td className="px-4 py-3 max-w-[180px] truncate">{v.particular}</td>
+                            <td className="px-4 py-3">
+                              {v.patientName ? (
+                                <div>
+                                  <div className="font-medium text-xs leading-tight">{v.patientName}</div>
+                                  {v.patientUhid && <div className="text-[10px] text-muted-foreground">{v.patientUhid}</div>}
+                                </div>
+                              ) : <span className="text-muted-foreground text-xs">—</span>}
+                            </td>
+                            <td className="px-4 py-3 max-w-[160px] truncate">{v.particular}</td>
                             <td className="px-4 py-3 text-xs text-muted-foreground">{accountName(v.debitAccountId)}</td>
                             <td className="px-4 py-3 text-xs text-muted-foreground">{accountName(v.creditAccountId)}</td>
                             <td className="px-4 py-3 text-right font-semibold">{inr(v.amount)}</td>
@@ -527,7 +546,7 @@ export default function Accounting() {
                   </tbody>
                   <tfoot className="border-t border-card-border bg-muted/30">
                     <tr>
-                      <td colSpan={6} className="px-4 py-3 text-sm font-semibold text-right">Total</td>
+                      <td colSpan={7} className="px-4 py-3 text-sm font-semibold text-right">Total</td>
                       <td className="px-4 py-3 text-right font-bold">{inr(vouchers.reduce((s, v) => s + v.amount, 0))}</td>
                       <td />
                     </tr>

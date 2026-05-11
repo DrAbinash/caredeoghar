@@ -24,7 +24,7 @@ import { generateTokenForBill } from "./tokens";
 import { generateTestTokensForOrder } from "./test-tokens";
 import { generateStudiesForOrder } from "./radiology";
 import { sendBillWhatsapp } from "./whatsapp";
-import { eq, and, sql, desc, like, or, gt } from "drizzle-orm";
+import { eq, and, sql, desc, like, or, gt, ne } from "drizzle-orm";
 import {
   ListBillsQueryParams,
   CreateBillBody,
@@ -276,7 +276,13 @@ billsRouter.get("/", async (req, res) => {
   const conditions: (ReturnType<typeof eq> | ReturnType<typeof gt>)[] = [];
   if (status) conditions.push(eq(billsTable.status, status));
   if (patientId) conditions.push(eq(billsTable.patientId, patientId));
-  if (dueOnly) conditions.push(gt(sql`${billsTable.balanceAmount}::numeric`, sql`0`));
+  if (dueOnly) {
+    // Only include bills with an actual outstanding balance AND not cancelled.
+    // Cancelled bills should have balanceAmount=0 already (zeroed on cancel),
+    // but the status exclusion is a safety net for any legacy rows.
+    conditions.push(gt(sql`${billsTable.balanceAmount}::numeric`, sql`0`));
+    conditions.push(ne(billsTable.status, "cancelled"));
+  }
   if (dateFrom || dateTo) {
     if (dateField === "due") {
       // Bills only have a due date when one was set; bills with NULL dueDate are excluded by this filter.
@@ -700,6 +706,9 @@ billsRouter.post("/:id/cancel", async (req, res) => {
       cancelledAt: new Date(),
       cancelledByName: performedBy,
       cancellationReason: reason,
+      // Zero out the outstanding balance so cancelled bills never appear
+      // in the Due Payments report (dueOnly filter: balanceAmount > 0).
+      balanceAmount: "0.00",
     }).where(eq(billsTable.id, id)).returning();
 
     await tx.insert(billAuditsTable).values({
