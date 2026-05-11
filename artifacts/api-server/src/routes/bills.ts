@@ -680,8 +680,12 @@ billsRouter.post("/:id/cancel", async (req, res) => {
     return;
   }
   const id = paramsParsed.data.id;
-  const performedBy = bodyParsed.data.performedBy.trim();
+  const performedBy = (req as StaffAuthRequest).staffSession?.subjectName?.trim() || bodyParsed.data.performedBy.trim();
   const reason = bodyParsed.data.reason.trim();
+  if (!performedBy) {
+    res.status(401).json({ error: "Staff authentication required" });
+    return;
+  }
 
   // Serialize concurrent cancel/refund attempts on this bill via row-level lock.
   const txResult = await db.transaction(async (tx) => {
@@ -756,10 +760,14 @@ billsRouter.post("/:id/refund", async (req, res) => {
     return;
   }
   const id = paramsParsed.data.id;
-  const performedBy = bodyParsed.data.performedBy.trim();
+  const performedBy = (req as StaffAuthRequest).staffSession?.subjectName?.trim() || bodyParsed.data.performedBy.trim();
   const reason = bodyParsed.data.reason.trim();
   const rawAmount = bodyParsed.data.amount;
   const method = (bodyParsed.data.method ?? "cash").trim().toLowerCase();
+  if (!performedBy) {
+    res.status(401).json({ error: "Staff authentication required" });
+    return;
+  }
 
   // Round to 2 decimals to avoid float comparison surprises (₹).
   const amount = Math.round(rawAmount * 100) / 100;
@@ -1123,6 +1131,7 @@ paymentsRouter.post("/", async (req, res) => {
     return;
   }
   const { billId, amount, method, referenceNumber, notes } = parsed.data;
+  const actorName = (req as StaffAuthRequest).staffSession?.subjectName?.trim();
 
   if (!Number.isFinite(amount) || amount <= 0) {
     res.status(400).json({ error: "Payment amount must be greater than zero. Use the refund endpoint to process refunds." });
@@ -1147,6 +1156,7 @@ paymentsRouter.post("/", async (req, res) => {
     method,
     referenceNumber: referenceNumber ?? null,
     notes: notes ?? null,
+    recordedByName: actorName || null,
   }).returning();
 
   const newPaidAmount = Number(bill.paidAmount) + amount;
