@@ -1488,7 +1488,7 @@ export default function BillingDesk() {
                     </button>
                   )}
                 </div>
-                <div className="p-2.5 space-y-1.5 max-h-[30vh] overflow-y-auto">
+                <div className="p-2.5 space-y-1.5 max-h-[26vh] overflow-y-auto">
                   {suggestion && suggestion.discount > 0 && (
                     <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 rounded-lg px-3 py-2 flex items-center gap-2 text-xs">
                       <Zap size={11} className="text-green-600 flex-shrink-0" />
@@ -1526,8 +1526,8 @@ export default function BillingDesk() {
                 </div>
               </div>
 
-              <div className="flex-shrink-0 bg-card p-3 space-y-3 border-b border-card-border max-h-[42vh] overflow-y-auto lg:rounded-b-xl">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex-shrink-0 bg-card p-3 space-y-2 border-b border-card-border lg:rounded-b-xl">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <button onClick={() => setPayNow(!payNow)} className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${payNow ? "bg-primary" : "bg-muted"}`}>
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${payNow ? "translate-x-4" : "translate-x-0"}`} />
                   </button>
@@ -1535,7 +1535,7 @@ export default function BillingDesk() {
                   <div className="text-right"><div className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</div><div className="text-base font-bold text-primary">{inr(total)}</div></div>
                 </div>
                 {payNow && (
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     <div className="grid grid-cols-[1.1fr_1fr_18px] gap-2 px-0.5 text-[10px] sm:text-[10px]"><span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Mode</span><span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Amount (₹)</span><span /></div>
                     {paymentSplits.map((split, idx) => (
                       <div key={idx} className="grid grid-cols-[1.1fr_1fr_18px] gap-2 items-center">
@@ -1547,7 +1547,7 @@ export default function BillingDesk() {
                         {paymentSplits.length > 1 ? <button onClick={() => setPaymentSplits((prev) => prev.filter((_, i) => i !== idx))} className="text-muted-foreground hover:text-destructive transition-colors"><X size={13} /></button> : <span />}
                       </div>
                     ))}
-                    {paymentSplits.length < PAYMENT_MODES.length && <button onClick={() => setPaymentSplits((prev) => [...prev, { mode: "upi", amount: "" }])} className="text-[11px] text-primary hover:underline flex items-center gap-1"><Plus size={11} /> Add another payment method</button>}
+                    {paymentSplits.length < PAYMENT_MODES.length && <button onClick={() => setPaymentSplits((prev) => [...prev, { mode: "upi", amount: "" }])} className="text-[11px] text-primary hover:underline flex items-center gap-1">+ Add another payment method</button>}
                   <div className="pt-2 border-t border-card-border space-y-1.5 text-[11px]">
                     {balance > 0 ? <div className="flex items-center justify-between gap-2 animate-pulse"><span className="font-semibold text-slate-700 dark:text-slate-200">Balance due</span><span className="text-red-600 text-lg sm:text-xl font-extrabold">{inr(balance)}</span></div> : paidTotal > 0 && total > 0 ? <div className="flex items-center justify-center gap-1 animate-pulse text-green-600 font-semibold text-base sm:text-lg"><CheckCircle2 size={13} /> Fully paid — {inr(paidTotal)}</div> : <div className="text-muted-foreground">Enter amount(s) above</div>}
                     <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
@@ -1591,9 +1591,8 @@ export default function BillingDesk() {
                 )}
               </div>
             </div>
+            <TodayCollectionsPanel />
           </div>
-          {/* ── Today's Collections Panel — dues first for quick payment ── */}
-          <TodayCollectionsPanel />
         </div>
       </div>
       {/* ── Hidden Print Receipt (shown only when printing) ── */}
@@ -1615,64 +1614,64 @@ export default function BillingDesk() {
                 position: absolute !important;
                 top: 0 !important; left: 0 !important; right: 0 !important;
                 margin: 0 !important;
-                padding: 0 3mm !important;
+                padding: 0 1.5mm !important;
                 max-width: none !important;
                 text-transform: uppercase;
               }
               .billing-desk-receipt .bdr-keep-case { text-transform: none !important; }
-              @page { size: A5; margin: 2mm 3mm; }
+              @page { size: A5; margin: 1.5mm 1.5mm; }
             }
             .billing-desk-receipt {
               display: none;
               font-family: Arial, sans-serif;
-              font-size: 12px;
+              font-size: 10.5px;
               color: #000;
               max-width: 700px;
               margin: 0 auto;
-              padding: 24px;
+              padding: 0;
             }
-            .bdr-patient { border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; padding: 4px 4px; margin-bottom: 8px; font-size: 11px; line-height: 1.3; }
+            .bdr-patient { border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; padding: 2px 2px; margin-bottom: 5px; font-size: 10px; line-height: 1.22; }
             .bdr-patient-line { display: flex; justify-content: space-between; gap: 12px; }
             .bdr-patient-line strong { font-weight: 700; }
-            .bdr-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 4px; }
-            .bdr-header h1 { font-size: 20px; font-weight: 700; margin: 0 0 1px; }
-            .bdr-header p  { margin: 1px 0; font-size: 11px; color: #444; }
-            .bdr-title { text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 1px; margin: 3px 0 6px; text-transform: uppercase; }
-            .bdr-meta { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 11px; }
+            .bdr-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 2px; margin-bottom: 2px; }
+            .bdr-header h1 { font-size: 17px; font-weight: 800; margin: 0 0 0.5px; line-height: 1; }
+            .bdr-header p  { margin: 0.5px 0; font-size: 9.5px; color: #444; }
+            .bdr-title { text-align: center; font-size: 10.5px; font-weight: 700; letter-spacing: 0.6px; margin: 2px 0 4px; text-transform: uppercase; }
+            .bdr-meta { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 10px; }
             .bdr-meta table td { padding: 1px 4px 1px 0; }
             .bdr-meta table td:first-child { font-weight: 600; color: #444; white-space: nowrap; }
-            .bdr-table { width: 100%; border-collapse: collapse; margin-bottom: 6px; font-size: 11px; }
-            .bdr-table th { background: #f5f5f5; text-align: left; padding: 4px 6px; border: 1px solid #ccc; font-weight: 600; }
-            .bdr-table td { padding: 3px 6px; border: 1px solid #ccc; vertical-align: top; }
+            .bdr-table { width: 100%; border-collapse: collapse; margin-bottom: 4px; font-size: 10px; }
+            .bdr-table th { background: #f5f5f5; text-align: left; padding: 3px 5px; border: 1px solid #ccc; font-weight: 700; }
+            .bdr-table td { padding: 2px 5px; border: 1px solid #ccc; vertical-align: top; }
             .bdr-table .text-right { text-align: right; }
-            .bdr-bottom-row { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 8px; }
-            .bdr-payments { font-size: 11px; flex: 1; }
-            .bdr-payments strong { display: block; margin-bottom: 2px; border-bottom: 1px solid #ccc; padding-bottom: 2px; font-size: 11px; }
+            .bdr-bottom-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 4px; }
+            .bdr-payments { font-size: 10px; flex: 1; }
+            .bdr-payments strong { display: block; margin-bottom: 1px; border-bottom: 1px solid #ccc; padding-bottom: 1px; font-size: 10px; }
             .bdr-payments table { width: 100%; border-collapse: collapse; }
-            .bdr-payments td { padding: 2px 4px 2px 0; border: none; }
-            .bdr-summary { min-width: 200px; font-size: 11px; }
+            .bdr-payments td { padding: 1px 4px 1px 0; border: none; }
+            .bdr-summary { min-width: 170px; font-size: 10px; }
             .bdr-summary table { width: 100%; border-collapse: collapse; }
-            .bdr-summary td { padding: 1px 4px; }
+            .bdr-summary td { padding: 0.5px 3px; }
             .bdr-summary tr.bdr-grand td { font-weight: 700; border-top: 1px solid #000; padding-top: 3px; }
-            .bdr-footer { text-align: center; font-size: 10px; color: #666; border-top: 1px solid #ccc; padding-top: 6px; margin-top: 6px; }
+            .bdr-footer { text-align: center; font-size: 9px; color: #666; border-top: 1px solid #ccc; padding-top: 3px; margin-top: 3px; }
           `}</style>
 
-          <div className="bdr-header" style={{ display: "flex", alignItems: "center", gap: 14, justifyContent: "space-between", textAlign: "center", paddingBottom: 8, marginBottom: 6 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, justifyContent: "center" }}>
+          <div className="bdr-header" style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between", textAlign: "center", paddingBottom: 1, marginBottom: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, justifyContent: "center", minWidth: 0 }}>
               {clinic?.logoDataUrl && (
-                <img src={clinic.logoDataUrl} alt="Logo" style={{ maxHeight: 66, maxWidth: 108, objectFit: "contain" }} />
+                <img src={clinic.logoDataUrl} alt="Logo" style={{ maxHeight: 48, maxWidth: 84, objectFit: "contain" }} />
               )}
               <div>
-                <h1 style={{ margin: 0, fontSize: 22, lineHeight: 1.05 }}>{clinic?.name || "Diagnostic Centre"}</h1>
-                {clinic?.tagline && <p style={{ margin: "2px 0", fontStyle: "italic", color: "#555", fontSize: 11.5 }}>{clinic.tagline}</p>}
-                {clinic?.address && <p style={{ margin: "2px 0", fontSize: 11.5 }}>{clinic.address}</p>}
-                <p style={{ margin: "2px 0", fontSize: 11.5 }}>
+                <h1 style={{ margin: 0, fontSize: 17, lineHeight: 1 }}>{clinic?.name || "Diagnostic Centre"}</h1>
+                {clinic?.tagline && <p style={{ margin: "1px 0", fontStyle: "italic", color: "#555", fontSize: 9.5 }}>{clinic.tagline}</p>}
+                {clinic?.address && <p style={{ margin: "1px 0", fontSize: 9.5 }}>{clinic.address}</p>}
+                <p style={{ margin: "1px 0", fontSize: 9.5 }}>
                   {clinic?.phone && <>Ph: {clinic.phone}</>}
                   {clinic?.phone && clinic?.email && " | "}
                   {clinic?.email && <>Email: {clinic.email}</>}
                 </p>
                 {(clinic?.gstin || clinic?.website) && (
-                  <p style={{ margin: "2px 0", fontSize: 10.5 }}>
+                  <p style={{ margin: "1px 0", fontSize: 9 }}>
                     {clinic?.gstin && <>GSTIN: {clinic.gstin}</>}
                     {clinic?.gstin && clinic?.website && " | "}
                     {clinic?.website && <>{clinic.website}</>}
@@ -1682,27 +1681,27 @@ export default function BillingDesk() {
             </div>
             {/* Auto-included verify QR (toggle in Settings → "Print QR on bill"). */}
             {clinic?.qrOnBillEnabled !== false && (
-              <div className="bdr-keep-case" style={{ flexShrink: 0, textAlign: "center", fontSize: 8, color: "#444", lineHeight: 1.1 }}>
-                <img src={billQrDataUrl || qrSvgDataUrl(buildBillVerifyUrl(lastBill.billNumber))} alt="Verify QR" style={{ width: 56, height: 56, display: "block" }} />
+              <div className="bdr-keep-case" style={{ flexShrink: 0, textAlign: "center", fontSize: 7.5, color: "#444", lineHeight: 1.05 }}>
+                <img src={billQrDataUrl || qrSvgDataUrl(buildBillVerifyUrl(lastBill.billNumber))} alt="Verify QR" style={{ width: 42, height: 42, display: "block" }} />
                 <div style={{ marginTop: 2 }}>Scan to verify</div>
               </div>
             )}
           </div>
-          <div className="bdr-title">Invoice / Receipt</div>
+          <div className="bdr-title" style={{ margin: "1px 0 2px" }}>Invoice / Receipt</div>
 
           {/* Compact 2-line patient block. text-transform:uppercase on wrapper
               forces caps; use bdr-keep-case to opt specific fields out. */}
-          <div className="bdr-patient">
+          <div className="bdr-patient" style={{ marginBottom: 3 }}>
             <div className="bdr-patient-line">
               <div>
-                <strong style={{ fontSize: 15, fontWeight: 900, lineHeight: 1.05 }}>{lastBill.patient.firstName} {lastBill.patient.lastName}</strong>
+                <strong style={{ fontSize: 13, fontWeight: 900, lineHeight: 1.05 }}>{lastBill.patient.firstName} {lastBill.patient.lastName}</strong>
                 {(() => {
                   const a = calcAge(lastBill.patient.dateOfBirth);
                   const ageSex = [a, lastBill.patient.gender].filter(Boolean).join(" / ");
-                  return ageSex ? <div style={{ fontSize: 12, fontWeight: 800, marginTop: 1 }}>{ageSex}</div> : null;
+                  return ageSex ? <div style={{ fontSize: 10.5, fontWeight: 800, marginTop: 1 }}>{ageSex}</div> : null;
                 })()}
               </div>
-              <div style={{ textAlign: "right", fontSize: 11, lineHeight: 1.4 }}>
+              <div style={{ textAlign: "right", fontSize: 10, lineHeight: 1.3 }}>
                 {lastBill.patient.phone && <div>Ph: {lastBill.patient.phone}</div>}
                 <div>ID: {lastBill.patient.patientId}</div>
               </div>
@@ -1717,7 +1716,7 @@ export default function BillingDesk() {
             </div>
           </div>
 
-            <table className="bdr-table" style={{ fontSize: 10 }}>
+            <table className="bdr-table" style={{ fontSize: 9 }}>
             <thead>
               <tr style={{ background: bdLs.tableHeaderBg, color: bdLs.tableHeaderColor, borderBottom: bdLs.tableRowBorderBottom }}>
                 <th style={{ padding: bdLs.tableHeaderPad }}>#</th>
@@ -1742,9 +1741,9 @@ export default function BillingDesk() {
             const paidOnReceipt = lastBill.payments.reduce((s, p) => s + Number(p.amount || 0), 0);
             const balanceOnReceipt = Math.max(0, lastBill.total - paidOnReceipt);
             return (
-              <div className="bdr-bottom-row" style={{ alignItems: "stretch", gap: 16 }}>
+              <div className="bdr-bottom-row" style={{ alignItems: "stretch", gap: 8, marginBottom: 2 }}>
                 {lastBill.payments.length > 0 ? (
-                  <div className="bdr-payments" style={{ flex: 1.35 }}>
+                  <div className="bdr-payments" style={{ flex: 1.5 }}>
                     <strong>Payment Details</strong>
                     <table>
                       <tbody>
@@ -1758,7 +1757,7 @@ export default function BillingDesk() {
                     </table>
                   </div>
                 ) : <div style={{ flex: 1 }} />}
-                <div className="bdr-summary" style={{ minWidth: 170, flex: 0.75 }}>
+                <div className="bdr-summary" style={{ minWidth: 150, flex: 0.7 }}>
                   <table>
                     <tbody>
                       <tr><td>Subtotal</td><td style={{ textAlign: "right" }}>₹{lastBill.subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>
