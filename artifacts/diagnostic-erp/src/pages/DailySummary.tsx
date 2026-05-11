@@ -152,6 +152,8 @@ export default function DailySummary() {
   const netCash = data?.grandTotal ?? 0;
   const userRows = data?.byUser ?? [];
   const detailedRows = data?.payments ?? [];
+  const cancelledCount = data?.billsByStatus?.cancelled ?? 0;
+  const cancelledBills = data?.billsByStatus?.cancelled ? data.billsByStatus.cancelled : 0;
   const staffOptions: StaffOption[] = [
     { name: "All Staff", billCount: data?.summary.billCount ?? 0 },
     ...userRows.map((u) => ({ name: u.userName, billCount: u.billCount })),
@@ -263,6 +265,13 @@ export default function DailySummary() {
               label="Dues"
               value={inr(summary.outstanding)}
               accent="bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800"
+            />
+            <SummaryCard
+              icon={<ArrowDownCircle size={14} className="text-slate-600" />}
+              label="Refunds / Cancellations"
+              value={String(cancelledCount)}
+              sub={cancelledBills > 0 ? `${cancelledBills} cancelled bill${cancelledBills === 1 ? "" : "s"}` : "No cancellations today"}
+              accent="bg-slate-50 dark:bg-slate-950/30 border-slate-200 dark:border-slate-800"
             />
           </div>
 
