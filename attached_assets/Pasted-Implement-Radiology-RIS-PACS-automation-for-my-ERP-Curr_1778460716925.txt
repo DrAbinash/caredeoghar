@@ -1,0 +1,196 @@
+Implement Radiology RIS/PACS automation for my ERP.
+
+Current PACS: CONQUEST PACS.
+Viewer: WEASIS.
+ERP already has POST /api/patient-reports for saving reports.
+Do not remove existing features.
+
+Build the following:
+
+1. Add internal patient contact API:
+GET /api/internal/patients/:patientId/contact
+
+Return:
+{
+  patientId,
+  name,
+  age,
+  sex,
+  mobile,
+  email
+}
+
+Find patient by patientId/UHID. This endpoint is for internal ERP automation.
+
+2. Add radiology study intake API:
+POST /api/internal/radiology/studies
+
+Body:
+{
+  studyId,
+  patientId,
+  patientName,
+  age,
+  sex,
+  modality,
+  studyDescription,
+  studyDate,
+  accessionNumber,
+  studyInstanceUID,
+  aeTitle,
+  ipAddress,
+  port,
+  referringDoctor,
+  weasisUrl
+}
+
+This should create or update a radiology worklist entry. Avoid duplicates using studyInstanceUID or accessionNumber.
+
+3. Add radiology worklist database/model if not existing:
+Fields:
+id, studyId, patientId, patientName, age, sex, modality, studyDescription, studyDate, accessionNumber, studyInstanceUID, aeTitle, ipAddress, port, referringDoctor, weasisUrl, status, assignedRadiologist, aiDraftStatus, reportId, createdAt, updatedAt.
+
+Statuses:
+STUDY_RECEIVED
+AI_DRAFT_READY
+REPORT_IN_PROGRESS
+REPORT_FINAL
+DELIVERED
+
+4. Add frontend page:
+Radiology Worklist
+
+Route:
+/radiology/worklist
+
+Show table:
+Patient Name, Age/Sex, Modality, Study, Accession No, Study Date, Status, Assigned Radiologist, Actions.
+
+Actions:
+Open in Weasis
+Create AI Draft
+Open Report Editor
+Mark Final
+
+5. Add report editor page:
+Route:
+/radiology/report/:studyId
+
+Show:
+Patient demographics at top.
+Open in Weasis button.
+Raw findings prompt textarea.
+Template selector.
+Generate AI Draft button.
+Editable formatted report editor.
+Impression field.
+Critical checkbox and critical note.
+Save Final Report button.
+
+6. Integrate with existing POST /api/patient-reports.
+
+When Save Final Report is clicked, send payload:
+
+{
+  patientId,
+  testId,
+  studyId,
+  orderId,
+  billId,
+  title,
+  type: "radiology",
+  body,
+  parameters: {
+    modality,
+    studyDescription,
+    accessionNumber,
+    studyInstanceUID,
+    weasisUrl,
+    aeTitle,
+    ipAddress,
+    port
+  },
+  impression,
+  templateId,
+  createdBy,
+  isCritical,
+  criticalNote
+}
+
+After success, update radiology worklist status to REPORT_FINAL and store reportId.
+
+7. Add endpoint:
+POST /api/internal/radiology/report-status
+
+Body:
+{
+  studyId,
+  accessionNumber,
+  studyInstanceUID,
+  status,
+  deliveryStatus,
+  reportId
+}
+
+Use it to update worklist status.
+
+8. Add AI draft endpoint:
+POST /api/internal/radiology/ai-draft
+
+Body:
+{
+  studyId,
+  modality,
+  studyDescription,
+  clinicalHistory,
+  rawFindings,
+  templateId
+}
+
+For now, implement simple template-based AI placeholder if no AI key exists.
+Return:
+{
+  title,
+  technique,
+  findings,
+  impression,
+  recommendation,
+  formattedReportHtml,
+  formattedReportText
+}
+
+Prepare structure so OpenAI/Ollama can be connected later.
+
+9. Add initial templates:
+MRI Brain Plain
+MRI Brain With Contrast
+MRI LS Spine
+MRI Cervical Spine
+CT Brain
+X-Ray Chest
+USG Abdomen
+
+Template format should include:
+Bold demographics top line.
+Bold divider line.
+Centered bold underlined study title.
+Technique.
+Findings/Observation with anatomical headings.
+Impression bullet points.
+Recommendation.
+Footer: Please correlate with clinical findings.
+
+10. Add audit logging:
+Log study intake, AI draft generation, report editing, final report save, status change, and delivery status change.
+
+11. Add navigation menu item:
+Radiology Worklist
+Icon: suitable medical/image/report icon.
+
+12. Make it safe:
+No AI report should be marked final automatically.
+Only user action Save Final Report can finalize.
+Do not send patient email automatically yet; only prepare deliveryStatus = READY_TO_SEND.
+
+13. Provide migration/schema changes and keep build working.
+Run typecheck/build and fix errors.
