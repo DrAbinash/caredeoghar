@@ -74,9 +74,8 @@ export default function Packages() {
   const [editPkg, setEditPkg] = useState<PackageItem | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   // When true, the MRP field tracks the sum of selected tests' prices. Flips
-  // to false the moment the user edits MRP by hand, or when the user opens
-  // an existing package for edit (we don't want to silently rewrite their
-  // saved price). The user can re-enable it via the "Auto" button.
+  // to false the moment the user edits MRP by hand. Existing packages stay in
+  // manual mode unless their saved MRP exactly matches the current test sum.
   const [mrpAuto, setMrpAuto] = useState(true);
 
   const { data: packages = [], isLoading } = useQuery<PackageItem[]>({
@@ -146,10 +145,7 @@ export default function Packages() {
       testDiscounts: td,
       testSearch: "",
     });
-    // Don't override the saved MRP on edit — but if it happens to match the
-    // current sum of test prices, treat it as still auto-tracking.
-    const sum = pkg.tests.reduce((acc, t) => acc + Number(t.price ?? 0), 0);
-    setMrpAuto(Math.abs(sum - Number(pkg.price)) < 0.005);
+    setMrpAuto(false);
   }
 
   function handleSubmit(e: React.FormEvent) {
