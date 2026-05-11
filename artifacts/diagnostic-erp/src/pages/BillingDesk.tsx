@@ -1418,8 +1418,8 @@ export default function BillingDesk() {
             <div className="space-y-3">
               {/* ── Selected Tests ── */}
               <div className="lg:flex-1 min-h-0 overflow-y-auto border-b border-card-border max-h-[34vh] lg:max-h-none">
-                <div className="px-4 py-2 bg-gradient-to-r from-slate-50 to-transparent dark:from-slate-800/30 border-l-[3px] border-l-slate-400 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                <div className="px-4 py-2 bg-gradient-to-r from-slate-50 via-slate-100 to-transparent dark:from-slate-800/30 dark:via-slate-700/20 border-l-[3px] border-l-slate-500 flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
                     Selected Tests ({selectedTests.length})
                   </span>
                   {selectedTests.length > 0 && (
@@ -1472,14 +1472,14 @@ export default function BillingDesk() {
               </div>
 
               <div className="flex-shrink-0 border-b border-card-border bg-card lg:sticky lg:bottom-0 lg:z-10 shadow-sm">
-                <div className="px-3 py-2 border-b border-card-border bg-gradient-to-r from-indigo-50 to-transparent dark:from-indigo-950/20 border-l-[3px] border-l-indigo-500 flex items-center justify-between gap-2">
+                <div className="px-3 py-2 border-b border-card-border bg-gradient-to-r from-indigo-100 via-indigo-50 to-transparent dark:from-indigo-950/30 dark:via-indigo-900/10 border-l-[3px] border-l-indigo-600 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
-                    <Receipt size={14} className="text-indigo-600 dark:text-indigo-400 flex-shrink-0" />
-                    <span className="text-sm font-semibold truncate">Bill Summary</span>
+                    <Receipt size={14} className="text-indigo-700 dark:text-indigo-300 flex-shrink-0" />
+                    <span className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">Bill Summary</span>
                   </div>
                   {selectedTests.length > 0 && (
                     <button
-                      className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+                      className="flex items-center gap-1 text-[11px] font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-colors flex-shrink-0"
                       onClick={fetchSuggestion}
                       disabled={suggLoading}
                     >
@@ -1531,7 +1531,7 @@ export default function BillingDesk() {
                   <button onClick={() => setPayNow(!payNow)} className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${payNow ? "bg-primary" : "bg-muted"}`}>
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${payNow ? "translate-x-4" : "translate-x-0"}`} />
                   </button>
-                  <span className="text-sm font-medium flex-1 min-w-0">Collect Payment Now</span>
+                  <span className="text-sm font-bold text-slate-800 dark:text-slate-100 flex-1 min-w-0">Collect Payment Now</span>
                   <div className="text-right"><div className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</div><div className="text-base font-bold text-primary">{inr(total)}</div></div>
                 </div>
                 {payNow && (
@@ -1549,7 +1549,7 @@ export default function BillingDesk() {
                     ))}
                     {paymentSplits.length < PAYMENT_MODES.length && <button onClick={() => setPaymentSplits((prev) => [...prev, { mode: "upi", amount: "" }])} className="text-[11px] text-primary hover:underline flex items-center gap-1"><Plus size={11} /> Add another payment method</button>}
                   <div className="pt-2 border-t border-card-border space-y-1.5 text-[11px]">
-                    {balance > 0 ? <div className="flex items-center justify-between gap-2 animate-pulse"><span className="text-muted-foreground">Balance due</span><span className="text-red-600 text-lg sm:text-xl font-extrabold">{inr(balance)}</span></div> : paidTotal > 0 && total > 0 ? <div className="flex items-center justify-center gap-1 animate-pulse text-green-600 font-semibold text-base sm:text-lg"><CheckCircle2 size={13} /> Fully paid — {inr(paidTotal)}</div> : <div className="text-muted-foreground">Enter amount(s) above</div>}
+                    {balance > 0 ? <div className="flex items-center justify-between gap-2 animate-pulse"><span className="font-semibold text-slate-700 dark:text-slate-200">Balance due</span><span className="text-red-600 text-lg sm:text-xl font-extrabold">{inr(balance)}</span></div> : paidTotal > 0 && total > 0 ? <div className="flex items-center justify-center gap-1 animate-pulse text-green-600 font-semibold text-base sm:text-lg"><CheckCircle2 size={13} /> Fully paid — {inr(paidTotal)}</div> : <div className="text-muted-foreground">Enter amount(s) above</div>}
                     <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
                       <Button variant="outline" onClick={resetAll} disabled={generateMut.isPending} className="h-8 text-[11px] px-2">
                         <RefreshCcw size={13} className="mr-1" /> Reset

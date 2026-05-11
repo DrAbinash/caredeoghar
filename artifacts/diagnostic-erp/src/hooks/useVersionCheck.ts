@@ -43,7 +43,7 @@ export function useVersionCheck(): { updateAvailable: boolean; dismiss: () => vo
     }
 
     // Kick off the first check immediately, then resume polling on tab focus.
-    timer = setTimeout(check, POLL_INTERVAL_MS);
+    void check();
 
     const onVisibility = () => {
       if (document.visibilityState === "visible" && !updateAvailable) {
