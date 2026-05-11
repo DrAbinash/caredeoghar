@@ -556,26 +556,17 @@ export default function BillingDesk() {
         tests: selectedTests.map((t) => ({ testId: t.testId, price: t.price })),
       });
 
-      // 2. Create bill
+      // 2. Create bill (inline payments are processed server-side within /billing permission)
+      const paymentRows = payNow
+        ? paymentSplits.filter((s) => Number(s.amount) > 0).map((s) => ({ amount: Number(s.amount), method: s.mode }))
+        : [];
       const bill = await api.post<{ id: number; billNumber: string; token?: { tokenNo: number; tokenDate: string } | null }>("/api/bills", {
         orderId: order.id,
         discount: discountAmt,
         discountReason: discountAmt > 0 ? discountReason || null : null,
         discountReasonNote: discountAmt > 0 ? discountNote || null : null,
+        payments: paymentRows,
       });
-
-      // 3. Record payment split(s)
-      if (payNow) {
-        const splits = paymentSplits.filter((s) => Number(s.amount) > 0);
-        for (const split of splits) {
-          await api.post("/api/payments", {
-            billId: bill.id,
-            amount: Number(split.amount),
-            method: split.mode,
-            reference: "",
-          });
-        }
-      }
 
       return bill;
     },

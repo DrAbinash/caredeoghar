@@ -323,7 +323,7 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
     res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
     return;
   }
-  const { orderId, discount = 0, dueDate } = parsed.data;
+  const { orderId, discount = 0, dueDate, payments: inlinePayments = [] } = parsed.data;
   const discountReason = typeof payload?.discountReason === "string" ? payload.discountReason.trim() || null : null;
   const discountReasonNote = typeof payload?.discountReasonNote === "string" ? payload.discountReasonNote.trim() || null : null;
 
@@ -397,6 +397,12 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
       await tx.update(patientsTable).set({ ledgerId }).where(eq(patientsTable.id, patRow.id));
     }
 
+    // Compute paid amount from inline payments (validated amount > 0 by schema)
+    const validPayments = inlinePayments.filter((p) => Number.isFinite(p.amount) && p.amount > 0);
+    const paidAmountInline = validPayments.reduce((s, p) => s + p.amount, 0);
+    const balanceAmountInline = Math.max(0, totalAmount - paidAmountInline);
+    const billStatus = paidAmountInline >= totalAmount - 0.01 ? "paid" : paidAmountInline > 0 ? "partial" : "pending";
+
     const [billRow] = await tx.insert(billsTable).values({
       billNumber,
       orderId,
@@ -407,13 +413,25 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
       discountReasonNote,
       taxAmount: taxAmount.toFixed(2),
       totalAmount: totalAmount.toFixed(2),
-      paidAmount: "0.00",
-      balanceAmount: totalAmount.toFixed(2),
-      status: "pending",
+      paidAmount: paidAmountInline.toFixed(2),
+      balanceAmount: balanceAmountInline.toFixed(2),
+      status: billStatus,
       ledgerId,
       dueDate: dueDate ?? null,
       createdByName: actorName || null,
     }).returning();
+
+    // Record each payment split atomically with the bill
+    for (const p of validPayments) {
+      await tx.insert(paymentsTable).values({
+        billId: billRow.id,
+        amount: p.amount.toFixed(2),
+        method: p.method,
+        referenceNumber: p.referenceNumber ?? null,
+        notes: p.notes ?? null,
+        recordedByName: actorName || null,
+      });
+    }
 
     return { bill: billRow, pat: patRow };
   });

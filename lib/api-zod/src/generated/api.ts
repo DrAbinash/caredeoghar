@@ -896,6 +896,12 @@ export const CreateBillBody = zod.object({
   orderId: zod.number(),
   discount: zod.number().min(createBillBodyDiscountMin).optional(),
   dueDate: zod.string().nullish(),
+  payments: zod.array(zod.object({
+    amount: zod.number().gt(0),
+    method: zod.enum(["cash", "card", "upi", "insurance", "cheque"]),
+    referenceNumber: zod.string().nullish(),
+    notes: zod.string().nullish(),
+  })).optional(),
 });
 
 /**
