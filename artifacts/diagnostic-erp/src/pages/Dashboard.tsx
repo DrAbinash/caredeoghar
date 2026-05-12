@@ -131,7 +131,10 @@ type IncomeExpensePayload = {
 };
 
 export default function Dashboard() {
-  const { data: stats, isLoading: statsLoading } = useGetDashboardStats();
+  const { data: stats, isLoading: statsLoading } = useQuery({
+    queryKey: ["dashboard-stats-raw"],
+    queryFn: () => api.get("/api/reports/dashboard"),
+  });
   const { data: revenue } = useGetRevenueReport({ period: "monthly" });
   const { data: popular } = useGetPopularTests();
 
@@ -196,11 +199,11 @@ export default function Dashboard() {
 
   const recentBills = (stats as any)?.recentBills ?? [];
   const overdueAlerts = (stats as any)?.overdueAlerts ?? [];
-  const totalBills = (stats as any)?.totalBills ?? 0;
-  const pendingReports = (stats as any)?.pendingReports ?? 0;
-  const todayBillCount = (stats as any)?.todayBills ?? 0;
-  const allPendingDues = (stats as any)?.pendingPayments ?? 0;
-  const todayPendingDues = (stats as any)?.todayPendingPayments ?? 0;
+  const totalBills = Number((stats as any)?.totalBills ?? 0);
+  const pendingReports = Number((stats as any)?.pendingReports ?? 0);
+  const todayBillCount = Number((stats as any)?.todayBills ?? 0);
+  const allPendingDues = Number((stats as any)?.pendingPayments ?? 0);
+  const todayPendingDues = Number((stats as any)?.todayPendingPayments ?? 0);
 
   return (
     <div className="pb-10">
@@ -211,8 +214,8 @@ export default function Dashboard() {
           <KpiCard
             icon={IndianRupee}
             label="Today's Revenue"
-            value={fmt(stats?.todayRevenue ?? 0)}
-            sub={`Month: ${fmt(stats?.monthRevenue ?? 0)}`}
+            value={fmt((stats as any)?.todayRevenue ?? 0)}
+            sub={`Month: ${fmt((stats as any)?.monthRevenue ?? 0)}`}
             iconBg="bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400"
             accentBorder="border-l-violet-500"
           />
@@ -315,10 +318,10 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: "Total Patients", value: stats?.totalPatients ?? 0, icon: Users, color: "text-cyan-600 dark:text-cyan-400", accent: "border-l-cyan-400" },
-            { label: "Today's Orders", value: stats?.todayOrders ?? 0, icon: ClipboardList, color: "text-violet-600 dark:text-violet-400", accent: "border-l-violet-400" },
-            { label: "Completed Tests", value: stats?.completedTests ?? 0, icon: TrendingUp, color: "text-green-600 dark:text-green-400", accent: "border-l-green-400" },
-            { label: "Pending Orders", value: stats?.pendingOrders ?? 0, icon: AlertTriangle, color: "text-amber-500 dark:text-amber-400", accent: "border-l-amber-400" },
+            { label: "Total Patients", value: (stats as any)?.totalPatients ?? 0, icon: Users, color: "text-cyan-600 dark:text-cyan-400", accent: "border-l-cyan-400" },
+            { label: "Today's Orders", value: (stats as any)?.todayOrders ?? 0, icon: ClipboardList, color: "text-violet-600 dark:text-violet-400", accent: "border-l-violet-400" },
+            { label: "Completed Tests", value: (stats as any)?.completedTests ?? 0, icon: TrendingUp, color: "text-green-600 dark:text-green-400", accent: "border-l-green-400" },
+            { label: "Pending Orders", value: (stats as any)?.pendingOrders ?? 0, icon: AlertTriangle, color: "text-amber-500 dark:text-amber-400", accent: "border-l-amber-400" },
           ].map(({ label, value, icon: Icon, color, accent }) => (
             <div key={label} className={`bg-white dark:bg-card border border-card-border rounded-lg px-4 py-3 flex items-center gap-3 chip-shadow border-l-4 ${accent}`}>
               <Icon size={16} className={color} />
