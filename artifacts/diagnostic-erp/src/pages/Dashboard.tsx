@@ -119,8 +119,6 @@ function daysAgoISO(n: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-// Backend payload shape from /api/reports/income-expense — `income`/`expense`
-// are nested objects, not flat numbers. We flatten them in `chartRows` below.
 type IncomeExpenseApiRow = {
   date: string;
   income: { total: number; cash: number; upi: number; card: number; bank: number; insurance: number; cheque: number };
@@ -137,8 +135,6 @@ export default function Dashboard() {
   const { data: revenue } = useGetRevenueReport({ period: "monthly" });
   const { data: popular } = useGetPopularTests();
 
-  // Filterable revenue/expense band — supplements the always-on KPI cards
-  // above with an arbitrary date window the user can tune.
   const [from, setFrom] = useState<string>(daysAgoISO(7));
   const [to, setTo] = useState<string>(todayISO());
 
@@ -158,7 +154,6 @@ export default function Dashboard() {
     };
   }, [rangeData]);
 
-  // Recharts needs flat numeric props — derive them from the nested API rows.
   const chartRows = useMemo(
     () =>
       (rangeData?.rows ?? []).map((r) => ({
@@ -203,7 +198,7 @@ export default function Dashboard() {
   const overdueAlerts = (stats as any)?.overdueAlerts ?? [];
   const totalBills = (stats as any)?.totalBills ?? 0;
   const pendingReports = (stats as any)?.pendingReports ?? 0;
-  const todayBillCount = (stats as any)?.todayBillCount ?? 0;
+  const todayBillCount = (stats as any)?.todayBills ?? 0;
   const allPendingDues = (stats as any)?.pendingPayments ?? 0;
   const todayPendingDues = (stats as any)?.todayPendingPayments ?? 0;
 
@@ -212,8 +207,6 @@ export default function Dashboard() {
       <PageHeader title="Dashboard" subtitle="Diagnostic Center Overview" />
 
       <div className="px-6 space-y-6">
-
-        {/* ── KPI Row ── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard
             icon={IndianRupee}
@@ -231,10 +224,6 @@ export default function Dashboard() {
             iconBg="bg-cyan-100 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-400"
             accentBorder="border-l-cyan-500"
           />
-          {/* Module B: Pending Dues tile pulses red whenever outstanding balance > 0
-              so the front desk can never miss it. Replaces the prior "Referral Payouts"
-              tile (which was also a Module A compliance leak — referral fees are now
-              super-admin-only). */}
           <KpiCard
             icon={AlertCircle}
             label="Pending Dues"
@@ -262,7 +251,6 @@ export default function Dashboard() {
           />
         </div>
 
-        {/* ── Date Range Snapshot ── */}
         <div className="bg-white dark:bg-card border border-card-border rounded-xl p-4 space-y-4 card-shadow">
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex items-center gap-2 mr-2">
@@ -325,7 +313,6 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* ── Secondary KPIs ── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { label: "Total Patients", value: stats?.totalPatients ?? 0, icon: Users, color: "text-cyan-600 dark:text-cyan-400", accent: "border-l-cyan-400" },
@@ -333,10 +320,7 @@ export default function Dashboard() {
             { label: "Completed Tests", value: stats?.completedTests ?? 0, icon: TrendingUp, color: "text-green-600 dark:text-green-400", accent: "border-l-green-400" },
             { label: "Pending Orders", value: stats?.pendingOrders ?? 0, icon: AlertTriangle, color: "text-amber-500 dark:text-amber-400", accent: "border-l-amber-400" },
           ].map(({ label, value, icon: Icon, color, accent }) => (
-            <div
-              key={label}
-              className={`bg-white dark:bg-card border border-card-border rounded-lg px-4 py-3 flex items-center gap-3 chip-shadow border-l-4 ${accent}`}
-            >
+            <div key={label} className={`bg-white dark:bg-card border border-card-border rounded-lg px-4 py-3 flex items-center gap-3 chip-shadow border-l-4 ${accent}`}>
               <Icon size={16} className={color} />
               <div>
                 <p className="text-xs text-muted-foreground">{label}</p>
@@ -347,48 +331,18 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-          {/* ── Quick Actions ── */}
           <div className="lg:col-span-1 space-y-3">
             <h3 className="text-sm font-semibold text-foreground">Quick Actions</h3>
-            <QuickActionCard
-              icon={Plus}
-              label="New Bill"
-              description="Generate a bill for a completed order"
-              href="/billing"
-              color="bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400"
-            />
-            <QuickActionCard
-              icon={Users}
-              label="Register Patient"
-              description="Add a new patient to the system"
-              href="/patients"
-              color="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
-            />
-            <QuickActionCard
-              icon={BarChart3}
-              label="Generate Reports"
-              description="View revenue and analytics reports"
-              href="/reports"
-              color="bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400"
-            />
-            <QuickActionCard
-              icon={Package}
-              label="Test Catalog"
-              description="Manage diagnostic test inventory"
-              href="/tests"
-              color="bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400"
-            />
-
-            {/* ── Alerts ── */}
+            <QuickActionCard icon={Plus} label="New Bill" description="Generate a bill for a completed order" href="/billing" color="bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400" />
+            <QuickActionCard icon={Users} label="Register Patient" description="Add a new patient to the system" href="/patients" color="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" />
+            <QuickActionCard icon={BarChart3} label="Generate Reports" description="View revenue and analytics reports" href="/reports" color="bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400" />
+            <QuickActionCard icon={Package} label="Test Catalog" description="Manage diagnostic test inventory" href="/tests" color="bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400" />
             {overdueAlerts.length > 0 && (
               <div className="mt-4">
                 <div className="flex items-center gap-2 mb-2">
                   <AlertTriangle size={14} className="text-yellow-500" />
                   <h3 className="text-sm font-semibold text-foreground">Alerts</h3>
-                  <span className="ml-auto px-2 py-0.5 bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 rounded-full text-xs font-bold">
-                    {overdueAlerts.length}
-                  </span>
+                  <span className="ml-auto px-2 py-0.5 bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 rounded-full text-xs font-bold">{overdueAlerts.length}</span>
                 </div>
                 <div className="space-y-2">
                   {overdueAlerts.map((alert: { billNumber: string; balanceAmount: number; dueDate: string | null }) => (
@@ -405,7 +359,6 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
-
             {overdueAlerts.length === 0 && (
               <div className="mt-4 bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800/40 rounded-lg px-4 py-3 flex items-center gap-2.5">
                 <div className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
@@ -414,7 +367,6 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* ── Revenue Chart ── */}
           <div className="lg:col-span-2 bg-white dark:bg-card border border-card-border rounded-xl p-5 card-shadow">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-foreground">Monthly Revenue</h3>
@@ -447,7 +399,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* ── Recent Transactions ── */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-foreground">Recent Transactions</h3>
@@ -501,17 +452,11 @@ export default function Dashboard() {
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${billStatusColor[bill.status] ?? "bg-gray-100 text-gray-600"}`}>
-                            {bill.status.charAt(0).toUpperCase() + bill.status.slice(1)}
-                          </span>
+                          <StatusBadge status={bill.status as any} colorMap={billStatusColor} />
                         </td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground">
-                          {new Date(bill.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
-                        </td>
-                        <td className="px-4 py-3">
-                          <Link href={`/billing/${bill.id}`} className="text-muted-foreground hover:text-primary transition-colors inline-flex">
-                            <ChevronRight size={15} />
-                          </Link>
+                        <td className="px-4 py-3 text-muted-foreground text-xs">{new Date(bill.createdAt).toLocaleDateString()}</td>
+                        <td className="px-4 py-3 text-right">
+                          <Link href={`/billing/bill/${bill.id}`} className="text-xs text-primary hover:underline">Open</Link>
                         </td>
                       </tr>
                     ))
@@ -521,39 +466,6 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-
-        {/* ── Popular Tests ── */}
-        {popular?.tests && popular.tests.length > 0 && (
-          <div>
-            <h3 className="text-sm font-semibold text-foreground mb-3">Most Ordered Tests</h3>
-            <div className="bg-white dark:bg-card border border-card-border rounded-xl p-5 card-shadow overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-muted-foreground border-b border-border">
-                    <th className="pb-2.5 font-medium">Test</th>
-                    <th className="pb-2.5 font-medium">Category</th>
-                    <th className="pb-2.5 font-medium text-right">Orders</th>
-                    <th className="pb-2.5 font-medium text-right">Revenue</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {popular.tests.slice(0, 5).map((t) => (
-                    <tr key={t.testId} className="border-b border-border/50 last:border-0 hover:bg-muted/20">
-                      <td className="py-2.5">
-                        <div className="font-medium text-foreground">{t.testName}</div>
-                        <div className="text-xs text-muted-foreground">{t.testCode}</div>
-                      </td>
-                      <td className="py-2.5 text-muted-foreground">{t.category}</td>
-                      <td className="py-2.5 text-right font-medium">{t.orderCount}</td>
-                      <td className="py-2.5 text-right font-semibold text-green-600 dark:text-green-400">{fmt(t.revenue)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
       </div>
     </div>
   );
