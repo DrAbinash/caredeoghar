@@ -142,6 +142,7 @@ export default function BillDetail({ id }: { id: number }) {
   // when the bill loads. Empty string until generation completes; the
   // <img> below skips rendering until the data URL is ready.
   const [billQrDataUrl, setBillQrDataUrl] = useState<string>("");
+  const [reprintReady, setReprintReady] = useState(false);
   useEffect(() => {
     if (!bill?.billNumber) { setBillQrDataUrl(""); return; }
     let cancelled = false;
@@ -155,6 +156,16 @@ export default function BillDetail({ id }: { id: number }) {
       .catch(() => { if (!cancelled) setBillQrDataUrl(""); });
     return () => { cancelled = true; };
   }, [bill?.billNumber]);
+
+  useEffect(() => {
+    if (!bill || !clinic) return;
+    if (!isReprint) {
+      setReprintReady(false);
+      return;
+    }
+    const timer = setTimeout(() => window.print(), 150);
+    return () => clearTimeout(timer);
+  }, [bill, clinic, isReprint]);
 
   const reprintLog = useMutation({
     mutationFn: (body: { reprintedBy: string; reason: string }) =>
@@ -178,7 +189,6 @@ export default function BillDetail({ id }: { id: number }) {
     setReprintOpen(false);
     setReprintReason("");
     setIsReprint(true);
-    window.setTimeout(() => window.print(), 150);
   };
 
   useEffect(() => {
@@ -736,6 +746,167 @@ export default function BillDetail({ id }: { id: number }) {
         {/* Bill title + meta — bill number is shown as a pure number
             (the legacy `BILL-` prefix is stripped here). */}
         {isReprint && (
+          <div className="billing-desk-receipt" style={{ display: "none" }}>
+            <style>{`
+              @media print {
+                html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
+                body * { visibility: hidden !important; }
+                .billing-desk-receipt, .billing-desk-receipt * { visibility: visible !important; }
+                .billing-desk-receipt {
+                  display: block !important;
+                  position: absolute !important;
+                  top: 0 !important; left: 0 !important; right: 0 !important;
+                  margin: 0 !important;
+                  padding: 0 1.5mm !important;
+                  max-width: none !important;
+                  text-transform: uppercase;
+                }
+                .billing-desk-receipt .bdr-keep-case { text-transform: none !important; }
+                @page { size: A5; margin: 1.5mm 1.5mm; }
+              }
+              .billing-desk-receipt {
+                display: none;
+                font-family: Arial, sans-serif;
+                font-size: 10.5px;
+                color: #000;
+                max-width: 700px;
+                margin: 0 auto;
+                padding: 0;
+              }
+              .bdr-patient { border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; padding: 2px 2px; margin-bottom: 5px; font-size: 10px; line-height: 1.22; }
+              .bdr-patient-line { display: flex; justify-content: space-between; gap: 12px; }
+              .bdr-patient-line strong { font-weight: 700; }
+              .bdr-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 2px; margin-bottom: 2px; }
+              .bdr-header h1 { font-size: 17px; font-weight: 800; margin: 0 0 0.5px; line-height: 1; }
+              .bdr-header p  { margin: 0.5px 0; font-size: 9.5px; color: #444; }
+              .bdr-title { text-align: center; font-size: 10.5px; font-weight: 700; letter-spacing: 0.6px; margin: 2px 0 4px; text-transform: uppercase; }
+              .bdr-meta { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 10px; }
+              .bdr-meta table td { padding: 1px 4px 1px 0; }
+              .bdr-meta table td:first-child { font-weight: 600; color: #444; white-space: nowrap; }
+              .bdr-table { width: 100%; border-collapse: collapse; margin-bottom: 4px; font-size: 10px; }
+              .bdr-table th { background: #f5f5f5; text-align: left; padding: 3px 5px; border: 1px solid #ccc; font-weight: 700; }
+              .bdr-table td { padding: 2px 5px; border: 1px solid #ccc; vertical-align: top; }
+              .bdr-table .text-right { text-align: right; }
+              .bdr-bottom-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 4px; }
+              .bdr-payments { font-size: 10px; flex: 1; }
+              .bdr-payments strong { display: block; margin-bottom: 1px; border-bottom: 1px solid #ccc; padding-bottom: 1px; font-size: 10px; }
+              .bdr-payments table { width: 100%; border-collapse: collapse; }
+              .bdr-payments td { padding: 1px 4px 1px 0; border: none; }
+              .bdr-summary { min-width: 170px; font-size: 10px; }
+              .bdr-summary table { width: 100%; border-collapse: collapse; }
+              .bdr-summary td { padding: 0.5px 3px; }
+              .bdr-summary tr.bdr-grand td { font-weight: 700; border-top: 1px solid #000; padding-top: 3px; }
+              .bdr-footer { text-align: center; font-size: 9px; color: #666; border-top: 1px solid #ccc; padding-top: 3px; margin-top: 3px; }
+            `}</style>
+            <div className="bdr-header" style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between", textAlign: "center", paddingBottom: 1, marginBottom: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, justifyContent: "center", minWidth: 0 }}>
+                {clinic?.logoDataUrl && (
+                  <img src={clinic.logoDataUrl} alt="Logo" style={{ maxHeight: 48, maxWidth: 84, objectFit: "contain" }} />
+                )}
+                <div>
+                  <h1 style={{ margin: 0, fontSize: 17, lineHeight: 1 }}>{clinic?.name || "Diagnostic Centre"}</h1>
+                  {clinic?.tagline && <p style={{ margin: "1px 0", fontStyle: "italic", color: "#555", fontSize: 9.5 }}>{clinic.tagline}</p>}
+                  {clinic?.address && <p style={{ margin: "1px 0", fontSize: 9.5 }}>{clinic.address}</p>}
+                  <p style={{ margin: "1px 0", fontSize: 9.5 }}>
+                    {clinic?.phone && <>Ph: {clinic.phone}</>}
+                    {clinic?.phone && clinic?.email && " | "}
+                    {clinic?.email && <>Email: {clinic.email}</>}
+                  </p>
+                  {(clinic?.gstin || clinic?.website) && (
+                    <p style={{ margin: "1px 0", fontSize: 9 }}>
+                      {clinic?.gstin && <>GSTIN: {clinic.gstin}</>}
+                      {clinic?.gstin && clinic?.website && " | "}
+                      {clinic?.website && <>{clinic.website}</>}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {clinic?.qrOnBillEnabled !== false && (
+                <div className="bdr-keep-case" style={{ flexShrink: 0, textAlign: "center", fontSize: 7.5, color: "#444", lineHeight: 1.05 }}>
+                  <img src={billQrDataUrl} alt="Verify QR" style={{ width: 42, height: 42, display: "block" }} />
+                  <div style={{ marginTop: 2 }}>Scan to verify</div>
+                </div>
+              )}
+            </div>
+            <div className="bdr-title" style={{ margin: "1px 0 2px" }}>Invoice / Receipt</div>
+            <div className="bdr-patient" style={{ marginBottom: 3 }}>
+              <div className="bdr-patient-line">
+                <div>
+                  <strong style={{ fontSize: 13, fontWeight: 900, lineHeight: 1.05 }}>{bill.patient.firstName} {bill.patient.lastName}</strong>
+                  <div style={{ fontSize: 10.5, fontWeight: 800, marginTop: 1 }}>{[calcAge(bill.patient.dateOfBirth), bill.patient.gender].filter(Boolean).join(" / ")}</div>
+                </div>
+                <div style={{ textAlign: "right", fontSize: 10, lineHeight: 1.3 }}>
+                  {bill.patient.phone && <div>Ph: {bill.patient.phone}</div>}
+                  <div>ID: {bill.patient.patientId}</div>
+                </div>
+              </div>
+              <div className="bdr-patient-line" style={{ marginTop: 2 }}>
+                <span>Ref: <strong>{bill.doctor?.name ? `Dr. ${bill.doctor.name}` : "Self / Walk-in"}</strong></span>
+                <span>
+                  Bill No: <strong>{String(bill.billNumber).replace(/^BILL-?/i, "").replace(/-/g, "")}</strong>
+                  {"  ·  "}
+                  {new Date(bill.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })} {new Date(bill.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              </div>
+            </div>
+            <table className="bdr-table" style={{ fontSize: 9 }}>
+              <thead>
+                <tr style={{ background: ls.tableHeaderBg, color: ls.tableHeaderColor }}>
+                  <th style={{ padding: ls.tableHeaderPad }}>#</th>
+                  <th style={{ padding: ls.tableHeaderPad }}>Test Name</th>
+                  {(clinic?.billShowCategory ?? true) && <th style={{ padding: ls.tableHeaderPad }}>Category</th>}
+                  <th className="text-right" style={{ padding: ls.tableHeaderPad }}>Amount (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bill.order?.tests?.map((t, i) => (
+                  <tr key={t.id ?? i} style={{ background: ls.tableRowAltBg(i), borderBottom: ls.tableRowBorderBottom }}>
+                    <td>{i + 1}</td>
+                    <td style={{ fontWeight: 600 }}>{t.test?.name ?? t.name}</td>
+                    {(clinic?.billShowCategory ?? true) && <td>{t.test?.category ?? t.category}</td>}
+                    <td className="text-right">₹{Number(t.price ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="bdr-bottom-row" style={{ alignItems: "stretch", gap: 8, marginBottom: 2 }}>
+              <div style={{ flex: 1.5 }}>
+                <strong>Payment Details</strong>
+                <table>
+                  <tbody>
+                    {(bill.payments ?? []).map((p, i) => (
+                      <tr key={i}>
+                        <td style={{ textTransform: "capitalize" }}>{p.method?.replace(/_/g, " ") ?? p.mode?.replace(/_/g, " ")}</td>
+                        <td style={{ textAlign: "right" }}>₹{Number(p.amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="bdr-summary" style={{ minWidth: 150, flex: 0.7 }}>
+                <table>
+                  <tbody>
+                    <tr><td>Subtotal</td><td style={{ textAlign: "right" }}>₹{Number(bill.subtotal ?? bill.totalAmount ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>
+                    {(bill.discount ?? 0) > 0 && <tr><td>Discount</td><td style={{ textAlign: "right", color: "green" }}>−₹{Number(bill.discount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>}
+                    <tr><td><strong>Total</strong></td><td style={{ textAlign: "right" }}><strong>₹{Number(bill.totalAmount ?? bill.total ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong></td></tr>
+                    <tr><td>Paid</td><td style={{ textAlign: "right", color: "green" }}>₹{Number(bill.paidAmount ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>
+                    <tr className="bdr-grand">
+                      <td><strong>Balance Due</strong></td>
+                      <td style={{ textAlign: "right", color: Number(bill.balanceAmount ?? 0) > 0 ? "#c62828" : "green" }}>
+                        ₹{Number(bill.balanceAmount ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        {Number(bill.balanceAmount ?? 0) === 0 && " (PAID)"}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="bdr-footer" style={{ marginTop: 8, paddingTop: 8 }}>
+              <p className="bdr-keep-case">{clinic?.footerNote || "Thank you for choosing our diagnostic services."}</p>
+              <p className="bdr-keep-case">{readStaffSession()?.user?.name ? `Billed by: ${readStaffSession()?.user?.name}` : ""} · Computer-generated — No signature required</p>
+            </div>
+          </div>
+        )}
           <div style={{
             textAlign: "center",
             fontSize: "11px",
