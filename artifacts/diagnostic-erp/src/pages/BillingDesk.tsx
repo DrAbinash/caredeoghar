@@ -1600,6 +1600,7 @@ export default function BillingDesk() {
       {/* ── Hidden Print Receipt (shown only when printing) ── */}
       {lastBill && Array.from({ length: Math.max(1, Math.min(2, Number(clinic?.billPrintCopies ?? 1) || 1)) }).map((_, copyIdx) => {
         const bdLs = getLayoutStyles(getBillPrintLayout());
+        const paperSize = getAutoBillPaperSize(lastBill.tests.length, getBillPaperSize());
         return (
         <div key={copyIdx} className="billing-desk-receipt" style={copyIdx > 0 ? { pageBreakBefore: "always" } : undefined}>
           <style>{`
@@ -1617,49 +1618,50 @@ export default function BillingDesk() {
                 position: absolute !important;
                 top: 0 !important; left: 0 !important; right: 0 !important;
                 margin: 0 !important;
-                padding: 2.5mm 3mm !important;
+                padding: ${paperSize === "A4" ? "4mm 5mm" : "2.5mm 3mm"} !important;
                 max-width: none !important;
                 text-transform: uppercase;
-                min-height: 195mm !important;
+                min-height: ${paperSize === "A4" ? "287mm" : "195mm"} !important;
+                width: 100% !important;
                 box-sizing: border-box !important;
               }
               .billing-desk-receipt .bdr-keep-case { text-transform: none !important; }
-              .billing-desk-receipt .bdr-spacer { flex: 1 1 auto !important; min-height: 10mm; }
+              .billing-desk-receipt .bdr-spacer { flex: 1 1 auto !important; min-height: ${paperSize === "A4" ? "16mm" : "10mm"}; }
               .billing-desk-receipt .bdr-footer { margin-top: auto !important; }
-              @page { size: A5; margin: 0; }
+              @page { size: ${paperSize}; margin: 0; }
             }
             .billing-desk-receipt {
               display: none;
               font-family: Arial, sans-serif;
-              font-size: 12px;
+              font-size: ${paperSize === "A4" ? "13px" : "12px"};
               color: #000;
-              max-width: 700px;
+              max-width: ${paperSize === "A4" ? "900px" : "700px"};
               margin: 0 auto;
               padding: 0;
             }
-            .bdr-patient { border-top: 1px solid #888; border-bottom: 1px solid #888; padding: 4px 4px; margin-bottom: 8px; font-size: 11px; line-height: 1.3; }
+            .bdr-patient { border-top: 1px solid #888; border-bottom: 1px solid #888; padding: ${paperSize === "A4" ? "5px 4px" : "4px 4px"}; margin-bottom: ${paperSize === "A4" ? "9px" : "8px"}; font-size: ${paperSize === "A4" ? "11.5px" : "11px"}; line-height: 1.3; }
             .bdr-patient-line { display: flex; justify-content: space-between; gap: 12px; }
             .bdr-patient-line strong { font-weight: 700; }
-            .bdr-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 4px; margin-bottom: 4px; }
-            .bdr-header h1 { font-size: 20px; font-weight: 800; margin: 0 0 1px; line-height: 1.05; }
-            .bdr-header p  { margin: 1px 0; font-size: 10px; color: #444; }
-            .bdr-title { text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 1px; margin: 3px 0 5px; text-transform: uppercase; }
-            .bdr-table { width: 100%; border-collapse: collapse; margin-bottom: 7px; font-size: 11px; }
-            .bdr-table th { background: #f5f5f5; text-align: left; padding: 5px 6px; border: 1px solid #bbb; font-weight: 700; }
-            .bdr-table td { padding: 5px 6px; border: 1px solid #bbb; vertical-align: top; }
+            .bdr-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: ${paperSize === "A4" ? "5px" : "4px"}; margin-bottom: ${paperSize === "A4" ? "5px" : "4px"}; }
+            .bdr-header h1 { font-size: ${paperSize === "A4" ? "22px" : "20px"}; font-weight: 800; margin: 0 0 1px; line-height: 1.05; }
+            .bdr-header p  { margin: 1px 0; font-size: ${paperSize === "A4" ? "10.5px" : "10px"}; color: #444; }
+            .bdr-title { text-align: center; font-size: ${paperSize === "A4" ? "13px" : "12px"}; font-weight: 700; letter-spacing: 1px; margin: 3px 0 5px; text-transform: uppercase; }
+            .bdr-table { width: 100%; border-collapse: collapse; margin-bottom: ${paperSize === "A4" ? "8px" : "7px"}; font-size: ${paperSize === "A4" ? "11.5px" : "11px"}; }
+            .bdr-table th { background: #f5f5f5; text-align: left; padding: ${paperSize === "A4" ? "6px 7px" : "5px 6px"}; border: 1px solid #bbb; font-weight: 700; }
+            .bdr-table td { padding: ${paperSize === "A4" ? "6px 7px" : "5px 6px"}; border: 1px solid #bbb; vertical-align: top; }
             .bdr-table .text-right { text-align: right; }
-            .bdr-bottom-row { display: flex; gap: 8px; align-items: stretch; margin-bottom: 6px; }
-            .bdr-payments { font-size: 11px; flex: 1; border: 1px solid #bbb; padding: 4px 6px; }
-            .bdr-payments strong { display: block; margin-bottom: 2px; border-bottom: 1px solid #999; padding-bottom: 2px; font-size: 11px; }
+            .bdr-bottom-row { display: flex; gap: 8px; align-items: stretch; margin-bottom: ${paperSize === "A4" ? "7px" : "6px"}; }
+            .bdr-payments { font-size: ${paperSize === "A4" ? "11.5px" : "11px"}; flex: 1; border: 1px solid #bbb; padding: ${paperSize === "A4" ? "5px 7px" : "4px 6px"}; }
+            .bdr-payments strong { display: block; margin-bottom: 2px; border-bottom: 1px solid #999; padding-bottom: 2px; font-size: ${paperSize === "A4" ? "11.5px" : "11px"}; }
             .bdr-payments table { width: 100%; border-collapse: collapse; }
             .bdr-payments td { padding: 2px 4px 2px 0; border: none; }
-            .bdr-summary { min-width: 170px; font-size: 11px; border: 1px solid #bbb; padding: 4px 6px; }
+            .bdr-summary { min-width: ${paperSize === "A4" ? "190px" : "170px"}; font-size: ${paperSize === "A4" ? "11.5px" : "11px"}; border: 1px solid #bbb; padding: ${paperSize === "A4" ? "5px 7px" : "4px 6px"}; }
             .bdr-summary table { width: 100%; border-collapse: collapse; }
             .bdr-summary td { padding: 2px 3px; }
-            .bdr-summary tr.bdr-grand td { font-weight: 700; border-top: 2px solid #000; padding-top: 4px; font-size: 12px; }
-            .bdr-footer { text-align: center; font-size: 10px; color: #555; border-top: 1px solid #888; padding-top: 5px; margin-top: 6px; }
+            .bdr-summary tr.bdr-grand td { font-weight: 700; border-top: 2px solid #000; padding-top: 4px; font-size: ${paperSize === "A4" ? "12.5px" : "12px"}; }
+            .bdr-footer { text-align: center; font-size: ${paperSize === "A4" ? "10.5px" : "10px"}; color: #555; border-top: 1px solid #888; padding-top: 5px; margin-top: 6px; }
             .bdr-footer p { margin: 2px 0; }
-            .bdr-spacer { flex: 1 1 auto; min-height: 10mm; }
+            .bdr-spacer { flex: 1 1 auto; min-height: ${paperSize === "A4" ? "16mm" : "10mm"}; }
           `}</style>
 
           <div className="bdr-header" style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between", textAlign: "center", paddingBottom: 1, marginBottom: 1 }}>
@@ -1668,7 +1670,7 @@ export default function BillingDesk() {
                 <img src={clinic.logoDataUrl} alt="Logo" style={{ maxHeight: 48, maxWidth: 84, objectFit: "contain" }} />
               )}
               <div>
-                <h1 style={{ margin: 0, fontSize: 17, lineHeight: 1 }}>{clinic?.name || "Diagnostic Centre"}</h1>
+                <h1 style={{ margin: 0, fontSize: paperSize === "A4" ? 18 : 17, lineHeight: 1 }}>{clinic?.name || "Diagnostic Centre"}</h1>
                 {clinic?.tagline && <p style={{ margin: "1px 0", fontStyle: "italic", color: "#555", fontSize: 9.5 }}>{clinic.tagline}</p>}
                 {clinic?.address && <p style={{ margin: "1px 0", fontSize: 9.5 }}>{clinic.address}</p>}
                 <p style={{ margin: "1px 0", fontSize: 9.5 }}>
@@ -1688,7 +1690,7 @@ export default function BillingDesk() {
             {/* Auto-included verify QR (toggle in Settings → "Print QR on bill"). */}
             {clinic?.qrOnBillEnabled !== false && (
               <div className="bdr-keep-case" style={{ flexShrink: 0, textAlign: "center", fontSize: 7.5, color: "#444", lineHeight: 1.05 }}>
-                <img src={billQrDataUrl || qrSvgDataUrl(buildBillVerifyUrl(lastBill.billNumber))} alt="Verify QR" style={{ width: 42, height: 42, display: "block" }} />
+                <img src={billQrDataUrl || qrSvgDataUrl(buildBillVerifyUrl(lastBill.billNumber))} alt="Verify QR" style={{ width: paperSize === "A4" ? 48 : 42, height: paperSize === "A4" ? 48 : 42, display: "block" }} />
                 <div style={{ marginTop: 2 }}>Scan to verify</div>
               </div>
             )}
@@ -1700,14 +1702,14 @@ export default function BillingDesk() {
           <div className="bdr-patient" style={{ marginBottom: 3 }}>
             <div className="bdr-patient-line">
               <div>
-                <strong style={{ fontSize: 13, fontWeight: 900, lineHeight: 1.05 }}>{lastBill.patient.firstName} {lastBill.patient.lastName}</strong>
+                <strong style={{ fontSize: paperSize === "A4" ? 14 : 13, fontWeight: 900, lineHeight: 1.05 }}>{lastBill.patient.firstName} {lastBill.patient.lastName}</strong>
                 {(() => {
                   const a = calcAge(lastBill.patient.dateOfBirth);
                   const ageSex = [a, lastBill.patient.gender].filter(Boolean).join(" / ");
-                  return ageSex ? <div style={{ fontSize: 10.5, fontWeight: 800, marginTop: 1 }}>{ageSex}</div> : null;
+                  return ageSex ? <div style={{ fontSize: paperSize === "A4" ? 11 : 10.5, fontWeight: 800, marginTop: 1 }}>{ageSex}</div> : null;
                 })()}
               </div>
-              <div style={{ textAlign: "right", fontSize: 10, lineHeight: 1.3 }}>
+              <div style={{ textAlign: "right", fontSize: paperSize === "A4" ? 10.5 : 10, lineHeight: 1.3 }}>
                 {lastBill.patient.phone && <div>Ph: {lastBill.patient.phone}</div>}
                 <div>ID: {lastBill.patient.patientId}</div>
               </div>
@@ -1722,7 +1724,7 @@ export default function BillingDesk() {
             </div>
           </div>
 
-            <table className="bdr-table" style={{ fontSize: 9 }}>
+            <table className="bdr-table" style={{ fontSize: paperSize === "A4" ? 10 : 9 }}>
             <thead>
               <tr style={{ background: bdLs.tableHeaderBg, color: bdLs.tableHeaderColor, borderBottom: bdLs.tableRowBorderBottom }}>
                 <th style={{ padding: bdLs.tableHeaderPad }}>#</th>

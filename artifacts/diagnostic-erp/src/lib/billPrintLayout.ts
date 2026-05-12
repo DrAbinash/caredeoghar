@@ -66,7 +66,7 @@ export function setBillPaperSize(size: BillPaperSize): void {
 
 export function getAutoBillPaperSize(testCount: number, manualSize?: BillPaperSize): BillPaperSize {
   if (manualSize === "A4" || manualSize === "A5") return manualSize;
-  return testCount >= 7 ? "A4" : "A5";
+  return testCount >= 6 ? "A4" : "A5";
 }
 
 // ── Per-layout style helpers ──────────────────────────────────────────────────
