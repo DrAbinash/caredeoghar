@@ -38,3 +38,23 @@ PUBLIC_OBJECT_SEARCH_PATHS = "data/uploads"
 PRIVATE_OBJECT_DIR = "data/private-objects"
 
 [userenv.shared]
+
+[[ports]]
+localPort = 8080
+externalPort = 80
+
+[[ports]]
+localPort = 8081
+externalPort = 8081
+
+[[ports]]
+localPort = 23309
+externalPort = 3001
+
+[[ports]]
+localPort = 23508
+externalPort = 3000
+
+[[ports]]
+localPort = 24741
+externalPort = 3002
