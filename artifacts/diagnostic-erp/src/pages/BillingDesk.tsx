@@ -1612,50 +1612,54 @@ export default function BillingDesk() {
               body * { visibility: hidden !important; }
               .billing-desk-receipt, .billing-desk-receipt * { visibility: visible !important; }
               .billing-desk-receipt {
-                display: block !important;
+                display: flex !important;
+                flex-direction: column !important;
                 position: absolute !important;
                 top: 0 !important; left: 0 !important; right: 0 !important;
                 margin: 0 !important;
-                padding: 0 1.5mm !important;
+                padding: 2.5mm 3mm !important;
                 max-width: none !important;
                 text-transform: uppercase;
+                min-height: 195mm !important;
+                box-sizing: border-box !important;
               }
               .billing-desk-receipt .bdr-keep-case { text-transform: none !important; }
-              @page { size: A5; margin: 1.5mm 1.5mm; }
+              .billing-desk-receipt .bdr-spacer { flex: 1 1 auto !important; min-height: 10mm; }
+              .billing-desk-receipt .bdr-footer { margin-top: auto !important; }
+              @page { size: A5; margin: 0; }
             }
             .billing-desk-receipt {
               display: none;
               font-family: Arial, sans-serif;
-              font-size: 10.5px;
+              font-size: 12px;
               color: #000;
               max-width: 700px;
               margin: 0 auto;
               padding: 0;
             }
-            .bdr-patient { border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; padding: 2px 2px; margin-bottom: 5px; font-size: 10px; line-height: 1.22; }
+            .bdr-patient { border-top: 1px solid #888; border-bottom: 1px solid #888; padding: 4px 4px; margin-bottom: 8px; font-size: 11px; line-height: 1.3; }
             .bdr-patient-line { display: flex; justify-content: space-between; gap: 12px; }
             .bdr-patient-line strong { font-weight: 700; }
-            .bdr-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 2px; margin-bottom: 2px; }
-            .bdr-header h1 { font-size: 17px; font-weight: 800; margin: 0 0 0.5px; line-height: 1; }
-            .bdr-header p  { margin: 0.5px 0; font-size: 9.5px; color: #444; }
-            .bdr-title { text-align: center; font-size: 10.5px; font-weight: 700; letter-spacing: 0.6px; margin: 2px 0 4px; text-transform: uppercase; }
-            .bdr-meta { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 10px; }
-            .bdr-meta table td { padding: 1px 4px 1px 0; }
-            .bdr-meta table td:first-child { font-weight: 600; color: #444; white-space: nowrap; }
-            .bdr-table { width: 100%; border-collapse: collapse; margin-bottom: 4px; font-size: 10px; }
-            .bdr-table th { background: #f5f5f5; text-align: left; padding: 3px 5px; border: 1px solid #ccc; font-weight: 700; }
-            .bdr-table td { padding: 2px 5px; border: 1px solid #ccc; vertical-align: top; }
+            .bdr-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 4px; margin-bottom: 4px; }
+            .bdr-header h1 { font-size: 20px; font-weight: 800; margin: 0 0 1px; line-height: 1.05; }
+            .bdr-header p  { margin: 1px 0; font-size: 10px; color: #444; }
+            .bdr-title { text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 1px; margin: 3px 0 5px; text-transform: uppercase; }
+            .bdr-table { width: 100%; border-collapse: collapse; margin-bottom: 7px; font-size: 11px; }
+            .bdr-table th { background: #f5f5f5; text-align: left; padding: 5px 6px; border: 1px solid #bbb; font-weight: 700; }
+            .bdr-table td { padding: 5px 6px; border: 1px solid #bbb; vertical-align: top; }
             .bdr-table .text-right { text-align: right; }
-            .bdr-bottom-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 4px; }
-            .bdr-payments { font-size: 10px; flex: 1; }
-            .bdr-payments strong { display: block; margin-bottom: 1px; border-bottom: 1px solid #ccc; padding-bottom: 1px; font-size: 10px; }
+            .bdr-bottom-row { display: flex; gap: 8px; align-items: stretch; margin-bottom: 6px; }
+            .bdr-payments { font-size: 11px; flex: 1; border: 1px solid #bbb; padding: 4px 6px; }
+            .bdr-payments strong { display: block; margin-bottom: 2px; border-bottom: 1px solid #999; padding-bottom: 2px; font-size: 11px; }
             .bdr-payments table { width: 100%; border-collapse: collapse; }
-            .bdr-payments td { padding: 1px 4px 1px 0; border: none; }
-            .bdr-summary { min-width: 170px; font-size: 10px; }
+            .bdr-payments td { padding: 2px 4px 2px 0; border: none; }
+            .bdr-summary { min-width: 170px; font-size: 11px; border: 1px solid #bbb; padding: 4px 6px; }
             .bdr-summary table { width: 100%; border-collapse: collapse; }
-            .bdr-summary td { padding: 0.5px 3px; }
-            .bdr-summary tr.bdr-grand td { font-weight: 700; border-top: 1px solid #000; padding-top: 3px; }
-            .bdr-footer { text-align: center; font-size: 9px; color: #666; border-top: 1px solid #ccc; padding-top: 3px; margin-top: 3px; }
+            .bdr-summary td { padding: 2px 3px; }
+            .bdr-summary tr.bdr-grand td { font-weight: 700; border-top: 2px solid #000; padding-top: 4px; font-size: 12px; }
+            .bdr-footer { text-align: center; font-size: 10px; color: #555; border-top: 1px solid #888; padding-top: 5px; margin-top: 6px; }
+            .bdr-footer p { margin: 2px 0; }
+            .bdr-spacer { flex: 1 1 auto; min-height: 10mm; }
           `}</style>
 
           <div className="bdr-header" style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between", textAlign: "center", paddingBottom: 1, marginBottom: 1 }}>
@@ -1780,7 +1784,9 @@ export default function BillingDesk() {
             );
           })()}
 
-          <div className="bdr-footer" style={{ marginTop: 8, paddingTop: 8 }}>
+          <div className="bdr-spacer" />
+
+          <div className="bdr-footer">
             {(() => {
               const n = readStaffSession()?.user?.name;
               const meta = [n ? `Billed by: ${n}` : null, "Computer-generated — No signature required"].filter(Boolean).join(" · ");
