@@ -242,3 +242,7 @@
   border-radius: 6px;
 }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* Hide scrollbar while keeping scroll functionality (used on horizontal pill rows) */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
