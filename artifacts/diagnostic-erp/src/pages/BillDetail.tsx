@@ -797,40 +797,49 @@ export default function BillDetail({ id }: { id: number }) {
               body * { visibility: hidden !important; }
               .billing-desk-receipt, .billing-desk-receipt * { visibility: visible !important; }
               .billing-desk-receipt {
-                display: block !important;
+                display: flex !important;
+                flex-direction: column !important;
                 position: absolute !important;
                 top: 0 !important; left: 0 !important; right: 0 !important;
                 margin: 0 !important;
-                padding: 0 1.5mm !important;
+                padding: 4mm 5mm !important;
                 max-width: none !important;
                 text-transform: uppercase;
+                min-height: ${effectivePaperSize === "A5" ? "195mm" : "275mm"} !important;
+                box-sizing: border-box !important;
               }
               .billing-desk-receipt .bdr-keep-case { text-transform: none !important; }
-              @page { size: ${effectivePaperSize}; margin: 1.5mm 1.5mm; }
+              .billing-desk-receipt .bdr-spacer { flex: 1 1 auto !important; min-height: 6mm; }
+              .billing-desk-receipt .bdr-footer { margin-top: auto !important; }
+              @page { size: ${effectivePaperSize}; margin: 0; }
             }
-            .billing-desk-receipt { display: none; font-family: Arial, sans-serif; font-size: 10.5px; color: #000; max-width: 700px; margin: 0 auto; padding: 0; }
-            @media print { .billing-desk-receipt { display: block !important; } }
-            .bdr-patient { border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; padding: 2px 2px; margin-bottom: 5px; font-size: 10px; line-height: 1.22; }
-            .bdr-patient-line { display: flex; justify-content: space-between; gap: 12px; }
+            .billing-desk-receipt { display: none; font-family: Arial, sans-serif; font-size: 12px; color: #000; max-width: 700px; margin: 0 auto; padding: 0; }
+            @media print { .billing-desk-receipt { display: flex !important; } }
+            .bdr-patient { border-top: 1px solid #888; border-bottom: 1px solid #888; padding: 5px 4px; margin-bottom: 8px; font-size: 11.5px; line-height: 1.35; }
+            .bdr-patient-line { display: flex; justify-content: space-between; gap: 14px; }
             .bdr-patient-line strong { font-weight: 700; }
-            .bdr-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 2px; margin-bottom: 2px; }
-            .bdr-header h1 { font-size: 17px; font-weight: 800; margin: 0 0 0.5px; line-height: 1; }
-            .bdr-header p { margin: 0.5px 0; font-size: 9.5px; color: #444; }
-            .bdr-title { text-align: center; font-size: 10.5px; font-weight: 700; letter-spacing: 0.6px; margin: 2px 0 4px; text-transform: uppercase; }
-            .bdr-table { width: 100%; border-collapse: collapse; margin-bottom: 4px; font-size: 10px; }
-            .bdr-table th { background: #f5f5f5; text-align: left; padding: 3px 5px; border: 1px solid #ccc; font-weight: 700; }
-            .bdr-table td { padding: 2px 5px; border: 1px solid #ccc; vertical-align: top; }
+            .bdr-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 4px; margin-bottom: 4px; }
+            .bdr-header h1 { font-size: 20px; font-weight: 800; margin: 0 0 1px; line-height: 1.05; letter-spacing: 0.4px; }
+            .bdr-header p { margin: 1px 0; font-size: 10.5px; color: #444; }
+            .bdr-title { text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 1.2px; margin: 4px 0 6px; text-transform: uppercase; background: #f0f0f0; padding: 3px 0; border: 1px solid #999; }
+            .bdr-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 11.5px; }
+            .bdr-table th { background: #efefef; text-align: left; padding: 6px 7px; border: 1px solid #999; font-weight: 700; font-size: 11px; letter-spacing: 0.3px; }
+            .bdr-table td { padding: 6px 7px; border: 1px solid #bbb; vertical-align: top; }
             .bdr-table .bdr-right { text-align: right; }
-            .bdr-bottom-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 4px; }
-            .bdr-payments { font-size: 10px; flex: 1; }
-            .bdr-payments strong { display: block; margin-bottom: 1px; border-bottom: 1px solid #ccc; padding-bottom: 1px; font-size: 10px; }
+            .bdr-bottom-row { display: flex; gap: 10px; align-items: stretch; margin-bottom: 6px; }
+            .bdr-payments { font-size: 11.5px; flex: 1; border: 1px solid #bbb; padding: 5px 7px; }
+            .bdr-payments strong { display: block; margin-bottom: 3px; border-bottom: 1px solid #999; padding-bottom: 3px; font-size: 11.5px; letter-spacing: 0.3px; }
             .bdr-payments table { width: 100%; border-collapse: collapse; }
-            .bdr-payments td { padding: 1px 4px 1px 0; border: none; }
-            .bdr-summary { min-width: 170px; font-size: 10px; }
+            .bdr-payments td { padding: 3px 4px 3px 0; border: none; }
+            .bdr-summary { min-width: 200px; font-size: 11.5px; border: 1px solid #bbb; padding: 5px 8px; }
             .bdr-summary table { width: 100%; border-collapse: collapse; }
-            .bdr-summary td { padding: 0.5px 3px; }
-            .bdr-summary tr.bdr-grand td { font-weight: 700; border-top: 1px solid #000; padding-top: 3px; }
-            .bdr-footer { text-align: center; font-size: 9px; color: #666; border-top: 1px solid #ccc; padding-top: 3px; margin-top: 3px; }
+            .bdr-summary td { padding: 3px 3px; }
+            .bdr-summary tr.bdr-grand td { font-weight: 700; border-top: 2px solid #000; padding-top: 5px; font-size: 12.5px; }
+            .bdr-footer { text-align: center; font-size: 10px; color: #555; border-top: 1px solid #888; padding-top: 6px; margin-top: 8px; }
+            .bdr-footer p { margin: 2px 0; }
+            .bdr-sign-row { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 14mm; padding: 0 4mm; font-size: 10px; }
+            .bdr-sign-box { text-align: center; min-width: 38%; }
+            .bdr-sign-line { border-top: 1px solid #000; padding-top: 2px; margin-top: 12mm; }
           `}</style>
 
           {/* Clinic header */}
@@ -1007,12 +1016,27 @@ export default function BillDetail({ id }: { id: number }) {
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="bdr-footer" style={{ marginTop: 8, paddingTop: 8 }}>
-            <p className="bdr-keep-case">{clinic?.footerNote || "Thank you for choosing our diagnostic services."}</p>
+          {/* Flexible spacer — pushes the footer to the bottom of the A5/A4 page */}
+          <div className="bdr-spacer" />
+
+          {/* Signature row — adds a professional finish at the bottom */}
+          <div className="bdr-sign-row bdr-keep-case">
+            <div className="bdr-sign-box">
+              <div className="bdr-sign-line">Patient / Receiver Signature</div>
+            </div>
+            <div className="bdr-sign-box">
+              <div className="bdr-sign-line">
+                {readStaffSession()?.user?.name ? `For ${clinic?.name || "Diagnostic Centre"}` : "Authorised Signatory"}
+              </div>
+            </div>
+          </div>
+
+          {/* Footer — pinned to the bottom in print mode via margin-top:auto */}
+          <div className="bdr-footer">
+            <p className="bdr-keep-case">{clinic?.footerNote || "Please collect report within 7 days. Thank you for choosing our diagnostic services."}</p>
             <p className="bdr-keep-case">
               {readStaffSession()?.user?.name ? `Billed by: ${readStaffSession()?.user?.name}` : ""}
-              {" · "}Computer-generated — No signature required
+              {readStaffSession()?.user?.name ? " · " : ""}Computer-generated — No signature required
             </p>
           </div>
         </div>
