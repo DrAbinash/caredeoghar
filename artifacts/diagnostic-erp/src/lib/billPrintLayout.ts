@@ -42,6 +42,33 @@ export function setBillPrintLayout(layout: BillLayout): void {
   }
 }
 
+export type BillPaperSize = "A4" | "A5";
+
+const PAPER_KEY = "diagnosticErp:billPaperSize";
+
+export function getBillPaperSize(): BillPaperSize {
+  try {
+    const v = localStorage.getItem(PAPER_KEY);
+    if (v === "A4" || v === "A5") return v;
+  } catch {
+    // SSR / iframe sandbox — ignore
+  }
+  return "A5";
+}
+
+export function setBillPaperSize(size: BillPaperSize): void {
+  try {
+    localStorage.setItem(PAPER_KEY, size);
+  } catch {
+    // ignore
+  }
+}
+
+export function getAutoBillPaperSize(testCount: number, manualSize?: BillPaperSize): BillPaperSize {
+  if (manualSize === "A4" || manualSize === "A5") return manualSize;
+  return testCount >= 7 ? "A4" : "A5";
+}
+
 // ── Per-layout style helpers ──────────────────────────────────────────────────
 
 export type LayoutStyles = {

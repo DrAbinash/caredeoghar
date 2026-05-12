@@ -426,6 +426,16 @@ export default function BillingDesk() {
     queryFn: () => api.get(doctorId ? `/api/bills/preview-number?doctorId=${doctorId}` : "/api/bills/preview-number"),
     retry: false,
   });
+  const dummyBillPreview = {
+    billNumber: "2026050001",
+    patientName: "Dummy Patient",
+    tests: [
+      { name: "CBC", price: 350 },
+      { name: "Blood Sugar", price: 180 },
+      { name: "Lipid Profile", price: 620 },
+    ],
+    total: 1150,
+  };
 
   // ── Data queries ────────────────────────────────────
   const debouncedSearch = useDebounce(patientSearch, 150);
@@ -1793,6 +1803,23 @@ export default function BillingDesk() {
         </div>
         );
       })}
+      <div className="mt-4 rounded-lg border bg-muted/20 p-3 text-xs">
+        <div className="font-semibold mb-2">Dummy bill preview</div>
+        <div className="grid gap-1">
+          <div>Bill No: {dummyBillPreview.billNumber}</div>
+          <div>Patient: {dummyBillPreview.patientName}</div>
+          {dummyBillPreview.tests.map((t) => (
+            <div key={t.name} className="flex justify-between">
+              <span>{t.name}</span>
+              <span>₹{t.price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+            </div>
+          ))}
+          <div className="flex justify-between font-semibold pt-1 border-t">
+            <span>Total</span>
+            <span>₹{dummyBillPreview.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+          </div>
+        </div>
+      </div>
 
       {/* ── Quick Test slot picker dialog ── */}
       <Dialog

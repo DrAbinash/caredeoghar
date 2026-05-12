@@ -20,7 +20,7 @@ import { useForm } from "react-hook-form";
 import { useSuperAdmin, getSuperAdminToken } from "@/hooks/useSuperAdmin";
 import { readStaffSession } from "@/lib/staffSession";
 import { useToast } from "@/hooks/use-toast";
-import { getBillPrintLayout, getLayoutStyles } from "@/lib/billPrintLayout";
+import { getAutoBillPaperSize, getBillPaperSize, getBillPrintLayout, getLayoutStyles, setBillPaperSize } from "@/lib/billPrintLayout";
 
 type PaymentForm = {
   amount: number;
@@ -95,15 +95,18 @@ export default function BillDetail({ id }: { id: number }) {
   const [reprintBy, setReprintBy] = useState<string>(() => readStaffSession()?.user.name || localStorage.getItem("diagnosticErp:lastReprintBy") || "");
   const [reprintReason, setReprintReason] = useState<string>("");
   const [isReprint, setIsReprint] = useState(false);
-  const [paperSize, setPaperSize] = useState<"A4" | "A5">(() => (localStorage.getItem("diagnosticErp:billPaperSize") as "A4" | "A5") || "A5");
+  const [paperSize, setPaperSize] = useState<"A4" | "A5">(() => getBillPaperSize());
+  const [paperMode, setPaperMode] = useState<"auto" | "manual">("auto");
   const billPrintLayout = getBillPrintLayout();
   const ls = getLayoutStyles(billPrintLayout);
   const queryClient = useQueryClient();
   const superAdmin = useSuperAdmin();
 
   useEffect(() => {
-    localStorage.setItem("diagnosticErp:billPaperSize", paperSize);
-  }, [paperSize]);
+    if (paperMode === "manual") setBillPaperSize(paperSize);
+  }, [paperMode, paperSize]);
+  const autoPaperSize = getAutoBillPaperSize((bill?.order?.tests?.length ?? 0), paperMode === "manual" ? paperSize : undefined);
+  const effectivePaperSize = paperMode === "manual" ? paperSize : autoPaperSize;
 
   // Clinic settings for the printed receipt header
   const { data: clinic } = useQuery<{
@@ -407,12 +410,12 @@ export default function BillDetail({ id }: { id: number }) {
               <span className="text-muted-foreground px-1">Paper:</span>
               <button
                 type="button"
-                onClick={() => setPaperSize("A4")}
+                onClick={() => { setPaperMode("manual"); setPaperSize("A4"); }}
                 className={`px-2 py-0.5 rounded ${paperSize === "A4" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
               >A4</button>
               <button
                 type="button"
-                onClick={() => setPaperSize("A5")}
+                onClick={() => { setPaperMode("manual"); setPaperSize("A5"); }}
                 className={`px-2 py-0.5 rounded ${paperSize === "A5" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
               >A5</button>
             </div>
@@ -662,15 +665,15 @@ export default function BillDetail({ id }: { id: number }) {
             position: absolute !important;
             top: 0 !important; left: 0 !important; right: 0 !important;
             margin: 0 !important;
-            padding: ${paperSize === "A5" ? "0 4px" : "8px 12px"} !important;
+            padding: ${effectivePaperSize === "A5" ? "0 4px" : "8px 12px"} !important;
             background: white !important;
             color: black !important;
             font-family: Arial, sans-serif !important;
-            font-size: ${paperSize === "A5" ? "9.5px" : "12.5px"} !important;
+            font-size: ${effectivePaperSize === "A5" ? "9.5px" : "12.5px"} !important;
             text-transform: uppercase !important;
           }
           .print-receipt .pr-keep-case { text-transform: none !important; }
-          @page { size: ${paperSize}; margin: ${paperSize === "A5" ? "2mm 3mm" : "4mm 6mm"}; }
+          @page { size: ${effectivePaperSize}; margin: ${effectivePaperSize === "A5" ? "2mm 3mm" : "4mm 6mm"}; }
           ${isBW ? `
           /* ── B&W mode: high-contrast print for monochrome laser printers ── */
           .print-receipt-bw {
@@ -696,7 +699,7 @@ export default function BillDetail({ id }: { id: number }) {
           marginBottom: "12px",
         }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: paperSize === "A5" ? "15px" : "20px", fontWeight: 800, color: "#1e40af", letterSpacing: "0.3px", lineHeight: 1.15 }}>
+            <div style={{ fontSize: effectivePaperSize === "A5" ? "15px" : "20px", fontWeight: 800, color: "#1e40af", letterSpacing: "0.3px", lineHeight: 1.15 }}>
               {clinic?.name || "DiagnoCenter"}
             </div>
             {clinic?.tagline && (
@@ -721,8 +724,8 @@ export default function BillDetail({ id }: { id: number }) {
               src={clinic.logoDataUrl}
               alt="logo"
               style={{
-                maxHeight: paperSize === "A5" ? "48px" : "64px",
-                maxWidth: paperSize === "A5" ? "110px" : "150px",
+                maxHeight: effectivePaperSize === "A5" ? "48px" : "64px",
+                maxWidth: effectivePaperSize === "A5" ? "110px" : "150px",
                 objectFit: "contain",
                 flexShrink: 0,
               }}
@@ -779,7 +782,7 @@ export default function BillDetail({ id }: { id: number }) {
                   <img
                     src={billQrDataUrl}
                     alt="Verify QR"
-                    style={{ width: paperSize === "A5" ? "56px" : "68px", height: paperSize === "A5" ? "56px" : "68px", display: "block" }}
+                    style={{ width: effectivePaperSize === "A5" ? "56px" : "68px", height: effectivePaperSize === "A5" ? "56px" : "68px", display: "block" }}
                   />
                 )}
                 <div style={{ marginTop: "2px" }}>Scan to verify</div>
@@ -811,10 +814,10 @@ export default function BillDetail({ id }: { id: number }) {
             <div style={{ marginBottom: "10px", padding: "6px 8px", borderTop: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0", lineHeight: 1.25 }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }}>
                 <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                  <div style={{ fontSize: paperSize === "A5" ? "15px" : "17px", fontWeight: 900, color: "#111", lineHeight: 1.05, letterSpacing: "-0.1px" }}>
+                  <div style={{ fontSize: effectivePaperSize === "A5" ? "15px" : "17px", fontWeight: 900, color: "#111", lineHeight: 1.05, letterSpacing: "-0.1px" }}>
                     {bill.patient.firstName} {bill.patient.lastName}
                   </div>
-                  <div style={{ fontSize: paperSize === "A5" ? "12px" : "13px", fontWeight: 800, color: "#111", lineHeight: 1.05, marginTop: "2px" }}>
+                  <div style={{ fontSize: effectivePaperSize === "A5" ? "12px" : "13px", fontWeight: 800, color: "#111", lineHeight: 1.05, marginTop: "2px" }}>
                     {ageSex}
                   </div>
                 </div>
@@ -833,7 +836,7 @@ export default function BillDetail({ id }: { id: number }) {
         {bill.order?.tests && bill.order.tests.length > 0 && (
           <div style={{ marginBottom: "16px" }}>
             <div style={{ fontSize: "10px", fontWeight: "700", textTransform: "uppercase", color: "#64748b", marginBottom: "6px" }}>Tests / Services</div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: paperSize === "A5" ? "10px" : "12px" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: effectivePaperSize === "A5" ? "10px" : "12px" }}>
               <thead>
                 <tr style={{ background: ls.tableHeaderBg, color: ls.tableHeaderColor }}>
                   {(clinic?.billShowCode ?? true) && <th style={{ padding: ls.tableHeaderPad, textAlign: "left", fontWeight: "600" }}>Code</th>}
@@ -980,7 +983,7 @@ export default function BillDetail({ id }: { id: number }) {
               />
             </div>
             <div className="text-xs text-muted-foreground">
-              Paper size: <strong>{paperSize}</strong> · Change above the Re-print button.
+            Paper size: <strong>{paperMode === "manual" ? paperSize : `AUTO (${effectivePaperSize})`}</strong> · Change above the Re-print button.
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setReprintOpen(false)}>Cancel</Button>
