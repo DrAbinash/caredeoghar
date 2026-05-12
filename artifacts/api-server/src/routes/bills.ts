@@ -24,6 +24,7 @@ import { generateTokenForBill } from "./tokens";
 import { generateTestTokensForOrder } from "./test-tokens";
 import { generateStudiesForOrder } from "./radiology";
 import { sendBillWhatsapp } from "./whatsapp";
+import { autoVoucherForPayment } from "../lib/auto-voucher";
 import { eq, and, sql, desc, like, or, gt, ne } from "drizzle-orm";
 import {
   ListBillsQueryParams,
@@ -392,7 +393,7 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
   // writes outside any transaction — a mid-flight failure (e.g. unique-key
   // collision on billNumber) would leave the order/patient mutated with no
   // matching bill row.
-  const { bill, pat } = await db.transaction(async (tx) => {
+  const { bill, pat, validPayments: txPayments } = await db.transaction(async (tx) => {
     const billNumber = await generateBillNumber(ledgerId);
 
     if (!order.ledgerId) {
@@ -439,7 +440,7 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
       });
     }
 
-    return { bill: billRow, pat: patRow };
+    return { bill: billRow, pat: patRow, validPayments };
   });
 
   // Auto-generate queue token (per book, resets daily) — never blocks bill creation
@@ -472,6 +473,19 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
     });
   } catch (err) {
     console.warn("Radiology study fan-out failed:", err);
+  }
+
+  // Auto-generate accounting vouchers for each inline payment — async, never blocks billing
+  const patientName = pat ? `${pat.firstName} ${pat.lastName}`.trim() : undefined;
+  for (const p of txPayments ?? []) {
+    autoVoucherForPayment({
+      billId: bill.id,
+      amount: p.amount,
+      method: p.method,
+      billNumber: bill.billNumber,
+      patientName,
+      performedBy: actorName || null,
+    }).catch(() => {/* already logged inside */});
   }
 
   // Fire WhatsApp send asynchronously — don't block the response
@@ -850,6 +864,22 @@ billsRouter.post("/:id/refund", async (req, res) => {
   if (!result) return;
   const { updated, currentPaid, currentRefund, newPaid, newRefund } = result;
 
+  // Auto-generate refund voucher — async, never blocks response
+  try {
+    const [patForVoucher] = await db
+      .select({ firstName: patientsTable.firstName, lastName: patientsTable.lastName })
+      .from(patientsTable)
+      .where(eq(patientsTable.id, updated.patientId));
+    autoVoucherForPayment({
+      billId: id,
+      amount: -amount, // negative signals a refund voucher
+      method,
+      billNumber: updated.billNumber,
+      patientName: patForVoucher ? `${patForVoucher.firstName} ${patForVoucher.lastName}`.trim() : null,
+      performedBy,
+    }).catch(() => {/* already logged inside */});
+  } catch { /* never block */ }
+
   try {
     const billForEmail = await buildBill(updated);
     const patientName = billForEmail.patient
@@ -1177,6 +1207,26 @@ paymentsRouter.post("/", async (req, res) => {
     balanceAmount: String(Math.max(0, balanceAmount)),
     status: newStatus,
   }).where(eq(billsTable.id, billId));
+
+  // Auto-generate accounting voucher — async, never blocks payment response
+  const [billForVoucher] = await db
+    .select({ billNumber: billsTable.billNumber, patientId: billsTable.patientId })
+    .from(billsTable)
+    .where(eq(billsTable.id, billId));
+  if (billForVoucher) {
+    const [patientRow] = await db
+      .select({ firstName: patientsTable.firstName, lastName: patientsTable.lastName })
+      .from(patientsTable)
+      .where(eq(patientsTable.id, billForVoucher.patientId));
+    autoVoucherForPayment({
+      billId,
+      amount,
+      method,
+      billNumber: billForVoucher.billNumber,
+      patientName: patientRow ? `${patientRow.firstName} ${patientRow.lastName}`.trim() : null,
+      performedBy: actorName || null,
+    }).catch(() => {/* already logged inside */});
+  }
 
   res.status(201).json({ ...payment, amount: Number(payment.amount) });
 });

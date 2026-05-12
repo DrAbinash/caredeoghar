@@ -85,11 +85,14 @@ function buildReportHtml(title: string, subtitle: string, rows: { label: string;
 }
 
 reportsRouter.get("/dashboard", async (_req, res) => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const endOfDay = new Date();
-  endOfDay.setHours(23, 59, 59, 999);
-  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  // Use IST-aware day boundaries so "today" counts are correct regardless of
+  // the server's timezone (UTC). Without this fix bills created after 18:30 UTC
+  // (= midnight IST) were counted as "tomorrow" and todayBills showed 0.
+  const todayISTStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const [istY, istM] = todayISTStr.split("-").map(Number);
+  const today = new Date(`${todayISTStr}T00:00:00+05:30`);
+  const endOfDay = new Date(`${todayISTStr}T23:59:59.999+05:30`);
+  const startOfMonth = new Date(`${istY}-${String(istM).padStart(2, "0")}-01T00:00:00+05:30`);
   const startOfTodayIso = today.toISOString();
   const endOfTodayIso = endOfDay.toISOString();
 
