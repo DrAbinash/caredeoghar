@@ -743,8 +743,6 @@ export default function BillDetail({ id }: { id: number }) {
           )}
         </div>
 
-        {/* Bill title + meta — bill number is shown as a pure number
-            (the legacy `BILL-` prefix is stripped here). */}
         {isReprint && (
           <div className="billing-desk-receipt" style={{ display: "none" }}>
             <style>{`
@@ -752,37 +750,18 @@ export default function BillDetail({ id }: { id: number }) {
                 html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
                 body * { visibility: hidden !important; }
                 .billing-desk-receipt, .billing-desk-receipt * { visibility: visible !important; }
-                .billing-desk-receipt {
-                  display: block !important;
-                  position: absolute !important;
-                  top: 0 !important; left: 0 !important; right: 0 !important;
-                  margin: 0 !important;
-                  padding: 0 1.5mm !important;
-                  max-width: none !important;
-                  text-transform: uppercase;
-                }
+                .billing-desk-receipt { display: block !important; position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; margin: 0 !important; padding: 0 1.5mm !important; max-width: none !important; text-transform: uppercase; }
                 .billing-desk-receipt .bdr-keep-case { text-transform: none !important; }
                 @page { size: A5; margin: 1.5mm 1.5mm; }
               }
-              .billing-desk-receipt {
-                display: none;
-                font-family: Arial, sans-serif;
-                font-size: 10.5px;
-                color: #000;
-                max-width: 700px;
-                margin: 0 auto;
-                padding: 0;
-              }
+              .billing-desk-receipt { display: none; font-family: Arial, sans-serif; font-size: 10.5px; color: #000; max-width: 700px; margin: 0 auto; padding: 0; }
               .bdr-patient { border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; padding: 2px 2px; margin-bottom: 5px; font-size: 10px; line-height: 1.22; }
               .bdr-patient-line { display: flex; justify-content: space-between; gap: 12px; }
               .bdr-patient-line strong { font-weight: 700; }
               .bdr-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 2px; margin-bottom: 2px; }
               .bdr-header h1 { font-size: 17px; font-weight: 800; margin: 0 0 0.5px; line-height: 1; }
-              .bdr-header p  { margin: 0.5px 0; font-size: 9.5px; color: #444; }
+              .bdr-header p { margin: 0.5px 0; font-size: 9.5px; color: #444; }
               .bdr-title { text-align: center; font-size: 10.5px; font-weight: 700; letter-spacing: 0.6px; margin: 2px 0 4px; text-transform: uppercase; }
-              .bdr-meta { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 10px; }
-              .bdr-meta table td { padding: 1px 4px 1px 0; }
-              .bdr-meta table td:first-child { font-weight: 600; color: #444; white-space: nowrap; }
               .bdr-table { width: 100%; border-collapse: collapse; margin-bottom: 4px; font-size: 10px; }
               .bdr-table th { background: #f5f5f5; text-align: left; padding: 3px 5px; border: 1px solid #ccc; font-weight: 700; }
               .bdr-table td { padding: 2px 5px; border: 1px solid #ccc; vertical-align: top; }
@@ -800,33 +779,16 @@ export default function BillDetail({ id }: { id: number }) {
             `}</style>
             <div className="bdr-header" style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between", textAlign: "center", paddingBottom: 1, marginBottom: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, justifyContent: "center", minWidth: 0 }}>
-                {clinic?.logoDataUrl && (
-                  <img src={clinic.logoDataUrl} alt="Logo" style={{ maxHeight: 48, maxWidth: 84, objectFit: "contain" }} />
-                )}
+                {clinic?.logoDataUrl && <img src={clinic.logoDataUrl} alt="Logo" style={{ maxHeight: 48, maxWidth: 84, objectFit: "contain" }} />}
                 <div>
                   <h1 style={{ margin: 0, fontSize: 17, lineHeight: 1 }}>{clinic?.name || "Diagnostic Centre"}</h1>
                   {clinic?.tagline && <p style={{ margin: "1px 0", fontStyle: "italic", color: "#555", fontSize: 9.5 }}>{clinic.tagline}</p>}
                   {clinic?.address && <p style={{ margin: "1px 0", fontSize: 9.5 }}>{clinic.address}</p>}
-                  <p style={{ margin: "1px 0", fontSize: 9.5 }}>
-                    {clinic?.phone && <>Ph: {clinic.phone}</>}
-                    {clinic?.phone && clinic?.email && " | "}
-                    {clinic?.email && <>Email: {clinic.email}</>}
-                  </p>
-                  {(clinic?.gstin || clinic?.website) && (
-                    <p style={{ margin: "1px 0", fontSize: 9 }}>
-                      {clinic?.gstin && <>GSTIN: {clinic.gstin}</>}
-                      {clinic?.gstin && clinic?.website && " | "}
-                      {clinic?.website && <>{clinic.website}</>}
-                    </p>
-                  )}
+                  <p style={{ margin: "1px 0", fontSize: 9.5 }}>{clinic?.phone && <>Ph: {clinic.phone}</>}{clinic?.phone && clinic?.email && " | "}{clinic?.email && <>Email: {clinic.email}</>}</p>
+                  {(clinic?.gstin || clinic?.website) && <p style={{ margin: "1px 0", fontSize: 9 }}>{clinic?.gstin && <>GSTIN: {clinic.gstin}</>}{clinic?.gstin && clinic?.website && " | "}{clinic?.website && <>{clinic.website}</>}</p>}
                 </div>
               </div>
-              {clinic?.qrOnBillEnabled !== false && (
-                <div className="bdr-keep-case" style={{ flexShrink: 0, textAlign: "center", fontSize: 7.5, color: "#444", lineHeight: 1.05 }}>
-                  <img src={billQrDataUrl} alt="Verify QR" style={{ width: 42, height: 42, display: "block" }} />
-                  <div style={{ marginTop: 2 }}>Scan to verify</div>
-                </div>
-              )}
+              {clinic?.qrOnBillEnabled !== false && <div className="bdr-keep-case" style={{ flexShrink: 0, textAlign: "center", fontSize: 7.5, color: "#444", lineHeight: 1.05 }}><img src={billQrDataUrl} alt="Verify QR" style={{ width: 42, height: 42, display: "block" }} /><div style={{ marginTop: 2 }}>Scan to verify</div></div>}
             </div>
             <div className="bdr-title" style={{ margin: "1px 0 2px" }}>Invoice / Receipt</div>
             <div className="bdr-patient" style={{ marginBottom: 3 }}>
@@ -841,17 +803,13 @@ export default function BillDetail({ id }: { id: number }) {
                 </div>
               </div>
               <div className="bdr-patient-line" style={{ marginTop: 2 }}>
-                <span>Ref: <strong>{bill.doctor?.name ? `Dr. ${bill.doctor.name}` : "Self / Walk-in"}</strong></span>
-                <span>
-                  Bill No: <strong>{String(bill.billNumber).replace(/^BILL-?/i, "").replace(/-/g, "")}</strong>
-                  {"  ·  "}
-                  {new Date(bill.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })} {new Date(bill.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-                </span>
+                <span>Ref: <strong>{bill.order?.doctor ? `Dr. ${bill.order.doctor.name}` : "Self / Walk-in"}</strong></span>
+                <span>Bill No: <strong>{String(bill.billNumber).replace(/^BILL-?/i, "").replace(/-/g, "")}</strong>{"  ·  "}{new Date(bill.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })} {new Date(bill.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
               </div>
             </div>
             <table className="bdr-table" style={{ fontSize: 9 }}>
               <thead>
-                <tr style={{ background: ls.tableHeaderBg, color: ls.tableHeaderColor }}>
+                <tr style={{ background: ls.tableHeaderBg, color: ls.tableHeaderColor, borderBottom: ls.tableRowBorderBottom }}>
                   <th style={{ padding: ls.tableHeaderPad }}>#</th>
                   <th style={{ padding: ls.tableHeaderPad }}>Test Name</th>
                   {(clinic?.billShowCategory ?? true) && <th style={{ padding: ls.tableHeaderPad }}>Category</th>}
@@ -876,7 +834,7 @@ export default function BillDetail({ id }: { id: number }) {
                   <tbody>
                     {(bill.payments ?? []).map((p, i) => (
                       <tr key={i}>
-                        <td style={{ textTransform: "capitalize" }}>{p.method?.replace(/_/g, " ") ?? p.mode?.replace(/_/g, " ")}</td>
+                        <td style={{ textTransform: "capitalize" }}>{p.method}</td>
                         <td style={{ textAlign: "right" }}>₹{Number(p.amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                       </tr>
                     ))}
@@ -886,16 +844,13 @@ export default function BillDetail({ id }: { id: number }) {
               <div className="bdr-summary" style={{ minWidth: 150, flex: 0.7 }}>
                 <table>
                   <tbody>
-                    <tr><td>Subtotal</td><td style={{ textAlign: "right" }}>₹{Number(bill.subtotal ?? bill.totalAmount ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>
-                    {(bill.discount ?? 0) > 0 && <tr><td>Discount</td><td style={{ textAlign: "right", color: "green" }}>−₹{Number(bill.discount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>}
-                    <tr><td><strong>Total</strong></td><td style={{ textAlign: "right" }}><strong>₹{Number(bill.totalAmount ?? bill.total ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong></td></tr>
+                    <tr><td>Subtotal</td><td style={{ textAlign: "right" }}>₹{Number(bill.subtotal ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>
+                    {bill.discount > 0 && <tr><td>Discount</td><td style={{ textAlign: "right", color: "green" }}>−₹{Number(bill.discount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>}
+                    <tr><td><strong>Total</strong></td><td style={{ textAlign: "right" }}><strong>₹{Number(bill.totalAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong></td></tr>
                     <tr><td>Paid</td><td style={{ textAlign: "right", color: "green" }}>₹{Number(bill.paidAmount ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>
                     <tr className="bdr-grand">
                       <td><strong>Balance Due</strong></td>
-                      <td style={{ textAlign: "right", color: Number(bill.balanceAmount ?? 0) > 0 ? "#c62828" : "green" }}>
-                        ₹{Number(bill.balanceAmount ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                        {Number(bill.balanceAmount ?? 0) === 0 && " (PAID)"}
-                      </td>
+                      <td style={{ textAlign: "right", color: Number(bill.balanceAmount ?? 0) > 0 ? "#c62828" : "green" }}>₹{Number(bill.balanceAmount ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}{Number(bill.balanceAmount ?? 0) === 0 && " (PAID)"}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -907,220 +862,6 @@ export default function BillDetail({ id }: { id: number }) {
             </div>
           </div>
         )}
-          <div style={{
-            textAlign: "center",
-            fontSize: "11px",
-            fontWeight: "700",
-            color: "#dc2626",
-            border: "1.5px solid #dc2626",
-            borderRadius: "4px",
-            padding: "3px 10px",
-            marginBottom: "8px",
-            letterSpacing: "1.5px",
-          }}>
-            ★ DUPLICATE / REPRINT COPY ★
-          </div>
-        )}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
-          <div>
-            <div style={{ fontSize: "15px", fontWeight: "700", color: "#111" }}>INVOICE / RECEIPT</div>
-            <div style={{ fontSize: "11.5px", color: "#444", marginTop: "2px" }}>
-              Bill No: <strong>{String(bill.billNumber).replace(/^BILL-?/i, "").replace(/-/g, "")}</strong>
-              {"   "}·{"   "}
-              Date: {new Date(bill.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })} {new Date(bill.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-            </div>
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{
-              display: "inline-block",
-              padding: "3px 10px",
-              borderRadius: "16px",
-              fontSize: "10.5px",
-              fontWeight: "700",
-              background: bill.status === "paid" ? "#dcfce7" : bill.status === "cancelled" ? "#fee2e2" : "#fef9c3",
-              color: bill.status === "paid" ? "#15803d" : bill.status === "cancelled" ? "#dc2626" : "#854d0e",
-              border: `1px solid ${bill.status === "paid" ? "#86efac" : bill.status === "cancelled" ? "#fca5a5" : "#fde047"}`,
-            }}>
-              {bill.status}
-            </div>
-            {bill.order?.orderNumber && (
-              <div style={{ fontSize: "10.5px", color: "#666", marginTop: "2px" }}>Order: {bill.order.orderNumber}</div>
-            )}
-            {/* Auto-included verify QR — toggle in Settings → "Print QR on bill". */}
-            {clinic?.qrOnBillEnabled !== false && (
-              <div className="pr-keep-case" style={{ marginTop: "6px", display: "inline-block", textAlign: "center", fontSize: "8px", color: "#444", lineHeight: 1.1 }}>
-                {billQrDataUrl && (
-                  <img
-                    src={billQrDataUrl}
-                    alt="Verify QR"
-                    style={{ width: effectivePaperSize === "A5" ? "56px" : "68px", height: effectivePaperSize === "A5" ? "56px" : "68px", display: "block" }}
-                  />
-                )}
-                <div style={{ marginTop: "2px" }}>Scan to verify</div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Patient + Doctor info — compact 2-line block (no boxed bg, no
-            grid) so an A5 bill fits on a single page. The wrapper's
-            text-transform:uppercase rule capitalizes name / gender /
-            doctor automatically. */}
-        {bill.patient && (() => {
-          const ageYrs = bill.patient.dateOfBirth
-            ? Math.floor((Date.now() - new Date(bill.patient.dateOfBirth).getTime()) / (365.25 * 24 * 3600 * 1000))
-            : null;
-          const rightRows = [
-            bill.patient.phone ? `PH ${bill.patient.phone}` : null,
-            `ID ${bill.patient.patientId}`,
-          ].filter(Boolean);
-          const ageSex = [
-            ageYrs && ageYrs > 0 ? `${ageYrs} Yrs` : null,
-            bill.patient.gender ? bill.patient.gender : null,
-          ].filter(Boolean).join(" / ");
-          const ref = bill.order?.doctor
-            ? `Dr. ${bill.order.doctor.name}${bill.order.doctor.specialization ? ` (${bill.order.doctor.specialization})` : ""}`
-            : "Self / Walk-in";
-          return (
-            <div style={{ marginBottom: "10px", padding: "6px 8px", borderTop: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0", lineHeight: 1.25 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }}>
-                <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                  <div style={{ fontSize: effectivePaperSize === "A5" ? "15px" : "17px", fontWeight: 900, color: "#111", lineHeight: 1.05, letterSpacing: "-0.1px" }}>
-                    {bill.patient.firstName} {bill.patient.lastName}
-                  </div>
-                  <div style={{ fontSize: effectivePaperSize === "A5" ? "12px" : "13px", fontWeight: 800, color: "#111", lineHeight: 1.05, marginTop: "2px" }}>
-                    {ageSex}
-                  </div>
-                </div>
-                <div style={{ textAlign: "right", fontSize: "12.5px", color: "#111", fontWeight: 700, lineHeight: 1.3 }}>
-                  {rightRows.map((row) => <div key={row}>{row}</div>)}
-                </div>
-              </div>
-              <div style={{ fontSize: "11px", color: "#555", marginTop: "2px" }}>
-                Ref: <strong>{ref}</strong>
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Tests table */}
-        {bill.order?.tests && bill.order.tests.length > 0 && (
-          <div style={{ marginBottom: "16px" }}>
-            <div style={{ fontSize: "10px", fontWeight: "700", textTransform: "uppercase", color: "#64748b", marginBottom: "6px" }}>Tests / Services</div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: effectivePaperSize === "A5" ? "10px" : "12px" }}>
-              <thead>
-                <tr style={{ background: ls.tableHeaderBg, color: ls.tableHeaderColor }}>
-                  {(clinic?.billShowCode ?? true) && <th style={{ padding: ls.tableHeaderPad, textAlign: "left", fontWeight: "600" }}>Code</th>}
-                  <th style={{ padding: ls.tableHeaderPad, textAlign: "left", fontWeight: "600" }}>Test / Service</th>
-                  {(clinic?.billShowCategory ?? true) && <th style={{ padding: ls.tableHeaderPad, textAlign: "left", fontWeight: "600" }}>Category</th>}
-                  {clinic?.showTatOnBill && (
-                    <th style={{ padding: ls.tableHeaderPad, textAlign: "left", fontWeight: "600" }}>TAT</th>
-                  )}
-                  <th style={{ padding: ls.tableHeaderPad, textAlign: "right", fontWeight: "600" }}>Amount (₹)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bill.order.tests.map((ot, i) => (
-                  <tr key={ot.id} style={{ background: ls.tableRowAltBg(i), borderBottom: ls.tableRowBorderBottom }}>
-                    {(clinic?.billShowCode ?? true) && <td style={{ padding: "6px 10px", fontFamily: "monospace", fontWeight: "700", color: ls.accentColor }}>{ot.test?.code}</td>}
-                    <td style={{ padding: "6px 10px", fontWeight: "600" }}>{ot.test?.name}</td>
-                    {(clinic?.billShowCategory ?? true) && <td style={{ padding: "6px 10px", color: "#666" }}>{ot.test?.category}</td>}
-                    {clinic?.showTatOnBill && (
-                      <td style={{ padding: "6px 10px", color: "#444" }}>{ot.test?.duration || "—"}</td>
-                    )}
-                    <td style={{ padding: "6px 10px", textAlign: "right", fontWeight: "600" }}>{Number(ot.price).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Financial summary */}
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "16px" }}>
-          <table style={{ width: "260px", fontSize: "12px", borderCollapse: "collapse" }}>
-            <tbody>
-              <tr>
-                <td style={{ padding: "4px 10px", color: "#555" }}>Subtotal</td>
-                <td style={{ padding: "4px 10px", textAlign: "right" }}>₹{Number(bill.subtotal).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-              </tr>
-              {bill.discount > 0 && (
-                <tr>
-                  <td style={{ padding: "4px 10px", color: "#16a34a" }}>Discount</td>
-                  <td style={{ padding: "4px 10px", textAlign: "right", color: "#16a34a" }}>- ₹{Number(bill.discount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                </tr>
-              )}
-              {bill.taxAmount > 0 && (
-                <tr>
-                  <td style={{ padding: "4px 10px", color: "#555" }}>Tax</td>
-                  <td style={{ padding: "4px 10px", textAlign: "right" }}>₹{Number(bill.taxAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                </tr>
-              )}
-              <tr style={{ background: ls.totalRowBg, color: ls.totalRowColor, fontWeight: "700", borderTop: ls.totalRowBorder }}>
-                <td style={{ padding: "7px 10px", fontSize: "13px" }}>Total Amount</td>
-                <td style={{ padding: "7px 10px", textAlign: "right", fontSize: "13px" }}>₹{Number(bill.totalAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-              </tr>
-              <tr style={{ color: "#16a34a" }}>
-                <td style={{ padding: "4px 10px" }}>Amount Paid</td>
-                <td style={{ padding: "4px 10px", textAlign: "right" }}>- ₹{Number(bill.paidAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-              </tr>
-              {!isCancelled && (
-                <tr style={{ fontWeight: "700", color: bill.balanceAmount > 0 ? "#dc2626" : "#16a34a", borderTop: "2px solid #e2e8f0" }}>
-                  <td style={{ padding: "6px 10px" }}>Balance Due</td>
-                  <td style={{ padding: "6px 10px", textAlign: "right" }}>₹{Number(bill.balanceAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Payment history */}
-        {bill.payments && bill.payments.length > 0 && (
-          <div style={{ marginBottom: "16px" }}>
-            <div style={{ fontSize: "10px", fontWeight: "700", textTransform: "uppercase", color: "#64748b", marginBottom: "6px" }}>Payment History</div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
-              <thead>
-                <tr style={{ background: "#f1f5f9", borderBottom: "1px solid #cbd5e1" }}>
-                  <th style={{ padding: "5px 8px", textAlign: "left", color: "#475569" }}>Date &amp; Time</th>
-                  <th style={{ padding: "5px 8px", textAlign: "left", color: "#475569" }}>Method</th>
-                  <th style={{ padding: "5px 8px", textAlign: "left", color: "#475569" }}>Reference</th>
-                  <th style={{ padding: "5px 8px", textAlign: "right", color: "#475569" }}>Amount (₹)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bill.payments.map((p) => (
-                  <tr key={p.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
-                    <td style={{ padding: "5px 8px", color: "#555" }}>{new Date(p.createdAt).toLocaleString("en-IN")}</td>
-                    <td style={{ padding: "5px 8px", textTransform: "uppercase", fontWeight: "600", color: "#1e40af" }}>{p.method}</td>
-                    <td style={{ padding: "5px 8px", color: "#555" }}>{p.referenceNumber || "—"}</td>
-                    <td style={{ padding: "5px 8px", textAlign: "right", fontWeight: "600" }}>{Number(p.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Footer */}
-        {(() => {
-          const billedBy = readStaffSession()?.user?.name ?? "";
-          const footerMeta = [billedBy ? `Billed by: ${billedBy}` : null, "Computer-generated — No signature required"].filter(Boolean).join(" · ");
-          return (
-            <div style={{ borderTop: "1px solid #d1d5db", paddingTop: "5px", marginTop: "4px" }}>
-              {!isCancelled && bill.balanceAmount <= 0 && (
-                <div style={{ fontSize: "10px", color: "#16a34a", fontWeight: "700", textAlign: "center", marginBottom: "2px" }}>✓ PAID IN FULL — THANK YOU!</div>
-              )}
-              {!isCancelled && bill.balanceAmount > 0 && (
-                <div style={{ fontSize: "10px", color: "#dc2626", fontWeight: "700", textAlign: "center", marginBottom: "2px" }}>BALANCE DUE: ₹{Number(bill.balanceAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div>
-              )}
-              <div className="pr-keep-case" style={{ fontSize: "8.5px", color: "#888", textAlign: "center", lineHeight: 1.6 }}>
-                <div>{clinic?.footerNote || "Thank you for choosing our diagnostic services."}</div>
-                <div>{footerMeta}</div>
-              </div>
-            </div>
-          );
-        })()}
-      </div>
       ))}
 
       {/* Re-print Dialog */}
