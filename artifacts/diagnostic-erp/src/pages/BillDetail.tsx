@@ -15,7 +15,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Plus, Pencil, History, Clock, ShieldAlert, Trash2, AlertTriangle, ExternalLink, Printer, Ban, Undo2, XCircle } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, History, Clock, ShieldAlert, Trash2, AlertTriangle, ExternalLink, Printer, Ban, Undo2, XCircle, AlertCircle } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useSuperAdmin, getSuperAdminToken } from "@/hooks/useSuperAdmin";
 import { readStaffSession } from "@/lib/staffSession";
@@ -548,6 +548,39 @@ export default function BillDetail({ id }: { id: number }) {
                   <span>{formatCurrency(bill.balanceAmount)}</span>
                 </div>
               )}
+              {/* Refund Due — patient overpaid after a test was cancelled */}
+              {!isCancelled && bill.paidAmount > bill.totalAmount && (
+                <div className="mt-2 rounded-lg border border-orange-300 bg-orange-50 dark:bg-orange-950/20 p-3 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="flex items-center gap-1.5 text-sm font-semibold text-orange-700 dark:text-orange-400">
+                      <AlertCircle size={14} /> Refund Due to Patient
+                    </span>
+                    <span className="text-sm font-bold text-orange-700 dark:text-orange-400">
+                      {formatCurrency(bill.paidAmount - bill.totalAmount)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-orange-600 dark:text-orange-500">
+                    A test was cancelled after payment. Refund the overpaid amount to the patient.
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/30"
+                    onClick={() => {
+                      resetRefund({
+                        performedBy: defaultActor,
+                        reason: "Test cancellation refund",
+                        amount: bill.paidAmount - bill.totalAmount,
+                        method: "cash",
+                      });
+                      setRefundTab("refund");
+                      setRefundOpen(true);
+                    }}
+                  >
+                    Process Refund — {formatCurrency(bill.paidAmount - bill.totalAmount)}
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -860,7 +893,7 @@ export default function BillDetail({ id }: { id: number }) {
             </div>
           </div>
 
-          {/* Tests table */}
+          {/* Tests table — active tests numbered, cancelled tests shown with strikethrough */}
           <table className="bdr-table" style={{ fontSize: 9 }}>
             <thead>
               <tr style={{ background: ls.tableHeaderBg, color: ls.tableHeaderColor, borderBottom: ls.tableRowBorderBottom }}>
@@ -871,14 +904,37 @@ export default function BillDetail({ id }: { id: number }) {
               </tr>
             </thead>
             <tbody>
-              {bill.order?.tests?.filter((t) => (t.status ?? "active") === "active").map((t, i) => (
-                <tr key={t.id ?? i} style={{ background: ls.tableRowAltBg(i), borderBottom: ls.tableRowBorderBottom }}>
-                  <td>{i + 1}</td>
-                  <td style={{ fontWeight: 600 }}>{t.test?.name}</td>
-                  {(clinic?.billShowCategory ?? true) && <td>{t.test?.category}</td>}
-                  <td className="bdr-right">₹{Number(t.price ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                </tr>
-              ))}
+              {(() => {
+                let activeSeq = 0;
+                return bill.order?.tests?.map((t, idx) => {
+                  const isCancelledTest = (t.status ?? "active") === "cancelled";
+                  if (!isCancelledTest) activeSeq++;
+                  return (
+                    <tr key={t.id ?? idx} style={{ background: isCancelledTest ? "#fff5f5" : ls.tableRowAltBg(activeSeq - 1), borderBottom: ls.tableRowBorderBottom }}>
+                      <td style={{ color: isCancelledTest ? "#c62828" : "inherit" }}>
+                        {isCancelledTest ? "✕" : activeSeq}
+                      </td>
+                      <td style={{ fontWeight: 600, color: isCancelledTest ? "#999" : "inherit" }}>
+                        <span style={{ textDecoration: isCancelledTest ? "line-through" : "none" }}>{t.test?.name}</span>
+                        {isCancelledTest && (
+                          <span style={{ marginLeft: 5, fontSize: 7.5, fontWeight: 700, color: "#c62828", textDecoration: "none", letterSpacing: 0.3 }}>CANCELLED</span>
+                        )}
+                        {isCancelledTest && t.cancelledByName && (
+                          <span style={{ display: "block", fontSize: 7.5, color: "#999", textDecoration: "none", fontWeight: 400 }}>
+                            Cancelled by {t.cancelledByName}
+                          </span>
+                        )}
+                      </td>
+                      {(clinic?.billShowCategory ?? true) && (
+                        <td style={{ color: isCancelledTest ? "#bbb" : "inherit" }}>{t.test?.category}</td>
+                      )}
+                      <td className="bdr-right" style={{ textDecoration: isCancelledTest ? "line-through" : "none", color: isCancelledTest ? "#c62828" : "inherit" }}>
+                        ₹{Number(t.price ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  );
+                });
+              })()}
             </tbody>
           </table>
 
@@ -921,13 +977,31 @@ export default function BillDetail({ id }: { id: number }) {
                     <td>Paid</td>
                     <td style={{ textAlign: "right", color: "green" }}>₹{Number(bill.paidAmount ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                   </tr>
-                  <tr className="bdr-grand">
-                    <td><strong>Balance Due</strong></td>
-                    <td style={{ textAlign: "right", color: Number(bill.balanceAmount ?? 0) > 0 ? "#c62828" : "green" }}>
-                      ₹{Number(bill.balanceAmount ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                      {Number(bill.balanceAmount ?? 0) === 0 && " (PAID)"}
-                    </td>
-                  </tr>
+                  {Number((bill as { refundAmount?: number | string }).refundAmount ?? 0) > 0 && (
+                    <tr>
+                      <td>Refunded</td>
+                      <td style={{ textAlign: "right", color: "#e65100" }}>
+                        −₹{Number((bill as { refundAmount?: number | string }).refundAmount ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  )}
+                  {Number(bill.paidAmount) > Number(bill.totalAmount) ? (
+                    <tr className="bdr-grand">
+                      <td><strong>Refund Due</strong></td>
+                      <td style={{ textAlign: "right", color: "#e65100" }}>
+                        <strong>₹{(Number(bill.paidAmount) - Number(bill.totalAmount)).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong>
+                        <span style={{ fontSize: 7.5, display: "block", fontWeight: 400 }}>Refund pending — cancelled test</span>
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr className="bdr-grand">
+                      <td><strong>Balance Due</strong></td>
+                      <td style={{ textAlign: "right", color: Number(bill.balanceAmount ?? 0) > 0 ? "#c62828" : "green" }}>
+                        ₹{Number(bill.balanceAmount ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        {Number(bill.balanceAmount ?? 0) === 0 && " (PAID)"}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
