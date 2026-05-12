@@ -290,48 +290,6 @@ export default function DailySummary() {
             <div className="text-xs text-muted-foreground">{physicalFormula}</div>
           </div>
 
-          <div className="bg-card border border-card-border rounded-xl overflow-hidden">
-            <button onClick={() => setShowBills((v) => !v)} className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold hover:bg-muted/30 transition-colors">
-              <span className="flex items-center gap-2"><Receipt size={14} className="text-primary" /> Bills Created Today <Badge variant="secondary" className="text-xs">{billRows.length}</Badge></span>
-              {showBills ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            </button>
-            {showBills && (
-              <div className="overflow-x-auto border-t border-card-border">
-                {billRows.length === 0 ? <p className="text-xs text-muted-foreground italic p-4">No bills created for this date.</p> : (
-                  <table className="w-full text-xs">
-                    <thead className="bg-muted/50"><tr><th className="px-3 py-2 text-left font-semibold">Time</th><th className="px-3 py-2 text-left font-semibold">Bill #</th><th className="px-3 py-2 text-left font-semibold">Patient</th><th className="px-3 py-2 text-right font-semibold">Amount</th><th className="px-3 py-2 text-right font-semibold">Paid</th><th className="px-3 py-2 text-right font-semibold">Balance</th><th className="px-3 py-2 text-left font-semibold">Status</th><th className="px-3 py-2 text-left font-semibold">By</th></tr></thead>
-                    <tbody className="divide-y divide-card-border">
-                      {billRows.map((b) => (
-                        <tr key={b.id} className="hover:bg-muted/20"><td className="px-3 py-1.5 text-muted-foreground">{new Date(b.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}</td><td className="px-3 py-1.5 font-mono font-semibold">{String(b.billNumber).replace(/^BILL-?/i, "").replace(/-/g, "")}</td><td className="px-3 py-1.5">{b.patientName}</td><td className="px-3 py-1.5 text-right">{inr(b.totalAmount)}</td><td className="px-3 py-1.5 text-right text-green-700">{inr(b.paidAmount)}</td><td className={cn("px-3 py-1.5 text-right font-semibold", b.balanceAmount > 0 ? "text-red-600" : "text-green-600")}>{inr(b.balanceAmount)}</td><td className="px-3 py-1.5">{statusBadge(b.status)}</td><td className="px-3 py-1.5 text-muted-foreground">{b.createdByName || "—"}</td></tr>
-                      ))}
-                    </tbody>
-                    <tfoot className="bg-muted/30 border-t-2 border-card-border"><tr><td colSpan={3} className="px-3 py-2 font-semibold text-xs">Total ({billRows.filter(b => b.status !== "cancelled").length} active)</td><td className="px-3 py-2 text-right font-bold">{inr(billRows.filter(b => b.status !== "cancelled").reduce((s, b) => s + b.totalAmount, 0))}</td><td className="px-3 py-2 text-right font-bold text-green-700">{inr(billRows.filter(b => b.status !== "cancelled").reduce((s, b) => s + b.paidAmount, 0))}</td><td className="px-3 py-2 text-right font-bold text-red-600">{inr(summary.outstanding)}</td><td colSpan={2} /></tr></tfoot>
-                  </table>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="bg-card border border-card-border rounded-xl overflow-hidden">
-            <button onClick={() => setShowPayments((v) => !v)} className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold hover:bg-muted/30 transition-colors">
-              <span className="flex items-center gap-2"><CreditCard size={14} /> Payment Entries <Badge variant="secondary" className="text-xs">{detailedRows.length}</Badge></span>
-              {showPayments ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            </button>
-            {showPayments && (
-              <div className="overflow-x-auto border-t border-card-border">
-                <table className="w-full text-xs">
-                  <thead className="bg-muted/50 border-y border-card-border"><tr><th className="px-3 py-2 text-left font-semibold">Time</th><th className="px-3 py-2 text-left font-semibold">Method</th><th className="px-3 py-2 text-right font-semibold">Amount</th><th className="px-3 py-2 text-left font-semibold">Ref #</th><th className="px-3 py-2 text-left font-semibold">Recorded By</th></tr></thead>
-                  <tbody className="divide-y divide-card-border">
-                    {detailedRows.map((p) => (
-                      <tr key={p.id} className="hover:bg-muted/20"><td className="px-3 py-1.5 text-muted-foreground">{new Date(p.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}</td><td className="px-3 py-1.5"><span className="flex items-center gap-1 capitalize">{methodIcon(p.method)} {p.method.toUpperCase()}</span></td><td className="px-3 py-1.5 text-right font-semibold text-green-700">{inr(p.amount)}</td><td className="px-3 py-1.5 font-mono text-muted-foreground">{p.referenceNumber || "—"}</td><td className="px-3 py-1.5 text-muted-foreground">{p.recordedByName || "—"}</td></tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-muted/30 border-t-2 border-card-border"><tr><td colSpan={2} className="px-3 py-2 font-semibold text-xs">Total</td><td className="px-3 py-2 text-right font-bold text-green-700">{inr(summary.digitalCollection)}</td><td colSpan={2} /></tr></tfoot>
-                </table>
-              </div>
-            )}
-          </div>
-
           {(refundRows.length > 0 || cancelledRows.length > 0) && (
             <div className="bg-card border border-card-border rounded-xl overflow-hidden">
               <button onClick={() => setShowRefunds((v) => !v)} className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold hover:bg-muted/30 transition-colors">
@@ -442,6 +400,50 @@ export default function DailySummary() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* ── Bills Created Today — moved to bottom ── */}
+          <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+            <button onClick={() => setShowBills((v) => !v)} className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold hover:bg-muted/30 transition-colors">
+              <span className="flex items-center gap-2"><Receipt size={14} className="text-primary" /> Bills Created Today <Badge variant="secondary" className="text-xs">{billRows.length}</Badge></span>
+              {showBills ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+            {showBills && (
+              <div className="overflow-x-auto border-t border-card-border">
+                {billRows.length === 0 ? <p className="text-xs text-muted-foreground italic p-4">No bills created for this date.</p> : (
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/50"><tr><th className="px-3 py-2 text-left font-semibold">Time</th><th className="px-3 py-2 text-left font-semibold">Bill #</th><th className="px-3 py-2 text-left font-semibold">Patient</th><th className="px-3 py-2 text-right font-semibold">Amount</th><th className="px-3 py-2 text-right font-semibold">Paid</th><th className="px-3 py-2 text-right font-semibold">Balance</th><th className="px-3 py-2 text-left font-semibold">Status</th><th className="px-3 py-2 text-left font-semibold">By</th></tr></thead>
+                    <tbody className="divide-y divide-card-border">
+                      {billRows.map((b) => (
+                        <tr key={b.id} className="hover:bg-muted/20"><td className="px-3 py-1.5 text-muted-foreground">{new Date(b.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}</td><td className="px-3 py-1.5 font-mono font-semibold">{String(b.billNumber).replace(/^BILL-?/i, "").replace(/-/g, "")}</td><td className="px-3 py-1.5">{b.patientName}</td><td className="px-3 py-1.5 text-right">{inr(b.totalAmount)}</td><td className="px-3 py-1.5 text-right text-green-700">{inr(b.paidAmount)}</td><td className={cn("px-3 py-1.5 text-right font-semibold", b.balanceAmount > 0 ? "text-red-600" : "text-green-600")}>{inr(b.balanceAmount)}</td><td className="px-3 py-1.5">{statusBadge(b.status)}</td><td className="px-3 py-1.5 text-muted-foreground">{b.createdByName || "—"}</td></tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-muted/30 border-t-2 border-card-border"><tr><td colSpan={3} className="px-3 py-2 font-semibold text-xs">Total ({billRows.filter(b => b.status !== "cancelled").length} active)</td><td className="px-3 py-2 text-right font-bold">{inr(billRows.filter(b => b.status !== "cancelled").reduce((s, b) => s + b.totalAmount, 0))}</td><td className="px-3 py-2 text-right font-bold text-green-700">{inr(billRows.filter(b => b.status !== "cancelled").reduce((s, b) => s + b.paidAmount, 0))}</td><td className="px-3 py-2 text-right font-bold text-red-600">{inr(summary.outstanding)}</td><td colSpan={2} /></tr></tfoot>
+                  </table>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Payment Entries — moved to bottom ── */}
+          <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+            <button onClick={() => setShowPayments((v) => !v)} className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold hover:bg-muted/30 transition-colors">
+              <span className="flex items-center gap-2"><CreditCard size={14} /> Payment Entries <Badge variant="secondary" className="text-xs">{detailedRows.length}</Badge></span>
+              {showPayments ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+            {showPayments && (
+              <div className="overflow-x-auto border-t border-card-border">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/50 border-y border-card-border"><tr><th className="px-3 py-2 text-left font-semibold">Time</th><th className="px-3 py-2 text-left font-semibold">Method</th><th className="px-3 py-2 text-right font-semibold">Amount</th><th className="px-3 py-2 text-left font-semibold">Ref #</th><th className="px-3 py-2 text-left font-semibold">Recorded By</th></tr></thead>
+                  <tbody className="divide-y divide-card-border">
+                    {detailedRows.map((p) => (
+                      <tr key={p.id} className="hover:bg-muted/20"><td className="px-3 py-1.5 text-muted-foreground">{new Date(p.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}</td><td className="px-3 py-1.5"><span className="flex items-center gap-1 capitalize">{methodIcon(p.method)} {p.method.toUpperCase()}</span></td><td className="px-3 py-1.5 text-right font-semibold text-green-700">{inr(p.amount)}</td><td className="px-3 py-1.5 font-mono text-muted-foreground">{p.referenceNumber || "—"}</td><td className="px-3 py-1.5 text-muted-foreground">{p.recordedByName || "—"}</td></tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-muted/30 border-t-2 border-card-border"><tr><td colSpan={2} className="px-3 py-2 font-semibold text-xs">Total</td><td className="px-3 py-2 text-right font-bold text-green-700">{inr(summary.digitalCollection)}</td><td colSpan={2} /></tr></tfoot>
+                </table>
+              </div>
+            )}
           </div>
         </>
       )}
