@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { billsTable, paymentsTable, ordersTable } from "@workspace/db/schema";
-import { sql, and, eq, gte, lt, ne } from "drizzle-orm";
+import { sql, and, eq, gte, lt } from "drizzle-orm";
 import { patientsTable } from "@workspace/db/schema";
 
 export const dailySummaryRouter: IRouter = Router();
@@ -23,11 +23,7 @@ dailySummaryRouter.get("/", async (req, res) => {
 
   const { start: dayStart, end: dayEnd } = dayBoundsIST(date);
 
-  // ── Payments in this date range (includes negatives = refunds) ──────────────
-  const paymentFilters = [
-    gte(paymentsTable.createdAt, dayStart),
-    lt(paymentsTable.createdAt, dayEnd),
-  ];
+  const paymentFilters = [gte(paymentsTable.createdAt, dayStart), lt(paymentsTable.createdAt, dayEnd)];
   if (staffName) paymentFilters.push(eq(paymentsTable.recordedByName, staffName));
 
   const allPaymentItems = await db
@@ -46,15 +42,10 @@ dailySummaryRouter.get("/", async (req, res) => {
     .orderBy(sql`${paymentsTable.createdAt} DESC`)
     .limit(500);
 
-  // Separate positive (receipts) and negative (refunds) payments
   const paymentItems = allPaymentItems.filter((p) => Number(p.amount) > 0);
-  const refundItems  = allPaymentItems.filter((p) => Number(p.amount) < 0);
+  const refundItems = allPaymentItems.filter((p) => Number(p.amount) < 0);
 
-  // ── Bills created in this date range ─────────────────────────────────────
-  const billFilters = [
-    gte(billsTable.createdAt, dayStart),
-    lt(billsTable.createdAt, dayEnd),
-  ];
+  const billFilters = [gte(billsTable.createdAt, dayStart), lt(billsTable.createdAt, dayEnd)];
   if (staffName) billFilters.push(eq(billsTable.createdByName, staffName));
 
   const allBillRows = await db
@@ -77,13 +68,11 @@ dailySummaryRouter.get("/", async (req, res) => {
     .where(and(...billFilters))
     .orderBy(sql`${billsTable.createdAt} DESC`);
 
-  // ── Orders in this date range ──────────────────────────────────────────────
   const orderCount = await db
     .select({ count: sql<number>`COUNT(*)::int` })
     .from(ordersTable)
     .where(and(gte(ordersTable.createdAt, dayStart), lt(ordersTable.createdAt, dayEnd)));
 
-  // ── Expenses for this date ────────────────────────────────────────────────
   const expenseRows = await db.execute<{ payment_mode: string; total: string }>(
     sql`SELECT payment_mode, COALESCE(SUM(amount::numeric), 0)::text AS total
         FROM expenses
@@ -91,7 +80,6 @@ dailySummaryRouter.get("/", async (req, res) => {
         GROUP BY payment_mode`
   );
 
-  // ── All outstanding dues across ALL time (not just today) ─────────────────
   const allDuesResult = await db.execute<{ total: string }>(
     sql`SELECT COALESCE(SUM(balance_amount::numeric), 0)::text AS total
         FROM bills
@@ -99,22 +87,22 @@ dailySummaryRouter.get("/", async (req, res) => {
   );
   const totalOutstandingDues = Number(allDuesResult.rows[0]?.total ?? 0);
 
-  // ── Aggregate ─────────────────────────────────────────────────────────────
-  const activeBills    = allBillRows.filter((r) => r.status !== "cancelled");
+  const activeBills = allBillRows.filter((r) => r.status !== "cancelled");
   const cancelledBills = allBillRows.filter((r) => r.status === "cancelled");
 
-  const totalBilled   = activeBills.reduce((s, r) => s + Number(r.totalAmount), 0);
+  const totalBilling = activeBills.reduce((s, r) => s + Number(r.totalAmount), 0);
+  const outstanding = activeBills.reduce((s, r) => s + Math.max(0, Number(r.balanceAmount ?? 0)), 0);
+  const totalRefunded = refundItems.reduce((s, p) => s + Math.abs(Number(p.amount)), 0);
+  const totalReceived = paymentItems.reduce((s, p) => s + Number(p.amount), 0);
+  const digitalCollection = paymentItems.reduce((s, p) => {
+    const m = (p.method ?? "other").toLowerCase();
+    return s + (["upi", "card", "online", "bank", "cheque", "neft", "rtgs"].includes(m) ? Number(p.amount) : 0);
+  }, 0);
+  const expenses = expenseRows.rows.reduce((s, r) => s + Number(r.total), 0);
+  const netCollection = totalBilling - outstanding - totalRefunded - cancelledBills.reduce((s, r) => s + Number(r.totalAmount), 0) - expenses;
+  const physicalCashInHand = netCollection - digitalCollection;
+  const refundsAndCancellations = totalRefunded + cancelledBills.reduce((s, r) => s + Number(r.totalAmount), 0);
 
-  // Outstanding from TODAY's bills: use actual balance_amount (not totalBilled - totalReceived).
-  // This correctly reflects partial payments regardless of when they were made.
-  const todayOutstanding = activeBills.reduce((s, r) => s + Math.max(0, Number(r.balanceAmount ?? 0)), 0);
-
-  // Net received today = sum of positive payments minus sum of |refunds|
-  const totalReceived  = paymentItems.reduce((s, p) => s + Number(p.amount), 0);
-  const totalRefunded  = refundItems.reduce((s, p) => s + Math.abs(Number(p.amount)), 0);
-  const netReceived    = totalReceived - totalRefunded;
-
-  // byMethod shows positive receipts only (refunds shown separately)
   const byMethod: Record<string, number> = {};
   for (const p of paymentItems) {
     const m = (p.method ?? "other").toLowerCase();
@@ -128,20 +116,13 @@ dailySummaryRouter.get("/", async (req, res) => {
   }
 
   const billsByStatus = {
-    paid:      activeBills.filter((r) => r.status === "paid").length,
-    partial:   activeBills.filter((r) => r.status === "partial").length,
-    pending:   activeBills.filter((r) => r.status === "pending").length,
+    paid: activeBills.filter((r) => r.status === "paid").length,
+    partial: activeBills.filter((r) => r.status === "partial").length,
+    pending: activeBills.filter((r) => r.status === "pending").length,
     cancelled: cancelledBills.length,
   };
 
-  // ── Per-user breakdown ────────────────────────────────────────────────────
-  type UserAgg = {
-    userName: string;
-    billCount: number;
-    billed: number;
-    received: number;
-    methods: Record<string, number>;
-  };
+  type UserAgg = { userName: string; billCount: number; billed: number; received: number; methods: Record<string, number> };
   const byUserMap = new Map<string, UserAgg>();
   const ensureUser = (name: string | null | undefined): UserAgg => {
     const key = (name && name.trim()) || "Unknown User";
@@ -152,52 +133,46 @@ dailySummaryRouter.get("/", async (req, res) => {
     }
     return row;
   };
+
   for (const r of activeBills) {
     const fallbackName = paymentItems.find((p) => p.billId === r.id)?.recordedByName ?? null;
     const u = ensureUser(r.createdByName ?? fallbackName);
     u.billCount += 1;
     u.billed += Number(r.totalAmount);
   }
+
   for (const p of paymentItems) {
-    const recorder =
-      (p.recordedByName && p.recordedByName.trim())
-        ? p.recordedByName
-        : (allBillRows.find((b) => b.id === p.billId)?.createdByName ?? null);
+    const recorder = (p.recordedByName && p.recordedByName.trim()) ? p.recordedByName : (allBillRows.find((b) => b.id === p.billId)?.createdByName ?? null);
     const u = ensureUser(recorder);
     const amt = Number(p.amount);
     u.received += amt;
     const m = (p.method ?? "cash").toLowerCase();
     u.methods[m] = (u.methods[m] ?? 0) + amt;
   }
-  const byUser = Array.from(byUserMap.values()).sort((a, b) => b.received - a.received);
 
-  // ── Expenses ──────────────────────────────────────────────────────────────
-  let totalExpense = 0;
-  for (const row of expenseRows.rows) {
-    totalExpense += Number(row.total);
-  }
-  // Net Cash in Hand = net received (receipts minus refunds) minus expenses
-  const grandTotal = netReceived - totalExpense;
+  const byUser = Array.from(byUserMap.values()).sort((a, b) => b.received - a.received);
 
   res.json({
     date,
     staffName: staffName || null,
     summary: {
-      totalBilled,
-      totalReceived,    // gross receipts today
-      totalRefunded,    // refunds today
-      netReceived,      // totalReceived - totalRefunded
-      outstanding: todayOutstanding,  // actual balance_amount of today's active bills
-      totalOutstandingDues,           // ALL outstanding dues across all time
+      totalBilling,
+      outstanding,
+      refundsAndCancellations,
+      expenses,
+      netCollection,
+      digitalCollection,
+      physicalCashInHand,
       billCount: activeBills.length,
       orderCount: orderCount[0]?.count ?? 0,
+      totalOutstandingDues,
     },
     byMethod,
     byRefundMethod,
     billsByStatus,
     byUser,
-    totalExpense,
-    grandTotal,
+    totalExpense: expenses,
+    grandTotal: physicalCashInHand,
     bills: allBillRows.map((r) => ({
       id: r.id,
       billNumber: r.billNumber,
