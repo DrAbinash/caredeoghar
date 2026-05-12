@@ -114,20 +114,9 @@ const navItems: NavEntry[] = [
       { path: "/orders", icon: ClipboardList, label: "Orders" },
     ],
   },
-  {
-    id: "tests-grp",
-    icon: FlaskConical,
-    label: "Test Catalog",
-    children: [
-      { path: "/tests", icon: FlaskConical, label: "Tests" },
-      { path: "/outsourced-labs", icon: Building2, label: "Outsourced Labs" },
-      { path: "/packages", icon: Boxes, label: "Packages" },
-    ],
-  },
   { path: "/reports", icon: BarChart3, label: "Reports" },
   { path: "/report-generator", icon: FilePen, label: "Report Generator" },
   { path: "/report-hub", icon: FileText, label: "Report Hub" },
-  { path: "/inventory", icon: Package, label: "Inventory" },
   { path: "/expenses", icon: TrendingDown, label: "Expenses" },
   {
     id: "staff-grp",
@@ -138,9 +127,7 @@ const navItems: NavEntry[] = [
       { path: "/hr-forms", icon: FilePen, label: "HR Forms" },
     ],
   },
-  { path: "/referrals", icon: Stethoscope, label: "Doctors" },
   { path: "/accounting", icon: BookOpen, label: "Accounting" },
-  { path: "/discounts", icon: Tag, label: "Discounts" },
   { path: "/form-f", icon: FileText, label: "Form F (PCPNDT)" },
   { path: "/website", icon: Globe, label: "Website Builder" },
   {
@@ -153,8 +140,21 @@ const navItems: NavEntry[] = [
     ],
   },
   { path: "/machines", icon: Wrench, label: "Machines" },
-  { path: "/settings", icon: Settings2, label: "Settings" },
-  { path: "/system-update", icon: Download, label: "System Update" },
+  {
+    id: "settings-grp",
+    icon: Settings2,
+    label: "Settings",
+    children: [
+      { path: "/settings", icon: Settings2, label: "General Settings" },
+      { path: "/tests", icon: FlaskConical, label: "Test Catalog" },
+      { path: "/outsourced-labs", icon: Building2, label: "Outsourced Labs" },
+      { path: "/packages", icon: Boxes, label: "Packages" },
+      { path: "/inventory", icon: Package, label: "Inventory" },
+      { path: "/discounts", icon: Tag, label: "Discounts" },
+      { path: "/referrals", icon: Stethoscope, label: "Doctors" },
+      { path: "/system-update", icon: Download, label: "System Update" },
+    ],
+  },
 ];
 
 // Flat list of every leaf path (used for the mobile header label lookup).

@@ -1,4 +1,4 @@
-import { ERP_SESSION_KEY, type StaffSession } from "./staffSession";
+import { ERP_SESSION_KEY, type StaffSession, clearStaffSession } from "./staffSession";
 
 function getStaffToken(): string | null {
   try {
@@ -18,12 +18,29 @@ function buildHeaders(init?: RequestInit): Record<string, string> {
   return { ...base, ...(init?.headers as Record<string, string> | undefined) };
 }
 
+// When the server returns 401 the staff session has expired. Clear it and
+// redirect back to the portal login page so the user sees a clear message
+// rather than mysterious "No data" / silent failures across the app.
+function handleSessionExpiry(): void {
+  clearStaffSession();
+  try { window.localStorage.removeItem("portal_staff_session"); } catch { /* ignore */ }
+  const base = (import.meta as { env: { BASE_URL: string } }).env.BASE_URL || "/";
+  const portalUrl = `${base}portal`.replace(/\/+/g, "/").replace(":/", "://");
+  // Only redirect if not already on the portal page to avoid redirect loops.
+  if (!window.location.pathname.includes("/portal")) {
+    window.location.href = portalUrl;
+  }
+}
+
 export async function fetchApi<T = unknown>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     headers: buildHeaders(init),
     ...init,
   });
   if (!res.ok) {
+    if (res.status === 401) {
+      handleSessionExpiry();
+    }
     const err = await res.json().catch(() => ({ message: res.statusText }));
     throw new Error(err?.message || res.statusText);
   }

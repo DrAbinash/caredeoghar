@@ -475,15 +475,24 @@ reportsRouter.get("/payment-methods", async (req, res) => {
   });
 });
 
+// IST-aware date boundaries helper.
+// Bills are created with server-local timestamps. Replit servers run in UTC,
+// but the clinic operates in IST (UTC+5:30). Without this correction, a query
+// for "2026-05-11" would use UTC midnight boundaries and miss all bills
+// created between IST 00:00–05:30 (which are UTC May 10 18:30–May 11 00:00).
+function istDayBounds(dateIso: string): { fromDate: Date; toDate: Date } {
+  return {
+    fromDate: new Date(`${dateIso}T00:00:00+05:30`),
+    toDate:   new Date(`${dateIso}T23:59:59.999+05:30`),
+  };
+}
+
 // Daily full summary (single date) ────────────────────────────────────────────
 reportsRouter.get("/daily-summary", async (req, res) => {
   const q = SingleDateQuery.safeParse(req.query);
   if (!q.success) { res.status(400).json({ error: "Invalid request", details: q.error.issues }); return; }
   const date = q.data.date || new Date().toISOString().split("T")[0];
-  const fromDate = new Date(date);
-  fromDate.setHours(0,0,0,0);
-  const toDate = new Date(date);
-  toDate.setHours(23,59,59,999);
+  const { fromDate, toDate } = istDayBounds(date);
 
   const [bills, payments, orders, expenseVouchers] = await Promise.all([
     db.select({ b: billsTable, p: patientsTable })
@@ -591,10 +600,7 @@ reportsRouter.get("/daily-summary/pdf", async (req, res) => {
   const q = SingleDateQuery.safeParse(req.query);
   if (!q.success) { res.status(400).json({ error: "Invalid request", details: q.error.issues }); return; }
   const date = q.data.date || new Date().toISOString().split("T")[0];
-  const fromDate = new Date(date);
-  fromDate.setHours(0,0,0,0);
-  const toDate = new Date(date);
-  toDate.setHours(23,59,59,999);
+  const { fromDate, toDate } = istDayBounds(date);
 
   const [bills, payments] = await Promise.all([
     db.select({ b: billsTable }).from(billsTable).where(and(gte(billsTable.createdAt, fromDate), lte(billsTable.createdAt, toDate))),

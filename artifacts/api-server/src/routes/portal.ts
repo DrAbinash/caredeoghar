@@ -23,8 +23,8 @@ import { requireStaffAuth, requireStaffPermission } from "../middleware/requireS
 
 export const portalRouter = Router();
 
-// Session lifetime: 12 hours
-const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+// Session lifetime: 24 hours (full working day — avoids mid-shift expiry)
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 
 // Allowed appointment time slots — matches the UI's fixed list.
 // The server enforces this so callers cannot inject arbitrary slot strings.
