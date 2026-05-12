@@ -317,6 +317,11 @@ radiologyRouter.post("/studies", async (req, res) => {
     modality?: string;
     notes?: string;
     technicianId?: number;
+    // DICOM MWL fields (optional at creation, required before in_progress)
+    bodyPart?: string;
+    studyDescription?: string;
+    scheduledStationAETitle?: string;
+    referringDoctor?: string;
   };
   if (!body.patientId || !body.testId) {
     res.status(400).json({ error: "patientId and testId required" }); return;
@@ -342,6 +347,11 @@ radiologyRouter.post("/studies", async (req, res) => {
         notes: body.notes ?? null,
         status: "scheduled",
         studyDate: todayISO(),
+        // DICOM MWL fields — optional at creation
+        bodyPart:                body.bodyPart?.trim() || null,
+        studyDescription:        body.studyDescription?.trim() || null,
+        scheduledStationAETitle: body.scheduledStationAETitle?.trim() || null,
+        referringDoctor:         body.referringDoctor?.trim() || null,
       }).returning();
       res.status(201).json(row); return;
     } catch (err) {
@@ -356,7 +366,14 @@ radiologyRouter.post("/studies", async (req, res) => {
   res.status(500).json({ error: "Could not allocate accession number" });
 });
 
-// PATCH /api/radiology/studies/:id — update status, technician, num images, notes
+// Valid DICOM modality codes accepted by MWL. Studies must use one of these
+// before moving to in_progress (i.e., ready-for-scan) status.
+const DICOM_MWL_MODALITIES = ["MR", "CT", "DX", "CR", "US", "MG"] as const;
+
+// PATCH /api/radiology/studies/:id — update status, technician, num images, notes,
+// and the new DICOM MWL fields (bodyPart, studyDescription, scheduledStationAETitle,
+// referringDoctor). A study cannot move to in_progress unless all mandatory DICOM
+// MWL fields are populated.
 radiologyRouter.patch("/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -367,17 +384,76 @@ radiologyRouter.patch("/:id", async (req, res) => {
     notes?: string;
     studyInstanceUid?: string;
     clinicalHistory?: string | null;
+    // DICOM MWL fields
+    bodyPart?: string | null;
+    studyDescription?: string | null;
+    scheduledStationAETitle?: string | null;
+    referringDoctor?: string | null;
   };
 
   const updates: Partial<typeof radiologyStudiesTable.$inferInsert> = {};
+
   if (body.status !== undefined) {
     const valid = ["scheduled", "in_progress", "acquired", "reported_preliminary", "reported_final", "delivered", "cancelled"];
     if (!valid.includes(body.status)) { res.status(400).json({ error: "Invalid status" }); return; }
+
+    // ── DICOM MWL gate: validate mandatory fields before allowing in_progress ─
+    if (body.status === "in_progress") {
+      // Fetch current study + patient in one join so we can check all
+      // mandatory fields including demographics that live on the patient row.
+      const [current] = await db
+        .select({
+          modality:                radiologyStudiesTable.modality,
+          studyDescription:        radiologyStudiesTable.studyDescription,
+          bodyPart:                radiologyStudiesTable.bodyPart,
+          scheduledStationAETitle: radiologyStudiesTable.scheduledStationAETitle,
+          referringDoctor:         radiologyStudiesTable.referringDoctor,
+          gender:                  patientsTable.gender,
+          phone:                   patientsTable.phone,
+          dateOfBirth:             patientsTable.dateOfBirth,
+        })
+        .from(radiologyStudiesTable)
+        .leftJoin(patientsTable, eq(patientsTable.id, radiologyStudiesTable.patientId))
+        .where(eq(radiologyStudiesTable.id, id));
+
+      if (!current) { res.status(404).json({ error: "Study not found" }); return; }
+
+      // Merge the pending update values with existing DB values so the caller
+      // can set the MWL fields AND change status to in_progress in one PATCH.
+      const effectiveModality   = current.modality;
+      const effectiveStudyDesc  = (body.studyDescription  ?? current.studyDescription)?.trim();
+      const effectiveBodyPart   = (body.bodyPart           ?? current.bodyPart)?.trim();
+      const effectiveStationAE  = (body.scheduledStationAETitle ?? current.scheduledStationAETitle)?.trim();
+      const effectiveRefDoc     = (body.referringDoctor    ?? current.referringDoctor)?.trim();
+
+      const missing: string[] = [];
+      if (!DICOM_MWL_MODALITIES.includes(effectiveModality as typeof DICOM_MWL_MODALITIES[number])) {
+        missing.push(`modality must be one of ${DICOM_MWL_MODALITIES.join(", ")} (current: "${effectiveModality}")`);
+      }
+      if (!effectiveStudyDesc)  missing.push("studyDescription");
+      if (!effectiveBodyPart)   missing.push("bodyPart");
+      if (!effectiveStationAE)  missing.push("scheduledStationAETitle");
+      if (!effectiveRefDoc)     missing.push("referringDoctor");
+      if (!current.gender?.trim())     missing.push("patient sex/gender");
+      if (!current.phone?.trim())      missing.push("patient mobile/phone");
+      if (!current.dateOfBirth?.trim()) missing.push("patient date of birth");
+
+      if (missing.length > 0) {
+        res.status(422).json({
+          error: "Cannot move to in_progress: mandatory DICOM MWL fields are missing",
+          missing,
+          hint: "Populate all required fields before marking the study as ready-for-scan.",
+        });
+        return;
+      }
+    }
+
     updates.status = body.status;
     if (body.status === "in_progress") updates.startedAt = new Date();
     if (body.status === "acquired") updates.acquiredAt = new Date();
     if (body.status === "delivered") updates.deliveredAt = new Date();
   }
+
   if (body.technicianId !== undefined) {
     if (body.technicianId === null) {
       updates.technicianId = null;
@@ -397,6 +473,12 @@ radiologyRouter.patch("/:id", async (req, res) => {
   if (body.notes !== undefined) updates.notes = body.notes;
   if (body.studyInstanceUid !== undefined) updates.studyInstanceUid = body.studyInstanceUid;
   if ("clinicalHistory" in body) updates.clinicalHistory = (body as { clinicalHistory?: string }).clinicalHistory ?? null;
+
+  // DICOM MWL fields
+  if ("bodyPart" in body) updates.bodyPart = body.bodyPart ?? null;
+  if ("studyDescription" in body) updates.studyDescription = body.studyDescription ?? null;
+  if ("scheduledStationAETitle" in body) updates.scheduledStationAETitle = body.scheduledStationAETitle ?? null;
+  if ("referringDoctor" in body) updates.referringDoctor = body.referringDoctor ?? null;
 
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "Nothing to update" }); return;

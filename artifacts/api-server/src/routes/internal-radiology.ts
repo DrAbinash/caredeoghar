@@ -18,13 +18,14 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import { db } from "@workspace/db";
 import {
   patientsTable,
+  radiologyStudiesTable,
   radiologyWorklistTable,
   radiologyAuditLogTable,
   dicomNodesTable,
   dicomPullJobsTable,
   pacsLogsTable,
 } from "@workspace/db/schema";
-import { and, eq, or, sql, inArray } from "drizzle-orm";
+import { and, eq, or, sql, inArray, gte, lte } from "drizzle-orm";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -930,6 +931,246 @@ router.patch("/dicom/pull-jobs/:jobId", async (req, res) => {
   }).where(eq(dicomNodesTable.id, job.nodeId));
 
   res.json(updated);
+});
+
+// ── Helpers: DICOM formatting ─────────────────────────────────────────────────
+
+// Map internal gender strings → DICOM sex codes M / F / O
+function dicomSex(gender: string | null | undefined): "M" | "F" | "O" {
+  const g = (gender ?? "").toLowerCase().trim();
+  if (g === "male" || g === "m") return "M";
+  if (g === "female" || g === "f") return "F";
+  return "O";
+}
+
+// ISO date string (YYYY-MM-DD) or null → DICOM date string (YYYYMMDD) or null
+function dicomDate(isoDate: string | null | undefined): string | null {
+  if (!isoDate) return null;
+  return isoDate.replace(/-/g, "").slice(0, 8);
+}
+
+// Date/timestamp → DICOM date (YYYYMMDD)
+function dicomDateFromTs(ts: Date | string | null | undefined): string | null {
+  if (!ts) return null;
+  const d = ts instanceof Date ? ts : new Date(ts);
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const dy = String(d.getDate()).padStart(2, "0");
+  return `${y}${mo}${dy}`;
+}
+
+// Date/timestamp → DICOM time (HHMMSS)
+function dicomTimeFromTs(ts: Date | string | null | undefined): string | null {
+  if (!ts) return null;
+  const d = ts instanceof Date ? ts : new Date(ts);
+  if (Number.isNaN(d.getTime())) return null;
+  const h = String(d.getHours()).padStart(2, "0");
+  const m = String(d.getMinutes()).padStart(2, "0");
+  const s = String(d.getSeconds()).padStart(2, "0");
+  return `${h}${m}${s}`;
+}
+
+// Build DICOM PatientName "LAST^FIRST"
+function dicomPatientName(firstName: string | null, lastName: string | null): string {
+  const last = (lastName ?? "").trim().toUpperCase();
+  const first = (firstName ?? "").trim().toUpperCase();
+  return last ? `${last}^${first}` : first;
+}
+
+// Map internal status → MWL status
+function toMwlStatus(internalStatus: string): string {
+  switch (internalStatus) {
+    case "scheduled": return "SCHEDULED";
+    case "in_progress": return "IN_PROGRESS";
+    case "acquired": return "COMPLETED";
+    case "reported_preliminary":
+    case "reported_final":
+    case "delivered": return "COMPLETED";
+    case "cancelled": return "CANCELLED";
+    default: return "SCHEDULED";
+  }
+}
+
+// Map MWL status → internal status
+function fromMwlStatus(mwlStatus: string): string {
+  switch (mwlStatus.toUpperCase()) {
+    case "SCHEDULED": return "scheduled";
+    case "ARRIVED":   return "scheduled";   // arrived but not scanning yet
+    case "IN_PROGRESS": return "in_progress";
+    case "COMPLETED": return "acquired";
+    case "CANCELLED": return "cancelled";
+    default: return "scheduled";
+  }
+}
+
+// ── GET /api/internal/radiology/mwl-orders ───────────────────────────────────
+//
+// Returns scheduled radiology orders in DICOM Modality Worklist (MWL) JSON.
+// Filters: status=SCHEDULED|IN_PROGRESS|all  modality=MR|CT|...  date=YYYY-MM-DD
+// Auth: Bearer INTERNAL_API_KEY
+
+router.get("/radiology/mwl-orders", async (req, res) => {
+  const mwlStatus = ((req.query.status as string) || "SCHEDULED").toUpperCase();
+  const modality  = (req.query.modality as string) || "";
+  const dateParam = (req.query.date as string) || "";
+
+  // Translate MWL status filter → internal status list
+  let internalStatuses: string[];
+  if (mwlStatus === "ALL") {
+    internalStatuses = ["scheduled", "in_progress", "acquired", "cancelled"];
+  } else if (mwlStatus === "COMPLETED") {
+    internalStatuses = ["acquired", "reported_preliminary", "reported_final", "delivered"];
+  } else if (mwlStatus === "IN_PROGRESS") {
+    internalStatuses = ["in_progress"];
+  } else if (mwlStatus === "CANCELLED") {
+    internalStatuses = ["cancelled"];
+  } else {
+    internalStatuses = ["scheduled"];
+  }
+
+  const conds = [
+    internalStatuses.length === 1
+      ? eq(radiologyStudiesTable.status, internalStatuses[0]!)
+      : sql`${radiologyStudiesTable.status} = ANY(${internalStatuses})`,
+  ];
+  if (modality && modality !== "all") {
+    conds.push(eq(radiologyStudiesTable.modality, modality));
+  }
+  if (dateParam) {
+    // dateParam = YYYY-MM-DD → filter by study_date
+    conds.push(eq(radiologyStudiesTable.studyDate, dateParam));
+  }
+
+  const rows = await db
+    .select({
+      id:                      radiologyStudiesTable.id,
+      accessionNumber:         radiologyStudiesTable.accessionNumber,
+      modality:                radiologyStudiesTable.modality,
+      studyDescription:        radiologyStudiesTable.studyDescription,
+      bodyPart:                radiologyStudiesTable.bodyPart,
+      scheduledAt:             radiologyStudiesTable.scheduledAt,
+      studyDate:               radiologyStudiesTable.studyDate,
+      status:                  radiologyStudiesTable.status,
+      scheduledStationAETitle: radiologyStudiesTable.scheduledStationAETitle,
+      referringDoctor:         radiologyStudiesTable.referringDoctor,
+      testId:                  radiologyStudiesTable.testId,
+      orderId:                 radiologyStudiesTable.orderId,
+      department:              radiologyStudiesTable.department,
+      // patient fields
+      patientDbId:   patientsTable.id,
+      patientUhid:   patientsTable.patientId,
+      firstName:     patientsTable.firstName,
+      lastName:      patientsTable.lastName,
+      gender:        patientsTable.gender,
+      dateOfBirth:   patientsTable.dateOfBirth,
+      phone:         patientsTable.phone,
+    })
+    .from(radiologyStudiesTable)
+    .leftJoin(patientsTable, eq(patientsTable.id, radiologyStudiesTable.patientId))
+    .where(and(...conds))
+    .orderBy(radiologyStudiesTable.scheduledAt)
+    .limit(500);
+
+  const mwlOrders = rows.map((r) => ({
+    orderId:                 r.id,
+    status:                  toMwlStatus(r.status),
+    internalStatus:          r.status,
+    // Patient demographics
+    patientId:               r.patientUhid ?? String(r.patientDbId ?? ""),
+    patientName:             dicomPatientName(r.firstName, r.lastName),
+    sex:                     dicomSex(r.gender),
+    patientBirthDate:        dicomDate(r.dateOfBirth),
+    phone:                   r.phone ?? null,
+    // Study identification
+    accessionNumber:         r.accessionNumber,
+    testId:                  r.testId,
+    modality:                r.modality,
+    studyDescription:        r.studyDescription ?? null,
+    bodyPart:                r.bodyPart ?? null,
+    referringDoctor:         r.referringDoctor ?? null,
+    // Schedule
+    scheduledDate:           dicomDateFromTs(r.scheduledAt),
+    scheduledTime:           dicomTimeFromTs(r.scheduledAt),
+    scheduledStationAETitle: r.scheduledStationAETitle ?? null,
+    department:              r.department ?? null,
+  }));
+
+  res.json(mwlOrders);
+});
+
+// ── POST /api/internal/radiology/mwl-order-status ────────────────────────────
+//
+// Update status of a radiology order from an MWL lifecycle event.
+// Body: { orderId?, accessionNumber?, status, actor? }
+// Valid statuses: SCHEDULED, ARRIVED, IN_PROGRESS, COMPLETED, CANCELLED
+// Auth: Bearer INTERNAL_API_KEY
+
+router.post("/radiology/mwl-order-status", async (req, res) => {
+  const b = (req.body ?? {}) as {
+    orderId?:        number;
+    accessionNumber?: string;
+    status?:         string;
+    actor?:          string;
+  };
+
+  const VALID_MWL = ["SCHEDULED", "ARRIVED", "IN_PROGRESS", "COMPLETED", "CANCELLED"];
+  const mwlStatus = b.status?.toUpperCase().trim();
+  if (!mwlStatus || !VALID_MWL.includes(mwlStatus)) {
+    res.status(400).json({
+      error: `status is required and must be one of: ${VALID_MWL.join(", ")}`,
+    });
+    return;
+  }
+
+  // Locate the study
+  let study: typeof radiologyStudiesTable.$inferSelect | undefined;
+  if (b.orderId) {
+    const [r] = await db
+      .select()
+      .from(radiologyStudiesTable)
+      .where(eq(radiologyStudiesTable.id, b.orderId));
+    study = r;
+  }
+  if (!study && b.accessionNumber) {
+    const [r] = await db
+      .select()
+      .from(radiologyStudiesTable)
+      .where(eq(radiologyStudiesTable.accessionNumber, b.accessionNumber.trim()));
+    study = r;
+  }
+  if (!study) {
+    res.status(404).json({ error: "Radiology order not found — supply orderId or accessionNumber" });
+    return;
+  }
+
+  const internalStatus = fromMwlStatus(mwlStatus);
+  const updates: Partial<typeof radiologyStudiesTable.$inferInsert> = {
+    status: internalStatus,
+    updatedAt: new Date(),
+  };
+  if (internalStatus === "in_progress" && !study.startedAt) updates.startedAt = new Date();
+  if (internalStatus === "acquired"    && !study.acquiredAt) updates.acquiredAt = new Date();
+
+  const [updated] = await db
+    .update(radiologyStudiesTable)
+    .set(updates)
+    .where(eq(radiologyStudiesTable.id, study.id))
+    .returning();
+
+  await audit({
+    accessionNumber: study.accessionNumber,
+    action: "MWL_STATUS_UPDATED",
+    actor: b.actor ?? "mwl-agent",
+    details: { from: study.status, to: internalStatus, mwlStatus },
+  });
+
+  res.json({
+    orderId:        updated.id,
+    accessionNumber: updated.accessionNumber,
+    internalStatus: updated.status,
+    mwlStatus:      toMwlStatus(updated.status),
+  });
 });
 
 export default router;

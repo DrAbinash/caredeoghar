@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Save, RefreshCw, Trash2, Server, Settings2 } from "lucide-react";
+import { Plus, Save, RefreshCw, Trash2, Server, Settings2, Radio } from "lucide-react";
 
 type Setting = { id: number; key: string; value: string | null; category: string; isSecret: boolean };
 type Modality = {
@@ -18,6 +18,51 @@ type Modality = {
 
 const SETTING_CATEGORIES = ["general", "conquest", "mwl", "delivery", "notification"];
 const MODALITY_CODES = ["MR", "CT", "CR", "DX", "US", "MG", "XA", "OT"];
+
+// MWL settings stored in pacs_settings under category "mwl"
+const MWL_FIELDS: Array<{
+  key: string;
+  label: string;
+  placeholder: string;
+  type?: string;
+  isSelect?: boolean;
+  options?: string[];
+  hint?: string;
+}> = [
+  {
+    key: "mwl_ae_title",
+    label: "MWL AE Title",
+    placeholder: "ERPMWL",
+    hint: "DICOM Application Entity title for the MWL SCP (e.g. ERPMWL)",
+  },
+  {
+    key: "mwl_port",
+    label: "MWL Port",
+    placeholder: "4242",
+    type: "number",
+    hint: "TCP port the MWL SCP listens on",
+  },
+  {
+    key: "mwl_default_station_ae_title",
+    label: "Default Station AE Title",
+    placeholder: "STATION01",
+    hint: "Scheduled station AE title pre-filled on new radiology orders",
+  },
+  {
+    key: "mwl_default_modality",
+    label: "Default Modality",
+    placeholder: "MR",
+    isSelect: true,
+    options: ["MR", "CT", "DX", "CR", "US", "MG"],
+    hint: "Default DICOM modality code for new radiology orders",
+  },
+  {
+    key: "mwl_accession_prefix",
+    label: "Auto Accession Number Prefix",
+    placeholder: "ACC",
+    hint: "Short prefix prepended to auto-generated accession numbers (e.g. ACC, DCH, RAD)",
+  },
+];
 
 function SettingRow({ setting, onSave, onDelete }: {
   setting: Setting;
@@ -87,11 +132,111 @@ function ModalityCard({ m, onToggle, onDelete }: {
   );
 }
 
+// MWL Settings tab — dedicated form for the five MWL configuration keys.
+// Values are persisted to pacs_settings under category "mwl".
+function MwlSettingsTab({
+  settings,
+  onSave,
+}: {
+  settings: Setting[];
+  onSave: (key: string, value: string) => void;
+}) {
+  // Build an editable state map from the current saved settings
+  const savedMap: Record<string, string> = {};
+  for (const s of settings.filter((s) => s.category === "mwl")) {
+    savedMap[s.key] = s.value ?? "";
+  }
+
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    for (const f of MWL_FIELDS) init[f.key] = savedMap[f.key] ?? "";
+    return init;
+  });
+
+  // Re-initialise when server data arrives (query refetch)
+  // This is intentionally done via a key approach in the parent — see below.
+
+  const dirty = MWL_FIELDS.some((f) => values[f.key] !== (savedMap[f.key] ?? ""));
+
+  function handleSave() {
+    for (const f of MWL_FIELDS) {
+      const current = savedMap[f.key] ?? "";
+      if (values[f.key] !== current) {
+        onSave(f.key, values[f.key] ?? "");
+      }
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-xl border bg-card p-5 space-y-4">
+        <div className="flex items-center gap-2 mb-1">
+          <Radio size={16} className="text-primary" />
+          <h3 className="text-sm font-semibold">Modality Worklist (MWL) Settings</h3>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Configure the DICOM Modality Worklist SCP so imaging machines (CT, MRI, X-Ray)
+          can query scheduled studies directly from this ERP.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {MWL_FIELDS.map((f) => (
+            <div key={f.key} className="space-y-1">
+              <label className="text-xs font-medium text-foreground">{f.label}</label>
+              {f.isSelect ? (
+                <select
+                  value={values[f.key] ?? ""}
+                  onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                  className="w-full h-9 text-sm border rounded-md px-2 bg-background"
+                >
+                  <option value="">— use system default —</option>
+                  {f.options?.map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+              ) : (
+                <Input
+                  type={f.type ?? "text"}
+                  value={values[f.key] ?? ""}
+                  onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                  placeholder={f.placeholder}
+                  className="h-9 text-sm"
+                />
+              )}
+              {f.hint && <p className="text-[11px] text-muted-foreground">{f.hint}</p>}
+            </div>
+          ))}
+        </div>
+
+        <div className="flex justify-end pt-2">
+          <Button size="sm" onClick={handleSave} disabled={!dirty} className="h-8">
+            <Save size={13} className="mr-1" /> Save MWL Settings
+          </Button>
+        </div>
+      </div>
+
+      <div className="rounded-xl border bg-muted/40 p-4 text-xs text-muted-foreground space-y-1">
+        <p className="font-medium text-foreground text-sm">Mandatory DICOM fields before scanning</p>
+        <p>A radiology order cannot move to <span className="font-mono bg-muted px-1 rounded">in_progress</span> (ready-for-scan) until all of these are filled on the study:</p>
+        <ul className="list-disc ml-4 mt-1 space-y-0.5">
+          <li>Study Description (DICOM 0008,1030)</li>
+          <li>Body Part Examined (DICOM 0018,0015)</li>
+          <li>Scheduled Station AE Title (DICOM 0040,0001)</li>
+          <li>Referring Physician Name (DICOM 0008,0090)</li>
+          <li>Modality must be one of: MR · CT · DX · CR · US · MG</li>
+          <li>Patient sex, mobile number, and date of birth</li>
+        </ul>
+        <p className="mt-2">Internal MWL endpoint: <span className="font-mono bg-muted px-1 rounded">GET /api/internal/radiology/mwl-orders</span> (requires Bearer INTERNAL_API_KEY)</p>
+        <p>MWL status update: <span className="font-mono bg-muted px-1 rounded">POST /api/internal/radiology/mwl-order-status</span></p>
+        <p className="mt-1">Valid MWL statuses: SCHEDULED · ARRIVED · IN_PROGRESS · COMPLETED · CANCELLED</p>
+      </div>
+    </div>
+  );
+}
+
 export default function PacsSettings() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"settings" | "modalities">("settings");
+  const [activeTab, setActiveTab] = useState<"settings" | "modalities" | "mwl">("settings");
   const [newKey, setNewKey] = useState("");
   const [newVal, setNewVal] = useState("");
   const [newCat, setNewCat] = useState("general");
@@ -143,11 +288,23 @@ export default function PacsSettings() {
     return acc;
   }, {});
 
+  // Save a single MWL key via the generic pacs-settings upsert endpoint.
+  function saveMwlKey(key: string, value: string) {
+    const existing = settings.find((s) => s.key === key);
+    upsertSetting.mutate({
+      ...(existing ? { id: existing.id } : {}),
+      key,
+      value,
+      category: "mwl",
+      isSecret: false,
+    });
+  }
+
   return (
     <div className="p-4 md:p-6 space-y-6">
       <PageHeader
-        title="PACS Settings"
-        subtitle="Configure Conquest PACS connection, modalities, and delivery options"
+        title="PACS / DICOM Settings"
+        subtitle="Configure Conquest PACS, imaging devices, and Modality Worklist (MWL)"
         actions={
           <Button variant="outline" size="sm" onClick={() => { refetchSettings(); refetchModalities(); }} disabled={fetchingSettings || fetchingModalities}>
             <RefreshCw size={14} className={fetchingSettings || fetchingModalities ? "animate-spin" : ""} />
@@ -158,13 +315,17 @@ export default function PacsSettings() {
 
       {/* Tab bar */}
       <div className="flex gap-2 border-b">
-        {(["settings", "modalities"] as const).map((tab) => (
+        {([
+          { key: "settings",   icon: <Settings2 size={14} className="inline mr-1" />, label: "Settings" },
+          { key: "modalities", icon: <Server    size={14} className="inline mr-1" />, label: "Modalities" },
+          { key: "mwl",        icon: <Radio     size={14} className="inline mr-1" />, label: "Worklist (MWL)" },
+        ] as const).map((tab) => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors capitalize ${activeTab === tab ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           >
-            {tab === "settings" ? <><Settings2 size={14} className="inline mr-1" />Settings</> : <><Server size={14} className="inline mr-1" />Modalities</>}
+            {tab.icon}{tab.label}
           </button>
         ))}
       </div>
@@ -259,6 +420,16 @@ export default function PacsSettings() {
             </div>
           )}
         </div>
+      )}
+
+      {activeTab === "mwl" && (
+        // Use a key so the MwlSettingsTab re-initialises its local state when
+        // the server data arrives (settings query is async).
+        <MwlSettingsTab
+          key={settings.length}
+          settings={settings}
+          onSave={saveMwlKey}
+        />
       )}
     </div>
   );

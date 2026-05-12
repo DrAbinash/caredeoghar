@@ -65,6 +65,11 @@ type StudyDetail = Study & {
   studyInstanceUid: string | null;
   templateId: number | null;
   clinicalHistory: string | null;
+  // DICOM MWL fields — required before in_progress
+  bodyPart: string | null;
+  studyDescription: string | null;
+  scheduledStationAETitle: string | null;
+  referringDoctor: string | null;
 };
 
 // Built-in fallback templates for the most common neuro/spine cases. These
@@ -774,18 +779,35 @@ function StudyDetailModal({ id, onClose }: { id: number; onClose: () => void }) 
   const [numImages, setNumImages] = useState<number>(0);
   const [notes, setNotes] = useState("");
   const [studyInstanceUid, setStudyInstanceUid] = useState("");
+  // DICOM MWL fields — required before the study can move to in_progress
+  const [studyDescription, setStudyDescription] = useState("");
+  const [bodyPart, setBodyPart] = useState("");
+  const [scheduledStationAETitle, setScheduledStationAETitle] = useState("");
+  const [referringDoctor, setReferringDoctor] = useState("");
 
   useEffect(() => {
     if (study) {
       setNumImages(study.numImages ?? 0);
       setNotes(study.notes ?? "");
       setStudyInstanceUid(study.studyInstanceUid ?? "");
+      setStudyDescription(study.studyDescription ?? "");
+      setBodyPart(study.bodyPart ?? "");
+      setScheduledStationAETitle(study.scheduledStationAETitle ?? "");
+      setReferringDoctor(study.referringDoctor ?? "");
     }
   }, [study]);
 
   const save = useMutation({
     mutationFn: () =>
-      api.patch(`/api/radiology/${id}`, { numImages, notes, studyInstanceUid }),
+      api.patch(`/api/radiology/${id}`, {
+        numImages,
+        notes,
+        studyInstanceUid,
+        studyDescription: studyDescription || null,
+        bodyPart: bodyPart || null,
+        scheduledStationAETitle: scheduledStationAETitle || null,
+        referringDoctor: referringDoctor || null,
+      }),
     onSuccess: () => {
       toast({ title: "Study updated" });
       qc.invalidateQueries({ queryKey: ["radiology-worklist"] });
@@ -795,9 +817,13 @@ function StudyDetailModal({ id, onClose }: { id: number; onClose: () => void }) 
     onError: (e: Error) => toast({ title: "Save failed", description: e.message, variant: "destructive" }),
   });
 
+  // A study requires all MWL fields before it can move to in_progress.
+  const mwlFieldsMissing = !studyDescription.trim() || !bodyPart.trim() ||
+    !scheduledStationAETitle.trim() || !referringDoctor.trim();
+
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Study Details</DialogTitle>
           <DialogDescription>{study?.accessionNumber ?? "Loading…"}</DialogDescription>
@@ -805,13 +831,68 @@ function StudyDetailModal({ id, onClose }: { id: number; onClose: () => void }) 
         {isLoading ? (
           <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
         ) : study ? (
-          <div className="space-y-3 text-sm">
+          <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-2">
               <div><div className="text-xs text-muted-foreground">Modality</div><div className="font-mono">{study.modality}</div></div>
               <div><div className="text-xs text-muted-foreground">Status</div><StatusPill status={study.status} /></div>
               <div><div className="text-xs text-muted-foreground">Technician</div><div>{study.technicianName ?? "—"}</div></div>
               <div><div className="text-xs text-muted-foreground">Room</div><div>{study.roomNumber || "—"}</div></div>
             </div>
+
+            {/* DICOM MWL mandatory fields */}
+            <div className="rounded-lg border border-dashed p-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-semibold">DICOM Worklist Fields</p>
+                {mwlFieldsMissing ? (
+                  <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">
+                    Required before scanning
+                  </span>
+                ) : (
+                  <span className="text-[10px] bg-green-100 text-green-800 px-1.5 py-0.5 rounded">
+                    Complete
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground">Study Description *</label>
+                  <Input
+                    value={studyDescription}
+                    onChange={(e) => setStudyDescription(e.target.value)}
+                    placeholder="e.g. MRI Brain Plain"
+                    className="h-8 text-xs mt-0.5"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Body Part Examined *</label>
+                  <Input
+                    value={bodyPart}
+                    onChange={(e) => setBodyPart(e.target.value)}
+                    placeholder="e.g. BRAIN, CHEST, ABDOMEN"
+                    className="h-8 text-xs mt-0.5"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Station AE Title *</label>
+                  <Input
+                    value={scheduledStationAETitle}
+                    onChange={(e) => setScheduledStationAETitle(e.target.value)}
+                    placeholder="e.g. MRI01, CT_ROOM2"
+                    className="h-8 text-xs mt-0.5"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Referring Doctor *</label>
+                  <Input
+                    value={referringDoctor}
+                    onChange={(e) => setReferringDoctor(e.target.value)}
+                    placeholder="Dr. Name"
+                    className="h-8 text-xs mt-0.5"
+                  />
+                </div>
+              </div>
+            </div>
+
             <div>
               <label className="text-xs text-muted-foreground">Number of images acquired</label>
               <Input type="number" min={0} value={numImages} onChange={(e) => setNumImages(Number(e.target.value))} />

@@ -40,6 +40,16 @@ export const radiologyStudiesTable = pgTable(
     numImages: integer("num_images").notNull().default(0),
     studyInstanceUid: text("study_instance_uid"),
     notes: text("notes"),
+    // ── DICOM Modality Worklist (MWL) fields ──────────────────────────────
+    // These are required before a study can move to in_progress.
+    // bodyPart       → DICOM tag BodyPartExamined (0018,0015)
+    // studyDescription → DICOM tag StudyDescription (0008,1030)
+    // scheduledStationAETitle → DICOM tag ScheduledStationAETitle (0040,0001)
+    // referringDoctor → DICOM tag ReferringPhysicianName (0008,0090)
+    bodyPart: text("body_part"),
+    studyDescription: text("study_description"),
+    scheduledStationAETitle: text("scheduled_station_ae_title"),
+    referringDoctor: text("referring_doctor"),
     prelimReport: text("prelim_report"),
     prelimReportedBy: text("prelim_reported_by"),
     prelimReportedAt: timestamp("prelim_reported_at", { withTimezone: true }),
