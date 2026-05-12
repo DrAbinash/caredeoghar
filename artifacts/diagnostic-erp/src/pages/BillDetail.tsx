@@ -21,6 +21,14 @@ import { useSuperAdmin, getSuperAdminToken } from "@/hooks/useSuperAdmin";
 import { readStaffSession } from "@/lib/staffSession";
 import { useToast } from "@/hooks/use-toast";
 import { getAutoBillPaperSize, getBillPaperSize, getBillPrintLayout, getLayoutStyles, setBillPaperSize } from "@/lib/billPrintLayout";
+import {
+  buildBillPrintHtml,
+  openBlankPrintWindow,
+  writeAndPrint,
+  printViaIframe,
+  type PrintBillData,
+  type PrintClinic,
+} from "@/lib/printBill";
 
 type PaymentForm = {
   amount: number;
@@ -81,6 +89,19 @@ type BillAudit = {
 const PAYMENT_METHODS = ["cash", "card", "upi", "insurance", "cheque"];
 const BILL_STATUSES = ["pending", "partial", "paid", "cancelled"];
 
+// ─── Print helpers ────────────────────────────────────────────────────────
+// We render the receipt into a freshly-opened popup window using a fully-
+// formed HTML string. This avoids the previous in-page hidden-DOM approach,
+// which was racy: the browser sometimes printed before React had mounted
+// the receipt subtree (blank page) or printed only the header on reprint
+// because the receipt body had been removed during an earlier cleanup.
+//
+// Doing all the work in a self-contained HTML string also means the same
+// template is used for fresh prints (?print=1) and reprints, and we don't
+// depend on the `clinic` query already being warm in the cache.
+
+// (Implementation moved to src/lib/printBill.ts and imported above.)
+
 export default function BillDetail({ id }: { id: number }) {
   const [, navigate] = useLocation();
   const { data: bill, isLoading } = useGetBill(id);
@@ -94,7 +115,6 @@ export default function BillDetail({ id }: { id: number }) {
   const [refundTab, setRefundTab] = useState<"cancel" | "refund" | "cancel-refund">("cancel");
   const [reprintBy, setReprintBy] = useState<string>(() => readStaffSession()?.user.name || localStorage.getItem("diagnosticErp:lastReprintBy") || "");
   const [reprintReason, setReprintReason] = useState<string>("");
-  const [isReprint, setIsReprint] = useState(false);
   const [paperSize, setPaperSize] = useState<"A4" | "A5">(() => getBillPaperSize());
   const [paperMode, setPaperMode] = useState<"auto" | "manual">("auto");
   const billPrintLayout = getBillPrintLayout();
@@ -142,7 +162,6 @@ export default function BillDetail({ id }: { id: number }) {
   // when the bill loads. Empty string until generation completes; the
   // <img> below skips rendering until the data URL is ready.
   const [billQrDataUrl, setBillQrDataUrl] = useState<string>("");
-  const [reprintReady, setReprintReady] = useState(false);
   useEffect(() => {
     if (!bill?.billNumber) { setBillQrDataUrl(""); return; }
     let cancelled = false;
@@ -157,15 +176,10 @@ export default function BillDetail({ id }: { id: number }) {
     return () => { cancelled = true; };
   }, [bill?.billNumber]);
 
-  useEffect(() => {
-    if (!bill || !clinic) return;
-    if (!isReprint) {
-      setReprintReady(false);
-      return;
-    }
-    const timer = setTimeout(() => window.print(), 150);
-    return () => clearTimeout(timer);
-  }, [bill, clinic, isReprint]);
+  // Note: the previous in-page hidden-DOM print pipeline has been replaced
+  // with a popup-window template (buildBillPrintHtml). The reprint flow now
+  // calls openBlankPrintWindow + writeAndPrint from submitReprint() so we don't
+  // depend on React state propagating before window.print() fires.
 
   const reprintLog = useMutation({
     mutationFn: (body: { reprintedBy: string; reason: string }) =>
@@ -175,10 +189,32 @@ export default function BillDetail({ id }: { id: number }) {
     },
   });
 
+  // Build the receipt HTML for the loaded bill. Caller picks the delivery
+  // method: an already-opened popup window (writeAndPrint) for click-driven
+  // flows, or a same-tab hidden iframe (printViaIframe) for the ?print=1
+  // case where the tab itself was opened by a target="_blank" link.
+  const buildHtmlForCurrent = (opts: { reprintBy?: string; reprintReason?: string } = {}): string | null => {
+    if (!bill) return null;
+    return buildBillPrintHtml({
+      bill: bill as PrintBillData,
+      clinic: clinic as PrintClinic,
+      paperSize: effectivePaperSize,
+      isBW,
+      qrDataUrl: billQrDataUrl,
+      reprintBy: opts.reprintBy,
+      reprintReason: opts.reprintReason,
+    });
+  };
+
+  // Re-print: open the popup SYNCHRONOUSLY in the click handler so the
+  // browser doesn't strip user-activation by the time the reprint-log POST
+  // resolves. The window shows a "Preparing receipt…" placeholder until
+  // we write the final HTML.
   const submitReprint = async () => {
     const by = reprintBy.trim();
     const why = reprintReason.trim();
     if (!by || !why) return;
+    const win = openBlankPrintWindow();
     localStorage.setItem("diagnosticErp:lastReprintBy", by);
     try {
       await reprintLog.mutateAsync({ reprintedBy: by, reason: why });
@@ -188,16 +224,30 @@ export default function BillDetail({ id }: { id: number }) {
     }
     setReprintOpen(false);
     setReprintReason("");
-    setIsReprint(true);
+    const html = buildHtmlForCurrent({ reprintBy: by, reprintReason: why });
+    if (html) writeAndPrint(win, html);
   };
 
+  // Auto-print on first load when navigated with ?print=1 (e.g. opened in a
+  // new tab from the Billing list "Print" link). The tab itself was opened
+  // by a user click, so we can print directly into a hidden iframe in the
+  // same tab — no popup blocker risk and no dependency on `clinic` being
+  // loaded (the template falls back to defaults).
+  const autoPrintedRef = useState({ done: false })[0];
   useEffect(() => {
-    if (!bill || !clinic) return;
+    if (!bill) return;
+    if (autoPrintedRef.done) return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("print") !== "1") return;
-    const timer = setTimeout(() => window.print(), 300);
+    autoPrintedRef.done = true;
+    // Tiny delay so QR data URL has a chance to settle (it loads async).
+    const timer = setTimeout(() => {
+      const html = buildHtmlForCurrent();
+      if (html) printViaIframe(html);
+    }, 300);
     return () => clearTimeout(timer);
-  }, [bill, clinic]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bill, clinic, billQrDataUrl, effectivePaperSize, isBW]);
 
   const { data: audits = [], refetch: refetchAudits } = useQuery<BillAudit[]>({
     queryKey: ["bill-audits", id],
@@ -697,93 +747,14 @@ export default function BillDetail({ id }: { id: number }) {
         )}
       </div>
 
-      {/* ── Print Receipt (hidden on screen, visible when printing) ──
-          Notes:
-          - We don't use position:fixed: on some browsers it overflows the
-            page and produces a blank trailing page. Plain block flow + the
-            hide-everything-else rule prints exactly the receipt.
-          - `text-transform: uppercase` on the wrapper forces ALL displayed
-            patient/doctor/test text into capital case as required, regardless
-            of the case the user typed in. */}
-      <style>{`
-        @media print {
-          html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
-          body * { visibility: hidden !important; }
-          .print-receipt, .print-receipt * { visibility: visible !important; }
-          .print-receipt {
-            position: absolute !important;
-            top: 0 !important; left: 0 !important; right: 0 !important;
-            margin: 0 !important;
-            padding: ${effectivePaperSize === "A5" ? "0 4px" : "8px 12px"} !important;
-            background: white !important;
-            color: black !important;
-            font-family: Arial, sans-serif !important;
-            font-size: ${effectivePaperSize === "A5" ? "9.5px" : "12.5px"} !important;
-            text-transform: uppercase !important;
-          }
-          .print-receipt .pr-keep-case { text-transform: none !important; }
-          @page { size: ${effectivePaperSize}; margin: ${effectivePaperSize === "A5" ? "2mm 3mm" : "4mm 6mm"}; }
-          ${isBW ? `
-          /* ── B&W mode: high-contrast print for monochrome laser printers ── */
-          .print-receipt-bw {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-            filter: grayscale(1) contrast(1.35) !important;
-          }
-          ` : ""}
-        }
-        @media screen { .print-receipt { display: none; } }
-      `}</style>
-
-      {Array.from({ length: Math.max(1, Math.min(2, Number(clinic?.billPrintCopies ?? 1) || 1)) }).map((_, copyIdx) => (
-      <div key={copyIdx} className={`print-receipt${isBW ? " print-receipt-bw" : ""}`} style={copyIdx > 0 ? { pageBreakBefore: "always" } : undefined}>
-        {/* Clinic header — name + address on left, logo on right */}
-        <div style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: "16px",
-          borderBottom: "2px solid #1e40af",
-          paddingBottom: "10px",
-          marginBottom: "12px",
-        }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: effectivePaperSize === "A5" ? "15px" : "20px", fontWeight: 800, color: "#1e40af", letterSpacing: "0.3px", lineHeight: 1.15 }}>
-              {clinic?.name || "DiagnoCenter"}
-            </div>
-            {clinic?.tagline && (
-              <div style={{ fontSize: "10.5px", color: "#666", marginTop: "1px", lineHeight: 1.2 }}>{clinic.tagline}</div>
-            )}
-            {clinic?.address && (
-              <div style={{ fontSize: "10.5px", color: "#444", marginTop: "3px", lineHeight: 1.25 }}>
-                {clinic.address.replace(/\s*\n\s*/g, ", ").trim()}
-              </div>
-            )}
-            <div style={{ fontSize: "10.5px", color: "#444", marginTop: "2px", lineHeight: 1.25 }}>
-              {[clinic?.phone && `Ph: ${clinic.phone}`, clinic?.email, clinic?.website]
-                .filter(Boolean)
-                .join("  •  ")}
-            </div>
-            {clinic?.gstin && (
-              <div style={{ fontSize: "10px", color: "#666", marginTop: "1px" }}>GSTIN: {clinic.gstin}</div>
-            )}
-          </div>
-          {clinic?.logoDataUrl && (
-            <img
-              src={clinic.logoDataUrl}
-              alt="logo"
-              style={{
-                maxHeight: effectivePaperSize === "A5" ? "48px" : "64px",
-                maxWidth: effectivePaperSize === "A5" ? "110px" : "150px",
-                objectFit: "contain",
-                flexShrink: 0,
-              }}
-            />
-          )}
-        </div>
-
-      </div>
-      ))}
+      {/* Receipt printing has moved out of the main DOM and into a popup
+          window populated with a self-contained HTML string. See
+          buildBillPrintHtml + openBillPrintWindow at the top of this file
+          and the printCurrentBill() helper inside the component. The old
+          in-page hidden-DOM block was deleted because it was the source of
+          the "blank page" / "header-only reprint" bugs (the receipt body
+          had been removed in a prior cleanup, and the visibility-toggle
+          approach also raced React render and image-load timing). */}
 
       {/* Re-print Dialog */}
       <Dialog open={reprintOpen} onOpenChange={setReprintOpen}>

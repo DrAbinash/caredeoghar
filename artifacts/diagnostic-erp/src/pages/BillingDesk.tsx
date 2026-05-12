@@ -3,7 +3,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import QRCode from "qrcode";
 import { api } from "@/lib/fetchApi";
 import { readStaffSession } from "@/lib/staffSession";
-import { getBillPrintLayout, getLayoutStyles } from "@/lib/billPrintLayout";
+import { getBillPrintLayout, getLayoutStyles, getAutoBillPaperSize, getBillPaperSize } from "@/lib/billPrintLayout";
+import {
+  buildBillPrintHtml,
+  openBlankPrintWindow,
+  writeAndPrint,
+  type PrintBillData,
+  type PrintClinic,
+} from "@/lib/printBill";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,7 +82,7 @@ type Test   = { id: number; name: string; code: string; price: number; category:
 type PkgTest = Test & { discountPct?: number; discountAmount?: number };
 type Pkg    = { id: number; packageCode: string; name: string; price: number; discountPct: number; discountAmount?: number; isActive?: boolean; tests: PkgTest[] };
 
-type SelectedTest = { testId: number; name: string; price: number; category: string; source: "test" | "package" };
+type SelectedTest = { testId: number; name: string; code: string; price: number; category: string; source: "test" | "package" };
 type SelectedPackage = { packageId: number; name: string; testIds: number[] };
 type PaySplit = { mode: string; amount: string };
 type LastBill = {
@@ -554,6 +561,11 @@ export default function BillingDesk() {
 
   const queryClient = useQueryClient();
   const printAfterSaveRef = useRef(false);
+  // Reference to the popup window that "Save & Print" opens SYNCHRONOUSLY
+  // on click. The mutation onSuccess populates it with the receipt HTML.
+  // Opening the window only after the await would commonly trip the
+  // browser's pop-up blocker because user-activation is consumed.
+  const printWindowRef = useRef<Window | null>(null);
   const generateMut = useMutation({
     mutationFn: async () => {
       if (!selectedPatient) throw new Error("No patient selected");
@@ -584,7 +596,7 @@ export default function BillingDesk() {
     onSuccess: (bill) => {
       if (!selectedPatient) return;
       const doctor = doctors.find((d) => d.id === doctorId);
-      setLastBill({
+      const lastBillLocal: LastBill = {
         id: bill.id,
         billNumber: bill.billNumber,
         patient: selectedPatient,
@@ -596,32 +608,100 @@ export default function BillingDesk() {
         payments: paymentSplits.filter((p) => Number(p.amount) > 0),
         tokenNo: bill.token?.tokenNo ?? null,
         tokenDate: bill.token?.tokenDate ?? null,
-      });
+      };
+      setLastBill(lastBillLocal);
       setShowBillToast(true);
       window.setTimeout(() => setShowBillToast(false), 5000);
       queryClient.invalidateQueries({ queryKey: ["recent-bills-today"] });
       queryClient.invalidateQueries({ queryKey: ["bill-preview-no"] });
       if (printAfterSaveRef.current) {
         printAfterSaveRef.current = false;
-        // Force a fresh fetch of clinic settings before printing — otherwise
-        // the receipt header falls back to "Diagnostic Centre" instead of
-        // the configured clinic name/address/logo. We always refetch (rather
-        // than ensureQueryData) so a previously-failed/empty cache entry
-        // (e.g. from when this user had no permission) is replaced with the
-        // real data, then wait long enough for React to re-render the
-        // receipt subtree before triggering print.
-        void queryClient
-          .fetchQuery({
-            queryKey: ["clinic-settings"],
-            queryFn: () => api.get("/api/clinic-settings"),
-          })
-          .catch(() => {})
-          .then(() => {
-            window.setTimeout(() => window.print(), 500);
+        const win = printWindowRef.current;
+        printWindowRef.current = null;
+        // Build the receipt HTML using the SAME template as BillDetail's
+        // re-print so QR, copies, A4/A5 auto-size, B&W, and cancelled-test
+        // listing all behave identically. We fetch fresh clinic + printer
+        // settings (in parallel) before rendering so the header and B&W
+        // mode reflect any edits made since the page loaded.
+        void Promise.all([
+          queryClient
+            .fetchQuery({
+              queryKey: ["clinic-settings"],
+              queryFn: () => api.get("/api/clinic-settings"),
+            })
+            .catch(() => undefined),
+          getPrinterSettings(),
+          // Generate a real QR for the just-saved bill (lastBill state is
+          // not yet observable inside this onSuccess closure).
+          QRCode.toDataURL(buildBillVerifyUrl(lastBillLocal.billNumber), {
+            errorCorrectionLevel: "M",
+            margin: 1,
+            width: 256,
+            color: { dark: "#000000", light: "#ffffff" },
+          }).catch(() => ""),
+        ]).then(([freshClinic, printerCfg, qrUrl]) => {
+          const clinicForPrint = (freshClinic as PrintClinic) ?? (clinic as PrintClinic);
+          const isBW = (printerCfg as { billPrinterType?: string })?.billPrinterType === "bw";
+          const paid = lastBillLocal.payments.reduce((s, p) => s + Number(p.amount || 0), 0);
+          const billForPrint: PrintBillData = {
+            billNumber: lastBillLocal.billNumber,
+            subtotal: lastBillLocal.subtotal,
+            discount: lastBillLocal.discount,
+            taxAmount: 0,
+            totalAmount: lastBillLocal.total,
+            paidAmount: paid,
+            balanceAmount: Math.max(0, lastBillLocal.total - paid),
+            createdAt: new Date().toISOString(),
+            patient: {
+              firstName: lastBillLocal.patient.firstName,
+              lastName: lastBillLocal.patient.lastName,
+              patientId: lastBillLocal.patient.patientId,
+              phone: lastBillLocal.patient.phone ?? null,
+              gender: lastBillLocal.patient.gender ?? null,
+              dateOfBirth: lastBillLocal.patient.dateOfBirth ?? null,
+            },
+            order: {
+              doctor: lastBillLocal.doctorName ? { name: lastBillLocal.doctorName } : null,
+              tests: lastBillLocal.tests.map((t) => ({
+                price: t.price,
+                status: "active",
+                test: { name: t.name, code: t.code ?? "", category: t.category },
+              })),
+            },
+            payments: lastBillLocal.payments.map((p) => ({
+              method: p.mode,
+              amount: Number(p.amount || 0),
+            })),
+            tokenNo: lastBillLocal.tokenNo ?? null,
+          };
+          const paperSize = getAutoBillPaperSize(lastBillLocal.tests.length, getBillPaperSize());
+          const html = buildBillPrintHtml({
+            bill: billForPrint,
+            clinic: clinicForPrint,
+            paperSize,
+            isBW,
+            qrDataUrl: qrUrl as string,
           });
+          writeAndPrint(win, html);
+        });
+      } else if (printWindowRef.current) {
+        // Defensive: shouldn't happen, but if a popup was opened and
+        // we end up not printing, close it so the user isn't left with
+        // a stranded "Preparing receipt…" tab.
+        try { printWindowRef.current.close(); } catch { /* ignore */ }
+        printWindowRef.current = null;
       }
     },
-    onError: (err: Error) => toast({ title: err.message || "Failed to generate bill", variant: "destructive" }),
+    onError: (err: Error) => {
+      // Clean up any popup the click handler opened pre-mutation so the
+      // user isn't left with a stranded "Preparing receipt…" tab.
+      if (printWindowRef.current) {
+        try { printWindowRef.current.close(); } catch { /* ignore */ }
+        printWindowRef.current = null;
+      }
+      printAfterSaveRef.current = false;
+      toast({ title: err.message || "Failed to generate bill", variant: "destructive" });
+    },
   });
 
   // ── Derived values ──────────────────────────────────
@@ -667,7 +747,7 @@ export default function BillingDesk() {
       toast({ title: "Test already added" });
       return;
     }
-    setSelectedTests((prev) => [...prev, { testId: t.id, name: t.name, price: t.price, category: t.category, source: "test" }]);
+    setSelectedTests((prev) => [...prev, { testId: t.id, name: t.name, code: t.code, price: t.price, category: t.category, source: "test" }]);
     setTestSearch("");
   }
 
@@ -733,7 +813,7 @@ export default function BillingDesk() {
     const existingIds = new Set(selectedTests.map((s) => s.testId));
     const toAdd: SelectedTest[] = pkg.tests
       .filter((t) => !existingIds.has(t.id))
-      .map((t) => ({ testId: t.id, name: t.name, price: computeLinePrice(t), category: t.category, source: "package" as const }));
+      .map((t) => ({ testId: t.id, name: t.name, code: t.code, price: computeLinePrice(t), category: t.category, source: "package" as const }));
     if (toAdd.length === 0) {
       toast({ title: "All tests in this package already added" });
       return;
@@ -1557,7 +1637,15 @@ export default function BillingDesk() {
                         <RefreshCcw size={13} className="mr-1" /> Reset
                       </Button>
                       <Button
-                        onClick={() => { printAfterSaveRef.current = true; generateMut.mutate(); }}
+                        onClick={() => {
+                          // Open the popup window SYNCHRONOUSLY here so the
+                          // browser keeps the user-activation token. The
+                          // mutation onSuccess populates it once the bill is
+                          // saved.
+                          printWindowRef.current = openBlankPrintWindow();
+                          printAfterSaveRef.current = true;
+                          generateMut.mutate();
+                        }}
                         disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || (needsFormF && (!husbandName.trim() || !patientAddress.trim()))}
                         className="h-8 text-[11px] px-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0 shadow-md disabled:from-muted disabled:to-muted disabled:text-muted-foreground disabled:shadow-none"
                         title={needsFormF && (!husbandName.trim() || !patientAddress.trim()) ? "Fill Husband Name & Address for PCPNDT Form F" : undefined}
