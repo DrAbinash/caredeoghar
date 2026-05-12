@@ -1803,24 +1803,6 @@ export default function BillingDesk() {
         </div>
         );
       })}
-      <div className="mt-4 rounded-lg border bg-muted/20 p-3 text-xs">
-        <div className="font-semibold mb-2">Dummy bill preview</div>
-        <div className="grid gap-1">
-          <div>Bill No: {dummyBillPreview.billNumber}</div>
-          <div>Patient: {dummyBillPreview.patientName}</div>
-          {dummyBillPreview.tests.map((t) => (
-            <div key={t.name} className="flex justify-between">
-              <span>{t.name}</span>
-              <span>₹{t.price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
-            </div>
-          ))}
-          <div className="flex justify-between font-semibold pt-1 border-t">
-            <span>Total</span>
-            <span>₹{dummyBillPreview.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
-          </div>
-        </div>
-      </div>
-
       {/* ── Quick Test slot picker dialog ── */}
       <Dialog
         open={quickPickerSlot !== null}
