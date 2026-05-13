@@ -1,6 +1,7 @@
 import { useState, Fragment, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
+import { useToast } from "@/hooks/use-toast";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -123,6 +124,7 @@ function VoucherBadge({ type }: { type: string }) {
 
 export default function Accounting() {
   const qc = useQueryClient();
+  const { toast } = useToast();
   const [accOpen, setAccOpen] = useState(false);
   const [voucherOpen, setVoucherOpen] = useState(false);
   const [voucherType, setVoucherType] = useState("payment");
@@ -244,9 +246,21 @@ export default function Accounting() {
 
   // ── Mutations ────────────────────────────────────────────────────────────────
 
+  const showMutationError = (action: string) => (err: unknown) => {
+    const msg = err instanceof Error ? err.message : `Failed to ${action}`;
+    toast({ title: `Failed to ${action}`, description: msg, variant: "destructive" });
+  };
+
   const createAccount = useMutation({
     mutationFn: (body: Record<string, unknown>) => api.post("/api/accounting/accounts", body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["accounts"] }); qc.invalidateQueries({ queryKey: ["ledger"] }); setAccOpen(false); resetAcc(); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["accounts"] });
+      qc.invalidateQueries({ queryKey: ["ledger"] });
+      setAccOpen(false);
+      resetAcc();
+      toast({ title: "Account added" });
+    },
+    onError: showMutationError("add account"),
   });
   const createVoucher = useMutation({
     mutationFn: (body: Record<string, unknown>) => api.post("/api/accounting/vouchers", body),
@@ -255,7 +269,9 @@ export default function Accounting() {
       qc.invalidateQueries({ queryKey: ["trial-balance"] }); qc.invalidateQueries({ queryKey: ["profit-loss"] });
       qc.invalidateQueries({ queryKey: ["balance-sheet"] });
       setVoucherOpen(false); resetV();
+      toast({ title: "Voucher created" });
     },
+    onError: showMutationError("create voucher"),
   });
   const editVoucher = useMutation({
     mutationFn: ({ id, body }: { id: number; body: Record<string, unknown> }) => api.patch(`/api/accounting/vouchers/${id}`, body),
@@ -263,7 +279,9 @@ export default function Accounting() {
       qc.invalidateQueries({ queryKey: ["vouchers"] }); qc.invalidateQueries({ queryKey: ["ledger"] });
       qc.invalidateQueries({ queryKey: ["voucher-audits"] });
       setEditVoucherOpen(false); setEditingVoucher(null); resetEV();
+      toast({ title: "Voucher updated" });
     },
+    onError: showMutationError("update voucher"),
   });
   const deleteVoucher = useMutation({
     mutationFn: (id: number) => api.delete(`/api/accounting/vouchers/${id}`),
@@ -273,7 +291,9 @@ export default function Accounting() {
       qc.invalidateQueries({ queryKey: ["trial-balance"] });
       qc.invalidateQueries({ queryKey: ["profit-loss"] });
       qc.invalidateQueries({ queryKey: ["balance-sheet"] });
+      toast({ title: "Voucher deleted" });
     },
+    onError: showMutationError("delete voucher"),
   });
 
   // ── Forms ────────────────────────────────────────────────────────────────────
