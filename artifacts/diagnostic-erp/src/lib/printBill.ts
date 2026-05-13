@@ -188,9 +188,6 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
       </table>
       ${cancelledRows}
 
-      <!-- spacer pushes totals/footer to the bottom of the page -->
-      <div class="receipt-spacer"></div>
-
       <div style="display:flex;gap:8px;margin-top:8px;align-items:flex-start">
         ${qrEnabled && qrDataUrl ? `<div style="flex-shrink:0;display:flex;flex-direction:column;align-items:flex-start"><img src="${qrDataUrl}" alt="Verify QR" style="width:56px;height:56px;display:block"/><div style="font-size:${fontPx - 3}px;color:#666;margin-top:1px;text-transform:none;white-space:nowrap">Scan to verify bill</div></div>` : ""}
         <div style="flex:1;font-size:${fontPx - 1}px;min-width:0">
@@ -219,10 +216,9 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
 <style>
   @page { size: ${paperSize} portrait; margin: ${pageMargin}; }
   *, *::before, *::after { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
+  html, body { margin: 0; padding: 0; width: 100%; }
   body { background: #fff; color: #000; font-family: Arial, sans-serif; font-size: ${fontPx}px; text-transform: uppercase; ${isBW ? "filter: grayscale(1) contrast(1.35); -webkit-print-color-adjust: exact; print-color-adjust: exact;" : ""} }
-  .receipt { width: 100%; padding: 4px 6px; display: flex; flex-direction: column; min-height: 100vh; }
-  .receipt-spacer { flex: 1; }
+  .receipt { width: 100%; padding: 4px 6px; }
   table { width: 100%; }
 </style></head><body>${pages}</body></html>`;
 }
