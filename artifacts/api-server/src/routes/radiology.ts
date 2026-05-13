@@ -70,6 +70,12 @@ export async function generateStudiesForOrder(opts: {
   billId: number;
   orderId: number;
   patientId: number;
+  dicomFields?: {
+    studyDescription?: string;
+    bodyPart?: string;
+    scheduledStationAETitle?: string;
+    referringDoctor?: string;
+  };
 }): Promise<Array<{ orderTestId: number; testName: string; modality: string; accessionNumber: string }>> {
   const orderTests = await db
     .select({
@@ -105,6 +111,10 @@ export async function generateStudiesForOrder(opts: {
           roomNumber: ot.roomNumber || "",
           status: "scheduled",
           studyDate: todayISO(),
+          ...(opts.dicomFields?.studyDescription ? { studyDescription: opts.dicomFields.studyDescription } : {}),
+          ...(opts.dicomFields?.bodyPart ? { bodyPart: opts.dicomFields.bodyPart } : {}),
+          ...(opts.dicomFields?.scheduledStationAETitle ? { scheduledStationAETitle: opts.dicomFields.scheduledStationAETitle } : {}),
+          ...(opts.dicomFields?.referringDoctor ? { referringDoctor: opts.dicomFields.referringDoctor } : {}),
         }).returning();
         out.push({ orderTestId: ot.orderTestId, testName: ot.testName, modality, accessionNumber: row.accessionNumber });
         lastErr = null;

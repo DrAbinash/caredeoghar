@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Save, RefreshCw, Trash2, Server, Settings2, Radio } from "lucide-react";
+import { Plus, Save, RefreshCw, Trash2, Server, Settings2, Radio, Search, ScanLine } from "lucide-react";
 
 type Setting = { id: number; key: string; value: string | null; category: string; isSecret: boolean };
 type Modality = {
@@ -232,6 +232,152 @@ function MwlSettingsTab({
   );
 }
 
+type DiagnosticTest = { id: number; name: string; code: string; category: string; isActive: boolean };
+
+function DicomMwlTestsTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [search, setSearch] = useState("");
+
+  const { data: tests = [], isLoading: testsLoading } = useQuery<DiagnosticTest[]>({
+    queryKey: ["tests-all-dicom-mwl"],
+    queryFn: () => api.get<{ tests: DiagnosticTest[] }>("/api/tests?limit=500").then((d) => d.tests ?? []),
+  });
+
+  const { data: settings, isLoading: settingsLoading } = useQuery<{ dicomMwlTestIds?: string }>({
+    queryKey: ["clinic-settings"],
+    queryFn: () => api.get("/api/clinic-settings"),
+  });
+
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (!settingsLoading && settings !== undefined) {
+      try {
+        const ids: number[] = JSON.parse(settings?.dicomMwlTestIds ?? "[]");
+        setSelectedIds(new Set(ids));
+      } catch { /* ignore */ }
+    }
+  }, [settings, settingsLoading]);
+
+  const saveMut = useMutation({
+    mutationFn: () =>
+      api.put("/api/clinic-settings", { dicomMwlTestIds: JSON.stringify([...selectedIds]) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clinic-settings"] });
+      toast({ title: "DICOM MWL test list saved" });
+    },
+    onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+  });
+
+  const toggleTest = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const activeTests = tests.filter((t) => t.isActive !== false);
+  const filteredTests = activeTests.filter((t) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return t.name.toLowerCase().includes(q) || t.code.toLowerCase().includes(q) || t.category.toLowerCase().includes(q);
+  });
+
+  const byCategory: Record<string, DiagnosticTest[]> = {};
+  for (const t of filteredTests) {
+    if (!byCategory[t.category]) byCategory[t.category] = [];
+    byCategory[t.category].push(t);
+  }
+
+  if (testsLoading || settingsLoading) {
+    return <div className="rounded-xl border bg-card p-6 text-center text-muted-foreground text-sm animate-pulse">Loading tests…</div>;
+  }
+
+  return (
+    <div className="rounded-xl border bg-card p-5 space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-semibold text-sm flex items-center gap-2">
+            <ScanLine size={15} className="text-blue-600" />
+            DICOM MWL — Required Tests
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            When any of these tests is selected in Billing Desk, the DICOM Worklist fields
+            (Study Description, Body Part, Station AE Title, Referring Doctor) become mandatory
+            before the bill can be generated.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-xs font-semibold text-blue-600">{selectedIds.size} selected</span>
+          <Button size="sm" onClick={() => saveMut.mutate()} disabled={saveMut.isPending} className="h-8">
+            {saveMut.isPending ? "Saving…" : <><Save size={12} className="mr-1" />Save</>}
+          </Button>
+        </div>
+      </div>
+
+      {/* Quick-select buttons */}
+      <div className="flex gap-2 flex-wrap">
+        <span className="text-xs text-muted-foreground self-center">Quick select:</span>
+        {["Radiology", "CT", "MRI", "X-Ray", "Ultrasound", "USG"].map((cat) => {
+          const catTests = activeTests.filter((t) => t.category.toLowerCase().includes(cat.toLowerCase()) || t.name.toLowerCase().includes(cat.toLowerCase()));
+          if (catTests.length === 0) return null;
+          return (
+            <Button key={cat} variant="outline" size="sm" className="h-7 text-xs"
+              onClick={() => setSelectedIds((prev) => { const next = new Set(prev); catTests.forEach((t) => next.add(t.id)); return next; })}
+            >
+              + {cat} ({catTests.length})
+            </Button>
+          );
+        })}
+        <Button variant="outline" size="sm" className="h-7 text-xs text-destructive"
+          onClick={() => setSelectedIds(new Set())}>
+          Clear all
+        </Button>
+      </div>
+
+      {/* Search */}
+      <div className="relative">
+        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Filter tests by name, code or category…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9 h-8 text-sm"
+        />
+      </div>
+
+      {/* Test list grouped by category */}
+      <div className="max-h-72 overflow-y-auto space-y-3 pr-1">
+        {Object.keys(byCategory).length === 0 && (
+          <p className="text-xs text-muted-foreground text-center py-4">No tests match the filter.</p>
+        )}
+        {Object.entries(byCategory).map(([cat, catTests]) => (
+          <div key={cat}>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">{cat}</p>
+            <div className="space-y-1">
+              {catTests.map((t) => {
+                const checked = selectedIds.has(t.id);
+                return (
+                  <label
+                    key={t.id}
+                    className={`flex items-center gap-2.5 px-3 py-1.5 rounded-md cursor-pointer text-sm transition-colors ${checked ? "bg-blue-50 border border-blue-200 dark:bg-blue-950/30 dark:border-blue-800" : "hover:bg-muted/60 border border-transparent"}`}
+                  >
+                    <input type="checkbox" checked={checked} onChange={() => toggleTest(t.id)} className="accent-blue-600" />
+                    <span className="flex-1">{t.name}</span>
+                    <span className="text-[10px] text-muted-foreground font-mono">{t.code}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function PacsSettings() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -423,13 +569,16 @@ export default function PacsSettings() {
       )}
 
       {activeTab === "mwl" && (
-        // Use a key so the MwlSettingsTab re-initialises its local state when
-        // the server data arrives (settings query is async).
-        <MwlSettingsTab
-          key={settings.length}
-          settings={settings}
-          onSave={saveMwlKey}
-        />
+        <div className="space-y-6">
+          {/* Use a key so the MwlSettingsTab re-initialises its local state when
+              the server data arrives (settings query is async). */}
+          <MwlSettingsTab
+            key={settings.length}
+            settings={settings}
+            onSave={saveMwlKey}
+          />
+          <DicomMwlTestsTab />
+        </div>
       )}
     </div>
   );

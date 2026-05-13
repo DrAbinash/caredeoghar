@@ -476,6 +476,7 @@ export default function BillingDesk() {
     name: string; tagline: string; address: string; email: string; phone: string;
     website: string; gstin: string; logoDataUrl: string | null; footerNote?: string;
     formFTestIds?: string;
+    dicomMwlTestIds?: string;
     quickTestIds?: string;
     billPrintCopies?: number;
     qrOnBillEnabled?: boolean;
@@ -494,6 +495,18 @@ export default function BillingDesk() {
   const needsFormF = selectedTests.some((t) => formFTestIdSet.has(t.testId));
   const [husbandName, setHusbandName] = useState("");
   const [patientAddress, setPatientAddress] = useState("");
+
+  // ── DICOM MWL fields (triggered by configured tests) ───────────────
+  const dicomMwlTestIdSet: Set<number> = (() => {
+    try { return new Set(JSON.parse(clinic?.dicomMwlTestIds ?? "[]") as number[]); }
+    catch { return new Set(); }
+  })();
+  const needsDicom = dicomMwlTestIdSet.size > 0 && selectedTests.some((t) => dicomMwlTestIdSet.has(t.testId));
+  const [dicomStudyDesc, setDicomStudyDesc] = useState("");
+  const [dicomBodyPart, setDicomBodyPart] = useState("");
+  const [dicomStationAE, setDicomStationAE] = useState("");
+  const [dicomReferringDoc, setDicomReferringDoc] = useState("");
+  const dicomFieldsComplete = dicomStudyDesc.trim() !== "" && dicomBodyPart.trim() !== "" && dicomStationAE.trim() !== "" && dicomReferringDoc.trim() !== "";
 
   // ── Quick Test Tabs (6 customizable slots) ─────────
   const quickTestIds: (number | null)[] = useMemo(() => {
@@ -589,6 +602,14 @@ export default function BillingDesk() {
         discountReason: discountAmt > 0 ? discountReason || null : null,
         discountReasonNote: discountAmt > 0 ? discountNote || null : null,
         payments: paymentRows,
+        ...(needsDicom && dicomFieldsComplete ? {
+          dicomFields: {
+            studyDescription: dicomStudyDesc.trim(),
+            bodyPart: dicomBodyPart.trim(),
+            scheduledStationAETitle: dicomStationAE.trim(),
+            referringDoctor: dicomReferringDoc.trim(),
+          },
+        } : {}),
       });
 
       return bill;
@@ -1035,6 +1056,60 @@ export default function BillingDesk() {
                 )}
               </div>
             </div>
+
+            {/* ── DICOM MWL Fields (shown when a DICOM-configured test is selected) ── */}
+            {selectedPatient && needsDicom && (
+              <div className="bg-blue-50 border border-blue-300 rounded-xl overflow-hidden dark:bg-blue-950/20 dark:border-blue-800">
+                <div className="px-4 py-2 border-b border-blue-200 bg-blue-100 dark:bg-blue-900/30 flex items-center gap-2">
+                  <span className="text-xs font-semibold text-blue-800 dark:text-blue-200 flex items-center gap-1.5">
+                    <span className="inline-block w-2 h-2 rounded-full bg-blue-600" />
+                    DICOM Worklist Fields Required — fill before generating bill
+                    {dicomFieldsComplete && <span className="ml-2 text-green-700 dark:text-green-400 font-medium">✓ Complete</span>}
+                  </span>
+                </div>
+                <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold">Study Description <span className="text-red-500">*</span></label>
+                    <input
+                      value={dicomStudyDesc}
+                      onChange={(e) => setDicomStudyDesc(e.target.value)}
+                      placeholder="e.g. Brain MRI with contrast"
+                      className="w-full h-8 text-sm border border-blue-300 rounded-md px-2 bg-white dark:bg-background focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold">Body Part <span className="text-red-500">*</span></label>
+                    <input
+                      value={dicomBodyPart}
+                      onChange={(e) => setDicomBodyPart(e.target.value)}
+                      placeholder="e.g. BRAIN, CHEST, ABDOMEN"
+                      className="w-full h-8 text-sm border border-blue-300 rounded-md px-2 bg-white dark:bg-background focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold">Station AE Title <span className="text-red-500">*</span></label>
+                    <input
+                      value={dicomStationAE}
+                      onChange={(e) => setDicomStationAE(e.target.value)}
+                      placeholder="e.g. MRI_ROOM1"
+                      className="w-full h-8 text-sm border border-blue-300 rounded-md px-2 bg-white dark:bg-background focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold">Referring Doctor <span className="text-red-500">*</span></label>
+                    <input
+                      value={dicomReferringDoc}
+                      onChange={(e) => setDicomReferringDoc(e.target.value)}
+                      placeholder="e.g. Dr. Sharma"
+                      className="w-full h-8 text-sm border border-blue-300 rounded-md px-2 bg-white dark:bg-background focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 col-span-full">
+                    These fields are required for DICOM Modality Worklist. They will be pre-filled on the radiology study so imaging machines can pick up the order.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* ── Form F Extra Fields (shown when a Form-F-required test is selected) ── */}
             {selectedPatient && needsFormF && (
@@ -1646,9 +1721,9 @@ export default function BillingDesk() {
                           printAfterSaveRef.current = true;
                           generateMut.mutate();
                         }}
-                        disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || (needsFormF && (!husbandName.trim() || !patientAddress.trim()))}
+                        disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || (needsFormF && (!husbandName.trim() || !patientAddress.trim())) || (needsDicom && !dicomFieldsComplete)}
                         className="h-8 text-[11px] px-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0 shadow-md disabled:from-muted disabled:to-muted disabled:text-muted-foreground disabled:shadow-none"
-                        title={needsFormF && (!husbandName.trim() || !patientAddress.trim()) ? "Fill Husband Name & Address for PCPNDT Form F" : undefined}
+                        title={needsFormF && (!husbandName.trim() || !patientAddress.trim()) ? "Fill Husband Name & Address for PCPNDT Form F" : needsDicom && !dicomFieldsComplete ? "Fill all 4 DICOM Worklist fields before generating bill" : undefined}
                       >
                         <Printer size={13} className="mr-1" />
                         {generateMut.isPending && printAfterSaveRef.current ? "Saving…" : "Save & Print"}

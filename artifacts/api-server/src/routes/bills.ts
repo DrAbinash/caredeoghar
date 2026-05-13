@@ -334,6 +334,20 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
   const discountReason = typeof payload?.discountReason === "string" ? payload.discountReason.trim() || null : null;
   const discountReasonNote = typeof payload?.discountReasonNote === "string" ? payload.discountReasonNote.trim() || null : null;
 
+  // Optional DICOM MWL fields captured at billing desk and written into the
+  // auto-generated radiology study rows. Not part of the Zod schema so we read
+  // them directly from the raw payload — same pattern as discountReason above.
+  const rawDicom = payload?.dicomFields;
+  const dicomFields: { studyDescription?: string; bodyPart?: string; scheduledStationAETitle?: string; referringDoctor?: string } | undefined =
+    rawDicom && typeof rawDicom === "object"
+      ? {
+          studyDescription: typeof rawDicom.studyDescription === "string" ? rawDicom.studyDescription.trim() || undefined : undefined,
+          bodyPart: typeof rawDicom.bodyPart === "string" ? rawDicom.bodyPart.trim() || undefined : undefined,
+          scheduledStationAETitle: typeof rawDicom.scheduledStationAETitle === "string" ? rawDicom.scheduledStationAETitle.trim() || undefined : undefined,
+          referringDoctor: typeof rawDicom.referringDoctor === "string" ? rawDicom.referringDoctor.trim() || undefined : undefined,
+        }
+      : undefined;
+
   const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, orderId));
   if (!order) {
     res.status(404).json({ error: "Order not found" });
@@ -470,6 +484,7 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
   try {
     studies = await generateStudiesForOrder({
       billId: bill.id, orderId: order.id, patientId: order.patientId,
+      dicomFields,
     });
   } catch (err) {
     console.warn("Radiology study fan-out failed:", err);
