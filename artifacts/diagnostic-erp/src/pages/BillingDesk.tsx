@@ -581,6 +581,23 @@ export default function BillingDesk() {
     select: (d) => d.filter((p) => p.isActive !== false),
   });
 
+  // ── Duplicate-bill detection: reuse the today-collections cache ───────────
+  const { data: todayBillsData } = useQuery<{ bills: RecentBill[] }>({
+    queryKey: ["today-collections-panel"],
+    queryFn: () => api.get<{ bills: RecentBill[] }>("/api/bills?limit=30&page=1"),
+    staleTime: 20_000,
+    refetchOnWindowFocus: true,
+  });
+  const todayStr = new Date().toDateString();
+  const recentPatientBill = !lastBill && selectedPatient
+    ? (todayBillsData?.bills ?? []).find(
+        (b) =>
+          b.patient?.patientId === selectedPatient.patientId &&
+          new Date(b.createdAt).toDateString() === todayStr &&
+          b.status !== "cancelled",
+      ) ?? null
+    : null;
+
   // ── Create mutations ───────────────────────────────
   const createPatientMut = useMutation({
     mutationFn: (body: typeof newPatient) => {
@@ -1082,6 +1099,17 @@ export default function BillingDesk() {
                 )}
               </div>
             </div>
+
+            {/* ── Duplicate bill warning ── */}
+            {recentPatientBill && (
+              <div className="mx-3 mb-1 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-3 py-2 text-[11px]">
+                <AlertTriangle size={13} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <span className="font-semibold text-amber-800 dark:text-amber-300">Bill already exists today</span>
+                  <span className="text-amber-700 dark:text-amber-400"> — {recentPatientBill.billNumber} was created at {new Date(recentPatientBill.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}. Are you sure you want to create another?</span>
+                </div>
+              </div>
+            )}
 
             {/* ── DICOM MWL Fields (shown when a DICOM-configured test is selected) ── */}
             {selectedPatient && needsDicom && (
@@ -1767,12 +1795,11 @@ export default function BillingDesk() {
                           printAfterSaveRef.current = true;
                           generateMut.mutate();
                         }}
-                        disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || (needsFormF && (!husbandName.trim() || !patientAddress.trim())) || (needsDicom && !dicomFieldsComplete)}
-                        className="h-8 text-[11px] px-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0 shadow-md disabled:from-muted disabled:to-muted disabled:text-muted-foreground disabled:shadow-none"
-                        title={needsFormF && (!husbandName.trim() || !patientAddress.trim()) ? "Fill Husband Name & Address for PCPNDT Form F" : needsDicom && !dicomFieldsComplete ? "Fill all 4 DICOM Worklist fields before generating bill" : undefined}
+                        disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || !!lastBill || (needsFormF && (!husbandName.trim() || !patientAddress.trim())) || (needsDicom && !dicomFieldsComplete)}
+                        className={`h-8 text-[11px] px-2 border-0 shadow-md disabled:shadow-none ${lastBill ? "bg-green-600 text-white disabled:bg-green-600 disabled:text-white disabled:opacity-80" : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white disabled:from-muted disabled:to-muted disabled:text-muted-foreground"}`}
+                        title={lastBill ? `Bill ${lastBill.billNumber} already saved — click Reset to start a new bill` : needsFormF && (!husbandName.trim() || !patientAddress.trim()) ? "Fill Husband Name & Address for PCPNDT Form F" : needsDicom && !dicomFieldsComplete ? "Fill all 4 DICOM Worklist fields before generating bill" : undefined}
                       >
-                        <Printer size={13} className="mr-1" />
-                        {generateMut.isPending && printAfterSaveRef.current ? "Saving…" : "Save & Print"}
+                        {lastBill ? <><CheckCircle2 size={13} className="mr-1" />Bill Saved ✓</> : generateMut.isPending ? <><Printer size={13} className="mr-1" />Saving…</> : <><Printer size={13} className="mr-1" />Save & Print</>}
                       </Button>
                       <Button
                         variant="outline"
