@@ -73,7 +73,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
 
   const { start, end } = dayBoundsRange(from, to);
 
-  // ── Bills created by this staff ────────────────────────────────────────
+  // ── Bills created by this staff (for display + gross billing) ──────────
   const allBillRows = await db
     .select({
       id: billsTable.id,
@@ -85,6 +85,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       status: billsTable.status,
       createdAt: billsTable.createdAt,
       createdByName: billsTable.createdByName,
+      cancelledByName: billsTable.cancelledByName,
       patientFirstName: patientsTable.firstName,
       patientLastName: patientsTable.lastName,
     })
@@ -98,6 +99,27 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       ),
     )
     .orderBy(sql`${billsTable.createdAt} DESC`);
+
+  // ── Bills cancelled BY this staff (for cancellation accountability) ─────
+  // Whoever physically cancels a bill and returns money to the patient is
+  // accountable for the refund — NOT the original creator of the bill.
+  // We query by cancelledByName + cancelledAt so the liability is correctly
+  // attributed to the person who performed the cancellation action.
+  const cancelledByMeRows = await db
+    .select({
+      id: billsTable.id,
+      billNumber: billsTable.billNumber,
+      totalAmount: billsTable.totalAmount,
+      createdByName: billsTable.createdByName,
+    })
+    .from(billsTable)
+    .where(
+      and(
+        gte(billsTable.cancelledAt, start),
+        lt(billsTable.cancelledAt, end),
+        eq(billsTable.cancelledByName, staffName),
+      ),
+    );
 
   // ── Payments recorded by this staff ────────────────────────────────────
   const allPaymentRows = await db
@@ -153,8 +175,24 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
   `);
 
   // ── Compute summary ─────────────────────────────────────────────────────
+  // activeBills = bills CREATED by this staff that are still live (not cancelled).
+  // cancelledBills = bills CANCELLED BY this staff (may include bills they didn't create).
+  //   This is the correct attribution: whoever cancels a bill and returns money to the
+  //   patient is accountable for it — not the person who originally created the bill.
   const activeBills = allBillRows.filter((r) => r.status !== "cancelled");
-  const cancelledBills = allBillRows.filter((r) => r.status === "cancelled");
+  // Bills this user created that were later cancelled by SOMEONE ELSE — shown in the
+  // bills list for transparency but NOT counted against this user's financial metrics.
+  const cancelledByOthers = allBillRows.filter(
+    (r) => r.status === "cancelled" && r.cancelledByName !== staffName,
+  );
+  // Bills this user both created AND cancelled themselves.
+  const cancelledBySelf = allBillRows.filter(
+    (r) => r.status === "cancelled" && r.cancelledByName === staffName,
+  );
+  // All bills cancelled by this staff (includes bills they didn't create).
+  // Used for the financial cancellation metric.
+  const cancelledByMe = cancelledByMeRows;
+
   const paymentItems = allPaymentRows.filter((p) => Number(p.amount) > 0);
   const refundItems = allPaymentRows.filter((p) => Number(p.amount) < 0);
 
@@ -164,7 +202,8 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
     0,
   );
   const refundAmount = refundItems.reduce((s, p) => s + Math.abs(Number(p.amount)), 0);
-  const cancelledAmount = cancelledBills.reduce((s, r) => s + Number(r.totalAmount), 0);
+  // cancelledAmount is based on bills CANCELLED BY this staff, not bills they created.
+  const cancelledAmount = cancelledByMe.reduce((s, r) => s + Number(r.totalAmount), 0);
   const refundsAndCancellations = refundAmount + cancelledAmount;
   const cashExpenses = Number(cashExpRaw.rows[0]?.cash_expenses ?? 0);
   const totalReceived = paymentItems.reduce((s, p) => s + Number(p.amount), 0);
@@ -204,8 +243,12 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       cashCollection,
       physicalCashInHand,
       discountsGiven,
-      cancellationCount: cancelledBills.length,
+      // cancellationCount = bills cancelled BY this staff (not bills they created that got cancelled)
+      cancellationCount: cancelledByMe.length,
       billCount: activeBills.length,
+      // How many bills this user created were cancelled by someone else (informational)
+      cancelledByOthersCount: cancelledByOthers.length,
+      cancelledBySelfCount: cancelledBySelf.length,
       closingCashBalance: physicalCashInHand,
     },
     byMethod,
@@ -242,6 +285,14 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       newValue: r.newValue,
       createdAt:
         r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
+    })),
+    // Bills this staff cancelled today (may include bills created by other staff).
+    // Financial liability for the refund sits with the canceller, not the creator.
+    cancelledByMe: cancelledByMe.map((r) => ({
+      id: r.id,
+      billNumber: r.billNumber,
+      totalAmount: Number(r.totalAmount),
+      originalCreator: r.createdByName ?? "Unknown",
     })),
   });
 });
