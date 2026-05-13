@@ -234,6 +234,8 @@ function MwlSettingsTab({
 
 type DiagnosticTest = { id: number; name: string; code: string; category: string; isActive: boolean };
 
+type MwlTestDefault = { bodyPart: string; stationAE: string };
+
 function DicomMwlTestsTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -244,12 +246,14 @@ function DicomMwlTestsTab() {
     queryFn: () => api.get<{ tests: DiagnosticTest[] }>("/api/tests?limit=500").then((d) => d.tests ?? []),
   });
 
-  const { data: settings, isLoading: settingsLoading } = useQuery<{ dicomMwlTestIds?: string }>({
+  const { data: settings, isLoading: settingsLoading } = useQuery<{ dicomMwlTestIds?: string; dicomMwlTestDefaults?: string }>({
     queryKey: ["clinic-settings"],
     queryFn: () => api.get("/api/clinic-settings"),
   });
 
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  // Per-test defaults: { "<id>": { bodyPart, stationAE } }
+  const [defaults, setDefaults] = useState<Record<string, MwlTestDefault>>({});
 
   useEffect(() => {
     if (!settingsLoading && settings !== undefined) {
@@ -257,12 +261,19 @@ function DicomMwlTestsTab() {
         const ids: number[] = JSON.parse(settings?.dicomMwlTestIds ?? "[]");
         setSelectedIds(new Set(ids));
       } catch { /* ignore */ }
+      try {
+        const d = JSON.parse(settings?.dicomMwlTestDefaults ?? "{}");
+        setDefaults(typeof d === "object" && d !== null ? d : {});
+      } catch { /* ignore */ }
     }
   }, [settings, settingsLoading]);
 
   const saveMut = useMutation({
     mutationFn: () =>
-      api.put("/api/clinic-settings", { dicomMwlTestIds: JSON.stringify([...selectedIds]) }),
+      api.put("/api/clinic-settings", {
+        dicomMwlTestIds: JSON.stringify([...selectedIds]),
+        dicomMwlTestDefaults: JSON.stringify(defaults),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clinic-settings"] });
       toast({ title: "DICOM MWL test list saved" });
@@ -275,6 +286,13 @@ function DicomMwlTestsTab() {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
+    });
+  };
+
+  const setDefault = (id: number, field: keyof MwlTestDefault, value: string) => {
+    setDefaults((prev) => {
+      const existing: MwlTestDefault = prev[String(id)] ?? { bodyPart: "", stationAE: "" };
+      return { ...prev, [String(id)]: { ...existing, [field]: value } };
     });
   };
 
@@ -301,12 +319,11 @@ function DicomMwlTestsTab() {
         <div>
           <h3 className="font-semibold text-sm flex items-center gap-2">
             <ScanLine size={15} className="text-blue-600" />
-            DICOM MWL — Required Tests
+            DICOM MWL — Required Tests & Defaults
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            When any of these tests is selected in Billing Desk, the DICOM Worklist fields
-            (Study Description, Body Part, Station AE Title, Referring Doctor) become mandatory
-            before the bill can be generated.
+            Tick each test that needs DICOM Worklist. Set a default Body Part and Station AE Title
+            so Billing Desk auto-fills them — staff only need to type the Referring Doctor.
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -349,31 +366,62 @@ function DicomMwlTestsTab() {
       </div>
 
       {/* Test list grouped by category */}
-      <div className="max-h-72 overflow-y-auto space-y-3 pr-1">
+      <div className="max-h-[480px] overflow-y-auto space-y-3 pr-1">
         {Object.keys(byCategory).length === 0 && (
           <p className="text-xs text-muted-foreground text-center py-4">No tests match the filter.</p>
         )}
         {Object.entries(byCategory).map(([cat, catTests]) => (
           <div key={cat}>
             <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">{cat}</p>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               {catTests.map((t) => {
                 const checked = selectedIds.has(t.id);
+                const def = defaults[String(t.id)] ?? { bodyPart: "", stationAE: "" };
                 return (
-                  <label
+                  <div
                     key={t.id}
-                    className={`flex items-center gap-2.5 px-3 py-1.5 rounded-md cursor-pointer text-sm transition-colors ${checked ? "bg-blue-50 border border-blue-200 dark:bg-blue-950/30 dark:border-blue-800" : "hover:bg-muted/60 border border-transparent"}`}
+                    className={`rounded-md border transition-colors ${checked ? "border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800" : "border-transparent hover:bg-muted/50"}`}
                   >
-                    <input type="checkbox" checked={checked} onChange={() => toggleTest(t.id)} className="accent-blue-600" />
-                    <span className="flex-1">{t.name}</span>
-                    <span className="text-[10px] text-muted-foreground font-mono">{t.code}</span>
-                  </label>
+                    {/* Checkbox row */}
+                    <label className="flex items-center gap-2.5 px-3 py-1.5 cursor-pointer text-sm">
+                      <input type="checkbox" checked={checked} onChange={() => toggleTest(t.id)} className="accent-blue-600 shrink-0" />
+                      <span className="flex-1 font-medium">{t.name}</span>
+                      <span className="text-[10px] text-muted-foreground font-mono">{t.code}</span>
+                    </label>
+                    {/* Defaults row — only visible when checked */}
+                    {checked && (
+                      <div className="px-3 pb-2 grid grid-cols-2 gap-2">
+                        <div className="space-y-0.5">
+                          <p className="text-[10px] text-muted-foreground font-medium">Default Body Part</p>
+                          <Input
+                            value={def.bodyPart}
+                            onChange={(e) => setDefault(t.id, "bodyPart", e.target.value.toUpperCase())}
+                            placeholder="e.g. BRAIN"
+                            className="h-7 text-xs font-mono"
+                          />
+                        </div>
+                        <div className="space-y-0.5">
+                          <p className="text-[10px] text-muted-foreground font-medium">Default Station AE Title</p>
+                          <Input
+                            value={def.stationAE}
+                            onChange={(e) => setDefault(t.id, "stationAE", e.target.value.toUpperCase())}
+                            placeholder="e.g. MRI_ROOM1"
+                            className="h-7 text-xs font-mono"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
           </div>
         ))}
       </div>
+
+      {saveMut.isSuccess && (
+        <p className="text-xs text-green-600 font-medium">✓ Settings saved successfully.</p>
+      )}
     </div>
   );
 }

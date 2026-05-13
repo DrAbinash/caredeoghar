@@ -477,6 +477,7 @@ export default function BillingDesk() {
     website: string; gstin: string; logoDataUrl: string | null; footerNote?: string;
     formFTestIds?: string;
     dicomMwlTestIds?: string;
+    dicomMwlTestDefaults?: string;
     quickTestIds?: string;
     billPrintCopies?: number;
     qrOnBillEnabled?: boolean;
@@ -501,12 +502,33 @@ export default function BillingDesk() {
     try { return new Set(JSON.parse(clinic?.dicomMwlTestIds ?? "[]") as number[]); }
     catch { return new Set(); }
   })();
+  const dicomMwlTestDefaults: Record<string, { bodyPart: string; stationAE: string }> = (() => {
+    try { const d = JSON.parse(clinic?.dicomMwlTestDefaults ?? "{}"); return typeof d === "object" && d !== null ? d : {}; }
+    catch { return {}; }
+  })();
   const needsDicom = dicomMwlTestIdSet.size > 0 && selectedTests.some((t) => dicomMwlTestIdSet.has(t.testId));
   const [dicomStudyDesc, setDicomStudyDesc] = useState("");
   const [dicomBodyPart, setDicomBodyPart] = useState("");
   const [dicomStationAE, setDicomStationAE] = useState("");
   const [dicomReferringDoc, setDicomReferringDoc] = useState("");
   const dicomFieldsComplete = dicomStudyDesc.trim() !== "" && dicomBodyPart.trim() !== "" && dicomStationAE.trim() !== "" && dicomReferringDoc.trim() !== "";
+
+  // Auto-fill DICOM fields from per-test defaults whenever the basket changes.
+  // Only overwrites a field if it is currently empty, so manual edits are preserved.
+  useEffect(() => {
+    if (!needsDicom) return;
+    const firstDicomTest = selectedTests.find((t) => dicomMwlTestIdSet.has(t.testId));
+    if (!firstDicomTest) return;
+    const def = dicomMwlTestDefaults[String(firstDicomTest.testId)];
+    // Study Description: auto-fill from test name if empty
+    setDicomStudyDesc((prev) => prev.trim() ? prev : firstDicomTest.name);
+    // Body Part: fill from default if set
+    if (def?.bodyPart) setDicomBodyPart((prev) => prev.trim() ? prev : def.bodyPart);
+    // Station AE: fill from default if set
+    if (def?.stationAE) setDicomStationAE((prev) => prev.trim() ? prev : def.stationAE);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsDicom, selectedTests.map((t) => t.testId).join(",")]);
+
 
   // ── Quick Test Tabs (6 customizable slots) ─────────
   const quickTestIds: (number | null)[] = useMemo(() => {
@@ -1060,53 +1082,71 @@ export default function BillingDesk() {
             {/* ── DICOM MWL Fields (shown when a DICOM-configured test is selected) ── */}
             {selectedPatient && needsDicom && (
               <div className="bg-blue-50 border border-blue-300 rounded-xl overflow-hidden dark:bg-blue-950/20 dark:border-blue-800">
-                <div className="px-4 py-2 border-b border-blue-200 bg-blue-100 dark:bg-blue-900/30 flex items-center gap-2">
+                <div className="px-4 py-2 border-b border-blue-200 bg-blue-100 dark:bg-blue-900/30 flex items-center justify-between gap-2">
                   <span className="text-xs font-semibold text-blue-800 dark:text-blue-200 flex items-center gap-1.5">
                     <span className="inline-block w-2 h-2 rounded-full bg-blue-600" />
-                    DICOM Worklist Fields Required — fill before generating bill
-                    {dicomFieldsComplete && <span className="ml-2 text-green-700 dark:text-green-400 font-medium">✓ Complete</span>}
+                    DICOM Worklist
                   </span>
+                  {dicomFieldsComplete
+                    ? <span className="text-[11px] text-green-700 dark:text-green-400 font-semibold">✓ Ready</span>
+                    : <span className="text-[11px] text-amber-700 font-semibold">Fill Referring Doctor</span>}
                 </div>
-                <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold">Study Description <span className="text-red-500">*</span></label>
+                <div className="p-3 grid grid-cols-2 gap-2">
+                  {/* Study Description */}
+                  <div className="space-y-0.5">
+                    <label className="text-[10px] font-semibold flex items-center gap-1">
+                      Study Description
+                      {dicomStudyDesc.trim() && <span className="text-[9px] text-blue-500 font-normal">(auto)</span>}
+                      <span className="text-red-500">*</span>
+                    </label>
                     <input
                       value={dicomStudyDesc}
                       onChange={(e) => setDicomStudyDesc(e.target.value)}
-                      placeholder="e.g. Brain MRI with contrast"
-                      className="w-full h-8 text-sm border border-blue-300 rounded-md px-2 bg-white dark:bg-background focus:outline-none focus:border-blue-500"
+                      placeholder="e.g. Brain MRI"
+                      className="w-full h-7 text-xs border border-blue-300 rounded px-2 bg-white dark:bg-background focus:outline-none focus:border-blue-500"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold">Body Part <span className="text-red-500">*</span></label>
+                  {/* Body Part */}
+                  <div className="space-y-0.5">
+                    <label className="text-[10px] font-semibold flex items-center gap-1">
+                      Body Part
+                      {dicomBodyPart.trim() && <span className="text-[9px] text-blue-500 font-normal">(auto)</span>}
+                      <span className="text-red-500">*</span>
+                    </label>
                     <input
                       value={dicomBodyPart}
-                      onChange={(e) => setDicomBodyPart(e.target.value)}
-                      placeholder="e.g. BRAIN, CHEST, ABDOMEN"
-                      className="w-full h-8 text-sm border border-blue-300 rounded-md px-2 bg-white dark:bg-background focus:outline-none focus:border-blue-500"
+                      onChange={(e) => setDicomBodyPart(e.target.value.toUpperCase())}
+                      placeholder="BRAIN"
+                      className="w-full h-7 text-xs font-mono border border-blue-300 rounded px-2 bg-white dark:bg-background focus:outline-none focus:border-blue-500"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold">Station AE Title <span className="text-red-500">*</span></label>
+                  {/* Station AE */}
+                  <div className="space-y-0.5">
+                    <label className="text-[10px] font-semibold flex items-center gap-1">
+                      Station AE Title
+                      {dicomStationAE.trim() && <span className="text-[9px] text-blue-500 font-normal">(auto)</span>}
+                      <span className="text-red-500">*</span>
+                    </label>
                     <input
                       value={dicomStationAE}
-                      onChange={(e) => setDicomStationAE(e.target.value)}
-                      placeholder="e.g. MRI_ROOM1"
-                      className="w-full h-8 text-sm border border-blue-300 rounded-md px-2 bg-white dark:bg-background focus:outline-none focus:border-blue-500"
+                      onChange={(e) => setDicomStationAE(e.target.value.toUpperCase())}
+                      placeholder="MRI_ROOM1"
+                      className="w-full h-7 text-xs font-mono border border-blue-300 rounded px-2 bg-white dark:bg-background focus:outline-none focus:border-blue-500"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold">Referring Doctor <span className="text-red-500">*</span></label>
+                  {/* Referring Doctor — highlighted as the key manual field */}
+                  <div className="space-y-0.5">
+                    <label className="text-[10px] font-semibold flex items-center gap-1 text-blue-900 dark:text-blue-200">
+                      Referring Doctor <span className="text-red-500">*</span>
+                    </label>
                     <input
                       value={dicomReferringDoc}
                       onChange={(e) => setDicomReferringDoc(e.target.value)}
-                      placeholder="e.g. Dr. Sharma"
-                      className="w-full h-8 text-sm border border-blue-300 rounded-md px-2 bg-white dark:bg-background focus:outline-none focus:border-blue-500"
+                      placeholder="Dr. Sharma"
+                      autoFocus={needsDicom && !dicomReferringDoc}
+                      className={`w-full h-7 text-xs border rounded px-2 bg-white dark:bg-background focus:outline-none transition-colors ${dicomReferringDoc.trim() ? "border-blue-300 focus:border-blue-500" : "border-amber-400 focus:border-amber-500 ring-1 ring-amber-300"}`}
                     />
                   </div>
-                  <p className="text-[10px] text-blue-700 dark:text-blue-400 col-span-full">
-                    These fields are required for DICOM Modality Worklist. They will be pre-filled on the radiology study so imaging machines can pick up the order.
-                  </p>
                 </div>
               </div>
             )}
