@@ -102,6 +102,7 @@ dailySummaryRouter.get("/", async (req, res) => {
   const netCollection = totalBilling - outstanding - totalRefunded - cancelledBills.reduce((s, r) => s + Number(r.totalAmount), 0) - expenses;
   const physicalCashInHand = netCollection - digitalCollection;
   const refundsAndCancellations = totalRefunded + cancelledBills.reduce((s, r) => s + Number(r.totalAmount), 0);
+  const discountsGiven = activeBills.reduce((s, r) => s + Number(r.discount ?? 0), 0);
 
   const byMethod: Record<string, number> = {};
   for (const p of paymentItems) {
@@ -163,6 +164,7 @@ dailySummaryRouter.get("/", async (req, res) => {
       netCollection,
       digitalCollection,
       physicalCashInHand,
+      discountsGiven,
       billCount: activeBills.length,
       orderCount: orderCount[0]?.count ?? 0,
       totalOutstandingDues,

@@ -43,6 +43,7 @@ type DailySummaryData = {
     netCollection: number;
     digitalCollection: number;
     physicalCashInHand: number;
+    discountsGiven: number;
     billCount: number;
     orderCount: number;
   };
@@ -190,6 +191,7 @@ export default function DailySummary() {
     netCollection: 0,
     digitalCollection: 0,
     physicalCashInHand: 0,
+    discountsGiven: 0,
     billCount: 0,
     orderCount: 0,
   };
@@ -205,6 +207,7 @@ export default function DailySummary() {
   const digitalCollection = summary.digitalCollection;
   const netCollection = summary.netCollection;
   const physicalCash = summary.physicalCashInHand;
+  const discountsGiven = summary.discountsGiven ?? 0;
 
   const staffOptions: StaffOption[] = [
     { name: "All Staff", billCount: summary.billCount },
@@ -212,11 +215,12 @@ export default function DailySummary() {
   ];
 
   const consolidatedRows = [
-    { label: "Net Collection", value: netCollection },
+    { label: "Total Received Today", value: netCollection },
     { label: "Digital Collection", value: digitalCollection },
     { label: "Physical Cash in Hand", value: physicalCash },
     { label: "Outstanding / Dues", value: summary.outstanding },
     { label: "Refunds / Cancellations", value: summary.refundsAndCancellations },
+    { label: "Discounts Given", value: discountsGiven },
     { label: "Expenses", value: expenseTotal },
   ];
 
@@ -224,9 +228,10 @@ export default function DailySummary() {
   const outstandingFormula = `Outstanding / Dues = ${inr(summary.outstanding)}`;
   const refundsFormula = `Refunds / Cancellations = ${inr(summary.refundsAndCancellations)}`;
   const expensesFormula = `Expenses = ${inr(expenseTotal)}`;
-  const netCollectionFormula = `Net Collection = ${inr(summary.totalBilling)} - ${inr(summary.outstanding)} - ${inr(summary.refundsAndCancellations)} - ${inr(expenseTotal)} = ${inr(netCollection)}`;
+  const discountsFormula = `Discounts Given Today = ${inr(discountsGiven)}`;
+  const totalReceivedFormula = `Total Received Today = ${inr(summary.totalBilling)} − ${inr(summary.outstanding)} − ${inr(summary.refundsAndCancellations)} − ${inr(expenseTotal)} = ${inr(netCollection)}`;
   const digitalFormula = `Digital Collection = UPI + Card + other bank/digital modes = ${inr(digitalCollection)}`;
-  const physicalFormula = `Physical Cash in Hand = ${inr(netCollection)} - ${inr(digitalCollection)} = ${inr(physicalCash)}`;
+  const physicalFormula = `Physical Cash in Hand = ${inr(netCollection)} − ${inr(digitalCollection)} = ${inr(physicalCash)}`;
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-5xl mx-auto">
@@ -273,9 +278,10 @@ export default function DailySummary() {
             <SummaryCard icon={<Receipt size={14} className="text-amber-600" />} label="Outstanding / Dues" value={inr(summary.outstanding)} sub={outstandingFormula} accent="bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800" />
             <SummaryCard icon={<RotateCcw size={14} className="text-rose-600" />} label="Refunds / Cancellations" value={inr(summary.refundsAndCancellations)} sub={refundsFormula} accent="bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800" />
             <SummaryCard icon={<TrendingDown size={14} className="text-red-500" />} label="Expenses" value={inr(expenseTotal)} sub={expensesFormula} accent="bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800" />
-            <SummaryCard icon={<Wallet size={14} className="text-blue-600" />} label="Net Collection" value={inr(netCollection)} sub={netCollectionFormula} accent="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800" />
+            <SummaryCard icon={<Wallet size={14} className="text-blue-600" />} label="Total Received Today (Cash+Digital)" value={inr(netCollection)} sub={totalReceivedFormula} accent="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800" tooltip="Total Billing − Dues − Refunds − Expenses" />
             <SummaryCard icon={<Smartphone size={14} className="text-violet-600" />} label="Digital Collection" value={inr(digitalCollection)} sub={digitalFormula} accent="bg-card border-card-border" />
             <SummaryCard icon={<Banknote size={14} className="text-green-700" />} label="Physical Cash in Hand" value={inr(physicalCash)} sub={physicalFormula} accent="bg-card border-card-border" />
+            <SummaryCard icon={<ArrowDownCircle size={14} className="text-purple-600" />} label="Discounts Given Today" value={inr(discountsGiven)} sub={discountsFormula} accent="bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800" />
             <SummaryCard icon={<XCircle size={14} className="text-slate-600" />} label="Cancellations" value={String(cancelledCount)} sub={cancelledCount > 0 ? `${cancelledCount} cancelled bill${cancelledCount === 1 ? "" : "s"}` : "No cancellations today"} accent="bg-slate-50 dark:bg-slate-950/30 border-slate-200 dark:border-slate-800" />
           </div>
 
@@ -285,7 +291,8 @@ export default function DailySummary() {
             <div className="text-xs text-muted-foreground">{outstandingFormula}</div>
             <div className="text-xs text-muted-foreground">{refundsFormula}</div>
             <div className="text-xs text-muted-foreground">{expensesFormula}</div>
-            <div className="text-xs text-muted-foreground">{netCollectionFormula}</div>
+            <div className="text-xs text-muted-foreground">{discountsFormula}</div>
+            <div className="text-xs text-muted-foreground">{totalReceivedFormula}</div>
             <div className="text-xs text-muted-foreground">{digitalFormula}</div>
             <div className="text-xs text-muted-foreground">{physicalFormula}</div>
           </div>
@@ -350,7 +357,8 @@ export default function DailySummary() {
                 <div>{outstandingFormula}</div>
                 <div>{refundsFormula}</div>
                 <div>{expensesFormula}</div>
-                <div>{netCollectionFormula}</div>
+                <div>{discountsFormula}</div>
+                <div className="font-medium text-foreground">{totalReceivedFormula}</div>
                 <div>{digitalFormula}</div>
                 <div>{physicalFormula}</div>
               </div>
