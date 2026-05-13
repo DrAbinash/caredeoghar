@@ -113,21 +113,22 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
   const created = bill.createdAt ? new Date(bill.createdAt) : new Date();
   const isCancelled = (bill.status ?? "") === "cancelled";
 
-  const fontPx = paperSize === "A5" ? 11 : 12;
+  const fontPx = paperSize === "A5" ? 14 : 12;
   const pageMargin = paperSize === "A5" ? "3mm" : "6mm";
-  const headerNameSize = paperSize === "A5" ? "15px" : "20px";
+  const headerNameSize = paperSize === "A5" ? "20px" : "20px";
   const colCount = 3 + (showCode ? 1 : 0) + (showCategory ? 1 : 0);
 
   const testRows = tests.map((t, i) => {
     const code = t.test?.code ?? "";
     const name = t.test?.name ?? "";
     const cat = t.test?.category ?? "";
+    const tdPad = paperSize === "A5" ? "4px 5px" : "2px 4px";
     return `<tr>
-      <td style="padding:2px 4px;border-bottom:1px solid #eee">${i + 1}</td>
-      ${showCode ? `<td style="padding:2px 4px;border-bottom:1px solid #eee;font-family:monospace">${escapeHtml(code)}</td>` : ""}
-      <td style="padding:2px 4px;border-bottom:1px solid #eee">${escapeHtml(name)}</td>
-      ${showCategory ? `<td style="padding:2px 4px;border-bottom:1px solid #eee">${escapeHtml(cat)}</td>` : ""}
-      <td style="padding:2px 4px;border-bottom:1px solid #eee;text-align:right">₹${Number(t.price).toFixed(2)}</td>
+      <td style="padding:${tdPad};border-bottom:1px solid #eee">${i + 1}</td>
+      ${showCode ? `<td style="padding:${tdPad};border-bottom:1px solid #eee;font-family:monospace">${escapeHtml(code)}</td>` : ""}
+      <td style="padding:${tdPad};border-bottom:1px solid #eee">${escapeHtml(name)}</td>
+      ${showCategory ? `<td style="padding:${tdPad};border-bottom:1px solid #eee">${escapeHtml(cat)}</td>` : ""}
+      <td style="padding:${tdPad};border-bottom:1px solid #eee;text-align:right">₹${Number(t.price).toFixed(2)}</td>
     </tr>`;
   }).join("");
 
@@ -143,19 +144,18 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
       <td style="padding:1px 4px;text-align:right">₹${Number(p.amount).toFixed(2)}</td>
     </tr>`).join("");
 
-  const minH = paperSize === "A5" ? "197mm" : "283mm";
   const onePage = (copyIdx: number) => `
-    <section class="receipt" style="${copyIdx > 0 ? "page-break-before:always;" : ""}display:flex;flex-direction:column;min-height:${minH};">
+    <section class="receipt" style="${copyIdx > 0 ? "page-break-before:always;" : ""}display:flex;flex-direction:column;min-height:100vh;">
       ${reprintBy || reprintReason ? `<div style="text-align:center;font-size:${fontPx - 1}px;color:#a16207;border:1px dashed #d97706;padding:2px 4px;margin-bottom:6px;text-transform:uppercase">DUPLICATE / RE-PRINT${reprintBy ? ` · BY ${escapeHtml(reprintBy)}` : ""}${reprintReason ? ` · ${escapeHtml(reprintReason)}` : ""}</div>` : ""}
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;border-bottom:2px solid #1e40af;padding-bottom:8px;margin-bottom:8px">
         <div style="flex:1;min-width:0">
           <div style="font-size:${headerNameSize};font-weight:800;color:#1e40af;line-height:1.15">${escapeHtml(clinic?.name || "Diagnostic Centre")}</div>
-          ${clinic?.tagline ? `<div style="font-size:${fontPx - 1}px;color:#666;margin-top:1px;text-transform:none">${escapeHtml(clinic.tagline)}</div>` : ""}
-          ${clinic?.address ? `<div style="font-size:${fontPx - 1}px;color:#444;margin-top:2px;text-transform:none">${escapeHtml(clinic.address.replace(/\s*\n\s*/g, ", ").trim())}</div>` : ""}
-          <div style="font-size:${fontPx - 1}px;color:#444;margin-top:1px;text-transform:none">${[clinic?.phone && `Ph: ${clinic.phone}`, clinic?.email, clinic?.website].filter(Boolean).map((s) => escapeHtml(String(s))).join("  •  ")}</div>
-          ${clinic?.gstin ? `<div style="font-size:${fontPx - 2}px;color:#666;margin-top:1px;text-transform:none">GSTIN: ${escapeHtml(clinic.gstin)}</div>` : ""}
+          ${clinic?.tagline ? `<div style="font-size:${Math.round(fontPx * 0.75)}px;color:#666;margin-top:1px;text-transform:none">${escapeHtml(clinic.tagline)}</div>` : ""}
+          ${clinic?.address ? `<div style="font-size:${Math.round(fontPx * 0.75)}px;color:#444;margin-top:2px;text-transform:none">${escapeHtml(clinic.address.replace(/\s*\n\s*/g, ", ").trim())}</div>` : ""}
+          <div style="font-size:${Math.round(fontPx * 0.75)}px;color:#444;margin-top:1px;text-transform:none">${[clinic?.phone && `Ph: ${clinic.phone}`, clinic?.email, clinic?.website].filter(Boolean).map((s) => escapeHtml(String(s))).join("  •  ")}</div>
+          ${clinic?.gstin ? `<div style="font-size:${Math.round(fontPx * 0.65)}px;color:#666;margin-top:1px;text-transform:none">GSTIN: ${escapeHtml(clinic.gstin)}</div>` : ""}
         </div>
-        ${clinic?.logoDataUrl ? `<img src="${clinic.logoDataUrl}" alt="logo" style="max-height:${paperSize === "A5" ? 48 : 64}px;max-width:${paperSize === "A5" ? 110 : 150}px;object-fit:contain;flex-shrink:0"/>` : ""}
+        ${clinic?.logoDataUrl ? `<img src="${clinic.logoDataUrl}" alt="logo" style="max-height:${paperSize === "A5" ? 56 : 64}px;max-width:${paperSize === "A5" ? 120 : 150}px;object-fit:contain;flex-shrink:0"/>` : ""}
       </div>
 
       <div style="text-align:center;font-size:${fontPx + 1}px;font-weight:700;letter-spacing:1px;margin:0 0 6px">INVOICE / RECEIPT${isCancelled ? " — CANCELLED" : ""}</div>
@@ -164,12 +164,12 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
           <div style="line-height:1.25">
             <div style="display:flex;align-items:baseline;flex-wrap:wrap;gap:0 5px">
-              <strong style="font-size:${paperSize === "A5" ? 14 : 17}px;font-weight:900;line-height:1.05">${escapeHtml(`${bill.patient?.firstName ?? ""} ${bill.patient?.lastName ?? ""}`.trim())}</strong>
-              ${ageGender ? `<strong style="font-size:${paperSize === "A5" ? 12 : 14}px;font-weight:800">&middot; ${escapeHtml(ageGender)}</strong>` : ""}
+              <strong style="font-size:${paperSize === "A5" ? 18 : 17}px;font-weight:900;line-height:1.05">${escapeHtml(`${bill.patient?.firstName ?? ""} ${bill.patient?.lastName ?? ""}`.trim())}</strong>
+              ${ageGender ? `<strong style="font-size:${paperSize === "A5" ? 14 : 14}px;font-weight:800">&middot; ${escapeHtml(ageGender)}</strong>` : ""}
             </div>
-            <div style="font-size:${paperSize === "A5" ? 11.5 : 13}px;font-weight:700;margin-top:3px">REF: <strong>${bill.order?.doctor?.name ? escapeHtml("DR. " + bill.order.doctor.name) : "SELF / WALK-IN"}</strong></div>
+            <div style="font-size:${paperSize === "A5" ? 13 : 13}px;font-weight:700;margin-top:3px">REF: <strong>${bill.order?.doctor?.name ? escapeHtml("DR. " + bill.order.doctor.name) : "SELF / WALK-IN"}</strong></div>
           </div>
-          <div style="text-align:right;font-size:${fontPx - 1}px;line-height:1.5;flex-shrink:0">
+          <div style="text-align:right;font-size:${Math.round(fontPx * 0.85)}px;line-height:1.5;flex-shrink:0">
             ${bill.patient?.phone ? `<div>PH: ${escapeHtml(bill.patient.phone)}</div>` : ""}
             <div>${created.toLocaleDateString("en-IN")} ${created.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</div>
             <div>ID: ${escapeHtml(bill.patient?.patientId ?? "")} &middot; BILL: ${escapeHtml(billDigits)}</div>
@@ -180,11 +180,11 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
       <table style="width:100%;border-collapse:collapse;font-size:${fontPx}px">
         <thead>
           <tr style="background:#f4f4f4">
-            <th style="padding:3px 4px;text-align:left;border-bottom:1px solid #ccc">#</th>
-            ${showCode ? `<th style="padding:3px 4px;text-align:left;border-bottom:1px solid #ccc">Code</th>` : ""}
-            <th style="padding:3px 4px;text-align:left;border-bottom:1px solid #ccc">Test</th>
-            ${showCategory ? `<th style="padding:3px 4px;text-align:left;border-bottom:1px solid #ccc">Category</th>` : ""}
-            <th style="padding:3px 4px;text-align:right;border-bottom:1px solid #ccc">Amount (₹)</th>
+            <th style="padding:${paperSize === "A5" ? "5px 5px" : "3px 4px"};text-align:left;border-bottom:1px solid #ccc">#</th>
+            ${showCode ? `<th style="padding:${paperSize === "A5" ? "5px 5px" : "3px 4px"};text-align:left;border-bottom:1px solid #ccc">Code</th>` : ""}
+            <th style="padding:${paperSize === "A5" ? "5px 5px" : "3px 4px"};text-align:left;border-bottom:1px solid #ccc">Test</th>
+            ${showCategory ? `<th style="padding:${paperSize === "A5" ? "5px 5px" : "3px 4px"};text-align:left;border-bottom:1px solid #ccc">Category</th>` : ""}
+            <th style="padding:${paperSize === "A5" ? "5px 5px" : "3px 4px"};text-align:right;border-bottom:1px solid #ccc">Amount (₹)</th>
           </tr>
         </thead>
         <tbody>
@@ -210,10 +210,10 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
         <tbody>
           <tr>
             <td style="vertical-align:top;padding:0;overflow:hidden">
-              ${qrEnabled && qrDataUrl ? `<img src="${qrDataUrl}" alt="Verify QR" style="width:56px;height:56px;display:block"/><div style="font-size:${fontPx - 3}px;color:#666;margin-top:1px;text-transform:none;white-space:nowrap">Scan to verify</div>` : ""}
+              ${qrEnabled && qrDataUrl ? `<img src="${qrDataUrl}" alt="Verify QR" style="width:${paperSize === "A5" ? 56 : 56}px;height:${paperSize === "A5" ? 56 : 56}px;display:block"/><div style="font-size:${Math.round(fontPx * 0.7)}px;color:#666;margin-top:1px;text-transform:none;white-space:nowrap">Scan to verify</div>` : ""}
             </td>
-            <td style="vertical-align:top;padding:0 8px;font-size:${fontPx - 1}px;word-break:break-word">
-              ${(bill.payments ?? []).length > 0 ? `<div style="font-weight:700;border-bottom:1px solid #ccc;padding-bottom:1px;margin-bottom:2px">PAYMENT DETAILS</div><table style="width:100%;border-collapse:collapse;font-size:${fontPx - 1}px;table-layout:fixed"><colgroup><col style="width:34%"/><col/><col style="width:30%"/></colgroup><tbody>${payRows}</tbody></table>` : ""}
+            <td style="vertical-align:top;padding:0 8px;font-size:${Math.round(fontPx * 0.95)}px;word-break:break-word">
+              ${(bill.payments ?? []).length > 0 ? `<div style="font-weight:700;border-bottom:1px solid #ccc;padding-bottom:1px;margin-bottom:2px">PAYMENT DETAILS</div><table style="width:100%;border-collapse:collapse;font-size:${Math.round(fontPx * 0.95)}px;table-layout:fixed"><colgroup><col style="width:34%"/><col/><col style="width:30%"/></colgroup><tbody>${payRows}</tbody></table>` : ""}
             </td>
             <td style="vertical-align:top;padding:0">
               <table style="width:100%;border-collapse:collapse;font-size:${fontPx}px;table-layout:fixed">
@@ -244,7 +244,7 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
   *, *::before, *::after { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; width: 100%; }
   body { background: #fff; color: #000; font-family: Arial, sans-serif; font-size: ${fontPx}px; text-transform: uppercase; ${isBW ? "filter: grayscale(1) contrast(1.35); -webkit-print-color-adjust: exact; print-color-adjust: exact;" : ""} }
-  .receipt { width: 100%; padding: 4px 6px; }
+  .receipt { width: 100%; padding: ${paperSize === "A5" ? "5px 7px" : "4px 6px"}; }
   table { width: 100%; }
 </style></head><body>${pages}</body></html>`;
 }

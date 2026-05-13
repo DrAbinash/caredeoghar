@@ -1944,13 +1944,12 @@ export default function BillingDesk() {
               .billing-desk-receipt {
                 display: flex !important;
                 flex-direction: column !important;
-                position: absolute !important;
-                top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
-                margin: 0 !important;
-                padding: ${paperSize === "A4" ? "4mm 5mm" : "2.5mm 3mm"} !important;
+                margin: 0 auto !important;
+                padding: ${paperSize === "A4" ? "5mm 6mm" : "3mm 4mm"} !important;
                 max-width: none !important;
                 text-transform: uppercase;
                 width: 100% !important;
+                min-height: 100vh !important;
                 box-sizing: border-box !important;
               }
               .billing-desk-receipt .bdr-keep-case { text-transform: none !important; }
@@ -1961,33 +1960,33 @@ export default function BillingDesk() {
             .billing-desk-receipt {
               display: none;
               font-family: Arial, sans-serif;
-              font-size: ${paperSize === "A4" ? "13px" : "12px"};
+              font-size: ${paperSize === "A4" ? "13px" : "14px"};
               color: #000;
               max-width: ${paperSize === "A4" ? "900px" : "700px"};
               margin: 0 auto;
               padding: 0;
             }
-            .bdr-patient { border-top: 1px solid #888; border-bottom: 1px solid #888; padding: ${paperSize === "A4" ? "5px 4px" : "4px 4px"}; margin-bottom: ${paperSize === "A4" ? "9px" : "8px"}; font-size: ${paperSize === "A4" ? "11.5px" : "11px"}; line-height: 1.3; }
+            .bdr-patient { border-top: 1px solid #888; border-bottom: 1px solid #888; padding: ${paperSize === "A4" ? "5px 4px" : "5px 5px"}; margin-bottom: ${paperSize === "A4" ? "9px" : "9px"}; font-size: ${paperSize === "A4" ? "11.5px" : "14px"}; line-height: 1.3; }
             .bdr-patient-line { display: flex; justify-content: space-between; gap: 12px; }
             .bdr-patient-line strong { font-weight: 700; }
-            .bdr-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: ${paperSize === "A4" ? "5px" : "4px"}; margin-bottom: ${paperSize === "A4" ? "5px" : "4px"}; }
+            .bdr-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: ${paperSize === "A4" ? "5px" : "5px"}; margin-bottom: ${paperSize === "A4" ? "5px" : "5px"}; }
             .bdr-header h1 { font-size: ${paperSize === "A4" ? "22px" : "20px"}; font-weight: 800; margin: 0 0 1px; line-height: 1.05; }
-            .bdr-header p  { margin: 1px 0; font-size: ${paperSize === "A4" ? "10.5px" : "10px"}; color: #444; }
-            .bdr-title { text-align: center; font-size: ${paperSize === "A4" ? "13px" : "12px"}; font-weight: 700; letter-spacing: 1px; margin: 3px 0 5px; text-transform: uppercase; }
-            .bdr-table { width: 100%; border-collapse: collapse; margin-bottom: ${paperSize === "A4" ? "8px" : "7px"}; font-size: ${paperSize === "A4" ? "11.5px" : "11px"}; }
+            .bdr-header p  { margin: 1px 0; font-size: ${paperSize === "A4" ? "10.5px" : "12px"}; color: #444; }
+            .bdr-title { text-align: center; font-size: ${paperSize === "A4" ? "13px" : "14px"}; font-weight: 700; letter-spacing: 1px; margin: 3px 0 5px; text-transform: uppercase; }
+            .bdr-table { width: 100%; border-collapse: collapse; margin-bottom: ${paperSize === "A4" ? "8px" : "8px"}; font-size: ${paperSize === "A4" ? "11.5px" : "13px"}; }
             .bdr-table th { background: #f5f5f5; text-align: left; padding: ${paperSize === "A4" ? "6px 7px" : "5px 6px"}; border: 1px solid #bbb; font-weight: 700; }
             .bdr-table td { padding: ${paperSize === "A4" ? "6px 7px" : "5px 6px"}; border: 1px solid #bbb; vertical-align: top; }
             .bdr-table .text-right { text-align: right; }
-            .bdr-bottom-row { display: flex; gap: 8px; align-items: stretch; margin-bottom: ${paperSize === "A4" ? "7px" : "6px"}; }
-            .bdr-payments { font-size: ${paperSize === "A4" ? "11.5px" : "11px"}; flex: 1; border: 1px solid #bbb; padding: ${paperSize === "A4" ? "5px 7px" : "4px 6px"}; }
-            .bdr-payments strong { display: block; margin-bottom: 2px; border-bottom: 1px solid #999; padding-bottom: 2px; font-size: ${paperSize === "A4" ? "11.5px" : "11px"}; }
+            .bdr-bottom-row { display: flex; gap: 8px; align-items: stretch; margin-bottom: ${paperSize === "A4" ? "7px" : "7px"}; }
+            .bdr-payments { font-size: ${paperSize === "A4" ? "11.5px" : "13px"}; flex: 1; border: 1px solid #bbb; padding: ${paperSize === "A4" ? "5px 7px" : "5px 6px"}; }
+            .bdr-payments strong { display: block; margin-bottom: 2px; border-bottom: 1px solid #999; padding-bottom: 2px; font-size: ${paperSize === "A4" ? "11.5px" : "13px"}; }
             .bdr-payments table { width: 100%; border-collapse: collapse; }
             .bdr-payments td { padding: 2px 4px 2px 0; border: none; }
-            .bdr-summary { min-width: ${paperSize === "A4" ? "190px" : "170px"}; font-size: ${paperSize === "A4" ? "11.5px" : "11px"}; border: 1px solid #bbb; padding: ${paperSize === "A4" ? "5px 7px" : "4px 6px"}; }
+            .bdr-summary { min-width: ${paperSize === "A4" ? "190px" : "175px"}; font-size: ${paperSize === "A4" ? "11.5px" : "13px"}; border: 1px solid #bbb; padding: ${paperSize === "A4" ? "5px 7px" : "5px 6px"}; }
             .bdr-summary table { width: 100%; border-collapse: collapse; }
             .bdr-summary td { padding: 2px 3px; }
-            .bdr-summary tr.bdr-grand td { font-weight: 700; border-top: 2px solid #000; padding-top: 4px; font-size: ${paperSize === "A4" ? "12.5px" : "12px"}; }
-            .bdr-footer { text-align: center; font-size: ${paperSize === "A4" ? "10.5px" : "10px"}; color: #555; border-top: 1px solid #888; padding-top: 5px; margin-top: 6px; }
+            .bdr-summary tr.bdr-grand td { font-weight: 700; border-top: 2px solid #000; padding-top: 4px; font-size: ${paperSize === "A4" ? "12.5px" : "14px"}; }
+            .bdr-footer { text-align: center; font-size: ${paperSize === "A4" ? "10.5px" : "12px"}; color: #555; border-top: 1px solid #888; padding-top: 5px; margin-top: 6px; }
             .bdr-footer p { margin: 2px 0; }
             .bdr-spacer { flex: 1 1 auto; min-height: ${paperSize === "A4" ? "16mm" : "10mm"}; }
           `}</style>
@@ -1998,16 +1997,16 @@ export default function BillingDesk() {
                 <img src={clinic.logoDataUrl} alt="Logo" style={{ maxHeight: 48, maxWidth: 84, objectFit: "contain" }} />
               )}
               <div>
-                <h1 style={{ margin: 0, fontSize: paperSize === "A4" ? 18 : 17, lineHeight: 1 }}>{clinic?.name || "Diagnostic Centre"}</h1>
-                {clinic?.tagline && <p style={{ margin: "1px 0", fontStyle: "italic", color: "#555", fontSize: 9.5 }}>{clinic.tagline}</p>}
-                {clinic?.address && <p style={{ margin: "1px 0", fontSize: 9.5 }}>{clinic.address}</p>}
-                <p style={{ margin: "1px 0", fontSize: 9.5 }}>
+                <h1 style={{ margin: 0, fontSize: paperSize === "A4" ? 18 : 20, lineHeight: 1 }}>{clinic?.name || "Diagnostic Centre"}</h1>
+                {clinic?.tagline && <p style={{ margin: "1px 0", fontStyle: "italic", color: "#555", fontSize: paperSize === "A4" ? 9.5 : 12 }}>{clinic.tagline}</p>}
+                {clinic?.address && <p style={{ margin: "1px 0", fontSize: paperSize === "A4" ? 9.5 : 12 }}>{clinic.address}</p>}
+                <p style={{ margin: "1px 0", fontSize: paperSize === "A4" ? 9.5 : 12 }}>
                   {clinic?.phone && <>Ph: {clinic.phone}</>}
                   {clinic?.phone && clinic?.email && " | "}
                   {clinic?.email && <>Email: {clinic.email}</>}
                 </p>
                 {(clinic?.gstin || clinic?.website) && (
-                  <p style={{ margin: "1px 0", fontSize: 9 }}>
+                  <p style={{ margin: "1px 0", fontSize: paperSize === "A4" ? 9 : 11 }}>
                     {clinic?.gstin && <>GSTIN: {clinic.gstin}</>}
                     {clinic?.gstin && clinic?.website && " | "}
                     {clinic?.website && <>{clinic.website}</>}
@@ -2034,24 +2033,24 @@ export default function BillingDesk() {
               <div style={{ lineHeight: 1.25 }}>
                 {/* Line 1: Name inline with Age/Sex */}
                 <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: "0 6px" }}>
-                  <strong style={{ fontSize: paperSize === "A4" ? 16 : 14, fontWeight: 900, lineHeight: 1.05 }}>
+                  <strong style={{ fontSize: paperSize === "A4" ? 16 : 18, fontWeight: 900, lineHeight: 1.05 }}>
                     {lastBill.patient.firstName} {lastBill.patient.lastName}
                   </strong>
                   {(() => {
                     const a = calcAge(lastBill.patient.dateOfBirth);
                     const ageSex = [a, lastBill.patient.gender].filter(Boolean).join(" / ");
                     return ageSex ? (
-                      <strong style={{ fontSize: paperSize === "A4" ? 13 : 12, fontWeight: 800 }}>· {ageSex}</strong>
+                      <strong style={{ fontSize: paperSize === "A4" ? 13 : 14, fontWeight: 800 }}>· {ageSex}</strong>
                     ) : null;
                   })()}
                 </div>
                 {/* Line 2: Ref doctor */}
-                <div style={{ fontSize: paperSize === "A4" ? 12 : 11.5, fontWeight: 700, marginTop: 3 }}>
+                <div style={{ fontSize: paperSize === "A4" ? 12 : 13, fontWeight: 700, marginTop: 3 }}>
                   Ref: <strong>{lastBill.doctorName ? `Dr. ${lastBill.doctorName}` : "Self / Walk-in"}</strong>
                 </div>
               </div>
               {/* RIGHT: 3 compact lines, right-aligned */}
-              <div style={{ textAlign: "right", fontSize: paperSize === "A4" ? 10.5 : 10, lineHeight: 1.5, flexShrink: 0 }}>
+              <div style={{ textAlign: "right", fontSize: paperSize === "A4" ? 10.5 : 12, lineHeight: 1.5, flexShrink: 0 }}>
                 {lastBill.patient.phone && <div>Ph: {lastBill.patient.phone}</div>}
                 <div>
                   {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}{" "}
@@ -2065,7 +2064,7 @@ export default function BillingDesk() {
             </div>
           </div>
 
-            <table className="bdr-table" style={{ fontSize: paperSize === "A4" ? 10 : 9 }}>
+            <table className="bdr-table" style={{ fontSize: paperSize === "A4" ? 10 : 13 }}>
             <thead>
               <tr style={{ background: bdLs.tableHeaderBg, color: bdLs.tableHeaderColor, borderBottom: bdLs.tableRowBorderBottom }}>
                 <th style={{ padding: bdLs.tableHeaderPad }}>#</th>
