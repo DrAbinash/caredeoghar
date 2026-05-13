@@ -455,7 +455,7 @@ export default function Dashboard() {
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <StatusBadge status={bill.status as any} colorMap={billStatusColor} />
+                          <StatusBadge status={bill.status} />
                         </td>
                         <td className="px-4 py-3 text-muted-foreground text-xs">{new Date(bill.createdAt).toLocaleDateString()}</td>
                         <td className="px-4 py-3 text-right">
