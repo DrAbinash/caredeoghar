@@ -7,6 +7,8 @@ import StatusBadge from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SummaryExportToolbar } from "@/components/SummaryExport";
+import type { ExportConfig } from "@/components/SummaryExport";
 import { ChevronRight, IndianRupee, AlertCircle, FileText, Calendar, Phone } from "lucide-react";
 
 type Bill = {
@@ -19,7 +21,11 @@ type Bill = {
   createdAt: string;
   dueDate: string | null;
   patient: { id: number; firstName: string; lastName: string; patientId: string; phone: string } | null;
-  order: { orderNumber: string } | null;
+  order: {
+    orderNumber: string;
+    doctor: { name: string; specialization?: string | null } | null;
+    tests: Array<{ test: { name: string } | null }>;
+  } | null;
 };
 
 type DuesResponse = {
@@ -86,11 +92,70 @@ export default function Dues() {
   const totals = data?.totals;
   const totalCount = data?.total ?? 0;
 
+  const exportConfig = useMemo<ExportConfig | null>(() => {
+    if (!bills.length && !totals) return null;
+    const inr = (n: number) =>
+      new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
+    const rangeLabel = dateFrom && dateTo
+      ? dateFrom === dateTo ? dateFrom : `${dateFrom} to ${dateTo}`
+      : "All time";
+
+    return {
+      title: "Due Payments Report",
+      subtitle: `${rangeLabel} • Date type: ${dateField === "due" ? "Due Date" : "Bill Date"}`,
+      sections: [
+        {
+          title: "Summary",
+          metrics: [
+            ["Bills with Dues", totalCount.toLocaleString("en-IN")],
+            ["Total Billed", inr(totals?.totalAmount ?? 0)],
+            ["Total Outstanding", inr(totals?.balanceAmount ?? 0)],
+            ["Total Collected", inr(totals?.paidAmount ?? 0)],
+          ],
+        },
+      ],
+      tables: [
+        {
+          title: "Outstanding Bills",
+          headers: ["Bill #", "Patient", "Phone", "Referral Doctor", "Tests", "Bill Date", "Due Date", "Total", "Paid", "Balance", "Status"],
+          rows: bills
+            .filter((b) => b.status !== "cancelled")
+            .map((b) => {
+              const patientName = b.patient ? `${b.patient.firstName} ${b.patient.lastName}` : "—";
+              const testNames = b.order?.tests
+                .map((t) => t.test?.name ?? "")
+                .filter(Boolean)
+                .join(", ") ?? "—";
+              const doctorName = b.order?.doctor?.name ?? "—";
+              return [
+                b.billNumber,
+                patientName,
+                b.patient?.phone ?? "—",
+                doctorName,
+                testNames || "—",
+                new Date(b.createdAt).toLocaleDateString("en-IN"),
+                b.dueDate ? new Date(b.dueDate).toLocaleDateString("en-IN") : "—",
+                inr(b.totalAmount),
+                inr(b.paidAmount),
+                inr(b.balanceAmount),
+                b.status,
+              ];
+            }),
+        },
+      ],
+    };
+  }, [bills, totals, totalCount, dateFrom, dateTo, dateField]);
+
+  const NUM_COLS = 11;
+
   return (
     <div className="pb-8">
       <PageHeader
         title="Due Payments"
         subtitle="Outstanding dues with date-range filter"
+        actions={
+          <SummaryExportToolbar config={exportConfig} emailEndpoint="/api/dashboard/my-daily-summary/send-email" />
+        }
       />
 
       <div className="px-6 space-y-5">
@@ -183,26 +248,28 @@ export default function Dues() {
                 <tr className="text-left text-xs text-muted-foreground border-b border-border bg-muted/30">
                   <th className="px-4 py-3 font-medium">Bill No.</th>
                   <th className="px-4 py-3 font-medium">Patient</th>
+                  <th className="px-4 py-3 font-medium">Referral Doctor</th>
+                  <th className="px-4 py-3 font-medium">Tests</th>
                   <th className="px-4 py-3 font-medium">Bill Date</th>
                   <th className="px-4 py-3 font-medium">Due Date</th>
                   <th className="px-4 py-3 font-medium text-right">Total</th>
                   <th className="px-4 py-3 font-medium text-right">Paid</th>
-                  <th className="px-4 py-3 font-medium text-right">Balance</th>
+                  <th className="px-4 py-3 font-medium text-right">Due Amount</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium"></th>
                 </tr>
               </thead>
               <tbody>
                 {error ? (
-                  <tr><td colSpan={9} className="px-4 py-12 text-center text-red-600">{(error as Error).message}</td></tr>
+                  <tr><td colSpan={NUM_COLS} className="px-4 py-12 text-center text-red-600">{(error as Error).message}</td></tr>
                 ) : isLoading ? (
                   [...Array(6)].map((_, i) => (
                     <tr key={i} className="border-b border-border/50 animate-pulse">
-                      {[...Array(9)].map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 bg-muted rounded w-20" /></td>)}
+                      {[...Array(NUM_COLS)].map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 bg-muted rounded w-20" /></td>)}
                     </tr>
                   ))
                 ) : bills.length === 0 ? (
-                  <tr><td colSpan={9} className="px-4 py-16 text-center">
+                  <tr><td colSpan={NUM_COLS} className="px-4 py-16 text-center">
                     <div className="flex flex-col items-center gap-2 text-muted-foreground">
                       <Calendar size={28} />
                       <p className="text-sm">No outstanding dues in this period</p>
@@ -214,9 +281,13 @@ export default function Dues() {
                     const dueOverdue = b.dueDate && new Date(b.dueDate) < new Date(today());
                     const isCancelled = b.status === "cancelled";
                     const displayBalance = isCancelled ? 0 : b.balanceAmount;
+                    const testNames = b.order?.tests
+                      .map((t) => t.test?.name)
+                      .filter(Boolean)
+                      .join(", ");
                     return (
                       <tr key={b.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
-                        <td className="px-4 py-3 font-mono text-xs font-medium text-primary">{b.billNumber}</td>
+                        <td className="px-4 py-3 font-mono text-xs font-medium text-primary whitespace-nowrap">{b.billNumber}</td>
                         <td className="px-4 py-3">
                           {b.patient ? (
                             <div>
@@ -232,8 +303,23 @@ export default function Dues() {
                             </div>
                           ) : <span className="text-muted-foreground">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(b.createdAt).toLocaleDateString()}</td>
                         <td className="px-4 py-3 text-xs">
+                          {b.order?.doctor
+                            ? <div>
+                                <div className="font-medium">{b.order.doctor.name}</div>
+                                {b.order.doctor.specialization && (
+                                  <div className="text-muted-foreground">{b.order.doctor.specialization}</div>
+                                )}
+                              </div>
+                            : <span className="text-muted-foreground">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-xs max-w-[200px]">
+                          {testNames
+                            ? <span title={testNames} className="line-clamp-2">{testNames}</span>
+                            : <span className="text-muted-foreground">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{new Date(b.createdAt).toLocaleDateString()}</td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap">
                           {b.dueDate ? (
                             <span className={dueOverdue ? "text-red-600 dark:text-red-400 font-medium" : "text-muted-foreground"}>
                               {new Date(b.dueDate).toLocaleDateString()}
@@ -241,9 +327,9 @@ export default function Dues() {
                             </span>
                           ) : <span className="text-muted-foreground">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-right font-semibold">{formatCurrency(b.totalAmount)}</td>
-                        <td className="px-4 py-3 text-right text-green-600 dark:text-green-400 font-medium">{formatCurrency(b.paidAmount)}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-red-600 dark:text-red-400">{formatCurrency(displayBalance)}</td>
+                        <td className="px-4 py-3 text-right font-semibold whitespace-nowrap">{formatCurrency(b.totalAmount)}</td>
+                        <td className="px-4 py-3 text-right text-green-600 dark:text-green-400 font-medium whitespace-nowrap">{formatCurrency(b.paidAmount)}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-red-600 dark:text-red-400 whitespace-nowrap">{formatCurrency(displayBalance)}</td>
                         <td className="px-4 py-3">{isCancelled ? <span className="text-xs text-muted-foreground">—</span> : <StatusBadge status={b.status} />}</td>
                         <td className="px-4 py-3">
                           <Link href={`/billing/${b.id}`} className="text-muted-foreground hover:text-foreground inline-flex p-1 rounded hover:bg-muted" title="Open bill">
@@ -258,7 +344,7 @@ export default function Dues() {
               {bills.length > 0 && (
                 <tfoot>
                   <tr className="border-t-2 border-border bg-muted/30 font-semibold text-sm">
-                    <td className="px-4 py-3" colSpan={4}>Page Subtotal ({bills.length} of {totalCount})</td>
+                    <td className="px-4 py-3" colSpan={6}>Page Subtotal ({bills.length} of {totalCount})</td>
                     <td className="px-4 py-3 text-right">{formatCurrency(bills.reduce((s, b) => s + b.totalAmount, 0))}</td>
                     <td className="px-4 py-3 text-right text-green-600 dark:text-green-400">{formatCurrency(bills.reduce((s, b) => s + b.paidAmount, 0))}</td>
                     <td className="px-4 py-3 text-right text-red-600 dark:text-red-400">{formatCurrency(bills.reduce((s, b) => s + (b.status === "cancelled" ? 0 : b.balanceAmount), 0))}</td>
