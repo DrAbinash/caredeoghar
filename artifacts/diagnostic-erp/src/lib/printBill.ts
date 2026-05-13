@@ -113,7 +113,7 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
   const created = bill.createdAt ? new Date(bill.createdAt) : new Date();
   const isCancelled = (bill.status ?? "") === "cancelled";
 
-  const fontPx = paperSize === "A5" ? 10 : 12;
+  const fontPx = paperSize === "A5" ? 11 : 12;
   const pageMargin = paperSize === "A5" ? "3mm" : "6mm";
   const headerNameSize = paperSize === "A5" ? "15px" : "20px";
   const colCount = 3 + (showCode ? 1 : 0) + (showCategory ? 1 : 0);
@@ -143,8 +143,9 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
       <td style="padding:1px 4px;text-align:right">₹${Number(p.amount).toFixed(2)}</td>
     </tr>`).join("");
 
+  const minH = paperSize === "A5" ? "197mm" : "283mm";
   const onePage = (copyIdx: number) => `
-    <section class="receipt" style="${copyIdx > 0 ? "page-break-before:always;" : ""}">
+    <section class="receipt" style="${copyIdx > 0 ? "page-break-before:always;" : ""}display:flex;flex-direction:column;min-height:${minH};">
       ${reprintBy || reprintReason ? `<div style="text-align:center;font-size:${fontPx - 1}px;color:#a16207;border:1px dashed #d97706;padding:2px 4px;margin-bottom:6px;text-transform:uppercase">DUPLICATE / RE-PRINT${reprintBy ? ` · BY ${escapeHtml(reprintBy)}` : ""}${reprintReason ? ` · ${escapeHtml(reprintReason)}` : ""}</div>` : ""}
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;border-bottom:2px solid #1e40af;padding-bottom:8px;margin-bottom:8px">
         <div style="flex:1;min-width:0">
@@ -159,17 +160,21 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
 
       <div style="text-align:center;font-size:${fontPx + 1}px;font-weight:700;letter-spacing:1px;margin:0 0 6px">INVOICE / RECEIPT${isCancelled ? " — CANCELLED" : ""}</div>
 
-      <div style="font-size:${fontPx}px;border-top:1px solid #ccc;border-bottom:1px solid #ccc;padding:3px 0;margin-bottom:6px">
-        <div style="display:flex;justify-content:space-between;gap:8px">
-          <div><strong>${escapeHtml(`${bill.patient?.firstName ?? ""} ${bill.patient?.lastName ?? ""}`.trim())}</strong>${ageGender ? ` · ${escapeHtml(ageGender)}` : ""}</div>
-          <div>PH: ${escapeHtml(bill.patient?.phone ?? "")}</div>
+      <div style="border-top:1px solid #ccc;border-bottom:1px solid #ccc;padding:5px 0;margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+          <div style="line-height:1.25">
+            <div style="display:flex;align-items:baseline;flex-wrap:wrap;gap:0 5px">
+              <strong style="font-size:${paperSize === "A5" ? 14 : 17}px;font-weight:900;line-height:1.05">${escapeHtml(`${bill.patient?.firstName ?? ""} ${bill.patient?.lastName ?? ""}`.trim())}</strong>
+              ${ageGender ? `<strong style="font-size:${paperSize === "A5" ? 12 : 14}px;font-weight:800">&middot; ${escapeHtml(ageGender)}</strong>` : ""}
+            </div>
+            <div style="font-size:${paperSize === "A5" ? 11.5 : 13}px;font-weight:700;margin-top:3px">REF: <strong>${bill.order?.doctor?.name ? escapeHtml("DR. " + bill.order.doctor.name) : "SELF / WALK-IN"}</strong></div>
+          </div>
+          <div style="text-align:right;font-size:${fontPx - 1}px;line-height:1.5;flex-shrink:0">
+            ${bill.patient?.phone ? `<div>PH: ${escapeHtml(bill.patient.phone)}</div>` : ""}
+            <div>${created.toLocaleDateString("en-IN")} ${created.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</div>
+            <div>ID: ${escapeHtml(bill.patient?.patientId ?? "")} &middot; BILL: ${escapeHtml(billDigits)}</div>
+          </div>
         </div>
-        <div style="display:flex;justify-content:space-between;gap:8px;margin-top:1px">
-          <div>ID: ${escapeHtml(bill.patient?.patientId ?? "")}</div>
-          <div>BILL: ${escapeHtml(billDigits)}</div>
-          <div>${created.toLocaleDateString("en-IN")} ${created.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</div>
-        </div>
-        <div style="margin-top:1px">REF: ${bill.order?.doctor?.name ? escapeHtml("DR. " + bill.order.doctor.name) : "SELF / WALK-IN"}</div>
       </div>
 
       <table style="width:100%;border-collapse:collapse;font-size:${fontPx}px">
@@ -226,8 +231,9 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
         </tbody>
       </table>
 
-      ${bill.tokenNo != null ? `<div style="margin-top:6px;padding:3px;border:1px dashed #000;text-align:center;font-weight:700;font-size:${fontPx + 1}px">QUEUE TOKEN&nbsp;#${String(bill.tokenNo).padStart(3, "0")}</div>` : ""}
-      ${clinic?.footerNote ? `<div style="margin-top:8px;padding-top:4px;border-top:1px dashed #999;font-size:${fontPx - 2}px;color:#555;text-transform:none;text-align:center">${escapeHtml(clinic.footerNote)}</div>` : ""}
+      <div style="flex:1;min-height:8px"></div>
+      ${bill.tokenNo != null ? `<div style="padding:3px;border:1px dashed #000;text-align:center;font-weight:700;font-size:${fontPx + 1}px">QUEUE TOKEN&nbsp;#${String(bill.tokenNo).padStart(3, "0")}</div>` : ""}
+      ${clinic?.footerNote ? `<div style="margin-top:6px;padding-top:4px;border-top:1px dashed #999;font-size:${fontPx - 2}px;color:#555;text-transform:none;text-align:center">${escapeHtml(clinic.footerNote)}</div>` : ""}
     </section>`;
 
   const pages = Array.from({ length: copies }).map((_, i) => onePage(i)).join("");

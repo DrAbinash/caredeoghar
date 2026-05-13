@@ -1945,12 +1945,11 @@ export default function BillingDesk() {
                 display: flex !important;
                 flex-direction: column !important;
                 position: absolute !important;
-                top: 0 !important; left: 0 !important; right: 0 !important;
+                top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
                 margin: 0 !important;
                 padding: ${paperSize === "A4" ? "4mm 5mm" : "2.5mm 3mm"} !important;
                 max-width: none !important;
                 text-transform: uppercase;
-                min-height: ${paperSize === "A4" ? "287mm" : "195mm"} !important;
                 width: 100% !important;
                 box-sizing: border-box !important;
               }
@@ -2026,30 +2025,43 @@ export default function BillingDesk() {
           </div>
           <div className="bdr-title" style={{ margin: "1px 0 2px" }}>Invoice / Receipt</div>
 
-          {/* Compact 2-line patient block. text-transform:uppercase on wrapper
-              forces caps; use bdr-keep-case to opt specific fields out. */}
-          <div className="bdr-patient" style={{ marginBottom: 3 }}>
-            <div className="bdr-patient-line">
-              <div>
-                <strong style={{ fontSize: paperSize === "A4" ? 14 : 13, fontWeight: 900, lineHeight: 1.05 }}>{lastBill.patient.firstName} {lastBill.patient.lastName}</strong>
-                {(() => {
-                  const a = calcAge(lastBill.patient.dateOfBirth);
-                  const ageSex = [a, lastBill.patient.gender].filter(Boolean).join(" / ");
-                  return ageSex ? <div style={{ fontSize: paperSize === "A4" ? 11 : 10.5, fontWeight: 800, marginTop: 1 }}>{ageSex}</div> : null;
-                })()}
+          {/* 2-column patient block:
+              LEFT  — 2 lines, bold+larger (Name·Age/Sex | Ref Doctor)
+              RIGHT — 3 compact lines right-aligned (Phone | Date/Time | ID·Bill) */}
+          <div className="bdr-patient" style={{ marginBottom: 4 }}>
+            <div className="bdr-patient-line" style={{ alignItems: "flex-start" }}>
+              {/* LEFT: 2 bold lines */}
+              <div style={{ lineHeight: 1.25 }}>
+                {/* Line 1: Name inline with Age/Sex */}
+                <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: "0 6px" }}>
+                  <strong style={{ fontSize: paperSize === "A4" ? 16 : 14, fontWeight: 900, lineHeight: 1.05 }}>
+                    {lastBill.patient.firstName} {lastBill.patient.lastName}
+                  </strong>
+                  {(() => {
+                    const a = calcAge(lastBill.patient.dateOfBirth);
+                    const ageSex = [a, lastBill.patient.gender].filter(Boolean).join(" / ");
+                    return ageSex ? (
+                      <strong style={{ fontSize: paperSize === "A4" ? 13 : 12, fontWeight: 800 }}>· {ageSex}</strong>
+                    ) : null;
+                  })()}
+                </div>
+                {/* Line 2: Ref doctor */}
+                <div style={{ fontSize: paperSize === "A4" ? 12 : 11.5, fontWeight: 700, marginTop: 3 }}>
+                  Ref: <strong>{lastBill.doctorName ? `Dr. ${lastBill.doctorName}` : "Self / Walk-in"}</strong>
+                </div>
               </div>
-              <div style={{ textAlign: "right", fontSize: paperSize === "A4" ? 10.5 : 10, lineHeight: 1.3 }}>
+              {/* RIGHT: 3 compact lines, right-aligned */}
+              <div style={{ textAlign: "right", fontSize: paperSize === "A4" ? 10.5 : 10, lineHeight: 1.5, flexShrink: 0 }}>
                 {lastBill.patient.phone && <div>Ph: {lastBill.patient.phone}</div>}
-                <div>ID: {lastBill.patient.patientId}</div>
+                <div>
+                  {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}{" "}
+                  {new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                </div>
+                <div>
+                  ID: {lastBill.patient.patientId}{" · "}
+                  Bill: <strong>{String(lastBill.billNumber).replace(/^BILL-?/i, "").replace(/-/g, "")}</strong>
+                </div>
               </div>
-            </div>
-            <div className="bdr-patient-line" style={{ marginTop: 2 }}>
-              <span>Ref: <strong>{lastBill.doctorName ? `Dr. ${lastBill.doctorName}` : "Self / Walk-in"}</strong></span>
-              <span>
-                Bill No: <strong>{String(lastBill.billNumber).replace(/^BILL-?/i, "").replace(/-/g, "")}</strong>
-                {"  ·  "}
-                {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })} {new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-              </span>
             </div>
           </div>
 
@@ -2078,7 +2090,7 @@ export default function BillingDesk() {
             const paidOnReceipt = lastBill.payments.reduce((s, p) => s + Number(p.amount || 0), 0);
             const balanceOnReceipt = Math.max(0, lastBill.total - paidOnReceipt);
             return (
-              <div className="bdr-bottom-row" style={{ alignItems: "stretch", gap: 8, marginBottom: 2 }}>
+              <div className="bdr-bottom-row" style={{ alignItems: "stretch", gap: 8, marginTop: 10, marginBottom: 2 }}>
                 {lastBill.payments.length > 0 ? (
                   <div className="bdr-payments" style={{ flex: 1.5 }}>
                     <strong>Payment Details</strong>
