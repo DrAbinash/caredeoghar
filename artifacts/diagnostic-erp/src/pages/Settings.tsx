@@ -419,7 +419,8 @@ function UsersTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
               </div>
               <div>
                 <Label>Max Discount %</Label>
-                <Input type="number" {...register("maxDiscount")} className="mt-1" placeholder="e.g. 20" />
+                <Input type="number" min="0" max="100" {...register("maxDiscount")} className="mt-1" placeholder="e.g. 20" />
+                <p className="text-[11px] text-muted-foreground mt-1">Leave blank or 0 to disallow discounts. Set 100 to allow any discount. Admins are never restricted.</p>
               </div>
             </div>
 
