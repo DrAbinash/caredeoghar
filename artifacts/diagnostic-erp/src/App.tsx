@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Layout from "@/components/Layout";
-import { readStaffSession, canAccess, firstPermissionedPath, firstAllowedPath, longestMatchingNavPath } from "@/lib/staffSession";
+import { readStaffSession, canAccess, firstPermissionedPath, firstAllowedPath, longestMatchingNavPath, FULL_ACCESS_ROLES } from "@/lib/staffSession";
 import { useEffect } from "react";
 
 const BillingDesk     = lazy(() => import("@/pages/BillingDesk"));
@@ -50,6 +50,7 @@ const Portal          = lazy(() => import("@/pages/Portal"));
 const Display         = lazy(() => import("@/pages/Display"));
 const OnlineBookings  = lazy(() => import("@/pages/OnlineBookings"));
 const DailySummary    = lazy(() => import("@/pages/DailySummary"));
+const MyDailySummary  = lazy(() => import("@/pages/MyDailySummary"));
 const OutsourcedLabs  = lazy(() => import("@/pages/OutsourcedLabs"));
 const Kiosk           = lazy(() => import("@/pages/Kiosk"));
 const NotFound        = lazy(() => import("@/pages/not-found"));
@@ -76,7 +77,7 @@ const queryClient = new QueryClient({
 });
 
 const ERP_NAV_ORDER = [
-  "/", "/dashboard", "/daily-summary", "/patients", "/appointments", "/queue", "/online-bookings",
+  "/", "/dashboard", "/my-daily-summary", "/daily-summary", "/patients", "/appointments", "/queue", "/online-bookings",
   "/radiology", "/radiology/worklist", "/radiology/pacs-dashboard", "/radiology/pacs-settings", "/radiology/pacs-logs",
   "/orders", "/tests", "/packages", "/billing", "/payments", "/reports",
   "/report-generator", "/report-hub", "/inventory", "/expenses", "/staff", "/referrals",
@@ -89,6 +90,11 @@ function PermissionGuard() {
     const session = readStaffSession();
     if (!session) {
       navigate("/portal", { replace: true });
+      return;
+    }
+    // Owner Dashboard is admin/super_admin only — redirect others to My Daily Summary.
+    if (location === "/dashboard" && !FULL_ACCESS_ROLES.has(session.user.role)) {
+      navigate("/my-daily-summary", { replace: true });
       return;
     }
     const matched = longestMatchingNavPath(location, ERP_NAV_ORDER);
@@ -143,6 +149,7 @@ function Router() {
               <Route path="/dicom-nodes" component={DicomNodes} />
               <Route path="/appointments" component={Appointments} />
               <Route path="/daily-summary" component={DailySummary} />
+              <Route path="/my-daily-summary" component={MyDailySummary} />
               <Route path="/online-bookings" component={OnlineBookings} />
               <Route path="/queue" component={QueuePage} />
               <Route path="/radiology" component={Radiology} />

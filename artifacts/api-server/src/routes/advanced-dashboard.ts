@@ -1,11 +1,22 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
-import { requireStaffAuth } from "../middleware/requireStaffAuth";
+import { FULL_ACCESS_ROLES, requireStaffAuth } from "../middleware/requireStaffAuth";
+import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
 
 export const advancedDashboardRouter = Router();
 
 advancedDashboardRouter.use(requireStaffAuth);
+
+// Owner-only: admin / super_admin only
+advancedDashboardRouter.use((req: StaffAuthRequest, res, next) => {
+  const role = req.staffSession?.role ?? "";
+  if (!FULL_ACCESS_ROLES.has(role)) {
+    res.status(403).json({ error: "Owner Dashboard access requires admin or super_admin role." });
+    return;
+  }
+  next();
+});
 
 function dayBoundsRange(from: string, to: string) {
   return {
@@ -14,7 +25,7 @@ function dayBoundsRange(from: string, to: string) {
   };
 }
 
-advancedDashboardRouter.get("/", async (req, res) => {
+advancedDashboardRouter.get("/", async (req: StaffAuthRequest, res) => {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   const from = typeof req.query.from === "string" ? req.query.from : today;
   const to = typeof req.query.to === "string" ? req.query.to : from;
@@ -172,7 +183,83 @@ advancedDashboardRouter.get("/", async (req, res) => {
     (a, b) => b.totalBilling - a.totalBilling,
   );
 
-  // ── 6. Modality summary ──────────────────────────────────────────────────
+  // ── 6. Overall summary (all-staff aggregate for date range) ─────────────
+  const billsAggRaw = await db.execute<{
+    gross_billing: string;
+    outstanding: string;
+    cancelled_amount: string;
+    discounts_given: string;
+  }>(sql`
+    SELECT
+      COALESCE(SUM(total_amount::numeric) FILTER (WHERE status <> 'cancelled'), 0)::text  AS gross_billing,
+      COALESCE(SUM(balance_amount::numeric) FILTER (WHERE status IN ('pending','partial') AND balance_amount::numeric > 0), 0)::text AS outstanding,
+      COALESCE(SUM(total_amount::numeric) FILTER (WHERE status = 'cancelled'), 0)::text   AS cancelled_amount,
+      COALESCE(SUM(discount::numeric)     FILTER (WHERE status <> 'cancelled'), 0)::text  AS discounts_given
+    FROM bills
+    WHERE created_at >= ${start} AND created_at <= ${end}
+    ${staffFilter ? sql`AND created_by_name = ${staffFilter}` : sql``}
+  `);
+
+  const paymentsAggRaw = await db.execute<{
+    total_received: string;
+    refund_amount: string;
+    digital_collection: string;
+    cash_collection: string;
+  }>(sql`
+    SELECT
+      COALESCE(SUM(amount::numeric) FILTER (WHERE amount::numeric > 0), 0)::text AS total_received,
+      COALESCE(SUM(ABS(amount::numeric)) FILTER (WHERE amount::numeric < 0), 0)::text AS refund_amount,
+      COALESCE(SUM(amount::numeric) FILTER (WHERE amount::numeric > 0 AND LOWER(method) IN ('upi','card','online','bank','cheque','neft','rtgs')), 0)::text AS digital_collection,
+      COALESCE(SUM(amount::numeric) FILTER (WHERE amount::numeric > 0 AND LOWER(method) = 'cash'), 0)::text AS cash_collection
+    FROM payments
+    WHERE created_at >= ${start} AND created_at <= ${end}
+    ${staffFilter ? sql`AND recorded_by_name = ${staffFilter}` : sql``}
+  `);
+
+  const expensesAggRaw = await db.execute<{ total_expenses: string }>(sql`
+    SELECT COALESCE(SUM(amount::numeric), 0)::text AS total_expenses
+    FROM expenses
+    WHERE expense_date >= ${from} AND expense_date <= ${to}
+    ${staffFilter ? sql`AND approved_by = ${staffFilter}` : sql``}
+  `);
+
+  const pendingReportsRaw = await db.execute<{ count: string }>(sql`
+    SELECT COUNT(*)::text AS count
+    FROM order_tests
+    WHERE status = 'active'
+      AND (result_status IS NULL OR result_status NOT IN ('completed','verified','delivered','cancelled'))
+  `);
+
+  const grossBilling = Number(billsAggRaw.rows[0]?.gross_billing ?? 0);
+  const outstanding = Number(billsAggRaw.rows[0]?.outstanding ?? 0);
+  const cancelledAmount = Number(billsAggRaw.rows[0]?.cancelled_amount ?? 0);
+  const discountsGiven = Number(billsAggRaw.rows[0]?.discounts_given ?? 0);
+  const totalReceived = Number(paymentsAggRaw.rows[0]?.total_received ?? 0);
+  const refundAmount = Number(paymentsAggRaw.rows[0]?.refund_amount ?? 0);
+  const digitalCollection = Number(paymentsAggRaw.rows[0]?.digital_collection ?? 0);
+  const cashCollection = Number(paymentsAggRaw.rows[0]?.cash_collection ?? 0);
+  const totalExpenses = Number(expensesAggRaw.rows[0]?.total_expenses ?? 0);
+  const refundsAndCancellations = refundAmount + cancelledAmount;
+  const netCollection = grossBilling - outstanding - refundsAndCancellations - totalExpenses;
+  const physicalCashInHand = netCollection - digitalCollection;
+
+  const overallSummary = {
+    grossBilling,
+    outstanding,
+    refundsAndCancellations,
+    refundAmount,
+    cancelledAmount,
+    totalReceived,
+    digitalCollection,
+    cashCollection,
+    totalExpenses,
+    discountsGiven,
+    netCollection,
+    physicalCashInHand,
+    pendingReports: Number(pendingReportsRaw.rows[0]?.count ?? 0),
+  };
+
+  // ── 7. Modality summary ──────────────────────────────────────────────────
   const modalityRaw = await db.execute<{
     modality: string;
     test_count: string;
@@ -205,9 +292,6 @@ advancedDashboardRouter.get("/", async (req, res) => {
       modality: r.modality,
       testCount: Number(r.test_count),
       grossBilling: Number(r.gross_billing),
-      discounts: 0,
-      netCollection: Number(r.gross_billing),
-      pendingDues: 0,
       completedReports: Number(r.completed_reports),
       pendingReports: Number(r.pending_reports),
     }))
@@ -220,7 +304,7 @@ advancedDashboardRouter.get("/", async (req, res) => {
       return ia - ib;
     });
 
-  // ── 7. Alerts ────────────────────────────────────────────────────────────
+  // ── 8. Alerts ────────────────────────────────────────────────────────────
   const alerts: {
     type: string;
     message: string;
@@ -255,10 +339,7 @@ advancedDashboardRouter.get("/", async (req, res) => {
         staffName: s.staffName,
       });
     }
-    if (
-      s.totalBilling > 1000 &&
-      s.totalReceived < s.totalBilling * 0.5
-    ) {
+    if (s.totalBilling > 1000 && s.totalReceived < s.totalBilling * 0.5) {
       alerts.push({
         type: "low_collection",
         message: `${s.staffName}: collected only ${((s.totalReceived / s.totalBilling) * 100).toFixed(0)}% of billing (₹${s.totalReceived.toFixed(0)} / ₹${s.totalBilling.toFixed(0)})`,
@@ -268,5 +349,5 @@ advancedDashboardRouter.get("/", async (req, res) => {
     }
   }
 
-  res.json({ from, to, staffComparison, modalitySummary, alerts });
+  res.json({ from, to, overallSummary, staffComparison, modalitySummary, alerts });
 });

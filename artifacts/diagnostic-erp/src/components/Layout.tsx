@@ -56,7 +56,7 @@ import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { api } from "@/lib/fetchApi";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { readStaffSession, clearStaffSession, canAccess } from "@/lib/staffSession";
+import { readStaffSession, clearStaffSession, canAccess, FULL_ACCESS_ROLES } from "@/lib/staffSession";
 import { useUserTheme, clearUserTheme } from "@/lib/userTheme";
 import {
   getStoredUsbKey,
@@ -75,7 +75,7 @@ import {
 } from "@/lib/usbKey";
 import { SIDEBAR_THEMES, DEFAULT_THEME, resolveTheme } from "@/lib/sidebarThemes";
 
-type NavLeaf = { path: string; icon: typeof Zap; label: string };
+type NavLeaf = { path: string; icon: typeof Zap; label: string; ownerOnly?: boolean };
 type NavGroup = { id: string; icon: typeof Zap; label: string; children: NavLeaf[] };
 type NavEntry = NavLeaf | NavGroup;
 
@@ -85,8 +85,8 @@ const isGroup = (n: NavEntry): n is NavGroup => "children" in n;
 // unchanged; only the visual grouping is consolidated to reduce clutter.
 const navItems: NavEntry[] = [
   { path: "/", icon: Zap, label: "Billing Desk" },
-  { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { path: "/daily-summary", icon: BarChart2, label: "Daily Summary" },
+  { path: "/dashboard", icon: LayoutDashboard, label: "Owner Dashboard", ownerOnly: true },
+  { path: "/my-daily-summary", icon: BarChart2, label: "My Daily Summary" },
   { path: "/patients", icon: Users, label: "Patients" },
   { path: "/appointments", icon: CalendarDays, label: "Appointments" },
   { path: "/online-bookings", icon: ShoppingCart, label: "Online Bookings" },
@@ -254,6 +254,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       const kids = n.children.filter((c) => canAccess(session, c.path));
       return kids.length ? [{ ...n, children: kids }] : [];
     }
+    // Owner-only items are only visible to admin / super_admin.
+    if (n.ownerOnly && !FULL_ACCESS_ROLES.has(session?.user.role ?? "")) return [];
     return canAccess(session, n.path) ? [n] : [];
   });
 

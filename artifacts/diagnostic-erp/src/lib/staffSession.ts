@@ -104,6 +104,13 @@ const PERMISSION_ALIASES: Readonly<Record<string, string>> = {
 // Roles that always get full access regardless of stored permissions.
 export const FULL_ACCESS_ROLES = new Set(["admin", "super_admin"]);
 
+// Returns true if the session belongs to an owner-level role (admin / super_admin).
+// Used to gate Owner Dashboard access and the sidebar nav item.
+export function isOwnerRole(session: StaffSession | null): boolean {
+  if (!session) return false;
+  return FULL_ACCESS_ROLES.has(session.user.role);
+}
+
 export function canAccess(session: StaffSession | null, path: string): boolean {
   const required = PERMISSION_ALIASES[path] ?? path;
   // No session → deny access to all permissioned paths.
