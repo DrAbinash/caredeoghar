@@ -19,6 +19,9 @@ import {
   XCircle,
   RotateCcw,
   Info,
+  History,
+  FileEdit,
+  ReceiptText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -97,6 +100,29 @@ type DailySummaryData = {
     paidAmount: number;
     createdByName: string;
   }[];
+  billEdits?: {
+    id: number;
+    billId: number;
+    billNumber: string;
+    patientName: string;
+    editedBy: string;
+    reason: string;
+    changeType: string;
+    oldValue: string | null;
+    newValue: string | null;
+    createdAt: string;
+  }[];
+  voucherEdits?: {
+    id: number;
+    voucherId: number;
+    voucherNumber: string;
+    editedBy: string;
+    reason: string;
+    changeType: string;
+    oldValue: string | null;
+    newValue: string | null;
+    createdAt: string;
+  }[];
 };
 
 type StaffOption = { name: string; billCount: number };
@@ -173,6 +199,7 @@ export default function DailySummary() {
   const [showBills, setShowBills] = useState(true);
   const [showPayments, setShowPayments] = useState(true);
   const [showRefunds, setShowRefunds] = useState(true);
+  const [showEdits, setShowEdits] = useState(true);
 
   const { data, isLoading, refetch, isFetching } = useQuery<DailySummaryData>({
     queryKey: ["daily-summary", date, staffFilter],
@@ -203,6 +230,9 @@ export default function DailySummary() {
   const refundRows = data?.refunds ?? [];
   const billRows = data?.bills ?? [];
   const cancelledRows = data?.cancelledBillsDetail ?? [];
+  const billEdits = data?.billEdits ?? [];
+  const voucherEdits = data?.voucherEdits ?? [];
+  const totalEdits = billEdits.length + voucherEdits.length;
   const cancelledCount = data?.billsByStatus?.cancelled ?? 0;
   const digitalCollection = summary.digitalCollection;
   const netCollection = summary.netCollection;
@@ -285,17 +315,138 @@ export default function DailySummary() {
             <SummaryCard icon={<XCircle size={14} className="text-slate-600" />} label="Cancellations" value={String(cancelledCount)} sub={cancelledCount > 0 ? `${cancelledCount} cancelled bill${cancelledCount === 1 ? "" : "s"}` : "No cancellations today"} accent="bg-slate-50 dark:bg-slate-950/30 border-slate-200 dark:border-slate-800" />
           </div>
 
-          <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
-            <div className="text-sm font-semibold flex items-center gap-2"><Wallet size={14} /> Bottom Summary</div>
-            <div className="text-xs text-muted-foreground">{totalBillingFormula}</div>
-            <div className="text-xs text-muted-foreground">{outstandingFormula}</div>
-            <div className="text-xs text-muted-foreground">{refundsFormula}</div>
-            <div className="text-xs text-muted-foreground">{expensesFormula}</div>
-            <div className="text-xs text-muted-foreground">{discountsFormula}</div>
-            <div className="text-xs text-muted-foreground">{totalReceivedFormula}</div>
-            <div className="text-xs text-muted-foreground">{digitalFormula}</div>
-            <div className="text-xs text-muted-foreground">{physicalFormula}</div>
+          {/* ── Bottom Line — clean styled table that matches the operator's
+                handwritten template (Total Billing − Outstanding − Refunds −
+                Expense = Total Received; Digital subtracted to give Physical
+                Cash in Hand). ───────────────────────────────────────────── */}
+          <div className="rounded-xl border-2 border-card-border bg-gradient-to-br from-card to-muted/30 overflow-hidden shadow-sm">
+            <div className="px-4 py-2.5 bg-gradient-to-r from-primary/10 to-primary/5 border-b-2 border-card-border flex items-center gap-2">
+              <Wallet size={16} className="text-primary" />
+              <span className="text-sm font-bold tracking-wide uppercase">Bottom Line</span>
+              <span className="ml-auto text-[11px] text-muted-foreground font-medium">As on {date}</span>
+            </div>
+            <table className="w-full text-sm">
+              <tbody>
+                <tr className="border-b border-card-border/60">
+                  <td className="px-4 py-2 text-muted-foreground flex items-center gap-2"><TrendingUp size={13} className="text-green-600" /> Total Billing <span className="text-[10px] font-mono text-muted-foreground/70">(X)</span></td>
+                  <td className="px-4 py-2 text-right font-semibold tabular-nums">{inr(summary.totalBilling)}</td>
+                </tr>
+                <tr className="border-b border-card-border/60">
+                  <td className="px-4 py-2 text-muted-foreground flex items-center gap-2"><Receipt size={13} className="text-amber-600" /> Outstanding / Dues <span className="text-[10px] font-mono text-muted-foreground/70">(− Y)</span></td>
+                  <td className="px-4 py-2 text-right font-semibold tabular-nums text-amber-700 dark:text-amber-500">− {inr(summary.outstanding)}</td>
+                </tr>
+                <tr className="border-b border-card-border/60">
+                  <td className="px-4 py-2 text-muted-foreground flex items-center gap-2"><RotateCcw size={13} className="text-rose-600" /> Refunds / Cancellations <span className="text-[10px] font-mono text-muted-foreground/70">(− Z)</span></td>
+                  <td className="px-4 py-2 text-right font-semibold tabular-nums text-rose-700 dark:text-rose-500">− {inr(summary.refundsAndCancellations)}</td>
+                </tr>
+                <tr className="border-b-2 border-foreground/40">
+                  <td className="px-4 py-2 text-muted-foreground flex items-center gap-2"><TrendingDown size={13} className="text-red-500" /> Expenses <span className="text-[10px] font-mono text-muted-foreground/70">(− A)</span></td>
+                  <td className="px-4 py-2 text-right font-semibold tabular-nums text-red-700 dark:text-red-500">− {inr(expenseTotal)}</td>
+                </tr>
+                <tr className="bg-blue-50/70 dark:bg-blue-950/30 border-b-2 border-foreground/40">
+                  <td className="px-4 py-2.5 font-bold flex items-center gap-2"><Wallet size={14} className="text-blue-700" /> Total Received Today <span className="text-[10px] font-mono text-blue-700/80 dark:text-blue-400/80">(B = X − Y − Z − A)</span></td>
+                  <td className="px-4 py-2.5 text-right font-bold tabular-nums text-blue-800 dark:text-blue-300 text-base">{inr(netCollection)}</td>
+                </tr>
+                <tr className="border-b-2 border-foreground/40">
+                  <td className="px-4 py-2 text-muted-foreground flex items-center gap-2"><Smartphone size={13} className="text-violet-600" /> Digital Collection <span className="text-[10px] font-mono text-muted-foreground/70">(− C)</span></td>
+                  <td className="px-4 py-2 text-right font-semibold tabular-nums text-violet-700 dark:text-violet-400">− {inr(digitalCollection)}</td>
+                </tr>
+                <tr className="bg-green-50/70 dark:bg-green-950/30">
+                  <td className="px-4 py-3 font-bold flex items-center gap-2"><Banknote size={15} className="text-green-700" /> Physical Cash in Hand <span className="text-[10px] font-mono text-green-700/80 dark:text-green-400/80">(B − C)</span></td>
+                  <td className="px-4 py-3 text-right font-extrabold tabular-nums text-green-800 dark:text-green-300 text-lg">{inr(physicalCash)}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div className="px-4 py-2 bg-muted/30 border-t border-card-border text-[11px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
+              <span>Discounts Given Today: <strong className="text-foreground">{inr(discountsGiven)}</strong></span>
+              <span>Bills: <strong className="text-foreground">{summary.billCount}</strong></span>
+              {totalEdits > 0 && <span>Edits Logged: <strong className="text-foreground">{totalEdits}</strong></span>}
+            </div>
           </div>
+
+          {/* ── Bills / Vouchers Edit Logs — collapsible section showing every
+                bill or voucher modification made on this day, with old vs new
+                values, reason, and editor. ──────────────────────────────── */}
+          {totalEdits > 0 && (
+            <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+              <button onClick={() => setShowEdits((v) => !v)} className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold hover:bg-muted/30 transition-colors">
+                <span className="flex items-center gap-2"><History size={14} className="text-indigo-600" /> Bills / Vouchers Edit Logs <Badge variant="secondary" className="text-xs">{totalEdits}</Badge></span>
+                {showEdits ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </button>
+              {showEdits && (
+                <div className="border-t border-card-border divide-y divide-card-border">
+                  {billEdits.length > 0 && (
+                    <div className="overflow-x-auto">
+                      <div className="px-4 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 dark:bg-indigo-950/20 flex items-center gap-2"><ReceiptText size={12} /> Bill Edits ({billEdits.length})</div>
+                      <table className="w-full text-xs">
+                        <thead className="bg-muted/40">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-semibold">Time</th>
+                            <th className="px-3 py-2 text-left font-semibold">Bill #</th>
+                            <th className="px-3 py-2 text-left font-semibold">Patient</th>
+                            <th className="px-3 py-2 text-left font-semibold">Field</th>
+                            <th className="px-3 py-2 text-left font-semibold">Old → New</th>
+                            <th className="px-3 py-2 text-left font-semibold">Reason</th>
+                            <th className="px-3 py-2 text-left font-semibold">Edited By</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-card-border">
+                          {billEdits.map((e) => (
+                            <tr key={e.id} className="hover:bg-muted/20">
+                              <td className="px-3 py-1.5 text-muted-foreground whitespace-nowrap">{new Date(e.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}</td>
+                              <td className="px-3 py-1.5 font-mono font-semibold">{String(e.billNumber).replace(/^BILL-?/i, "").replace(/-/g, "")}</td>
+                              <td className="px-3 py-1.5">{e.patientName}</td>
+                              <td className="px-3 py-1.5"><span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 uppercase">{e.changeType}</span></td>
+                              <td className="px-3 py-1.5 font-mono text-[11px]">
+                                <span className="text-rose-600 line-through">{e.oldValue ?? "—"}</span>
+                                <span className="text-muted-foreground mx-1">→</span>
+                                <span className="text-green-700 font-semibold">{e.newValue ?? "—"}</span>
+                              </td>
+                              <td className="px-3 py-1.5 text-muted-foreground max-w-[200px] truncate" title={e.reason}>{e.reason || "—"}</td>
+                              <td className="px-3 py-1.5 text-muted-foreground">{e.editedBy}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {voucherEdits.length > 0 && (
+                    <div className="overflow-x-auto">
+                      <div className="px-4 py-2 text-xs font-semibold text-purple-700 bg-purple-50 dark:bg-purple-950/20 flex items-center gap-2"><FileEdit size={12} /> Voucher Edits ({voucherEdits.length})</div>
+                      <table className="w-full text-xs">
+                        <thead className="bg-muted/40">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-semibold">Time</th>
+                            <th className="px-3 py-2 text-left font-semibold">Voucher #</th>
+                            <th className="px-3 py-2 text-left font-semibold">Field</th>
+                            <th className="px-3 py-2 text-left font-semibold">Old → New</th>
+                            <th className="px-3 py-2 text-left font-semibold">Reason</th>
+                            <th className="px-3 py-2 text-left font-semibold">Edited By</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-card-border">
+                          {voucherEdits.map((e) => (
+                            <tr key={e.id} className="hover:bg-muted/20">
+                              <td className="px-3 py-1.5 text-muted-foreground whitespace-nowrap">{new Date(e.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}</td>
+                              <td className="px-3 py-1.5 font-mono font-semibold">{e.voucherNumber}</td>
+                              <td className="px-3 py-1.5"><span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 uppercase">{e.changeType}</span></td>
+                              <td className="px-3 py-1.5 font-mono text-[11px]">
+                                <span className="text-rose-600 line-through">{e.oldValue ?? "—"}</span>
+                                <span className="text-muted-foreground mx-1">→</span>
+                                <span className="text-green-700 font-semibold">{e.newValue ?? "—"}</span>
+                              </td>
+                              <td className="px-3 py-1.5 text-muted-foreground max-w-[200px] truncate" title={e.reason}>{e.reason || "—"}</td>
+                              <td className="px-3 py-1.5 text-muted-foreground">{e.editedBy}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {(refundRows.length > 0 || cancelledRows.length > 0) && (
             <div className="bg-card border border-card-border rounded-xl overflow-hidden">

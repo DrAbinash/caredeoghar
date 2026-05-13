@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { billsTable, paymentsTable, ordersTable } from "@workspace/db/schema";
+import { billsTable, paymentsTable, ordersTable, billAuditsTable, voucherAuditsTable } from "@workspace/db/schema";
 import { sql, and, eq, gte, lt } from "drizzle-orm";
 import { patientsTable } from "@workspace/db/schema";
 
@@ -153,6 +153,39 @@ dailySummaryRouter.get("/", async (req, res) => {
 
   const byUser = Array.from(byUserMap.values()).sort((a, b) => b.received - a.received);
 
+  // ── Audit logs (bill + voucher edits within this day) ─────────────────
+  const billAuditFilters = [gte(billAuditsTable.createdAt, dayStart), lt(billAuditsTable.createdAt, dayEnd)];
+  if (staffName) billAuditFilters.push(eq(billAuditsTable.editedBy, staffName));
+  const billEditsRaw = await db
+    .select({
+      id: billAuditsTable.id,
+      billId: billAuditsTable.billId,
+      editedBy: billAuditsTable.editedBy,
+      reason: billAuditsTable.reason,
+      changeType: billAuditsTable.changeType,
+      oldValue: billAuditsTable.oldValue,
+      newValue: billAuditsTable.newValue,
+      createdAt: billAuditsTable.createdAt,
+      billNumber: billsTable.billNumber,
+      patientFirst: patientsTable.firstName,
+      patientLast: patientsTable.lastName,
+    })
+    .from(billAuditsTable)
+    .leftJoin(billsTable, eq(billAuditsTable.billId, billsTable.id))
+    .leftJoin(patientsTable, eq(billsTable.patientId, patientsTable.id))
+    .where(and(...billAuditFilters))
+    .orderBy(sql`${billAuditsTable.createdAt} DESC`)
+    .limit(200);
+
+  const voucherAuditFilters = [gte(voucherAuditsTable.createdAt, dayStart), lt(voucherAuditsTable.createdAt, dayEnd)];
+  if (staffName) voucherAuditFilters.push(eq(voucherAuditsTable.editedBy, staffName));
+  const voucherEditsRaw = await db
+    .select()
+    .from(voucherAuditsTable)
+    .where(and(...voucherAuditFilters))
+    .orderBy(sql`${voucherAuditsTable.createdAt} DESC`)
+    .limit(200);
+
   res.json({
     date,
     staffName: staffName || null,
@@ -212,6 +245,29 @@ dailySummaryRouter.get("/", async (req, res) => {
       totalAmount: Number(r.totalAmount),
       paidAmount: Number(r.paidAmount),
       createdByName: r.createdByName ?? "",
+    })),
+    billEdits: billEditsRaw.map((r) => ({
+      id: r.id,
+      billId: r.billId,
+      billNumber: r.billNumber ?? `#${r.billId}`,
+      patientName: r.patientFirst ? `${r.patientFirst} ${r.patientLast ?? ""}`.trim() : "—",
+      editedBy: r.editedBy,
+      reason: r.reason,
+      changeType: r.changeType,
+      oldValue: r.oldValue,
+      newValue: r.newValue,
+      createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
+    })),
+    voucherEdits: voucherEditsRaw.map((r) => ({
+      id: r.id,
+      voucherId: r.voucherId,
+      voucherNumber: r.voucherNumber,
+      editedBy: r.editedBy,
+      reason: r.reason,
+      changeType: r.changeType,
+      oldValue: r.oldValue,
+      newValue: r.newValue,
+      createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
     })),
   });
 });
