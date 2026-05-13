@@ -188,23 +188,43 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
       </table>
       ${cancelledRows}
 
-      <div style="display:flex;gap:8px;margin-top:8px;align-items:flex-start">
-        ${qrEnabled && qrDataUrl ? `<div style="flex-shrink:0;display:flex;flex-direction:column;align-items:flex-start"><img src="${qrDataUrl}" alt="Verify QR" style="width:56px;height:56px;display:block"/><div style="font-size:${fontPx - 3}px;color:#666;margin-top:1px;text-transform:none;white-space:nowrap">Scan to verify bill</div></div>` : ""}
-        <div style="flex:1;font-size:${fontPx - 1}px;min-width:0">
-          ${(bill.payments ?? []).length > 0 ? `<div style="font-weight:700;border-bottom:1px solid #ccc;padding-bottom:1px;margin-bottom:2px">PAYMENT DETAILS</div>
-          <table style="width:100%;border-collapse:collapse;font-size:${fontPx - 1}px"><tbody>${payRows}</tbody></table>` : ""}
-        </div>
-        <table style="min-width:160px;font-size:${fontPx}px;border-collapse:collapse;flex-shrink:0">
-          <tbody>
-            <tr><td style="padding:1px 4px">Subtotal</td><td style="padding:1px 4px;text-align:right">₹${Number(bill.subtotal).toFixed(2)}</td></tr>
-            ${Number(bill.discount) > 0 ? `<tr><td style="padding:1px 4px">Discount</td><td style="padding:1px 4px;text-align:right;color:green">−₹${Number(bill.discount).toFixed(2)}</td></tr>` : ""}
-            ${Number(bill.taxAmount ?? 0) > 0 ? `<tr><td style="padding:1px 4px">Tax</td><td style="padding:1px 4px;text-align:right">₹${Number(bill.taxAmount).toFixed(2)}</td></tr>` : ""}
-            <tr><td style="padding:2px 4px;border-top:1px solid #000;font-weight:700">Total</td><td style="padding:2px 4px;border-top:1px solid #000;text-align:right;font-weight:700">₹${Number(bill.totalAmount).toFixed(2)}</td></tr>
-            <tr><td style="padding:1px 4px">Paid</td><td style="padding:1px 4px;text-align:right;color:green">₹${Number(bill.paidAmount).toFixed(2)}</td></tr>
-            <tr><td style="padding:2px 4px;border-top:1px solid #000;font-weight:700">Balance</td><td style="padding:2px 4px;border-top:1px solid #000;text-align:right;font-weight:700;color:${Number(bill.balanceAmount) > 0 ? "#c62828" : "green"}">₹${Number(bill.balanceAmount).toFixed(2)}${Number(bill.balanceAmount) === 0 ? " (PAID)" : ""}</td></tr>
-          </tbody>
-        </table>
-      </div>
+      <!--
+        BOTTOM SECTION — table-based 3-column layout (NOT flexbox).
+        Tables with table-layout:fixed render predictably in every print
+        engine; flexbox columns can collapse/overlap on physical printers
+        especially on A4 where there's lots of horizontal space. The
+        explicit pixel widths on the QR + Totals columns guarantee the
+        middle column gets the remaining space without crowding either side.
+      -->
+      <table style="width:100%;border-collapse:separate;border-spacing:0;margin-top:8px;table-layout:fixed">
+        <colgroup>
+          <col style="width:${qrEnabled && qrDataUrl ? "70px" : "0"}"/>
+          <col/>
+          <col style="width:${paperSize === "A4" ? "210px" : "175px"}"/>
+        </colgroup>
+        <tbody>
+          <tr>
+            <td style="vertical-align:top;padding:0;overflow:hidden">
+              ${qrEnabled && qrDataUrl ? `<img src="${qrDataUrl}" alt="Verify QR" style="width:56px;height:56px;display:block"/><div style="font-size:${fontPx - 3}px;color:#666;margin-top:1px;text-transform:none;white-space:nowrap">Scan to verify</div>` : ""}
+            </td>
+            <td style="vertical-align:top;padding:0 8px;font-size:${fontPx - 1}px;word-break:break-word">
+              ${(bill.payments ?? []).length > 0 ? `<div style="font-weight:700;border-bottom:1px solid #ccc;padding-bottom:1px;margin-bottom:2px">PAYMENT DETAILS</div><table style="width:100%;border-collapse:collapse;font-size:${fontPx - 1}px;table-layout:fixed"><colgroup><col style="width:34%"/><col/><col style="width:30%"/></colgroup><tbody>${payRows}</tbody></table>` : ""}
+            </td>
+            <td style="vertical-align:top;padding:0">
+              <table style="width:100%;border-collapse:collapse;font-size:${fontPx}px;table-layout:fixed">
+                <tbody>
+                  <tr><td style="padding:1px 4px">Subtotal</td><td style="padding:1px 4px;text-align:right;white-space:nowrap">₹${Number(bill.subtotal).toFixed(2)}</td></tr>
+                  ${Number(bill.discount) > 0 ? `<tr><td style="padding:1px 4px">Discount</td><td style="padding:1px 4px;text-align:right;color:green;white-space:nowrap">−₹${Number(bill.discount).toFixed(2)}</td></tr>` : ""}
+                  ${Number(bill.taxAmount ?? 0) > 0 ? `<tr><td style="padding:1px 4px">Tax</td><td style="padding:1px 4px;text-align:right;white-space:nowrap">₹${Number(bill.taxAmount).toFixed(2)}</td></tr>` : ""}
+                  <tr><td style="padding:2px 4px;border-top:1px solid #000;font-weight:700">Total</td><td style="padding:2px 4px;border-top:1px solid #000;text-align:right;font-weight:700;white-space:nowrap">₹${Number(bill.totalAmount).toFixed(2)}</td></tr>
+                  <tr><td style="padding:1px 4px">Paid</td><td style="padding:1px 4px;text-align:right;color:green;white-space:nowrap">₹${Number(bill.paidAmount).toFixed(2)}</td></tr>
+                  <tr><td style="padding:2px 4px;border-top:1px solid #000;font-weight:700">Balance</td><td style="padding:2px 4px;border-top:1px solid #000;text-align:right;font-weight:700;white-space:nowrap;color:${Number(bill.balanceAmount) > 0 ? "#c62828" : "green"}">₹${Number(bill.balanceAmount).toFixed(2)}${Number(bill.balanceAmount) === 0 ? " (PAID)" : ""}</td></tr>
+                </tbody>
+              </table>
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
       ${bill.tokenNo != null ? `<div style="margin-top:6px;padding:3px;border:1px dashed #000;text-align:center;font-weight:700;font-size:${fontPx + 1}px">QUEUE TOKEN&nbsp;#${String(bill.tokenNo).padStart(3, "0")}</div>` : ""}
       ${clinic?.footerNote ? `<div style="margin-top:8px;padding-top:4px;border-top:1px dashed #999;font-size:${fontPx - 2}px;color:#555;text-transform:none;text-align:center">${escapeHtml(clinic.footerNote)}</div>` : ""}
