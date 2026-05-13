@@ -513,21 +513,25 @@ export default function BillingDesk() {
   const [dicomReferringDoc, setDicomReferringDoc] = useState("");
   const dicomFieldsComplete = dicomStudyDesc.trim() !== "" && dicomBodyPart.trim() !== "" && dicomStationAE.trim() !== "" && dicomReferringDoc.trim() !== "";
 
-  // Auto-fill DICOM fields from per-test defaults whenever the basket changes.
-  // Only overwrites a field if it is currently empty, so manual edits are preserved.
+  // Auto-fill DICOM fields from per-test defaults and bill data whenever the
+  // basket or selected doctor changes. Only overwrites empty fields so manual
+  // edits are preserved.
   useEffect(() => {
     if (!needsDicom) return;
     const firstDicomTest = selectedTests.find((t) => dicomMwlTestIdSet.has(t.testId));
     if (!firstDicomTest) return;
     const def = dicomMwlTestDefaults[String(firstDicomTest.testId)];
-    // Study Description: auto-fill from test name if empty
+    // Study Description: auto-fill from test name
     setDicomStudyDesc((prev) => prev.trim() ? prev : firstDicomTest.name);
-    // Body Part: fill from default if set
+    // Body Part: fill from per-test default
     if (def?.bodyPart) setDicomBodyPart((prev) => prev.trim() ? prev : def.bodyPart);
-    // Station AE: fill from default if set
+    // Station AE: fill from per-test default
     if (def?.stationAE) setDicomStationAE((prev) => prev.trim() ? prev : def.stationAE);
+    // Referring Doctor: fill from the doctor selected on the bill
+    const selectedDoctor = doctors.find((d) => d.id === doctorId);
+    if (selectedDoctor) setDicomReferringDoc((prev) => prev.trim() ? prev : selectedDoctor.name);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [needsDicom, selectedTests.map((t) => t.testId).join(",")]);
+  }, [needsDicom, selectedTests.map((t) => t.testId).join(","), doctorId]);
 
 
   // ── Quick Test Tabs (6 customizable slots) ─────────
@@ -1134,10 +1138,12 @@ export default function BillingDesk() {
                       className="w-full h-7 text-xs font-mono border border-blue-300 rounded px-2 bg-white dark:bg-background focus:outline-none focus:border-blue-500"
                     />
                   </div>
-                  {/* Referring Doctor — highlighted as the key manual field */}
+                  {/* Referring Doctor */}
                   <div className="space-y-0.5">
                     <label className="text-[10px] font-semibold flex items-center gap-1 text-blue-900 dark:text-blue-200">
-                      Referring Doctor <span className="text-red-500">*</span>
+                      Referring Doctor
+                      {dicomReferringDoc.trim() && <span className="text-[9px] text-blue-500 font-normal">(auto)</span>}
+                      <span className="text-red-500">*</span>
                     </label>
                     <input
                       value={dicomReferringDoc}
