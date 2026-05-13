@@ -189,12 +189,12 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
       ${cancelledRows}
 
       <div style="display:flex;gap:8px;margin-top:8px;align-items:flex-start">
-        <div style="flex:1;font-size:${fontPx - 1}px">
+        ${qrEnabled && qrDataUrl ? `<div style="flex-shrink:0;display:flex;flex-direction:column;align-items:flex-start"><img src="${qrDataUrl}" alt="Verify QR" style="width:56px;height:56px;display:block"/><div style="font-size:${fontPx - 3}px;color:#666;margin-top:1px;text-transform:none;white-space:nowrap">Scan to verify bill</div></div>` : ""}
+        <div style="flex:1;font-size:${fontPx - 1}px;min-width:0">
           ${(bill.payments ?? []).length > 0 ? `<div style="font-weight:700;border-bottom:1px solid #ccc;padding-bottom:1px;margin-bottom:2px">PAYMENT DETAILS</div>
           <table style="width:100%;border-collapse:collapse;font-size:${fontPx - 1}px"><tbody>${payRows}</tbody></table>` : ""}
-          ${qrEnabled && qrDataUrl ? `<div style="margin-top:6px;text-align:center"><img src="${qrDataUrl}" alt="Verify QR" style="width:80px;height:80px"/><div style="font-size:${fontPx - 2}px;color:#666;margin-top:1px;text-transform:none">Scan to verify bill</div></div>` : ""}
         </div>
-        <table style="min-width:170px;font-size:${fontPx}px;border-collapse:collapse">
+        <table style="min-width:160px;font-size:${fontPx}px;border-collapse:collapse;flex-shrink:0">
           <tbody>
             <tr><td style="padding:1px 4px">Subtotal</td><td style="padding:1px 4px;text-align:right">₹${Number(bill.subtotal).toFixed(2)}</td></tr>
             ${Number(bill.discount) > 0 ? `<tr><td style="padding:1px 4px">Discount</td><td style="padding:1px 4px;text-align:right;color:green">−₹${Number(bill.discount).toFixed(2)}</td></tr>` : ""}
@@ -215,9 +215,11 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
   return `<!doctype html><html><head><meta charset="utf-8"><title>Bill ${escapeHtml(bill.billNumber)}</title>
 <style>
   @page { size: ${paperSize}; margin: ${pageMargin}; }
-  html, body { margin: 0; padding: 0; background: #fff; color: #000; }
-  body { font-family: Arial, sans-serif; font-size: ${fontPx}px; text-transform: uppercase; ${isBW ? "filter: grayscale(1) contrast(1.35); -webkit-print-color-adjust: exact; print-color-adjust: exact;" : ""} }
-  .receipt { padding: 4px 6px; }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { margin: 0; padding: 0; width: 100%; }
+  body { margin: 0; padding: 0; width: 100%; background: #fff; color: #000; font-family: Arial, sans-serif; font-size: ${fontPx}px; text-transform: uppercase; ${isBW ? "filter: grayscale(1) contrast(1.35); -webkit-print-color-adjust: exact; print-color-adjust: exact;" : ""} }
+  .receipt { width: 100%; padding: 4px 6px; }
+  table { width: 100%; }
 </style></head><body>${pages}</body></html>`;
 }
 
