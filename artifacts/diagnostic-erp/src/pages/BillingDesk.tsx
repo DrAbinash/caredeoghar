@@ -362,7 +362,8 @@ export default function BillingDesk() {
     age: "", email: "", address: "", bloodGroup: "",
   });
   const [searchOpen, setSearchOpen] = useState(false);
-  const searchRef = useRef<HTMLDivElement>(null);
+  const searchRef  = useRef<HTMLDivElement>(null);
+  const paymentRef = useRef<HTMLDivElement>(null);
 
   // ── Doctor search state ─────────────────────────────
   const [doctorId, setDoctorId] = useState<number | null>(null);
@@ -921,6 +922,56 @@ export default function BillingDesk() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // ── Keyboard shortcuts ──────────────────────────────
+  // Refs are declared here; .current assignments happen after canGenerate is defined (below).
+  const canGenerateRef = useRef(false);
+  const lastBillRef    = useRef<LastBill | null>(null);
+  useEffect(() => {
+    function kbHandler(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName;
+      const inInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+      // Esc — blur focused input, do NOT reset bill
+      if (e.key === "Escape") {
+        (document.activeElement as HTMLElement)?.blur();
+        return;
+      }
+      // F2 — jump to patient search (works even inside inputs)
+      if (e.key === "F2") {
+        e.preventDefault();
+        const input = searchRef.current?.querySelector("input");
+        input?.focus();
+        return;
+      }
+      // F4 — jump to payment amount input
+      if (e.key === "F4") {
+        e.preventDefault();
+        paymentRef.current?.querySelector("input")?.focus();
+        return;
+      }
+      if (inInput) return; // let remaining shortcuts only fire outside inputs
+      // Ctrl/Cmd + P — Save & Print
+      if ((e.ctrlKey || e.metaKey) && e.key === "p") {
+        e.preventDefault();
+        if (canGenerateRef.current && !lastBillRef.current) {
+          printAfterSaveRef.current = true;
+          generateMut.mutate();
+        }
+        return;
+      }
+      // Ctrl/Cmd + S — Save (no print)
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        if (canGenerateRef.current && !lastBillRef.current) {
+          generateMut.mutate();
+        }
+        return;
+      }
+    }
+    document.addEventListener("keydown", kbHandler);
+    return () => document.removeEventListener("keydown", kbHandler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Reset ───────────────────────────────────────────
   function resetAll() {
     setSelectedPatient(null);
@@ -949,6 +1000,9 @@ export default function BillingDesk() {
   }
 
   const canGenerate = !!selectedPatient && selectedTests.length > 0;
+  // Update shortcut refs on every render so the keydown handler stays fresh.
+  canGenerateRef.current = canGenerate;
+  lastBillRef.current    = lastBill;
 
   // ──────────────────────────────────────────────────────
   // RENDER
@@ -997,7 +1051,7 @@ export default function BillingDesk() {
         {/* ══════════════════════════════════════════════
             LEFT COLUMN — Patient + Doctor + Notes
         ══════════════════════════════════════════════ */}
-        <div className="w-full lg:w-[50%] lg:border-r border-card-border flex flex-col lg:overflow-hidden min-h-0">
+        <div className="w-full lg:w-[65%] lg:border-r border-card-border flex flex-col lg:overflow-hidden min-h-0">
           <div className="lg:flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
 
             {/* ── Patient Section — Search ── */}
@@ -1477,7 +1531,7 @@ export default function BillingDesk() {
                             {t ? (
                               <>
                                 <span className="font-semibold w-full truncate leading-tight">{t.name}</span>
-                                <span className="text-[9px] font-mono opacity-70 w-full truncate mt-0.5">{t.code} · {inr(t.price)}</span>
+                                <span className="text-[9px] opacity-70 w-full truncate mt-0.5 capitalize">{t.category || t.code} · {inr(t.price)}</span>
                               </>
                             ) : (
                               <span className="flex items-center gap-1 opacity-60"><Plus size={10} />Slot {i + 1}</span>
@@ -1631,7 +1685,7 @@ export default function BillingDesk() {
         {/* ══════════════════════════════════════════════
             RIGHT COLUMN — Bill Summary + Payment
         ══════════════════════════════════════════════ */}
-        <div className="w-full lg:flex-[1.45] flex flex-col lg:overflow-hidden min-h-0">
+        <div className="w-full lg:w-[35%] flex flex-col lg:overflow-hidden min-h-0">
           <div className="flex-1 min-h-0 overflow-y-auto">
 
             <div className="space-y-3">
@@ -1741,7 +1795,7 @@ export default function BillingDesk() {
                       <Input placeholder="Custom note (optional)…" value={discountNote} onChange={(e) => setDiscountNote(e.target.value)} className="h-7 text-xs" maxLength={200} />
                     </div>
                   )}
-                  <div className="flex items-center justify-between pt-1 border-t border-card-border"><span className="font-semibold text-xs">Total</span><span className="text-base font-bold text-primary">{inr(total)}</span></div>
+                  <div className="flex items-center justify-between pt-2 border-t border-card-border"><span className="font-bold text-sm text-slate-700 dark:text-slate-200 uppercase tracking-wide">Total</span><span className="text-2xl font-extrabold text-primary tabular-nums">{inr(total)}</span></div>
                 </div>
               </div>
 
@@ -1751,68 +1805,121 @@ export default function BillingDesk() {
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${payNow ? "translate-x-4" : "translate-x-0"}`} />
                   </button>
                   <span className="text-sm font-bold text-slate-800 dark:text-slate-100 flex-1 min-w-0">Collect Payment Now</span>
-                  <div className="text-right"><div className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</div><div className="text-base font-bold text-primary">{inr(total)}</div></div>
+                  <div className="text-right"><div className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</div><div className="text-xl font-extrabold text-primary tabular-nums">{inr(total)}</div></div>
                 </div>
                 {payNow && (
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-[1.1fr_1fr_18px] gap-2 px-0.5 text-[10px] sm:text-[10px]"><span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Mode</span><span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Amount (₹)</span><span /></div>
-                    {paymentSplits.map((split, idx) => (
-                      <div key={idx} className="grid grid-cols-[1.1fr_1fr_18px] gap-2 items-center">
-                        <Select value={split.mode} onValueChange={(v) => setPaymentSplits((prev) => prev.map((s, i) => i === idx ? { ...s, mode: v } : s))}>
-                          <SelectTrigger className="h-9 text-[11px]"><SelectValue /></SelectTrigger>
-                          <SelectContent>{PAYMENT_MODES.map((m) => <SelectItem key={m} value={m} className="capitalize">{m.toUpperCase()}</SelectItem>)}</SelectContent>
-                        </Select>
-                        <Input type="number" min={0} step="0.01" placeholder={idx === 0 ? total.toFixed(2) : "0.00"} value={split.amount} onChange={(e) => setPaymentSplits((prev) => prev.map((s, i) => i === idx ? { ...s, amount: e.target.value } : s))} className="h-9 text-[11px]" />
-                        {paymentSplits.length > 1 ? <button onClick={() => setPaymentSplits((prev) => prev.filter((_, i) => i !== idx))} className="text-muted-foreground hover:text-destructive transition-colors"><X size={13} /></button> : <span />}
+                  <div className="space-y-3" ref={paymentRef}>
+                    {/* ── Primary split: segmented mode buttons ── */}
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-5 gap-1">
+                        {PAYMENT_MODES.map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => setPaymentSplits((prev) => prev.map((s, i) => i === 0 ? { ...s, mode: m } : s))}
+                            className={`py-2 rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all flex flex-col items-center gap-0.5 ${
+                              paymentSplits[0]?.mode === m
+                                ? "bg-primary text-white shadow-md ring-2 ring-primary/30"
+                                : "bg-muted/60 text-slate-600 dark:text-slate-300 hover:bg-muted"
+                            }`}
+                          >
+                            <span>{m === "cash" ? "💵" : m === "upi" ? "📱" : m === "card" ? "💳" : m === "cheque" ? "📝" : "🏥"}</span>
+                            <span>{m}</span>
+                          </button>
+                        ))}
                       </div>
-                    ))}
-                    {paymentSplits.length < PAYMENT_MODES.length && <button onClick={() => setPaymentSplits((prev) => [...prev, { mode: "upi", amount: "" }])} className="text-[11px] text-primary hover:underline flex items-center gap-1">+ Add another payment method</button>}
-                  <div className="pt-2 border-t border-card-border space-y-1.5 text-[11px]">
-                    {balance > 0 ? <div className="flex items-center justify-between gap-2 animate-pulse"><span className="font-semibold text-slate-700 dark:text-slate-200">Balance due</span><span className="text-red-600 text-lg sm:text-xl font-extrabold">{inr(balance)}</span></div> : paidTotal > 0 && total > 0 ? <div className="flex items-center justify-center gap-1 animate-pulse text-green-600 font-semibold text-base sm:text-lg"><CheckCircle2 size={13} /> Fully paid — {inr(paidTotal)}</div> : <div className="text-muted-foreground">Enter amount(s) above</div>}
-                    <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-                      <Button variant="outline" onClick={resetAll} disabled={generateMut.isPending} className="h-8 text-[11px] px-2">
-                        <RefreshCcw size={13} className="mr-1" /> Reset
-                      </Button>
-                      <Button
-                        onClick={() => {
-                          // Hidden-iframe printing — no popup window opens,
-                          // no popup-blocker risk, native print dialog appears
-                          // as soon as the bill is saved + QR is generated.
-                          printAfterSaveRef.current = true;
-                          generateMut.mutate();
-                        }}
-                        disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || !!lastBill || (needsFormF && (!husbandName.trim() || !patientAddress.trim())) || (needsDicom && !dicomFieldsComplete)}
-                        className={`h-8 text-[11px] px-2 border-0 shadow-md disabled:shadow-none ${lastBill ? "bg-green-600 text-white disabled:bg-green-600 disabled:text-white disabled:opacity-80" : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white disabled:from-muted disabled:to-muted disabled:text-muted-foreground"}`}
-                        title={lastBill ? `Bill ${lastBill.billNumber} already saved — click Reset to start a new bill` : needsFormF && (!husbandName.trim() || !patientAddress.trim()) ? "Fill Husband Name & Address for PCPNDT Form F" : needsDicom && !dicomFieldsComplete ? "Fill all 4 DICOM Worklist fields before generating bill" : undefined}
-                      >
-                        {lastBill ? <><CheckCircle2 size={13} className="mr-1" />Bill Saved ✓</> : generateMut.isPending ? <><Printer size={13} className="mr-1" />Saving…</> : <><Printer size={13} className="mr-1" />Save & Print</>}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={async () => {
-                          if (!lastBill) return;
-                          await printBarcode(lastBill);
-                        }}
-                        disabled={!lastBill}
-                        className="h-8 text-[11px] px-2"
-                      >
-                        Barcode
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={async () => {
-                          if (!lastBill) return;
-                          await printToken(lastBill, clinic);
-                        }}
-                        disabled={!lastBill || !lastBill.tokenNo}
-                        className="h-8 text-[11px] px-2"
-                      >
-                        Token
-                      </Button>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        placeholder={total.toFixed(2)}
+                        value={paymentSplits[0]?.amount ?? ""}
+                        onChange={(e) => setPaymentSplits((prev) => prev.map((s, i) => i === 0 ? { ...s, amount: e.target.value } : s))}
+                        className="h-11 text-base font-semibold"
+                      />
+                    </div>
+                    {/* ── Additional splits (Select + Input) ── */}
+                    {paymentSplits.slice(1).map((split, relIdx) => {
+                      const idx = relIdx + 1;
+                      return (
+                        <div key={idx} className="grid grid-cols-[1.1fr_1fr_18px] gap-2 items-center">
+                          <Select value={split.mode} onValueChange={(v) => setPaymentSplits((prev) => prev.map((s, i) => i === idx ? { ...s, mode: v } : s))}>
+                            <SelectTrigger className="h-9 text-[11px]"><SelectValue /></SelectTrigger>
+                            <SelectContent>{PAYMENT_MODES.map((m) => <SelectItem key={m} value={m} className="capitalize">{m.toUpperCase()}</SelectItem>)}</SelectContent>
+                          </Select>
+                          <Input type="number" min={0} step="0.01" placeholder="0.00" value={split.amount} onChange={(e) => setPaymentSplits((prev) => prev.map((s, i) => i === idx ? { ...s, amount: e.target.value } : s))} className="h-9 text-[11px]" />
+                          <button onClick={() => setPaymentSplits((prev) => prev.filter((_, i) => i !== idx))} className="text-muted-foreground hover:text-destructive transition-colors"><X size={13} /></button>
+                        </div>
+                      );
+                    })}
+                    {paymentSplits.length < PAYMENT_MODES.length && (
+                      <button onClick={() => setPaymentSplits((prev) => [...prev, { mode: "upi", amount: "" }])} className="text-[11px] text-primary hover:underline flex items-center gap-1">+ Split payment</button>
+                    )}
+                    {/* ── Balance / paid summary ── */}
+                    <div className="pt-2 border-t border-card-border text-[11px]">
+                      {balance > 0 ? (
+                        <div className="flex items-center justify-between gap-2 animate-pulse">
+                          <span className="font-semibold text-slate-700 dark:text-slate-200">Balance due</span>
+                          <span className="text-red-600 text-lg sm:text-xl font-extrabold">{inr(balance)}</span>
+                        </div>
+                      ) : paidTotal > 0 && total > 0 ? (
+                        <div className="flex items-center justify-center gap-1 animate-pulse text-green-600 font-semibold text-base sm:text-lg">
+                          <CheckCircle2 size={13} /> Fully paid — {inr(paidTotal)}
+                        </div>
+                      ) : (
+                        <div className="text-muted-foreground">Enter amount above</div>
+                      )}
                     </div>
                   </div>
-                </div>
                 )}
+                {/* ── Action buttons — always visible ── */}
+                <div className="space-y-2 pt-1">
+                  <Button
+                    onClick={() => {
+                      printAfterSaveRef.current = true;
+                      generateMut.mutate();
+                    }}
+                    disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || !!lastBill || (needsFormF && (!husbandName.trim() || !patientAddress.trim())) || (needsDicom && !dicomFieldsComplete)}
+                    className={`w-full h-12 text-lg font-bold border-0 shadow-lg disabled:shadow-none ${lastBill ? "bg-green-600 text-white disabled:bg-green-600 disabled:text-white disabled:opacity-80" : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white disabled:from-muted disabled:to-muted disabled:text-muted-foreground"}`}
+                    title={lastBill ? `Bill ${lastBill.billNumber} already saved — click Reset to start a new bill` : needsFormF && (!husbandName.trim() || !patientAddress.trim()) ? "Fill Husband Name & Address for PCPNDT Form F" : needsDicom && !dicomFieldsComplete ? "Fill all 4 DICOM Worklist fields before generating bill" : undefined}
+                  >
+                    {lastBill ? <><CheckCircle2 size={18} className="mr-2" />Bill Saved ✓</> : generateMut.isPending ? <><Printer size={18} className="mr-2 animate-spin" />Saving…</> : <><Printer size={18} className="mr-2" />Save &amp; Print</>}
+                  </Button>
+                  {!lastBill && (
+                    <div className="text-center text-[10px] text-muted-foreground select-none">
+                      <kbd className="px-1 py-0.5 rounded border border-card-border font-mono text-[9px]">Ctrl+P</kbd> Save &amp; Print &nbsp;·&nbsp;
+                      <kbd className="px-1 py-0.5 rounded border border-card-border font-mono text-[9px]">F2</kbd> Patient &nbsp;·&nbsp;
+                      <kbd className="px-1 py-0.5 rounded border border-card-border font-mono text-[9px]">F4</kbd> Payment
+                    </div>
+                  )}
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <Button variant="outline" onClick={resetAll} disabled={generateMut.isPending} className="h-8 text-[11px] px-2">
+                      <RefreshCcw size={13} className="mr-1" /> Reset
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        if (!lastBill) return;
+                        await printBarcode(lastBill);
+                      }}
+                      disabled={!lastBill}
+                      className="h-8 text-[11px] px-2"
+                    >
+                      Barcode
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        if (!lastBill) return;
+                        await printToken(lastBill, clinic);
+                      }}
+                      disabled={!lastBill || !lastBill.tokenNo}
+                      className="h-8 text-[11px] px-2"
+                    >
+                      Token
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
             <TodayCollectionsPanel />
