@@ -234,6 +234,16 @@ export default function DailySummary() {
   const voucherEdits = data?.voucherEdits ?? [];
   const totalEdits = billEdits.length + voucherEdits.length;
   const cancelledCount = data?.billsByStatus?.cancelled ?? 0;
+  const cancelledAmount = cancelledRows.reduce((s, r) => s + Number(r.totalAmount), 0);
+  const cancelledByUser = Object.values(
+    cancelledRows.reduce<Record<string, { name: string; count: number; amount: number }>>((acc, r) => {
+      const key = r.createdByName || "Unknown";
+      if (!acc[key]) acc[key] = { name: key, count: 0, amount: 0 };
+      acc[key].count++;
+      acc[key].amount += Number(r.totalAmount);
+      return acc;
+    }, {})
+  ).sort((a, b) => b.amount - a.amount);
   const digitalCollection = summary.digitalCollection;
   const netCollection = summary.netCollection;
   const physicalCash = summary.physicalCashInHand;
@@ -312,7 +322,7 @@ export default function DailySummary() {
             <SummaryCard icon={<Smartphone size={14} className="text-violet-600" />} label="Digital Collection" value={inr(digitalCollection)} sub={digitalFormula} accent="bg-card border-card-border" />
             <SummaryCard icon={<Banknote size={14} className="text-green-700" />} label="Physical Cash in Hand" value={inr(physicalCash)} sub={physicalFormula} accent="bg-card border-card-border" />
             <SummaryCard icon={<ArrowDownCircle size={14} className="text-purple-600" />} label="Discounts Given Today" value={inr(discountsGiven)} sub={discountsFormula} accent="bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800" />
-            <SummaryCard icon={<XCircle size={14} className="text-slate-600" />} label="Cancellations" value={String(cancelledCount)} sub={cancelledCount > 0 ? `${cancelledCount} cancelled bill${cancelledCount === 1 ? "" : "s"}` : "No cancellations today"} accent="bg-slate-50 dark:bg-slate-950/30 border-slate-200 dark:border-slate-800" />
+            <SummaryCard icon={<XCircle size={14} className="text-slate-600" />} label="Cancellations" value={cancelledCount > 0 ? inr(cancelledAmount) : "—"} sub={cancelledCount > 0 ? `${cancelledCount} bill${cancelledCount === 1 ? "" : "s"} cancelled` : "No cancellations today"} accent="bg-slate-50 dark:bg-slate-950/30 border-slate-200 dark:border-slate-800" />
           </div>
 
           {/* ── Bottom Line — clean styled table that matches the operator's
@@ -470,12 +480,50 @@ export default function DailySummary() {
                   )}
                   {cancelledRows.length > 0 && (
                     <div className="overflow-x-auto">
-                      <div className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-50 dark:bg-slate-950/20">Cancelled Bills ({cancelledRows.length})</div>
+                      <div className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-50 dark:bg-slate-950/20 flex items-center justify-between">
+                        <span className="flex items-center gap-2"><XCircle size={12} /> Cancelled Bills ({cancelledRows.length})</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200">{inr(cancelledAmount)}</span>
+                      </div>
+                      {cancelledByUser.length > 1 && (
+                        <div className="px-4 py-2 bg-muted/30 border-b border-card-border flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
+                          {cancelledByUser.map((u) => (
+                            <span key={u.name} className="text-muted-foreground">
+                              <span className="font-semibold text-foreground">{u.name}</span>
+                              {" — "}
+                              {u.count} bill{u.count === 1 ? "" : "s"}, <span className="font-semibold text-slate-700 dark:text-slate-300">{inr(u.amount)}</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       <table className="w-full text-xs">
-                        <thead className="bg-muted/40"><tr><th className="px-3 py-2 text-left font-semibold">Bill #</th><th className="px-3 py-2 text-left font-semibold">Patient</th><th className="px-3 py-2 text-right font-semibold">Bill Amount</th><th className="px-3 py-2 text-right font-semibold">Paid Before Cancel</th><th className="px-3 py-2 text-left font-semibold">By</th></tr></thead>
+                        <thead className="bg-muted/40">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-semibold">Bill #</th>
+                            <th className="px-3 py-2 text-left font-semibold">Patient</th>
+                            <th className="px-3 py-2 text-right font-semibold">Bill Amount</th>
+                            <th className="px-3 py-2 text-right font-semibold">Paid Before Cancel</th>
+                            <th className="px-3 py-2 text-left font-semibold">By</th>
+                          </tr>
+                        </thead>
                         <tbody className="divide-y divide-card-border">
-                          {cancelledRows.map((b) => (<tr key={b.id} className="hover:bg-muted/20"><td className="px-3 py-1.5 font-mono font-semibold">{String(b.billNumber).replace(/^BILL-?/i, "").replace(/-/g, "")}</td><td className="px-3 py-1.5">{b.patientName}</td><td className="px-3 py-1.5 text-right">{inr(b.totalAmount)}</td><td className="px-3 py-1.5 text-right">{inr(b.paidAmount)}</td><td className="px-3 py-1.5 text-muted-foreground">{b.createdByName || "—"}</td></tr>))}
+                          {cancelledRows.map((b) => (
+                            <tr key={b.id} className="hover:bg-muted/20">
+                              <td className="px-3 py-1.5 font-mono font-semibold">{String(b.billNumber).replace(/^BILL-?/i, "").replace(/-/g, "")}</td>
+                              <td className="px-3 py-1.5">{b.patientName}</td>
+                              <td className="px-3 py-1.5 text-right">{inr(b.totalAmount)}</td>
+                              <td className="px-3 py-1.5 text-right">{inr(b.paidAmount)}</td>
+                              <td className="px-3 py-1.5 text-muted-foreground">{b.createdByName || "—"}</td>
+                            </tr>
+                          ))}
                         </tbody>
+                        <tfoot className="bg-muted/30 border-t-2 border-card-border">
+                          <tr>
+                            <td colSpan={2} className="px-3 py-2 font-semibold text-xs">Total Cancelled</td>
+                            <td className="px-3 py-2 text-right font-bold text-slate-700 dark:text-slate-300">{inr(cancelledAmount)}</td>
+                            <td className="px-3 py-2 text-right font-bold text-rose-600">{inr(cancelledRows.reduce((s, r) => s + Number(r.paidAmount), 0))}</td>
+                            <td />
+                          </tr>
+                        </tfoot>
                       </table>
                     </div>
                   )}
