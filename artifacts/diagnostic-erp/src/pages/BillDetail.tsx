@@ -104,7 +104,15 @@ const BILL_STATUSES = ["pending", "partial", "paid", "cancelled"];
 
 export default function BillDetail({ id }: { id: number }) {
   const [, navigate] = useLocation();
-  const { data: bill, isLoading } = useGetBill(id);
+  const { data: bill, isLoading } = useGetBill(id, {
+    query: {
+      // Re-fetch the bill every 15 s so payments/refunds/cancellations made by
+      // another tab or staff member appear automatically without a manual refresh.
+      queryKey: getGetBillQueryKey(id),
+      refetchInterval: 15_000,
+      refetchOnWindowFocus: true,
+    },
+  });
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
