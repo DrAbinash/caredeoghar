@@ -6,8 +6,7 @@ import { readStaffSession } from "@/lib/staffSession";
 import { getBillPrintLayout, getLayoutStyles, getAutoBillPaperSize, getBillPaperSize } from "@/lib/billPrintLayout";
 import {
   buildBillPrintHtml,
-  openBlankPrintWindow,
-  writeAndPrint,
+  printViaIframe,
   type PrintBillData,
   type PrintClinic,
 } from "@/lib/printBill";
@@ -617,11 +616,14 @@ export default function BillingDesk() {
 
   const queryClient = useQueryClient();
   const printAfterSaveRef = useRef(false);
-  // Reference to the popup window that "Save & Print" opens SYNCHRONOUSLY
-  // on click. The mutation onSuccess populates it with the receipt HTML.
-  // Opening the window only after the await would commonly trip the
-  // browser's pop-up blocker because user-activation is consumed.
-  const printWindowRef = useRef<Window | null>(null);
+  // Pre-load printer settings on mount so the auto-print path after "Save &
+  // Print" doesn't have to wait on a network round-trip — it just reads from
+  // the React Query cache. Refreshes silently in the background every 5 min.
+  const { data: printerCfgCached } = useQuery<PrinterCfg>({
+    queryKey: ["printer-settings"],
+    queryFn: getPrinterSettings,
+    staleTime: 5 * 60_000,
+  });
   const generateMut = useMutation({
     mutationFn: async () => {
       if (!selectedPatient) throw new Error("No patient selected");
@@ -680,32 +682,27 @@ export default function BillingDesk() {
       queryClient.invalidateQueries({ queryKey: ["bill-preview-no"] });
       if (printAfterSaveRef.current) {
         printAfterSaveRef.current = false;
-        const win = printWindowRef.current;
-        printWindowRef.current = null;
         // Build the receipt HTML using the SAME template as BillDetail's
         // re-print so QR, copies, A4/A5 auto-size, B&W, and cancelled-test
-        // listing all behave identically. We fetch fresh clinic + printer
-        // settings (in parallel) before rendering so the header and B&W
-        // mode reflect any edits made since the page loaded.
-        void Promise.all([
-          queryClient
-            .fetchQuery({
-              queryKey: ["clinic-settings"],
-              queryFn: () => api.get("/api/clinic-settings"),
-            })
-            .catch(() => undefined),
-          getPrinterSettings(),
-          // Generate a real QR for the just-saved bill (lastBill state is
-          // not yet observable inside this onSuccess closure).
-          QRCode.toDataURL(buildBillVerifyUrl(lastBillLocal.billNumber), {
-            errorCorrectionLevel: "M",
-            margin: 1,
-            width: 256,
-            color: { dark: "#000000", light: "#ffffff" },
-          }).catch(() => ""),
-        ]).then(([freshClinic, printerCfg, qrUrl]) => {
-          const clinicForPrint = (freshClinic as PrintClinic) ?? (clinic as PrintClinic);
-          const isBW = (printerCfg as { billPrinterType?: string })?.billPrinterType === "bw";
+        // listing all behave identically. Clinic settings + printer settings
+        // are already cached by React Query (loaded on mount), so the only
+        // async work here is generating the QR code (~50ms).
+        const cachedClinic = queryClient.getQueryData<PrintClinic>([
+          "clinic-settings",
+        ]);
+        const cachedPrinter =
+          printerCfgCached ??
+          queryClient.getQueryData<PrinterCfg>(["printer-settings"]);
+        void QRCode.toDataURL(buildBillVerifyUrl(lastBillLocal.billNumber), {
+          errorCorrectionLevel: "M",
+          margin: 1,
+          width: 256,
+          color: { dark: "#000000", light: "#ffffff" },
+        })
+          .catch(() => "")
+          .then((qrUrl) => {
+          const clinicForPrint = cachedClinic ?? (clinic as PrintClinic);
+          const isBW = (cachedPrinter as { billPrinterType?: string } | undefined)?.billPrinterType === "bw";
           const paid = lastBillLocal.payments.reduce((s, p) => s + Number(p.amount || 0), 0);
           const billForPrint: PrintBillData = {
             billNumber: lastBillLocal.billNumber,
@@ -746,23 +743,14 @@ export default function BillingDesk() {
             isBW,
             qrDataUrl: qrUrl as string,
           });
-          writeAndPrint(win, html);
+          // Print into a hidden 0×0 iframe — no popup window, no popup-
+          // blocker, no "Preparing receipt…" placeholder. The browser's
+          // native print dialog opens directly with the receipt loaded.
+          printViaIframe(html);
         });
-      } else if (printWindowRef.current) {
-        // Defensive: shouldn't happen, but if a popup was opened and
-        // we end up not printing, close it so the user isn't left with
-        // a stranded "Preparing receipt…" tab.
-        try { printWindowRef.current.close(); } catch { /* ignore */ }
-        printWindowRef.current = null;
       }
     },
     onError: (err: Error) => {
-      // Clean up any popup the click handler opened pre-mutation so the
-      // user isn't left with a stranded "Preparing receipt…" tab.
-      if (printWindowRef.current) {
-        try { printWindowRef.current.close(); } catch { /* ignore */ }
-        printWindowRef.current = null;
-      }
       printAfterSaveRef.current = false;
       toast({ title: err.message || "Failed to generate bill", variant: "destructive" });
     },
@@ -1787,11 +1775,9 @@ export default function BillingDesk() {
                       </Button>
                       <Button
                         onClick={() => {
-                          // Open the popup window SYNCHRONOUSLY here so the
-                          // browser keeps the user-activation token. The
-                          // mutation onSuccess populates it once the bill is
-                          // saved.
-                          printWindowRef.current = openBlankPrintWindow();
+                          // Hidden-iframe printing — no popup window opens,
+                          // no popup-blocker risk, native print dialog appears
+                          // as soon as the bill is saved + QR is generated.
                           printAfterSaveRef.current = true;
                           generateMut.mutate();
                         }}
