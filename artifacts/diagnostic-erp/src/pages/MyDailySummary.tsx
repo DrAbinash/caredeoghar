@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import { readStaffSession, FULL_ACCESS_ROLES } from "@/lib/staffSession";
 import PageHeader from "@/components/PageHeader";
+import { SummaryExportToolbar } from "@/components/SummaryExport";
+import type { ExportConfig } from "@/components/SummaryExport";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
@@ -154,6 +156,83 @@ export default function MyDailySummary() {
 
   const s = data?.summary;
 
+  // ── Export config (memoised so PDF/Excel/Print never re-compute unless data changes) ──
+  const exportConfig = useMemo<ExportConfig | null>(() => {
+    if (!data || !s) return null;
+    const inr = (n: number) =>
+      new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
+
+    return {
+      title: `My Daily Summary — ${data.staffName}`,
+      subtitle: data.from === data.to ? data.from : `${data.from} to ${data.to}`,
+      sections: [
+        {
+          title: "Financial Summary",
+          metrics: [
+            ["Bills Created", String(s.billCount)],
+            ["Gross Billing", inr(s.grossBilling)],
+            ["Outstanding / Dues", inr(s.outstanding)],
+            ["Total Received", inr(s.totalReceived)],
+            ["Digital Collection (UPI / Card / Net)", inr(s.digitalCollection)],
+            ["Cash Collection", inr(s.cashCollection)],
+            ["Cash Expenses (approved by me)", inr(s.cashExpenses)],
+            ["Physical Cash in Hand", inr(s.physicalCashInHand)],
+            ["Discounts Given", inr(s.discountsGiven)],
+            ["Refunds & Cancellations", inr(s.refundsAndCancellations)],
+            ["Cancellation Count", String(s.cancellationCount)],
+          ],
+        },
+        ...(Object.keys(data.byMethod).length > 0
+          ? [
+              {
+                title: "Collection by Payment Method",
+                metrics: Object.entries(data.byMethod)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([m, v]) => [m.charAt(0).toUpperCase() + m.slice(1), inr(v)] as [string, string]),
+              },
+            ]
+          : []),
+      ],
+      tables: [
+        ...(data.bills.length > 0
+          ? [
+              {
+                title: "Bills",
+                headers: ["Bill #", "Patient", "Total", "Paid", "Balance", "Discount", "Status"],
+                rows: data.bills.map((b) => [
+                  b.billNumber,
+                  b.patientName,
+                  inr(b.totalAmount),
+                  inr(b.paidAmount),
+                  inr(b.balanceAmount),
+                  b.discount > 0 ? inr(b.discount) : "—",
+                  b.status,
+                ]),
+              },
+            ]
+          : []),
+        ...(data.payments.length > 0
+          ? [
+              {
+                title: "Payments Collected",
+                headers: ["Bill ID", "Amount", "Method"],
+                rows: data.payments.map((p) => [`#${p.billId}`, inr(p.amount), p.method]),
+              },
+            ]
+          : []),
+        ...(data.billEdits.length > 0
+          ? [
+              {
+                title: "Bill Edits",
+                headers: ["Bill #", "Change Type", "Reason"],
+                rows: data.billEdits.map((e) => [e.billNumber, e.changeType ?? "—", e.reason ?? "—"]),
+              },
+            ]
+          : []),
+      ],
+    };
+  }, [data, s]);
+
   const statusColors: Record<string, string> = {
     paid: "#16a34a", partial: "#d97706", pending: "#dc2626", cancelled: "#94a3b8",
   };
@@ -169,9 +248,18 @@ export default function MyDailySummary() {
         title="My Daily Summary"
         subtitle={data ? `${data.staffName} • ${from === to ? from : `${from} → ${to}`}` : "Personal financial summary"}
         actions={
-          <button onClick={() => { void refetch(); }} className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-primary transition-colors">
-            <RefreshCw size={13} /> Refresh
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <SummaryExportToolbar
+              config={exportConfig}
+              emailEndpoint="/api/dashboard/my-daily-summary/send-email"
+            />
+            <button
+              onClick={() => { void refetch(); }}
+              className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-primary transition-colors"
+            >
+              <RefreshCw size={13} /> Refresh
+            </button>
+          </div>
         }
       />
 

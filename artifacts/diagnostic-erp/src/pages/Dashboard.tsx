@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { api } from "@/lib/fetchApi";
@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import PageHeader from "@/components/PageHeader";
 import { readStaffSession, FULL_ACCESS_ROLES } from "@/lib/staffSession";
+import { SummaryExportToolbar } from "@/components/SummaryExport";
+import type { ExportConfig } from "@/components/SummaryExport";
 import {
   Users, TrendingUp, TrendingDown, IndianRupee, FileText, AlertTriangle,
   Activity, Wallet, Banknote, Smartphone, RotateCcw, XCircle, FileEdit,
@@ -727,6 +729,88 @@ export default function Dashboard() {
   const s = advanced?.overallSummary;
   const loading = advLoading;
 
+  // ── Export config ──────────────────────────────────────────────────────────
+  const exportConfig = useMemo<ExportConfig | null>(() => {
+    if (!s || !advanced) return null;
+    const inr = (n: number) =>
+      new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
+
+    return {
+      title: "Owner Dashboard — Financial Report",
+      subtitle: from === to ? from : `${from} to ${to}`,
+      sections: [
+        {
+          title: "Overall Financial Summary",
+          metrics: [
+            ["Gross Billing", inr(s.grossBilling)],
+            ["Net Collection", inr(s.netCollection)],
+            ["Total Received", inr(s.totalReceived)],
+            ["Digital Collection (UPI / Card / Net)", inr(s.digitalCollection)],
+            ["Physical Cash in Hand", inr(s.physicalCashInHand)],
+            ["Outstanding / Dues", inr(s.outstanding)],
+            ["Refunds & Cancellations", inr(s.refundsAndCancellations)],
+            ["Cash Expenses", inr(s.totalExpenses)],
+            ["Discounts Given", inr(s.discountsGiven)],
+            ["Pending Reports", String(s.pendingReports)],
+          ],
+        },
+      ],
+      tables: [
+        ...(advanced.staffComparison.length > 0
+          ? [
+              {
+                title: "Staff Comparison",
+                headers: ["Staff", "Bills", "Total Billing", "Received", "Cash", "Digital", "Discounts", "Cancels", "Net Cash"],
+                rows: advanced.staffComparison.map((r) => [
+                  r.staffName,
+                  r.billCount,
+                  inr(r.totalBilling),
+                  inr(r.totalReceived),
+                  inr(r.cashCollection),
+                  inr(r.digitalCollection),
+                  inr(r.discountsGiven),
+                  r.cancellationCount,
+                  inr(r.netCashHandled),
+                ]),
+              },
+            ]
+          : []),
+        ...(advanced.modalitySummary.length > 0
+          ? [
+              {
+                title: "Modality Summary",
+                headers: ["Modality", "Tests", "Gross Billing", "Completed Reports", "Pending Reports"],
+                rows: advanced.modalitySummary.map((r) => [
+                  r.modality,
+                  r.testCount,
+                  inr(r.grossBilling),
+                  r.completedReports,
+                  r.pendingReports,
+                ]),
+              },
+            ]
+          : []),
+        ...(todayData && todayData.bills.length > 0
+          ? [
+              {
+                title: "Today's Transactions",
+                headers: ["Bill #", "Patient", "By", "Total", "Paid", "Balance", "Status"],
+                rows: todayData.bills.map((b) => [
+                  b.billNumber,
+                  b.patientName,
+                  b.createdByName,
+                  inr(b.totalAmount),
+                  inr(b.paidAmount),
+                  inr(b.balanceAmount),
+                  b.status,
+                ]),
+              },
+            ]
+          : []),
+      ],
+    };
+  }, [s, advanced, from, to, todayData]);
+
   const kpiCards = [
     { icon: IndianRupee, label: "Gross Billing", value: s ? fmt(s.grossBilling) : "—", sub: s ? `${advanced.staffComparison.reduce((n, r) => n + r.billCount, 0)} bills` : "", iconBg: "bg-emerald-100 text-emerald-700", accentBorder: "border-l-emerald-500" },
     { icon: TrendingUp, label: "Net Collection", value: s ? fmt(s.netCollection) : "—", sub: s ? `${fmt(s.totalReceived)} received` : "", iconBg: "bg-green-100 text-green-700", accentBorder: "border-l-green-500" },
@@ -751,9 +835,18 @@ export default function Dashboard() {
         title="Owner Dashboard"
         subtitle={`Financial overview • ${from === to ? from : `${from} → ${to}`}`}
         actions={
-          <button onClick={() => { void refetchAdv(); }} className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-primary transition-colors">
-            <RefreshCw size={13} /> Refresh
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <SummaryExportToolbar
+              config={exportConfig}
+              emailEndpoint="/api/dashboard/my-daily-summary/send-email"
+            />
+            <button
+              onClick={() => { void refetchAdv(); }}
+              className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-primary transition-colors"
+            >
+              <RefreshCw size={13} /> Refresh
+            </button>
+          </div>
         }
       />
 

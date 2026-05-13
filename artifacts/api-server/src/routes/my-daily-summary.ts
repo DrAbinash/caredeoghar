@@ -4,6 +4,7 @@ import { billsTable, paymentsTable, billAuditsTable, patientsTable } from "@work
 import { sql, and, eq, gte, lt } from "drizzle-orm";
 import { FULL_ACCESS_ROLES } from "../middleware/requireStaffAuth";
 import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
+import { getTransporter, getEmailSettings } from "../email";
 
 export const myDailySummaryRouter = Router();
 
@@ -14,6 +15,47 @@ function dayBoundsRange(from: string, to: string) {
   };
 }
 
+// POST /send-email — sends the pre-built HTML summary to a given email address.
+// requireStaffAuth applied at routes/index.ts (covers all router methods).
+myDailySummaryRouter.post("/send-email", async (req: StaffAuthRequest, res) => {
+  const { to, subject, htmlBody } = req.body as {
+    to?: string;
+    subject?: string;
+    htmlBody?: string;
+  };
+
+  if (!to || !subject || !htmlBody) {
+    return res.status(400).json({ ok: false, error: "Missing required fields: to, subject, htmlBody" });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+    return res.status(400).json({ ok: false, error: "Invalid email address" });
+  }
+
+  const settings = await getEmailSettings();
+  const transport = await getTransporter();
+
+  if (!settings || !transport) {
+    return res
+      .status(503)
+      .json({ ok: false, error: "Email not configured. Please set up SMTP in Settings → Email." });
+  }
+
+  try {
+    await transport.sendMail({
+      from: `"${settings.fromName}" <${settings.fromAddress}>`,
+      to,
+      subject,
+      html: htmlBody,
+    });
+    return res.json({ ok: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Send failed";
+    req.log.error({ err }, "send-summary-email failed");
+    return res.status(500).json({ ok: false, error: msg });
+  }
+});
+
+// GET / — staff daily summary (session-scoped)
 // requireStaffAuth applied at routes/index.ts
 myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
   const session = req.staffSession!;
