@@ -1515,7 +1515,45 @@ function OnlineBookingTab() {
   );
 }
 
-function EmailTab() { const { data: settings } = useQuery<EmailSettings>({ queryKey: ["email-settings"], queryFn: () => api.get("/api/email-settings") }); const save = useMutation({ mutationFn: (body: EmailSettings) => api.put("/api/email-settings", body) }); const { register, handleSubmit, reset } = useForm<EmailSettings>({ defaultValues: settings }); return (<div className="grid grid-cols-1 gap-4"><div className="bg-card border border-card-border rounded-xl p-4"><p className="text-sm text-muted-foreground">Configure SMTP and email notifications.</p></div><form onSubmit={handleSubmit((d) => save.mutate(d))} className="space-y-4 bg-card border border-card-border rounded-xl p-4"><div className="grid md:grid-cols-2 gap-4"><div><Label>SMTP Host</Label><Input {...register("smtpHost")} className="mt-1" /></div><div><Label>SMTP Port</Label><Input {...register("smtpPort")} className="mt-1" /></div><div><Label>SMTP User</Label><Input {...register("smtpUser")} className="mt-1" /></div><div><Label>SMTP Password</Label><Input {...register("smtpPassword")} className="mt-1" type="password" /></div><div><Label>From Address</Label><Input {...register("fromAddress")} className="mt-1" /></div><div><Label>From Name</Label><Input {...register("fromName")} className="mt-1" /></div><div><Label>Admin Email</Label><Input {...register("adminEmail")} className="mt-1" /></div><div><Label>Extra Recipients</Label><Input {...register("extraRecipients")} className="mt-1" /></div></div><div className="flex justify-end gap-2"><Button variant="outline" type="button" onClick={() => reset(settings)}>Reset</Button><Button type="submit">Save</Button></div></form></div>);
+function EmailTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: settings } = useQuery<EmailSettings>({ queryKey: ["email-settings"], queryFn: () => api.get("/api/email-settings") });
+  const { register, handleSubmit, reset } = useForm<EmailSettings>({ defaultValues: settings });
+  useEffect(() => { if (settings) reset(settings); }, [settings, reset]);
+  const save = useMutation({
+    mutationFn: (body: EmailSettings) => api.post("/api/email-settings", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["email-settings"] });
+      toast({ title: "Saved", description: "Email settings updated successfully." });
+    },
+    onError: (err: unknown) => {
+      toast({ title: "Save failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    },
+  });
+  return (
+    <div className="grid grid-cols-1 gap-4">
+      <div className="bg-card border border-card-border rounded-xl p-4">
+        <p className="text-sm text-muted-foreground">Configure SMTP and email notifications.</p>
+      </div>
+      <form onSubmit={handleSubmit((d) => save.mutate(d))} className="space-y-4 bg-card border border-card-border rounded-xl p-4">
+        <div className="grid md:grid-cols-2 gap-4">
+          <div><Label>SMTP Host</Label><Input {...register("smtpHost")} className="mt-1" /></div>
+          <div><Label>SMTP Port</Label><Input {...register("smtpPort")} className="mt-1" /></div>
+          <div><Label>SMTP User</Label><Input {...register("smtpUser")} className="mt-1" /></div>
+          <div><Label>SMTP Password</Label><Input {...register("smtpPassword")} className="mt-1" type="password" /></div>
+          <div><Label>From Address</Label><Input {...register("fromAddress")} className="mt-1" /></div>
+          <div><Label>From Name</Label><Input {...register("fromName")} className="mt-1" /></div>
+          <div><Label>Admin Email</Label><Input {...register("adminEmail")} className="mt-1" /></div>
+          <div><Label>Extra Recipients</Label><Input {...register("extraRecipients")} className="mt-1" /></div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" type="button" onClick={() => reset(settings)} disabled={!settings}>Reset</Button>
+          <Button type="submit" disabled={save.isPending}>{save.isPending ? "Saving..." : "Save"}</Button>
+        </div>
+      </form>
+    </div>
+  );
 }
 
 function ManualTab() { const manualText = buildManualText(); return (<div className="space-y-4"><div className="bg-card border border-card-border rounded-xl p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4"><div><p className="text-sm font-semibold uppercase text-muted-foreground mb-1">Downloadable Manual</p><h2 className="text-xl font-bold">User Manual & Software Functionality</h2><p className="text-sm text-muted-foreground mt-1">A printable guide covering daily workflow, billing, lab, inventory, referrals, and administration.</p></div><Button onClick={() => downloadTextFile("Diagnostic-Center-Billing-ERP-Manual.txt", manualText)}><Download size={14} className="mr-2" /> Download Manual</Button></div><div className="grid gap-4 md:grid-cols-2">{MANUAL_SECTIONS.map((section) => { const Icon = section.icon; return (<div key={section.title} className="bg-card border border-card-border rounded-xl p-5"><div className="flex items-center gap-2 mb-3"><Icon size={16} className="text-primary" /><h3 className="font-semibold">{section.title}</h3></div><ul className="space-y-2 text-sm text-muted-foreground list-disc pl-5">{section.points.map((point) => <li key={point}>{point}</li>)}</ul></div>); })}</div><div className="bg-muted/30 border border-card-border rounded-xl p-5"><div className="flex items-center gap-2 mb-3"><FileText size={16} className="text-primary" /><h3 className="font-semibold">Software Functionality Summary</h3></div><div className="grid gap-3 md:grid-cols-3 text-sm"><div className="bg-card border border-card-border rounded-lg p-3"><p className="font-medium mb-1">Patient Flow</p><p className="text-muted-foreground">Register, order tests, bill, collect payments, and track history.</p></div><div className="bg-card border border-card-border rounded-lg p-3"><p className="font-medium mb-1">Operations</p><p className="text-muted-foreground">Manage doctors, commissions, inventory, lab reports, and accounting.</p></div><div className="bg-card border border-card-border rounded-lg p-3"><p className="font-medium mb-1">Security</p><p className="text-muted-foreground">Role-based permissions, audit logs, email alerts, and super admin portal.</p></div></div></div></div>);
