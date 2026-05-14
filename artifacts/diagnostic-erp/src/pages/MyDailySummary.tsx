@@ -1,10 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import { readStaffSession, FULL_ACCESS_ROLES } from "@/lib/staffSession";
 import PageHeader from "@/components/PageHeader";
-import { SummaryExportToolbar } from "@/components/SummaryExport";
-import type { ExportConfig } from "@/components/SummaryExport";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
@@ -31,8 +29,6 @@ type MyDailySummarySummary = {
   cancellationCount: number;
   billCount: number;
   closingCashBalance: number;
-  cancelledByOthersCount: number;
-  cancelledBySelfCount: number;
 };
 
 type MyDailySummaryData = {
@@ -70,12 +66,6 @@ type MyDailySummaryData = {
     oldValue: string | null;
     newValue: string | null;
     createdAt: string;
-  }[];
-  cancelledByMe: {
-    id: number;
-    billNumber: string;
-    totalAmount: number;
-    originalCreator: string;
   }[];
 };
 
@@ -164,83 +154,6 @@ export default function MyDailySummary() {
 
   const s = data?.summary;
 
-  // ── Export config (memoised so PDF/Excel/Print never re-compute unless data changes) ──
-  const exportConfig = useMemo<ExportConfig | null>(() => {
-    if (!data || !s) return null;
-    const inr = (n: number) =>
-      new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
-
-    return {
-      title: `My Daily Summary — ${data.staffName}`,
-      subtitle: data.from === data.to ? data.from : `${data.from} to ${data.to}`,
-      sections: [
-        {
-          title: "Financial Summary",
-          metrics: [
-            ["Bills Created", String(s.billCount)],
-            ["Gross Billing", inr(s.grossBilling)],
-            ["Outstanding / Dues", inr(s.outstanding)],
-            ["Total Received", inr(s.totalReceived)],
-            ["Digital Collection (UPI / Card / Net)", inr(s.digitalCollection)],
-            ["Cash Collection", inr(s.cashCollection)],
-            ["Cash Expenses (approved by me)", inr(s.cashExpenses)],
-            ["Physical Cash in Hand", inr(s.physicalCashInHand)],
-            ["Discounts Given", inr(s.discountsGiven)],
-            ["Refunds & Cancellations", inr(s.refundsAndCancellations)],
-            ["Cancellation Count", String(s.cancellationCount)],
-          ],
-        },
-        ...(Object.keys(data.byMethod).length > 0
-          ? [
-              {
-                title: "Collection by Payment Method",
-                metrics: Object.entries(data.byMethod)
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([m, v]) => [m.charAt(0).toUpperCase() + m.slice(1), inr(v)] as [string, string]),
-              },
-            ]
-          : []),
-      ],
-      tables: [
-        ...(data.bills.length > 0
-          ? [
-              {
-                title: "Bills",
-                headers: ["Bill #", "Patient", "Total", "Paid", "Balance", "Discount", "Status"],
-                rows: data.bills.map((b) => [
-                  b.billNumber,
-                  b.patientName,
-                  inr(b.totalAmount),
-                  inr(b.paidAmount),
-                  inr(b.balanceAmount),
-                  b.discount > 0 ? inr(b.discount) : "—",
-                  b.status,
-                ]),
-              },
-            ]
-          : []),
-        ...(data.payments.length > 0
-          ? [
-              {
-                title: "Payments Collected",
-                headers: ["Bill ID", "Amount", "Method"],
-                rows: data.payments.map((p) => [`#${p.billId}`, inr(p.amount), p.method]),
-              },
-            ]
-          : []),
-        ...(data.billEdits.length > 0
-          ? [
-              {
-                title: "Bill Edits",
-                headers: ["Bill #", "Change Type", "Reason"],
-                rows: data.billEdits.map((e) => [e.billNumber, e.changeType ?? "—", e.reason ?? "—"]),
-              },
-            ]
-          : []),
-      ],
-    };
-  }, [data, s]);
-
   const statusColors: Record<string, string> = {
     paid: "#16a34a", partial: "#d97706", pending: "#dc2626", cancelled: "#94a3b8",
   };
@@ -256,18 +169,9 @@ export default function MyDailySummary() {
         title="My Daily Summary"
         subtitle={data ? `${data.staffName} • ${from === to ? from : `${from} → ${to}`}` : "Personal financial summary"}
         actions={
-          <div className="flex items-center gap-2 flex-wrap">
-            <SummaryExportToolbar
-              config={exportConfig}
-              emailEndpoint="/api/dashboard/my-daily-summary/send-email"
-            />
-            <button
-              onClick={() => { void refetch(); }}
-              className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-primary transition-colors"
-            >
-              <RefreshCw size={13} /> Refresh
-            </button>
-          </div>
+          <button onClick={() => { void refetch(); }} className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-primary transition-colors">
+            <RefreshCw size={13} /> Refresh
+          </button>
         }
       />
 
@@ -512,41 +416,6 @@ export default function MyDailySummary() {
                   <span className="text-[10px] text-gray-500">{fmtTime(e.createdAt)}</span>
                 </div>
                 {e.reason && <p className="text-xs text-gray-600 mt-0.5 truncate">{e.reason}</p>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── Cancelled by Me ── */}
-      {data && data.cancelledByMe && data.cancelledByMe.length > 0 && (
-        <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 rounded-xl shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-red-200 dark:border-red-900/50">
-            <h3 className="text-sm font-bold text-red-800 dark:text-red-300 flex items-center gap-2">
-              <XCircle size={14} className="text-red-600" /> Bills Cancelled by Me
-              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
-                {data.cancelledByMe.length}
-              </span>
-            </h3>
-            <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">
-              Cancellation liability belongs to the person who cancelled — not the original creator.
-              The refund amount is counted in your Refunds &amp; Cancellations total.
-            </p>
-          </div>
-          <div className="divide-y divide-red-100 dark:divide-red-900/30 max-h-48 overflow-y-auto">
-            {data.cancelledByMe.map((b) => (
-              <div key={b.id} className="px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-red-100/40 dark:hover:bg-red-900/10">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Link href={`/billing/${b.id}`} className="text-xs font-semibold text-red-700 dark:text-red-400 hover:underline font-mono">
-                    {b.billNumber}
-                  </Link>
-                  <span className="text-[10px] text-red-500 dark:text-red-400">
-                    originally by {b.originalCreator}
-                  </span>
-                </div>
-                <span className="text-xs font-bold text-red-700 dark:text-red-300 whitespace-nowrap">
-                  −{fmt(b.totalAmount)}
-                </span>
               </div>
             ))}
           </div>
