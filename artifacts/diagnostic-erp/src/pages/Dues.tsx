@@ -20,6 +20,7 @@ type Bill = {
   status: string;
   createdAt: string;
   dueDate: string | null;
+  createdByName: string | null;
   patient: { id: number; firstName: string; lastName: string; patientId: string; phone: string } | null;
   order: {
     orderNumber: string;
@@ -41,24 +42,22 @@ const today = () => new Date().toISOString().slice(0, 10);
 export default function Dues() {
   const [dateFrom, setDateFrom] = useState<string>(today());
   const [dateTo, setDateTo] = useState<string>(today());
-  const [dateField, setDateField] = useState<"created" | "due">("created");
   const [page, setPage] = useState(1);
   const limit = 50;
 
   const queryParams = useMemo(() => {
     const p = new URLSearchParams({
       dueOnly: "1",
-      dateField,
       page: String(page),
       limit: String(limit),
     });
     if (dateFrom) p.set("dateFrom", dateFrom);
     if (dateTo) p.set("dateTo", dateTo);
     return p.toString();
-  }, [dateFrom, dateTo, dateField, page]);
+  }, [dateFrom, dateTo, page]);
 
   const { data, isLoading, isFetching, error } = useQuery<DuesResponse>({
-    queryKey: ["dues", dateFrom, dateTo, dateField, page],
+    queryKey: ["dues", dateFrom, dateTo, page],
     queryFn: () => api.get(`/api/bills?${queryParams}`),
     placeholderData: (prev) => prev,
   });
@@ -102,7 +101,7 @@ export default function Dues() {
 
     return {
       title: "Due Payments Report",
-      subtitle: `${rangeLabel} • Date type: ${dateField === "due" ? "Due Date" : "Bill Date"}`,
+      subtitle: `${rangeLabel} • Bill Date filter`,
       sections: [
         {
           title: "Summary",
@@ -117,7 +116,7 @@ export default function Dues() {
       tables: [
         {
           title: "Outstanding Bills",
-          headers: ["Bill #", "Patient", "Phone", "Referral Doctor", "Tests", "Bill Date", "Due Date", "Total", "Paid", "Balance", "Status"],
+          headers: ["Bill #", "Patient", "Phone", "Referral Doctor", "Tests", "Bill Date", "Billed By", "Total", "Paid", "Balance", "Status"],
           rows: bills
             .filter((b) => b.status !== "cancelled")
             .map((b) => {
@@ -134,7 +133,7 @@ export default function Dues() {
                 doctorName,
                 testNames || "—",
                 new Date(b.createdAt).toLocaleDateString("en-IN"),
-                b.dueDate ? new Date(b.dueDate).toLocaleDateString("en-IN") : "—",
+                b.createdByName ?? "—",
                 inr(b.totalAmount),
                 inr(b.paidAmount),
                 inr(b.balanceAmount),
@@ -144,9 +143,9 @@ export default function Dues() {
         },
       ],
     };
-  }, [bills, totals, totalCount, dateFrom, dateTo, dateField]);
+  }, [bills, totals, totalCount, dateFrom, dateTo]);
 
-  const NUM_COLS = 11;
+  const NUM_COLS = 10;
 
   return (
     <div className="pb-8">
@@ -179,29 +178,6 @@ export default function Dues() {
                 onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
                 className="mt-1 w-40"
               />
-            </div>
-            <div>
-              <Label className="text-xs">Date Type</Label>
-              <div className="flex gap-1 mt-1 p-0.5 bg-muted rounded-md">
-                <button
-                  type="button"
-                  onClick={() => { setDateField("created"); setPage(1); }}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-sm transition-colors ${
-                    dateField === "created" ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Bill Date
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setDateField("due"); setPage(1); }}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-sm transition-colors ${
-                    dateField === "due" ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Due Date
-                </button>
-              </div>
             </div>
             <div className="flex flex-col">
               <Label className="text-xs">Quick Ranges</Label>
@@ -251,7 +227,7 @@ export default function Dues() {
                   <th className="px-4 py-3 font-medium">Referral Doctor</th>
                   <th className="px-4 py-3 font-medium">Tests</th>
                   <th className="px-4 py-3 font-medium">Bill Date</th>
-                  <th className="px-4 py-3 font-medium">Due Date</th>
+                  <th className="px-4 py-3 font-medium">Billed By</th>
                   <th className="px-4 py-3 font-medium text-right">Total</th>
                   <th className="px-4 py-3 font-medium text-right">Paid</th>
                   <th className="px-4 py-3 font-medium text-right">Due Amount</th>
@@ -278,7 +254,6 @@ export default function Dues() {
                   </td></tr>
                 ) : (
                   bills.map((b) => {
-                    const dueOverdue = b.dueDate && new Date(b.dueDate) < new Date(today());
                     const isCancelled = b.status === "cancelled";
                     const displayBalance = isCancelled ? 0 : b.balanceAmount;
                     const testNames = b.order?.tests
@@ -320,12 +295,7 @@ export default function Dues() {
                         </td>
                         <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{new Date(b.createdAt).toLocaleDateString()}</td>
                         <td className="px-4 py-3 text-xs whitespace-nowrap">
-                          {b.dueDate ? (
-                            <span className={dueOverdue ? "text-red-600 dark:text-red-400 font-medium" : "text-muted-foreground"}>
-                              {new Date(b.dueDate).toLocaleDateString()}
-                              {dueOverdue && <span className="ml-1 text-[10px] uppercase">overdue</span>}
-                            </span>
-                          ) : <span className="text-muted-foreground">—</span>}
+                          <span className="font-medium">{b.createdByName ?? "—"}</span>
                         </td>
                         <td className="px-4 py-3 text-right font-semibold whitespace-nowrap">{formatCurrency(b.totalAmount)}</td>
                         <td className="px-4 py-3 text-right text-green-600 dark:text-green-400 font-medium whitespace-nowrap">{formatCurrency(b.paidAmount)}</td>
@@ -344,7 +314,7 @@ export default function Dues() {
               {bills.length > 0 && (
                 <tfoot>
                   <tr className="border-t-2 border-border bg-muted/30 font-semibold text-sm">
-                    <td className="px-4 py-3" colSpan={6}>Page Subtotal ({bills.length} of {totalCount})</td>
+                    <td className="px-4 py-3" colSpan={5}>Page Subtotal ({bills.length} of {totalCount})</td>
                     <td className="px-4 py-3 text-right">{formatCurrency(bills.reduce((s, b) => s + b.totalAmount, 0))}</td>
                     <td className="px-4 py-3 text-right text-green-600 dark:text-green-400">{formatCurrency(bills.reduce((s, b) => s + b.paidAmount, 0))}</td>
                     <td className="px-4 py-3 text-right text-red-600 dark:text-red-400">{formatCurrency(bills.reduce((s, b) => s + (b.status === "cancelled" ? 0 : b.balanceAmount), 0))}</td>
