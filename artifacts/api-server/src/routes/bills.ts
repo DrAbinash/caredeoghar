@@ -25,7 +25,7 @@ import { generateTestTokensForOrder } from "./test-tokens";
 import { generateStudiesForOrder } from "./radiology";
 import { sendBillWhatsapp } from "./whatsapp";
 import { autoVoucherForPayment } from "../lib/auto-voucher";
-import { eq, and, sql, desc, like, or, gt, ne } from "drizzle-orm";
+import { eq, and, sql, desc, like, or, gt, ne, inArray } from "drizzle-orm";
 import {
   ListBillsQueryParams,
   CreateBillBody,
@@ -1083,12 +1083,77 @@ paymentsRouter.get("/", async (req, res) => {
   const { billId, page = 1, limit = 20 } = parsed.data;
   const offset = (page - 1) * limit;
 
-  const [payments, countResult] = await Promise.all([
-    db.select().from(paymentsTable).where(billId ? eq(paymentsTable.billId, billId) : undefined).orderBy(desc(paymentsTable.createdAt)).limit(limit).offset(offset),
-    db.select({ count: sql<number>`count(*)` }).from(paymentsTable).where(billId ? eq(paymentsTable.billId, billId) : undefined),
+  // Optional text search (q >= 2 chars) — finds bills by patient name/ID/phone/bill#
+  // then filters payments to those bills. Read directly from req.query to avoid
+  // roundtripping through OpenAPI codegen.
+  const q = typeof req.query.q === "string" && req.query.q.trim().length >= 2 ? req.query.q.trim() : null;
+
+  // Resolve text-search into a set of bill IDs upfront
+  let searchBillIds: number[] | null = null;
+  if (q) {
+    const pattern = `%${q.toLowerCase()}%`;
+    const matchingBills = await db
+      .select({ id: billsTable.id })
+      .from(billsTable)
+      .leftJoin(patientsTable, eq(billsTable.patientId, patientsTable.id))
+      .where(
+        or(
+          sql`LOWER(${billsTable.billNumber}) LIKE ${pattern}`,
+          sql`LOWER(${patientsTable.firstName} || ' ' || COALESCE(${patientsTable.lastName}, '')) LIKE ${pattern}`,
+          sql`LOWER(COALESCE(${patientsTable.patientId}, '')) LIKE ${pattern}`,
+          sql`COALESCE(${patientsTable.phone}, '') LIKE ${pattern}`,
+        ),
+      )
+      .limit(100);
+    searchBillIds = matchingBills.map((b) => b.id);
+    if (searchBillIds.length === 0) {
+      res.json({ payments: [], total: 0, page, limit });
+      return;
+    }
+  }
+
+  const conditions = [];
+  if (billId) conditions.push(eq(paymentsTable.billId, billId));
+  if (searchBillIds) conditions.push(inArray(paymentsTable.billId, searchBillIds));
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const [rows, countResult] = await Promise.all([
+    db
+      .select({
+        id: paymentsTable.id,
+        billId: paymentsTable.billId,
+        billNumber: billsTable.billNumber,
+        amount: paymentsTable.amount,
+        method: paymentsTable.method,
+        referenceNumber: paymentsTable.referenceNumber,
+        notes: paymentsTable.notes,
+        recordedByName: paymentsTable.recordedByName,
+        createdAt: paymentsTable.createdAt,
+        patientName: sql<string>`COALESCE(${patientsTable.firstName} || ' ' || COALESCE(${patientsTable.lastName}, ''), '')`,
+        patientPid: patientsTable.patientId,
+      })
+      .from(paymentsTable)
+      .leftJoin(billsTable, eq(paymentsTable.billId, billsTable.id))
+      .leftJoin(patientsTable, eq(billsTable.patientId, patientsTable.id))
+      .where(where)
+      .orderBy(desc(paymentsTable.createdAt))
+      .limit(limit)
+      .offset(offset),
+    db.select({ count: sql<number>`count(*)` }).from(paymentsTable).where(where),
   ]);
 
-  res.json({ payments: payments.map(p => ({ ...p, amount: Number(p.amount) })), total: Number(countResult[0]?.count ?? 0), page, limit });
+  res.json({
+    payments: rows.map((p) => ({
+      ...p,
+      amount: Number(p.amount),
+      billNumber: p.billNumber ?? `#${p.billId}`,
+      patientName: p.patientName?.trim() || null,
+      patientPid: p.patientPid ?? null,
+    })),
+    total: Number(countResult[0]?.count ?? 0),
+    page,
+    limit,
+  });
 });
 
 // ── Cancel a single test on a bill (partial cancellation) ────────────────────

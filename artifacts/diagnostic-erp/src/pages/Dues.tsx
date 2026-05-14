@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SummaryExportToolbar } from "@/components/SummaryExport";
 import type { ExportConfig } from "@/components/SummaryExport";
-import { ChevronRight, IndianRupee, AlertCircle, FileText, Calendar, Phone } from "lucide-react";
+import { ChevronRight, IndianRupee, AlertCircle, FileText, Calendar, Phone, Search, X } from "lucide-react";
 
 type Bill = {
   id: number;
@@ -43,6 +43,7 @@ export default function Dues() {
   const [dateFrom, setDateFrom] = useState<string>(today());
   const [dateTo, setDateTo] = useState<string>(today());
   const [page, setPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState("");
   const limit = 50;
 
   const queryParams = useMemo(() => {
@@ -87,9 +88,23 @@ export default function Dues() {
     }
   };
 
-  const bills = data?.bills ?? [];
+  const allBills = data?.bills ?? [];
   const totals = data?.totals;
   const totalCount = data?.total ?? 0;
+
+  const lc = searchTerm.trim().toLowerCase();
+  const bills = useMemo(() => {
+    if (!lc) return allBills;
+    return allBills.filter((b) => {
+      const name = b.patient ? `${b.patient.firstName} ${b.patient.lastName}`.toLowerCase() : "";
+      return (
+        b.billNumber.toLowerCase().includes(lc) ||
+        name.includes(lc) ||
+        (b.patient?.patientId ?? "").toLowerCase().includes(lc) ||
+        (b.patient?.phone ?? "").includes(lc)
+      );
+    });
+  }, [allBills, lc]);
 
   const exportConfig = useMemo<ExportConfig | null>(() => {
     if (!bills.length && !totals) return null;
@@ -186,6 +201,24 @@ export default function Dues() {
                 <Button size="sm" variant="outline" onClick={() => setQuickRange("week")}>7 Days</Button>
                 <Button size="sm" variant="outline" onClick={() => setQuickRange("month")}>This Month</Button>
                 <Button size="sm" variant="outline" onClick={() => setQuickRange("all-time")}>All</Button>
+              </div>
+            </div>
+            <div className="flex-1 min-w-[220px]">
+              <Label className="text-xs">Search</Label>
+              <div className="relative mt-1">
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Patient name, ID, bill #, phone…"
+                  className="w-full pl-8 pr-8 h-9 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                {searchTerm && (
+                  <button onClick={() => setSearchTerm("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    <X size={14} />
+                  </button>
+                )}
               </div>
             </div>
             {isFetching && (
