@@ -799,32 +799,7 @@ export default function Dashboard() {
     setTo(todayISO());
   };
 
-  if (statsLoading) {
-    return (
-      <div className="p-6">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-muted rounded w-48" />
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-            {[...Array(5)].map((_, i) => <div key={i} className="h-24 bg-muted rounded-xl" />)}
-          </div>
-          <div className="h-48 bg-muted rounded-xl" />
-          <div className="grid lg:grid-cols-2 gap-4">
-            <div className="h-64 bg-muted rounded-xl" />
-            <div className="h-64 bg-muted rounded-xl" />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const recentBills = (stats as any)?.recentBills ?? [];
-  const overdueAlerts = (stats as any)?.overdueAlerts ?? [];
-  const totalBills = Number((stats as any)?.totalBills ?? 0);
-  const pendingReports = Number((stats as any)?.pendingReports ?? 0);
-  const todayBillCount = Number((stats as any)?.todayBills ?? 0);
-  const allPendingDues = Number((stats as any)?.pendingPayments ?? 0);
-  const monthRevenue = Number((stats as any)?.monthRevenue ?? 0);
-
+  // Derived values — computed before any early return so hooks stay unconditional
   const staffRows = advanced?.staffComparison ?? [];
   const modalityRows = advanced?.modalitySummary ?? [];
   const alertRows = advanced?.alerts ?? [];
@@ -867,6 +842,32 @@ export default function Dashboard() {
       ],
     };
   }, [overallSummary, staffRows, modalityRows, from, to]);
+
+  if (statsLoading) {
+    return (
+      <div className="p-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 bg-muted rounded w-48" />
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            {[...Array(5)].map((_, i) => <div key={i} className="h-24 bg-muted rounded-xl" />)}
+          </div>
+          <div className="h-48 bg-muted rounded-xl" />
+          <div className="grid lg:grid-cols-2 gap-4">
+            <div className="h-64 bg-muted rounded-xl" />
+            <div className="h-64 bg-muted rounded-xl" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const recentBills = (stats as any)?.recentBills ?? [];
+  const overdueAlerts = (stats as any)?.overdueAlerts ?? [];
+  const totalBills = Number((stats as any)?.totalBills ?? 0);
+  const pendingReports = Number((stats as any)?.pendingReports ?? 0);
+  const todayBillCount = Number((stats as any)?.todayBills ?? 0);
+  const allPendingDues = Number((stats as any)?.pendingPayments ?? 0);
+  const monthRevenue = Number((stats as any)?.monthRevenue ?? 0);
 
   return (
     <div className="pb-10">
