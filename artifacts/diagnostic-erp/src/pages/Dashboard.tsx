@@ -4,7 +4,9 @@ import { api } from "@/lib/fetchApi";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Calendar, AlertCircle } from "lucide-react";
+import { Calendar, AlertCircle, RefreshCw } from "lucide-react";
+import { SummaryExportToolbar } from "@/components/SummaryExport";
+import type { ExportConfig } from "@/components/SummaryExport";
 import {
   useGetDashboardStats,
   useGetRevenueReport,
@@ -98,9 +100,57 @@ type DashboardAlert = {
   staffName?: string;
 };
 
+type OverallSummary = {
+  grossBilling: number;
+  outstanding: number;
+  refundsAndCancellations: number;
+  refundAmount: number;
+  cancelledAmount: number;
+  totalReceived: number;
+  digitalCollection: number;
+  cashCollection: number;
+  totalExpenses: number;
+  discountsGiven: number;
+  netCollection: number;
+  physicalCashInHand: number;
+  pendingReports: number;
+};
+
+type DailySummaryBillEdit = {
+  id: number;
+  billId: number;
+  billNumber: string;
+  editedBy: string;
+  reason: string;
+  changeType: string;
+  oldValue: string | null;
+  newValue: string | null;
+  createdAt: string;
+};
+
+type DailySummaryData = {
+  date: string;
+  summary: {
+    totalBilling: number; outstanding: number; refundsAndCancellations: number;
+    expenses: number; netCollection: number; digitalCollection: number;
+    physicalCashInHand: number; discountsGiven: number; billCount: number; orderCount: number;
+  };
+  byMethod: Record<string, number>;
+  bills: {
+    id: number; billNumber: string; patientName: string; totalAmount: number;
+    paidAmount: number; balanceAmount: number; discount: number; status: string;
+    createdAt: string; createdByName: string;
+  }[];
+  billEdits: DailySummaryBillEdit[];
+  voucherEdits: { id: number; editedBy: string; reason: string; createdAt: string }[];
+  refunds: { id: number; billId: number; amount: number; method: string; createdAt: string; recordedByName: string }[];
+  cancelledBillsDetail: { id: number; billNumber: string; patientName: string; totalAmount: number; createdByName: string; cancelledAt: string }[];
+};
+
 type AdvancedSummary = {
   from: string;
   to: string;
+  overallSummary: OverallSummary;
   staffComparison: StaffComparisonRow[];
   modalitySummary: ModalityRow[];
   alerts: DashboardAlert[];
@@ -140,6 +190,10 @@ const MODALITY_COLORS: Record<string, string> = {
 };
 function modalityColor(m: string) {
   return MODALITY_COLORS[m] ?? "#64748b";
+}
+function fmtTime(iso: string) {
+  try { return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }); }
+  catch { return ""; }
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -530,6 +584,170 @@ function AlertsStrip({ alerts }: { alerts: DashboardAlert[] }) {
   );
 }
 
+// ─── Financial Reconciliation ─────────────────────────────────────────────────
+
+function RecRow({ label, value, type, note }: {
+  label: string; value: number; type: "start" | "deduct" | "result" | "final"; note?: string;
+}) {
+  const isDeduct = type === "deduct";
+  const isResult = type === "result" || type === "final";
+  return (
+    <div className={`flex items-center justify-between py-1.5 ${isResult ? "font-bold" : ""}`}>
+      <span className={`text-sm ${isDeduct ? "text-red-600 dark:text-red-400 pl-4" : isResult ? "text-gray-900 dark:text-foreground" : "text-gray-800 dark:text-gray-200"}`}>
+        {label}
+        {note && <span className="text-xs font-normal text-gray-400 ml-1">({note})</span>}
+      </span>
+      <span className={`tabular-nums text-sm ${isDeduct ? "text-red-600 dark:text-red-400" : isResult ? type === "final" ? "text-blue-700 dark:text-blue-300 text-base" : "text-green-700 dark:text-green-400" : "text-gray-800 dark:text-gray-200"}`}>
+        {isDeduct ? `−\u2009${fmt(value)}` : fmt(value)}
+      </span>
+    </div>
+  );
+}
+
+function ReconciliationFlow({ s }: { s: OverallSummary }) {
+  return (
+    <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 dark:border-card-border bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20">
+        <h3 className="text-sm font-bold text-gray-900 dark:text-foreground flex items-center gap-2">
+          <BarChart3 size={14} className="text-blue-600" /> Daily Financial Reconciliation
+        </h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Step-by-step cash flow verification</p>
+      </div>
+      <div className="p-4 space-y-0">
+        <RecRow label="Gross Billing" value={s.grossBilling} type="start" />
+        <RecRow label="− Outstanding / Dues" value={s.outstanding} type="deduct" />
+        <RecRow label="− Refunds & Cancellations" value={s.refundsAndCancellations} type="deduct"
+          note={`₹${s.refundAmount.toFixed(0)} refunds + ₹${s.cancelledAmount.toFixed(0)} cancelled`} />
+        <RecRow label="− Cash Expenses" value={s.totalExpenses} type="deduct" />
+        <div className="my-2 border-t-2 border-green-200 dark:border-green-800" />
+        <RecRow label="= Net Collection" value={s.netCollection} type="result" />
+        <div className="my-2 border-t border-dashed border-gray-200 dark:border-gray-700" />
+        <RecRow label="− Digital Collection" value={s.digitalCollection} type="deduct" />
+        <div className="my-2 border-t-2 border-blue-200 dark:border-blue-800" />
+        <RecRow label="= Physical Cash in Hand" value={s.physicalCashInHand} type="final" />
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <div className="rounded-lg bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800 p-2.5 text-center">
+            <p className="text-xs text-violet-700 dark:text-violet-400 font-semibold uppercase tracking-wide">Digital</p>
+            <p className="text-base font-bold text-violet-800 dark:text-violet-200">{fmt(s.digitalCollection)}</p>
+          </div>
+          <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 p-2.5 text-center">
+            <p className="text-xs text-blue-700 dark:text-blue-400 font-semibold uppercase tracking-wide">Physical Cash</p>
+            <p className="text-base font-bold text-blue-800 dark:text-blue-200">{fmt(s.physicalCashInHand)}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Control Logs ─────────────────────────────────────────────────────────────
+
+type ControlLogTab = "bill-edits" | "cancellations" | "refunds";
+
+function ControlLogs({ data }: { data: DailySummaryData | undefined }) {
+  const [tab, setTab] = useState<ControlLogTab>("bill-edits");
+  if (!data) return null;
+
+  const billEdits = data.billEdits ?? [];
+  const voucherEdits = data.voucherEdits ?? [];
+  const allEdits = [
+    ...billEdits.map((e) => ({ ...e, source: "Bill" as const })),
+    ...voucherEdits.map((e) => ({ id: e.id, billId: 0, billNumber: "—", editedBy: e.editedBy, reason: e.reason, changeType: "", oldValue: null as null, newValue: null as null, createdAt: e.createdAt, source: "Voucher" as const })),
+  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const cancellations = data.cancelledBillsDetail ?? [];
+  const refunds = data.refunds ?? [];
+  const totalLogs = allEdits.length + cancellations.length + refunds.length;
+
+  if (totalLogs === 0) return (
+    <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl p-5 text-sm text-gray-500 text-center">
+      No edits, cancellations, or refunds today.
+    </div>
+  );
+
+  const tabs: { id: ControlLogTab; label: string; count: number }[] = [
+    { id: "bill-edits", label: "Bill & Voucher Edits", count: allEdits.length },
+    { id: "cancellations", label: "Cancellations", count: cancellations.length },
+    { id: "refunds", label: "Refunds", count: refunds.length },
+  ];
+
+  return (
+    <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 dark:border-card-border">
+        <h3 className="text-sm font-bold text-gray-900 dark:text-foreground flex items-center gap-2">
+          <FileEdit size={14} className="text-purple-600" /> Control Logs
+          <span className="text-xs font-normal text-gray-500 ml-1">— today's document activity</span>
+        </h3>
+      </div>
+      <div className="flex border-b border-gray-100 dark:border-card-border">
+        {tabs.map((t) => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors ${tab === t.id ? "border-primary text-primary" : "border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-foreground"}`}>
+            {t.label}
+            {t.count > 0 && (
+              <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${tab === t.id ? "bg-primary/10 text-primary" : "bg-gray-100 dark:bg-muted text-gray-600"}`}>
+                {t.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+      <div className="divide-y divide-gray-100 dark:divide-card-border max-h-72 overflow-y-auto">
+        {tab === "bill-edits" && (allEdits.length === 0
+          ? <p className="px-4 py-6 text-sm text-gray-500 text-center">No edits today.</p>
+          : allEdits.map((e, i) => (
+            <div key={i} className="px-4 py-2.5 flex items-start gap-3 hover:bg-gray-50 dark:hover:bg-muted/20">
+              <FileEdit size={13} className="mt-0.5 text-purple-500 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${e.source === "Voucher" ? "bg-indigo-100 text-indigo-700" : "bg-purple-100 text-purple-700"}`}>{e.source}</span>
+                  {e.billNumber && e.billNumber !== "—" && (
+                    <Link href={`/billing/${e.billId}`} className="text-xs font-semibold text-primary hover:underline">{e.billNumber}</Link>
+                  )}
+                  <span className="text-xs text-gray-700 dark:text-gray-300 font-semibold">{e.editedBy}</span>
+                  <span className="text-[10px] text-gray-500">{fmtTime(e.createdAt)}</span>
+                </div>
+                {e.reason && <p className="text-xs text-gray-500 mt-0.5 truncate">{e.reason}</p>}
+              </div>
+            </div>
+          ))
+        )}
+        {tab === "cancellations" && (cancellations.length === 0
+          ? <p className="px-4 py-6 text-sm text-gray-500 text-center">No cancellations today.</p>
+          : cancellations.map((c, i) => (
+            <div key={i} className="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-muted/20">
+              <XCircle size={13} className="text-rose-500 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold text-gray-800 dark:text-foreground">{c.patientName}</span>
+                  <span className="text-xs text-gray-500">by {c.createdByName}</span>
+                  <span className="text-[10px] text-gray-500">{fmtTime(c.cancelledAt)}</span>
+                </div>
+                <p className="text-xs text-rose-600 font-semibold">{fmt(c.totalAmount)}</p>
+              </div>
+            </div>
+          ))
+        )}
+        {tab === "refunds" && (refunds.length === 0
+          ? <p className="px-4 py-6 text-sm text-gray-500 text-center">No refunds today.</p>
+          : refunds.map((r, i) => (
+            <div key={i} className="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-muted/20">
+              <RotateCcw size={13} className="text-amber-500 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Link href={`/billing/${r.billId}`} className="text-xs font-semibold text-primary hover:underline">Bill #{r.billId}</Link>
+                  <span className="text-xs text-gray-500">by {r.recordedByName}</span>
+                  <span className="text-[10px] text-gray-500">{fmtTime(r.createdAt)}</span>
+                </div>
+                <p className="text-xs text-amber-700 dark:text-amber-400 font-semibold">{fmt(Math.abs(r.amount))} via {r.method}</p>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function Dashboard() {
@@ -548,10 +766,16 @@ export default function Dashboard() {
     queryFn: () => api.get(`/api/reports/income-expense?from=${from}&to=${to}`),
   });
 
-  const { data: advanced, isFetching: advancedLoading } = useQuery<AdvancedSummary>({
+  const { data: advanced, isFetching: advancedLoading, refetch: refetchAdv } = useQuery<AdvancedSummary>({
     queryKey: ["dashboard-advanced", from, to],
     queryFn: () => api.get(`/api/dashboard/advanced-summary?from=${from}&to=${to}`),
     placeholderData: (prev) => prev,
+  });
+
+  const { data: todayData } = useQuery<DailySummaryData>({
+    queryKey: ["daily-summary-today-dash"],
+    queryFn: () => api.get(`/api/daily-summary?date=${todayISO()}`),
+    staleTime: 2 * 60_000,
   });
 
   const rangeTotals = useMemo(() => {
@@ -604,10 +828,63 @@ export default function Dashboard() {
   const staffRows = advanced?.staffComparison ?? [];
   const modalityRows = advanced?.modalitySummary ?? [];
   const alertRows = advanced?.alerts ?? [];
+  const overallSummary = advanced?.overallSummary;
+
+  const exportConfig = useMemo<ExportConfig | null>(() => {
+    if (!overallSummary) return null;
+    const inr = (n: number) =>
+      new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
+    return {
+      title: "Dashboard — Financial Report",
+      subtitle: from === to ? from : `${from} to ${to}`,
+      sections: [
+        {
+          title: "Financial Summary",
+          metrics: [
+            ["Gross Billing", inr(overallSummary.grossBilling)],
+            ["Net Collection", inr(overallSummary.netCollection)],
+            ["Physical Cash in Hand", inr(overallSummary.physicalCashInHand)],
+            ["Digital Collection", inr(overallSummary.digitalCollection)],
+            ["Outstanding / Dues", inr(overallSummary.outstanding)],
+            ["Refunds & Cancellations", inr(overallSummary.refundsAndCancellations)],
+            ["Cash Expenses", inr(overallSummary.totalExpenses)],
+            ["Discounts Given", inr(overallSummary.discountsGiven)],
+            ["Pending Reports", String(overallSummary.pendingReports)],
+          ],
+        },
+      ],
+      tables: [
+        ...(staffRows.length > 0 ? [{
+          title: "Staff Comparison",
+          headers: ["Staff", "Bills", "Total Billing", "Received", "Cash", "Digital", "Discounts", "Cancels", "Net Cash"],
+          rows: staffRows.map((r) => [r.staffName, r.billCount, inr(r.totalBilling), inr(r.totalReceived), inr(r.cashCollection), inr(r.digitalCollection), inr(r.discountsGiven), r.cancellationCount, inr(r.netCashHandled)]),
+        }] : []),
+        ...(modalityRows.length > 0 ? [{
+          title: "Modality Summary",
+          headers: ["Modality", "Tests", "Gross Billing", "Completed", "Pending"],
+          rows: modalityRows.map((r) => [r.modality, r.testCount, inr(r.grossBilling), r.completedReports, r.pendingReports]),
+        }] : []),
+      ],
+    };
+  }, [overallSummary, staffRows, modalityRows, from, to]);
 
   return (
     <div className="pb-10">
-      <PageHeader title="Dashboard" subtitle="Diagnostic Center Overview" />
+      <PageHeader
+        title="Dashboard"
+        subtitle="Diagnostic Center Overview"
+        actions={
+          <div className="flex items-center gap-2 flex-wrap">
+            <SummaryExportToolbar config={exportConfig} emailEndpoint="/api/dashboard/my-daily-summary/send-email" />
+            <button
+              onClick={() => { void refetchAdv(); }}
+              className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400 hover:text-primary transition-colors"
+            >
+              <RefreshCw size={13} /> Refresh
+            </button>
+          </div>
+        }
+      />
 
       <div className="px-4 xl:px-6 space-y-5">
 
@@ -804,6 +1081,18 @@ export default function Dashboard() {
               <div className="h-[210px] flex items-center justify-center text-sm text-gray-500">No revenue data yet</div>
             )}
           </div>
+        </div>
+
+        {/* ── Financial Reconciliation + Control Logs ──────────────────────── */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          {overallSummary ? (
+            <ReconciliationFlow s={overallSummary} />
+          ) : (
+            <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl p-6 text-sm text-gray-400 text-center">
+              Loading reconciliation…
+            </div>
+          )}
+          <ControlLogs data={todayData} />
         </div>
 
         {/* ── Advanced analytics — 2-column on wide screens ───────────────── */}
