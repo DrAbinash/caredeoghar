@@ -9,10 +9,12 @@ import { Link } from "wouter";
 import {
   IndianRupee, Wallet, Banknote, Smartphone, TrendingDown, RotateCcw,
   XCircle, FileEdit, Clock, Calendar, RefreshCw, Tag, CheckCircle2,
-  ArrowRight, User,
+  ArrowRight, Users,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+type AppUser = { id: number; name: string; role: string; isActive: boolean };
 
 type MyDailySummarySummary = {
   grossBilling: number;
@@ -138,6 +140,14 @@ export default function MyDailySummary() {
   const [to, setTo] = useState(today);
   const [staffFilter, setStaffFilter] = useState("");
 
+  const { data: allUsers = [] } = useQuery<AppUser[]>({
+    queryKey: ["users"],
+    queryFn: () => api.get("/api/users"),
+    enabled: isOwner,
+    staleTime: 5 * 60_000,
+  });
+  const activeStaff = allUsers.filter((u) => u.isActive).sort((a, b) => a.name.localeCompare(b.name));
+
   function setPreset(days: number) {
     setFrom(daysAgoISO(days - 1));
     setTo(today);
@@ -176,25 +186,14 @@ export default function MyDailySummary() {
       />
 
       {/* ── Date Range Picker ── */}
-      <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl p-4 shadow-sm">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex items-center gap-2 flex-wrap flex-1">
+      <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl p-4 shadow-sm space-y-3">
+        {/* Date inputs + presets */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 flex-1 flex-wrap">
             <Calendar size={14} className="text-gray-500 flex-shrink-0" />
             <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-8 w-36 text-sm" />
             <span className="text-gray-500 text-sm">→</span>
             <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-8 w-36 text-sm" />
-            {/* Admin-only staff filter */}
-            {isOwner && (
-              <div className="flex items-center gap-1.5">
-                <User size={13} className="text-gray-400" />
-                <Input
-                  placeholder="Filter by staff name…"
-                  value={staffFilter}
-                  onChange={(e) => setStaffFilter(e.target.value)}
-                  className="h-8 w-44 text-sm"
-                />
-              </div>
-            )}
           </div>
           <div className="flex gap-1.5 flex-wrap">
             {[{ label: "Today", days: 1 }, { label: "7 Days", days: 7 }, { label: "30 Days", days: 30 }].map((p) => (
@@ -204,8 +203,51 @@ export default function MyDailySummary() {
             ))}
           </div>
         </div>
+
+        {/* Admin-only staff quick-tabs */}
+        {isOwner && activeStaff.length > 0 && (
+          <div>
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">
+              <Users size={12} /> Staff
+            </div>
+            <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+              {/* All Staff chip */}
+              <button
+                type="button"
+                onClick={() => setStaffFilter("")}
+                className={`flex-shrink-0 flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-all whitespace-nowrap ${
+                  staffFilter === ""
+                    ? "bg-primary border-primary text-white shadow-sm"
+                    : "border-gray-300 dark:border-card-border bg-white dark:bg-card text-gray-700 dark:text-gray-300 hover:border-primary hover:text-primary"
+                }`}
+              >
+                All Staff / Total
+              </button>
+
+              {/* One chip per active staff member */}
+              {activeStaff.map((u) => {
+                const isSelected = staffFilter === u.name;
+                return (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => setStaffFilter(isSelected ? "" : u.name)}
+                    className={`flex-shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all whitespace-nowrap ${
+                      isSelected
+                        ? "bg-primary border-primary text-white shadow-sm"
+                        : "border-gray-300 dark:border-card-border bg-white dark:bg-card text-gray-700 dark:text-gray-300 hover:border-primary hover:text-primary"
+                    }`}
+                  >
+                    {u.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {data?.isFiltered && (
-          <p className="mt-2 text-xs text-blue-600 font-semibold">
+          <p className="text-xs text-blue-600 font-semibold">
             Showing data for: <span className="font-bold">{data.staffName}</span>
           </p>
         )}
