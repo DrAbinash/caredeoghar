@@ -40,6 +40,7 @@ type BillSearchResult = {
   patientName: string;
   patientId: string;
   phone: string;
+  doctorName?: string | null;
 };
 
 type BillForm = {
@@ -194,6 +195,7 @@ export default function Billing() {
                   <th className="px-4 py-3 font-medium">Bill No.</th>
                   <th className="px-4 py-3 font-medium">Patient</th>
                   {!isSearching && <th className="px-4 py-3 font-medium">Order</th>}
+                  <th className="px-4 py-3 font-medium">Referral</th>
                   <th className="px-4 py-3 font-medium text-right">Total</th>
                   <th className="px-4 py-3 font-medium text-right">Paid</th>
                   <th className="px-4 py-3 font-medium text-right">Balance</th>
@@ -211,7 +213,7 @@ export default function Billing() {
                       </tr>
                     ))
                   ) : !searchResults?.length ? (
-                    <tr><td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">No bills match "{debouncedSearch}"</td></tr>
+                    <tr><td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">No bills match "{debouncedSearch}"</td></tr>
                   ) : (
                     searchResults.map((b) => (
                       <tr key={b.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
@@ -220,6 +222,7 @@ export default function Billing() {
                           <div className="font-medium">{b.patientName}</div>
                           <div className="text-xs text-muted-foreground">{b.patientId}{b.phone ? ` · ${b.phone}` : ""}</div>
                         </td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground">{b.doctorName ?? <span className="opacity-40">—</span>}</td>
                         <td className="px-4 py-3 text-right font-semibold">{formatCurrency(b.totalAmount)}</td>
                         <td className="px-4 py-3 text-right text-green-600 dark:text-green-400 font-medium">{formatCurrency(b.paidAmount)}</td>
                         <td className="px-4 py-3 text-right">
@@ -250,7 +253,7 @@ export default function Billing() {
                     </tr>
                   ))
                 ) : data?.bills?.length === 0 ? (
-                  <tr><td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">No bills found</td></tr>
+                  <tr><td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">No bills found</td></tr>
                 ) : (
                   data?.bills?.map((b) => (
                     <tr key={b.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
@@ -264,6 +267,7 @@ export default function Billing() {
                         )}
                       </td>
                       <td className="px-4 py-3 font-mono text-xs">{b.order?.orderNumber}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">{(b.order as { doctor?: { name: string } | null })?.doctor?.name ?? <span className="opacity-40">—</span>}</td>
                       <td className="px-4 py-3 text-right font-semibold">{formatCurrency(b.totalAmount)}</td>
                       <td className="px-4 py-3 text-right text-green-600 dark:text-green-400 font-medium">{formatCurrency(b.paidAmount)}</td>
                       <td className="px-4 py-3 text-right">

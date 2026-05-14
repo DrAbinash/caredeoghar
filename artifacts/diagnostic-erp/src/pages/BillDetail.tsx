@@ -558,12 +558,10 @@ export default function BillDetail({ id }: { id: number }) {
                 <p className="text-sm font-medium">{bill.dueDate}</p>
               </div>
             )}
-            {bill.order?.doctor && (
-              <div className="mt-2">
-                <p className="text-xs text-muted-foreground">Referring Doctor</p>
-                <p className="text-sm font-medium">{bill.order.doctor.name}</p>
-              </div>
-            )}
+            <div className="mt-2">
+              <p className="text-xs text-muted-foreground">Referring Doctor</p>
+              <p className="text-sm font-medium">{bill.order?.doctor?.name ?? <span className="text-muted-foreground">—</span>}</p>
+            </div>
           </div>
 
           {/* Financials */}

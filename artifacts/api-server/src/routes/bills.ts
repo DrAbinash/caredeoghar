@@ -173,9 +173,12 @@ billsRouter.get("/search", async (req, res) => {
       patientName: sql<string>`${patientsTable.firstName} || ' ' || ${patientsTable.lastName}`,
       patientId: patientsTable.patientId,
       phone: patientsTable.phone,
+      doctorName: doctorsTable.name,
     })
     .from(billsTable)
     .leftJoin(patientsTable, eq(billsTable.patientId, patientsTable.id))
+    .leftJoin(ordersTable, eq(billsTable.orderId, ordersTable.id))
+    .leftJoin(doctorsTable, eq(ordersTable.doctorId, doctorsTable.id))
     .where(
       and(
         or(
@@ -196,6 +199,7 @@ billsRouter.get("/search", async (req, res) => {
       totalAmount: Number(r.totalAmount),
       paidAmount: Number(r.paidAmount),
       balanceAmount: Number(r.balanceAmount),
+      doctorName: r.doctorName ?? null,
     })),
   );
 });
