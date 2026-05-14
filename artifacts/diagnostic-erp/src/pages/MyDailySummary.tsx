@@ -18,6 +18,9 @@ type AppUser = { id: number; name: string; role: string; isActive: boolean };
 
 type MyDailySummarySummary = {
   grossBilling: number;
+  grossBilledIncludingCancelled: number;
+  cancelledOnMyBills: number;
+  netCollectedOnMyBills: number;
   outstanding: number;
   refundsAndCancellations: number;
   refundAmount: number;
@@ -25,6 +28,11 @@ type MyDailySummarySummary = {
   cashExpenses: number;
   totalReceived: number;
   digitalCollection: number;
+  cashIn: number;
+  digitalIn: number;
+  cashRefunded: number;
+  digitalRefunded: number;
+  netDigital: number;
   cashCollection: number;
   physicalCashInHand: number;
   discountsGiven: number;
@@ -288,35 +296,59 @@ export default function MyDailySummary() {
             <MiniKpi icon={XCircle} label="Cancellation Count" value={String(s.cancellationCount)} sub={s.cancellationCount > 0 ? `₹${s.cancelledAmount.toFixed(0)} written off` : "None"} iconBg="bg-gray-100 text-gray-700" border="border-l-gray-400" />
           </div>
 
-          {/* ── Financial Reconciliation + Bill Edits ── */}
+          {/* ── Two correctly-balancing reconciliation cards ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Reconciliation flow — bold, stand-out design */}
+            {/* CARD 1 — My Billing (bills I created in the date range) */}
             <div className="bg-white dark:bg-card border-2 border-emerald-300 dark:border-emerald-700 rounded-xl shadow-md overflow-hidden">
               <div className="px-5 py-4 bg-gradient-to-r from-emerald-600 to-green-600">
                 <h3 className="text-base font-extrabold text-white flex items-center gap-2">
-                  <IndianRupee size={16} /> My Cash Reconciliation
+                  <IndianRupee size={16} /> My Billing
                 </h3>
-                <p className="text-xs text-emerald-100 mt-0.5">Step-by-step balance verification</p>
+                <p className="text-xs text-emerald-100 mt-0.5">Bills I created in this period</p>
               </div>
               <div className="px-5 py-2">
-                <RecRow label="Gross Billing" value={s.grossBilling} type="start" />
-                <RecRow label="− Outstanding / Dues" value={s.outstanding} type="deduct" />
-                <RecRow label="− Refunds & Cancellations" value={s.refundsAndCancellations} type="deduct"
-                  note={`₹${s.refundAmount.toFixed(0)} refunds + ${s.cancellationCount} cancelled`} />
+                <RecRow label="Gross Billed" value={s.grossBilledIncludingCancelled} type="start"
+                  note={`${s.billCount + (s.cancellationCount > 0 ? s.cancellationCount : 0)} bills · post-discount`} />
+                <RecRow label="− Cancelled" value={s.cancelledOnMyBills} type="deduct"
+                  note={`${s.cancellationCount} cancelled`} />
                 <div className="my-3 border-t-4 border-green-300 dark:border-green-700" />
-                <RecRow label="= Total Received" value={s.totalReceived} type="result" />
-                <div className="my-2 border-t-2 border-dashed border-gray-300 dark:border-gray-600" />
-                <RecRow label="− Digital Collection" value={s.digitalCollection} type="deduct" />
-                <div className="my-2 border-t-2 border-dashed border-gray-300 dark:border-gray-600" />
-                <RecRow label="= Cash Collected" value={s.cashCollection} type="result" />
-                <RecRow label="− Cash Expenses" value={s.cashExpenses} type="deduct" note="approved by you" />
+                <RecRow label="= Active Billing" value={s.grossBilling} type="result" />
+                <RecRow label="− Outstanding / Dues" value={s.outstanding} type="deduct" note="still to collect" />
                 <div className="my-3 border-t-4 border-blue-300 dark:border-blue-700" />
-                <RecRow label="= Physical Cash in Hand" value={s.physicalCashInHand} type="final" />
+                <RecRow label="= Net Collected on My Bills" value={s.netCollectedOnMyBills} type="final" />
                 <div className="pb-2" />
               </div>
             </div>
 
-            {/* Bill Edits — moved up, detailed table */}
+            {/* CARD 2 — My Cashbox (money I personally handled) */}
+            <div className="bg-white dark:bg-card border-2 border-blue-300 dark:border-blue-700 rounded-xl shadow-md overflow-hidden">
+              <div className="px-5 py-4 bg-gradient-to-r from-blue-600 to-indigo-600">
+                <h3 className="text-base font-extrabold text-white flex items-center gap-2">
+                  <Wallet size={16} /> My Cashbox
+                </h3>
+                <p className="text-xs text-blue-100 mt-0.5">Money I personally collected & handled</p>
+              </div>
+              <div className="px-5 py-2">
+                <RecRow label="Cash In" value={s.cashIn} type="start" note="positive cash payments" />
+                <RecRow label="− Cash Refunded" value={s.cashRefunded} type="deduct" />
+                <div className="my-2 border-t-2 border-dashed border-gray-300 dark:border-gray-600" />
+                <RecRow label="= Net Cash Collected" value={s.cashCollection} type="result" />
+                <RecRow label="− Cash Expenses" value={s.cashExpenses} type="deduct" note="approved by you" />
+                <div className="my-3 border-t-4 border-blue-300 dark:border-blue-700" />
+                <RecRow label="= Physical Cash in Hand" value={s.physicalCashInHand} type="final" />
+                <div className="my-3 border-t-2 border-violet-200 dark:border-violet-800" />
+                <RecRow label="Digital In" value={s.digitalIn} type="start" note="UPI / card / bank" />
+                <RecRow label="− Digital Refunded" value={s.digitalRefunded} type="deduct" />
+                <div className="my-2 border-t-2 border-dashed border-gray-300 dark:border-gray-600" />
+                <RecRow label="= Net Digital Collection" value={s.netDigital} type="result" />
+                <div className="pb-2" />
+              </div>
+            </div>
+          </div>
+
+          {/* ── Bill Edits + Collection by Method ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Bill Edits — detailed table */}
             <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl shadow-sm overflow-hidden flex flex-col">
               <div className="px-4 py-3 border-b border-gray-100 dark:border-card-border flex items-center justify-between">
                 <h3 className="text-sm font-bold text-gray-900 dark:text-foreground flex items-center gap-2">
@@ -380,31 +412,42 @@ export default function MyDailySummary() {
                 </div>
               )}
             </div>
-          </div>
 
-          {/* ── Collection by Method — compact strip ── */}
-          {Object.entries(data.byMethod).length > 0 && (
-            <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl shadow-sm p-4">
-              <h3 className="text-sm font-bold text-gray-900 dark:text-foreground flex items-center gap-2 mb-3">
-                <Wallet size={14} className="text-green-600" /> Collection by Method
-              </h3>
-              <div className="flex flex-wrap gap-3">
-                {Object.entries(data.byMethod)
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([method, amount]) => (
-                    <div key={method} className="flex-1 min-w-[120px] rounded-lg bg-gray-50 dark:bg-muted/30 border border-gray-200 dark:border-card-border px-3 py-2">
-                      <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                        {methodLabels[method.toLowerCase()] ?? method}
-                      </p>
-                      <p className="text-base font-bold text-gray-900 dark:text-foreground tabular-nums mt-0.5">{fmt(amount)}</p>
-                      {s.totalReceived > 0 && (
-                        <p className="text-[10px] text-gray-400 mt-0.5">{((amount / s.totalReceived) * 100).toFixed(0)}%</p>
-                      )}
-                    </div>
-                  ))}
+            {/* Collection by Method — vertical card alongside Bill Edits */}
+            <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100 dark:border-card-border">
+                <h3 className="text-sm font-bold text-gray-900 dark:text-foreground flex items-center gap-2">
+                  <Wallet size={14} className="text-green-600" /> Collection by Method
+                </h3>
+              </div>
+              <div className="p-4">
+                {Object.entries(data.byMethod).length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-6">No collections in this period.</p>
+                ) : (
+                  <div className="space-y-2.5">
+                    {Object.entries(data.byMethod)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([method, amount]) => (
+                        <div key={method}>
+                          <div className="flex justify-between mb-1">
+                            <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 capitalize">
+                              {methodLabels[method.toLowerCase()] ?? method}
+                            </span>
+                            <span className="text-sm font-bold text-gray-900 dark:text-foreground tabular-nums">{fmt(amount)}</span>
+                          </div>
+                          <div className="h-1.5 bg-gray-100 dark:bg-muted rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-primary"
+                              style={{ width: `${s.totalReceived > 0 ? Math.min(100, (amount / s.totalReceived) * 100) : 0}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
               </div>
             </div>
-          )}
+          </div>
         </>
       )}
 

@@ -191,29 +191,67 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
   const paymentItems = allPaymentRows.filter((p) => Number(p.amount) > 0);
   const refundItems = allPaymentRows.filter((p) => Number(p.amount) < 0);
 
+  // ── My Billing side (bills I created in the date range) ────────────────
+  // Equation that balances:
+  //   Gross Billed (incl. cancelled)
+  //   − Cancelled (bills I created that were cancelled by anyone)
+  //   − Outstanding (current balance on non-cancelled bills I created)
+  //   = Net Collected on my bills
+  // NOTE: totalAmount is stored post-discount (subtotal − discount + tax),
+  // so "Gross Billed" here is net of discounts.
+  const grossBilledIncludingCancelled = allBillRows.reduce(
+    (s, r) => s + Number(r.totalAmount),
+    0,
+  );
+  const cancelledOnMyBills = allBillRows
+    .filter((r) => r.status === "cancelled")
+    .reduce((s, r) => s + Number(r.totalAmount), 0);
   const grossBilling = activeBills.reduce((s, r) => s + Number(r.totalAmount), 0);
   const outstanding = activeBills.reduce(
     (s, r) => s + Math.max(0, Number(r.balanceAmount ?? 0)),
     0,
   );
-  const refundAmount = refundItems.reduce((s, p) => s + Math.abs(Number(p.amount)), 0);
-  // cancelledAmount is based on bills CANCELLED BY this staff, not bills they created.
-  const cancelledAmount = cancelledByMe.reduce((s, r) => s + Number(r.totalAmount), 0);
-  const refundsAndCancellations = refundAmount + cancelledAmount;
+  const netCollectedOnMyBills = grossBilling - outstanding;
+  const discountsGiven = activeBills.reduce((s, r) => s + Number(r.discount ?? 0), 0);
+
+  // ── My Cashbox side (money I personally handled) ───────────────────────
+  // Equation that balances:
+  //   Cash In − Cash Refunded − Cash Expenses = Physical Cash in Hand
+  //   Digital In − Digital Refunded         = Net Digital Collection
+  const isDigital = (m: string | null | undefined) =>
+    ["upi", "card", "online", "bank", "cheque", "neft", "rtgs"].includes(
+      (m ?? "").toLowerCase(),
+    );
+  const cashIn = paymentItems.reduce(
+    (s, p) => s + (isDigital(p.method) ? 0 : Number(p.amount)),
+    0,
+  );
+  const digitalIn = paymentItems.reduce(
+    (s, p) => s + (isDigital(p.method) ? Number(p.amount) : 0),
+    0,
+  );
+  const cashRefunded = refundItems.reduce(
+    (s, p) => s + (isDigital(p.method) ? 0 : Math.abs(Number(p.amount))),
+    0,
+  );
+  const digitalRefunded = refundItems.reduce(
+    (s, p) => s + (isDigital(p.method) ? Math.abs(Number(p.amount)) : 0),
+    0,
+  );
   const cashExpenses = Number(cashExpRaw.rows[0]?.cash_expenses ?? 0);
   const totalReceived = paymentItems.reduce((s, p) => s + Number(p.amount), 0);
-  const digitalCollection = paymentItems.reduce((s, p) => {
-    const m = (p.method ?? "other").toLowerCase();
-    return (
-      s +
-      (["upi", "card", "online", "bank", "cheque", "neft", "rtgs"].includes(m)
-        ? Number(p.amount)
-        : 0)
-    );
-  }, 0);
-  const cashCollection = totalReceived - digitalCollection;
+  const refundAmount = refundItems.reduce((s, p) => s + Math.abs(Number(p.amount)), 0);
+  // Bills CANCELLED BY this staff (informational — accountability of canceller)
+  const cancelledAmount = cancelledByMe.reduce((s, r) => s + Number(r.totalAmount), 0);
+  // FIXED: cashCollection now subtracts cash refunds (was previously gross cash in)
+  const cashCollection = cashIn - cashRefunded;
+  const netDigital = digitalIn - digitalRefunded;
   const physicalCashInHand = cashCollection - cashExpenses;
-  const discountsGiven = activeBills.reduce((s, r) => s + Number(r.discount ?? 0), 0);
+  // Legacy/compat: digitalCollection used to mean "digital In" (gross)
+  const digitalCollection = digitalIn;
+  // Legacy/compat: refundsAndCancellations field kept but no longer used in the
+  // headline reconciliation (it mixed two unrelated data sets).
+  const refundsAndCancellations = refundAmount + cancelledAmount;
 
   const byMethod: Record<string, number> = {};
   for (const p of paymentItems) {
@@ -228,6 +266,9 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
     to,
     summary: {
       grossBilling,
+      grossBilledIncludingCancelled,
+      cancelledOnMyBills,
+      netCollectedOnMyBills,
       outstanding,
       refundsAndCancellations,
       refundAmount,
@@ -235,6 +276,11 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       cashExpenses,
       totalReceived,
       digitalCollection,
+      cashIn,
+      digitalIn,
+      cashRefunded,
+      digitalRefunded,
+      netDigital,
       cashCollection,
       physicalCashInHand,
       discountsGiven,
