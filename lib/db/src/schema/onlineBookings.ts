@@ -7,6 +7,7 @@ export const onlineBookingsTable = pgTable("online_bookings", {
   phone: text("phone").notNull(),
   email: text("email").notNull().default(""),
   selectedDate: text("selected_date").notNull(),
+  timeSlot: text("time_slot").notNull().default(""),
   testIds: text("test_ids").notNull().default("[]"),
   packageIds: text("package_ids").notNull().default("[]"),
   totalAmount: numeric("total_amount", { precision: 10, scale: 2 }).notNull().default("0"),

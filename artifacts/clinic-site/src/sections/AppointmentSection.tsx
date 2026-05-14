@@ -67,7 +67,7 @@ export default function AppointmentSection({ section, settings }: { section: Sec
   const [catFilter, setCatFilter] = useState("all");
   const urlChecked = useRef(false);
 
-  const [pd, setPd] = useState({ name: "", phone: "", email: "", date: "", notes: "", isVip: false });
+  const [pd, setPd] = useState({ name: "", phone: "", email: "", date: "", timeSlot: "", notes: "", isVip: false });
   const [selTests, setSelTests] = useState<Set<number>>(new Set());
   const [selPkgs, setSelPkgs] = useState<Set<number>>(new Set());
 
@@ -83,7 +83,7 @@ export default function AppointmentSection({ section, settings }: { section: Sec
     urlChecked.current = true;
     const params = new URLSearchParams(window.location.search);
     const bookingStatus = params.get("booking");
-    if (bookingStatus === "success") {
+    if (bookingStatus === "success" || bookingStatus === "link_success") {
       setSuccessRef(params.get("ref") ?? "");
       setStep("done");
     } else if (bookingStatus === "failed") {
@@ -140,7 +140,7 @@ export default function AppointmentSection({ section, settings }: { section: Sec
     setError(""); setPaying(true);
     try {
       const res = await bookingPost<{ payuUrl: string; fields: Record<string, string> }>("/api/public/booking/payu-initiate", {
-        name: pd.name, phone: pd.phone, email: pd.email, selectedDate: pd.date,
+        name: pd.name, phone: pd.phone, email: pd.email, selectedDate: pd.date, timeSlot: pd.timeSlot,
         testIds: Array.from(selTests), packageIds: Array.from(selPkgs),
         totalAmount: total, notes: pd.notes, isVip: pd.isVip,
       });
@@ -160,7 +160,7 @@ export default function AppointmentSection({ section, settings }: { section: Sec
       if (!loaded) { setError("Could not load payment gateway. Please try again."); setPaying(false); return; }
 
       const res = await bookingPost<{ bookingRef: string; razorpayOrderId: string; amountPaise: number; keyId: string }>("/api/public/booking/create-order", {
-        name: pd.name, phone: pd.phone, email: pd.email, selectedDate: pd.date,
+        name: pd.name, phone: pd.phone, email: pd.email, selectedDate: pd.date, timeSlot: pd.timeSlot,
         testIds: Array.from(selTests), packageIds: Array.from(selPkgs),
         totalAmount: total, notes: pd.notes, isVip: pd.isVip,
       });
@@ -246,7 +246,8 @@ export default function AppointmentSection({ section, settings }: { section: Sec
             <div style={{ fontSize: "3rem", marginBottom: ".5rem" }}>✅</div>
             <h3 style={{ fontWeight: 700, fontSize: "1.15rem", marginBottom: ".5rem" }}>Payment Successful!</h3>
             <p className="subtle" style={{ marginBottom: "1rem" }}>Your booking reference is</p>
-            <div style={{ fontFamily: "monospace", fontSize: "1.3rem", fontWeight: 800, letterSpacing: 2, color: "hsl(var(--site-primary))", marginBottom: "1rem" }}>{successRef}</div>
+            <div style={{ fontFamily: "monospace", fontSize: "1.3rem", fontWeight: 800, letterSpacing: 2, color: "hsl(var(--site-primary))", marginBottom: ".5rem" }}>{successRef}</div>
+            <div className="subtle" style={{ fontSize: ".9rem", marginBottom: "1rem" }}>Date: {pd.date}{pd.timeSlot && <> · Slot: {pd.timeSlot}</>}</div>
             <p className="subtle" style={{ fontSize: ".9rem" }}>Please save this reference. Our staff will confirm your appointment shortly. You may receive a call or WhatsApp message.</p>
           </div>
         ) : step === "form" ? (
@@ -256,6 +257,14 @@ export default function AppointmentSection({ section, settings }: { section: Sec
             <input className="input-soft" placeholder="Phone number *" required value={pd.phone} onChange={(e) => setPd({ ...pd, phone: e.target.value })} />
             <input className="input-soft" type="email" placeholder="Email (optional)" value={pd.email} onChange={(e) => setPd({ ...pd, email: e.target.value })} />
             <input className="input-soft" type="date" required value={pd.date} onChange={(e) => setPd({ ...pd, date: e.target.value })} min={new Date().toISOString().slice(0, 10)} />
+            <select className="input-soft" required value={pd.timeSlot} onChange={(e) => setPd({ ...pd, timeSlot: e.target.value })}>
+              <option value="">Select time slot</option>
+              <option value="07:00 – 10:00">Morning (7:00 – 10:00 AM)</option>
+              <option value="10:00 – 13:00">Late Morning (10:00 AM – 1:00 PM)</option>
+              <option value="13:00 – 16:00">Afternoon (1:00 – 4:00 PM)</option>
+              <option value="16:00 – 19:00">Evening (4:00 – 7:00 PM)</option>
+              <option value="19:00 – 21:00">Night (7:00 – 9:00 PM)</option>
+            </select>
             <textarea className="input-soft" placeholder="Special instructions (optional)" rows={2} value={pd.notes} onChange={(e) => setPd({ ...pd, notes: e.target.value })} />
             {config?.vipEnabled && (
               <label style={{ display: "flex", alignItems: "center", gap: ".5rem", cursor: "pointer", fontSize: ".92rem" }}>

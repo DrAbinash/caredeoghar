@@ -149,11 +149,11 @@ publicBookingRouter.post("/payu-initiate", createOrderLimiter, async (req, res):
   }
 
   const {
-    name, phone, email = "", selectedDate,
+    name, phone, email = "", selectedDate, timeSlot = "",
     testIds = [], packageIds = [], totalAmount,
     notes = "", isVip = false,
   } = req.body as {
-    name: string; phone: string; email?: string; selectedDate: string;
+    name: string; phone: string; email?: string; selectedDate: string; timeSlot?: string;
     testIds?: number[]; packageIds?: number[]; totalAmount: number;
     notes?: string; isVip?: boolean;
   };
@@ -195,6 +195,7 @@ publicBookingRouter.post("/payu-initiate", createOrderLimiter, async (req, res):
     phone: phone.trim(),
     email: emailStr,
     selectedDate,
+    timeSlot: timeSlot.trim(),
     testIds: JSON.stringify(testIds),
     packageIds: JSON.stringify(packageIds),
     totalAmount: String(amount),
@@ -309,11 +310,11 @@ publicBookingRouter.post("/create-order", createOrderLimiter, async (req, res): 
   }
 
   const {
-    name, phone, email = "", selectedDate,
+    name, phone, email = "", selectedDate, timeSlot = "",
     testIds = [], packageIds = [], totalAmount,
     notes = "", isVip = false,
   } = req.body as {
-    name: string; phone: string; email?: string; selectedDate: string;
+    name: string; phone: string; email?: string; selectedDate: string; timeSlot?: string;
     testIds?: number[]; packageIds?: number[]; totalAmount: number;
     notes?: string; isVip?: boolean;
   };
@@ -360,7 +361,7 @@ publicBookingRouter.post("/create-order", createOrderLimiter, async (req, res): 
 
   await db.insert(onlineBookingsTable).values({
     bookingRef, name: name.trim(), phone: phone.trim(), email: email.trim(),
-    selectedDate, testIds: JSON.stringify(testIds), packageIds: JSON.stringify(packageIds),
+    selectedDate, timeSlot: timeSlot.trim(), testIds: JSON.stringify(testIds), packageIds: JSON.stringify(packageIds),
     totalAmount: String(amount), notes: notes.trim(),
     isVip: Boolean(isVip) && Boolean(settings.vipQueueEnabled),
     razorpayOrderId, status: "pending_payment",

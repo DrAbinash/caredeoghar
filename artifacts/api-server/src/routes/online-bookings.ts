@@ -18,6 +18,7 @@ import { eq, desc, and, or, ilike, sql } from "drizzle-orm";
 import { generateBillNumber } from "./bills";
 import { generateTokenForBill } from "./tokens";
 import { generateTestTokensForOrder } from "./test-tokens";
+import crypto from "node:crypto";
 
 export const onlineBookingsRouter = Router();
 
@@ -263,4 +264,62 @@ onlineBookingsRouter.post("/:id/confirm", async (req: StaffAuthRequest, res): Pr
     .returning();
 
   res.json({ booking: updated, billId: bill.id, patientId });
+});
+
+// POST /api/online-bookings/:id/payment-link
+// Creates a Razorpay payment link for an existing booking and returns the link URL.
+onlineBookingsRouter.post("/:id/payment-link", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  const [booking] = await db.select().from(onlineBookingsTable).where(eq(onlineBookingsTable.id, id)).limit(1);
+  if (!booking) { res.status(404).json({ error: "Booking not found" }); return; }
+
+  const settings = await db.select().from(clinicSettingsTable).limit(1);
+  const s = settings[0];
+  const keyId = process.env.RAZORPAY_KEY_ID || (s?.razorpayKeyId ?? "");
+  const keySecret = process.env.RAZORPAY_KEY_SECRET || "";
+  if (!keyId || !keySecret) {
+    res.status(503).json({ error: "Razorpay not configured." });
+    return;
+  }
+
+  const amountPaise = Math.round(Number(booking.totalAmount) * 100);
+  if (!Number.isFinite(amountPaise) || amountPaise <= 0) {
+    res.status(400).json({ error: "Invalid booking amount." });
+    return;
+  }
+
+  const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
+  const base = `${req.protocol}://${req.get("host")}`;
+  const callbackUrl = `${base}/?booking=link_success&ref=${encodeURIComponent(booking.bookingRef)}`;
+
+  try {
+    const rpRes = await fetch("https://api.razorpay.com/v1/payment_links", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Basic ${auth}` },
+      body: JSON.stringify({
+        amount: amountPaise,
+        currency: "INR",
+        accept_partial: false,
+        description: `DiagnoCenter booking ${booking.bookingRef}`,
+        customer: {
+          name: booking.name,
+          contact: booking.phone.replace(/[^0-9]/g, "").slice(0, 10),
+          email: booking.email || undefined,
+        },
+        notify: { sms: true, email: Boolean(booking.email) },
+        reminder_enable: true,
+        callback_url: callbackUrl,
+        callback_method: "get",
+      }),
+    });
+    if (!rpRes.ok) {
+      const err = await rpRes.json().catch(() => ({}));
+      res.status(502).json({ error: "Razorpay error.", details: (err as { error?: { description?: string } }).error?.description });
+      return;
+    }
+    const data = (await rpRes.json()) as { short_url: string; id: string };
+    res.json({ url: data.short_url, linkId: data.id });
+  } catch {
+    res.status(502).json({ error: "Could not connect to Razorpay." });
+  }
 });

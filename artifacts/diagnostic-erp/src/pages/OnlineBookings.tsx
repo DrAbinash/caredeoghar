@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Search, RefreshCw, CheckCircle2, XCircle, Eye, Globe, Star,
-  CreditCard, Phone, Calendar, FileText, User,
+  CreditCard, Phone, Calendar, FileText, User, Clock,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -25,6 +25,7 @@ type OnlineBooking = {
   phone: string;
   email: string;
   selectedDate: string;
+  timeSlot: string;
   testIds: string;
   packageIds: string;
   totalAmount: string;
@@ -182,6 +183,11 @@ export default function OnlineBookingsPage() {
                         <Calendar size={12} />
                         <span>{b.selectedDate}</span>
                       </div>
+                      {b.timeSlot && (
+                        <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                          <Clock size={10} /> {b.timeSlot}
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right font-semibold tabular-nums">
                       ₹{Number(b.totalAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
@@ -221,6 +227,23 @@ export default function OnlineBookingsPage() {
                             <XCircle size={12} className="mr-1" /> Cancel
                           </Button>
                         )}
+                        {b.status === "pending_payment" && (
+                          <Button
+                            size="sm" variant="outline"
+                            className="h-7 px-2 text-xs"
+                            onClick={async () => {
+                              try {
+                                const r = await api.post<{ url: string; linkId: string }>(`/api/online-bookings/${b.id}/payment-link`, {});
+                                if (r.url && navigator.clipboard) await navigator.clipboard.writeText(r.url);
+                                toast({ title: "Payment link created", description: r.url ? "Link copied to clipboard. Share via WhatsApp or SMS." : "Link created but not copied." });
+                              } catch (e: unknown) {
+                                toast({ title: "Error", description: (e as { message?: string }).message || "Could not create link", variant: "destructive" });
+                              }
+                            }}
+                          >
+                            <CreditCard size={12} className="mr-1" /> Share Link
+                          </Button>
+                        )}
                         {b.status === "confirmed" && b.billId && (
                           <Link href={`/billing/${b.billId}`}>
                             <Button size="sm" variant="outline" className="h-7 px-2 text-xs">
@@ -250,7 +273,7 @@ export default function OnlineBookingsPage() {
                 <div><span className="text-muted-foreground">Name</span><p className="font-medium">{selected.name}</p></div>
                 <div><span className="text-muted-foreground">Phone</span><p className="font-medium">{selected.phone}</p></div>
                 <div><span className="text-muted-foreground">Email</span><p className="font-medium">{selected.email || "—"}</p></div>
-                <div><span className="text-muted-foreground">Date</span><p className="font-medium">{selected.selectedDate}</p></div>
+                <div><span className="text-muted-foreground">Date</span><p className="font-medium">{selected.selectedDate}</p>{selected.timeSlot && <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5"><Clock size={10} />{selected.timeSlot}</p>}</div>
                 <div><span className="text-muted-foreground">Amount</span><p className="font-semibold text-primary">₹{Number(selected.totalAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p></div>
                 <div><span className="text-muted-foreground">VIP</span><p>{selected.isVip ? <span className="text-amber-600 font-semibold flex items-center gap-1"><Star size={12} className="fill-amber-500" />Yes</span> : "No"}</p></div>
               </div>
@@ -305,7 +328,7 @@ export default function OnlineBookingsPage() {
                 <li>Create an order and a paid bill (₹{Number(selected.totalAmount).toLocaleString("en-IN")})</li>
                 <li>Issue queue tokens {selected.isVip ? "(VIP priority)" : "(online queue)"}</li>
               </ul>
-              <p className="text-muted-foreground">Appointment date: <strong className="text-foreground">{selected.selectedDate}</strong></p>
+              <p className="text-muted-foreground">Appointment date: <strong className="text-foreground">{selected.selectedDate}</strong>{selected.timeSlot && <> · <strong className="text-foreground">{selected.timeSlot}</strong></>}</p>
             </div>
             <DialogFooter>
               <Button

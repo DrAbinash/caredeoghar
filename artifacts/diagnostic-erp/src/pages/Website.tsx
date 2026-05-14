@@ -631,7 +631,15 @@ function PhotosTab() {
       const fd = new FormData();
       fd.append("photo", file);
       fd.append("category", "general");
-      const r = await fetch("/api/website/photos", { method: "POST", body: fd });
+      // Auth header is required because /api/website/photos is gated by requireStaffAuth.
+      const token = typeof window !== "undefined"
+        ? (() => { try { return JSON.parse(window.localStorage.getItem("portal_staff_session") || "{}").token ?? null; } catch { return null; } })()
+        : null;
+      const r = await fetch("/api/website/photos", {
+        method: "POST",
+        body: fd,
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
       if (!r.ok) throw new Error(await r.text());
       qc.invalidateQueries({ queryKey: ["website", "photos"] });
       toast({ title: "Uploaded" });
