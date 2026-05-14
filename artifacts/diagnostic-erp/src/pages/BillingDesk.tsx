@@ -1138,8 +1138,8 @@ export default function BillingDesk() {
                                 {p.firstName[0]}{p.lastName[0]}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium">{p.firstName} {p.lastName}</div>
-                                <div className="text-xs text-muted-foreground">{p.patientId} · {p.phone}</div>
+                                <div className="text-sm font-bold text-slate-900 dark:text-slate-100">{p.firstName} {p.lastName}</div>
+                                <div className="text-xs text-slate-600 dark:text-slate-400">{p.patientId} · {p.phone}</div>
                               </div>
                               <span className="text-xs text-muted-foreground capitalize">{p.gender}</span>
                             </button>
@@ -1494,8 +1494,8 @@ export default function BillingDesk() {
                                 #{d.id}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium">Dr. {d.name}</div>
-                                <div className="text-xs text-muted-foreground">{d.specialization}</div>
+                                <div className="text-sm font-bold text-slate-900 dark:text-slate-100">Dr. {d.name}</div>
+                                <div className="text-xs text-slate-600 dark:text-slate-400">{d.specialization}</div>
                               </div>
                             </button>
                           ));
@@ -1516,8 +1516,8 @@ export default function BillingDesk() {
               <div className="p-2.5 space-y-2">
                 {/* ── Quick Test Tabs (6 customizable slots) ── */}
                 <div className="pt-1">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-violet-800 dark:text-violet-200 mb-1">
-                    <Zap size={12} className="text-violet-600 dark:text-violet-400" /> Quick Tests
+                  <div className="flex items-center gap-1.5 text-xs font-extrabold text-violet-900 dark:text-violet-100 mb-1">
+                    <Zap size={12} className="text-violet-700 dark:text-violet-300" /> Quick Tests
                   </div>
                   <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
                     {quickTestIds.map((id, i) => {
@@ -1588,8 +1588,8 @@ export default function BillingDesk() {
                 </div>
 
                 <div className="pt-1">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
-                    <FlaskConical size={11} /> Individual Tests
+                  <div className="flex items-center gap-2 text-xs font-extrabold text-slate-800 dark:text-slate-100">
+                    <FlaskConical size={11} className="text-slate-600 dark:text-slate-300" /> Individual Tests
                   </div>
                   <div className="mt-1 border border-card-border rounded-lg overflow-hidden">
                     <div className="max-h-48 overflow-y-auto divide-y divide-card-border">
@@ -1614,8 +1614,8 @@ export default function BillingDesk() {
                               >
                                 <FlaskConical size={11} className={added ? "text-primary" : "text-muted-foreground"} />
                                 <span className="text-[10px] font-mono font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded flex-shrink-0">#{t.id}</span>
-                                <span className="flex-1 font-medium truncate">{t.name}</span>
-                                <span className="text-xs text-muted-foreground font-mono flex-shrink-0">{t.code}</span>
+                                <span className="flex-1 font-bold text-slate-800 dark:text-slate-200 truncate">{t.name}</span>
+                                <span className="text-xs text-slate-500 dark:text-slate-400 font-mono flex-shrink-0">{t.code}</span>
                                 <span className={`text-xs font-semibold flex-shrink-0 ${added ? "text-primary" : ""}`}>{inr(t.price)}</span>
                                 {added ? <CheckCircle2 size={12} className="text-primary flex-shrink-0" /> : <Plus size={12} className="text-muted-foreground flex-shrink-0" />}
                               </button>
@@ -1721,12 +1721,12 @@ export default function BillingDesk() {
                     {selectedTests.map((t) => (
                       <div key={t.testId} className="flex items-center gap-2 px-4 py-2.5">
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{t.name}</div>
-                          <div className="text-xs text-muted-foreground capitalize">{t.category}
+                          <div className="text-sm font-bold text-slate-800 dark:text-slate-200 truncate">{t.name}</div>
+                          <div className="text-xs text-slate-600 dark:text-slate-400 capitalize">{t.category}
                             {t.source === "package" && <span className="ml-1 text-orange-500">· pkg</span>}
                           </div>
                         </div>
-                        <span className="text-sm font-semibold flex-shrink-0">{inr(t.price)}</span>
+                        <span className="text-sm font-bold flex-shrink-0">{inr(t.price)}</span>
                         <button onClick={() => removeTest(t.testId)} className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0">
                           <X size={13} />
                         </button>
