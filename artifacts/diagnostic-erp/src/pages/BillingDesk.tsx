@@ -1686,7 +1686,7 @@ export default function BillingDesk() {
             RIGHT COLUMN — Bill Summary + Payment
         ══════════════════════════════════════════════ */}
         <div className="w-full lg:w-[35%] flex flex-col lg:overflow-hidden min-h-0">
-          <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="flex-shrink-0 overflow-y-auto">
 
             <div className="space-y-3">
               {/* ── Selected Tests ── */}
@@ -1797,20 +1797,62 @@ export default function BillingDesk() {
                   )}
                   <div className="flex items-center justify-between pt-2 border-t border-card-border"><span className="font-bold text-sm text-slate-700 dark:text-slate-200 uppercase tracking-wide">Total</span><span className="text-2xl font-extrabold text-primary tabular-nums">{inr(total)}</span></div>
 
-                  {/* ── Payment Collection — directly under Total, same line-height, light-tinted box ── */}
-                  <div className="mt-2 -mx-2.5 px-3 py-2.5 bg-amber-50/80 dark:bg-amber-950/20 border-y border-amber-200 dark:border-amber-900/30">
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => setPayNow(!payNow)} className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${payNow ? "bg-amber-500" : "bg-muted"}`}>
-                          <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${payNow ? "translate-x-4" : "translate-x-0"}`} />
-                        </button>
-                        <span className="text-sm font-bold text-amber-800 dark:text-amber-200">Collect Payment Now</span>
+                  {/* ── Payment Collection — amount input first, toggle + modes below ── */}
+                  <div className="mt-3 space-y-2" ref={paymentRef}>
+                    {/* Primary amount input — always visible, large and prominent */}
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder={total.toFixed(2)}
+                      value={paymentSplits[0]?.amount ?? ""}
+                      onChange={(e) => setPaymentSplits((prev) => prev.map((s, i) => i === 0 ? { ...s, amount: e.target.value } : s))}
+                      className="h-12 text-xl font-bold tracking-tight"
+                    />
+                    {/* Additional splits */}
+                    {paymentSplits.slice(1).map((split, relIdx) => {
+                      const idx = relIdx + 1;
+                      return (
+                        <div key={idx} className="grid grid-cols-[1.1fr_1fr_18px] gap-2 items-center">
+                          <Select value={split.mode} onValueChange={(v) => setPaymentSplits((prev) => prev.map((s, i) => i === idx ? { ...s, mode: v } : s))}>
+                            <SelectTrigger className="h-9 text-[11px]"><SelectValue /></SelectTrigger>
+                            <SelectContent>{PAYMENT_MODES.map((m) => <SelectItem key={m} value={m} className="capitalize">{m.toUpperCase()}</SelectItem>)}</SelectContent>
+                          </Select>
+                          <Input type="number" min={0} step="0.01" placeholder="0.00" value={split.amount} onChange={(e) => setPaymentSplits((prev) => prev.map((s, i) => i === idx ? { ...s, amount: e.target.value } : s))} className="h-9 text-[11px]" />
+                          <button onClick={() => setPaymentSplits((prev) => prev.filter((_, i) => i !== idx))} className="text-muted-foreground hover:text-destructive transition-colors"><X size={13} /></button>
+                        </div>
+                      );
+                    })}
+                    {paymentSplits.length < PAYMENT_MODES.length && (
+                      <button onClick={() => setPaymentSplits((prev) => [...prev, { mode: "upi", amount: "" }])} className="text-[11px] text-primary hover:underline flex items-center gap-1">+ Split payment</button>
+                    )}
+                    {/* Balance / paid summary */}
+                    {(balance > 0 || (paidTotal > 0 && total > 0)) && (
+                      <div className="text-[11px]">
+                        {balance > 0 ? (
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-semibold text-slate-600 dark:text-slate-300">Balance due</span>
+                            <span className="text-red-600 text-lg font-extrabold">{inr(balance)}</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center gap-1 text-green-600 font-semibold text-base">
+                            <CheckCircle2 size={13} /> Fully paid — {inr(paidTotal)}
+                          </div>
+                        )}
                       </div>
-                      <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">Total {inr(total)}</span>
-                    </div>
-                    {payNow && (
-                      <div className="space-y-2" ref={paymentRef}>
-                        {/* Mode buttons */}
+                    )}
+                    {/* Toggle + mode buttons row */}
+                    <div className="pt-1 border-t border-card-border space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => setPayNow(!payNow)} className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${payNow ? "bg-primary" : "bg-muted"}`}>
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${payNow ? "translate-x-4" : "translate-x-0"}`} />
+                          </button>
+                          <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Collect Payment Now</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground font-medium">Total {inr(total)}</span>
+                      </div>
+                      {payNow && (
                         <div className="grid grid-cols-5 gap-1">
                           {PAYMENT_MODES.map((m) => (
                             <button
@@ -1819,8 +1861,8 @@ export default function BillingDesk() {
                               onClick={() => setPaymentSplits((prev) => prev.map((s, i) => i === 0 ? { ...s, mode: m } : s))}
                               className={`py-2 rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all flex flex-col items-center gap-0.5 ${
                                 paymentSplits[0]?.mode === m
-                                  ? "bg-amber-500 text-white shadow-md ring-2 ring-amber-300"
-                                  : "bg-white/70 dark:bg-white/10 text-amber-800 dark:text-amber-200 hover:bg-white"
+                                  ? "bg-primary text-white shadow-md ring-2 ring-primary/30"
+                                  : "bg-muted/60 text-slate-600 dark:text-slate-300 hover:bg-muted"
                               }`}
                             >
                               <span>{m === "cash" ? "💵" : m === "upi" ? "📱" : m === "card" ? "💳" : m === "cheque" ? "📝" : "🏥"}</span>
@@ -1828,50 +1870,8 @@ export default function BillingDesk() {
                             </button>
                           ))}
                         </div>
-                        {/* Amount input — high contrast */}
-                        <Input
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          placeholder={total.toFixed(2)}
-                          value={paymentSplits[0]?.amount ?? ""}
-                          onChange={(e) => setPaymentSplits((prev) => prev.map((s, i) => i === 0 ? { ...s, amount: e.target.value } : s))}
-                          className="h-11 text-lg font-bold bg-white dark:bg-background border-amber-300 focus-visible:ring-amber-400"
-                        />
-                        {/* Additional splits */}
-                        {paymentSplits.slice(1).map((split, relIdx) => {
-                          const idx = relIdx + 1;
-                          return (
-                            <div key={idx} className="grid grid-cols-[1.1fr_1fr_18px] gap-2 items-center">
-                              <Select value={split.mode} onValueChange={(v) => setPaymentSplits((prev) => prev.map((s, i) => i === idx ? { ...s, mode: v } : s))}>
-                                <SelectTrigger className="h-9 text-[11px]"><SelectValue /></SelectTrigger>
-                                <SelectContent>{PAYMENT_MODES.map((m) => <SelectItem key={m} value={m} className="capitalize">{m.toUpperCase()}</SelectItem>)}</SelectContent>
-                              </Select>
-                              <Input type="number" min={0} step="0.01" placeholder="0.00" value={split.amount} onChange={(e) => setPaymentSplits((prev) => prev.map((s, i) => i === idx ? { ...s, amount: e.target.value } : s))} className="h-9 text-[11px]" />
-                              <button onClick={() => setPaymentSplits((prev) => prev.filter((_, i) => i !== idx))} className="text-muted-foreground hover:text-destructive transition-colors"><X size={13} /></button>
-                            </div>
-                          );
-                        })}
-                        {paymentSplits.length < PAYMENT_MODES.length && (
-                          <button onClick={() => setPaymentSplits((prev) => [...prev, { mode: "upi", amount: "" }])} className="text-[11px] text-amber-700 dark:text-amber-300 hover:underline flex items-center gap-1">+ Split payment</button>
-                        )}
-                        {/* Balance / paid summary */}
-                        <div className="pt-1.5 border-t border-amber-200 dark:border-amber-800/30 text-[11px]">
-                          {balance > 0 ? (
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-semibold text-amber-900 dark:text-amber-200">Balance due</span>
-                              <span className="text-red-600 text-lg font-extrabold">{inr(balance)}</span>
-                            </div>
-                          ) : paidTotal > 0 && total > 0 ? (
-                            <div className="flex items-center justify-center gap-1 text-green-600 font-semibold text-base">
-                              <CheckCircle2 size={13} /> Fully paid — {inr(paidTotal)}
-                            </div>
-                          ) : (
-                            <div className="text-amber-600/70 dark:text-amber-400/70">Enter amount above</div>
-                          )}
-                        </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1927,8 +1927,8 @@ export default function BillingDesk() {
                 </div>
               </div>
             </div>
-            <TodayCollectionsPanel />
           </div>
+          <TodayCollectionsPanel />
         </div>
       </div>
       {/* ── Hidden Print Receipt (shown only when printing) ── */}
@@ -2426,8 +2426,8 @@ function TodayCollectionsPanel() {
   const totalDue = sorted.reduce((s, b) => s + (b.status === "cancelled" ? 0 : b.balanceAmount), 0);
 
   return (
-    <div className="flex-shrink-0 border-t border-card-border bg-card/50">
-      <div className="px-4 py-2 h-10 flex items-center gap-2 text-sm font-bold uppercase tracking-wide border-b border-card-border bg-gradient-to-r from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/10 border-l-[3px] border-l-blue-600">
+    <div className="flex-1 min-h-0 flex flex-col border-t border-card-border bg-card/50">
+      <div className="flex-shrink-0 px-4 py-2 h-10 flex items-center gap-2 text-sm font-bold uppercase tracking-wide border-b border-card-border bg-gradient-to-r from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/10 border-l-[3px] border-l-blue-600">
         <Receipt size={14} className="text-blue-600 dark:text-blue-400" />
         <span className="text-blue-800 dark:text-blue-200">Today's Collections</span>
         <span className="text-muted-foreground font-normal ml-0.5">{sorted.length}</span>
@@ -2437,7 +2437,7 @@ function TodayCollectionsPanel() {
           </span>
         )}
       </div>
-      <div className="max-h-[210px] overflow-y-auto divide-y divide-card-border" aria-live="polite">
+      <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-card-border" aria-live="polite">
         {isLoading ? (
           <div className="px-3 py-4 text-xs text-muted-foreground text-center">Loading…</div>
         ) : sorted.length === 0 ? (
