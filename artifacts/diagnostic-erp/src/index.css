@@ -243,6 +243,14 @@
 }
 ::-webkit-scrollbar-track { background: transparent; }
 
+@keyframes blink-fast {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.animate-blink-fast {
+  animation: blink-fast 0.6s ease-in-out infinite;
+}
+
 /* Hide scrollbar while keeping scroll functionality (used on horizontal pill rows) */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

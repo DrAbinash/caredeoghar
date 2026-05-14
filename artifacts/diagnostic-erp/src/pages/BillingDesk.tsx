@@ -1066,7 +1066,7 @@ export default function BillingDesk() {
 
             {/* ── Patient Section — Search ── */}
             <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
-              <div className="px-4 py-2 h-10 border-b border-card-border flex items-center justify-between bg-blue-600 dark:bg-blue-700 border-l-[4px] border-l-blue-800">
+              <div className="px-4 py-2 h-10 border-b border-card-border flex items-center justify-between bg-blue-800 dark:bg-blue-900 border-l-[4px] border-l-blue-950">
                 <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-white">
                   <User size={14} className="text-white" /> Search Patient
                 </div>
@@ -1275,7 +1275,7 @@ export default function BillingDesk() {
             {/* ── Add New Patient ── */}
             {!selectedPatient && (
               <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
-                <div className="w-full px-4 py-2 h-10 border-b border-card-border bg-indigo-600 dark:bg-indigo-700 border-l-[4px] border-l-indigo-800 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-white">
+                <div className="w-full px-4 py-2 h-10 border-b border-card-border bg-indigo-800 dark:bg-indigo-900 border-l-[4px] border-l-indigo-950 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-white">
                   <UserPlus size={14} className="text-white" />
                   <span>Register New Patient</span>
                 </div>
@@ -1355,7 +1355,7 @@ export default function BillingDesk() {
                   </div>
                   <Button
                     size="sm"
-                    className="w-full"
+                    className="w-full bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold"
                     disabled={!newPatient.firstName || !newPatient.lastName || !newPatient.phone || !newPatient.age || createPatientMut.isPending}
                     onClick={() => createPatientMut.mutate(newPatient)}
                   >
@@ -1367,7 +1367,7 @@ export default function BillingDesk() {
 
             {/* ── Referral / Doctor — Walk-in / Self + Quick Doctor Tabs + Search ── */}
             <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
-              <div className="px-4 py-2 h-10 border-b border-card-border bg-sky-600 dark:bg-sky-700 border-l-[4px] border-l-sky-800 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-white">
+              <div className="px-4 py-2 h-10 border-b border-card-border bg-sky-800 dark:bg-sky-900 border-l-[4px] border-l-sky-950 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-white">
                 <Stethoscope size={14} className="text-white" /> Referral Doctor
                 <span className="ml-auto text-xs font-bold text-white/80">optional</span>
               </div>
@@ -1509,7 +1509,7 @@ export default function BillingDesk() {
 
             {/* ── Test Catalog (Quick Tests + Add Tests + Individual Tests) ── */}
             <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
-              <div className="px-4 py-2 h-10 border-b border-card-border bg-violet-600 dark:bg-violet-700 border-l-[4px] border-l-violet-800 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-white">
+              <div className="px-4 py-2 h-10 border-b border-card-border bg-violet-800 dark:bg-violet-900 border-l-[4px] border-l-violet-950 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-white">
                 <FlaskConical size={14} className="text-white" /> Test Catalog
                 <span className="ml-auto text-xs font-bold text-white/80">Hover ✏️ to customize slots</span>
               </div>
@@ -1631,7 +1631,7 @@ export default function BillingDesk() {
 
             {/* ── Add Package ── */}
             <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
-              <div className="px-4 py-2 h-10 border-b border-card-border flex items-center justify-between bg-rose-600 dark:bg-rose-700 border-l-[4px] border-l-rose-800">
+              <div className="px-4 py-2 h-10 border-b border-card-border flex items-center justify-between bg-rose-800 dark:bg-rose-900 border-l-[4px] border-l-rose-950">
                 <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-white">
                   <Package size={14} className="text-white" /> Add Package
                 </div>
@@ -1755,7 +1755,7 @@ export default function BillingDesk() {
               </div>
 
               <div className="flex-shrink-0 border-b border-card-border bg-card lg:sticky lg:bottom-0 lg:z-10 shadow-sm">
-                <div className="px-4 py-2 h-10 border-b border-card-border bg-indigo-700 dark:bg-indigo-800 border-l-[4px] border-l-indigo-900 flex items-center justify-between gap-2">
+                <div className="px-4 py-2 h-10 border-b border-card-border bg-indigo-900 dark:bg-indigo-950 border-l-[4px] border-l-indigo-950 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <Receipt size={14} className="text-white flex-shrink-0" />
                     <span className="text-sm font-bold uppercase tracking-wide text-white truncate">Bill Summary</span>
@@ -1842,10 +1842,10 @@ export default function BillingDesk() {
                         {balance > 0 ? (
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-extrabold text-slate-900 dark:text-slate-900">Balance due</span>
-                            <span className="text-red-600 text-lg font-extrabold">{inr(balance)}</span>
+                            <span className="text-red-600 text-lg font-extrabold animate-blink-fast">{inr(balance)}</span>
                           </div>
                         ) : (
-                          <div className="flex items-center justify-center gap-1 text-green-600 font-extrabold text-base">
+                          <div className="flex items-center justify-center gap-1 text-green-600 font-extrabold text-base animate-blink-fast">
                             <CheckCircle2 size={13} /> Fully paid — {inr(paidTotal)}
                           </div>
                         )}
@@ -1863,19 +1863,19 @@ export default function BillingDesk() {
                         <span className="text-xs text-slate-900 dark:text-slate-900 font-bold">Total {inr(total)}</span>
                       </div>
                       {payNow && (
-                        <div className="grid grid-cols-5 gap-1">
+                        <div className="flex items-center gap-1.5">
                           {PAYMENT_MODES.map((m) => (
                             <button
                               key={m}
                               type="button"
                               onClick={() => setPaymentSplits((prev) => prev.map((s, i) => i === 0 ? { ...s, mode: m } : s))}
-                              className={`py-2 rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all flex flex-col items-center gap-0.5 ${
+                              className={`flex items-center gap-1 px-2 py-1 rounded border text-[10px] font-extrabold uppercase transition-all ${
                                 paymentSplits[0]?.mode === m
-                                  ? "bg-primary text-white shadow-md ring-2 ring-primary/30"
-                                  : "bg-muted/60 text-slate-900 dark:text-slate-900 hover:bg-muted"
+                                  ? "bg-primary text-white border-primary shadow-sm"
+                                  : "bg-card border-card-border text-slate-900 dark:text-slate-900 hover:bg-muted/60"
                               }`}
                             >
-                              <span>{m === "cash" ? "💵" : m === "upi" ? "📱" : m === "card" ? "💳" : m === "cheque" ? "📝" : "🏥"}</span>
+                              <span className="text-[9px]">{m === "cash" ? "💵" : m === "upi" ? "📱" : m === "card" ? "💳" : m === "cheque" ? "📝" : "🏥"}</span>
                               <span>{m}</span>
                             </button>
                           ))}
@@ -2435,7 +2435,7 @@ function TodayCollectionsPanel() {
 
   return (
     <div className="flex-1 min-h-0 flex flex-col border-t border-card-border bg-card/50">
-      <div className="flex-shrink-0 px-4 py-2 h-10 flex items-center gap-2 text-sm font-bold uppercase tracking-wide border-b border-card-border bg-blue-700 dark:bg-blue-800 border-l-[4px] border-l-blue-900">
+      <div className="flex-shrink-0 px-4 py-2 h-10 flex items-center gap-2 text-sm font-bold uppercase tracking-wide border-b border-card-border bg-blue-900 dark:bg-blue-950 border-l-[4px] border-l-blue-950">
         <Receipt size={14} className="text-white" />
         <span className="text-white">Today's Collections</span>
         <span className="text-slate-900 dark:text-slate-900 font-bold ml-0.5">{sorted.length}</span>
