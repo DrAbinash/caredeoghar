@@ -115,6 +115,11 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
 
   const fontPx = paperSize === "A5" ? 14 : 12;
   const pageMargin = paperSize === "A5" ? "3mm" : "6mm";
+  // Explicit paper content height (page minus top+bottom margins).
+  // We use mm instead of 100vh because `vh` resolves to 0 inside the 0×0
+  // hidden iframe used by printViaIframe, which prevents the flex spacer
+  // from expanding and leaves the footer stuck right after the content.
+  const sectionMinHeight = paperSize === "A5" ? "204mm" : "285mm";
   const headerNameSize = paperSize === "A5" ? "20px" : "20px";
   const colCount = 3 + (showCode ? 1 : 0) + (showCategory ? 1 : 0);
 
@@ -145,7 +150,7 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
     </tr>`).join("");
 
   const onePage = (copyIdx: number) => `
-    <section class="receipt" style="${copyIdx > 0 ? "page-break-before:always;" : ""}display:flex;flex-direction:column;min-height:100vh;">
+    <section class="receipt" style="${copyIdx > 0 ? "page-break-before:always;" : ""}display:flex;flex-direction:column;min-height:${sectionMinHeight};">
       ${reprintBy || reprintReason ? `<div style="text-align:center;font-size:${fontPx - 1}px;color:#a16207;border:1px dashed #d97706;padding:2px 4px;margin-bottom:6px;text-transform:uppercase">DUPLICATE / RE-PRINT${reprintBy ? ` · BY ${escapeHtml(reprintBy)}` : ""}${reprintReason ? ` · ${escapeHtml(reprintReason)}` : ""}</div>` : ""}
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;border-bottom:2px solid #1e40af;padding-bottom:8px;margin-bottom:8px">
         <div style="flex:1;min-width:0">
@@ -231,9 +236,15 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
         </tbody>
       </table>
 
+      ${bill.tokenNo != null ? `
+      <div style="margin-top:8px;padding:4px 6px;border:1.5px dashed #000;border-radius:3px;display:flex;align-items:center;justify-content:space-between;page-break-inside:avoid">
+        <span style="font-size:${fontPx - 1}px;letter-spacing:1px;color:#444">QUEUE TOKEN</span>
+        <span style="font-size:${fontPx + 6}px;font-weight:900;letter-spacing:2px">#${String(bill.tokenNo).padStart(3, "0")}</span>
+        <span style="font-size:${fontPx - 1}px;color:#444">✂ TEAR HERE</span>
+      </div>` : ""}
+
       <div style="flex:1;min-height:8px"></div>
-      ${bill.tokenNo != null ? `<div style="padding:3px;border:1px dashed #000;text-align:center;font-weight:700;font-size:${fontPx + 1}px">QUEUE TOKEN&nbsp;#${String(bill.tokenNo).padStart(3, "0")}</div>` : ""}
-      ${clinic?.footerNote ? `<div style="margin-top:6px;padding-top:4px;border-top:1px dashed #999;font-size:${fontPx - 2}px;color:#555;text-transform:none;text-align:center">${escapeHtml(clinic.footerNote)}</div>` : ""}
+      ${clinic?.footerNote ? `<div style="padding-top:4px;border-top:1px dashed #999;font-size:${fontPx - 2}px;color:#555;text-transform:none;text-align:center">${escapeHtml(clinic.footerNote)}</div>` : ""}
     </section>`;
 
   const pages = Array.from({ length: copies }).map((_, i) => onePage(i)).join("");
