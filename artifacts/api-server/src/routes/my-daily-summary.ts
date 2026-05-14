@@ -64,12 +64,15 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
   const to = typeof req.query.to === "string" ? req.query.to : from;
 
   // Admin/superadmin may pass staffName to view another user's data.
-  // Normal users always see only their own data — staffName param is ignored.
+  // null = all-staff aggregate (owners only); non-owners always see their own data.
   const isOwner = FULL_ACCESS_ROLES.has(session.role);
-  const staffName =
+  const staffName: string | null =
     isOwner && typeof req.query.staffName === "string" && req.query.staffName.trim()
       ? req.query.staffName.trim()
-      : session.subjectName;
+      : isOwner
+        ? null           // owner with no filter → aggregate all staff
+        : session.subjectName;
+  const displayName = staffName ?? "All Staff";
 
   const { start, end } = dayBoundsRange(from, to);
 
@@ -91,13 +94,11 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
     })
     .from(billsTable)
     .leftJoin(patientsTable, eq(billsTable.patientId, patientsTable.id))
-    .where(
-      and(
-        gte(billsTable.createdAt, start),
-        lt(billsTable.createdAt, end),
-        eq(billsTable.createdByName, staffName),
-      ),
-    )
+    .where(and(
+      gte(billsTable.createdAt, start),
+      lt(billsTable.createdAt, end),
+      ...(staffName !== null ? [eq(billsTable.createdByName, staffName)] : []),
+    ))
     .orderBy(sql`${billsTable.createdAt} DESC`);
 
   // ── Bills cancelled BY this staff (for cancellation accountability) ─────
@@ -113,13 +114,11 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       createdByName: billsTable.createdByName,
     })
     .from(billsTable)
-    .where(
-      and(
-        gte(billsTable.cancelledAt, start),
-        lt(billsTable.cancelledAt, end),
-        eq(billsTable.cancelledByName, staffName),
-      ),
-    );
+    .where(and(
+      gte(billsTable.cancelledAt, start),
+      lt(billsTable.cancelledAt, end),
+      ...(staffName !== null ? [eq(billsTable.cancelledByName, staffName)] : []),
+    ));
 
   // ── Payments recorded by this staff ────────────────────────────────────
   const allPaymentRows = await db
@@ -132,13 +131,11 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       createdAt: paymentsTable.createdAt,
     })
     .from(paymentsTable)
-    .where(
-      and(
-        gte(paymentsTable.createdAt, start),
-        lt(paymentsTable.createdAt, end),
-        eq(paymentsTable.recordedByName, staffName),
-      ),
-    )
+    .where(and(
+      gte(paymentsTable.createdAt, start),
+      lt(paymentsTable.createdAt, end),
+      ...(staffName !== null ? [eq(paymentsTable.recordedByName, staffName)] : []),
+    ))
     .orderBy(sql`${paymentsTable.createdAt} DESC`);
 
   // ── Bill audits by this staff ──────────────────────────────────────────
@@ -156,13 +153,11 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
     })
     .from(billAuditsTable)
     .leftJoin(billsTable, eq(billAuditsTable.billId, billsTable.id))
-    .where(
-      and(
-        gte(billAuditsTable.createdAt, start),
-        lt(billAuditsTable.createdAt, end),
-        eq(billAuditsTable.editedBy, staffName),
-      ),
-    )
+    .where(and(
+      gte(billAuditsTable.createdAt, start),
+      lt(billAuditsTable.createdAt, end),
+      ...(staffName !== null ? [eq(billAuditsTable.editedBy, staffName)] : []),
+    ))
     .orderBy(sql`${billAuditsTable.createdAt} DESC`)
     .limit(50);
 
@@ -171,7 +166,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
     SELECT COALESCE(SUM(amount::numeric) FILTER (WHERE LOWER(payment_mode) = 'cash'), 0)::text AS cash_expenses
     FROM expenses
     WHERE expense_date >= ${from} AND expense_date <= ${to}
-      AND approved_by = ${staffName}
+    ${staffName !== null ? sql`AND approved_by = ${staffName}` : sql``}
   `);
 
   // ── Compute summary ─────────────────────────────────────────────────────
@@ -227,8 +222,8 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
   }
 
   res.json({
-    staffName,
-    isFiltered: isOwner && staffName !== session.subjectName,
+    staffName: displayName,
+    isFiltered: staffName !== null && isOwner && staffName !== session.subjectName,
     from,
     to,
     summary: {

@@ -115,14 +115,25 @@ function RecRow({ label, value, type, note }: {
   label: string; value: number; type: "start" | "deduct" | "result" | "final"; note?: string;
 }) {
   const isDeduct = type === "deduct";
-  const isResult = type === "result" || type === "final";
+  const isFinal = type === "final";
+  const isResult = type === "result";
   return (
-    <div className={`flex items-center justify-between py-1.5 ${isResult ? "font-bold" : ""}`}>
-      <span className={`text-sm ${isDeduct ? "text-red-600 dark:text-red-400 pl-4" : isResult ? "text-gray-900 dark:text-foreground" : "text-gray-800 dark:text-gray-200"}`}>
+    <div className={`flex items-center justify-between ${isFinal ? "py-3" : isResult ? "py-2.5" : "py-2"}`}>
+      <span className={
+        isFinal ? "text-base font-extrabold text-gray-900 dark:text-foreground" :
+        isResult ? "text-sm font-bold text-gray-900 dark:text-foreground" :
+        isDeduct ? "text-sm font-medium text-red-600 dark:text-red-400 pl-5" :
+        "text-sm font-medium text-gray-700 dark:text-gray-300"
+      }>
         {label}
-        {note && <span className="text-xs font-normal text-gray-400 ml-1">({note})</span>}
+        {note && <span className="text-[11px] font-normal text-gray-400 ml-1.5">({note})</span>}
       </span>
-      <span className={`tabular-nums text-sm ${isDeduct ? "text-red-600 dark:text-red-400" : isResult ? type === "final" ? "text-blue-700 dark:text-blue-300 text-base" : "text-green-700 dark:text-green-400" : "text-gray-800 dark:text-gray-200"}`}>
+      <span className={`tabular-nums font-bold ${
+        isFinal ? "text-2xl text-blue-700 dark:text-blue-300" :
+        isResult ? "text-lg text-green-700 dark:text-green-400" :
+        isDeduct ? "text-sm text-red-600 dark:text-red-400" :
+        "text-sm text-gray-800 dark:text-gray-200"
+      }`}>
         {isDeduct ? `−\u2009${fmt(value)}` : fmt(value)}
       </span>
     </div>
@@ -277,80 +288,123 @@ export default function MyDailySummary() {
             <MiniKpi icon={XCircle} label="Cancellation Count" value={String(s.cancellationCount)} sub={s.cancellationCount > 0 ? `₹${s.cancelledAmount.toFixed(0)} written off` : "None"} iconBg="bg-gray-100 text-gray-700" border="border-l-gray-400" />
           </div>
 
-          {/* ── Financial Reconciliation ── */}
+          {/* ── Financial Reconciliation + Bill Edits ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Reconciliation flow */}
-            <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-100 dark:border-card-border bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20">
-                <h3 className="text-sm font-bold text-gray-900 dark:text-foreground">My Cash Reconciliation</h3>
-                <p className="text-xs text-gray-600 mt-0.5">How my collections balance out</p>
+            {/* Reconciliation flow — bold, stand-out design */}
+            <div className="bg-white dark:bg-card border-2 border-emerald-300 dark:border-emerald-700 rounded-xl shadow-md overflow-hidden">
+              <div className="px-5 py-4 bg-gradient-to-r from-emerald-600 to-green-600">
+                <h3 className="text-base font-extrabold text-white flex items-center gap-2">
+                  <IndianRupee size={16} /> My Cash Reconciliation
+                </h3>
+                <p className="text-xs text-emerald-100 mt-0.5">Step-by-step balance verification</p>
               </div>
-              <div className="p-4 space-y-0">
+              <div className="px-5 py-2">
                 <RecRow label="Gross Billing" value={s.grossBilling} type="start" />
                 <RecRow label="− Outstanding / Dues" value={s.outstanding} type="deduct" />
                 <RecRow label="− Refunds & Cancellations" value={s.refundsAndCancellations} type="deduct"
-                  note={`${s.refundAmount.toFixed(0)} refunds + ${s.cancellationCount} cancelled`} />
-                <div className="my-2 border-t-2 border-green-200 dark:border-green-800" />
+                  note={`₹${s.refundAmount.toFixed(0)} refunds + ${s.cancellationCount} cancelled`} />
+                <div className="my-3 border-t-4 border-green-300 dark:border-green-700" />
                 <RecRow label="= Total Received" value={s.totalReceived} type="result" />
-                <div className="my-2 border-t border-dashed border-gray-200 dark:border-gray-700" />
+                <div className="my-2 border-t-2 border-dashed border-gray-300 dark:border-gray-600" />
                 <RecRow label="− Digital Collection" value={s.digitalCollection} type="deduct" />
-                <div className="my-2 border-t border-dashed border-gray-200 dark:border-gray-700" />
+                <div className="my-2 border-t-2 border-dashed border-gray-300 dark:border-gray-600" />
                 <RecRow label="= Cash Collected" value={s.cashCollection} type="result" />
                 <RecRow label="− Cash Expenses" value={s.cashExpenses} type="deduct" note="approved by you" />
-                <div className="my-2 border-t-2 border-blue-200 dark:border-blue-800" />
+                <div className="my-3 border-t-4 border-blue-300 dark:border-blue-700" />
                 <RecRow label="= Physical Cash in Hand" value={s.physicalCashInHand} type="final" />
+                <div className="pb-2" />
               </div>
             </div>
 
-            {/* Payment method breakdown */}
-            <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-100 dark:border-card-border">
+            {/* Bill Edits — moved up, detailed table */}
+            <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl shadow-sm overflow-hidden flex flex-col">
+              <div className="px-4 py-3 border-b border-gray-100 dark:border-card-border flex items-center justify-between">
                 <h3 className="text-sm font-bold text-gray-900 dark:text-foreground flex items-center gap-2">
-                  <Wallet size={14} className="text-green-600" /> Collection by Method
+                  <FileEdit size={14} className="text-purple-600" /> Bill Edits by Me
+                  {data.billEdits.length > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
+                      {data.billEdits.length}
+                    </span>
+                  )}
                 </h3>
               </div>
-              <div className="p-4 space-y-2.5">
-                {Object.entries(data.byMethod).length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-4">No collections in this period.</p>
-                ) : (
-                  Object.entries(data.byMethod)
-                    .sort((a, b) => b[1] - a[1])
-                    .map(([method, amount]) => (
-                      <div key={method}>
-                        <div className="flex justify-between mb-1">
-                          <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 capitalize">
-                            {methodLabels[method.toLowerCase()] ?? method}
-                          </span>
-                          <span className="text-xs font-bold text-gray-900 dark:text-foreground tabular-nums">{fmt(amount)}</span>
-                        </div>
-                        <div className="h-1.5 bg-gray-100 dark:bg-muted rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-primary"
-                            style={{ width: `${s.totalReceived > 0 ? Math.min(100, (amount / s.totalReceived) * 100) : 0}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))
-                )}
-
-                {/* Bottom line summary */}
-                {s.totalReceived > 0 && (
-                  <div className="mt-4 pt-3 border-t border-gray-100 dark:border-card-border grid grid-cols-2 gap-2">
-                    <div className="rounded-lg bg-violet-50 dark:bg-violet-950/20 border border-violet-200 p-2.5 text-center">
-                      <p className="text-xs text-violet-700 font-semibold">Digital</p>
-                      <p className="text-sm font-bold text-violet-800">{fmt(s.digitalCollection)}</p>
-                      <p className="text-[10px] text-violet-600">{s.totalReceived > 0 ? `${((s.digitalCollection / s.totalReceived) * 100).toFixed(0)}%` : "—"}</p>
-                    </div>
-                    <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 p-2.5 text-center">
-                      <p className="text-xs text-blue-700 font-semibold">Cash in Hand</p>
-                      <p className="text-sm font-bold text-blue-800">{fmt(s.physicalCashInHand)}</p>
-                      <p className="text-[10px] text-blue-600">{s.totalReceived > 0 ? `${((s.cashCollection / s.totalReceived) * 100).toFixed(0)}% of received` : "—"}</p>
-                    </div>
+              {data.billEdits.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center py-10">
+                  <div className="text-center">
+                    <FileEdit size={28} className="text-gray-200 dark:text-gray-600 mx-auto mb-2" />
+                    <p className="text-sm text-gray-500">No bill edits in this period</p>
                   </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="overflow-x-auto overflow-y-auto max-h-80">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 dark:bg-muted/30 sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Bill #</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Type</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300">Old → New</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300">Reason</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Time</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-card-border">
+                      {data.billEdits.map((e) => (
+                        <tr key={e.id} className="hover:bg-purple-50/50 dark:hover:bg-muted/20">
+                          <td className="px-3 py-2 font-semibold whitespace-nowrap">
+                            <Link href={`/billing/${e.billId}`} className="text-primary hover:underline">{e.billNumber}</Link>
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {e.changeType ? (
+                              <span className="px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-semibold text-[10px]">
+                                {e.changeType}
+                              </span>
+                            ) : <span className="text-gray-400">—</span>}
+                          </td>
+                          <td className="px-3 py-2 text-gray-600 dark:text-gray-400 max-w-[140px]">
+                            {(e.oldValue || e.newValue) ? (
+                              <span className="flex items-center gap-1 flex-wrap">
+                                {e.oldValue && <span className="line-through text-red-500">{e.oldValue}</span>}
+                                {e.oldValue && e.newValue && <ArrowRight size={9} className="text-gray-400 flex-shrink-0" />}
+                                {e.newValue && <span className="text-green-700 dark:text-green-400 font-semibold">{e.newValue}</span>}
+                              </span>
+                            ) : <span className="text-gray-400">—</span>}
+                          </td>
+                          <td className="px-3 py-2 text-gray-600 dark:text-gray-400 max-w-[140px] truncate">{e.reason || "—"}</td>
+                          <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
+                            <span className="flex items-center gap-1"><Clock size={10} />{fmtTime(e.createdAt)}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
+
+          {/* ── Collection by Method — compact strip ── */}
+          {Object.entries(data.byMethod).length > 0 && (
+            <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl shadow-sm p-4">
+              <h3 className="text-sm font-bold text-gray-900 dark:text-foreground flex items-center gap-2 mb-3">
+                <Wallet size={14} className="text-green-600" /> Collection by Method
+              </h3>
+              <div className="flex flex-wrap gap-3">
+                {Object.entries(data.byMethod)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([method, amount]) => (
+                    <div key={method} className="flex-1 min-w-[120px] rounded-lg bg-gray-50 dark:bg-muted/30 border border-gray-200 dark:border-card-border px-3 py-2">
+                      <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                        {methodLabels[method.toLowerCase()] ?? method}
+                      </p>
+                      <p className="text-base font-bold text-gray-900 dark:text-foreground tabular-nums mt-0.5">{fmt(amount)}</p>
+                      {s.totalReceived > 0 && (
+                        <p className="text-[10px] text-gray-400 mt-0.5">{((amount / s.totalReceived) * 100).toFixed(0)}%</p>
+                      )}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -434,30 +488,6 @@ export default function MyDailySummary() {
                   <p className="text-xs font-bold text-green-700 dark:text-green-400 tabular-nums">{fmt(p.amount)}</p>
                   <p className="text-[10px] text-gray-500 capitalize">{p.method}</p>
                 </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── Bill Edits ── */}
-      {data && data.billEdits.length > 0 && (
-        <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 dark:border-card-border">
-            <h3 className="text-sm font-bold text-gray-900 dark:text-foreground flex items-center gap-2">
-              <FileEdit size={14} className="text-purple-600" /> Bill Edits by Me
-              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700">{data.billEdits.length}</span>
-            </h3>
-          </div>
-          <div className="divide-y divide-gray-100 dark:divide-card-border max-h-56 overflow-y-auto">
-            {data.billEdits.map((e) => (
-              <div key={e.id} className="px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-muted/20">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Link href={`/billing/${e.billId}`} className="text-xs font-semibold text-primary hover:underline">{e.billNumber}</Link>
-                  {e.changeType && <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-muted text-gray-600 dark:text-gray-400">{e.changeType}</span>}
-                  <span className="text-[10px] text-gray-500">{fmtTime(e.createdAt)}</span>
-                </div>
-                {e.reason && <p className="text-xs text-gray-600 mt-0.5 truncate">{e.reason}</p>}
               </div>
             ))}
           </div>
