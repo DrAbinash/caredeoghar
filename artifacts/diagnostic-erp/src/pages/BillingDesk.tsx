@@ -1957,19 +1957,17 @@ export default function BillingDesk() {
               body * { visibility: hidden !important; }
               .billing-desk-receipt, .billing-desk-receipt * { visibility: visible !important; }
               .billing-desk-receipt {
-                display: flex !important;
-                flex-direction: column !important;
+                display: block !important;
                 margin: 0 auto !important;
                 padding: ${paperSize === "A4" ? "5mm 6mm" : "3mm 4mm"} !important;
                 max-width: none !important;
                 text-transform: uppercase;
                 width: 100% !important;
-                min-height: 100vh !important;
                 box-sizing: border-box !important;
               }
               .billing-desk-receipt .bdr-keep-case { text-transform: none !important; }
-              .billing-desk-receipt .bdr-spacer { flex: 1 1 auto !important; min-height: ${paperSize === "A4" ? "16mm" : "10mm"}; }
-              .billing-desk-receipt .bdr-footer { margin-top: auto !important; }
+              .billing-desk-receipt .bdr-spacer { display: none !important; }
+              .billing-desk-receipt .bdr-footer { margin-top: 6px !important; }
               @page { size: ${paperSize}; margin: 0; }
             }
             .billing-desk-receipt {
