@@ -1066,9 +1066,9 @@ export default function BillingDesk() {
 
             {/* ── Patient Section — Search ── */}
             <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
-              <div className="px-4 py-2 h-10 border-b border-card-border flex items-center justify-between bg-gradient-to-r from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/10 border-l-[3px] border-l-blue-600">
-                <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-blue-800 dark:text-blue-200">
-                  <User size={14} className="text-blue-600 dark:text-blue-400" /> Search Patient
+              <div className="px-4 py-2 h-10 border-b border-card-border flex items-center justify-between bg-blue-600 dark:bg-blue-700 border-l-[4px] border-l-blue-800">
+                <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-white">
+                  <User size={14} className="text-white" /> Search Patient
                 </div>
                 {selectedPatient && (
                   <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => { setSelectedPatient(null); setPatientSearch(""); }}>
@@ -1275,8 +1275,8 @@ export default function BillingDesk() {
             {/* ── Add New Patient ── */}
             {!selectedPatient && (
               <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
-                <div className="w-full px-4 py-2 h-10 border-b border-card-border bg-gradient-to-r from-indigo-50 to-indigo-100/50 dark:from-indigo-950/30 dark:to-indigo-900/10 border-l-[3px] border-l-indigo-600 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-indigo-800 dark:text-indigo-200">
-                  <UserPlus size={14} className="text-indigo-600 dark:text-indigo-400" />
+                <div className="w-full px-4 py-2 h-10 border-b border-card-border bg-indigo-600 dark:bg-indigo-700 border-l-[4px] border-l-indigo-800 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-white">
+                  <UserPlus size={14} className="text-white" />
                   <span>Register New Patient</span>
                 </div>
                 <div className="p-3 space-y-2">
@@ -1367,9 +1367,9 @@ export default function BillingDesk() {
 
             {/* ── Referral / Doctor — Walk-in / Self + Quick Doctor Tabs + Search ── */}
             <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
-              <div className="px-4 py-2 h-10 border-b border-card-border bg-gradient-to-r from-sky-50 to-sky-100/50 dark:from-sky-950/30 dark:to-sky-900/10 border-l-[3px] border-l-sky-600 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-sky-800 dark:text-sky-200">
-                <Stethoscope size={14} className="text-sky-600 dark:text-sky-400" /> Referral Doctor
-                <span className="ml-auto text-xs font-normal text-sky-600/70 dark:text-sky-400/70">optional</span>
+              <div className="px-4 py-2 h-10 border-b border-card-border bg-sky-600 dark:bg-sky-700 border-l-[4px] border-l-sky-800 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-white">
+                <Stethoscope size={14} className="text-white" /> Referral Doctor
+                <span className="ml-auto text-xs font-normal text-white/80">optional</span>
               </div>
               <div className="p-2.5" ref={doctorRef}>
                 {/* Walk-in + Search row */}
@@ -1509,15 +1509,15 @@ export default function BillingDesk() {
 
             {/* ── Test Catalog (Quick Tests + Add Tests + Individual Tests) ── */}
             <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
-              <div className="px-4 py-2 h-10 border-b border-card-border bg-gradient-to-r from-violet-50 to-violet-100/50 dark:from-violet-950/30 dark:to-violet-900/10 border-l-[3px] border-l-violet-600 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-violet-800 dark:text-violet-200">
-                <FlaskConical size={14} className="text-violet-600 dark:text-violet-400" /> Test Catalog
-                <span className="ml-auto text-xs font-normal text-violet-600/70 dark:text-violet-400/70">Hover ✏️ to customize slots</span>
+              <div className="px-4 py-2 h-10 border-b border-card-border bg-violet-600 dark:bg-violet-700 border-l-[4px] border-l-violet-800 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-white">
+                <FlaskConical size={14} className="text-white" /> Test Catalog
+                <span className="ml-auto text-xs font-normal text-white/80">Hover ✏️ to customize slots</span>
               </div>
               <div className="p-2.5 space-y-2">
                 {/* ── Quick Test Tabs (6 customizable slots) ── */}
                 <div className="pt-1">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-violet-700 dark:text-violet-300 mb-1">
-                    <Zap size={12} /> Quick Tests
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-violet-800 dark:text-violet-200 mb-1">
+                    <Zap size={12} className="text-violet-600 dark:text-violet-400" /> Quick Tests
                   </div>
                   <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
                     {quickTestIds.map((id, i) => {
@@ -1631,9 +1631,9 @@ export default function BillingDesk() {
 
             {/* ── Add Package ── */}
             <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
-              <div className="px-4 py-2 h-10 border-b border-card-border flex items-center justify-between bg-gradient-to-r from-rose-50 to-rose-100/50 dark:from-rose-950/30 dark:to-rose-900/10 border-l-[3px] border-l-rose-600">
-                <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-rose-800 dark:text-rose-200">
-                  <Package size={14} className="text-rose-600 dark:text-rose-400" /> Add Package
+              <div className="px-4 py-2 h-10 border-b border-card-border flex items-center justify-between bg-rose-600 dark:bg-rose-700 border-l-[4px] border-l-rose-800">
+                <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-white">
+                  <Package size={14} className="text-white" /> Add Package
                 </div>
                 <button
                   type="button"
@@ -1755,10 +1755,10 @@ export default function BillingDesk() {
               </div>
 
               <div className="flex-shrink-0 border-b border-card-border bg-card lg:sticky lg:bottom-0 lg:z-10 shadow-sm">
-                <div className="px-4 py-2 h-10 border-b border-card-border bg-gradient-to-r from-indigo-100 via-indigo-50 to-indigo-100/50 dark:from-indigo-950/40 dark:via-indigo-900/30 dark:to-indigo-900/20 border-l-[3px] border-l-indigo-700 flex items-center justify-between gap-2">
+                <div className="px-4 py-2 h-10 border-b border-card-border bg-indigo-700 dark:bg-indigo-800 border-l-[4px] border-l-indigo-900 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
-                    <Receipt size={14} className="text-indigo-700 dark:text-indigo-300 flex-shrink-0" />
-                    <span className="text-sm font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200 truncate">Bill Summary</span>
+                    <Receipt size={14} className="text-white flex-shrink-0" />
+                    <span className="text-sm font-bold uppercase tracking-wide text-white truncate">Bill Summary</span>
                   </div>
                   {selectedTests.length > 0 && (
                     <button
@@ -2435,9 +2435,9 @@ function TodayCollectionsPanel() {
 
   return (
     <div className="flex-1 min-h-0 flex flex-col border-t border-card-border bg-card/50">
-      <div className="flex-shrink-0 px-4 py-2 h-10 flex items-center gap-2 text-sm font-bold uppercase tracking-wide border-b border-card-border bg-gradient-to-r from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/10 border-l-[3px] border-l-blue-600">
-        <Receipt size={14} className="text-blue-600 dark:text-blue-400" />
-        <span className="text-blue-800 dark:text-blue-200">Today's Collections</span>
+      <div className="flex-shrink-0 px-4 py-2 h-10 flex items-center gap-2 text-sm font-bold uppercase tracking-wide border-b border-card-border bg-blue-700 dark:bg-blue-800 border-l-[4px] border-l-blue-900">
+        <Receipt size={14} className="text-white" />
+        <span className="text-white">Today's Collections</span>
         <span className="text-muted-foreground font-normal ml-0.5">{sorted.length}</span>
         {dueCount > 0 && (
           <span className="ml-auto text-orange-600 font-semibold tabular-nums">
