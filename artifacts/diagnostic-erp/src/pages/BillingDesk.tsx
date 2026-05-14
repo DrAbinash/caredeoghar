@@ -1056,8 +1056,8 @@ export default function BillingDesk() {
 
             {/* ── Patient Section — Search ── */}
             <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
-              <div className="px-4 py-2.5 border-b border-card-border flex items-center justify-between bg-gradient-to-r from-blue-50 to-transparent dark:from-blue-950/20 border-l-[3px] border-l-blue-500">
-                <div className="flex items-center gap-2 text-sm font-semibold">
+              <div className="px-4 py-2 h-10 border-b border-card-border flex items-center justify-between bg-gradient-to-r from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/10 border-l-[3px] border-l-blue-600">
+                <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-blue-800 dark:text-blue-200">
                   <User size={14} className="text-blue-600 dark:text-blue-400" /> Search Patient
                 </div>
                 {selectedPatient && (
@@ -1265,7 +1265,7 @@ export default function BillingDesk() {
             {/* ── Add New Patient ── */}
             {!selectedPatient && (
               <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
-                <div className="w-full px-4 py-2.5 border-b border-card-border bg-gradient-to-r from-indigo-50 to-transparent dark:from-indigo-950/20 border-l-[3px] border-l-indigo-500 flex items-center gap-2 text-sm font-semibold">
+                <div className="w-full px-4 py-2 h-10 border-b border-card-border bg-gradient-to-r from-indigo-50 to-indigo-100/50 dark:from-indigo-950/30 dark:to-indigo-900/10 border-l-[3px] border-l-indigo-600 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-indigo-800 dark:text-indigo-200">
                   <UserPlus size={14} className="text-indigo-600 dark:text-indigo-400" />
                   <span>Register New Patient</span>
                 </div>
@@ -1357,9 +1357,9 @@ export default function BillingDesk() {
 
             {/* ── Referral / Doctor — Walk-in / Self + Quick Doctor Tabs + Search ── */}
             <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
-              <div className="px-3 py-2 border-b border-card-border bg-gradient-to-r from-blue-50 to-transparent dark:from-blue-950/20 border-l-[3px] border-l-blue-400 flex items-center gap-2 text-xs font-semibold">
-                <Stethoscope size={12} className="text-blue-600 dark:text-blue-400" /> Referral Doctor
-                <span className="ml-auto text-[10px] font-normal text-muted-foreground">optional</span>
+              <div className="px-4 py-2 h-10 border-b border-card-border bg-gradient-to-r from-sky-50 to-sky-100/50 dark:from-sky-950/30 dark:to-sky-900/10 border-l-[3px] border-l-sky-600 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-sky-800 dark:text-sky-200">
+                <Stethoscope size={14} className="text-sky-600 dark:text-sky-400" /> Referral Doctor
+                <span className="ml-auto text-xs font-normal text-sky-600/70 dark:text-sky-400/70">optional</span>
               </div>
               <div className="p-2.5" ref={doctorRef}>
                 {/* Walk-in + Search row */}
@@ -1499,9 +1499,9 @@ export default function BillingDesk() {
 
             {/* ── Test Catalog (Quick Tests + Add Tests + Individual Tests) ── */}
             <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
-              <div className="px-3 py-2 border-b border-card-border bg-gradient-to-r from-violet-50 to-transparent dark:from-violet-950/20 border-l-[3px] border-l-violet-500 flex items-center gap-2 text-xs font-semibold">
-                <FlaskConical size={12} className="text-violet-600 dark:text-violet-400" /> Test Catalog
-                <span className="ml-auto text-[10px] font-normal text-muted-foreground">Hover ✏️ to customize slots</span>
+              <div className="px-4 py-2 h-10 border-b border-card-border bg-gradient-to-r from-violet-50 to-violet-100/50 dark:from-violet-950/30 dark:to-violet-900/10 border-l-[3px] border-l-violet-600 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-violet-800 dark:text-violet-200">
+                <FlaskConical size={14} className="text-violet-600 dark:text-violet-400" /> Test Catalog
+                <span className="ml-auto text-xs font-normal text-violet-600/70 dark:text-violet-400/70">Hover ✏️ to customize slots</span>
               </div>
               <div className="p-2.5 space-y-2">
                 {/* ── Quick Test Tabs (6 customizable slots) ── */}
@@ -1621,9 +1621,9 @@ export default function BillingDesk() {
 
             {/* ── Add Package ── */}
             <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
-              <div className="px-4 py-2.5 border-b border-card-border flex items-center justify-between bg-gradient-to-r from-rose-50 to-transparent dark:from-rose-950/20 border-l-[3px] border-l-rose-500">
-                <div className="flex items-center gap-2 text-sm font-semibold text-rose-700 dark:text-rose-300">
-                  <Package size={14} /> Add Package
+              <div className="px-4 py-2 h-10 border-b border-card-border flex items-center justify-between bg-gradient-to-r from-rose-50 to-rose-100/50 dark:from-rose-950/30 dark:to-rose-900/10 border-l-[3px] border-l-rose-600">
+                <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-rose-800 dark:text-rose-200">
+                  <Package size={14} className="text-rose-600 dark:text-rose-400" /> Add Package
                 </div>
                 <button
                   type="button"
@@ -1691,8 +1691,8 @@ export default function BillingDesk() {
             <div className="space-y-3">
               {/* ── Selected Tests ── */}
               <div className="lg:flex-1 min-h-0 overflow-y-auto border-b border-card-border max-h-[34vh] lg:max-h-none">
-                <div className="px-4 py-2 bg-gradient-to-r from-slate-50 via-slate-100 to-transparent dark:from-slate-800/30 dark:via-slate-700/20 border-l-[3px] border-l-slate-500 flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
+                <div className="px-4 py-2 h-10 bg-gradient-to-r from-slate-50 via-slate-100 to-slate-100/50 dark:from-slate-800/40 dark:via-slate-700/30 dark:to-slate-900/20 border-l-[3px] border-l-slate-600 flex items-center justify-between">
+                  <span className="text-sm font-bold uppercase tracking-wide text-slate-800 dark:text-slate-200">
                     Selected Tests ({selectedTests.length})
                   </span>
                   {selectedTests.length > 0 && (
@@ -1745,10 +1745,10 @@ export default function BillingDesk() {
               </div>
 
               <div className="flex-shrink-0 border-b border-card-border bg-card lg:sticky lg:bottom-0 lg:z-10 shadow-sm">
-                <div className="px-3 py-2 border-b border-card-border bg-gradient-to-r from-indigo-100 via-indigo-50 to-transparent dark:from-indigo-950/30 dark:via-indigo-900/10 border-l-[3px] border-l-indigo-600 flex items-center justify-between gap-2">
+                <div className="px-4 py-2 h-10 border-b border-card-border bg-gradient-to-r from-indigo-100 via-indigo-50 to-indigo-100/50 dark:from-indigo-950/40 dark:via-indigo-900/30 dark:to-indigo-900/20 border-l-[3px] border-l-indigo-700 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <Receipt size={14} className="text-indigo-700 dark:text-indigo-300 flex-shrink-0" />
-                    <span className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">Bill Summary</span>
+                    <span className="text-sm font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200 truncate">Bill Summary</span>
                   </div>
                   {selectedTests.length > 0 && (
                     <button
@@ -2422,9 +2422,9 @@ function TodayCollectionsPanel() {
 
   return (
     <div className="flex-shrink-0 border-t border-card-border bg-card/50">
-      <div className="px-3 py-1.5 flex items-center gap-2 text-[11px] font-semibold border-b border-card-border bg-gradient-to-r from-blue-50 to-transparent dark:from-blue-950/20 border-l-[3px] border-l-blue-400">
-        <Receipt size={11} className="text-blue-600 dark:text-blue-400" />
-        <span>Today's Collections</span>
+      <div className="px-4 py-2 h-10 flex items-center gap-2 text-sm font-bold uppercase tracking-wide border-b border-card-border bg-gradient-to-r from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/10 border-l-[3px] border-l-blue-600">
+        <Receipt size={14} className="text-blue-600 dark:text-blue-400" />
+        <span className="text-blue-800 dark:text-blue-200">Today's Collections</span>
         <span className="text-muted-foreground font-normal ml-0.5">{sorted.length}</span>
         {dueCount > 0 && (
           <span className="ml-auto text-orange-600 font-semibold tabular-nums">
