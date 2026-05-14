@@ -16,18 +16,32 @@ import { Switch } from "@/components/ui/switch";
 import { useForm, Controller } from "react-hook-form";
 import {
   Plus, Pencil, Trash2, Tag, Percent, BadgeDollarSign,
-  Calendar, CheckCircle2, XCircle, AlertCircle,
+  Calendar, CheckCircle2, XCircle, AlertCircle, UserCheck,
+  Stethoscope, Baby, X,
 } from "lucide-react";
 
-type Test = { id: number; name: string; code: string; category: string };
+type Test = { id: number; name: string; code: string | null; category: string | null };
+type Doctor = { id: number; name: string; specialization?: string };
+type RuleCondition =
+  | { type: "age_gte"; value: number }
+  | { type: "age_lte"; value: number }
+  | { type: "referral_doctor_id"; value: number };
+
 type DiscountRule = {
   id: number; name: string; type: "percentage" | "fixed"; value: number;
   scope: "all" | "category" | "test"; categories: string[]; testIds: number[];
+  conditions: RuleCondition[];
   expiresAt: string | null; reason: string | null; isActive: boolean;
   createdAt: string;
 };
 
 const CATEGORIES = ["Haematology", "Biochemistry", "Microbiology", "Serology", "Pathology", "Radiology", "Cardiology", "Other"];
+
+const CONDITION_TYPES = [
+  { value: "age_gte", label: "Patient Age ≥ (years)", icon: UserCheck },
+  { value: "age_lte", label: "Patient Age ≤ (years)", icon: Baby },
+  { value: "referral_doctor_id", label: "Referred by Doctor", icon: Stethoscope },
+] as const;
 
 function statusBadge(rule: DiscountRule) {
   const today = new Date().toISOString().split("T")[0];
@@ -51,14 +65,22 @@ export default function Discounts() {
   const [editRule, setEditRule] = useState<DiscountRule | null>(null);
   const [catInput, setCatInput] = useState("");
   const [testInput, setTestInput] = useState("");
+  // Conditions state managed separately (not via react-hook-form for simplicity)
+  const [conditions, setConditions] = useState<RuleCondition[]>([]);
 
   const { data: rules = [], isLoading } = useQuery<DiscountRule[]>({
     queryKey: ["discounts"],
     queryFn: () => api.get("/api/discounts"),
   });
-  const { data: tests = [] } = useQuery<Test[]>({
+  const { data: testsResp } = useQuery<{ tests: Test[]; total: number }>({
     queryKey: ["tests-simple"],
     queryFn: () => api.get("/api/tests"),
+  });
+  const tests: Test[] = testsResp?.tests ?? [];
+
+  const { data: doctors = [] } = useQuery<Doctor[]>({
+    queryKey: ["doctors"],
+    queryFn: () => api.get("/api/doctors"),
   });
 
   const { register, handleSubmit, reset, watch, setValue, control } = useForm<FormValues>({
@@ -69,9 +91,15 @@ export default function Discounts() {
   const selectedCats = watch("categories") || [];
   const selectedTestIds = watch("testIds") || [];
 
-  const openCreate = () => { setEditRule(null); reset({ name: "", type: "percentage", value: "", scope: "all", categories: [], testIds: [], expiresAt: "", reason: "" }); setOpen(true); };
+  const openCreate = () => {
+    setEditRule(null);
+    setConditions([]);
+    reset({ name: "", type: "percentage", value: "", scope: "all", categories: [], testIds: [], expiresAt: "", reason: "" });
+    setOpen(true);
+  };
   const openEdit = (r: DiscountRule) => {
     setEditRule(r);
+    setConditions(r.conditions ?? []);
     reset({ name: r.name, type: r.type, value: String(r.value), scope: r.scope, categories: r.categories, testIds: r.testIds.map(String), expiresAt: r.expiresAt ?? "", reason: r.reason ?? "" });
     setOpen(true);
   };
@@ -101,6 +129,7 @@ export default function Discounts() {
       scope: data.scope,
       categories: data.scope === "category" ? data.categories : [],
       testIds: data.scope === "test" ? data.testIds.map(Number) : [],
+      conditions,
       expiresAt: data.expiresAt || null,
       reason: data.reason || null,
     };
@@ -108,8 +137,36 @@ export default function Discounts() {
     else createMut.mutate(body);
   };
 
+  // ── Condition helpers ────────────────────────────────────────────────────────
+  function addCondition() {
+    setConditions(prev => [...prev, { type: "age_gte", value: 60 }]);
+  }
+  function removeCondition(idx: number) {
+    setConditions(prev => prev.filter((_, i) => i !== idx));
+  }
+  function updateConditionType(idx: number, newType: RuleCondition["type"]) {
+    setConditions(prev => prev.map((c, i) => {
+      if (i !== idx) return c;
+      if (newType === "referral_doctor_id") return { type: newType, value: doctors[0]?.id ?? 0 };
+      return { type: newType, value: 60 };
+    }));
+  }
+  function updateConditionValue(idx: number, val: number) {
+    setConditions(prev => prev.map((c, i) => i === idx ? { ...c, value: val } as RuleCondition : c));
+  }
+
   const today = new Date().toISOString().split("T")[0];
   const activeCount = rules.filter(r => r.isActive && (!r.expiresAt || r.expiresAt >= today)).length;
+
+  function conditionLabel(c: RuleCondition, docs: Doctor[]): string {
+    if (c.type === "age_gte") return `Age ≥ ${c.value} yrs`;
+    if (c.type === "age_lte") return `Age ≤ ${c.value} yrs`;
+    if (c.type === "referral_doctor_id") {
+      const d = docs.find(d => d.id === c.value);
+      return `Referred by ${d?.name ?? `Doctor #${c.value}`}`;
+    }
+    return "";
+  }
 
   return (
     <div className="pb-8">
@@ -168,6 +225,16 @@ export default function Discounts() {
                         </span>
                         {rule.expiresAt && <span className="text-xs text-muted-foreground flex items-center gap-1"><Calendar size={11} />Expires {rule.expiresAt}</span>}
                       </div>
+                      {/* Auto-apply condition badges */}
+                      {rule.conditions && rule.conditions.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {rule.conditions.map((c, i) => (
+                            <span key={i} className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
+                              <CheckCircle2 size={9} /> Auto: {conditionLabel(c, doctors)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       {rule.reason && <p className="text-xs text-muted-foreground mt-0.5 italic">"{rule.reason}"</p>}
                     </div>
                   </div>
@@ -192,7 +259,9 @@ export default function Discounts() {
         <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 text-sm text-blue-800 dark:text-blue-300">
           <p className="font-semibold mb-1">How discount rules work</p>
           <ul className="list-disc list-inside space-y-0.5 text-xs">
-            <li>Rules are automatically suggested during the Quick Register billing step</li>
+            <li>Rules are automatically suggested during the billing step</li>
+            <li>Auto-apply conditions (age, referring doctor) trigger the rule instantly when a patient is loaded in Billing Desk</li>
+            <li>All conditions on a rule must match for it to auto-apply (AND logic)</li>
             <li>The best applicable discount is selected; staff can override within their allowed limit</li>
             <li>Per-user maximum discount limits are set in <strong>Settings → Users</strong></li>
             <li>Expired rules are shown but not applied during billing</li>
@@ -202,7 +271,7 @@ export default function Discounts() {
 
       {/* Create / Edit Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editRule ? "Edit Discount Rule" : "New Discount Rule"}</DialogTitle>
           </DialogHeader>
@@ -261,7 +330,9 @@ export default function Discounts() {
                     );
                   })}
                 </div>
-                {catInput !== undefined && <Input value={catInput} onChange={e => setCatInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); if (catInput.trim()) { setValue("categories", [...selectedCats, catInput.trim()]); setCatInput(""); } } }} className="mt-2" placeholder="Or type custom category + Enter" />}
+                <Input value={catInput} onChange={e => setCatInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); if (catInput.trim()) { setValue("categories", [...selectedCats, catInput.trim()]); setCatInput(""); } } }}
+                  className="mt-2" placeholder="Or type custom category + Enter" />
               </div>
             )}
 
@@ -270,21 +341,97 @@ export default function Discounts() {
                 <Label>Select Tests</Label>
                 <Input value={testInput} onChange={e => setTestInput(e.target.value)} className="mt-1" placeholder="Search tests…" />
                 <div className="mt-2 max-h-40 overflow-y-auto space-y-1 border border-border rounded-lg p-2">
-                  {tests.filter(t => !testInput || t.name.toLowerCase().includes(testInput.toLowerCase()) || t.code.toLowerCase().includes(testInput.toLowerCase())).slice(0, 100).map(t => {
-                    const sel = selectedTestIds.includes(String(t.id));
-                    return (
-                      <button key={t.id} type="button"
-                        onClick={() => setValue("testIds", sel ? selectedTestIds.filter(x => x !== String(t.id)) : [...selectedTestIds, String(t.id)])}
-                        className={`w-full text-left text-xs px-2 py-1.5 rounded flex items-center justify-between transition-colors ${sel ? "bg-primary/10 text-primary" : "hover:bg-muted"}`}>
-                        <span>{t.code} — {t.name}</span>
-                        {sel && <CheckCircle2 size={12} className="text-primary flex-shrink-0" />}
-                      </button>
-                    );
-                  })}
+                  {tests
+                    .filter(t => !testInput ||
+                      t.name.toLowerCase().includes(testInput.toLowerCase()) ||
+                      (t.code ?? "").toLowerCase().includes(testInput.toLowerCase()))
+                    .slice(0, 100)
+                    .map(t => {
+                      const sel = selectedTestIds.includes(String(t.id));
+                      return (
+                        <button key={t.id} type="button"
+                          onClick={() => setValue("testIds", sel ? selectedTestIds.filter(x => x !== String(t.id)) : [...selectedTestIds, String(t.id)])}
+                          className={`w-full text-left text-xs px-2 py-1.5 rounded flex items-center justify-between transition-colors ${sel ? "bg-primary/10 text-primary" : "hover:bg-muted"}`}>
+                          <span>{t.code ? `${t.code} — ` : ""}{t.name}</span>
+                          {sel && <CheckCircle2 size={12} className="text-primary flex-shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  {tests.length === 0 && <p className="text-xs text-muted-foreground text-center py-3">Loading tests…</p>}
                 </div>
                 {selectedTestIds.length > 0 && <p className="text-xs text-muted-foreground mt-1">{selectedTestIds.length} test(s) selected</p>}
               </div>
             )}
+
+            {/* ── Auto-Apply Conditions ────────────────────────────────────── */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <Label>Auto-Apply Conditions <span className="text-xs font-normal text-muted-foreground ml-1">(optional — all must match)</span></Label>
+                <Button type="button" variant="outline" size="sm" className="h-7 text-xs px-2" onClick={addCondition}>
+                  <Plus size={11} className="mr-1" /> Add
+                </Button>
+              </div>
+
+              {conditions.length === 0 ? (
+                <p className="text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
+                  No conditions — rule applies to every patient. Add conditions to auto-trigger based on age or referring doctor.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {conditions.map((cond, idx) => (
+                    <div key={idx} className="flex items-center gap-2 bg-muted/20 border border-card-border rounded-lg p-2">
+                      {/* Type selector */}
+                      <Select value={cond.type} onValueChange={(v) => updateConditionType(idx, v as RuleCondition["type"])}>
+                        <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CONDITION_TYPES.map(ct => (
+                            <SelectItem key={ct.value} value={ct.value}>
+                              <span className="flex items-center gap-1.5">
+                                <ct.icon size={12} /> {ct.label}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
+                      {/* Value */}
+                      {cond.type === "referral_doctor_id" ? (
+                        <Select value={String(cond.value)} onValueChange={(v) => updateConditionValue(idx, Number(v))}>
+                          <SelectTrigger className="h-7 text-xs w-40 flex-shrink-0">
+                            <SelectValue placeholder="Pick doctor" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {doctors.map(d => (
+                              <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
+                            ))}
+                            {doctors.length === 0 && <SelectItem value="0" disabled>No doctors found</SelectItem>}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          type="number" min="0" max="120"
+                          value={cond.value}
+                          onChange={e => updateConditionValue(idx, Number(e.target.value))}
+                          className="h-7 text-xs w-20 flex-shrink-0"
+                          placeholder="years"
+                        />
+                      )}
+
+                      <button type="button" onClick={() => removeCondition(idx)}
+                        className="flex-shrink-0 text-muted-foreground hover:text-red-500 transition-colors">
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+
+                  <p className="text-[10px] text-muted-foreground">
+                    When a patient is loaded in Billing Desk, matching rules are auto-applied instantly.
+                  </p>
+                </div>
+              )}
+            </div>
 
             <div>
               <Label>Expiry Date</Label>
@@ -294,7 +441,7 @@ export default function Discounts() {
 
             <div>
               <Label>Default Reason / Description</Label>
-              <Input {...register("reason")} className="mt-1" placeholder="e.g., Corporate tie-up discount" />
+              <Input {...register("reason")} className="mt-1" placeholder="e.g., Senior citizen concession" />
             </div>
 
             <div className="flex justify-end gap-2 pt-2">

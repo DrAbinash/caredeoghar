@@ -899,6 +899,8 @@ export default function BillingDesk() {
     try {
       const result = await api.post<{ discount: number; rule: { name: string } | null }>("/api/discounts/apply", {
         tests: selectedTests.map((t) => ({ testId: t.testId, category: t.category, price: t.price })),
+        patientDob: selectedPatient?.dateOfBirth ?? null,
+        doctorId: doctorId ?? null,
       });
       setSuggestion(result);
     } catch {
@@ -907,6 +909,14 @@ export default function BillingDesk() {
       setSuggLoading(false);
     }
   }
+
+  // Auto-fetch suggestion whenever patient or doctor changes (if tests are already selected)
+  useEffect(() => {
+    if (selectedTests.length > 0 && (selectedPatient || doctorId)) {
+      void fetchSuggestion();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPatient?.id, doctorId]);
 
   // ── Click outside patient search dropdown ──────────
   useEffect(() => {

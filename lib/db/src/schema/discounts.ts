@@ -12,6 +12,10 @@ export const discountRulesTable = pgTable("discount_rules", {
   reason: text("reason"), // default reason description
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  // Auto-apply conditions: JSON array of { type, value } objects.
+  // Supported types: "age_gte" | "age_lte" | "referral_doctor_id"
+  // All conditions must match for the rule to auto-apply (AND logic).
+  conditions: text("conditions").notNull().default("[]"),
 });
 
 export type DiscountRule = typeof discountRulesTable.$inferSelect;
