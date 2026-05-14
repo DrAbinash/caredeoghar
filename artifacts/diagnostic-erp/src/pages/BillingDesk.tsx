@@ -1026,22 +1026,22 @@ export default function BillingDesk() {
           <Receipt size={18} className="text-primary" />
           <span className="font-bold text-base">Billing Desk</span>
         </div>
-        <div className="hidden sm:flex items-center gap-1.5 text-sm text-muted-foreground">
+        <div className="hidden sm:flex items-center gap-1.5 text-sm text-slate-900 dark:text-slate-900">
           <CalendarDays size={13} />
           <span>{today()}</span>
         </div>
         <div className="flex items-center gap-1.5 text-xs sm:text-sm">
-          <Hash size={13} className="text-muted-foreground" />
-          <span className="font-mono text-primary font-semibold">
+          <Hash size={13} className="text-slate-900 dark:text-slate-900" />
+          <span className="font-mono text-primary font-extrabold">
             {previewBillNo?.next ?? "—"}
           </span>
-          <span className="hidden sm:inline text-xs text-muted-foreground">(next bill no.)</span>
+          <span className="hidden sm:inline text-xs text-slate-900 dark:text-slate-900">(next bill no.)</span>
         </div>
         <div className="ml-auto flex items-center gap-2 w-full sm:w-auto order-last sm:order-none">
           <div className="flex-1 sm:flex-none"><BillSearchBox /></div>
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground flex-shrink-0">
+              <Button variant="ghost" size="sm" className="text-slate-900 dark:text-slate-900 hover:text-foreground flex-shrink-0">
                 <Receipt size={13} className="mr-1" /> <span className="hidden xs:inline sm:inline">Recent</span>
               </Button>
             </PopoverTrigger>
@@ -1049,7 +1049,7 @@ export default function BillingDesk() {
               <RecentBillsPanel />
             </PopoverContent>
           </Popover>
-          <Button variant="ghost" size="sm" onClick={resetAll} className="text-muted-foreground hover:text-foreground flex-shrink-0">
+          <Button variant="ghost" size="sm" onClick={resetAll} className="text-slate-900 dark:text-slate-900 hover:text-foreground flex-shrink-0">
             <RefreshCcw size={13} className="mr-1" /> <span className="hidden xs:inline sm:inline">New Bill</span>
           </Button>
         </div>
@@ -1071,7 +1071,7 @@ export default function BillingDesk() {
                   <User size={14} className="text-white" /> Search Patient
                 </div>
                 {selectedPatient && (
-                  <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => { setSelectedPatient(null); setPatientSearch(""); }}>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs text-slate-900 dark:text-slate-900" onClick={() => { setSelectedPatient(null); setPatientSearch(""); }}>
                     <X size={11} className="mr-1" /> Change
                   </Button>
                 )}
@@ -1086,18 +1086,18 @@ export default function BillingDesk() {
                         {selectedPatient.firstName[0]}{selectedPatient.lastName[0]}
                       </div>
                       <div>
-                        <div className="font-semibold text-sm">{selectedPatient.firstName} {selectedPatient.lastName}</div>
-                        <div className="text-xs text-muted-foreground font-mono">{selectedPatient.patientId}</div>
+                        <div className="font-extrabold text-sm">{selectedPatient.firstName} {selectedPatient.lastName}</div>
+                        <div className="text-xs text-slate-900 dark:text-slate-900 font-mono">{selectedPatient.patientId}</div>
                       </div>
-                      <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+                      <div className="ml-auto flex items-center gap-3 text-xs text-slate-900 dark:text-slate-900">
                         <span className="capitalize">{selectedPatient.gender}</span>
                         {selectedPatient.dateOfBirth && <span>{selectedPatient.dateOfBirth}</span>}
                       </div>
                     </div>
                     {selectedPatient.phone && (
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground pl-10">
+                      <div className="flex items-center gap-1 text-xs text-slate-900 dark:text-slate-900 pl-10">
                         <Phone size={10} /> {selectedPatient.phone}
-                        {selectedPatient.bloodGroup && <span className="ml-2 bg-red-100 text-red-600 px-1.5 rounded font-medium">{selectedPatient.bloodGroup}</span>}
+                        {selectedPatient.bloodGroup && <span className="ml-2 bg-red-100 text-red-600 px-1.5 rounded font-bold">{selectedPatient.bloodGroup}</span>}
                       </div>
                     )}
                   </div>
@@ -1105,7 +1105,7 @@ export default function BillingDesk() {
                   /* Search existing patient */
                   <div ref={searchRef}>
                     <div className="relative">
-                      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-900 dark:text-slate-900" />
                       <Input
                         placeholder="Search by name, ID or phone…"
                         value={patientSearch}
@@ -1118,12 +1118,12 @@ export default function BillingDesk() {
                     {searchOpen && (
                       <div className="mt-1 border border-card-border rounded-lg bg-popover shadow-lg max-h-52 overflow-y-auto">
                         {patientSearch.length === 0 && (
-                          <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-b border-border">
+                          <div className="px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wide text-slate-900 dark:text-slate-900 border-b border-border">
                             Recent Patients
                           </div>
                         )}
                         {!patientResults?.patients?.length ? (
-                          <div className="px-4 py-3 text-sm text-muted-foreground text-center">
+                          <div className="px-4 py-3 text-sm text-slate-900 dark:text-slate-900 text-center">
                             {patientSearch.length >= 1 ? "No patients found" : "No patients yet"}
                           </div>
                         ) : (
@@ -1138,10 +1138,10 @@ export default function BillingDesk() {
                                 {p.firstName[0]}{p.lastName[0]}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className="text-sm font-bold text-slate-900 dark:text-slate-100">{p.firstName} {p.lastName}</div>
-                                <div className="text-xs text-slate-600 dark:text-slate-400">{p.patientId} · {p.phone}</div>
+                                <div className="text-sm font-bold text-slate-900 dark:text-slate-900">{p.firstName} {p.lastName}</div>
+                                <div className="text-xs text-slate-900 dark:text-slate-900">{p.patientId} · {p.phone}</div>
                               </div>
-                              <span className="text-xs text-muted-foreground capitalize">{p.gender}</span>
+                              <span className="text-xs text-slate-900 dark:text-slate-900 capitalize">{p.gender}</span>
                             </button>
                           ))
                         )}
@@ -1157,8 +1157,8 @@ export default function BillingDesk() {
               <div className="mx-3 mb-1 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-3 py-2 text-[11px]">
                 <AlertTriangle size={13} className="text-amber-600 flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
-                  <span className="font-semibold text-amber-800 dark:text-amber-300">Bill already exists today</span>
-                  <span className="text-amber-700 dark:text-amber-400"> — {recentPatientBill.billNumber} was created at {new Date(recentPatientBill.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}. Are you sure you want to create another?</span>
+                  <span className="font-extrabold text-amber-800 dark:text-amber-300">Bill already exists today</span>
+                  <span className="text-amber-900 dark:text-amber-700"> — {recentPatientBill.billNumber} was created at {new Date(recentPatientBill.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}. Are you sure you want to create another?</span>
                 </div>
               </div>
             )}
@@ -1167,20 +1167,20 @@ export default function BillingDesk() {
             {selectedPatient && needsDicom && (
               <div className="bg-blue-50 border border-blue-300 rounded-xl overflow-hidden dark:bg-blue-950/20 dark:border-blue-800">
                 <div className="px-4 py-2 border-b border-blue-200 bg-blue-100 dark:bg-blue-900/30 flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold text-blue-800 dark:text-blue-200 flex items-center gap-1.5">
+                  <span className="text-xs font-extrabold text-blue-800 dark:text-blue-900 flex items-center gap-1.5">
                     <span className="inline-block w-2 h-2 rounded-full bg-blue-600" />
                     DICOM Worklist
                   </span>
                   {dicomFieldsComplete
-                    ? <span className="text-[11px] text-green-700 dark:text-green-400 font-semibold">✓ Ready</span>
-                    : <span className="text-[11px] text-amber-700 font-semibold">Fill Referring Doctor</span>}
+                    ? <span className="text-[11px] text-green-700 dark:text-green-800 font-extrabold">✓ Ready</span>
+                    : <span className="text-[11px] text-amber-900 font-extrabold">Fill Referring Doctor</span>}
                 </div>
                 <div className="p-3 grid grid-cols-2 gap-2">
                   {/* Study Description */}
                   <div className="space-y-0.5">
-                    <label className="text-[10px] font-semibold flex items-center gap-1">
+                    <label className="text-[10px] font-extrabold flex items-center gap-1">
                       Study Description
-                      {dicomStudyDesc.trim() && <span className="text-[9px] text-blue-500 font-normal">(auto)</span>}
+                      {dicomStudyDesc.trim() && <span className="text-[9px] text-blue-900 font-bold">(auto)</span>}
                       <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -1192,9 +1192,9 @@ export default function BillingDesk() {
                   </div>
                   {/* Body Part */}
                   <div className="space-y-0.5">
-                    <label className="text-[10px] font-semibold flex items-center gap-1">
+                    <label className="text-[10px] font-extrabold flex items-center gap-1">
                       Body Part
-                      {dicomBodyPart.trim() && <span className="text-[9px] text-blue-500 font-normal">(auto)</span>}
+                      {dicomBodyPart.trim() && <span className="text-[9px] text-blue-900 font-bold">(auto)</span>}
                       <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -1206,9 +1206,9 @@ export default function BillingDesk() {
                   </div>
                   {/* Station AE */}
                   <div className="space-y-0.5">
-                    <label className="text-[10px] font-semibold flex items-center gap-1">
+                    <label className="text-[10px] font-extrabold flex items-center gap-1">
                       Station AE Title
-                      {dicomStationAE.trim() && <span className="text-[9px] text-blue-500 font-normal">(auto)</span>}
+                      {dicomStationAE.trim() && <span className="text-[9px] text-blue-900 font-bold">(auto)</span>}
                       <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -1220,9 +1220,9 @@ export default function BillingDesk() {
                   </div>
                   {/* Referring Doctor */}
                   <div className="space-y-0.5">
-                    <label className="text-[10px] font-semibold flex items-center gap-1 text-blue-900 dark:text-blue-200">
+                    <label className="text-[10px] font-extrabold flex items-center gap-1 text-blue-900 dark:text-blue-900">
                       Referring Doctor
-                      {dicomReferringDoc.trim() && <span className="text-[9px] text-blue-500 font-normal">(auto)</span>}
+                      {dicomReferringDoc.trim() && <span className="text-[9px] text-blue-900 font-bold">(auto)</span>}
                       <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -1241,14 +1241,14 @@ export default function BillingDesk() {
             {selectedPatient && needsFormF && (
               <div className="bg-orange-50 border border-orange-300 rounded-xl overflow-hidden">
                 <div className="px-4 py-2 border-b border-orange-200 bg-orange-100 flex items-center gap-2">
-                  <AlertTriangle size={13} className="text-orange-600 flex-shrink-0" />
-                  <span className="text-xs font-semibold text-orange-800">
+                  <AlertTriangle size={13} className="text-orange-900 flex-shrink-0" />
+                  <span className="text-xs font-extrabold text-orange-800">
                     PCPNDT Form F Required — fill additional details before generating bill
                   </span>
                 </div>
                 <div className="p-3 space-y-2">
                   <div className="space-y-1">
-                    <Label className="text-xs font-semibold">Husband's / Father's Name <span className="text-red-500">*</span></Label>
+                    <Label className="text-xs font-extrabold">Husband's / Father's Name <span className="text-red-500">*</span></Label>
                     <Input
                       value={husbandName}
                       onChange={(e) => setHusbandName(e.target.value)}
@@ -1257,7 +1257,7 @@ export default function BillingDesk() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs font-semibold">Full Address <span className="text-red-500">*</span></Label>
+                    <Label className="text-xs font-extrabold">Full Address <span className="text-red-500">*</span></Label>
                     <Input
                       value={patientAddress}
                       onChange={(e) => setPatientAddress(e.target.value)}
@@ -1265,7 +1265,7 @@ export default function BillingDesk() {
                       className="h-8 text-sm border-orange-300 focus:border-orange-500"
                     />
                   </div>
-                  <p className="text-[10px] text-orange-600">
+                  <p className="text-[10px] text-orange-900">
                     These fields are mandatory for USG tests under the PCPNDT Act. Form F will be pre-filled with this data.
                   </p>
                 </div>
@@ -1369,7 +1369,7 @@ export default function BillingDesk() {
             <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
               <div className="px-4 py-2 h-10 border-b border-card-border bg-sky-600 dark:bg-sky-700 border-l-[4px] border-l-sky-800 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-white">
                 <Stethoscope size={14} className="text-white" /> Referral Doctor
-                <span className="ml-auto text-xs font-normal text-white/80">optional</span>
+                <span className="ml-auto text-xs font-bold text-white/80">optional</span>
               </div>
               <div className="p-2.5" ref={doctorRef}>
                 {/* Walk-in + Search row */}
@@ -1377,14 +1377,14 @@ export default function BillingDesk() {
                   <button
                     type="button"
                     onClick={() => { setDoctorMode("self"); setDoctorId(null); setDoctorSearch(""); setDoctorSearchOpen(false); }}
-                    className={`px-2 py-1 rounded-md text-[11px] border transition-colors flex-shrink-0 ${doctorMode === "self" ? "border-primary bg-primary/10 text-primary font-semibold" : "border-card-border text-muted-foreground hover:bg-muted/30"}`}
+                    className={`px-2 py-1 rounded-md text-[11px] border transition-colors flex-shrink-0 ${doctorMode === "self" ? "border-primary bg-primary/10 text-primary font-extrabold" : "border-card-border text-slate-900 dark:text-slate-900 hover:bg-muted/30"}`}
                   >
                     Walk-in
                   </button>
                   <button
                     type="button"
                     onClick={() => { setDoctorMode("doctor"); if (!doctorId) setDoctorSearchOpen((v) => !v); }}
-                    className={`px-2 py-1 rounded-md text-[11px] border transition-colors flex-shrink-0 ${doctorMode === "doctor" && !doctorId ? "border-primary bg-primary/10 text-primary font-semibold" : "border-card-border text-muted-foreground hover:bg-muted/30"}`}
+                    className={`px-2 py-1 rounded-md text-[11px] border transition-colors flex-shrink-0 ${doctorMode === "doctor" && !doctorId ? "border-primary bg-primary/10 text-primary font-extrabold" : "border-card-border text-slate-900 dark:text-slate-900 hover:bg-muted/30"}`}
                   >
                     Search…
                   </button>
@@ -1392,7 +1392,7 @@ export default function BillingDesk() {
                     <button
                       type="button"
                       onClick={() => { setDoctorId(null); setDoctorSearch(""); setDoctorMode("self"); }}
-                      className="text-muted-foreground hover:text-foreground transition-colors"
+                      className="text-slate-900 dark:text-slate-900 hover:text-foreground transition-colors"
                       title="Clear doctor"
                     >
                       <X size={12} />
@@ -1413,12 +1413,12 @@ export default function BillingDesk() {
                             setDoctorMode("doctor"); setDoctorId(id); setDoctorSearch(""); setDoctorSearchOpen(false);
                           }}
                           title={doc ? doc.name : `Assign quick doctor slot ${i + 1}`}
-                          className={`h-7 rounded-full border text-[10px] font-semibold px-3 flex items-center gap-1 transition-all whitespace-nowrap shadow-sm ${
+                          className={`h-7 rounded-full border text-[10px] font-extrabold px-3 flex items-center gap-1 transition-all whitespace-nowrap shadow-sm ${
                             isActive
                               ? "border-primary bg-primary/10 text-primary shadow-md"
                               : doc
-                              ? "border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-900 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-100"
-                              : "border-dashed border-card-border bg-muted/20 text-muted-foreground hover:bg-muted/40"
+                              ? "border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-900 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-900"
+                              : "border-dashed border-card-border bg-muted/20 text-slate-900 dark:text-slate-900 hover:bg-muted/40"
                           }`}
                         >
                           {doc ? (
@@ -1430,7 +1430,7 @@ export default function BillingDesk() {
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); setQuickDoctorPickerSlot(i); setQuickDoctorPickerSearch(""); }}
-                          className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full bg-card border border-card-border text-muted-foreground hover:text-foreground hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-sm"
+                          className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full bg-card border border-card-border text-slate-900 dark:text-slate-900 hover:text-foreground hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-sm"
                           title="Customize this slot"
                         >
                           <Pencil size={7} />
@@ -1443,7 +1443,7 @@ export default function BillingDesk() {
                 {doctorMode === "doctor" && doctorId && (() => {
                   const doc = doctors.find(d => d.id === doctorId);
                   return doc ? (
-                    <div className="mt-1.5 text-[10px] text-primary font-medium truncate">
+                    <div className="mt-1.5 text-[10px] text-primary font-bold truncate">
                       {doc.name}
                     </div>
                   ) : null;
@@ -1452,7 +1452,7 @@ export default function BillingDesk() {
                 {doctorMode === "doctor" && !doctorId && (
                   <div className="mt-2">
                     <div className="relative">
-                      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-900 dark:text-slate-900" />
                       <Input
                         placeholder="Search doctor by name or specialization…"
                         value={doctorSearch}
@@ -1466,7 +1466,7 @@ export default function BillingDesk() {
                     {doctorSearchOpen && (
                       <div className="mt-1 border border-card-border rounded-lg bg-popover shadow-lg max-h-48 overflow-y-auto">
                         <button
-                          className="w-full text-left px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted/50 border-b border-border italic"
+                          className="w-full text-left px-3 py-2.5 text-sm text-slate-900 dark:text-slate-900 hover:bg-muted/50 border-b border-border italic"
                           onMouseDown={(e) => e.preventDefault()}
                           onClick={() => { setDoctorMode("self"); setDoctorId(null); setDoctorSearch(""); setDoctorSearchOpen(false); }}
                         >
@@ -1482,7 +1482,7 @@ export default function BillingDesk() {
                             d.specialization.toLowerCase().includes(q)
                           );
                           return filtered.length === 0 ? (
-                            <div className="px-4 py-3 text-sm text-muted-foreground text-center">No doctors found</div>
+                            <div className="px-4 py-3 text-sm text-slate-900 dark:text-slate-900 text-center">No doctors found</div>
                           ) : filtered.map(d => (
                             <button
                               key={d.id}
@@ -1490,12 +1490,12 @@ export default function BillingDesk() {
                               onMouseDown={(e) => e.preventDefault()}
                               onClick={() => { setDoctorMode("doctor"); setDoctorId(d.id); setDoctorSearch(""); setDoctorSearchOpen(false); }}
                             >
-                              <div className="w-9 h-7 rounded bg-primary/10 flex items-center justify-center flex-shrink-0 font-mono text-[11px] text-primary font-semibold">
+                              <div className="w-9 h-7 rounded bg-primary/10 flex items-center justify-center flex-shrink-0 font-mono text-[11px] text-primary font-extrabold">
                                 #{d.id}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className="text-sm font-bold text-slate-900 dark:text-slate-100">Dr. {d.name}</div>
-                                <div className="text-xs text-slate-600 dark:text-slate-400">{d.specialization}</div>
+                                <div className="text-sm font-bold text-slate-900 dark:text-slate-900">Dr. {d.name}</div>
+                                <div className="text-xs text-slate-900 dark:text-slate-900">{d.specialization}</div>
                               </div>
                             </button>
                           ));
@@ -1511,13 +1511,13 @@ export default function BillingDesk() {
             <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
               <div className="px-4 py-2 h-10 border-b border-card-border bg-violet-600 dark:bg-violet-700 border-l-[4px] border-l-violet-800 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-white">
                 <FlaskConical size={14} className="text-white" /> Test Catalog
-                <span className="ml-auto text-xs font-normal text-white/80">Hover ✏️ to customize slots</span>
+                <span className="ml-auto text-xs font-bold text-white/80">Hover ✏️ to customize slots</span>
               </div>
               <div className="p-2.5 space-y-2">
                 {/* ── Quick Test Tabs (6 customizable slots) ── */}
                 <div className="pt-1">
-                  <div className="flex items-center gap-1.5 text-xs font-extrabold text-violet-900 dark:text-violet-100 mb-1">
-                    <Zap size={12} className="text-violet-700 dark:text-violet-300" /> Quick Tests
+                  <div className="flex items-center gap-1.5 text-xs font-extrabold text-violet-900 dark:text-violet-900 mb-1">
+                    <Zap size={12} className="text-violet-900 dark:text-violet-900" /> Quick Tests
                   </div>
                   <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
                     {quickTestIds.map((id, i) => {
@@ -1534,13 +1534,13 @@ export default function BillingDesk() {
                               t
                                 ? added
                                   ? "border-primary/40 bg-primary/10 text-primary cursor-default"
-                                  : "border-violet-300 bg-violet-50 hover:bg-violet-100 hover:shadow-md text-violet-900 dark:bg-violet-950/30 dark:border-violet-800 dark:text-violet-100"
-                                : "border-dashed border-card-border bg-muted/20 text-muted-foreground hover:bg-muted/40"
+                                  : "border-violet-300 bg-violet-50 hover:bg-violet-100 hover:shadow-md text-violet-900 dark:bg-violet-950/30 dark:border-violet-800 dark:text-violet-900"
+                                : "border-dashed border-card-border bg-muted/20 text-slate-900 dark:text-slate-900 hover:bg-muted/40"
                             }`}
                           >
                             {t ? (
                               <>
-                                <span className="font-semibold w-full truncate leading-tight">{t.name}</span>
+                                <span className="font-extrabold w-full truncate leading-tight">{t.name}</span>
                                 <span className="text-[9px] opacity-70 w-full truncate mt-0.5 capitalize">{t.category || t.code} · {inr(t.price)}</span>
                               </>
                             ) : (
@@ -1550,7 +1550,7 @@ export default function BillingDesk() {
                           <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); setQuickPickerSlot(i); setQuickPickerSearch(""); }}
-                            className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full bg-card border border-card-border text-muted-foreground hover:text-foreground hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-sm"
+                            className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full bg-card border border-card-border text-slate-900 dark:text-slate-900 hover:text-foreground hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-sm"
                             title="Customize this slot"
                           >
                             <Pencil size={7} />
@@ -1563,11 +1563,11 @@ export default function BillingDesk() {
 
                 {/* ── Add Tests compact row (label + search + category) ── */}
                 <div className="flex items-center gap-2 pt-1">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-primary flex-shrink-0">
+                  <div className="flex items-center gap-1.5 text-xs font-extrabold text-primary flex-shrink-0">
                     <FlaskConical size={13} /> Add Tests
                   </div>
                   <div className="relative min-w-0 flex-1">
-                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-900 dark:text-slate-900" />
                     <Input
                       placeholder="Search tests by name or code…"
                       value={testSearch}
@@ -1588,13 +1588,13 @@ export default function BillingDesk() {
                 </div>
 
                 <div className="pt-1">
-                  <div className="flex items-center gap-2 text-xs font-extrabold text-slate-800 dark:text-slate-100">
-                    <FlaskConical size={11} className="text-slate-600 dark:text-slate-300" /> Individual Tests
+                  <div className="flex items-center gap-2 text-xs font-extrabold text-slate-900 dark:text-slate-900">
+                    <FlaskConical size={11} className="text-slate-900 dark:text-slate-900" /> Individual Tests
                   </div>
                   <div className="mt-1 border border-card-border rounded-lg overflow-hidden">
                     <div className="max-h-48 overflow-y-auto divide-y divide-card-border">
                       {filteredTests.length === 0 ? (
-                        <div className="px-3 py-4 text-xs text-muted-foreground text-center">No tests found</div>
+                        <div className="px-3 py-4 text-xs text-slate-900 dark:text-slate-900 text-center">No tests found</div>
                       ) : (
                         filteredTests.slice(0, 50).map((t) => {
                           const added = !!selectedTests.find((s) => s.testId === t.id);
@@ -1603,21 +1603,21 @@ export default function BillingDesk() {
                             <div key={t.id} className={`flex items-center ${added ? "bg-primary/5" : ""}`}>
                               <button
                                 onClick={(e) => togglePin(t.id, e)}
-                                className={`pl-2 pr-1 py-2 flex-shrink-0 transition-colors ${pinned ? "text-amber-400 hover:text-amber-500" : "text-muted-foreground/30 hover:text-amber-400"}`}
+                                className={`pl-2 pr-1 py-2 flex-shrink-0 transition-colors ${pinned ? "text-amber-700 hover:text-amber-500" : "text-slate-900 dark:text-slate-900/30 hover:text-amber-700"}`}
                               >
                                 <Star size={11} fill={pinned ? "currentColor" : "none"} />
                               </button>
                               <button
                                 onClick={() => addTest(t)}
                                 disabled={added}
-                                className={`flex-1 flex items-center gap-2 pr-3 py-2 text-left text-sm transition-colors ${added ? "text-muted-foreground cursor-default" : "hover:bg-muted/50"}`}
+                                className={`flex-1 flex items-center gap-2 pr-3 py-2 text-left text-sm transition-colors ${added ? "text-slate-900 dark:text-slate-900 cursor-default" : "hover:bg-muted/50"}`}
                               >
-                                <FlaskConical size={11} className={added ? "text-primary" : "text-muted-foreground"} />
-                                <span className="text-[10px] font-mono font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded flex-shrink-0">#{t.id}</span>
-                                <span className="flex-1 font-bold text-slate-800 dark:text-slate-200 truncate">{t.name}</span>
-                                <span className="text-xs text-slate-500 dark:text-slate-400 font-mono flex-shrink-0">{t.code}</span>
-                                <span className={`text-xs font-semibold flex-shrink-0 ${added ? "text-primary" : ""}`}>{inr(t.price)}</span>
-                                {added ? <CheckCircle2 size={12} className="text-primary flex-shrink-0" /> : <Plus size={12} className="text-muted-foreground flex-shrink-0" />}
+                                <FlaskConical size={11} className={added ? "text-primary" : "text-slate-900 dark:text-slate-900"} />
+                                <span className="text-[10px] font-mono font-extrabold text-primary bg-primary/10 px-1.5 py-0.5 rounded flex-shrink-0">#{t.id}</span>
+                                <span className="flex-1 font-bold text-slate-900 dark:text-slate-900 truncate">{t.name}</span>
+                                <span className="text-xs text-slate-900 dark:text-slate-900 font-mono flex-shrink-0">{t.code}</span>
+                                <span className={`text-xs font-extrabold flex-shrink-0 ${added ? "text-primary" : ""}`}>{inr(t.price)}</span>
+                                {added ? <CheckCircle2 size={12} className="text-primary flex-shrink-0" /> : <Plus size={12} className="text-slate-900 dark:text-slate-900 flex-shrink-0" />}
                               </button>
                             </div>
                           );
@@ -1638,14 +1638,14 @@ export default function BillingDesk() {
                 <button
                   type="button"
                   onClick={() => navigate("/packages")}
-                  className="text-[11px] text-muted-foreground hover:text-foreground"
+                  className="text-[11px] text-slate-900 dark:text-slate-900 hover:text-foreground"
                 >
                   Manage
                 </button>
               </div>
               <div className="p-2.5 space-y-2">
                 <div className="relative">
-                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-900 dark:text-slate-900" />
                   <Input
                     placeholder="Search packages by name, code, or test…"
                     value={packageSearch}
@@ -1654,12 +1654,12 @@ export default function BillingDesk() {
                   />
                 </div>
                 {packages.length === 0 ? (
-                  <div className="px-3 py-3 text-xs text-muted-foreground text-center border border-card-border rounded-lg">
+                  <div className="px-3 py-3 text-xs text-slate-900 dark:text-slate-900 text-center border border-card-border rounded-lg">
                     No packages created yet.&nbsp;
                     <button onClick={() => navigate("/packages")} className="text-primary hover:underline">Create one</button>
                   </div>
                 ) : filteredPackages.length === 0 ? (
-                  <div className="px-3 py-2 text-xs text-muted-foreground text-center border border-card-border rounded-lg">No packages match "{packageSearch}"</div>
+                  <div className="px-3 py-2 text-xs text-slate-900 dark:text-slate-900 text-center border border-card-border rounded-lg">No packages match "{packageSearch}"</div>
                 ) : (
                   <div className="flex gap-2 flex-wrap pt-0.5">
                     {filteredPackages.map((pkg) => {
@@ -1670,16 +1670,16 @@ export default function BillingDesk() {
                           key={pkg.id}
                           onClick={() => addPackage(pkg)}
                           disabled={added}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-medium transition-colors shadow-sm ${
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-bold transition-colors shadow-sm ${
                             added
                               ? "border-primary/40 bg-primary/10 text-primary cursor-default"
                               : "border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-900 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-100"
                           }`}
                         >
                           <Package size={10} className="flex-shrink-0 opacity-70" />
-                          <span className="font-semibold">{pkg.name}</span>
+                          <span className="font-extrabold">{pkg.name}</span>
                           <span className="opacity-60 text-[10px]">{pkg.tests.length} tests</span>
-                          <span className="font-semibold">{inr(effective)}</span>
+                          <span className="font-extrabold">{inr(effective)}</span>
                           {added ? <CheckCircle2 size={11} className="flex-shrink-0" /> : <Plus size={11} className="flex-shrink-0 opacity-70" />}
                         </button>
                       );
@@ -1702,7 +1702,7 @@ export default function BillingDesk() {
               {/* ── Selected Tests ── */}
               <div className="lg:flex-1 min-h-0 overflow-y-auto border-b border-card-border max-h-[34vh] lg:max-h-none">
                 <div className="px-4 py-2 h-10 bg-gradient-to-r from-slate-50 via-slate-100 to-slate-100/50 dark:from-slate-800/40 dark:via-slate-700/30 dark:to-slate-900/20 border-l-[3px] border-l-slate-600 flex items-center justify-between">
-                  <span className="text-sm font-bold uppercase tracking-wide text-slate-800 dark:text-slate-200">
+                  <span className="text-sm font-bold uppercase tracking-wide text-slate-900 dark:text-slate-900">
                     Selected Tests ({selectedTests.length})
                   </span>
                   {selectedTests.length > 0 && (
@@ -1712,7 +1712,7 @@ export default function BillingDesk() {
                   )}
                 </div>
                 {selectedTests.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                  <div className="flex flex-col items-center justify-center py-8 text-slate-900 dark:text-slate-900">
                     <FlaskConical size={24} className="mb-2 opacity-30" />
                     <p className="text-xs">No tests added yet</p>
                   </div>
@@ -1721,13 +1721,13 @@ export default function BillingDesk() {
                     {selectedTests.map((t) => (
                       <div key={t.testId} className="flex items-center gap-2 px-4 py-2.5">
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-bold text-slate-800 dark:text-slate-200 truncate">{t.name}</div>
-                          <div className="text-xs text-slate-600 dark:text-slate-400 capitalize">{t.category}
+                          <div className="text-sm font-bold text-slate-900 dark:text-slate-900 truncate">{t.name}</div>
+                          <div className="text-xs text-slate-900 dark:text-slate-900 capitalize">{t.category}
                             {t.source === "package" && <span className="ml-1 text-orange-500">· pkg</span>}
                           </div>
                         </div>
                         <span className="text-sm font-bold flex-shrink-0">{inr(t.price)}</span>
-                        <button onClick={() => removeTest(t.testId)} className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0">
+                        <button onClick={() => removeTest(t.testId)} className="text-slate-900 dark:text-slate-900 hover:text-destructive transition-colors flex-shrink-0">
                           <X size={13} />
                         </button>
                       </div>
@@ -1736,15 +1736,15 @@ export default function BillingDesk() {
                 )}
                 {selectedPackages.length > 0 && (
                   <div className="border-t border-card-border bg-muted/5 px-4 py-3 space-y-2">
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Selected Packages</div>
+                    <div className="text-xs font-extrabold text-slate-900 dark:text-slate-900 uppercase tracking-wide">Selected Packages</div>
                     <div className="space-y-2">
                       {selectedPackages.map((pkg) => (
                         <div key={pkg.packageId} className="flex items-center justify-between gap-2 rounded-md border border-card-border px-3 py-2">
                           <div className="min-w-0">
-                            <div className="text-sm font-medium truncate">{pkg.name}</div>
-                            <div className="text-xs text-muted-foreground">{pkg.testIds.length} tests included</div>
+                            <div className="text-sm font-bold truncate">{pkg.name}</div>
+                            <div className="text-xs text-slate-900 dark:text-slate-900">{pkg.testIds.length} tests included</div>
                           </div>
-                          <button onClick={() => removePackage(pkg.packageId)} className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0">
+                          <button onClick={() => removePackage(pkg.packageId)} className="text-slate-900 dark:text-slate-900 hover:text-destructive transition-colors flex-shrink-0">
                             <X size={13} />
                           </button>
                         </div>
@@ -1762,7 +1762,7 @@ export default function BillingDesk() {
                   </div>
                   {selectedTests.length > 0 && (
                     <button
-                      className="flex items-center gap-1 text-[11px] font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-colors flex-shrink-0"
+                      className="flex items-center gap-1 text-[11px] font-extrabold text-slate-900 hover:text-slate-900 dark:text-slate-900 dark:hover:text-white transition-colors flex-shrink-0"
                       onClick={fetchSuggestion}
                       disabled={suggLoading}
                     >
@@ -1778,23 +1778,23 @@ export default function BillingDesk() {
                       <span className="text-green-700 flex-1">
                         Discount rule: <strong>{suggestion.rule?.name}</strong> — {inr(suggestion.discount)} applicable
                       </span>
-                      <button className="text-green-700 font-semibold hover:underline" onClick={() => { setDiscountType("amount"); setDiscountValue(suggestion.discount); setSuggestion(null); }}>
+                      <button className="text-green-700 font-extrabold hover:underline" onClick={() => { setDiscountType("amount"); setDiscountValue(suggestion.discount); setSuggestion(null); }}>
                         Apply
                       </button>
-                      <button onClick={() => setSuggestion(null)} className="text-muted-foreground hover:text-foreground">
+                      <button onClick={() => setSuggestion(null)} className="text-slate-900 dark:text-slate-900 hover:text-foreground">
                         <X size={10} />
                       </button>
                     </div>
                   )}
-                  <div className="flex items-center justify-between text-xs"><span className="text-muted-foreground">Subtotal</span><span className="font-medium">{inr(subtotal)}</span></div>
+                  <div className="flex items-center justify-between text-xs"><span className="text-slate-900 dark:text-slate-900">Subtotal</span><span className="font-bold">{inr(subtotal)}</span></div>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-muted-foreground w-14 flex-shrink-0">Discount</span>
+                    <span className="text-xs text-slate-900 dark:text-slate-900 w-14 flex-shrink-0">Discount</span>
                     <div className="flex items-center border border-card-border rounded-lg overflow-hidden flex-shrink-0">
                       <button onClick={() => setDiscountType("amount")} className={`px-2 py-1 text-xs flex items-center gap-0.5 transition-colors ${discountType === "amount" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}><IndianRupee size={10} /> ₹</button>
                       <button onClick={() => setDiscountType("pct")} className={`px-2 py-1 text-xs flex items-center gap-0.5 transition-colors ${discountType === "pct" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}><Percent size={10} /> %</button>
                     </div>
                     <Input type="number" min={0} max={discountType === "pct" ? 100 : subtotal} step="0.01" value={discountValue || ""} onChange={(e) => setDiscountValue(Number(e.target.value))} placeholder="0" className="h-7 text-xs flex-1 min-w-0" />
-                    {discountAmt > 0 && <span className="text-xs text-orange-600 font-medium flex-shrink-0">−{inr(discountAmt)}</span>}
+                    {discountAmt > 0 && <span className="text-xs text-orange-900 font-bold flex-shrink-0">−{inr(discountAmt)}</span>}
                   </div>
                   {discountAmt > 0 && (
                     <div className="space-y-1 pl-[62px]">
@@ -1805,7 +1805,7 @@ export default function BillingDesk() {
                       <Input placeholder="Custom note (optional)…" value={discountNote} onChange={(e) => setDiscountNote(e.target.value)} className="h-7 text-xs" maxLength={200} />
                     </div>
                   )}
-                  <div className="flex items-center justify-between pt-2 border-t border-card-border"><span className="font-bold text-sm text-slate-700 dark:text-slate-200 uppercase tracking-wide">Total</span><span className="text-2xl font-extrabold text-primary tabular-nums">{inr(total)}</span></div>
+                  <div className="flex items-center justify-between pt-2 border-t border-card-border"><span className="font-bold text-sm text-slate-700 dark:text-slate-900 uppercase tracking-wide">Total</span><span className="text-2xl font-extrabold text-primary tabular-nums">{inr(total)}</span></div>
 
                   {/* ── Payment Collection — amount input first, toggle + modes below ── */}
                   <div className="mt-3 space-y-2" ref={paymentRef}>
@@ -1829,7 +1829,7 @@ export default function BillingDesk() {
                             <SelectContent>{PAYMENT_MODES.map((m) => <SelectItem key={m} value={m} className="capitalize">{m.toUpperCase()}</SelectItem>)}</SelectContent>
                           </Select>
                           <Input type="number" min={0} step="0.01" placeholder="0.00" value={split.amount} onChange={(e) => setPaymentSplits((prev) => prev.map((s, i) => i === idx ? { ...s, amount: e.target.value } : s))} className="h-9 text-[11px]" />
-                          <button onClick={() => setPaymentSplits((prev) => prev.filter((_, i) => i !== idx))} className="text-muted-foreground hover:text-destructive transition-colors"><X size={13} /></button>
+                          <button onClick={() => setPaymentSplits((prev) => prev.filter((_, i) => i !== idx))} className="text-slate-900 dark:text-slate-900 hover:text-destructive transition-colors"><X size={13} /></button>
                         </div>
                       );
                     })}
@@ -1841,11 +1841,11 @@ export default function BillingDesk() {
                       <div className="text-[11px]">
                         {balance > 0 ? (
                           <div className="flex items-center justify-between gap-2">
-                            <span className="font-semibold text-slate-600 dark:text-slate-300">Balance due</span>
+                            <span className="font-extrabold text-slate-900 dark:text-slate-900">Balance due</span>
                             <span className="text-red-600 text-lg font-extrabold">{inr(balance)}</span>
                           </div>
                         ) : (
-                          <div className="flex items-center justify-center gap-1 text-green-600 font-semibold text-base">
+                          <div className="flex items-center justify-center gap-1 text-green-600 font-extrabold text-base">
                             <CheckCircle2 size={13} /> Fully paid — {inr(paidTotal)}
                           </div>
                         )}
@@ -1858,9 +1858,9 @@ export default function BillingDesk() {
                           <button onClick={() => setPayNow(!payNow)} className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${payNow ? "bg-primary" : "bg-muted"}`}>
                             <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${payNow ? "translate-x-4" : "translate-x-0"}`} />
                           </button>
-                          <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Collect Payment Now</span>
+                          <span className="text-sm font-extrabold text-slate-700 dark:text-slate-900">Collect Payment Now</span>
                         </div>
-                        <span className="text-xs text-muted-foreground font-medium">Total {inr(total)}</span>
+                        <span className="text-xs text-slate-900 dark:text-slate-900 font-bold">Total {inr(total)}</span>
                       </div>
                       {payNow && (
                         <div className="grid grid-cols-5 gap-1">
@@ -1872,7 +1872,7 @@ export default function BillingDesk() {
                               className={`py-2 rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all flex flex-col items-center gap-0.5 ${
                                 paymentSplits[0]?.mode === m
                                   ? "bg-primary text-white shadow-md ring-2 ring-primary/30"
-                                  : "bg-muted/60 text-slate-600 dark:text-slate-300 hover:bg-muted"
+                                  : "bg-muted/60 text-slate-900 dark:text-slate-900 hover:bg-muted"
                               }`}
                             >
                               <span>{m === "cash" ? "💵" : m === "upi" ? "📱" : m === "card" ? "💳" : m === "cheque" ? "📝" : "🏥"}</span>
@@ -1895,13 +1895,13 @@ export default function BillingDesk() {
                       generateMut.mutate();
                     }}
                     disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || !!lastBill || (needsFormF && (!husbandName.trim() || !patientAddress.trim())) || (needsDicom && !dicomFieldsComplete)}
-                    className={`w-full h-12 text-lg font-bold border-0 shadow-lg disabled:shadow-none ${lastBill ? "bg-green-600 text-white disabled:bg-green-600 disabled:text-white disabled:opacity-80" : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white disabled:from-muted disabled:to-muted disabled:text-muted-foreground"}`}
+                    className={`w-full h-12 text-lg font-bold border-0 shadow-lg disabled:shadow-none ${lastBill ? "bg-green-600 text-white disabled:bg-green-600 disabled:text-white disabled:opacity-80" : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white disabled:from-muted disabled:to-muted disabled:text-slate-900 dark:text-slate-900"}`}
                     title={lastBill ? `Bill ${lastBill.billNumber} already saved — click Reset to start a new bill` : needsFormF && (!husbandName.trim() || !patientAddress.trim()) ? "Fill Husband Name & Address for PCPNDT Form F" : needsDicom && !dicomFieldsComplete ? "Fill all 4 DICOM Worklist fields before generating bill" : undefined}
                   >
                     {lastBill ? <><CheckCircle2 size={18} className="mr-2" />Bill Saved ✓</> : generateMut.isPending ? <><Printer size={18} className="mr-2 animate-spin" />Saving…</> : <><Printer size={18} className="mr-2" />Save &amp; Print</>}
                   </Button>
                   {!lastBill && (
-                    <div className="text-center text-[10px] text-muted-foreground select-none">
+                    <div className="text-center text-[10px] text-slate-900 dark:text-slate-900 select-none">
                       <kbd className="px-1 py-0.5 rounded border border-card-border font-mono text-[9px]">Ctrl+P</kbd> Save &amp; Print &nbsp;·&nbsp;
                       <kbd className="px-1 py-0.5 rounded border border-card-border font-mono text-[9px]">F2</kbd> Patient &nbsp;·&nbsp;
                       <kbd className="px-1 py-0.5 rounded border border-card-border font-mono text-[9px]">F4</kbd> Payment
@@ -2168,11 +2168,11 @@ export default function BillingDesk() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-slate-900 dark:text-slate-900">
               Pick a frequently used test for this slot. Click the slot tab in Billing Desk to add this test instantly.
             </p>
             <div className="relative">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-900 dark:text-slate-900" />
               <Input
                 autoFocus
                 placeholder="Search tests by name or code…"
@@ -2188,7 +2188,7 @@ export default function BillingDesk() {
                   .filter((t) => !q || t.name.toLowerCase().includes(q) || t.code.toLowerCase().includes(q))
                   .slice(0, 100);
                 if (list.length === 0) {
-                  return <div className="px-3 py-4 text-xs text-muted-foreground text-center">No tests match "{quickPickerSearch}"</div>;
+                  return <div className="px-3 py-4 text-xs text-slate-900 dark:text-slate-900 text-center">No tests match "{quickPickerSearch}"</div>;
                 }
                 return list.map((t) => (
                   <button
@@ -2200,11 +2200,11 @@ export default function BillingDesk() {
                     }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-muted/50"
                   >
-                    <FlaskConical size={11} className="text-muted-foreground flex-shrink-0" />
-                    <span className="text-[10px] font-mono font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded flex-shrink-0">#{t.id}</span>
-                    <span className="flex-1 font-medium truncate">{t.name}</span>
-                    <span className="text-xs text-muted-foreground font-mono flex-shrink-0">{t.code}</span>
-                    <span className="text-xs font-semibold flex-shrink-0">{inr(t.price)}</span>
+                    <FlaskConical size={11} className="text-slate-900 dark:text-slate-900 flex-shrink-0" />
+                    <span className="text-[10px] font-mono font-extrabold text-primary bg-primary/10 px-1.5 py-0.5 rounded flex-shrink-0">#{t.id}</span>
+                    <span className="flex-1 font-bold truncate">{t.name}</span>
+                    <span className="text-xs text-slate-900 dark:text-slate-900 font-mono flex-shrink-0">{t.code}</span>
+                    <span className="text-xs font-extrabold flex-shrink-0">{inr(t.price)}</span>
                   </button>
                 ));
               })()}
@@ -2239,11 +2239,11 @@ export default function BillingDesk() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-slate-900 dark:text-slate-900">
               Pick a frequently referred doctor for this quick-select slot. Click the slot in the Referral Doctor section to select instantly.
             </p>
             <div className="relative">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-900 dark:text-slate-900" />
               <Input
                 autoFocus
                 placeholder="Search by name or specialization…"
@@ -2259,7 +2259,7 @@ export default function BillingDesk() {
                   .filter((d) => !q || d.name.toLowerCase().includes(q) || d.specialization.toLowerCase().includes(q))
                   .slice(0, 80);
                 if (list.length === 0) {
-                  return <div className="px-3 py-4 text-xs text-muted-foreground text-center">No doctors match "{quickDoctorPickerSearch}"</div>;
+                  return <div className="px-3 py-4 text-xs text-slate-900 dark:text-slate-900 text-center">No doctors match "{quickDoctorPickerSearch}"</div>;
                 }
                 return list.map((d) => (
                   <button
@@ -2271,12 +2271,12 @@ export default function BillingDesk() {
                     }}
                     className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-left hover:bg-muted/50"
                   >
-                    <div className="w-9 h-7 rounded bg-primary/10 flex items-center justify-center flex-shrink-0 font-mono text-[11px] text-primary font-semibold">
+                    <div className="w-9 h-7 rounded bg-primary/10 flex items-center justify-center flex-shrink-0 font-mono text-[11px] text-primary font-extrabold">
                       #{d.id}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium">Dr. {d.name}</div>
-                      <div className="text-xs text-muted-foreground">{d.specialization}</div>
+                      <div className="font-bold">Dr. {d.name}</div>
+                      <div className="text-xs text-slate-900 dark:text-slate-900">{d.specialization}</div>
                     </div>
                   </button>
                 ));
@@ -2340,7 +2340,7 @@ function BillSearchBox() {
   return (
     <div ref={ref} className="relative">
       <div className="relative">
-        <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-900 dark:text-slate-900" />
         <Input
           value={q}
           onChange={(e) => { setQ(e.target.value); setOpen(true); }}
@@ -2359,15 +2359,15 @@ function BillSearchBox() {
                 onChange={(e) => setDueOnly(e.target.checked)}
                 className="h-3 w-3"
               />
-              <span className="text-muted-foreground">Dues only</span>
+              <span className="text-slate-900 dark:text-slate-900">Dues only</span>
             </label>
-            <span className="text-[10px] text-muted-foreground">
+            <span className="text-[10px] text-slate-900 dark:text-slate-900">
               {isFetching ? "Searching…" : `${results.length} match${results.length === 1 ? "" : "es"}`}
             </span>
           </div>
           <div className="max-h-80 overflow-y-auto divide-y divide-card-border">
             {results.length === 0 && !isFetching ? (
-              <div className="px-4 py-6 text-xs text-muted-foreground text-center">No bills found</div>
+              <div className="px-4 py-6 text-xs text-slate-900 dark:text-slate-900 text-center">No bills found</div>
             ) : (
               results.map((r) => (
                 <button
@@ -2378,21 +2378,21 @@ function BillSearchBox() {
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-semibold text-primary">{r.billNumber}</span>
+                      <span className="font-mono text-xs font-extrabold text-primary">{r.billNumber}</span>
                       {r.balanceAmount > 0 ? (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 font-medium">DUE</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 font-bold">DUE</span>
                       ) : (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400 font-medium">PAID</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-800 font-bold">PAID</span>
                       )}
                     </div>
                     <div className="text-xs text-foreground mt-0.5 truncate">
                       {r.patientName ?? "—"}
-                      <span className="text-muted-foreground"> · {r.patientId ?? ""} {r.phone ? `· ${r.phone}` : ""}</span>
+                      <span className="text-slate-900 dark:text-slate-900"> · {r.patientId ?? ""} {r.phone ? `· ${r.phone}` : ""}</span>
                     </div>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <div className="text-xs text-muted-foreground">Total {inr(r.totalAmount)}</div>
-                    <div className={`text-sm font-semibold ${r.balanceAmount > 0 ? "text-orange-600" : "text-green-600"}`}>
+                    <div className="text-xs text-slate-900 dark:text-slate-900">Total {inr(r.totalAmount)}</div>
+                    <div className={`text-sm font-extrabold ${r.balanceAmount > 0 ? "text-orange-900" : "text-green-600"}`}>
                       Bal {inr(r.balanceAmount)}
                     </div>
                   </div>
@@ -2438,18 +2438,18 @@ function TodayCollectionsPanel() {
       <div className="flex-shrink-0 px-4 py-2 h-10 flex items-center gap-2 text-sm font-bold uppercase tracking-wide border-b border-card-border bg-blue-700 dark:bg-blue-800 border-l-[4px] border-l-blue-900">
         <Receipt size={14} className="text-white" />
         <span className="text-white">Today's Collections</span>
-        <span className="text-muted-foreground font-normal ml-0.5">{sorted.length}</span>
+        <span className="text-slate-900 dark:text-slate-900 font-bold ml-0.5">{sorted.length}</span>
         {dueCount > 0 && (
-          <span className="ml-auto text-orange-600 font-semibold tabular-nums">
+          <span className="ml-auto text-orange-900 font-extrabold tabular-nums">
             {dueCount} due · {inr(totalDue)}
           </span>
         )}
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-card-border" aria-live="polite">
         {isLoading ? (
-          <div className="px-3 py-4 text-xs text-muted-foreground text-center">Loading…</div>
+          <div className="px-3 py-4 text-xs text-slate-900 dark:text-slate-900 text-center">Loading…</div>
         ) : sorted.length === 0 ? (
-          <div className="px-3 py-4 text-xs text-muted-foreground text-center">No bills today yet</div>
+          <div className="px-3 py-4 text-xs text-slate-900 dark:text-slate-900 text-center">No bills today yet</div>
         ) : (
           sorted.map((b) => {
             const due = b.balanceAmount > 0 && b.status !== "cancelled";
@@ -2465,21 +2465,21 @@ function TodayCollectionsPanel() {
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="font-mono text-[10px] font-semibold text-primary truncate">{b.billNumber}</span>
+                    <span className="font-mono text-[10px] font-extrabold text-primary truncate">{b.billNumber}</span>
                     {due ? (
-                      <span className="flex-shrink-0 text-[9px] px-1 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 font-semibold">DUE</span>
+                      <span className="flex-shrink-0 text-[9px] px-1 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 font-extrabold">DUE</span>
                     ) : (
-                      <span className="flex-shrink-0 text-[9px] px-1 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400 font-semibold">PAID</span>
+                      <span className="flex-shrink-0 text-[9px] px-1 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-800 font-extrabold">PAID</span>
                     )}
                   </div>
-                  <div className="text-[10px] text-muted-foreground truncate">
+                  <div className="text-[10px] text-slate-900 dark:text-slate-900 truncate">
                     {b.patient ? `${b.patient.firstName} ${b.patient.lastName}` : "—"}
                   </div>
                 </div>
                 <div className="text-right flex-shrink-0 text-[10px]">
-                  <div className="text-muted-foreground">{inr(b.totalAmount)}</div>
-                  {due && <div className="font-semibold text-orange-600">Bal {inr(b.balanceAmount)}</div>}
-                  <div className="text-[9px] text-muted-foreground tabular-nums">{time}</div>
+                  <div className="text-slate-900 dark:text-slate-900">{inr(b.totalAmount)}</div>
+                  {due && <div className="font-extrabold text-orange-900">Bal {inr(b.balanceAmount)}</div>}
+                  <div className="text-[9px] text-slate-900 dark:text-slate-900 tabular-nums">{time}</div>
                 </div>
               </button>
             );
@@ -2517,18 +2517,18 @@ function RecentBillsPanel() {
 
   return (
     <div className="bg-card border border-card-border rounded-xl overflow-hidden">
-      <div className="px-4 py-2.5 border-b border-card-border bg-muted/20 flex items-center gap-2 text-sm font-semibold">
+      <div className="px-4 py-2.5 border-b border-card-border bg-muted/20 flex items-center gap-2 text-sm font-extrabold">
         <Receipt size={14} className="text-primary" />
         <span>Today's Recent Bills</span>
-        <span className="ml-auto text-xs font-normal text-muted-foreground">{bills.length}</span>
+        <span className="ml-auto text-xs font-bold text-slate-900 dark:text-slate-900">{bills.length}</span>
       </div>
       <div className="divide-y divide-card-border max-h-64 overflow-y-auto" aria-live="polite">
         {isLoading ? (
-          <div className="px-4 py-6 text-xs text-muted-foreground text-center">Loading…</div>
+          <div className="px-4 py-6 text-xs text-slate-900 dark:text-slate-900 text-center">Loading…</div>
         ) : isError ? (
           <div className="px-4 py-6 text-xs text-destructive text-center">Couldn't load recent bills. Check your connection.</div>
         ) : bills.length === 0 ? (
-          <div className="px-4 py-6 text-xs text-muted-foreground text-center">No bills generated today yet</div>
+          <div className="px-4 py-6 text-xs text-slate-900 dark:text-slate-900 text-center">No bills generated today yet</div>
         ) : (
           bills.map((b) => {
             const due = b.balanceAmount > 0;
@@ -2542,24 +2542,24 @@ function RecentBillsPanel() {
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-semibold text-primary truncate">{b.billNumber}</span>
+                    <span className="font-mono text-xs font-extrabold text-primary truncate">{b.billNumber}</span>
                     {due ? (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 font-medium">DUE</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 font-bold">DUE</span>
                     ) : (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400 font-medium">PAID</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-800 font-bold">PAID</span>
                     )}
-                    <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">{time}</span>
+                    <span className="ml-auto text-[10px] text-slate-900 dark:text-slate-900 tabular-nums">{time}</span>
                   </div>
                   <div className="text-xs text-foreground mt-0.5 truncate">
                     {b.patient ? `${b.patient.firstName} ${b.patient.lastName}` : "—"}
-                    {b.patient?.patientId && <span className="text-muted-foreground"> · {b.patient.patientId}</span>}
+                    {b.patient?.patientId && <span className="text-slate-900 dark:text-slate-900"> · {b.patient.patientId}</span>}
                   </div>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <div className="text-xs text-muted-foreground">{inr(b.totalAmount)}</div>
-                  {due && <div className="text-xs font-semibold text-orange-600">Bal {inr(b.balanceAmount)}</div>}
+                  <div className="text-xs text-slate-900 dark:text-slate-900">{inr(b.totalAmount)}</div>
+                  {due && <div className="text-xs font-extrabold text-orange-900">Bal {inr(b.balanceAmount)}</div>}
                 </div>
-                <ExternalLink size={11} className="text-muted-foreground flex-shrink-0" />
+                <ExternalLink size={11} className="text-slate-900 dark:text-slate-900 flex-shrink-0" />
               </button>
             );
           })
