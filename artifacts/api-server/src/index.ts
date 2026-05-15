@@ -140,6 +140,39 @@ async function runStartupMigrations(): Promise<void> {
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS bill_default_paper_size TEXT NOT NULL DEFAULT 'A5';
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS bill_show_code BOOLEAN NOT NULL DEFAULT TRUE;
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS bill_show_category BOOLEAN NOT NULL DEFAULT TRUE;
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS day_close_auto_print BOOLEAN NOT NULL DEFAULT TRUE;
+      CREATE TABLE IF NOT EXISTS day_closures (
+        id SERIAL PRIMARY KEY,
+        closure_date TEXT NOT NULL,
+        closed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        closed_by_user_id INTEGER,
+        closed_by_name TEXT NOT NULL DEFAULT '',
+        covered_from_ts TIMESTAMPTZ,
+        covered_to_ts TIMESTAMPTZ NOT NULL,
+        expected_cash NUMERIC(12,2) NOT NULL DEFAULT 0,
+        expected_upi NUMERIC(12,2) NOT NULL DEFAULT 0,
+        expected_card NUMERIC(12,2) NOT NULL DEFAULT 0,
+        expected_cheque NUMERIC(12,2) NOT NULL DEFAULT 0,
+        expected_other NUMERIC(12,2) NOT NULL DEFAULT 0,
+        actual_cash NUMERIC(12,2) NOT NULL DEFAULT 0,
+        actual_upi NUMERIC(12,2) NOT NULL DEFAULT 0,
+        actual_card NUMERIC(12,2) NOT NULL DEFAULT 0,
+        actual_cheque NUMERIC(12,2) NOT NULL DEFAULT 0,
+        actual_other NUMERIC(12,2) NOT NULL DEFAULT 0,
+        variance NUMERIC(12,2) NOT NULL DEFAULT 0,
+        variance_note TEXT NOT NULL DEFAULT '',
+        bills_count INTEGER NOT NULL DEFAULT 0,
+        payments_count INTEGER NOT NULL DEFAULT 0,
+        total_expected NUMERIC(12,2) NOT NULL DEFAULT 0,
+        total_actual NUMERIC(12,2) NOT NULL DEFAULT 0,
+        staff_breakdown JSONB NOT NULL DEFAULT '[]'::jsonb,
+        status TEXT NOT NULL DEFAULT 'closed',
+        reopened_at TIMESTAMPTZ,
+        reopened_by_user_id INTEGER,
+        reopened_by_name TEXT NOT NULL DEFAULT '',
+        reopen_reason TEXT NOT NULL DEFAULT ''
+      );
+      CREATE INDEX IF NOT EXISTS day_closures_covered_to_idx ON day_closures(covered_to_ts);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS sidebar_theme TEXT;
       CREATE TABLE IF NOT EXISTS kiosk_payment_sessions (
         id SERIAL PRIMARY KEY,

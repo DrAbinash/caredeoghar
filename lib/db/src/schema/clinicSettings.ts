@@ -40,5 +40,7 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   billDefaultPaperSize: text("bill_default_paper_size").notNull().default("A5"),
   billShowCode: boolean("bill_show_code").notNull().default(true),
   billShowCategory: boolean("bill_show_category").notNull().default(true),
+  // When true, closing the day auto-prints the summary slip on the bill printer.
+  dayCloseAutoPrint: boolean("day_close_auto_print").notNull().default(true),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -463,6 +463,7 @@ type ClinicSettings = {
   billDefaultPaperSize?: string;
   billShowCode?: boolean;
   billShowCategory?: boolean;
+  dayCloseAutoPrint?: boolean;
 };
 
 import { SIDEBAR_THEMES as SIDEBAR_THEME_PRESETS, parseCustomHex, buildCustomTheme } from "@/lib/sidebarThemes";
@@ -844,6 +845,20 @@ function ClinicInfoTab() {
           <div className="md:col-span-2">
             <Label>Bill Footer Note</Label>
             <Input value={current.footerNote} onChange={(e) => update("footerNote", e.target.value)} className="mt-1" />
+          </div>
+          <div>
+            <Label>Auto-print Day-Close summary slip</Label>
+            <button
+              type="button"
+              onClick={() => setForm({ ...current, dayCloseAutoPrint: !(current.dayCloseAutoPrint ?? true) })}
+              className={`mt-1 w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors ${(current.dayCloseAutoPrint ?? true) ? "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-800" : "bg-muted/30 border-card-border"}`}
+            >
+              <span className="text-sm font-medium">{(current.dayCloseAutoPrint ?? true) ? "Enabled" : "Disabled"}</span>
+              <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${(current.dayCloseAutoPrint ?? true) ? "bg-green-500" : "bg-muted-foreground/40"}`}>
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${(current.dayCloseAutoPrint ?? true) ? "translate-x-5" : "translate-x-1"}`} />
+              </span>
+            </button>
+            <p className="text-xs text-muted-foreground mt-1">When enabled, closing the day prints a summary slip on the bill printer right after save.</p>
           </div>
         </div>
         <div className="flex justify-end gap-2 pt-2 border-t border-card-border">

@@ -33,7 +33,7 @@ clinicSettingsRouter.put("/", async (req, res) => {
     }
     update.sidebarTheme = body.sidebarTheme;
   }
-  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "billShowCode", "billShowCategory"] as const;
+  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "billShowCode", "billShowCategory", "dayCloseAutoPrint"] as const;
   for (const f of boolFields) {
     if (body[f] !== undefined) {
       if (typeof body[f] !== "boolean") {

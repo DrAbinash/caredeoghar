@@ -58,6 +58,7 @@ import { advancedDashboardRouter } from "./advanced-dashboard";
 import { myDailySummaryRouter } from "./my-daily-summary";
 import { outsourcedLabsRouter } from "./outsourced-labs";
 import { kioskRouter } from "./kiosk";
+import { dayCloseRouter } from "./day-close";
 import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
 import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
 import userPreferencesRouter from "./userPreferences";
@@ -172,6 +173,10 @@ router.use("/expenses", requireStaffAuth, requireStaffPermission("/accounting"),
 
 // Ledgers — /accounting permission (multi-ledger configuration)
 router.use("/ledgers", requireStaffAuth, requireStaffPermission("/accounting"), ledgersRouter);
+// Day-Close / Cash-Drawer-Close — admin + super-admin only (gated via the
+// /day-close path; FULL_ACCESS_ROLES auto-permits both roles). The reopen
+// sub-route inside the router additionally enforces requireSuperAdmin.
+router.use("/day-close", requireStaffAuth, requireStaffPermission("/day-close"), dayCloseRouter);
 
 // Staff HR & payroll — /settings permission (only settings-level users may
 // read salary/bank details or post salary and advance records)
