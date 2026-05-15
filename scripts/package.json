@@ -7,8 +7,15 @@
     "generate:features": "tsx ./src/generate-features.ts",
     "hello": "tsx ./src/hello.ts",
     "trigger:cron": "tsx ./src/trigger-cron.ts",
+    "import:referral-doctors": "tsx ./src/import-referral-doctors.ts",
     "test:preinstall-guard": "node ./src/test-preinstall-guard.cjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@workspace/db": "workspace:*",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "catalog:",
+    "pg": "^8.20.0"
   },
   "devDependencies": {
     "@types/node": "catalog:",
