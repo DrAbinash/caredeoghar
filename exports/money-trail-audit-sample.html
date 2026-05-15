@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Money Trail Audit — Sample Snapshot</title>
+<style>
+  @page { size: A4; margin: 12mm; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1f2937; margin: 0; padding: 16mm; background: #fff; font-size: 12px; line-height: 1.4; }
+  h1 { font-size: 22px; margin: 0 0 4px; text-align: center; }
+  h2 { font-size: 14px; margin: 0 0 10px; }
+  h3 { font-size: 13px; margin: 0; }
+  hr { border: 0; border-top: 1px solid #d1d5db; margin: 10px 0; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 6px 8px; text-align: left; }
+  thead { background: #f3f4f6; }
+  thead th { font-weight: 700; border-bottom: 1px solid #d1d5db; font-size: 11px; }
+  tbody tr { border-bottom: 1px solid #e5e7eb; }
+  .muted { color: #6b7280; }
+  .right { text-align: right; }
+  .num { font-variant-numeric: tabular-nums; }
+  .bold { font-weight: 700; }
+  .extra-bold { font-weight: 800; font-size: 14px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .stat-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; color: #6b7280; }
+  .card { border: 1px solid #d1d5db; border-radius: 6px; overflow: hidden; margin-bottom: 14px; page-break-inside: avoid; }
+  .card-head { padding: 10px 14px; display: flex; align-items: flex-start; gap: 10px; border-bottom: 1px solid #d1d5db; }
+  .card-head .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .card-head .desc { font-size: 11px; color: #374151; margin-top: 4px; }
+  .chip { padding: 2px 8px; border-radius: 4px; font-size: 9px; font-weight: 800; text-transform: uppercase; border: 1px solid; }
+  .chip-high { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+  .chip-med { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+  .chip-low { background: #dbeafe; color: #1e40af; border-color: #93c5fd; }
+  .head-high { background: #fee2e2; }
+  .head-med { background: #fef3c7; }
+  .head-low { background: #dbeafe; }
+  .summary-box { padding: 12px 16px; border-radius: 6px; border-left: 4px solid; margin: 12px 0; }
+  .summary-amber { background: #fffbeb; border-color: #f59e0b; }
+  .summary-text { font-weight: 700; color: #1f2937; }
+  .signoff { margin-top: 28px; padding-top: 18px; border-top: 2px solid #d1d5db; page-break-inside: avoid; }
+  .signoff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; }
+  .sig-block { margin-top: 60px; border-top: 1px solid #6b7280; padding-top: 4px; }
+  .sig-block p { margin: 0; }
+  .sig-block .label { font-weight: 700; font-size: 11px; }
+  .sig-block .small { font-size: 10px; color: #4b5563; margin-top: 4px; }
+  .footer { font-size: 9px; color: #6b7280; text-align: center; margin-top: 24px; }
+  .demo-banner { background: #1e293b; color: #fff; text-align: center; padding: 8px; font-size: 11px; border-radius: 4px; margin-bottom: 14px; }
+  @media print { .demo-banner { display: none; } body { padding: 0; } }
+</style>
+</head>
+<body>
+
+<div class="demo-banner">
+  SAMPLE PREVIEW — Money Trail Audit print template, populated with synthetic data so you can see the CA sign-off layout.
+  Use Ctrl/Cmd + P to print or save as PDF.
+</div>
+
+<h1>Money Trail Audit — Archived Snapshot</h1>
+<p style="text-align:center;font-size:11px;margin:0">
+  Audit #18 · Period 2026-04-01 to 2026-04-30 ·
+  Generated 1 May 2026, 06:00 IST · Signed off by Anita Verma
+</p>
+<p style="text-align:center;font-size:10px;margin:4px 0 0">
+  <b>Notes:</b> April books cross-checked with TallyPrime export. Discount overrides clarified with Dr. Mehta on 2 May.
+</p>
+<hr>
+
+<!-- Period Summary -->
+<div class="card">
+  <div style="padding:12px 14px;border-bottom:1px solid #d1d5db">
+    <h2>Period Summary</h2>
+    <div class="grid-4">
+      <div><div class="stat-label">Bills</div><div class="num bold">847</div></div>
+      <div><div class="stat-label">Subtotal</div><div class="num bold">₹18,42,650.00</div></div>
+      <div><div class="stat-label">Discount</div><div class="num bold">₹1,12,400.00</div></div>
+      <div><div class="stat-label">Tax</div><div class="num bold">₹0.00</div></div>
+      <div><div class="stat-label">Total Billed</div><div class="num extra-bold">₹17,30,250.00</div></div>
+      <div><div class="stat-label">Paid</div><div class="num bold">₹16,48,900.00</div></div>
+      <div><div class="stat-label">Refunded</div><div class="num bold">₹14,200.00</div></div>
+      <div><div class="stat-label">Outstanding</div><div class="num bold">₹81,350.00</div></div>
+      <div><div class="stat-label">Cancelled bills</div><div class="num bold">11</div></div>
+      <div><div class="stat-label">Cancelled amount</div><div class="num bold">₹38,640.00</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="summary-box summary-amber">
+  <div class="summary-text">7 item(s) flagged for review (no high-severity)</div>
+</div>
+
+<!-- Anomaly 1: Cancelled-but-not-refunded -->
+<div class="card">
+  <div class="card-head head-med">
+    <div style="flex:1">
+      <div class="row">
+        <h3>Cancelled-but-not-refunded: money still on the books</h3>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="chip chip-med">Medium</span>
+          <span class="bold" style="font-size:11px">2 row(s)</span>
+          <span class="bold" style="font-size:11px">₹4,800.00</span>
+        </div>
+      </div>
+      <p class="desc">These bills are cancelled but the patient's payment was never refunded — the original Receipt voucher still sits in revenue. Use Cancel & Refund to auto-issue a Payment voucher in one step.</p>
+    </div>
+  </div>
+  <table>
+    <thead><tr>
+      <th>id</th><th>bill_number</th><th>total_amount</th><th>paid_amount</th><th>refund_amount</th><th>cancelled_at</th><th>cancelled_by_name</th>
+    </tr></thead>
+    <tbody>
+      <tr><td>3104</td><td>2026040217</td><td>2,400.00</td><td>2,400.00</td><td>0.00</td><td>2026-04-12 14:32</td><td>Reception – Priya</td></tr>
+      <tr><td>3219</td><td>2026040331</td><td>2,400.00</td><td>2,400.00</td><td>0.00</td><td>2026-04-22 10:08</td><td>Reception – Priya</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Anomaly 2: High discount -->
+<div class="card">
+  <div class="card-head head-low">
+    <div style="flex:1">
+      <div class="row">
+        <h3>High discount (&gt;50% of subtotal)</h3>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="chip chip-low">Low</span>
+          <span class="bold" style="font-size:11px">3 row(s)</span>
+          <span class="bold" style="font-size:11px">₹8,950.00</span>
+        </div>
+      </div>
+      <p class="desc">Bills where the applied discount exceeds 50% of subtotal. Usually approved by an admin but worth a CA spot-check.</p>
+    </div>
+  </div>
+  <table>
+    <thead><tr>
+      <th>id</th><th>bill_number</th><th>subtotal</th><th>discount</th><th>created_by_name</th><th>pct</th>
+    </tr></thead>
+    <tbody>
+      <tr><td>3088</td><td>2026040201</td><td>4,500.00</td><td>2,800.00</td><td>Dr. Mehta</td><td>62.22</td></tr>
+      <tr><td>3155</td><td>2026040268</td><td>5,200.00</td><td>3,200.00</td><td>Dr. Mehta</td><td>61.54</td></tr>
+      <tr><td>3267</td><td>2026040379</td><td>4,800.00</td><td>2,950.00</td><td>Reception – Sandeep</td><td>61.46</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Anomaly 3: Super-admin audit trail -->
+<div class="card">
+  <div class="card-head head-low">
+    <div style="flex:1">
+      <div class="row">
+        <h3>Super-admin / override audit trail</h3>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="chip chip-low">Low</span>
+          <span class="bold" style="font-size:11px">2 row(s)</span>
+          <span class="bold" style="font-size:11px">—</span>
+        </div>
+      </div>
+      <p class="desc">Every super-admin edit, deletion, and discount-override warning recorded in the period. Provided as-is for the CA's manual review.</p>
+    </div>
+  </div>
+  <table>
+    <thead><tr>
+      <th>id</th><th>bill_number</th><th>edited_by</th><th>change_type</th><th>old_value</th><th>new_value</th><th>reason</th><th>created_at</th>
+    </tr></thead>
+    <tbody>
+      <tr><td>91</td><td>2026040112</td><td>Anita Verma</td><td>totalAmount</td><td>3,200</td><td>2,800</td><td>Patient overcharged for repeat scan</td><td>2026-04-08 11:14</td></tr>
+      <tr><td>92</td><td>2026040298</td><td>Anita Verma</td><td>discount_override_warning</td><td>—</td><td>—</td><td>Camp patient, approved by owner</td><td>2026-04-19 16:42</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- CA Sign-off -->
+<div class="signoff">
+  <div class="signoff-grid">
+    <div>
+      <p class="label">Reviewed by (Chartered Accountant):</p>
+      <div class="sig-block">
+        <p>Name &amp; Signature</p>
+        <p class="small">Membership No.: ____________</p>
+        <p class="small">Date: ____________</p>
+      </div>
+    </div>
+    <div>
+      <p class="label">For DiagnoCenter (Super Admin):</p>
+      <div class="sig-block">
+        <p>Anita Verma</p>
+        <p class="small">Audit #18</p>
+        <p class="small">Date: ____________</p>
+      </div>
+    </div>
+  </div>
+  <p class="footer">
+    Generated automatically from the DiagnoCenter ERP. Snapshot stored permanently in audit_runs.
+  </p>
+</div>
+
+</body>
+</html>

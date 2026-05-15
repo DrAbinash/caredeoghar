@@ -54,3 +54,9 @@ id = "NcbySAEis2_2H9efpH-Rd"
 uri = "file://dicom-pull-agent/DICOM_Pull_Agent_Installation_Guide.pdf"
 type = "pdf"
 title = "DICOM Pull Agent — Installation Guide (PDF)"
+
+[[outputs]]
+id = "KEOQ4Qw52Z8sh3CXLy59q"
+uri = "file://exports/money-trail-audit-sample.pdf"
+type = "pdf"
+title = "Money Trail Audit — CA-printable Sample"
