@@ -333,7 +333,28 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     };
     void tick();
     const id = window.setInterval(() => { void tick(); }, 4000);
-    return () => { stopped = true; window.clearInterval(id); };
+
+    // Chrome drops FS Access API permission between page loads. On the first
+    // user interaction after mount (click or keydown), silently try to
+    // re-grant permission for the already-paired drive, then immediately tick
+    // so the Super Admin link reappears without needing Ctrl+Alt+U again.
+    let permissionGrantAttempted = false;
+    const tryRegrant = () => {
+      if (permissionGrantAttempted || stopped) return;
+      permissionGrantAttempted = true;
+      void ensurePairedDirPermission().then((granted) => {
+        if (granted && !stopped) void tick();
+      });
+    };
+    window.addEventListener("click", tryRegrant, { once: true, capture: true });
+    window.addEventListener("keydown", tryRegrant, { once: true, capture: true });
+
+    return () => {
+      stopped = true;
+      window.clearInterval(id);
+      window.removeEventListener("click", tryRegrant, { capture: true });
+      window.removeEventListener("keydown", tryRegrant, { capture: true });
+    };
   }, [usbGateEnforced]);
 
   // Hidden pairing trigger: Ctrl+Alt+U opens the one-time setup modal.
@@ -584,10 +605,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {/* Super-admin USB gate — appears ONLY when the paired pen drive is
-            currently plugged in and superadmin.key validates. There is no
-            "insert" button: the auto-detect loop handles everything. */}
-        {usbGateEnforced && usbKeyPresent && (
+        {/* Super-admin USB gate:
+            - Gate enforced (SUPER_ADMIN_USB_KEY is set): link appears only
+              when the pen drive is plugged in and superadmin.key validates.
+            - Gate NOT enforced (dev / unconfigured): link always visible so
+              super-admin is still reachable without a pen drive. */}
+        {(!usbGateEnforced || usbKeyPresent) && (
           <div className="px-3 py-2 border-t border-sidebar-border relative z-10" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
             <button
               onClick={openSuperAdmin}
