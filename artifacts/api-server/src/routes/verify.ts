@@ -48,8 +48,12 @@ verifyRouter.get("/bill/:billNumber", async (req, res) => {
   const patientName = bill.patientFirst
     ? `${bill.patientFirst} ${bill.patientLast ?? ""}`.trim()
     : "Unknown";
+  // Force Asia/Kolkata — the production container runs in UTC, and
+  // toLocaleString("en-IN") only sets the LOCALE (number/date format),
+  // not the timezone. Without timeZone the QR scan page showed UTC
+  // (5h30m off) for Indian operators.
   const issued = bill.createdAt
-    ? new Date(bill.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
+    ? new Date(bill.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" })
     : "—";
   const cancelled = !!bill.cancelledAt;
 
@@ -125,7 +129,7 @@ function renderVerified(b: {
         <tr><td>Balance</td><td>${inr(b.balance)}</td></tr>
         <tr class="total"><td>Total Amount</td><td>${inr(b.total)}</td></tr>
       </table>
-      <div class="footer">Verified at ${esc(new Date().toLocaleString("en-IN"))}</div>
+      <div class="footer">Verified at ${esc(new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }))} IST</div>
     </div></div>
   </body></html>`;
 }
