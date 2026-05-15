@@ -41,7 +41,8 @@ export type SiteSettings = {
 export type SectionType =
   | "header" | "hero" | "services" | "appointment" | "reviews"
   | "contact" | "connect" | "subscribe" | "faq" | "gallery"
-  | "custom_html" | "footer";
+  | "custom_html" | "footer"
+  | "why_choose_us" | "technology" | "health_packages" | "stats";
 
 export type Section = {
   id: string;
