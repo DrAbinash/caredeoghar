@@ -48,9 +48,14 @@ export type PrintBillData = {
     referenceNumber?: string | null;
     createdAt?: string;
   }>;
-  // Optional queue token printed at the bottom (BillingDesk sets this when
-  // the bill creates a per-test token).
+  // Per-department queue tokens (one per department, with room number).
+  // BillingDesk passes these from the bill creation response so the receipt
+  // can show the patient which queues they're in. Falls back to the single
+  // `tokenNo` for legacy bills that didn't generate per-test tokens.
+  testTokens?: Array<{ department: string; roomNumber: string; tokenNo: number }> | null;
   tokenNo?: number | null;
+  // Optional override; defaults to "Please collect your report within 7 days."
+  reportCollectionNote?: string | null;
 };
 
 export type PrintClinic = {
@@ -231,14 +236,21 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
         </tbody>
       </table>
 
-      ${bill.tokenNo != null ? `
-      <div style="margin-top:8px;padding:4px 6px;border:1.5px dashed #000;border-radius:3px;display:flex;align-items:center;justify-content:space-between;page-break-inside:avoid">
-        <span style="font-size:${fontPx - 1}px;letter-spacing:1px;color:#444">QUEUE TOKEN</span>
-        <span style="font-size:${fontPx + 6}px;font-weight:900;letter-spacing:2px">#${String(bill.tokenNo).padStart(3, "0")}</span>
-        <span style="font-size:${fontPx - 1}px;color:#444">✂ TEAR HERE</span>
-      </div>` : ""}
+      <!--
+        FOOTER BLOCK — fills the empty lower portion of the A5 page with a
+        prominent collect-report notice and the clinic's footer note. The
+        per-department queue tokens are NOT printed here; they print on the
+        separate Token Printer (see printToken in BillingDesk.tsx).
+      -->
+      <div style="margin-top:14px;border:1px solid #1e40af;border-radius:6px;padding:${paperSize === "A5" ? "10px 14px" : "8px 12px"};background:#f0f6ff;text-align:center;text-transform:none;page-break-inside:avoid">
+        <div style="font-size:${fontPx + 2}px;font-weight:800;color:#1e40af;letter-spacing:0.5px">${escapeHtml(bill.reportCollectionNote || "Please collect your report within 7 days.")}</div>
+        <div style="font-size:${Math.round(fontPx * 0.85)}px;color:#444;margin-top:4px">Reports beyond 7 days may be archived and require staff assistance to retrieve.</div>
+      </div>
 
-      ${clinic?.footerNote ? `<div style="padding-top:4px;border-top:1px dashed #999;font-size:${fontPx - 2}px;color:#555;text-transform:none;text-align:center;margin-top:6px">${escapeHtml(clinic.footerNote)}</div>` : ""}
+      <div style="margin-top:10px;text-align:center;text-transform:none;page-break-inside:avoid">
+        <div style="font-size:${fontPx + 1}px;font-weight:700;color:#1e40af;letter-spacing:0.5px">${escapeHtml(clinic?.footerNote || "Thank you for choosing our diagnostic services.")}</div>
+        <div style="font-size:${Math.round(fontPx * 0.75)}px;color:#888;margin-top:6px">We wish you good health.  &middot;  Computer-generated invoice — no signature required.</div>
+      </div>
     </section>`;
 
   const pages = Array.from({ length: copies }).map((_, i) => onePage(i)).join("");

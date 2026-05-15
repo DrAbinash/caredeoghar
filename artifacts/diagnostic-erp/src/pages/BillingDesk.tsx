@@ -96,6 +96,10 @@ type LastBill = {
   payments: PaySplit[];
   tokenNo?: number | null;
   tokenDate?: string | null;
+  // Per-department queue tokens issued by the bill creation flow. Populated
+  // by the /api/bills POST response; rendered on the separate token printer
+  // (see printToken below).
+  testTokens?: Array<{ orderTestId: number; testName: string; department: string; roomNumber: string; tokenNo: number }>;
 };
 
 // ──────────────────────────────────────────────────────
@@ -318,27 +322,77 @@ async function printBarcode(b: LastBill) {
   w.document.open(); w.document.write(html); w.document.close(); w.onload = () => { w.focus(); w.print(); setTimeout(() => w.close(), 400); };
 }
 
+// Render the per-department queue token slip on the configured Token Printer.
+// One combined slip lists every department the patient needs to visit, with
+// the token number and the room/counter for each. Falls back to the legacy
+// single-token layout when only `tokenNo` is present (back-compat for bills
+// generated before the per-test token rollout).
 async function printToken(b: LastBill, clinic: ClinicLite) {
   const p = await getPrinterSettings();
-  if (b.tokenNo == null) return;
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Token #${b.tokenNo}</title>
-    <style>
-      @page { size: 80mm 100mm; margin: 4mm; }
-      body { font-family: Arial, sans-serif; margin:0; padding:6px; text-align:center; color:#000; }
-      .clinic { font-size:11px; font-weight:700; border-bottom:1px dashed #000; padding-bottom:4px; margin-bottom:6px; }
-      .label { font-size:11px; letter-spacing:2px; text-transform:uppercase; color:#444; }
-      .num { font-size:64px; font-weight:900; line-height:1; margin:6px 0; }
-      .row { font-size:11px; margin:2px 0; }
-      .footer { margin-top:8px; padding-top:4px; border-top:1px dashed #000; font-size:9px; color:#555; }
-    </style></head><body>
+  // Group testTokens by (department, roomNumber, tokenNo) — we don't need to
+  // print the same dept token twice when a bill has two pathology tests that
+  // share one department-level token... wait, current generator emits one
+  // token PER orderTest. Until the per-department mode lands we de-dupe by
+  // department here so the slip stays compact.
+  const seen = new Set<string>();
+  const dedupedTokens = (b.testTokens ?? []).filter((t) => {
+    const key = `${t.department}::${t.tokenNo}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  // Nothing to print
+  if (dedupedTokens.length === 0 && b.tokenNo == null) return;
+
+  const ageStr = calcAge(b.patient.dateOfBirth);
+  const ageGender = [ageStr, b.patient.gender].filter(Boolean).join(" / ").toUpperCase();
+  const headerLines = `
     <div class="clinic">${escapeHtml(clinic?.name || "Diagnostic Centre")}</div>
-    <div class="label">Token</div>
-    <div class="num">${String(b.tokenNo).padStart(3, "0")}</div>
-    <div class="row"><strong>${escapeHtml(b.patient.firstName)} ${escapeHtml(b.patient.lastName)}</strong></div>
-    <div class="row">${escapeHtml(b.patient.patientId)}</div>
-    <div class="row">${escapeHtml(b.billNumber)}</div>
-    ${b.doctorName ? `<div class="row">Ref: ${escapeHtml(b.doctorName)}</div>` : ""}
-    <div class="footer">${new Date().toLocaleString("en-IN")}<br/>Please wait for your token to be called.</div>
+    <div class="patient"><strong>${escapeHtml(b.patient.firstName)} ${escapeHtml(b.patient.lastName)}</strong>${ageGender ? ` &middot; ${escapeHtml(ageGender)}` : ""}</div>
+    <div class="meta">ID: ${escapeHtml(b.patient.patientId)} &middot; Bill: ${escapeHtml(String(b.billNumber).replace(/^BILL-?/i, "").replace(/-/g, ""))}</div>
+    ${b.doctorName ? `<div class="meta">Ref: Dr. ${escapeHtml(b.doctorName)}</div>` : ""}
+    <div class="meta">${new Date().toLocaleString("en-IN")}</div>`;
+
+  let body = "";
+  if (dedupedTokens.length > 0) {
+    // Combined per-department slip
+    const rows = dedupedTokens.map((t) => `
+      <tr>
+        <td class="dept">${escapeHtml(t.department)}</td>
+        <td class="num">#${String(t.tokenNo).padStart(3, "0")}</td>
+        <td class="room">${t.roomNumber ? `Room ${escapeHtml(t.roomNumber)}` : "—"}</td>
+      </tr>`).join("");
+    body = `
+      <div class="title">QUEUE TOKENS</div>
+      <table class="tokens"><tbody>${rows}</tbody></table>
+      <div class="hint">Please proceed to the indicated room and wait for your number to be called.</div>`;
+  } else if (b.tokenNo != null) {
+    // Legacy single-number fallback
+    body = `
+      <div class="title">QUEUE TOKEN</div>
+      <div class="bignum">${String(b.tokenNo).padStart(3, "0")}</div>
+      <div class="hint">Please wait for your token to be called.</div>`;
+  }
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Token Slip — ${escapeHtml(b.billNumber)}</title>
+    <style>
+      @page { size: 80mm auto; margin: 4mm; }
+      body { font-family: Arial, sans-serif; margin:0; padding:6px; text-align:center; color:#000; font-size:11px; }
+      .clinic { font-size:13px; font-weight:800; border-bottom:1px dashed #000; padding-bottom:4px; margin-bottom:5px; }
+      .patient { font-size:12px; margin:1px 0; }
+      .meta { font-size:10px; color:#444; margin:1px 0; }
+      .title { margin-top:8px; font-size:10px; letter-spacing:2px; color:#444; }
+      .bignum { font-size:64px; font-weight:900; line-height:1; margin:4px 0; }
+      table.tokens { width:100%; border-collapse:collapse; margin-top:6px; }
+      table.tokens td { padding:4px 2px; border-bottom:1px dashed #ccc; vertical-align:middle; }
+      table.tokens td.dept { text-align:left; font-weight:700; font-size:11px; text-transform:uppercase; }
+      table.tokens td.num  { text-align:center; font-weight:900; font-size:18px; letter-spacing:1px; white-space:nowrap; }
+      table.tokens td.room { text-align:right; font-size:10px; color:#1e40af; font-weight:700; white-space:nowrap; }
+      .hint { margin-top:6px; padding-top:4px; border-top:1px dashed #000; font-size:9px; color:#555; }
+    </style></head><body>
+    ${headerLines}
+    ${body}
   </body></html>`;
   const w = window.open("", "_blank", printerWindowFeatures(p.tokenPrinter));
   if (!w) return openPrintWindow(html);
@@ -642,7 +696,12 @@ export default function BillingDesk() {
       const paymentRows = payNow
         ? paymentSplits.filter((s) => Number(s.amount) > 0).map((s) => ({ amount: Number(s.amount), method: s.mode }))
         : [];
-      const bill = await api.post<{ id: number; billNumber: string; token?: { tokenNo: number; tokenDate: string } | null }>("/api/bills", {
+      const bill = await api.post<{
+        id: number;
+        billNumber: string;
+        token?: { tokenNo: number; tokenDate: string } | null;
+        testTokens?: Array<{ orderTestId: number; testName: string; department: string; roomNumber: string; tokenNo: number }>;
+      }>("/api/bills", {
         orderId: order.id,
         discount: discountAmt,
         discountReason: discountAmt > 0 ? discountReason || null : null,
@@ -675,6 +734,7 @@ export default function BillingDesk() {
         payments: paymentSplits.filter((p) => Number(p.amount) > 0),
         tokenNo: bill.token?.tokenNo ?? null,
         tokenDate: bill.token?.tokenDate ?? null,
+        testTokens: bill.testTokens ?? [],
       };
       setLastBill(lastBillLocal);
       setShowBillToast(true);
@@ -735,6 +795,7 @@ export default function BillingDesk() {
               amount: Number(p.amount || 0),
             })),
             tokenNo: lastBillLocal.tokenNo ?? null,
+            testTokens: lastBillLocal.testTokens ?? null,
           };
           const paperSize = getAutoBillPaperSize(lastBillLocal.tests.length, getBillPaperSize());
           const html = buildBillPrintHtml({
@@ -748,6 +809,15 @@ export default function BillingDesk() {
           // blocker, no "Preparing receipt…" placeholder. The browser's
           // native print dialog opens directly with the receipt loaded.
           printViaIframe(html);
+          // Auto-print the combined per-department token slip on the
+          // configured Token Printer right after the bill. Fires only when
+          // the bill actually generated tokens. Wrapped in a small delay
+          // so it doesn't fight the bill's print dialog for focus.
+          if ((lastBillLocal.testTokens?.length ?? 0) > 0 || lastBillLocal.tokenNo != null) {
+            window.setTimeout(() => {
+              void printToken(lastBillLocal, clinicForPrint as ClinicLite).catch(() => { /* best-effort */ });
+            }, 600);
+          }
         });
       }
     },
