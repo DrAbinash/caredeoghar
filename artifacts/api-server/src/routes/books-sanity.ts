@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 
 export const booksSanityRouter = Router();
 
-type Anomaly = {
+export type BooksSanityAnomaly = {
   category: string;
   severity: "high" | "medium" | "low";
   count: number;
@@ -13,25 +13,29 @@ type Anomaly = {
   rows: Record<string, unknown>[];
 };
 
+export type BooksSanityReport = {
+  range: { from: string; to: string };
+  generatedAt: string;
+  periodTotals: Record<string, string | number>;
+  anomalies: BooksSanityAnomaly[];
+};
+
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-booksSanityRouter.get("/", async (req, res) => {
-  const fromRaw = typeof req.query.from === "string" ? req.query.from : null;
-  const toRaw = typeof req.query.to === "string" ? req.query.to : null;
-  if ((fromRaw && !ISO_DATE.test(fromRaw)) || (toRaw && !ISO_DATE.test(toRaw))) {
-    res.status(400).json({ error: "from/to must be YYYY-MM-DD" });
-    return;
-  }
-  if (fromRaw && toRaw && fromRaw > toRaw) {
-    res.status(400).json({ error: "'from' must be on or before 'to'" });
-    return;
-  }
-  // ISO YYYY-MM-DD; default = last 90 days. Range applies to bills.created_at.
+/**
+ * Reusable: produces the same payload as GET /api/books-sanity. Called from
+ * both the HTTP route and from the monthly cron snapshot job.
+ *
+ * `from` / `to` are optional ISO YYYY-MM-DD strings; when both are missing the
+ * report covers the last 90 days. Validation must be done by the caller.
+ */
+export async function runBooksSanity(opts: { from: string | null; to: string | null }): Promise<BooksSanityReport> {
+  const { from: fromRaw, to: toRaw } = opts;
   const dateFilter = fromRaw && toRaw
     ? sql`b.created_at >= ${fromRaw}::date AND b.created_at < (${toRaw}::date + INTERVAL '1 day')`
     : sql`b.created_at >= NOW() - INTERVAL '90 days'`;
 
-  const anomalies: Anomaly[] = [];
+  const anomalies: BooksSanityAnomaly[] = [];
 
   // ── 1. Cancelled bill, but order_tests still active (commission leak) ──────
   const leak = await db.execute(sql`
@@ -140,7 +144,7 @@ booksSanityRouter.get("/", async (req, res) => {
     });
   }
 
-  // ── 6. Super-admin edits in the period (audit trail summary) ───────────────
+  // ── 6. Super-admin / override audit trail ──────────────────────────────────
   const sEdits = await db.execute(sql`
     SELECT ba.id, ba.bill_id, ba.edited_by, ba.reason, ba.change_type,
            ba.old_value, ba.new_value, ba.created_at, b.bill_number
@@ -163,7 +167,7 @@ booksSanityRouter.get("/", async (req, res) => {
     });
   }
 
-  // ── Period totals (for the printable header summary) ───────────────────────
+  // ── Period totals ──────────────────────────────────────────────────────────
   const periodTotals = await db.execute(sql`
     SELECT
       COUNT(*)                                           AS bill_count,
@@ -180,15 +184,30 @@ booksSanityRouter.get("/", async (req, res) => {
      WHERE ${dateFilter}
   `);
 
-  res.json({
+  return {
     range: {
       from: fromRaw ?? "(last 90 days)",
       to: toRaw ?? new Date().toISOString().slice(0, 10),
     },
     generatedAt: new Date().toISOString(),
-    periodTotals: periodTotals.rows[0] ?? {},
+    periodTotals: (periodTotals.rows[0] ?? {}) as Record<string, string | number>,
     anomalies,
-  });
+  };
+}
+
+booksSanityRouter.get("/", async (req, res) => {
+  const fromRaw = typeof req.query.from === "string" ? req.query.from : null;
+  const toRaw = typeof req.query.to === "string" ? req.query.to : null;
+  if ((fromRaw && !ISO_DATE.test(fromRaw)) || (toRaw && !ISO_DATE.test(toRaw))) {
+    res.status(400).json({ error: "from/to must be YYYY-MM-DD" });
+    return;
+  }
+  if (fromRaw && toRaw && fromRaw > toRaw) {
+    res.status(400).json({ error: "'from' must be on or before 'to'" });
+    return;
+  }
+  const report = await runBooksSanity({ from: fromRaw, to: toRaw });
+  res.json(report);
 });
 
 export default booksSanityRouter;

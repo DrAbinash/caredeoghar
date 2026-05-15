@@ -245,6 +245,22 @@ async function runStartupMigrations(): Promise<void> {
         error_stack TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS audit_runs (
+        id SERIAL PRIMARY KEY,
+        period_from TEXT NOT NULL,
+        period_to TEXT NOT NULL,
+        generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        completed_at TIMESTAMPTZ,
+        completed_by TEXT,
+        source TEXT NOT NULL DEFAULT 'manual',
+        notes TEXT,
+        anomaly_count INTEGER NOT NULL DEFAULT 0,
+        high_count INTEGER NOT NULL DEFAULT 0,
+        total_impact NUMERIC(14,2) NOT NULL DEFAULT 0,
+        snapshot JSONB NOT NULL,
+        email_sent_at TIMESTAMPTZ
+      );
+      CREATE INDEX IF NOT EXISTS audit_runs_generated_at_idx ON audit_runs(generated_at DESC);
     `);
     logger.info("Startup migrations applied");
   } catch (err) {

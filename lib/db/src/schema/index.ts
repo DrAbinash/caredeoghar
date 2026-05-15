@@ -38,6 +38,7 @@ export * from "./machines";
 export * from "./departments";
 export * from "./branches";
 export * from "./backupLogs";
+export * from "./auditRuns";
 export * from "./siteSettings";
 export * from "./sitePages";
 export * from "./sitePopups";

@@ -14,8 +14,10 @@ import {
   patientsTable,
   ordersTable,
   appointmentsTable,
+  auditRunsTable,
 } from "@workspace/db/schema";
-import { eq, and, asc, isNull, or, sql } from "drizzle-orm";
+import { eq, and, asc, desc, isNull, or, sql } from "drizzle-orm";
+import { runBooksSanity } from "./books-sanity";
 import {
   requireSuperAdminUsb,
   isValidUsbKey,
@@ -281,4 +283,136 @@ superAdminRouter.get("/books", requireSuperAdmin, async (_req, res): Promise<voi
   );
 
   res.json(result);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MONEY TRAIL AUDIT RUNS
+// ─────────────────────────────────────────────────────────────────────────────
+// All routes require both the USB pen-drive gate and a valid super-admin
+// session token. Snapshots persist a Books-Sanity report to the audit_runs
+// table so the audit trail survives later edits to the underlying bills.
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+const SaveAuditBody = z.object({
+  from: z.string().regex(ISO_DATE_RE, "from must be YYYY-MM-DD"),
+  to: z.string().regex(ISO_DATE_RE, "to must be YYYY-MM-DD"),
+  notes: z.string().max(4000).optional(),
+});
+
+async function getCurrentSuperAdminName(req: import("express").Request): Promise<string> {
+  try {
+    const token = (req.header("x-sa-token") ?? "").trim();
+    if (!token) return "super-admin";
+    const [row] = await db
+      .select({ userName: superAdminSessionsTable.userName })
+      .from(superAdminSessionsTable)
+      .where(eq(superAdminSessionsTable.token, token))
+      .limit(1);
+    return row?.userName ?? "super-admin";
+  } catch {
+    return "super-admin";
+  }
+}
+
+// Live preview: run a Books-Sanity report without persisting. Gated by USB +
+// SA so the Money-Trail Audit page in the super-admin-portal can fetch it
+// using saAuthHeaders() (the regular /api/books-sanity route is gated by
+// requireStaffAuth which doesn't recognise SA tokens).
+superAdminRouter.get("/books-sanity-preview", requireSuperAdminUsb, requireSuperAdmin, async (req, res) => {
+  const fromRaw = typeof req.query.from === "string" ? req.query.from : null;
+  const toRaw = typeof req.query.to === "string" ? req.query.to : null;
+  if ((fromRaw && !ISO_DATE_RE.test(fromRaw)) || (toRaw && !ISO_DATE_RE.test(toRaw))) {
+    res.status(400).json({ error: "from/to must be YYYY-MM-DD" });
+    return;
+  }
+  if (fromRaw && toRaw && fromRaw > toRaw) {
+    res.status(400).json({ error: "'from' must be on or before 'to'" });
+    return;
+  }
+  const report = await runBooksSanity({ from: fromRaw, to: toRaw });
+  res.json(report);
+});
+
+// List past audit runs (most recent first). No snapshot payload — just a
+// summary row per audit. Use GET /:id to fetch the full snapshot.
+superAdminRouter.get("/audit-runs", requireSuperAdminUsb, requireSuperAdmin, async (_req, res) => {
+  const rows = await db.select({
+    id: auditRunsTable.id,
+    periodFrom: auditRunsTable.periodFrom,
+    periodTo: auditRunsTable.periodTo,
+    generatedAt: auditRunsTable.generatedAt,
+    completedAt: auditRunsTable.completedAt,
+    completedBy: auditRunsTable.completedBy,
+    source: auditRunsTable.source,
+    notes: auditRunsTable.notes,
+    anomalyCount: auditRunsTable.anomalyCount,
+    highCount: auditRunsTable.highCount,
+    totalImpact: auditRunsTable.totalImpact,
+    emailSentAt: auditRunsTable.emailSentAt,
+  }).from(auditRunsTable).orderBy(desc(auditRunsTable.generatedAt)).limit(200);
+  res.json({ items: rows });
+});
+
+// Fetch a single past audit including the full snapshot payload.
+superAdminRouter.get("/audit-runs/:id", requireSuperAdminUsb, requireSuperAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const [row] = await db.select().from(auditRunsTable).where(eq(auditRunsTable.id, id)).limit(1);
+  if (!row) {
+    res.status(404).json({ error: "Audit not found" });
+    return;
+  }
+  res.json(row);
+});
+
+// Run a fresh Books-Sanity report and persist it. Marks the audit complete
+// in a single step (the operator already reviewed the on-screen report
+// before clicking "Mark Audit Complete").
+superAdminRouter.post("/audit-runs", requireSuperAdminUsb, requireSuperAdmin, async (req, res) => {
+  const parsed = SaveAuditBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request", details: parsed.error.issues });
+    return;
+  }
+  const { from, to, notes } = parsed.data;
+  if (from > to) {
+    res.status(400).json({ error: "'from' must be on or before 'to'" });
+    return;
+  }
+
+  const report = await runBooksSanity({ from, to });
+  const anomalyCount = report.anomalies.reduce((s, a) => s + a.count, 0);
+  const highCount = report.anomalies.filter((a) => a.severity === "high").reduce((s, a) => s + a.count, 0);
+  const totalImpact = report.anomalies.reduce((s, a) => s + (a.totalAmount || 0), 0);
+  const completedBy = await getCurrentSuperAdminName(req);
+
+  const [inserted] = await db.insert(auditRunsTable).values({
+    periodFrom: from,
+    periodTo: to,
+    completedAt: new Date(),
+    completedBy,
+    source: "manual",
+    notes: notes ?? null,
+    anomalyCount,
+    highCount,
+    totalImpact: String(totalImpact),
+    snapshot: report,
+  }).returning();
+
+  res.json(inserted);
+});
+
+// Hard-delete an audit run. Super-admin only (already enforced by middleware).
+superAdminRouter.delete("/audit-runs/:id", requireSuperAdminUsb, requireSuperAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  await db.delete(auditRunsTable).where(eq(auditRunsTable.id, id));
+  res.json({ ok: true });
 });

@@ -5,7 +5,9 @@ import {
   doctorsTable, commissionRulesTable, orderTestsTable, ordersTable, testsTable,
   dicomNodesTable, dicomPullJobsTable,
 } from "@workspace/db/schema";
-import { sendDailySummaryEmail, sendCommissionMonthEndEmail } from "./email";
+import { sendDailySummaryEmail, sendCommissionMonthEndEmail, sendMonthlyAuditEmail } from "./email";
+import { runBooksSanity } from "./routes/books-sanity";
+import { auditRunsTable } from "@workspace/db/schema";
 import { gte, and, lte, eq, inArray, isNull, or, lt } from "drizzle-orm";
 
 let currentTask: ReturnType<typeof cron.schedule> | null = null;
@@ -16,6 +18,97 @@ export function startCronScheduler() {
   scheduleDaily();
   scheduleMonthEndCommission();
   scheduleDicomAutoPull();
+  scheduleMonthlyAudit();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Monthly Money-Trail Audit auto-run
+// Fires at 06:00 on the 1st of every month. Snapshots the previous calendar
+// month's Books-Sanity report into audit_runs (source="cron", completedAt=null
+// so it shows as "auto-run, awaiting review"), then emails the headline +
+// anomaly summary to the configured admin email.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function scheduleMonthlyAudit() {
+  cron.schedule("* * * * *", async () => {
+    try {
+      const now = new Date();
+      if (now.getDate() !== 1) return;
+      if (now.getHours() !== 6 || now.getMinutes() !== 0) return;
+
+      const key = `monthly-audit-${now.toISOString().slice(0, 10)}`;
+      if (firedToday.has(key)) return;
+      firedToday.add(key);
+
+      await fireMonthlyAudit(now);
+    } catch (err) {
+      console.error("[cron] monthly audit check failed:", err);
+    }
+  });
+
+  console.log("[cron] Monthly money-trail audit scheduler started (fires at 06:00 on day 1 of each month)");
+}
+
+function pad2(n: number) { return String(n).padStart(2, "0"); }
+
+export async function fireMonthlyAudit(now: Date): Promise<void> {
+  // Previous calendar month: from = first day of prev month, to = last day of prev month
+  const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);  // day 0 of this month = last of prev
+  const prevMonthStart = new Date(prevMonthEnd.getFullYear(), prevMonthEnd.getMonth(), 1);
+  const from = `${prevMonthStart.getFullYear()}-${pad2(prevMonthStart.getMonth() + 1)}-${pad2(prevMonthStart.getDate())}`;
+  const to = `${prevMonthEnd.getFullYear()}-${pad2(prevMonthEnd.getMonth() + 1)}-${pad2(prevMonthEnd.getDate())}`;
+
+  console.log(`[cron] Running monthly money-trail audit for ${from} → ${to}`);
+
+  // Restart-safe dedupe: if a cron-source audit already exists for this exact
+  // period (e.g. process restarted between 06:00 and the next-month boundary),
+  // skip the run rather than inserting a duplicate.
+  const existing = await db.select({ id: auditRunsTable.id }).from(auditRunsTable)
+    .where(and(eq(auditRunsTable.source, "cron"), eq(auditRunsTable.periodFrom, from), eq(auditRunsTable.periodTo, to)))
+    .limit(1);
+  if (existing.length > 0) {
+    console.log(`[cron] Monthly audit for ${from} → ${to} already exists (#${existing[0].id}); skipping.`);
+    return;
+  }
+
+  const report = await runBooksSanity({ from, to });
+  const anomalyCount = report.anomalies.reduce((s, a) => s + a.count, 0);
+  const highCount = report.anomalies.filter((a) => a.severity === "high").reduce((s, a) => s + a.count, 0);
+  const totalImpact = report.anomalies.reduce((s, a) => s + (a.totalAmount || 0), 0);
+
+  const [inserted] = await db.insert(auditRunsTable).values({
+    periodFrom: from,
+    periodTo: to,
+    completedAt: null,
+    completedBy: null,
+    source: "cron",
+    notes: null,
+    anomalyCount,
+    highCount,
+    totalImpact: String(totalImpact),
+    snapshot: report,
+  }).returning();
+
+  // Best-effort email — never fails the audit save
+  try {
+    const result = await sendMonthlyAuditEmail({
+      auditId: inserted.id,
+      periodFrom: from,
+      periodTo: to,
+      anomalyCount,
+      highCount,
+      totalImpact,
+      report,
+    });
+    if (result.ok) {
+      await db.update(auditRunsTable).set({ emailSentAt: new Date() }).where(eq(auditRunsTable.id, inserted.id));
+      console.log(`[cron] Monthly audit #${inserted.id} emailed`);
+    } else {
+      console.warn(`[cron] Monthly audit #${inserted.id} saved but email failed: ${result.error}`);
+    }
+  } catch (err) {
+    console.error("[cron] monthly audit email send threw:", err);
+  }
 }
 
 // ── DICOM Auto-Pull scheduler ────────────────────────────────────────────────

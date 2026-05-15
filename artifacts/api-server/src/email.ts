@@ -269,6 +269,90 @@ export async function sendDailySummaryEmail(params: {
   });
 }
 
+// Send the monthly money-trail audit summary email. Returns ok/error so the
+// caller can stamp emailSentAt on the audit row.
+export async function sendMonthlyAuditEmail(params: {
+  auditId: number;
+  periodFrom: string;
+  periodTo: string;
+  anomalyCount: number;
+  highCount: number;
+  totalImpact: number;
+  report: { anomalies: Array<{ category: string; severity: string; count: number; totalAmount: number; description: string }>; periodTotals: Record<string, string | number> };
+}): Promise<{ ok: boolean; error?: string }> {
+  const s = await getEmailSettings();
+  if (!s) return { ok: false, error: "Email settings not configured" };
+  const to = getAllRecipients({ adminEmail: s.adminEmail, extraRecipients: s.extraRecipients });
+  if (to.length === 0) return { ok: false, error: "No recipients configured" };
+  const transport = await getTransporter();
+  if (!transport) return { ok: false, error: "SMTP transport unavailable" };
+
+  const fmt = (n: number | string) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(n ?? 0));
+  const headlineColor = params.highCount > 0 ? "#b91c1c" : params.anomalyCount > 0 ? "#b45309" : "#047857";
+  const t = params.report.periodTotals;
+
+  const anomalyRows = params.report.anomalies.map((a) => `
+    <tr>
+      <td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600">${a.category}</td>
+      <td style="padding:8px;border-bottom:1px solid #e5e7eb;text-transform:uppercase;font-size:11px;color:${a.severity === "high" ? "#b91c1c" : a.severity === "medium" ? "#b45309" : "#0369a1"}">${a.severity}</td>
+      <td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:right">${a.count}</td>
+      <td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:right">${a.totalAmount > 0 ? fmt(a.totalAmount) : "—"}</td>
+    </tr>`).join("");
+
+  const html = `
+    <div style="font-family:system-ui,sans-serif;max-width:680px;margin:0 auto;padding:20px;color:#1f2937">
+      <h2 style="margin:0 0 4px;color:#1f2937">Monthly Money-Trail Audit</h2>
+      <p style="margin:0;color:#6b7280">Period: <b>${params.periodFrom}</b> to <b>${params.periodTo}</b></p>
+      <div style="background:#f3f4f6;border-left:4px solid ${headlineColor};padding:12px 16px;margin:16px 0;border-radius:4px">
+        <div style="font-weight:700;color:${headlineColor};font-size:16px">
+          ${params.highCount > 0
+            ? `${params.highCount} HIGH-severity issue(s) found · ${params.anomalyCount} total flagged rows`
+            : params.anomalyCount > 0
+              ? `${params.anomalyCount} item(s) flagged for review (no high-severity)`
+              : "No anomalies. Books reconcile cleanly."}
+        </div>
+        <div style="color:#6b7280;font-size:13px;margin-top:4px">
+          Estimated amount impact: <b>${fmt(params.totalImpact)}</b>
+        </div>
+      </div>
+      <h3 style="margin:20px 0 8px">Period Summary</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr><td style="padding:6px 8px;color:#6b7280">Bills</td><td style="padding:6px 8px;text-align:right;font-weight:600">${t.bill_count ?? 0}</td>
+            <td style="padding:6px 8px;color:#6b7280">Total billed</td><td style="padding:6px 8px;text-align:right;font-weight:600">${fmt(t.total_sum ?? 0)}</td></tr>
+        <tr><td style="padding:6px 8px;color:#6b7280">Discount</td><td style="padding:6px 8px;text-align:right;font-weight:600">${fmt(t.discount_sum ?? 0)}</td>
+            <td style="padding:6px 8px;color:#6b7280">Paid</td><td style="padding:6px 8px;text-align:right;font-weight:600">${fmt(t.paid_sum ?? 0)}</td></tr>
+        <tr><td style="padding:6px 8px;color:#6b7280">Refunded</td><td style="padding:6px 8px;text-align:right;font-weight:600">${fmt(t.refund_sum ?? 0)}</td>
+            <td style="padding:6px 8px;color:#6b7280">Outstanding</td><td style="padding:6px 8px;text-align:right;font-weight:600">${fmt(t.balance_sum ?? 0)}</td></tr>
+      </table>
+      ${anomalyRows ? `
+        <h3 style="margin:20px 0 8px">Anomalies</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="background:#f9fafb">
+            <th style="padding:8px;text-align:left;border-bottom:1px solid #e5e7eb">Category</th>
+            <th style="padding:8px;text-align:left;border-bottom:1px solid #e5e7eb">Severity</th>
+            <th style="padding:8px;text-align:right;border-bottom:1px solid #e5e7eb">Count</th>
+            <th style="padding:8px;text-align:right;border-bottom:1px solid #e5e7eb">Impact</th>
+          </tr></thead>
+          <tbody>${anomalyRows}</tbody>
+        </table>` : ""}
+      <p style="margin-top:24px;color:#6b7280;font-size:12px">
+        Open the Super Admin Portal → Money Trail Audit → History to view, print or sign off audit #${params.auditId}.
+      </p>
+    </div>`;
+
+  try {
+    await transport.sendMail({
+      from: `"${s.fromName}" <${s.fromAddress}>`,
+      to: to.join(","),
+      subject: `[Money-Trail Audit] ${params.periodFrom} to ${params.periodTo} — ${params.anomalyCount} flagged`,
+      html,
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Send failed" };
+  }
+}
+
 // Send a finalized patient report by email. Returns ok/error so the caller
 // can persist a report_share row with the right status.
 export async function sendReportEmail(params: {

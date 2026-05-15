@@ -6,13 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useForm } from "react-hook-form";
-import { ShieldAlert, LogOut, ExternalLink, Copy, CheckCheck, Eye, EyeOff, Lock, BookOpen, HandCoins, ListChecks, Wallet, Usb } from "lucide-react";
+import { ShieldAlert, LogOut, ExternalLink, Copy, CheckCheck, Eye, EyeOff, Lock, BookOpen, HandCoins, ListChecks, Wallet, Usb, ShieldCheck } from "lucide-react";
 import { setSaToken, setSaUsbKey, loadSaUsbKeyFromSession, saUsbHeader } from "./lib/saApi";
 
 const BooksManager     = lazy(() => import("./pages/Books"));
 const CommissionRules  = lazy(() => import("./pages/CommissionRules"));
 const CommissionReport = lazy(() => import("./pages/CommissionReport"));
 const DoctorLedger     = lazy(() => import("./pages/DoctorLedger"));
+const MoneyTrailAudit  = lazy(() => import("./pages/MoneyTrailAudit"));
 
 function PageLoader() {
   return (
@@ -262,7 +263,7 @@ function LoginScreen({ onLogin, onLockUsb }: { onLogin: (session: Session) => vo
 }
 
 function ActiveSessionScreen({
-  session, onEject, onManageBooks, onCommissionReport, onCommissionRules, onDoctorLedger,
+  session, onEject, onManageBooks, onCommissionReport, onCommissionRules, onDoctorLedger, onMoneyTrailAudit,
 }: {
   session: Session;
   onEject: () => void;
@@ -270,6 +271,7 @@ function ActiveSessionScreen({
   onCommissionReport: () => void;
   onCommissionRules: () => void;
   onDoctorLedger: () => void;
+  onMoneyTrailAudit: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
@@ -415,6 +417,20 @@ function ActiveSessionScreen({
             </p>
           </div>
 
+          {/* Money Trail Audit */}
+          <div className="border-t border-border pt-5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+              Audit & Compliance
+            </p>
+            <Button variant="outline" className="w-full justify-start" onClick={onMoneyTrailAudit}>
+              <ShieldCheck size={14} className="mr-2" />
+              Money Trail Audit
+            </Button>
+            <p className="text-xs text-muted-foreground mt-2">
+              Run a full money-trail audit, sign it off, and archive the snapshot. Auto-runs on the 1st of every month and emails the summary.
+            </p>
+          </div>
+
           {/* Eject */}
           <div className="border-t border-border pt-4">
             <Button
@@ -438,7 +454,7 @@ function ActiveSessionScreen({
 function App() {
   const [usbUnlocked, setUsbUnlocked] = useState<boolean>(() => loadSaUsbKeyFromSession() !== null);
   const [session, setSession] = useState<Session | null>(null);
-  const [view, setView] = useState<"home" | "books" | "commission-report" | "commission-rules" | "doctor-ledger">("home");
+  const [view, setView] = useState<"home" | "books" | "commission-report" | "commission-rules" | "doctor-ledger" | "money-trail-audit">("home");
 
   // Keep the saApi helper in sync with the active super-admin token so all
   // gated requests (commission, doctor-ledger) automatically include the
@@ -471,6 +487,8 @@ function App() {
           <CommissionRules onBack={() => setView("home")} />
         ) : view === "doctor-ledger" ? (
           <DoctorLedger onBack={() => setView("home")} />
+        ) : view === "money-trail-audit" ? (
+          <MoneyTrailAudit onBack={() => setView("home")} />
         ) : (
           <ActiveSessionScreen
             session={session}
@@ -479,6 +497,7 @@ function App() {
             onCommissionReport={() => setView("commission-report")}
             onCommissionRules={() => setView("commission-rules")}
             onDoctorLedger={() => setView("doctor-ledger")}
+            onMoneyTrailAudit={() => setView("money-trail-audit")}
           />
         )}
       </Suspense>
