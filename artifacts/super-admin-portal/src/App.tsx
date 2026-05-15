@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
@@ -6,8 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useForm } from "react-hook-form";
-import { ShieldAlert, LogOut, ExternalLink, Copy, CheckCheck, Eye, EyeOff, Lock, BookOpen, HandCoins, ListChecks, Wallet, Usb, ShieldCheck } from "lucide-react";
+import { ShieldAlert, LogOut, ExternalLink, Copy, CheckCheck, Eye, EyeOff, Lock, BookOpen, HandCoins, ListChecks, Wallet, Usb, ShieldCheck, FolderOpen } from "lucide-react";
 import { setSaToken, setSaUsbKey, loadSaUsbKeyFromSession, saUsbHeader } from "./lib/saApi";
+import {
+  isFsAccessSupported,
+  pairPenDrive,
+  tryReadKey,
+  unpairPenDrive,
+  hasPairedDrive,
+} from "./lib/usbPoller";
 
 const BooksManager     = lazy(() => import("./pages/Books"));
 const CommissionRules  = lazy(() => import("./pages/CommissionRules"));
@@ -70,29 +77,53 @@ function CountdownTimer({ expiresAt }: { expiresAt: string }) {
   return <span className="font-mono text-sm">{remaining}</span>;
 }
 
+async function verifyAndStoreKey(text: string): Promise<string | null> {
+  const res = await fetch(`${API_BASE}/super-admin/usb/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key: text }),
+  });
+  if (!res.ok) {
+    return res.status === 429 ? "Too many attempts. Try again later." : "Invalid USB key file.";
+  }
+  setSaUsbKey(text);
+  return null; // no error
+}
+
 function UsbUnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const fsSupported = isFsAccessSupported();
 
+  // Primary flow: File System Access API (Chromium) — gives us a persistent
+  // directory handle so the polling loop can detect drive removal later.
+  const handlePickDrive = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const text = await pairPenDrive();
+      const err = await verifyAndStoreKey(text);
+      if (err) { setError(err); return; }
+      onUnlocked();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.toLowerCase().includes("aborted") || msg.toLowerCase().includes("cancel")) return;
+      setError(msg.includes("superadmin.key") ? "superadmin.key not found in chosen folder." : "Could not read USB drive.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Fallback flow: plain <input type="file"> (Firefox / Safari).
+  // Key is stored in sessionStorage only — drive removal won't auto-lock.
   const handleFile = async (file: File) => {
     setError(null);
     setBusy(true);
     try {
       const text = (await file.text()).trim();
-      if (!text) {
-        setError("The selected file is empty.");
-        return;
-      }
-      const res = await fetch(`${API_BASE}/super-admin/usb/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: text }),
-      });
-      if (!res.ok) {
-        setError(res.status === 429 ? "Too many attempts. Try again later." : "Invalid USB key file.");
-        return;
-      }
-      setSaUsbKey(text);
+      if (!text) { setError("The selected file is empty."); return; }
+      const err = await verifyAndStoreKey(text);
+      if (err) { setError(err); return; }
       onUnlocked();
     } catch {
       setError("Could not read the file.");
@@ -112,10 +143,34 @@ function UsbUnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
           <p className="text-sm text-muted-foreground mt-1">Plug in your super-admin pen drive</p>
         </div>
 
-        <div className="bg-card border border-border rounded-2xl p-6 shadow-xl shadow-black/20">
-          <p className="text-xs text-muted-foreground mb-4">
-            Select the <span className="font-mono text-foreground">superadmin.key</span> file from your USB pen drive to unlock super-admin login.
-          </p>
+        <div className="bg-card border border-border rounded-2xl p-6 shadow-xl shadow-black/20 space-y-4">
+          {fsSupported ? (
+            <>
+              <p className="text-xs text-muted-foreground">
+                Click the button below and select your USB pen drive folder. The session will automatically lock when the drive is removed.
+              </p>
+              <Button
+                className="w-full gap-2"
+                onClick={handlePickDrive}
+                disabled={busy}
+              >
+                <FolderOpen size={14} />
+                {busy ? "Verifying…" : "Select USB Drive Folder"}
+              </Button>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">or use file picker</span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Select the <span className="font-mono text-foreground">superadmin.key</span> file from your USB pen drive.
+            </p>
+          )}
 
           <label className="block">
             <span className="sr-only">USB key file</span>
@@ -131,9 +186,9 @@ function UsbUnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
             />
           </label>
 
-          {busy && <p className="text-xs text-muted-foreground mt-3">Verifying…</p>}
+          {busy && !error && <p className="text-xs text-muted-foreground">Verifying…</p>}
           {error && (
-            <div className="mt-3 bg-destructive/10 border border-destructive/30 text-destructive text-xs rounded-lg px-3 py-2">
+            <div className="bg-destructive/10 border border-destructive/30 text-destructive text-xs rounded-lg px-3 py-2">
               {error}
             </div>
           )}
@@ -458,12 +513,15 @@ function viewFromHash(): SaView {
   return (HASH_VIEWS as string[]).includes(h) ? (h as SaView) : "home";
 }
 
+const USB_POLL_INTERVAL_MS = 5_000; // re-read key every 5 seconds
+
 function App() {
   const [usbUnlocked, setUsbUnlocked] = useState<boolean>(() => loadSaUsbKeyFromSession() !== null);
   const [session, setSession] = useState<Session | null>(null);
   // Initial view honours `#books` / `#commission-report` / etc. so the ERP
   // sidebar can deep-link straight into a specific module after PIN login.
   const [view, setView] = useState<SaView>(() => viewFromHash());
+  const { toast } = useToast();
 
   // Keep the saApi helper in sync with the active super-admin token so all
   // gated requests (commission, doctor-ledger) automatically include the
@@ -487,11 +545,60 @@ function App() {
     }
   }, [view]);
 
-  const ejectUsb = () => {
+  // ── USB pen-drive polling ──────────────────────────────────────────────────
+  // When the portal was unlocked via the File System Access API (Chromium),
+  // we hold an IndexedDB-persisted directory handle to the pen drive. Every
+  // USB_POLL_INTERVAL_MS we re-read `superadmin.key` from that handle.
+  // If the read fails for any reason (drive unplugged, file deleted, permission
+  // revoked), we immediately eject the session and return to the USB lock screen.
+  // On Firefox/Safari (no FS Access API), hasPairedDrive() returns false and
+  // the interval does nothing — session ends only when the SA token expires.
+  const ejectUsb = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    if (!usbUnlocked) return; // nothing to poll if not yet unlocked
+
+    let cancelled = false;
+
+    const poll = async () => {
+      // Only poll if we actually have a paired drive handle.
+      const paired = await hasPairedDrive();
+      if (!paired || cancelled) return;
+
+      const key = await tryReadKey();
+      if (cancelled) return;
+
+      if (key === null) {
+        // Drive removed or key file gone — lock immediately.
+        ejectUsb.current?.();
+        toast({
+          title: "USB drive removed",
+          description: "Super-admin session ended because the pen drive was unplugged.",
+          variant: "destructive",
+        });
+      }
+    };
+
+    const id = window.setInterval(() => { void poll(); }, USB_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [usbUnlocked, toast]);
+
+  const doEjectUsb = () => {
     setSaUsbKey(null);
     setSession(null);
     setUsbUnlocked(false);
+    // Also forget the paired drive handle so the next operator must re-pair.
+    void unpairPenDrive();
   };
+
+  // Wire up the ref so the async poll closure can call it without capturing
+  // a stale closure value.
+  useEffect(() => {
+    ejectUsb.current = doEjectUsb;
+  });
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -501,7 +608,7 @@ function App() {
         ) : !session ? (
           <LoginScreen
             onLogin={(s) => { setSession(s); setView("home"); }}
-            onLockUsb={ejectUsb}
+            onLockUsb={doEjectUsb}
           />
         ) : view === "books" ? (
           <BooksManager token={session.token} onBack={() => setView("home")} />
