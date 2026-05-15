@@ -26,6 +26,7 @@ import { generateStudiesForOrder } from "./radiology";
 import { sendBillWhatsapp } from "./whatsapp";
 import { autoVoucherForPayment } from "../lib/auto-voucher";
 import { eq, and, sql, desc, like, or, gt, ne, inArray } from "drizzle-orm";
+import { z } from "zod";
 import {
   ListBillsQueryParams,
   CreateBillBody,
@@ -587,6 +588,34 @@ billsRouter.put("/:id", async (req: StaffAuthRequest, res) => {
 
   const [updated] = await db.update(billsTable).set(updateData).where(eq(billsTable.id, paramsParsed.data.id)).returning();
 
+  // Always-on advisory audit: a discount edit that exceeds 50% of the active
+  // order_tests subtotal is flagged for CA review. Fires regardless of whether
+  // the caller supplied editedBy/reason — actor falls back to the staff
+  // session so the row is never anonymous. Non-blocking.
+  if (discount !== undefined && String(discount) !== existingBill.discount) {
+    try {
+      const otRows = await db.select({ price: orderTestsTable.price })
+        .from(orderTestsTable)
+        .where(and(eq(orderTestsTable.orderId, existingBill.orderId), ne(orderTestsTable.status, "cancelled")));
+      const ruleSubtotal = otRows.reduce((s, r) => s + Number(r.price ?? 0), 0);
+      const newDiscountVal = Number(discount);
+      if (ruleSubtotal > 0 && newDiscountVal > 0 && (newDiscountVal / ruleSubtotal) * 100 > 50) {
+        const session = req.staffSession;
+        const actor = (req.body?.editedBy as string | undefined)
+          || session?.subjectName
+          || (session ? `staff:${session.id}` : "system");
+        await db.insert(billAuditsTable).values({
+          billId: paramsParsed.data.id,
+          editedBy: actor,
+          reason: (req.body?.reason as string | undefined) || "auto-flagged: discount > 50% of active subtotal",
+          changeType: "discount_override_warning",
+          oldValue: `subtotal=₹${ruleSubtotal.toFixed(2)}`,
+          newValue: `discount=₹${newDiscountVal.toFixed(2)} (${((newDiscountVal / ruleSubtotal) * 100).toFixed(1)}% — review)`,
+        });
+      }
+    } catch { /* never block edit on advisory check */ }
+  }
+
   // Audit trail + email notification
   const { editedBy, reason } = req.body;
   if (editedBy && reason) {
@@ -753,7 +782,69 @@ billsRouter.post("/:id/cancel", async (req, res) => {
       newValue: "cancelled",
     });
 
-    return { updated, oldStatus: bill.status };
+    // CRITICAL: cascade cancellation into order_tests so referral commission
+    // and doctor-ledger reports (which filter on order_tests.status, NOT
+    // bills.status) stop accruing on this bill. Without this, a cancelled
+    // bill keeps paying commission to the referring doctor forever.
+    const cascadedTests = await tx.update(orderTestsTable).set({
+      status: "cancelled",
+      cancelledByName: performedBy,
+      cancelledAt: new Date(),
+      cancellationReason: `Bill cancelled: ${reason}`,
+    } as Partial<typeof orderTestsTable.$inferSelect>)
+      .where(and(eq(orderTestsTable.orderId, bill.orderId), ne(orderTestsTable.status, "cancelled")))
+      .returning({ id: orderTestsTable.id });
+
+    if (cascadedTests.length > 0) {
+      await tx.insert(billAuditsTable).values({
+        billId: id,
+        editedBy: performedBy,
+        reason,
+        changeType: "tests_cancelled_cascade",
+        oldValue: "active",
+        newValue: `${cascadedTests.length} test(s) cancelled (commission accrual stopped)`,
+      });
+    }
+
+    // Optional: simultaneously refund the paid amount in the same transaction.
+    // Body shape: { autoRefund: { method: "cash" | "upi" | ... } }. When omitted,
+    // behaviour is unchanged (cancel-only).
+    const autoRefundParsed = z.object({
+      autoRefund: z.object({ method: z.string().min(1) }).optional(),
+    }).safeParse(req.body);
+    let refundedAmount = 0;
+    let refundMethod: string | null = null;
+    if (autoRefundParsed.success && autoRefundParsed.data.autoRefund) {
+      const currentPaid = Number(bill.paidAmount);
+      if (currentPaid > 0.0001) {
+        refundMethod = autoRefundParsed.data.autoRefund.method.trim().toLowerCase();
+        refundedAmount = Math.round(currentPaid * 100) / 100;
+        const currentRefund = Number(bill.refundAmount);
+        const newRefund = Math.round((currentRefund + refundedAmount) * 100) / 100;
+        await tx.insert(paymentsTable).values({
+          billId: id,
+          amount: String(-refundedAmount),
+          method: refundMethod,
+          referenceNumber: null,
+          notes: `REFUND on cancellation: ${reason}`,
+          recordedByName: performedBy,
+        });
+        await tx.update(billsTable).set({
+          paidAmount: "0.00",
+          refundAmount: String(newRefund),
+        }).where(eq(billsTable.id, id));
+        await tx.insert(billAuditsTable).values({
+          billId: id,
+          editedBy: performedBy,
+          reason,
+          changeType: "refund",
+          oldValue: `paid=₹${currentPaid.toFixed(2)}`,
+          newValue: `refund=₹${refundedAmount.toFixed(2)} via ${refundMethod} (auto on cancel)`,
+        });
+      }
+    }
+
+    return { updated, oldStatus: bill.status, cascadedTestCount: cascadedTests.length, refundedAmount, refundMethod };
   }).catch((err: Error & { httpStatus?: number }) => {
     if (err.httpStatus) {
       res.status(err.httpStatus).json({ error: err.message });
@@ -762,7 +853,25 @@ billsRouter.post("/:id/cancel", async (req, res) => {
     throw err;
   });
   if (!txResult) return;
-  const { updated, oldStatus } = txResult;
+  const { updated, oldStatus, cascadedTestCount, refundedAmount, refundMethod } = txResult;
+
+  // Auto-generate refund voucher when an auto-refund happened on cancellation.
+  if (refundedAmount > 0 && refundMethod) {
+    try {
+      const [patForVoucher] = await db
+        .select({ firstName: patientsTable.firstName, lastName: patientsTable.lastName })
+        .from(patientsTable)
+        .where(eq(patientsTable.id, updated.patientId));
+      autoVoucherForPayment({
+        billId: id,
+        amount: -refundedAmount,
+        method: refundMethod,
+        billNumber: updated.billNumber,
+        patientName: patForVoucher ? `${patForVoucher.firstName} ${patForVoucher.lastName}`.trim() : null,
+        performedBy,
+      }).catch(() => {});
+    } catch { /* never block */ }
+  }
 
   // Best-effort email notification (re-use the bill-edit template)
   try {
@@ -770,12 +879,21 @@ billsRouter.post("/:id/cancel", async (req, res) => {
     const patientName = billForEmail.patient
       ? `${billForEmail.patient.firstName} ${billForEmail.patient.lastName}`
       : "Unknown Patient";
+    const changes: { field: string; from: string | null; to: string | null }[] = [
+      { field: "Status", from: oldStatus, to: "cancelled" },
+    ];
+    if (cascadedTestCount > 0) {
+      changes.push({ field: "Tests cancelled", from: null, to: `${cascadedTestCount} (commission stopped)` });
+    }
+    if (refundedAmount > 0 && refundMethod) {
+      changes.push({ field: "Auto refund", from: null, to: `₹${refundedAmount.toFixed(2)} via ${refundMethod}` });
+    }
     sendBillEditEmail({
       billNumber: updated.billNumber,
       patientName,
       editedBy: performedBy,
       reason: `[CANCELLED] ${reason}`,
-      changes: [{ field: "Status", from: oldStatus, to: "cancelled" }],
+      changes,
     }).catch((err) => console.error("[email] bill cancel notification failed:", err));
   } catch (err) {
     req.log?.warn?.({ err }, "Cancel email send failed");
@@ -984,6 +1102,25 @@ billsRouter.patch("/:id/super-edit", async (req, res) => {
   // Audit each changed field
   const auditRows: { billId: number; editedBy: string; reason: string; changeType: string; oldValue: string | null; newValue: string | null }[] = [];
   if (newSubtotal !== Number(bill.subtotal))   auditRows.push({ billId: id, editedBy: superAdminName, reason, changeType: "subtotal",   oldValue: bill.subtotal,   newValue: String(newSubtotal) });
+
+  // Audit warning: if the new subtotal no longer matches sum(order_tests.price),
+  // commission/doctor-ledger reports (which compute off order_tests, not bills)
+  // will silently disagree with the bill. Surface this for the CA review page.
+  if (newSubtotal !== Number(bill.subtotal)) {
+    const otRows = await db.select({ price: orderTestsTable.price, status: orderTestsTable.status })
+      .from(orderTestsTable).where(eq(orderTestsTable.orderId, bill.orderId));
+    const activeSum = otRows
+      .filter((r) => r.status !== "cancelled")
+      .reduce((s, r) => s + Number(r.price ?? 0), 0);
+    if (Math.abs(activeSum - newSubtotal) > 0.01) {
+      auditRows.push({
+        billId: id, editedBy: superAdminName, reason,
+        changeType: "subtotal_mismatch_warning",
+        oldValue: `order_tests sum=₹${activeSum.toFixed(2)}`,
+        newValue: `bill subtotal=₹${newSubtotal.toFixed(2)} (commission report will use order_tests sum, not this)`,
+      });
+    }
+  }
   if (newDiscount !== Number(bill.discount))   auditRows.push({ billId: id, editedBy: superAdminName, reason, changeType: "discount",   oldValue: bill.discount,   newValue: String(newDiscount) });
   if (newTaxAmount !== Number(bill.taxAmount)) auditRows.push({ billId: id, editedBy: superAdminName, reason, changeType: "taxAmount",  oldValue: bill.taxAmount,  newValue: String(newTaxAmount) });
   if (newTotal !== Number(bill.totalAmount))   auditRows.push({ billId: id, editedBy: superAdminName, reason, changeType: "totalAmount", oldValue: bill.totalAmount, newValue: String(newTotal) });

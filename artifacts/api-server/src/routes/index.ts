@@ -59,6 +59,7 @@ import { myDailySummaryRouter } from "./my-daily-summary";
 import { outsourcedLabsRouter } from "./outsourced-labs";
 import { kioskRouter } from "./kiosk";
 import { dayCloseRouter } from "./day-close";
+import { booksSanityRouter } from "./books-sanity";
 import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
 import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
 import userPreferencesRouter from "./userPreferences";
@@ -177,6 +178,8 @@ router.use("/ledgers", requireStaffAuth, requireStaffPermission("/accounting"), 
 // /day-close path; FULL_ACCESS_ROLES auto-permits both roles). The reopen
 // sub-route inside the router additionally enforces requireSuperAdmin.
 router.use("/day-close", requireStaffAuth, requireStaffPermission("/day-close"), dayCloseRouter);
+// Books Sanity / CA review — admin + super-admin only (same auth shape as day-close)
+router.use("/books-sanity", requireStaffAuth, requireStaffPermission("/day-close"), booksSanityRouter);
 
 // Staff HR & payroll — /settings permission (only settings-level users may
 // read salary/bank details or post salary and advance records)

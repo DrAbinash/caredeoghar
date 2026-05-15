@@ -116,6 +116,22 @@ async function runStartupMigrations(): Promise<void> {
       ALTER TABLE order_tests ADD COLUMN IF NOT EXISTS cancelled_by_name TEXT;
       ALTER TABLE order_tests ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
       ALTER TABLE order_tests ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
+
+      -- ── Backfill: close commission leak on historical cancelled bills ────
+      -- Any bill cancelled before the cascade-fix (May 2026) left its
+      -- order_tests rows in 'active' state, so commission reports kept
+      -- accruing for the referring doctor. This idempotent UPDATE marks
+      -- those tests as cancelled with a clear audit-friendly reason.
+      UPDATE order_tests ot
+         SET status = 'cancelled',
+             cancellation_reason = COALESCE(ot.cancellation_reason,
+               'Backfill: parent bill ' || b.bill_number || ' was cancelled'),
+             cancelled_at = COALESCE(ot.cancelled_at, b.cancelled_at, NOW()),
+             cancelled_by_name = COALESCE(ot.cancelled_by_name, b.cancelled_by_name, 'system-backfill')
+        FROM bills b
+       WHERE ot.order_id = b.order_id
+         AND b.status = 'cancelled'
+         AND ot.status <> 'cancelled';
       ALTER TABLE diagnostic_tests ADD COLUMN IF NOT EXISTS test_type TEXT NOT NULL DEFAULT 'inhouse';
       ALTER TABLE diagnostic_tests ADD COLUMN IF NOT EXISTS outsourced_lab_id INTEGER;
       CREATE TABLE IF NOT EXISTS outsourced_labs (

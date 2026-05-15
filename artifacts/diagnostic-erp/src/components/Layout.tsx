@@ -48,6 +48,7 @@ import {
   WifiOff,
   ScanSearch,
   Lock,
+  ShieldCheck,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -130,6 +131,7 @@ const navItems: NavEntry[] = [
   },
   { path: "/accounting", icon: BookOpen, label: "Accounting" },
   { path: "/day-close", icon: Lock, label: "Day Close", ownerOnly: true },
+  { path: "/books-sanity", icon: ShieldCheck, label: "Books Sanity (CA)", ownerOnly: true },
   { path: "/form-f", icon: FileText, label: "Form F (PCPNDT)" },
   { path: "/website", icon: Globe, label: "Website Builder" },
   {

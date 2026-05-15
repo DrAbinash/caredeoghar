@@ -34,6 +34,7 @@ const Appointments    = lazy(() => import("@/pages/Appointments"));
 const Packages        = lazy(() => import("@/pages/Packages"));
 const Expenses        = lazy(() => import("@/pages/Expenses"));
 const DayClose        = lazy(() => import("@/pages/DayClose"));
+const BooksSanity     = lazy(() => import("@/pages/BooksSanity"));
 const Staff           = lazy(() => import("@/pages/Staff"));
 const HRForms         = lazy(() => import("@/pages/HRForms"));
 const QueuePage       = lazy(() => import("@/pages/Queue"));
@@ -164,6 +165,7 @@ function Router() {
               <Route path="/packages" component={Packages} />
               <Route path="/expenses" component={Expenses} />
               <Route path="/day-close" component={DayClose} />
+              <Route path="/books-sanity" component={BooksSanity} />
               <Route path="/staff" component={Staff} />
               <Route path="/hr-forms" component={HRForms} />
               <Route path="/form-f" component={FormF} />
