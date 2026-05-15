@@ -75,6 +75,20 @@ function extractDeptRoom(body: unknown): { department?: string; roomNumber?: str
   return out;
 }
 
+/** Walk the error + cause chain and return true if it looks like a PG unique-violation. */
+function isUniqueViolation(e: unknown): boolean {
+  let node: unknown = e;
+  while (node && typeof node === "object") {
+    const n = node as Record<string, unknown>;
+    // Postgres error code 23505 (unique_violation) exposed by pg driver
+    if (n["code"] === "23505") return true;
+    const msg = typeof n["message"] === "string" ? n["message"] : "";
+    if (msg.includes("diagnostic_tests_code_unique") || msg.includes("duplicate key")) return true;
+    node = n["cause"];
+  }
+  return false;
+}
+
 testsRouter.post("/", async (req, res) => {
   const parsed = CreateTestBody.safeParse(req.body);
   if (!parsed.success) {
@@ -94,8 +108,7 @@ testsRouter.post("/", async (req, res) => {
     }).returning();
     res.status(201).json({ ...test, price: Number(test.price) });
   } catch (e) {
-    const msg = (e as { message?: string })?.message ?? "";
-    if (msg.includes("diagnostic_tests_code_unique") || msg.includes("duplicate key")) {
+    if (isUniqueViolation(e)) {
       res.status(409).json({ error: `Test code "${parsed.data.code}" is already in use. Please pick a different code.` });
       return;
     }
