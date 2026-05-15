@@ -290,7 +290,7 @@ export default function MyDailySummary() {
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
             <MiniKpi icon={IndianRupee} label="Gross Billing" value={fmt(s.grossBilling)} sub={`${s.billCount} bills`} iconBg="bg-emerald-100 text-emerald-700" border="border-l-emerald-500" />
             <MiniKpi icon={Wallet} label="Outstanding / Dues" value={fmt(s.outstanding)} sub="Unpaid balance" iconBg="bg-amber-100 text-amber-700" border="border-l-amber-500" />
-            <MiniKpi icon={RotateCcw} label="Refunds & Cancellations" value={fmt(s.refundsAndCancellations)} sub={`₹${s.refundAmount.toFixed(0)} refunds + ${s.cancellationCount} cancelled`} iconBg="bg-rose-100 text-rose-700" border="border-l-rose-500" />
+            <MiniKpi icon={RotateCcw} label="Cancellations" value={fmt(s.cancelledAmount)} sub={`${s.cancellationCount} bill${s.cancellationCount !== 1 ? "s" : ""} cancelled${s.refundAmount > 0 ? ` · ₹${s.refundAmount.toFixed(0)} refunded` : ""}`} iconBg="bg-rose-100 text-rose-700" border="border-l-rose-500" />
             <MiniKpi icon={TrendingDown} label="Cash Expenses" value={fmt(s.cashExpenses)} sub="Approved by you" iconBg="bg-orange-100 text-orange-700" border="border-l-orange-500" />
             <MiniKpi icon={CheckCircle2} label="Total Received" value={fmt(s.totalReceived)} sub="All payments collected" iconBg="bg-green-100 text-green-700" border="border-l-green-500" />
             <MiniKpi icon={Smartphone} label="Digital Collection" value={fmt(s.digitalCollection)} sub="UPI / Card / Net Banking" iconBg="bg-violet-100 text-violet-700" border="border-l-violet-500" />
@@ -355,7 +355,7 @@ export default function MyDailySummary() {
             <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl shadow-sm overflow-hidden flex flex-col">
               <div className="px-4 py-3 border-b border-gray-100 dark:border-card-border flex items-center justify-between">
                 <h3 className="text-sm font-bold text-gray-900 dark:text-foreground flex items-center gap-2">
-                  <FileEdit size={14} className="text-purple-600" /> Bill Edits by Me
+                  <FileEdit size={14} className="text-purple-600" /> Bill Activity by Me
                   {data.billEdits.length > 0 && (
                     <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
                       {data.billEdits.length}
@@ -390,7 +390,13 @@ export default function MyDailySummary() {
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap">
                             {e.changeType ? (
-                              <span className="px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-semibold text-[10px]">
+                              <span className={`px-1.5 py-0.5 rounded font-semibold text-[10px] ${
+                                e.changeType === "cancelled" ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300" :
+                                e.changeType === "reprint" ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300" :
+                                e.changeType === "refund" ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300" :
+                                e.changeType === "discount" ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300" :
+                                "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
+                              }`}>
                                 {e.changeType}
                               </span>
                             ) : <span className="text-gray-400">—</span>}

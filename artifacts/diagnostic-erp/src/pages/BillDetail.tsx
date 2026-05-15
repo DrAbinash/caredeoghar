@@ -1017,13 +1017,13 @@ export default function BillDetail({ id }: { id: number }) {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <History size={16} /> Edit History — {bill.billNumber}
+              <History size={16} /> Audit Log — {bill.billNumber}
             </DialogTitle>
           </DialogHeader>
           {audits.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground text-sm">
               <Clock size={32} className="mx-auto mb-2 opacity-30" />
-              No edits recorded for this bill
+              No audit entries recorded for this bill
             </div>
           ) : (
             <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -1031,6 +1031,9 @@ export default function BillDetail({ id }: { id: number }) {
                 <div key={a.id} className="border border-card-border rounded-lg p-3 text-sm">
                   <div className="flex items-center justify-between mb-1">
                     <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded ${
+                      a.changeType === "cancelled" ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" :
+                      a.changeType === "reprint" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" :
+                      a.changeType === "refund" ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" :
                       a.changeType === "deleted" ? "bg-red-100 text-red-700" :
                       a.changeType === "discount" ? "bg-blue-100 text-blue-700" :
                       a.changeType === "subtotal" || a.changeType === "taxAmount" || a.changeType === "totalAmount" ? "bg-amber-100 text-amber-700" :

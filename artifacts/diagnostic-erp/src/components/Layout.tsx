@@ -342,6 +342,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     // user interaction after mount (click or keydown), silently try to
     // re-grant permission for the already-paired drive, then immediately tick
     // so the Super Admin link reappears without needing Ctrl+Alt+U again.
+    // NOTE: We use separate once-listeners for click and keydown so that the
+    // Ctrl+Alt+U keydown (which also opens the pairing dialog) does NOT
+    // consume the click slot — either gesture independently triggers re-grant.
     let permissionGrantAttempted = false;
     const tryRegrant = () => {
       if (permissionGrantAttempted || stopped) return;
@@ -350,22 +353,38 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         if (granted && !stopped) void tick();
       });
     };
-    window.addEventListener("click", tryRegrant, { once: true, capture: true });
-    window.addEventListener("keydown", tryRegrant, { once: true, capture: true });
+    // Use named wrappers so we can remove them individually on cleanup.
+    // click uses { once: true } — a click is always a clear user gesture.
+    // keydown does NOT use { once: true } because the Ctrl+Alt+U combo fires
+    // a keydown but is primarily handled by the separate onKey listener; we
+    // don't want that keydown to silently consume the re-grant opportunity
+    // before the user has actually interacted with the page content.
+    const tryRegrantClick = () => { tryRegrant(); };
+    const tryRegrantKey = (e: KeyboardEvent) => {
+      // Skip the pairing combo itself — it will trigger the dialog which
+      // handles its own permission flow via onPairFs / pairPenDrive.
+      if (e.ctrlKey && e.altKey && (e.code === "KeyU" || e.key === "u" || e.key === "U")) return;
+      tryRegrant();
+    };
+    window.addEventListener("click", tryRegrantClick, { once: true, capture: true });
+    window.addEventListener("keydown", tryRegrantKey, { capture: true });
 
     return () => {
       stopped = true;
       window.clearInterval(id);
-      window.removeEventListener("click", tryRegrant, { capture: true });
-      window.removeEventListener("keydown", tryRegrant, { capture: true });
+      window.removeEventListener("click", tryRegrantClick, { capture: true });
+      window.removeEventListener("keydown", tryRegrantKey, { capture: true });
     };
   }, [usbGateEnforced]);
 
   // Hidden pairing trigger: Ctrl+Alt+U opens the one-time setup modal.
   // Operators who don't know the combo can't see anything related to USB.
+  // Use e.code ("KeyU") instead of e.key ("u"/"U") so the combo works on
+  // Windows keyboards where Ctrl+Alt is treated as AltGr and produces a
+  // locale-specific character (e.g. "ú") rather than the ASCII letter "u".
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.altKey && (e.key === "u" || e.key === "U")) {
+      if (e.ctrlKey && e.altKey && (e.code === "KeyU" || e.key === "u" || e.key === "U")) {
         e.preventDefault();
         setPairDialog({ busy: false, error: null, mode: isFsAccessSupported() ? "fs" : "file" });
       }
