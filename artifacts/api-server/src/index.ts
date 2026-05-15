@@ -132,6 +132,8 @@ async function runStartupMigrations(): Promise<void> {
        WHERE ot.order_id = b.order_id
          AND b.status = 'cancelled'
          AND ot.status <> 'cancelled';
+      ALTER TABLE diagnostic_tests ADD COLUMN IF NOT EXISTS department TEXT NOT NULL DEFAULT 'Pathology';
+      ALTER TABLE diagnostic_tests ADD COLUMN IF NOT EXISTS room_number TEXT NOT NULL DEFAULT '';
       ALTER TABLE diagnostic_tests ADD COLUMN IF NOT EXISTS test_type TEXT NOT NULL DEFAULT 'inhouse';
       ALTER TABLE diagnostic_tests ADD COLUMN IF NOT EXISTS outsourced_lab_id INTEGER;
       CREATE TABLE IF NOT EXISTS outsourced_labs (
