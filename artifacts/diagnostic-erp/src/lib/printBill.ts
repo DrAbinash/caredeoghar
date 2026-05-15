@@ -237,19 +237,16 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
       </table>
 
       <!--
-        FOOTER BLOCK — fills the empty lower portion of the A5 page with a
-        prominent collect-report notice and the clinic's footer note. The
-        per-department queue tokens are NOT printed here; they print on the
-        separate Token Printer (see printToken in BillingDesk.tsx).
+        FOOTER BLOCK — single combined section so there is only ONE
+        page-break-inside:avoid target. Having two separate avoid-blocks
+        caused browsers to push both onto a new page when they didn't fit
+        together after the totals, producing a blank page 2 (and page 4
+        for the second copy). Merged into one block; footerNote is the
+        primary message since the clinic configures it.
       -->
-      <div style="margin-top:14px;border:1px solid #1e40af;border-radius:6px;padding:${paperSize === "A5" ? "10px 14px" : "8px 12px"};background:#f0f6ff;text-align:center;text-transform:none;page-break-inside:avoid">
-        <div style="font-size:${fontPx + 2}px;font-weight:800;color:#1e40af;letter-spacing:0.5px">${escapeHtml(bill.reportCollectionNote || "Please collect your report within 7 days.")}</div>
-        <div style="font-size:${Math.round(fontPx * 0.85)}px;color:#444;margin-top:4px">Reports beyond 7 days may be archived and require staff assistance to retrieve.</div>
-      </div>
-
-      <div style="margin-top:10px;text-align:center;text-transform:none;page-break-inside:avoid">
-        <div style="font-size:${fontPx + 1}px;font-weight:700;color:#1e40af;letter-spacing:0.5px">${escapeHtml(clinic?.footerNote || "Thank you for choosing our diagnostic services.")}</div>
-        <div style="font-size:${Math.round(fontPx * 0.75)}px;color:#888;margin-top:6px">We wish you good health.  &middot;  Computer-generated invoice — no signature required.</div>
+      <div style="margin-top:8px;border:1px solid #1e40af;border-radius:6px;padding:${paperSize === "A5" ? "8px 14px" : "6px 12px"};background:#f0f6ff;text-align:center;text-transform:none;page-break-inside:avoid">
+        <div style="font-size:${fontPx + 1}px;font-weight:800;color:#1e40af;letter-spacing:0.5px">${escapeHtml(clinic?.footerNote || bill.reportCollectionNote || "Please collect your report within 7 days.")}</div>
+        <div style="font-size:${Math.round(fontPx * 0.8)}px;color:#666;margin-top:3px">We wish you good health.  &middot;  Computer-generated invoice — no signature required.</div>
       </div>
     </section>`;
 
