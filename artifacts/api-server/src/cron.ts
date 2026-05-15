@@ -76,18 +76,30 @@ export async function fireMonthlyAudit(now: Date): Promise<void> {
   const highCount = report.anomalies.filter((a) => a.severity === "high").reduce((s, a) => s + a.count, 0);
   const totalImpact = report.anomalies.reduce((s, a) => s + (a.totalAmount || 0), 0);
 
-  const [inserted] = await db.insert(auditRunsTable).values({
-    periodFrom: from,
-    periodTo: to,
-    completedAt: null,
-    completedBy: null,
-    source: "cron",
-    notes: null,
-    anomalyCount,
-    highCount,
-    totalImpact: String(totalImpact),
-    snapshot: report,
-  }).returning();
+  let inserted: typeof auditRunsTable.$inferSelect;
+  try {
+    [inserted] = await db.insert(auditRunsTable).values({
+      periodFrom: from,
+      periodTo: to,
+      completedAt: null,
+      completedBy: null,
+      source: "cron",
+      notes: null,
+      anomalyCount,
+      highCount,
+      totalImpact: String(totalImpact),
+      snapshot: report,
+    }).returning();
+  } catch (err) {
+    // Unique-index violation: another worker beat us to the insert. Treat
+    // as a no-op so cron retries don't crash the loop.
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("audit_runs_cron_unique_idx") || msg.includes("duplicate key")) {
+      console.log(`[cron] Monthly audit for ${from} → ${to} was inserted concurrently; skipping.`);
+      return;
+    }
+    throw err;
+  }
 
   // Best-effort email — never fails the audit save
   try {

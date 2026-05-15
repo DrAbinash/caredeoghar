@@ -301,16 +301,29 @@ const SaveAuditBody = z.object({
 });
 
 async function getCurrentSuperAdminName(req: import("express").Request): Promise<string> {
+  // requireSuperAdmin already validated the token before this fn is called,
+  // so a missing-name fallback here is unexpected and worth logging — it
+  // means the audit row will be stamped with a generic actor and the audit
+  // trail loses some precision. Log enough to investigate without leaking
+  // the token itself.
   try {
     const token = (req.header("x-sa-token") ?? "").trim();
-    if (!token) return "super-admin";
+    if (!token) {
+      req.log?.warn("getCurrentSuperAdminName: no x-sa-token header on already-authorised request");
+      return "super-admin";
+    }
     const [row] = await db
       .select({ userName: superAdminSessionsTable.userName })
       .from(superAdminSessionsTable)
       .where(eq(superAdminSessionsTable.token, token))
       .limit(1);
-    return row?.userName ?? "super-admin";
-  } catch {
+    if (!row?.userName) {
+      req.log?.warn({ tokenPrefix: token.slice(0, 8) }, "getCurrentSuperAdminName: session lookup returned no userName");
+      return "super-admin";
+    }
+    return row.userName;
+  } catch (err) {
+    req.log?.warn({ err }, "getCurrentSuperAdminName: lookup threw");
     return "super-admin";
   }
 }

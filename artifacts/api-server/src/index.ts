@@ -261,6 +261,12 @@ async function runStartupMigrations(): Promise<void> {
         email_sent_at TIMESTAMPTZ
       );
       CREATE INDEX IF NOT EXISTS audit_runs_generated_at_idx ON audit_runs(generated_at DESC);
+      -- Belt-and-suspenders dedupe: even if two cron processes (or a process
+      -- restart loop) both try to fire the same monthly audit, the DB itself
+      -- guarantees only one cron-source row per (period_from, period_to).
+      -- Manual audits intentionally can repeat for the same period.
+      CREATE UNIQUE INDEX IF NOT EXISTS audit_runs_cron_unique_idx
+        ON audit_runs(period_from, period_to) WHERE source = 'cron';
     `);
     logger.info("Startup migrations applied");
   } catch (err) {
