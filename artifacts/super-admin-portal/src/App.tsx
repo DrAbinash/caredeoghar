@@ -451,10 +451,19 @@ function ActiveSessionScreen({
   );
 }
 
+type SaView = "home" | "books" | "commission-report" | "commission-rules" | "doctor-ledger" | "money-trail-audit";
+const HASH_VIEWS: SaView[] = ["books", "commission-report", "commission-rules", "doctor-ledger", "money-trail-audit"];
+function viewFromHash(): SaView {
+  const h = (window.location.hash || "").replace(/^#/, "");
+  return (HASH_VIEWS as string[]).includes(h) ? (h as SaView) : "home";
+}
+
 function App() {
   const [usbUnlocked, setUsbUnlocked] = useState<boolean>(() => loadSaUsbKeyFromSession() !== null);
   const [session, setSession] = useState<Session | null>(null);
-  const [view, setView] = useState<"home" | "books" | "commission-report" | "commission-rules" | "doctor-ledger" | "money-trail-audit">("home");
+  // Initial view honours `#books` / `#commission-report` / etc. so the ERP
+  // sidebar can deep-link straight into a specific module after PIN login.
+  const [view, setView] = useState<SaView>(() => viewFromHash());
 
   // Keep the saApi helper in sync with the active super-admin token so all
   // gated requests (commission, doctor-ledger) automatically include the
@@ -462,6 +471,21 @@ function App() {
   useEffect(() => {
     setSaToken(session?.token ?? null);
   }, [session]);
+
+  // Two-way bind view ↔ url hash so back/forward navigation works and so
+  // operators can bookmark a module.
+  useEffect(() => {
+    const onHash = () => setView(viewFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  useEffect(() => {
+    const desired = view === "home" ? "" : `#${view}`;
+    if (window.location.hash !== desired) {
+      // replaceState avoids polluting browser history on every tab switch.
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${desired}`);
+    }
+  }, [view]);
 
   const ejectUsb = () => {
     setSaUsbKey(null);

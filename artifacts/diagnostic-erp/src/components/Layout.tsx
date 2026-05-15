@@ -49,6 +49,9 @@ import {
   ScanSearch,
   Lock,
   ShieldCheck,
+  HandCoins,
+  ListChecks,
+  Wallet,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -415,10 +418,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const openSuperAdmin = () => {
-    const url = `${window.location.origin}/super-admin-portal/`;
+  const openSuperAdmin = (hash: string = "") => {
+    const url = `${window.location.origin}/super-admin-portal/${hash ? `#${hash}` : ""}`;
     window.open(url, "_blank", "noopener,noreferrer");
   };
+
+  // Super-admin modules surfaced inline in the ERP sidebar when the USB
+  // pen drive is verified (or when the gate is not enforced in dev).
+  // Each entry deep-links into the matching tab in /super-admin-portal/.
+  const superAdminModules: { hash: string; icon: typeof Zap; label: string }[] = [
+    { hash: "books",              icon: BookOpen,    label: "Books Manager" },
+    { hash: "commission-report",  icon: ListChecks,  label: "Commission Report" },
+    { hash: "commission-rules",   icon: HandCoins,   label: "Commission Rules" },
+    { hash: "doctor-ledger",      icon: Wallet,      label: "Doctor Ledger" },
+    { hash: "money-trail-audit",  icon: ShieldCheck, label: "Money Trail Audit" },
+  ];
 
   const onLogout = async () => {
     // Best-effort: tell the server to invalidate the portal session, and clear
@@ -605,24 +619,39 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {/* Super-admin USB gate:
-            - Gate enforced (SUPER_ADMIN_USB_KEY is set): link appears only
-              when the pen drive is plugged in and superadmin.key validates.
-            - Gate NOT enforced (dev / unconfigured): link always visible so
-              super-admin is still reachable without a pen drive. */}
+        {/* Super-admin modules — surfaced inline when:
+            - Gate NOT enforced (dev / unconfigured): always visible.
+            - Gate enforced (prod): only when the paired pen drive is plugged
+              in and superadmin.key validates against the server secret.
+            Each entry opens /super-admin-portal/#<view> in a new tab so the
+            portal jumps straight into the chosen module after PIN login. */}
         {(!usbGateEnforced || usbKeyPresent) && (
           <div className="px-3 py-2 border-t border-sidebar-border relative z-10" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
-            <button
-              onClick={openSuperAdmin}
-              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-semibold bg-amber-500/15 border border-amber-500/30 text-amber-200 hover:bg-amber-500/25 transition-colors"
-              title="Open Super Admin Portal in a new tab"
-            >
-              <ShieldAlert size={13} />
-              Super Admin
-              <span className="ml-auto inline-flex items-center gap-1 text-[10px] text-amber-300/80">
-                <Usb size={10} /> KEY
+            <div className="flex items-center justify-between px-2.5 pb-1.5">
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-300/90">
+                <ShieldAlert size={11} />
+                Super Admin
               </span>
-            </button>
+              <span className="inline-flex items-center gap-1 text-[9px] text-amber-300/70">
+                <Usb size={9} /> KEY
+              </span>
+            </div>
+            <div className="space-y-1">
+              {superAdminModules.map((m) => {
+                const Icon = m.icon;
+                return (
+                  <button
+                    key={m.hash}
+                    onClick={() => openSuperAdmin(m.hash)}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] font-medium bg-amber-500/10 border border-amber-500/25 text-amber-100 hover:bg-amber-500/25 transition-colors text-left"
+                    title={`Open ${m.label} in a new tab`}
+                  >
+                    <Icon size={12} className="shrink-0 text-amber-300/90" />
+                    <span className="truncate">{m.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 
