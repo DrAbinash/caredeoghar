@@ -132,6 +132,14 @@ async function runStartupMigrations(): Promise<void> {
        WHERE ot.order_id = b.order_id
          AND b.status = 'cancelled'
          AND ot.status <> 'cancelled';
+      -- ── Promote bootstrap admin to super_admin if none exists yet ──────
+      -- Runs on every startup but only fires once: the WHERE ... NOT EXISTS
+      -- guard makes it a no-op as soon as any super_admin row is present.
+      UPDATE users
+         SET role = 'super_admin'
+       WHERE email = 'abinashsingh@gmail.com'
+         AND NOT EXISTS (SELECT 1 FROM users WHERE role = 'super_admin');
+
       ALTER TABLE diagnostic_tests ADD COLUMN IF NOT EXISTS department TEXT NOT NULL DEFAULT 'Pathology';
       ALTER TABLE diagnostic_tests ADD COLUMN IF NOT EXISTS room_number TEXT NOT NULL DEFAULT '';
       ALTER TABLE diagnostic_tests ADD COLUMN IF NOT EXISTS test_type TEXT NOT NULL DEFAULT 'inhouse';
