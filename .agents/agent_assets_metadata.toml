@@ -60,3 +60,9 @@ id = "KEOQ4Qw52Z8sh3CXLy59q"
 uri = "file://exports/money-trail-audit-sample.pdf"
 type = "pdf"
 title = "Money Trail Audit — CA-printable Sample"
+
+[[outputs]]
+id = "KqNK8C4PXBtg4V8tUPHAW"
+uri = "file://CARE_DIAGNOSTICS_WEBSITE_STRUCTURE.md"
+type = "text"
+title = "Care Diagnostics Website Structure Guide for ChatGPT"
