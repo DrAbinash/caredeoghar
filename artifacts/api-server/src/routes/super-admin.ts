@@ -15,6 +15,7 @@ import {
   ordersTable,
   appointmentsTable,
   auditRunsTable,
+  clinicSettingsTable,
 } from "@workspace/db/schema";
 import { eq, and, asc, desc, isNull, or, sql } from "drizzle-orm";
 import { runBooksSanity } from "./books-sanity";
@@ -428,4 +429,36 @@ superAdminRouter.delete("/audit-runs/:id", requireSuperAdminUsb, requireSuperAdm
   }
   await db.delete(auditRunsTable).where(eq(auditRunsTable.id, id));
   res.json({ ok: true });
+});
+
+// ─── Commission discount settings (super-admin only) ─────────────────────────
+// Returns the current commissionDiscountMode so the super-admin portal can
+// display and toggle it without giving full clinic-settings write access.
+superAdminRouter.get("/commission-settings", requireSuperAdminUsb, requireSuperAdmin, async (_req, res) => {
+  const rows = await db.select({ commissionDiscountMode: clinicSettingsTable.commissionDiscountMode }).from(clinicSettingsTable).limit(1);
+  const mode = rows[0]?.commissionDiscountMode ?? "none";
+  res.json({ commissionDiscountMode: mode });
+});
+
+const CommissionDiscountModes = ["none", "deduct", "deduct_rollover"] as const;
+const CommissionSettingsPatch = z.object({
+  commissionDiscountMode: z.enum(CommissionDiscountModes),
+});
+
+superAdminRouter.patch("/commission-settings", requireSuperAdminUsb, requireSuperAdmin, async (req, res) => {
+  const parsed = CommissionSettingsPatch.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "commissionDiscountMode must be one of: none, deduct, deduct_rollover" });
+    return;
+  }
+  const rows = await db.select({ id: clinicSettingsTable.id }).from(clinicSettingsTable).limit(1);
+  if (!rows[0]) {
+    // Bootstrap a default row if none exists, then set the mode.
+    await db.insert(clinicSettingsTable).values({ commissionDiscountMode: parsed.data.commissionDiscountMode });
+  } else {
+    await db.update(clinicSettingsTable)
+      .set({ commissionDiscountMode: parsed.data.commissionDiscountMode, updatedAt: new Date() })
+      .where(eq(clinicSettingsTable.id, rows[0].id));
+  }
+  res.json({ ok: true, commissionDiscountMode: parsed.data.commissionDiscountMode });
 });

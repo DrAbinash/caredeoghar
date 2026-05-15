@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import {
   commissionRulesTable,
+  clinicSettingsTable,
   doctorsTable,
   orderTestsTable,
   ordersTable,
@@ -168,9 +169,35 @@ function calcTestCommission(
   return { commission: 0, ruleName: "None" };
 }
 
+// ── Commission discount deduction helper ──────────────────────────────────────
+// Applies the clinic-level commissionDiscountMode rule to an order's raw
+// commission and the bill discount for that order.
+//   "none"            → no change (returns rawCommission unchanged)
+//   "deduct"          → commission − discount, floored at 0
+//   "deduct_rollover" → commission − discount, can be negative
+function applyDiscountDeduction(
+  rawCommission: number,
+  billDiscount: number,
+  mode: string,
+): { net: number; deducted: number } {
+  if (mode === "deduct") {
+    const net = Math.max(0, rawCommission - billDiscount);
+    return { net, deducted: rawCommission - net };
+  }
+  if (mode === "deduct_rollover") {
+    const net = rawCommission - billDiscount;
+    return { net, deducted: billDiscount };
+  }
+  return { net: rawCommission, deducted: 0 };
+}
+
 // Commission payout report (consolidated — for backwards compat)
 router.get("/report", async (req, res) => {
   const { from, to, doctorId } = req.query as Record<string, string>;
+
+  // Fetch clinic settings to determine commission discount mode.
+  const [clinicRow] = await db.select({ commissionDiscountMode: clinicSettingsTable.commissionDiscountMode }).from(clinicSettingsTable).limit(1);
+  const commissionDiscountMode = clinicRow?.commissionDiscountMode ?? "none";
 
   const doctors = await db.select().from(doctorsTable);
   const allRules = await db.select().from(commissionRulesTable);
@@ -187,36 +214,44 @@ router.get("/report", async (req, res) => {
   const orderTests = orderIds.length ? await db.select().from(orderTestsTable).where(and(inArray(orderTestsTable.orderId, orderIds), ne(orderTestsTable.status, "cancelled"))) : [];
   const billsForOrders = orderIds.length ? await db.select().from(billsTable).where(inArray(billsTable.orderId, orderIds)) : [];
   const discountedOrderIds = new Set(billsForOrders.filter(b => Number(b.discount) > 0).map(b => b.orderId));
+  // Map orderId → bill discount amount for the deduction logic.
+  const billDiscountByOrderId = new Map<number, number>();
+  for (const b of billsForOrders) {
+    if (b.orderId != null) billDiscountByOrderId.set(b.orderId, Number(b.discount ?? 0));
+  }
 
   const report = doctors
     .filter(d => !doctorId || d.id === Number(doctorId))
     .map(doctor => {
       const doctorOrders = orders.filter(o => o.doctorId === doctor.id);
       const rules = allRules.filter(r => r.doctorId === doctor.id);
-      let totalRevenue = 0, totalCommission = 0;
+      let totalRevenue = 0, totalCommission = 0, totalDiscountDeducted = 0;
       let testsFullPrice = 0, testsDiscounted = 0;
       let revenueFullPrice = 0, revenueDiscounted = 0;
       let commissionFullPrice = 0, commissionDiscounted = 0;
       let ordersFullPrice = 0, ordersDiscounted = 0;
-      const orderDetails: { orderId: number; orderNumber: string; date: string; revenue: number; commission: number; commissionRule: string; isDiscounted: boolean }[] = [];
+      const orderDetails: { orderId: number; orderNumber: string; date: string; revenue: number; commission: number; rawCommission: number; discountDeducted: number; commissionRule: string; isDiscounted: boolean }[] = [];
 
       for (const order of doctorOrders) {
         const tests = orderTests.filter(ot => ot.orderId === order.id);
         const isDisc = discountedOrderIds.has(order.id);
-        let orderRevenue = 0, orderCommission = 0, lastRule = "Default";
+        let orderRevenue = 0, rawOrderCommission = 0, lastRule = "Default";
         for (const ot of tests) {
           const test = testMap.get(ot.testId);
           const { commission, ruleName } = calcTestCommission(ot, test, rules, doctor);
           orderRevenue += Number(ot.price);
-          orderCommission += commission;
+          rawOrderCommission += commission;
           lastRule = ruleName;
           if (isDisc) testsDiscounted++; else testsFullPrice++;
         }
+        const billDiscount = billDiscountByOrderId.get(order.id) ?? 0;
+        const { net: orderCommission, deducted } = applyDiscountDeduction(rawOrderCommission, billDiscount, commissionDiscountMode);
         totalRevenue += orderRevenue;
         totalCommission += orderCommission;
+        totalDiscountDeducted += deducted;
         if (isDisc) { ordersDiscounted++; revenueDiscounted += orderRevenue; commissionDiscounted += orderCommission; }
         else        { ordersFullPrice++;  revenueFullPrice  += orderRevenue; commissionFullPrice  += orderCommission; }
-        orderDetails.push({ orderId: order.id, orderNumber: order.orderNumber, date: order.createdAt.toISOString().split("T")[0], revenue: orderRevenue, commission: orderCommission, commissionRule: lastRule, isDiscounted: isDisc });
+        orderDetails.push({ orderId: order.id, orderNumber: order.orderNumber, date: order.createdAt.toISOString().split("T")[0], revenue: orderRevenue, commission: orderCommission, rawCommission: rawOrderCommission, discountDeducted: deducted, commissionRule: lastRule, isDiscounted: isDisc });
       }
 
       return {
@@ -226,6 +261,8 @@ router.get("/report", async (req, res) => {
         totalOrders: doctorOrders.length,
         totalBilled: totalRevenue,
         commissionAmount: totalCommission,
+        totalDiscountDeducted,
+        commissionDiscountMode,
         commissionType: doctor.defaultCommissionType ?? "percentage",
         commissionValue: Number(doctor.defaultCommission ?? 0),
         // Discount-aware breakdown
@@ -249,6 +286,10 @@ router.get("/report", async (req, res) => {
 router.get("/report-detailed", async (req, res) => {
   const { from, to, doctorId, groupBy = "order" } = req.query as Record<string, string>;
 
+  // Fetch clinic settings for commission discount mode.
+  const [clinicRow] = await db.select({ commissionDiscountMode: clinicSettingsTable.commissionDiscountMode }).from(clinicSettingsTable).limit(1);
+  const commissionDiscountMode = clinicRow?.commissionDiscountMode ?? "none";
+
   const doctors = await db.select().from(doctorsTable);
   const allRules = await db.select().from(commissionRulesTable);
   const allTests = await db.select().from(testsTable);
@@ -262,6 +303,12 @@ router.get("/report-detailed", async (req, res) => {
   const orders = await db.select().from(ordersTable).where(conditions.length ? and(...conditions) : undefined);
   const orderIds = orders.map(o => o.id);
   const orderTests = orderIds.length ? await db.select().from(orderTestsTable).where(and(inArray(orderTestsTable.orderId, orderIds), ne(orderTestsTable.status, "cancelled"))) : [];
+  // Fetch bills to get discount amounts per order.
+  const billsForOrders = orderIds.length ? await db.select({ orderId: billsTable.orderId, discount: billsTable.discount }).from(billsTable).where(inArray(billsTable.orderId, orderIds)) : [];
+  const billDiscountByOrderId = new Map<number, number>();
+  for (const b of billsForOrders) {
+    if (b.orderId != null) billDiscountByOrderId.set(b.orderId, Number(b.discount ?? 0));
+  }
 
   const filteredDoctors = doctors.filter(d => !doctorId || d.id === Number(doctorId));
 
@@ -297,7 +344,23 @@ router.get("/report-detailed", async (req, res) => {
     }
 
     const totalRevenue = testRows.reduce((s, r) => s + r.price, 0);
-    const totalCommission = testRows.reduce((s, r) => s + r.commission, 0);
+
+    // Compute per-order adjusted commissions and total deduction for this doctor.
+    // Discount deduction is applied at order level, not per-test, because the
+    // bill discount belongs to the whole order (bill), not individual test lines.
+    const orderAdjustedCommission = new Map<number, number>(); // orderId → adjusted
+    let totalDiscountDeducted = 0;
+    {
+      const orderIdsForDoctor = [...new Set(testRows.map(r => r.orderId))];
+      for (const oid of orderIdsForDoctor) {
+        const rawOrderCommission = testRows.filter(r => r.orderId === oid).reduce((s, r) => s + r.commission, 0);
+        const billDiscount = billDiscountByOrderId.get(oid) ?? 0;
+        const { net, deducted } = applyDiscountDeduction(rawOrderCommission, billDiscount, commissionDiscountMode);
+        orderAdjustedCommission.set(oid, net);
+        totalDiscountDeducted += deducted;
+      }
+    }
+    const totalCommission = [...orderAdjustedCommission.values()].reduce((s, v) => s + v, 0);
 
     // Build groupBy views
     let grouped: unknown = null;
@@ -335,17 +398,19 @@ router.get("/report-detailed", async (req, res) => {
       // Count unique orders per category
       for (const row of testRows) {
         const cat = byCat[row.category];
-        // approximate: count distinct orders
         cat.orderCount = new Set(testRows.filter(r => r.category === row.category).map(r => r.orderId)).size;
       }
       grouped = Object.values(byCat).sort((a, b) => b.commission - a.commission);
     } else if (groupBy === "order") {
-      const byOrder: Record<number, { orderId: number; orderNumber: string; orderDate: string; testCount: number; revenue: number; commission: number; tests: TestRow[] }> = {};
+      const byOrder: Record<number, { orderId: number; orderNumber: string; orderDate: string; testCount: number; revenue: number; commission: number; rawCommission: number; discountDeducted: number; tests: TestRow[] }> = {};
       for (const row of testRows) {
-        if (!byOrder[row.orderId]) byOrder[row.orderId] = { orderId: row.orderId, orderNumber: row.orderNumber, orderDate: row.orderDate, testCount: 0, revenue: 0, commission: 0, tests: [] };
+        if (!byOrder[row.orderId]) {
+          const adjusted = orderAdjustedCommission.get(row.orderId) ?? 0;
+          const rawOrderComm = testRows.filter(r => r.orderId === row.orderId).reduce((s, r) => s + r.commission, 0);
+          byOrder[row.orderId] = { orderId: row.orderId, orderNumber: row.orderNumber, orderDate: row.orderDate, testCount: 0, revenue: 0, commission: adjusted, rawCommission: rawOrderComm, discountDeducted: rawOrderComm - adjusted, tests: [] };
+        }
         byOrder[row.orderId].testCount++;
         byOrder[row.orderId].revenue += row.price;
-        byOrder[row.orderId].commission += row.commission;
         byOrder[row.orderId].tests.push(row);
       }
       grouped = Object.values(byOrder).sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
@@ -359,6 +424,8 @@ router.get("/report-detailed", async (req, res) => {
       testCount: testRows.length,
       totalRevenue,
       totalCommission,
+      totalDiscountDeducted,
+      commissionDiscountMode,
       effectiveRate: totalRevenue > 0 ? Number(((totalCommission / totalRevenue) * 100).toFixed(2)) : 0,
       grouped,
       testRows: groupBy === "test" ? testRows : undefined,
@@ -370,6 +437,7 @@ router.get("/report-detailed", async (req, res) => {
     orders: result.reduce((s, r) => s + r.orderCount, 0),
     revenue: result.reduce((s, r) => s + r.totalRevenue, 0),
     commission: result.reduce((s, r) => s + r.totalCommission, 0),
+    totalDiscountDeducted: result.reduce((s, r) => s + r.totalDiscountDeducted, 0),
   };
 
   res.json({ report: result.filter(r => r.orderCount > 0), grandTotal });

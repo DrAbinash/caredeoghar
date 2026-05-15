@@ -42,5 +42,11 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   billShowCategory: boolean("bill_show_category").notNull().default(true),
   // When true, closing the day auto-prints the summary slip on the bill printer.
   dayCloseAutoPrint: boolean("day_close_auto_print").notNull().default(true),
+  // Referral commission discount deduction mode (super-admin configurable):
+  //   "none"            — discount has no effect on commission (default/legacy)
+  //   "deduct"          — commission = max(0, commission - bill_discount)
+  //   "deduct_rollover" — commission = commission - bill_discount (can go negative;
+  //                       negative amount is deducted from doctor's overall ledger)
+  commissionDiscountMode: text("commission_discount_mode").notNull().default("none"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

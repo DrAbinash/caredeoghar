@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { useForm } from "react-hook-form";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Trash2, Stethoscope, Star } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Stethoscope, Star, Percent } from "lucide-react";
 import {
   useListCommissionRules,
   useCreateCommissionRule,
@@ -36,9 +36,18 @@ type SaTest = { id: number; name: string; category: string | null };
 
 const SA_DOCTORS_KEY = ["/api/super-admin/doctors-list"] as const;
 const SA_TESTS_KEY = ["/api/super-admin/tests-list"] as const;
+const SA_COMMISSION_SETTINGS_KEY = ["/api/super-admin/commission-settings"] as const;
 
 const CATEGORIES = ["hematology", "biochemistry", "microbiology", "serology", "radiology", "cardiology", "urine analysis", "other"];
 const inr = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+type DiscountMode = "none" | "deduct" | "deduct_rollover";
+
+const DISCOUNT_MODE_OPTIONS: { value: DiscountMode; label: string; description: string }[] = [
+  { value: "none", label: "No Deduction", description: "Bill discounts do not affect commission payouts (default behaviour)." },
+  { value: "deduct", label: "Deduct from Commission", description: "Bill discount is subtracted from the doctor's commission. Commission is floored at \u20b90 — no negative payouts." },
+  { value: "deduct_rollover", label: "Deduct with Rollover", description: "Bill discount is subtracted from commission. If discount exceeds commission the balance goes negative and is carried over (deducted from future payouts)." },
+];
 
 export default function CommissionRules({ onBack }: { onBack: () => void }) {
   const { toast } = useToast();
@@ -47,6 +56,7 @@ export default function CommissionRules({ onBack }: { onBack: () => void }) {
   const [selectedDoctorId, setSelectedDoctorId] = useState<number | null>(null);
   const [ruleOpen, setRuleOpen] = useState(false);
   const [editRule, setEditRule] = useState<CommissionRule | null>(null);
+  const [discountModeSaving, setDiscountModeSaving] = useState(false);
 
   const { data: doctorsData } = useQuery({
     queryKey: SA_DOCTORS_KEY,
@@ -67,6 +77,37 @@ export default function CommissionRules({ onBack }: { onBack: () => void }) {
     },
   });
   const tests: SaTest[] = testsData?.tests ?? [];
+
+  const { data: commissionSettingsData } = useQuery({
+    queryKey: SA_COMMISSION_SETTINGS_KEY,
+    queryFn: async () => {
+      const res = await fetch("/api/super-admin/commission-settings", { headers: saAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to load commission settings");
+      return res.json() as Promise<{ commissionDiscountMode: DiscountMode }>;
+    },
+  });
+  const currentDiscountMode: DiscountMode = commissionSettingsData?.commissionDiscountMode ?? "none";
+
+  const saveDiscountMode = async (mode: DiscountMode) => {
+    setDiscountModeSaving(true);
+    try {
+      const res = await fetch("/api/super-admin/commission-settings", {
+        method: "PATCH",
+        headers: { ...saAuthHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ commissionDiscountMode: mode }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error ?? "Failed to save");
+      }
+      queryClient.invalidateQueries({ queryKey: SA_COMMISSION_SETTINGS_KEY });
+      toast({ title: "Commission discount setting saved" });
+    } catch (e) {
+      toast({ title: "Save failed", description: String(e), variant: "destructive" });
+    } finally {
+      setDiscountModeSaving(false);
+    }
+  };
 
   const { data: rulesData, queryKey: rulesQueryKey, error: rulesError } = useListCommissionRules(
     selectedDoctorId !== null ? { doctorId: selectedDoctorId } : undefined,
@@ -180,6 +221,45 @@ export default function CommissionRules({ onBack }: { onBack: () => void }) {
             <p className="text-sm text-muted-foreground mt-1">
               Per-doctor commission overrides for tests and categories
             </p>
+          </div>
+        </div>
+
+        {/* Commission discount deduction setting */}
+        <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+              <Percent size={15} className="text-amber-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm leading-tight">Bill Discount &amp; Commission</p>
+              <p className="text-xs text-muted-foreground">Controls how bill discounts affect referral commission payouts</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {DISCOUNT_MODE_OPTIONS.map((opt) => {
+              const isActive = currentDiscountMode === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  disabled={discountModeSaving}
+                  onClick={() => { if (!isActive) saveDiscountMode(opt.value); }}
+                  className={[
+                    "text-left rounded-lg border px-4 py-3 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    isActive
+                      ? "border-primary bg-primary/5 ring-1 ring-primary"
+                      : "border-border hover:border-primary/40 hover:bg-muted/50",
+                    discountModeSaving ? "opacity-60 cursor-not-allowed" : "cursor-pointer",
+                  ].join(" ")}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold">{opt.label}</span>
+                    {isActive && <Badge className="text-[10px] px-1.5 py-0 h-4">Active</Badge>}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-snug">{opt.description}</p>
+                </button>
+              );
+            })}
           </div>
         </div>
 

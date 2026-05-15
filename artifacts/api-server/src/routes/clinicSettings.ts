@@ -87,6 +87,14 @@ clinicSettingsRouter.put("/", async (req, res) => {
     }
     update.billPrintCopies = n;
   }
+  if (body.commissionDiscountMode !== undefined) {
+    const valid = ["none", "deduct", "deduct_rollover"];
+    if (!valid.includes(body.commissionDiscountMode)) {
+      res.status(400).json({ error: `commissionDiscountMode must be one of: ${valid.join(", ")}` });
+      return;
+    }
+    update.commissionDiscountMode = body.commissionDiscountMode;
+  }
   if (typeof update.logoDataUrl === "string" && update.logoDataUrl.length > 2_000_000) {
     res.status(413).json({ error: "Logo too large (max ~1.5MB)" });
     return;
