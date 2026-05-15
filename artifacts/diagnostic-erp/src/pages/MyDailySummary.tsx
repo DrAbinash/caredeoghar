@@ -37,6 +37,8 @@ type MyDailySummarySummary = {
   physicalCashInHand: number;
   discountsGiven: number;
   cancellationCount: number;
+  cancelledByOthersCount: number;
+  cancelledBySelfCount: number;
   billCount: number;
   closingCashBalance: number;
 };
@@ -57,6 +59,7 @@ type MyDailySummaryData = {
     balanceAmount: number;
     discount: number;
     status: string;
+    referringDoctor: string | null;
     createdAt: string;
   }[];
   payments: {
@@ -310,7 +313,7 @@ export default function MyDailySummary() {
                 <RecRow label="Gross Billed" value={s.grossBilledIncludingCancelled} type="start"
                   note={`${s.billCount + (s.cancellationCount > 0 ? s.cancellationCount : 0)} bills · post-discount`} />
                 <RecRow label="− Cancelled" value={s.cancelledOnMyBills} type="deduct"
-                  note={`${s.cancellationCount} cancelled`} />
+                  note={`${s.cancelledByOthersCount + s.cancelledBySelfCount} cancelled`} />
                 <div className="my-3 border-t-4 border-green-300 dark:border-green-700" />
                 <RecRow label="= Active Billing" value={s.grossBilling} type="result" />
                 <RecRow label="− Outstanding / Dues" value={s.outstanding} type="deduct" note="still to collect" />
@@ -466,7 +469,7 @@ export default function MyDailySummary() {
             <table className="w-full text-xs">
               <thead className="bg-gray-50 dark:bg-muted/30">
                 <tr>
-                  {["Bill #", "Patient", "Total", "Paid", "Balance", "Discount", "Status", "Time"].map((h) => (
+                  {["Bill #", "Patient", "Total", "Paid", "Balance", "Discount", "Status", "Referral Doctor"].map((h) => (
                     <th key={h} className="px-3 py-2.5 text-left font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -488,8 +491,8 @@ export default function MyDailySummary() {
                         {b.status}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
-                      <span className="flex items-center gap-1"><Clock size={10} /> {fmtTime(b.createdAt)}</span>
+                    <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                      {b.referringDoctor ? b.referringDoctor : <span className="text-gray-400">—</span>}
                     </td>
                   </tr>
                 ))}

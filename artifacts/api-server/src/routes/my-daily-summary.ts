@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { billsTable, paymentsTable, billAuditsTable, patientsTable } from "@workspace/db/schema";
+import { billsTable, paymentsTable, billAuditsTable, patientsTable, ordersTable, doctorsTable } from "@workspace/db/schema";
 import { sql, and, eq, gte, lt } from "drizzle-orm";
 import { FULL_ACCESS_ROLES } from "../middleware/requireStaffAuth";
 import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
@@ -91,9 +91,12 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       cancelledByName: billsTable.cancelledByName,
       patientFirstName: patientsTable.firstName,
       patientLastName: patientsTable.lastName,
+      referringDoctor: doctorsTable.name,
     })
     .from(billsTable)
     .leftJoin(patientsTable, eq(billsTable.patientId, patientsTable.id))
+    .leftJoin(ordersTable, eq(billsTable.orderId, ordersTable.id))
+    .leftJoin(doctorsTable, eq(ordersTable.doctorId, doctorsTable.id))
     .where(and(
       gte(billsTable.createdAt, start),
       lt(billsTable.createdAt, end),
@@ -304,6 +307,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       balanceAmount: Number(r.balanceAmount ?? 0),
       discount: Number(r.discount ?? 0),
       status: r.status,
+      referringDoctor: r.referringDoctor ?? null,
       createdAt:
         r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
     })),
