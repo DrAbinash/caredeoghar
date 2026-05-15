@@ -298,7 +298,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // ── Super-admin USB pen-drive gate ──────────────────────────────────────
   // ZERO visible affordance. The Super Admin link only appears when:
   //   (a) the operator previously paired the pen-drive root via the hidden
-  //       Ctrl+Alt+U combo (one-time per browser profile), AND
+  //       Ctrl+Shift+K combo (one-time per browser profile), AND
   //   (b) the pen drive is currently plugged in and `superadmin.key` reads
   //       successfully and matches the server secret.
   // Polled every 4s; on read failure the key is cleared and the link
@@ -341,9 +341,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     // Chrome drops FS Access API permission between page loads. On the first
     // user interaction after mount (click or keydown), silently try to
     // re-grant permission for the already-paired drive, then immediately tick
-    // so the Super Admin link reappears without needing Ctrl+Alt+U again.
+    // so the Super Admin link reappears without needing Ctrl+Shift+K again.
     // NOTE: We use separate once-listeners for click and keydown so that the
-    // Ctrl+Alt+U keydown (which also opens the pairing dialog) does NOT
+    // Ctrl+Shift+K keydown (which also opens the pairing dialog) does NOT
     // consume the click slot — either gesture independently triggers re-grant.
     let permissionGrantAttempted = false;
     const tryRegrant = () => {
@@ -355,7 +355,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     };
     // Use named wrappers so we can remove them individually on cleanup.
     // click uses { once: true } — a click is always a clear user gesture.
-    // keydown does NOT use { once: true } because the Ctrl+Alt+U combo fires
+    // keydown does NOT use { once: true } because the Ctrl+Shift+K combo fires
     // a keydown but is primarily handled by the separate onKey listener; we
     // don't want that keydown to silently consume the re-grant opportunity
     // before the user has actually interacted with the page content.
@@ -363,7 +363,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     const tryRegrantKey = (e: KeyboardEvent) => {
       // Skip the pairing combo itself — it will trigger the dialog which
       // handles its own permission flow via onPairFs / pairPenDrive.
-      if (e.ctrlKey && e.altKey && (e.code === "KeyU" || e.key === "u" || e.key === "U")) return;
+      if (e.ctrlKey && e.shiftKey && e.code === "KeyK") return;
       tryRegrant();
     };
     window.addEventListener("click", tryRegrantClick, { once: true, capture: true });
@@ -377,14 +377,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     };
   }, [usbGateEnforced]);
 
-  // Hidden pairing trigger: Ctrl+Alt+U opens the one-time setup modal.
+  // Hidden pairing trigger: Ctrl+Shift+K opens the one-time setup modal.
   // Operators who don't know the combo can't see anything related to USB.
-  // Use e.code ("KeyU") instead of e.key ("u"/"U") so the combo works on
-  // Windows keyboards where Ctrl+Alt is treated as AltGr and produces a
-  // locale-specific character (e.g. "ú") rather than the ASCII letter "u".
+  // Ctrl+Alt+U was the old combo but Chrome intercepts Ctrl+U (View Source)
+  // at the browser level before JS can prevent it. Ctrl+Shift+K is safe on
+  // all platforms (Chrome, Windows, Linux).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.altKey && (e.code === "KeyU" || e.key === "u" || e.key === "U")) {
+      if (e.ctrlKey && e.shiftKey && e.code === "KeyK") {
         e.preventDefault();
         setPairDialog({ busy: false, error: null, mode: isFsAccessSupported() ? "fs" : "file" });
       }
@@ -966,7 +966,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      {/* Hidden pen-drive pairing dialog (Ctrl+Alt+U). Not announced anywhere
+      {/* Hidden pen-drive pairing dialog (Ctrl+Shift+K). Not announced anywhere
           in the UI. Re-pair flow lives here too. */}
       {pairDialog && (
         <div
