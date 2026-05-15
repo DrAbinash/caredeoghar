@@ -45,6 +45,7 @@ export * from "./sitePopups";
 export * from "./onlineBookings";
 export * from "./outsourcedLabs";
 export * from "./radiologyWorklist";
+export * from "./radiologyReportGenerator";
 export * from "./whatsappConversations";
 export * from "./pacsSettings";
 export * from "./dayClosures";

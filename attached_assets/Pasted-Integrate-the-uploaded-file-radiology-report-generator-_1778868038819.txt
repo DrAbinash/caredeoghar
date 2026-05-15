@@ -1,0 +1,73 @@
+Integrate the uploaded file:
+
+radiology_report_generator_with_voice_key_images_bundle_v2.zip
+
+into my existing ERP/RIS/PACS system.
+
+IMPORTANT:
+
+- Do NOT replace existing ERP features.
+- Merge carefully into existing auth/database/router/frontend structure.
+- Keep existing PACS worklist, AI draft, patient-reports, radiology dashboard, and Conquest integration working.
+- Use existing POST /api/patient-reports for final report save.
+- Use existing staff session/auth system.
+- All /api/internal/* endpoints must require INTERNAL_API_KEY authorization where applicable.
+- Run migration, typecheck, build, and fix all errors automatically.
+
+FEATURES TO IMPLEMENT:
+
+1. Radiology Report Generator module for MRI / CT / USG / X-Ray
+2. Voice dictation using browser Web Speech API
+3. Voice cleanup endpoint for radiology terminology
+4. Key image upload/selection/caption support
+5. HTML report preview with key images
+6. Word/PDF export hooks
+7. Manual mode + PACS worklist mode
+8. Template library for MRI/CT/USG/X-Ray
+9. Locked diagnostic-center report format
+10. Save Draft + Save Final Report
+11. Audit logging
+
+FRONTEND ROUTES:
+
+- /erp/radiology/report-generator
+- /erp/radiology/report-generator/:studyId
+
+NAVIGATION:
+Radiology → Report Generator
+
+KEY IMAGE RULES:
+
+- Upload JPG/PNG/WebP screenshots only
+- Include/exclude image toggle
+- Captions below image
+- Images inserted after FINDINGS and before IMPRESSION
+- A4 print-safe layout
+
+VOICE RULES:
+
+- Use en-IN
+- Support punctuation words:
+  comma, full stop, new line, colon
+- Correct radiology terms:
+  FLAIR, DWI, ADC, SWI, Fazekas, lacunar, thecal sac, foraminal
+
+SAFETY:
+
+- AI/voice only creates drafts
+- No auto-finalization
+- Final save must be explicit user action
+
+After integration:
+
+1. Run all migrations
+2. Build frontend/backend
+3. Fix all compile/type errors
+4. Test:
+   - report template API
+   - voice cleanup API
+   - key image upload API
+   - report generation API
+   - report preview
+   - final save flow
+5. Verify routes load successfully

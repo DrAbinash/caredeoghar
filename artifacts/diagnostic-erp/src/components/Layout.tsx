@@ -103,6 +103,7 @@ const navItems: NavEntry[] = [
     children: [
       { path: "/radiology", icon: Radio, label: "Study Workflow" },
       { path: "/radiology/worklist", icon: ScanSearch, label: "PACS Worklist" },
+      { path: "/radiology/report-generator", icon: FilePen, label: "Report Generator" },
       { path: "/radiology/pacs-dashboard", icon: Monitor, label: "PACS Dashboard" },
       { path: "/radiology/pacs-settings", icon: Settings2, label: "PACS Settings" },
       { path: "/radiology/pacs-logs", icon: FileText, label: "PACS Logs" },

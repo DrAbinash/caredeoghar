@@ -1,0 +1,942 @@
+/**
+ * Radiology Report Generator API
+ *
+ * Provides template library, voice-text cleanup, HTML report generation,
+ * draft save/restore, key image upload, and final report save integration.
+ *
+ * All endpoints require a valid staff session — mounted with requireStaffAuth
+ * + requireStaffPermission("/orders") in routes/index.ts.
+ *
+ * Endpoints (relative to /api/radiology/report-generator):
+ *   GET  /templates
+ *   POST /voice-cleanup
+ *   POST /generate
+ *   POST /save-draft
+ *   GET  /drafts
+ *   GET  /drafts/:id
+ *   POST /key-images           (multipart/form-data)
+ *   GET  /key-images
+ *   PUT  /key-images/:id
+ *   DELETE /key-images/:id
+ */
+
+import { Router, type Request, type Response } from "express";
+import path from "node:path";
+import fs from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import multer from "multer";
+import { z } from "zod";
+import { db } from "@workspace/db";
+import {
+  radiologyReportDraftsTable,
+  radiologyVoiceLogsTable,
+  radiologyReportKeyImagesTable,
+  radiologyStudiesTable,
+  radiologyWorklistTable,
+  patientsTable,
+} from "@workspace/db/schema";
+import { eq, and, desc, isNull } from "drizzle-orm";
+import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
+
+// ── Upload directory ──────────────────────────────────────────────────────────
+
+const ARTIFACT_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const KEY_IMAGE_DIR = path.resolve(ARTIFACT_ROOT, "data", "uploads", "radiology-key-images");
+
+const ALLOWED_IMAGE_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
+const MIME_TO_EXT: Record<string, string> = {
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+};
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: async (_req, _file, cb) => {
+      try {
+        await fs.mkdir(KEY_IMAGE_DIR, { recursive: true });
+        cb(null, KEY_IMAGE_DIR);
+      } catch (e) {
+        cb(e as Error, KEY_IMAGE_DIR);
+      }
+    },
+    filename: (_req, file, cb) => {
+      const ext = MIME_TO_EXT[file.mimetype] ?? ".jpg";
+      cb(null, `rkg-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+    },
+  }),
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_IMAGE_MIME.has(file.mimetype)) cb(null, true);
+    else cb(new Error("Only JPG, PNG, and WebP images are accepted"));
+  },
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
+
+// ── Template library ──────────────────────────────────────────────────────────
+
+export interface ReportTemplate {
+  templateId: string;
+  modality: string;
+  studyName: string;
+  technique: string;
+  sections: string[];
+}
+
+export const RADIOLOGY_TEMPLATES: Record<string, ReportTemplate> = {
+  MRI_BRAIN_PLAIN: {
+    templateId: "MRI_BRAIN_PLAIN",
+    modality: "MRI",
+    studyName: "MRI BRAIN PLAIN",
+    technique:
+      "MRI of brain has been performed on 3 Tesla MRI scanner with multi-sequence, multi-planar acquisition using standard T1, T2, FLAIR, DWI, ADC and SWI sequences studied in axial, sagittal and coronal planes.",
+    sections: [
+      "BRAIN PARENCHYMA",
+      "WHITE MATTER",
+      "VENTRICULAR SYSTEM / CSF SPACES",
+      "POSTERIOR FOSSA",
+      "MIDLINE STRUCTURES",
+      "SELLAR / PARASELLAR REGION",
+      "ORBITS / PNS / MASTOIDS",
+      "VASCULAR FLOW VOIDS",
+    ],
+  },
+  MRI_BRAIN_CONTRAST: {
+    templateId: "MRI_BRAIN_CONTRAST",
+    modality: "MRI",
+    studyName: "MRI BRAIN WITH CONTRAST",
+    technique:
+      "MRI of brain has been performed on 3 Tesla MRI scanner with multi-sequence, multi-planar acquisition using standard T1, T2, FLAIR, DWI, ADC and SWI sequences followed by post-gadolinium T1W sequences in axial, sagittal and coronal planes.",
+    sections: [
+      "BRAIN PARENCHYMA",
+      "WHITE MATTER",
+      "VENTRICULAR SYSTEM / CSF SPACES",
+      "POST-CONTRAST ENHANCEMENT",
+      "POSTERIOR FOSSA",
+      "MIDLINE STRUCTURES",
+      "SELLAR / PARASELLAR REGION",
+      "ORBITS / PNS / MASTOIDS",
+    ],
+  },
+  MRI_STROKE_PROTOCOL: {
+    templateId: "MRI_STROKE_PROTOCOL",
+    modality: "MRI",
+    studyName: "MRI BRAIN STROKE PROTOCOL",
+    technique:
+      "MRI brain stroke protocol performed on 3 Tesla MRI scanner using DWI, ADC, FLAIR, T2, T1, MRA (TOF) and SWI sequences in multiple planes.",
+    sections: [
+      "DWI / ADC",
+      "FLAIR / T2",
+      "SWI / SUSCEPTIBILITY",
+      "MRA FINDINGS",
+      "POSTERIOR FOSSA",
+      "EXTRA-AXIAL SPACES",
+      "MIDLINE STRUCTURES",
+    ],
+  },
+  MRI_LS_SPINE: {
+    templateId: "MRI_LS_SPINE",
+    modality: "MRI",
+    studyName: "MRI LUMBOSACRAL SPINE",
+    technique:
+      "MRI of lumbosacral spine has been performed on 3 Tesla MRI scanner with multi-sequence, multi-planar acquisition using standard T1, T2 and STIR sequences in sagittal and axial planes.",
+    sections: [
+      "ALIGNMENT & CURVATURE",
+      "VERTEBRAL BODIES",
+      "INTERVERTEBRAL DISCS",
+      "SPINAL CANAL & CORD",
+      "NEURAL FORAMINA",
+      "CONUS / CAUDA EQUINA",
+      "PARASPINAL SOFT TISSUES",
+      "SACROILIAC JOINTS",
+    ],
+  },
+  MRI_CERVICAL_SPINE: {
+    templateId: "MRI_CERVICAL_SPINE",
+    modality: "MRI",
+    studyName: "MRI CERVICAL SPINE",
+    technique:
+      "MRI of cervical spine has been performed on 3 Tesla MRI scanner with multi-sequence, multi-planar acquisition using standard T1, T2 and STIR sequences in sagittal and axial planes.",
+    sections: [
+      "ALIGNMENT & CURVATURE",
+      "VERTEBRAL BODIES",
+      "INTERVERTEBRAL DISCS",
+      "SPINAL CANAL & CORD",
+      "NEURAL FORAMINA",
+      "PARASPINAL SOFT TISSUES",
+      "CRANIOCERVICAL JUNCTION",
+    ],
+  },
+  MRI_DORSAL_SPINE: {
+    templateId: "MRI_DORSAL_SPINE",
+    modality: "MRI",
+    studyName: "MRI DORSAL SPINE",
+    technique:
+      "MRI of dorsal spine has been performed on 3 Tesla MRI scanner with multi-sequence, multi-planar acquisition using standard T1, T2 and STIR sequences in sagittal and axial planes.",
+    sections: [
+      "ALIGNMENT & CURVATURE",
+      "VERTEBRAL BODIES",
+      "INTERVERTEBRAL DISCS",
+      "SPINAL CANAL & CORD",
+      "NEURAL FORAMINA",
+      "PARASPINAL SOFT TISSUES",
+    ],
+  },
+  MRI_WHOLE_SPINE: {
+    templateId: "MRI_WHOLE_SPINE",
+    modality: "MRI",
+    studyName: "MRI WHOLE SPINE SCREENING",
+    technique:
+      "Whole spine MRI screening performed on 3 Tesla MRI scanner with standard T1 and T2 sequences in sagittal plane covering cervical, dorsal and lumbosacral spine.",
+    sections: [
+      "CERVICAL SPINE",
+      "DORSAL SPINE",
+      "LUMBOSACRAL SPINE",
+      "SPINAL CORD",
+      "ALIGNMENT OVERVIEW",
+    ],
+  },
+  MRI_KNEE: {
+    templateId: "MRI_KNEE",
+    modality: "MRI",
+    studyName: "MRI KNEE",
+    technique:
+      "MRI of knee has been performed on 3 Tesla MRI scanner with multi-sequence, multi-planar acquisition using standard T1, T2, PD, PD-FAT-SAT sequences in axial, sagittal and coronal planes.",
+    sections: [
+      "MEDIAL MENISCUS",
+      "LATERAL MENISCUS",
+      "ANTERIOR CRUCIATE LIGAMENT",
+      "POSTERIOR CRUCIATE LIGAMENT",
+      "MEDIAL COLLATERAL LIGAMENT",
+      "LATERAL COLLATERAL LIGAMENT",
+      "ARTICULAR CARTILAGE",
+      "JOINT SPACE / EFFUSION",
+      "BONES",
+      "PATELLAR / EXTENSOR MECHANISM",
+    ],
+  },
+  CT_BRAIN: {
+    templateId: "CT_BRAIN",
+    modality: "CT",
+    studyName: "CT BRAIN",
+    technique:
+      "Non-contrast CT brain has been performed with axial sections (5 mm) and multiplanar reconstruction.",
+    sections: [
+      "CEREBRAL PARENCHYMA",
+      "VENTRICULAR SYSTEM",
+      "EXTRA-AXIAL SPACES",
+      "POSTERIOR FOSSA",
+      "MIDLINE STRUCTURES",
+      "BONES / SCALP",
+    ],
+  },
+  CT_BRAIN_TRAUMA: {
+    templateId: "CT_BRAIN_TRAUMA",
+    modality: "CT",
+    studyName: "CT BRAIN TRAUMA",
+    technique:
+      "Non-contrast CT brain with bone and soft tissue algorithms has been performed with axial sections and multiplanar reconstruction for trauma evaluation.",
+    sections: [
+      "SCALP / SOFT TISSUE",
+      "SKULL BONES",
+      "EXTRA-AXIAL COLLECTIONS",
+      "CEREBRAL PARENCHYMA",
+      "VENTRICULAR SYSTEM",
+      "POSTERIOR FOSSA",
+      "MIDLINE SHIFT",
+    ],
+  },
+  CT_CHEST: {
+    templateId: "CT_CHEST",
+    modality: "CT",
+    studyName: "CT CHEST",
+    technique:
+      "CT chest has been performed with axial sections and multiplanar reconstruction in lung and mediastinal windows.",
+    sections: [
+      "LUNG PARENCHYMA",
+      "BRONCHI / AIRWAYS",
+      "PLEURA",
+      "MEDIASTINUM",
+      "CARDIAC SILHOUETTE",
+      "CHEST WALL / RIBS",
+      "UPPER ABDOMEN (imaged portion)",
+    ],
+  },
+  HRCT_THORAX: {
+    templateId: "HRCT_THORAX",
+    modality: "CT",
+    studyName: "HRCT THORAX",
+    technique:
+      "High-resolution CT thorax has been performed using thin sections (1 mm) in inspiration and expiration phases with multiplanar reconstruction in lung and mediastinal windows.",
+    sections: [
+      "LUNG PARENCHYMA — UPPER LOBES",
+      "LUNG PARENCHYMA — MIDDLE / LINGULA",
+      "LUNG PARENCHYMA — LOWER LOBES",
+      "SECONDARY PULMONARY LOBULE PATTERN",
+      "AIRSPACE DISEASE",
+      "PLEURA",
+      "MEDIASTINUM / LYMPH NODES",
+      "CHEST WALL",
+    ],
+  },
+  CT_ABDOMEN_PELVIS: {
+    templateId: "CT_ABDOMEN_PELVIS",
+    modality: "CT",
+    studyName: "CT ABDOMEN AND PELVIS",
+    technique:
+      "CECT abdomen and pelvis performed in portovenous phase with oral and IV contrast; axial sections with coronal and sagittal reconstructions.",
+    sections: [
+      "LIVER",
+      "GALL BLADDER / BILE DUCTS",
+      "PANCREAS",
+      "SPLEEN",
+      "ADRENAL GLANDS",
+      "KIDNEYS",
+      "URINARY BLADDER",
+      "BOWEL / MESENTERY",
+      "LYMPH NODES",
+      "PERITONEUM / ASCITES",
+      "PELVIS (if included)",
+      "BONES (imaged portion)",
+    ],
+  },
+  CT_KUB: {
+    templateId: "CT_KUB",
+    modality: "CT",
+    studyName: "CT KUB (NCCT)",
+    technique:
+      "Non-contrast CT of kidneys, ureters, and urinary bladder performed in supine position with axial sections and multiplanar reconstruction.",
+    sections: [
+      "RIGHT KIDNEY",
+      "LEFT KIDNEY",
+      "RIGHT URETER",
+      "LEFT URETER",
+      "URINARY BLADDER",
+      "SURROUNDING STRUCTURES",
+    ],
+  },
+  CT_NECK: {
+    templateId: "CT_NECK",
+    modality: "CT",
+    studyName: "CT NECK",
+    technique:
+      "CECT neck performed with IV contrast in axial sections and multiplanar reconstruction.",
+    sections: [
+      "NECK SOFT TISSUES",
+      "LYMPH NODES",
+      "THYROID GLAND",
+      "LARYNX / HYPOPHARYNX",
+      "VESSELS",
+      "BONES",
+    ],
+  },
+  USG_ABDOMEN: {
+    templateId: "USG_ABDOMEN",
+    modality: "USG",
+    studyName: "ULTRASOUND WHOLE ABDOMEN",
+    technique:
+      "Ultrasound examination of the whole abdomen performed using curvilinear probe (3.5–5 MHz) in B-mode.",
+    sections: [
+      "LIVER",
+      "GALL BLADDER / CBD",
+      "PANCREAS",
+      "SPLEEN",
+      "KIDNEYS",
+      "URINARY BLADDER",
+      "PROSTATE (if applicable)",
+      "FREE FLUID / ASCITES",
+    ],
+  },
+  USG_KUB: {
+    templateId: "USG_KUB",
+    modality: "USG",
+    studyName: "ULTRASOUND KUB",
+    technique:
+      "Ultrasound examination of kidneys, urinary bladder, and prostate performed using curvilinear probe.",
+    sections: [
+      "RIGHT KIDNEY",
+      "LEFT KIDNEY",
+      "URINARY BLADDER",
+      "PROSTATE / UTERUS",
+      "PERINEPHRIC REGION",
+    ],
+  },
+  USG_PELVIS: {
+    templateId: "USG_PELVIS",
+    modality: "USG",
+    studyName: "ULTRASOUND PELVIS",
+    technique:
+      "Transabdominal pelvic ultrasound performed using curvilinear probe with adequate bladder distension.",
+    sections: [
+      "UTERUS",
+      "ENDOMETRIUM",
+      "OVARIES",
+      "ADNEXA",
+      "POUCH OF DOUGLAS",
+      "URINARY BLADDER",
+    ],
+  },
+  USG_OBSTETRIC: {
+    templateId: "USG_OBSTETRIC",
+    modality: "USG",
+    studyName: "OBSTETRIC ULTRASOUND",
+    technique:
+      "Transabdominal obstetric ultrasound performed using curvilinear probe.",
+    sections: [
+      "FETAL BIOMETRY",
+      "FETAL CARDIAC ACTIVITY",
+      "FETAL POSITION / PRESENTATION",
+      "PLACENTA",
+      "AMNIOTIC FLUID",
+      "CERVIX",
+      "FETAL ANATOMY SURVEY",
+    ],
+  },
+  USG_SCROTUM: {
+    templateId: "USG_SCROTUM",
+    modality: "USG",
+    studyName: "ULTRASOUND SCROTUM",
+    technique:
+      "High-frequency ultrasound of the scrotum performed using linear probe (7–15 MHz) in B-mode with color Doppler.",
+    sections: [
+      "RIGHT TESTIS / EPIDIDYMIS",
+      "LEFT TESTIS / EPIDIDYMIS",
+      "VASCULARITY (Doppler)",
+      "SCROTAL SAC / HYDROCELE",
+    ],
+  },
+  USG_NECK_THYROID: {
+    templateId: "USG_NECK_THYROID",
+    modality: "USG",
+    studyName: "ULTRASOUND NECK / THYROID",
+    technique:
+      "High-frequency ultrasound of the neck and thyroid performed using linear probe (7–15 MHz) in B-mode with color Doppler.",
+    sections: [
+      "RIGHT LOBE OF THYROID",
+      "LEFT LOBE OF THYROID",
+      "ISTHMUS",
+      "PARATHYROID REGION",
+      "CERVICAL LYMPH NODES",
+      "VASCULARITY",
+    ],
+  },
+  DOPPLER_LOWER_LIMB: {
+    templateId: "DOPPLER_LOWER_LIMB",
+    modality: "USG",
+    studyName: "DOPPLER LOWER LIMB",
+    technique:
+      "Color duplex Doppler study of the bilateral lower limb arteries/veins performed using linear and curvilinear probes.",
+    sections: [
+      "RIGHT LOWER LIMB",
+      "LEFT LOWER LIMB",
+      "DEEP VENOUS SYSTEM",
+      "SUPERFICIAL VENOUS SYSTEM",
+      "ARTERIAL FLOW",
+      "COMPRESSIBILITY / AUGMENTATION",
+    ],
+  },
+  XRAY_CHEST_PA: {
+    templateId: "XRAY_CHEST_PA",
+    modality: "X-RAY",
+    studyName: "X-RAY CHEST PA VIEW",
+    technique:
+      "Digital radiograph of the chest has been obtained in standard PA projection, erect position.",
+    sections: [
+      "LUNG FIELDS",
+      "HILUM",
+      "CARDIOMEDIASTINAL SILHOUETTE",
+      "PLEURA / COSTOPHRENIC ANGLES",
+      "DIAPHRAGM",
+      "BONES / SOFT TISSUES",
+    ],
+  },
+  XRAY_CERVICAL_SPINE: {
+    templateId: "XRAY_CERVICAL_SPINE",
+    modality: "X-RAY",
+    studyName: "X-RAY CERVICAL SPINE",
+    technique:
+      "Digital radiographs of the cervical spine obtained in AP and lateral projections; oblique views if requested.",
+    sections: [
+      "ALIGNMENT",
+      "VERTEBRAL BODIES",
+      "DISC SPACES",
+      "NEURAL FORAMINA",
+      "POSTERIOR ELEMENTS",
+      "SOFT TISSUES",
+    ],
+  },
+  XRAY_LS_SPINE: {
+    templateId: "XRAY_LS_SPINE",
+    modality: "X-RAY",
+    studyName: "X-RAY LUMBOSACRAL SPINE",
+    technique:
+      "Digital radiographs of the lumbosacral spine obtained in AP and lateral projections.",
+    sections: [
+      "ALIGNMENT / CURVATURE",
+      "VERTEBRAL BODIES",
+      "DISC SPACES",
+      "SACROILIAC JOINTS",
+      "POSTERIOR ELEMENTS",
+      "SOFT TISSUES",
+    ],
+  },
+  XRAY_KNEE: {
+    templateId: "XRAY_KNEE",
+    modality: "X-RAY",
+    studyName: "X-RAY KNEE",
+    technique:
+      "Digital radiographs of the knee joint obtained in weight-bearing AP and lateral projections; skyline view if requested.",
+    sections: [
+      "JOINT SPACE",
+      "FEMORAL CONDYLES",
+      "TIBIAL PLATEAU",
+      "PATELLA",
+      "SOFT TISSUES",
+    ],
+  },
+  XRAY_SHOULDER: {
+    templateId: "XRAY_SHOULDER",
+    modality: "X-RAY",
+    studyName: "X-RAY SHOULDER",
+    technique:
+      "Digital radiographs of the shoulder obtained in AP and axillary / scapular-Y projections.",
+    sections: [
+      "GLENOHUMERAL JOINT SPACE",
+      "HUMERUS",
+      "ACROMIOCLAVICULAR JOINT",
+      "CLAVICLE / SCAPULA",
+      "SOFT TISSUES",
+    ],
+  },
+  XRAY_PNS: {
+    templateId: "XRAY_PNS",
+    modality: "X-RAY",
+    studyName: "X-RAY PARANASAL SINUSES",
+    technique:
+      "Digital radiographs of the paranasal sinuses obtained in Waters and Caldwell projections.",
+    sections: [
+      "MAXILLARY SINUSES",
+      "FRONTAL SINUSES",
+      "ETHMOID SINUSES",
+      "SPHENOID SINUS",
+      "NASAL SEPTUM",
+      "SOFT TISSUES",
+    ],
+  },
+  XRAY_ABDOMEN: {
+    templateId: "XRAY_ABDOMEN",
+    modality: "X-RAY",
+    studyName: "X-RAY ABDOMEN",
+    technique:
+      "Digital radiograph of the abdomen obtained in erect and supine AP projections.",
+    sections: [
+      "BOWEL GAS PATTERN",
+      "AIR-FLUID LEVELS",
+      "FREE GAS",
+      "CALCIFICATIONS",
+      "SOLID ORGANS (visible)",
+      "BONES (imaged portion)",
+    ],
+  },
+};
+
+// ── Voice cleanup ─────────────────────────────────────────────────────────────
+
+function cleanVoiceText(raw: string): string {
+  return String(raw ?? "")
+    .replace(/\bcomma\b/gi, ",")
+    .replace(/\bfull stop\b/gi, ".")
+    .replace(/\bnew line\b/gi, "\n")
+    .replace(/\bcolon\b/gi, ":")
+    .replace(/\bsemicolon\b/gi, ";")
+    .replace(/\bflair\b/gi, "FLAIR")
+    .replace(/\bdwi\b/gi, "DWI")
+    .replace(/\badc\b/gi, "ADC")
+    .replace(/\bswi\b/gi, "SWI")
+    .replace(/\bfazekas\b/gi, "Fazekas")
+    .replace(/\blacunar\b/gi, "lacunar")
+    .replace(/\bthecal sac\b/gi, "thecal sac")
+    .replace(/\bforaminal\b/gi, "foraminal")
+    .replace(/\bhyperintense\b/gi, "hyperintense")
+    .replace(/\bhypointense\b/gi, "hypointense")
+    .replace(/\bisointense\b/gi, "isointense")
+    .replace(/\s+([,.])/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// ── HTML report builder ───────────────────────────────────────────────────────
+
+function escHtml(v: string): string {
+  return String(v ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function buildReportHtml(input: {
+  patientName?: string;
+  age?: string;
+  sex?: string;
+  patientId?: string;
+  referringDoctor?: string;
+  accessionNumber?: string;
+  studyDate?: string;
+  clinicalHistory?: string;
+  findingsSections?: Record<string, string>;
+  rawFindings?: string;
+  impression?: string[];
+  recommendation?: string;
+  template: ReportTemplate;
+  keyImages?: Array<{ imageUrl: string; caption: string; includeInReport: boolean }>;
+}): string {
+  const t = input.template;
+  const sections = input.findingsSections ?? {};
+  const impressionBullets = (input.impression ?? []).filter(Boolean);
+  const includedImages = (input.keyImages ?? []).filter((img) => img.includeInReport);
+
+  const sectionsHtml = t.sections
+    .map((name) => {
+      const content = sections[name] ?? input.rawFindings ?? "";
+      return `<p style="margin:4px 0;"><strong><u>${escHtml(name)}</u></strong><br/>${escHtml(content).replaceAll("\n", "<br/>") || "<em style='color:#aaa;'>—</em>"}</p>`;
+    })
+    .join("\n");
+
+  const imagesHtml =
+    includedImages.length > 0
+      ? `<h3 style="margin:12px 0 6px;"><u>KEY IMAGES</u></h3>
+<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:8px 0;">
+${includedImages
+  .map(
+    (img) => `  <figure style="margin:0;text-align:center;page-break-inside:avoid;">
+    <img src="${escHtml(img.imageUrl)}" style="max-width:100%;max-height:220px;object-fit:contain;border:1px solid #ccc;border-radius:4px;" />
+    <figcaption style="font-size:11px;color:#555;margin-top:4px;">${escHtml(img.caption)}</figcaption>
+  </figure>`,
+  )
+  .join("\n")}
+</div>`
+      : "";
+
+  const impressionHtml =
+    impressionBullets.length > 0
+      ? `<ul style="margin:4px 0 0 18px;padding:0;">${impressionBullets.map((b) => `<li>${escHtml(b)}</li>`).join("")}</ul>`
+      : `<p style="margin:4px 0;color:#aaa;"><em>Draft impression — not verified.</em></p>`;
+
+  return `<div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.45;color:#111;max-width:720px;margin:0 auto;">
+  <p style="margin:0 0 2px;"><strong>NAME: ${escHtml(input.patientName ?? "")} &nbsp;&nbsp; AGE/SEX: ${escHtml(input.age ?? "")}/${escHtml(input.sex ?? "")} &nbsp;&nbsp; UHID: ${escHtml(input.patientId ?? "")} &nbsp;&nbsp; ACC: ${escHtml(input.accessionNumber ?? "")}</strong></p>
+  <p style="margin:0 0 2px;"><strong>REF. BY: ${escHtml(input.referringDoctor ?? "")} &nbsp;&nbsp; DATE: ${escHtml(input.studyDate ?? "")}</strong></p>
+  <hr style="border:none;border-top:2px solid #000;margin:6px 0;" />
+  <h2 style="text-align:center;text-decoration:underline;font-size:15px;margin:8px 0;"><strong>${escHtml(t.studyName)}</strong></h2>
+  <h3 style="margin:10px 0 4px;"><u>TECHNIQUE</u></h3>
+  <p style="margin:0 0 8px;">${escHtml(t.technique)}</p>
+  ${input.clinicalHistory ? `<h3 style="margin:10px 0 4px;"><u>CLINICAL HISTORY</u></h3><p style="margin:0 0 8px;">${escHtml(input.clinicalHistory)}</p>` : ""}
+  <hr style="border:none;border-top:2px solid #000;margin:6px 0;" />
+  <h3 style="margin:10px 0 4px;"><u>FINDINGS / OBSERVATION</u></h3>
+  ${sectionsHtml}
+  ${imagesHtml}
+  <h3 style="margin:12px 0 4px;"><u>IMPRESSION</u></h3>
+  ${impressionHtml}
+  <h3 style="margin:12px 0 4px;"><u>RECOMMENDATION</u></h3>
+  <p style="margin:0 0 8px;">${escHtml(input.recommendation ?? "Please correlate with clinical findings.")}</p>
+  <hr style="border:none;border-top:1px solid #999;margin:12px 0 4px;" />
+  <p style="font-size:11px;color:#666;font-style:italic;margin:0;">Please correlate with clinical history and findings. Report issued by authorized radiologist only.</p>
+</div>`.trim();
+}
+
+// ── Router ────────────────────────────────────────────────────────────────────
+
+export const radiologyReportGeneratorRouter = Router();
+
+// GET /templates
+radiologyReportGeneratorRouter.get("/templates", (_req: Request, res: Response) => {
+  res.json({ success: true, templates: Object.values(RADIOLOGY_TEMPLATES) });
+});
+
+// POST /voice-cleanup
+const VoiceCleanupBody = z.object({
+  rawTranscript: z.string().min(1).max(10_000),
+  draftId: z.number().int().optional(),
+  studyId: z.number().int().optional(),
+  patientId: z.number().int().optional(),
+  targetField: z.string().max(100).optional(),
+});
+
+radiologyReportGeneratorRouter.post("/voice-cleanup", async (req: StaffAuthRequest, res: Response) => {
+  const parsed = VoiceCleanupBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ success: false, error: "rawTranscript is required" });
+    return;
+  }
+
+  const { rawTranscript, draftId, studyId, patientId, targetField } = parsed.data;
+  const cleanedText = cleanVoiceText(rawTranscript);
+  const structuredPoints = cleanedText
+    .split(/[;\n]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  // Audit log — fire-and-forget, do not block response
+  void db
+    .insert(radiologyVoiceLogsTable)
+    .values({
+      draftId: draftId ?? null,
+      studyId: studyId ?? null,
+      patientId: patientId ?? null,
+      targetField: targetField ?? null,
+      rawTranscript,
+      cleanedText,
+      createdBy: req.staffSession?.subjectName ?? null,
+    })
+    .catch(() => undefined);
+
+  res.json({ success: true, cleanedText, structuredPoints });
+});
+
+// POST /generate — build HTML preview (does not persist)
+const GenerateBody = z.object({
+  templateId: z.string(),
+  patientName: z.string().optional(),
+  age: z.string().optional(),
+  sex: z.string().optional(),
+  patientId: z.union([z.string(), z.number()]).optional(),
+  referringDoctor: z.string().optional(),
+  accessionNumber: z.string().optional(),
+  studyDate: z.string().optional(),
+  clinicalHistory: z.string().optional(),
+  findingsSections: z.record(z.string()).optional(),
+  rawFindings: z.string().optional(),
+  impression: z.array(z.string()).optional(),
+  recommendation: z.string().optional(),
+  keyImages: z
+    .array(
+      z.object({
+        imageUrl: z.string(),
+        caption: z.string().default(""),
+        includeInReport: z.boolean().default(true),
+      }),
+    )
+    .optional(),
+});
+
+radiologyReportGeneratorRouter.post("/generate", async (req: Request, res: Response) => {
+  const parsed = GenerateBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ success: false, error: "Invalid request", details: parsed.error.issues });
+    return;
+  }
+
+  const data = parsed.data;
+  const template = RADIOLOGY_TEMPLATES[data.templateId] ?? Object.values(RADIOLOGY_TEMPLATES)[0]!;
+
+  const html = buildReportHtml({
+    ...data,
+    patientId: data.patientId != null ? String(data.patientId) : undefined,
+    template,
+  });
+
+  const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+
+  res.json({
+    success: true,
+    title: template.studyName,
+    formattedReportHtml: html,
+    formattedReportText: text,
+  });
+});
+
+// POST /save-draft
+const SaveDraftBody = z.object({
+  id: z.number().int().optional(),
+  studyId: z.number().int().optional(),
+  worklistId: z.number().int().optional(),
+  patientId: z.number().int().optional(),
+  templateId: z.string().optional(),
+  modality: z.string().optional(),
+  studyName: z.string().optional(),
+  clinicalHistory: z.string().optional(),
+  rawFindings: z.string().optional(),
+  findingsSections: z.record(z.string()).optional(),
+  impression: z.array(z.string()).optional(),
+  recommendation: z.string().optional(),
+  formattedReportHtml: z.string().optional(),
+  formattedReportText: z.string().optional(),
+});
+
+radiologyReportGeneratorRouter.post("/save-draft", async (req: StaffAuthRequest, res: Response) => {
+  const parsed = SaveDraftBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ success: false, error: "Invalid request" });
+    return;
+  }
+
+  const { id, ...rest } = parsed.data;
+  const author = req.staffSession?.subjectName ?? null;
+
+  const values = {
+    studyId: rest.studyId ?? null,
+    worklistId: rest.worklistId ?? null,
+    patientId: rest.patientId ?? null,
+    templateId: rest.templateId ?? null,
+    modality: rest.modality ?? null,
+    studyName: rest.studyName ?? null,
+    clinicalHistory: rest.clinicalHistory ?? null,
+    rawFindings: rest.rawFindings ?? null,
+    findingsSections: rest.findingsSections
+      ? JSON.stringify(rest.findingsSections)
+      : null,
+    impression: rest.impression ? JSON.stringify(rest.impression) : null,
+    recommendation: rest.recommendation ?? null,
+    formattedReportHtml: rest.formattedReportHtml ?? null,
+    formattedReportText: rest.formattedReportText ?? null,
+  };
+
+  if (id) {
+    const [updated] = await db
+      .update(radiologyReportDraftsTable)
+      .set(values)
+      .where(eq(radiologyReportDraftsTable.id, id))
+      .returning();
+    res.json({ success: true, draft: updated });
+  } else {
+    const [created] = await db
+      .insert(radiologyReportDraftsTable)
+      .values({ ...values, createdBy: author })
+      .returning();
+    res.json({ success: true, draft: created });
+  }
+});
+
+// GET /drafts — list recent drafts (optionally filtered by studyId or patientId)
+radiologyReportGeneratorRouter.get("/drafts", async (req: Request, res: Response) => {
+  const studyId = req.query.studyId ? Number(req.query.studyId) : null;
+  const patientId = req.query.patientId ? Number(req.query.patientId) : null;
+
+  const conditions = [];
+  if (studyId) conditions.push(eq(radiologyReportDraftsTable.studyId, studyId));
+  if (patientId) conditions.push(eq(radiologyReportDraftsTable.patientId, patientId));
+
+  const rows = await db
+    .select()
+    .from(radiologyReportDraftsTable)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(radiologyReportDraftsTable.updatedAt))
+    .limit(50);
+
+  res.json({ success: true, drafts: rows });
+});
+
+// GET /drafts/:id
+radiologyReportGeneratorRouter.get("/drafts/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!id) { res.status(400).json({ success: false, error: "Invalid id" }); return; }
+
+  const [draft] = await db
+    .select()
+    .from(radiologyReportDraftsTable)
+    .where(eq(radiologyReportDraftsTable.id, id));
+
+  if (!draft) { res.status(404).json({ success: false, error: "Draft not found" }); return; }
+  res.json({ success: true, draft });
+});
+
+// POST /key-images — multipart upload
+radiologyReportGeneratorRouter.post(
+  "/key-images",
+  upload.single("image"),
+  async (req: StaffAuthRequest, res: Response) => {
+    if (!req.file) {
+      res.status(400).json({ success: false, error: "Image file is required" });
+      return;
+    }
+
+    const imageUrl = `/uploads/radiology-key-images/${req.file.filename}`;
+    const draftId = req.body.draftId ? Number(req.body.draftId) : null;
+    const studyId = req.body.studyId ? Number(req.body.studyId) : null;
+    const patientId = req.body.patientId ? Number(req.body.patientId) : null;
+
+    const [row] = await db
+      .insert(radiologyReportKeyImagesTable)
+      .values({
+        draftId,
+        studyId,
+        patientId,
+        accessionNumber: req.body.accessionNumber ?? null,
+        imageUrl,
+        thumbnailUrl: imageUrl,
+        caption: req.body.caption ?? "",
+        sortOrder: req.body.sortOrder ? Number(req.body.sortOrder) : 0,
+        includeInReport: true,
+        sourceType: "UPLOAD",
+        createdBy: req.staffSession?.subjectName ?? null,
+      })
+      .returning();
+
+    res.json({ success: true, item: row });
+  },
+);
+
+// GET /key-images?draftId=&studyId=
+radiologyReportGeneratorRouter.get("/key-images", async (req: Request, res: Response) => {
+  const draftId = req.query.draftId ? Number(req.query.draftId) : null;
+  const studyId = req.query.studyId ? Number(req.query.studyId) : null;
+
+  const conditions = [];
+  if (draftId) conditions.push(eq(radiologyReportKeyImagesTable.draftId, draftId));
+  if (studyId) conditions.push(eq(radiologyReportKeyImagesTable.studyId, studyId));
+
+  const rows = await db
+    .select()
+    .from(radiologyReportKeyImagesTable)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(radiologyReportKeyImagesTable.sortOrder);
+
+  res.json({ success: true, items: rows });
+});
+
+// PUT /key-images/:id
+const UpdateKeyImageBody = z.object({
+  caption: z.string().max(500).optional(),
+  includeInReport: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+radiologyReportGeneratorRouter.put("/key-images/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!id) { res.status(400).json({ success: false, error: "Invalid id" }); return; }
+
+  const parsed = UpdateKeyImageBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ success: false, error: "Invalid request" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(radiologyReportKeyImagesTable)
+    .set(parsed.data)
+    .where(eq(radiologyReportKeyImagesTable.id, id))
+    .returning();
+
+  if (!updated) { res.status(404).json({ success: false, error: "Image not found" }); return; }
+  res.json({ success: true, item: updated });
+});
+
+// DELETE /key-images/:id
+radiologyReportGeneratorRouter.delete("/key-images/:id", async (req: StaffAuthRequest, res: Response) => {
+  const id = Number(req.params.id);
+  if (!id) { res.status(400).json({ success: false, error: "Invalid id" }); return; }
+
+  const [deleted] = await db
+    .delete(radiologyReportKeyImagesTable)
+    .where(eq(radiologyReportKeyImagesTable.id, id))
+    .returning();
+
+  if (!deleted) { res.status(404).json({ success: false, error: "Image not found" }); return; }
+
+  // Best-effort file removal — ignore errors
+  if (deleted.imageUrl) {
+    const filename = path.basename(deleted.imageUrl);
+    void fs.unlink(path.join(KEY_IMAGE_DIR, filename)).catch(() => undefined);
+  }
+
+  res.json({ success: true });
+});

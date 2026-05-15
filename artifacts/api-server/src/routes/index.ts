@@ -63,6 +63,7 @@ import { booksSanityRouter } from "./books-sanity";
 import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
 import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
 import userPreferencesRouter from "./userPreferences";
+import { radiologyReportGeneratorRouter } from "./radiology-report-generator";
 
 const router: IRouter = Router();
 
@@ -276,6 +277,16 @@ router.use("/dicom", requireStaffAuth, requireStaffPermission("/dicom-nodes"), d
 
 // Radiology studies are tied to the orders workflow — /orders permission
 router.use("/radiology", requireStaffAuth, requireStaffPermission("/orders"), radiologyRouter);
+
+// Radiology Report Generator — staff-accessible report builder with voice dictation,
+// key image upload, template library, draft save, and final report creation.
+// Uses /orders permission consistent with other radiology endpoints.
+router.use(
+  "/radiology/report-generator",
+  requireStaffAuth,
+  requireStaffPermission("/orders"),
+  radiologyReportGeneratorRouter,
+);
 
 // Clinical report & compliance routes — /reports permission.
 // These expose patient PHI (names, codes, phone, email, test details),
