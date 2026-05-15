@@ -12,6 +12,7 @@ import {
   usersTable, portalSessionsTable,
 } from "@workspace/db/schema";
 import { eq, and, sql, desc, gt } from "drizzle-orm";
+import { todayIST } from "../lib/istDate";
 
 export const bridgeRouter = Router();
 
@@ -400,7 +401,7 @@ bridgeRouter.post("/staff-punch", requireBridgeAuth, async (req, res) => {
     return;
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIST();
   const now = new Date();
 
   // Smart toggle: if action='in' but already punched in (no out), treat as out

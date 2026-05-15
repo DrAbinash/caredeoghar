@@ -8,6 +8,7 @@ import {
   machineServiceRecordsTable,
 } from "@workspace/db/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
+import { todayIST } from "../lib/istDate";
 
 export const machinesRouter = Router();
 
@@ -56,7 +57,7 @@ machinesRouter.get("/", async (req, res): Promise<void> => {
   const amcRows = await db.select({ machineId: machineAmcContractsTable.machineId, endDate: machineAmcContractsTable.endDate, isActive: machineAmcContractsTable.isActive }).from(machineAmcContractsTable);
   const serviceRows = await db.select({ machineId: machineServiceRecordsTable.machineId, nextDueDate: machineServiceRecordsTable.nextDueDate, serviceType: machineServiceRecordsTable.serviceType }).from(machineServiceRecordsTable);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIST();
   const augmented = rows.map(m => {
     const openBreakdownCount = breakdownRows.filter(b => b.machineId === m.id && b.status !== "resolved").length;
     const activeAmc = amcRows.find(a => a.machineId === m.id && a.isActive && a.endDate >= today);
@@ -507,10 +508,9 @@ machinesRouter.delete("/services/:id", async (req, res): Promise<void> => {
 // =====================================================================
 machinesRouter.get("/calibration/reminders", async (req, res): Promise<void> => {
   const daysAhead = Number(req.query.days) || 30;
-  const today = new Date();
-  const todayStr = today.toISOString().slice(0, 10);
-  const horizonDate = new Date(today.getTime() + daysAhead * 86_400_000);
-  const horizonStr = horizonDate.toISOString().slice(0, 10);
+  const todayStr = todayIST();
+  const horizonDate = new Date(new Date(todayStr + "T00:00:00+05:30").getTime() + daysAhead * 86_400_000);
+  const horizonStr = todayIST(horizonDate);
 
   const all = await db.select({
     service: machineServiceRecordsTable,
@@ -536,7 +536,7 @@ machinesRouter.get("/calibration/reminders", async (req, res): Promise<void> => 
       const due = r.service.nextDueDate!;
       const overdue = due < todayStr;
       const dueSoon = due >= todayStr && due <= horizonStr;
-      const daysToDue = Math.round((new Date(due).getTime() - today.getTime()) / 86_400_000);
+      const daysToDue = Math.round((new Date(due).getTime() - new Date(todayStr + "T00:00:00+05:30").getTime()) / 86_400_000);
       return {
         id: r.service.id,
         machineId: r.service.machineId,
@@ -576,7 +576,7 @@ machinesRouter.get("/downtime/report", async (req, res): Promise<void> => {
   const breakdowns = await db.select().from(machineBreakdownsTable);
 
   const filtered = breakdowns.filter(b => {
-    const date = b.reportedAt.toISOString().slice(0, 10);
+    const date = todayIST(b.reportedAt);
     if (from && date < from) return false;
     if (to && date > to) return false;
     return true;

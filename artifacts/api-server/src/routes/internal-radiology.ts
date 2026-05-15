@@ -27,6 +27,7 @@ import {
 } from "@workspace/db/schema";
 import { and, eq, or, sql, inArray, gte, lte } from "drizzle-orm";
 import { logger } from "../lib/logger";
+import { todayIST } from "../lib/istDate";
 
 const router = Router();
 
@@ -624,7 +625,7 @@ router.post("/radiology/ai-draft", async (req, res) => {
   const age = b.age?.trim() || "";
   const sex = b.sex?.trim() || "";
   const accessionNumber = b.accessionNumber?.trim() || "";
-  const studyDate = b.studyDate?.trim() || new Date().toISOString().slice(0, 10);
+  const studyDate = b.studyDate?.trim() || todayIST();
 
   // Mark worklist entry as AI_DRAFT_READY (look up by studyId if provided)
   let worklistRow: typeof radiologyWorklistTable.$inferSelect | undefined;

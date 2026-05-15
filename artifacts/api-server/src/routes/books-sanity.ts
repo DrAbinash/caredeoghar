@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
+import { todayIST } from "../lib/istDate";
 
 export const booksSanityRouter = Router();
 
@@ -187,7 +188,7 @@ export async function runBooksSanity(opts: { from: string | null; to: string | n
   return {
     range: {
       from: fromRaw ?? "(last 90 days)",
-      to: toRaw ?? new Date().toISOString().slice(0, 10),
+      to: toRaw ?? todayIST(),
     },
     generatedAt: new Date().toISOString(),
     periodTotals: (periodTotals.rows[0] ?? {}) as Record<string, string | number>,

@@ -40,8 +40,10 @@ const SingleDateQuery = z.object({
 // at timezone boundaries. Returns null if from > to.
 function resolveDateRange(from: string | undefined, to: string | undefined) {
   const now = new Date();
-  const monthStartIso = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
-  const todayIso = now.toISOString().slice(0, 10);
+  const istNow = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const [istY, istM] = istNow.split("-").map(Number);
+  const monthStartIso = `${istY}-${String(istM).padStart(2, "0")}-01`;
+  const todayIso = istNow;
   const fromIso = from ?? monthStartIso;
   const toIso = to ?? todayIso;
   if (fromIso > toIso) return null;

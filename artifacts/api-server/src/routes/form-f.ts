@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, billsTable, patientsTable, formFRecordsTable, clinicSettingsTable } from "@workspace/db";
 import { eq, or, ilike, inArray, isNotNull, desc, and } from "drizzle-orm";
 import { ordersTable, orderTestsTable, testsTable, doctorsTable } from "@workspace/db";
+import { dateToISTString } from "../lib/istDate";
 
 const formFRouter = Router();
 
@@ -96,7 +97,7 @@ formFRouter.get("/fetch-billing/:search", async (req, res) => {
 
     res.json({
       billNumber: bill.billNumber,
-      billDate: bill.createdAt ? new Date(bill.createdAt).toISOString().slice(0, 10) : "",
+      billDate: bill.createdAt ? dateToISTString(bill.createdAt) : "",
       patientName: patient
         ? `${patient.firstName} ${patient.lastName}`.trim()
         : "",
@@ -259,7 +260,7 @@ formFRouter.get("/pending", async (req, res) => {
       return {
         billId: b.billId,
         billNumber: b.billNumber,
-        billDate: b.createdAt ? new Date(b.createdAt).toISOString().slice(0, 10) : "",
+        billDate: b.createdAt ? dateToISTString(b.createdAt) : "",
         patientName: patient ? `${patient.firstName} ${patient.lastName}`.trim() : "",
         mobile: patient?.phone ?? "",
         address: patient?.address ?? "",

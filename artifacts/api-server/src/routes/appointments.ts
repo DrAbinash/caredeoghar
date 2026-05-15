@@ -70,9 +70,11 @@ router.get("/", async (req, res) => {
   );
 });
 
+import { todayIST } from "../lib/istDate";
+
 // Stats for today
 router.get("/stats", async (req, res) => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIST();
   const rows = await db
     .select()
     .from(appointmentsTable)

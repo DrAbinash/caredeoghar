@@ -2,6 +2,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 
+// Force Node/V8 and any downstream libraries to treat IST as the local
+// timezone.  This fixes getFullYear()/getMonth()/getDate() and any
+// toLocaleDateString() call that omits an explicit timeZone.
+process.env.TZ = "Asia/Kolkata";
+
 // Load a workspace-root .env file (if present) before anything reads
 // process.env. By default dotenv does NOT override variables that are
 // already set, so the values injected by Replit's runtime always win.

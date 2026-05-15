@@ -4,11 +4,9 @@ import { billsTable, paymentsTable, ordersTable, billAuditsTable, voucherAuditsT
 import { sql, and, eq, gte, lt } from "drizzle-orm";
 import { patientsTable } from "@workspace/db/schema";
 
-export const dailySummaryRouter: IRouter = Router();
+import { todayIST } from "../lib/istDate";
 
-function todayIST(): string {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-}
+export const dailySummaryRouter: IRouter = Router();
 
 function dayBoundsIST(dateStr: string): { start: Date; end: Date } {
   return {

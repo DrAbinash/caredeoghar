@@ -7,6 +7,7 @@ import {
   verifyAuthenticationResponse,
 } from "@simplewebauthn/server";
 import { db } from "@workspace/db";
+import { todayIST } from "../lib/istDate";
 import {
   staffTable,
   staffCounterTable,
@@ -156,7 +157,7 @@ router.post("/:id/advances", async (req, res) => {
     .values({
       staffId: id,
       amount: String(amount),
-      advanceDate: (body.advanceDate as string) || new Date().toISOString().slice(0, 10),
+      advanceDate: (body.advanceDate as string) || todayIST(),
       paymentMode: (body.paymentMode as string) || "cash",
       reason: (body.reason as string) || null,
       notes: (body.notes as string) || null,
@@ -222,7 +223,7 @@ router.post("/:id/salary", async (req, res) => {
         .insert(staffSalaryPaymentsTable)
         .values({
           staffId: id,
-          monthYear: String(body.monthYear ?? new Date().toISOString().slice(0, 7)),
+          monthYear: String(body.monthYear ?? todayIST().slice(0, 7)),
           baseAmount: String(baseAmount),
           bonus: String(bonus),
           deductions: String(deductions),
@@ -230,7 +231,7 @@ router.post("/:id/salary", async (req, res) => {
           daysPresent: Number(body.daysPresent ?? 0),
           daysAbsent: Number(body.daysAbsent ?? 0),
           netAmount: String(netAmount),
-          paymentDate: (body.paymentDate as string) || new Date().toISOString().slice(0, 10),
+          paymentDate: (body.paymentDate as string) || todayIST(),
           paymentMode: (body.paymentMode as string) || "cash",
           reference: (body.reference as string) || null,
           notes: (body.notes as string) || null,
@@ -271,7 +272,7 @@ router.delete("/salary/:paymentId", async (req, res) => {
 // ── Attendance ──────────────────────────────────────
 router.get("/attendance/all", async (req, res) => {
   const { from, to } = req.query as Record<string, string>;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIST();
   const fromDate = from || today;
   const toDate = to || today;
   const rows = await db
@@ -308,7 +309,7 @@ router.get("/:id/attendance", async (req, res) => {
 
 // Atomic punch — uses unique (staff_id, date) + transaction
 async function recordPunch(staffId: number, action: "in" | "out", source: string) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIST();
   const now = new Date();
   return db.transaction(async (tx) => {
     if (action === "in") {
@@ -523,7 +524,7 @@ router.post("/biometric/punch/complete", async (req, res) => {
 
   const action = body.action === "out" ? "out" : "in";
   // Smart toggle: if "in" requested but already punched in, treat as "out"
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIST();
   const [existing] = await db
     .select()
     .from(staffAttendanceTable)
@@ -536,7 +537,7 @@ router.post("/biometric/punch/complete", async (req, res) => {
 
 // Today's overview
 router.get("/dashboard/today", async (_req, res) => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIST();
   const allStaff = await db.select().from(staffTable).where(eq(staffTable.isActive, true));
   const todayAtt = await db.select().from(staffAttendanceTable).where(eq(staffAttendanceTable.attendanceDate, today));
   const map = new Map(todayAtt.map((a) => [a.staffId, a]));

@@ -5,6 +5,7 @@ import { eq, desc, and, gte, lte, like, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { apiError, apiErrorFromZod } from "../lib/api-error";
 import { geminiParseBankStatement, type BankTransaction } from "@workspace/integrations-gemini-ai";
+import { todayIST } from "../lib/istDate";
 
 const router = Router();
 
@@ -876,7 +877,7 @@ router.post("/bank-statement/import", async (req, res): Promise<void> => {
     await db.insert(vouchersTable).values({
       voucherNumber,
       type: vType,
-      date: txn.date || new Date().toISOString().slice(0, 10),
+      date: txn.date || todayIST(),
       debitAccountId: isDebit ? String(contraAccountId) : String(bankAccountId),
       creditAccountId: isDebit ? String(bankAccountId) : String(contraAccountId),
       amount: String(amount),
