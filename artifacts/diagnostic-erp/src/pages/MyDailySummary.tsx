@@ -9,7 +9,7 @@ import { Link } from "wouter";
 import {
   IndianRupee, Wallet, Banknote, Smartphone, TrendingDown, RotateCcw,
   XCircle, FileEdit, Clock, Calendar, RefreshCw, Tag, CheckCircle2,
-  ArrowRight, Users,
+  ArrowRight, Users, Percent,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -452,6 +452,72 @@ export default function MyDailySummary() {
             </div>
           </div>
         </>
+      )}
+
+      {/* ── Discounts Given ── */}
+      {data && data.bills.filter((b) => b.discount > 0).length > 0 && (
+        <div className="bg-white dark:bg-card border border-amber-200 dark:border-amber-800 rounded-xl shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-amber-100 dark:border-amber-800 flex items-center justify-between bg-amber-50 dark:bg-amber-900/20">
+            <h3 className="text-sm font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2">
+              <Percent size={14} className="text-amber-600" /> Discounts Given
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200">
+                {data.bills.filter((b) => b.discount > 0).length} bills
+              </span>
+            </h3>
+            <span className="text-xs font-bold text-amber-700 dark:text-amber-300 tabular-nums">
+              Total discount: {fmt(data.bills.filter((b) => b.discount > 0).reduce((s, b) => s + b.discount, 0))}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-amber-50 dark:bg-amber-900/10">
+                <tr>
+                  {["Bill #", "Patient Name", "Referral Doctor", "Total (post-disc)", "Discount", "Disc %"].map((h) => (
+                    <th key={h} className="px-3 py-2.5 text-left font-semibold text-amber-800 dark:text-amber-300 whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-amber-50 dark:divide-amber-900/20">
+                {data.bills
+                  .filter((b) => b.discount > 0)
+                  .map((b) => {
+                    const gross = b.totalAmount + b.discount;
+                    const pct = gross > 0 ? ((b.discount / gross) * 100).toFixed(1) : "0.0";
+                    return (
+                      <tr key={b.id} className="hover:bg-amber-50/60 dark:hover:bg-amber-900/10">
+                        <td className="px-3 py-2 font-semibold whitespace-nowrap">
+                          <Link href={`/billing/${b.id}`} className="text-primary hover:underline">{b.billNumber}</Link>
+                        </td>
+                        <td className="px-3 py-2 font-semibold text-gray-800 dark:text-foreground">{b.patientName}</td>
+                        <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                          {b.referringDoctor ?? <span className="text-gray-400">—</span>}
+                        </td>
+                        <td className="px-3 py-2 tabular-nums text-gray-900 dark:text-foreground font-semibold">{fmt(b.totalAmount)}</td>
+                        <td className="px-3 py-2 tabular-nums font-bold text-amber-600 dark:text-amber-400">{fmt(b.discount)}</td>
+                        <td className="px-3 py-2 tabular-nums text-amber-700 dark:text-amber-300">
+                          <span className="px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 font-semibold">{pct}%</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+              <tfoot className="bg-amber-50 dark:bg-amber-900/10 border-t-2 border-amber-200 dark:border-amber-800">
+                <tr>
+                  <td className="px-3 py-2 font-bold text-amber-800 dark:text-amber-300" colSpan={3}>
+                    Total ({data.bills.filter((b) => b.discount > 0).length} bills)
+                  </td>
+                  <td className="px-3 py-2 font-bold tabular-nums text-gray-900 dark:text-foreground">
+                    {fmt(data.bills.filter((b) => b.discount > 0).reduce((s, b) => s + b.totalAmount, 0))}
+                  </td>
+                  <td className="px-3 py-2 font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                    {fmt(data.bills.filter((b) => b.discount > 0).reduce((s, b) => s + b.discount, 0))}
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
       )}
 
       {/* ── Recent Bills ── */}
