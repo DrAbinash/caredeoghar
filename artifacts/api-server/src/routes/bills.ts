@@ -258,6 +258,9 @@ billsRouter.get("/", async (req, res) => {
   // are read directly from req.query so we don't have to round-trip OpenAPI
   // codegen. Powers the Dues report page.
   const dueOnly = req.query.dueOnly === "1" || req.query.dueOnly === "true";
+  // When no specific status filter is set, callers can pass excludeCancelled=1
+  // to suppress cancelled rows (default view on the Bills page).
+  const excludeCancelled = req.query.excludeCancelled === "1" || req.query.excludeCancelled === "true";
   const dateFrom = typeof req.query.dateFrom === "string" && req.query.dateFrom ? req.query.dateFrom : null;
   const dateTo = typeof req.query.dateTo === "string" && req.query.dateTo ? req.query.dateTo : null;
   const dateField = req.query.dateField === "due" ? "due" : "created";
@@ -275,6 +278,7 @@ billsRouter.get("/", async (req, res) => {
 
   const conditions: (ReturnType<typeof eq> | ReturnType<typeof gt>)[] = [];
   if (status) conditions.push(eq(billsTable.status, status));
+  else if (excludeCancelled) conditions.push(ne(billsTable.status, "cancelled"));
   if (patientId) conditions.push(eq(billsTable.patientId, patientId));
   if (dueOnly) {
     // Only include bills with an actual outstanding balance AND not cancelled.
@@ -350,6 +354,21 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
   const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, orderId));
   if (!order) {
     res.status(404).json({ error: "Order not found" });
+    return;
+  }
+
+  // Guard against double-billing: reject if a non-cancelled bill already exists
+  // for this order. Prevents accidental duplicate bills from double-clicks or
+  // network retries. The user must explicitly cancel the existing bill first.
+  const [existingBill] = await db
+    .select({ id: billsTable.id, billNumber: billsTable.billNumber })
+    .from(billsTable)
+    .where(and(eq(billsTable.orderId, orderId), ne(billsTable.status, "cancelled")))
+    .limit(1);
+  if (existingBill) {
+    res.status(409).json({
+      error: `This order already has an active bill (${existingBill.billNumber}). Cancel it first before creating a new one.`,
+    });
     return;
   }
 

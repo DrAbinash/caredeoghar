@@ -1,10 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import {
-  useListBills,
   useCreateBill,
   useListOrders,
-  getListBillsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
@@ -49,10 +47,12 @@ type BillForm = {
   dueDate?: string;
 };
 
-const STATUSES = ["draft", "pending", "partial", "paid", "cancelled"];
+// "active" is a UI-only pseudo-status meaning "all except cancelled"
+const STATUSES = ["active", "draft", "pending", "partial", "paid", "cancelled"];
+const STATUS_LABELS: Record<string, string> = { active: "Active (excl. cancelled)" };
 
 export default function Billing() {
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState("active");
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -81,20 +81,42 @@ export default function Billing() {
     staleTime: 10_000,
   });
 
-  const { data, isLoading } = useListBills({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    status: (status || undefined) as any,
-    page,
-    limit: 20,
-    dateFrom: dateFrom || undefined,
-    dateTo: dateTo || undefined,
+  // Build query URL manually so we can pass excludeCancelled without
+  // regenerating the typed hook (which doesn't know about this param).
+  const billsUrl = (() => {
+    const p = new URLSearchParams();
+    if (status === "active") {
+      p.set("excludeCancelled", "1");
+    } else if (status && status !== "all") {
+      p.set("status", status);
+    }
+    p.set("page", String(page));
+    p.set("limit", "20");
+    if (dateFrom) p.set("dateFrom", dateFrom);
+    if (dateTo) p.set("dateTo", dateTo);
+    return `/api/bills?${p.toString()}`;
+  })();
+
+  const { data, isLoading } = useQuery<{
+    bills: Array<{
+      id: number; billNumber: string; totalAmount: number; paidAmount: number;
+      balanceAmount: number; status: string; createdAt: string;
+      patient?: { firstName: string; lastName: string; patientId: string } | null;
+      order?: { orderNumber: string; doctor?: { name: string } | null } | null;
+    }>;
+    total: number; page: number; limit: number;
+    totals: { totalAmount: number; paidAmount: number; balanceAmount: number };
+  }>({
+    queryKey: ["bills-list", status, page, dateFrom, dateTo],
+    queryFn: () => api.get(billsUrl),
+    staleTime: 15_000,
   });
   const { data: orders } = useListOrders({ status: "completed", limit: 100 });
 
   const createBill = useCreateBill({
     mutation: {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListBillsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: ["bills-list"] });
         setOpen(false);
         reset();
       },
@@ -161,13 +183,17 @@ export default function Billing() {
               <div className="flex flex-wrap items-end gap-2">
                 <div>
                   <Label className="text-xs text-muted-foreground">Status</Label>
-                  <Select value={status || "all"} onValueChange={(v) => { setPage(1); setStatus(v === "all" ? "" : v); }}>
-                    <SelectTrigger className="w-36 mt-0.5 h-8 text-sm">
-                      <SelectValue placeholder="All Statuses" />
+                  <Select value={status} onValueChange={(v) => { setPage(1); setStatus(v); }}>
+                    <SelectTrigger className="w-44 mt-0.5 h-8 text-sm">
+                      <SelectValue placeholder="Active (excl. cancelled)" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Statuses</SelectItem>
-                      {STATUSES.map((s) => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
+                      <SelectItem value="all">All (incl. cancelled)</SelectItem>
+                      {STATUSES.map((s) => (
+                        <SelectItem key={s} value={s} className="capitalize">
+                          {STATUS_LABELS[s] ?? s}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
