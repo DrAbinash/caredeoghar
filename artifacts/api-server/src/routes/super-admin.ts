@@ -419,7 +419,7 @@ superAdminRouter.delete("/books/:id", requireSuperAdmin, async (req, res): Promi
 // ── POST /api/super-admin/books/:id/assign-doctors ────────────────────────────
 superAdminRouter.post("/books/:id/assign-doctors", requireSuperAdmin, async (req, res): Promise<void> => {
   const paramsParsed = AssignDoctorsToLedgerParams.safeParse(req.params);
-  const bodyParsed = AssignDoctorsToLedgerBody.safeParse(req.body);
+  const bodyParsed = z.object({ doctorIds: z.array(z.number()) }).safeParse(req.body);
   if (!paramsParsed.success || !bodyParsed.success) {
     res.status(400).json({
       error: "Invalid request",

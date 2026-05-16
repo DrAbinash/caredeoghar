@@ -71,7 +71,7 @@ title = "Care Diagnostics Website Structure Guide for ChatGPT"
 id = "y7tCcAC_kuTN4_plVK50V"
 uri = "file://exports/test_catalog_import.csv"
 type = "table"
-title = "Test Catalog (308 tests) - Import CSV"
+title = "Fixed Test Catalog (308 tests) - Import CSV"
 
 [[outputs]]
 id = "jbZz7iflGLwmi6QTp56_g"
