@@ -8,6 +8,7 @@ import {
   ordersTable,
   testsTable,
   billsTable,
+  patientsTable,
 } from "@workspace/db/schema";
 import { eq, desc, and, gte, lte, inArray, ne } from "drizzle-orm";
 import {
@@ -441,6 +442,155 @@ router.get("/report-detailed", async (req, res) => {
   };
 
   res.json({ report: result.filter(r => r.orderCount > 0), grandTotal });
+});
+
+// ── Referral Report by Patient (per-visit, per-test rows) ─────────────────────
+// Returns each referral doctor's rows: one row per test per patient visit,
+// with patient name, date, bill number, commission, and rule details.
+// Used by the "Referral Report (Doctor Name)" page in the super-admin portal.
+router.get("/report-by-patient", async (req, res) => {
+  const { from, to, doctorId } = req.query as Record<string, string>;
+
+  const [clinicRow] = await db
+    .select({ commissionDiscountMode: clinicSettingsTable.commissionDiscountMode })
+    .from(clinicSettingsTable).limit(1);
+  const commissionDiscountMode = clinicRow?.commissionDiscountMode ?? "none";
+
+  const doctors = await db.select().from(doctorsTable);
+  const allRules = await db.select().from(commissionRulesTable);
+  const allTests = await db.select().from(testsTable);
+  const testMap = new Map(allTests.map(t => [t.id, { id: t.id, name: t.name, category: t.category ?? "Other", price: Number(t.price) }]));
+
+  const conditions = [];
+  if (doctorId) conditions.push(eq(ordersTable.doctorId, Number(doctorId)));
+  if (from) conditions.push(gte(ordersTable.createdAt, new Date(from)));
+  if (to) conditions.push(lte(ordersTable.createdAt, new Date(to + "T23:59:59Z")));
+
+  // Fetch orders joined with patient names
+  const ordersWithPatients = await db
+    .select({
+      orderId: ordersTable.id,
+      orderNumber: ordersTable.orderNumber,
+      orderDate: ordersTable.createdAt,
+      doctorId: ordersTable.doctorId,
+      patientFirstName: patientsTable.firstName,
+      patientLastName: patientsTable.lastName,
+      patientPid: patientsTable.patientId,
+    })
+    .from(ordersTable)
+    .innerJoin(patientsTable, eq(ordersTable.patientId, patientsTable.id))
+    .where(conditions.length ? and(...conditions) : undefined);
+
+  const orderIds = ordersWithPatients.map(o => o.orderId);
+  const orderTests = orderIds.length
+    ? await db.select().from(orderTestsTable)
+        .where(and(inArray(orderTestsTable.orderId, orderIds), ne(orderTestsTable.status, "cancelled")))
+    : [];
+
+  const billsForOrders = orderIds.length
+    ? await db
+        .select({ orderId: billsTable.orderId, billNumber: billsTable.billNumber, discount: billsTable.discount })
+        .from(billsTable).where(inArray(billsTable.orderId, orderIds))
+    : [];
+
+  const billByOrderId = new Map<number, { billNumber: string; discount: number }>();
+  for (const b of billsForOrders) {
+    if (b.orderId != null) billByOrderId.set(b.orderId, { billNumber: b.billNumber, discount: Number(b.discount ?? 0) });
+  }
+
+  const filteredDoctors = doctors.filter(d => !doctorId || d.id === Number(doctorId));
+
+  type PatientRow = {
+    date: string;
+    patientName: string;
+    patientPid: string;
+    orderId: number;
+    orderNumber: string;
+    billNumber: string;
+    testId: number;
+    testName: string;
+    category: string;
+    price: number;
+    commission: number;
+    ruleType: string;
+    ruleValue: number;
+    ruleName: string;
+  };
+
+  const result = filteredDoctors.map(doctor => {
+    const doctorOrders = ordersWithPatients.filter(o => o.doctorId === doctor.id);
+    const rules = allRules.filter(r => r.doctorId === doctor.id);
+
+    // Build per-order discount-adjusted commission ratio
+    const orderAdjustRatio = new Map<number, number>();
+    for (const order of doctorOrders) {
+      const ots = orderTests.filter(ot => ot.orderId === order.orderId);
+      const rawOrderComm = ots.reduce((s, ot) => s + calcTestCommission(ot, testMap.get(ot.testId), rules, doctor).commission, 0);
+      const billDiscount = billByOrderId.get(order.orderId)?.discount ?? 0;
+      const { net } = applyDiscountDeduction(rawOrderComm, billDiscount, commissionDiscountMode);
+      orderAdjustRatio.set(order.orderId, rawOrderComm > 0 ? net / rawOrderComm : 1);
+    }
+
+    const rows: PatientRow[] = [];
+    for (const order of doctorOrders) {
+      const ots = orderTests.filter(ot => ot.orderId === order.orderId);
+      const bill = billByOrderId.get(order.orderId);
+      const ratio = orderAdjustRatio.get(order.orderId) ?? 1;
+
+      for (const ot of ots) {
+        const test = testMap.get(ot.testId);
+        const { commission: rawComm, ruleName } = calcTestCommission(ot, test, rules, doctor);
+        const matchedRule = rules.find(r => {
+          if (!r.isActive) return false;
+          if (r.isExclusive && r.scope === "test" && r.testIds) return (JSON.parse(r.testIds) as number[]).includes(ot.testId);
+          if (r.isExclusive && r.scope === "category" && r.categories && test) return (JSON.parse(r.categories) as string[]).includes(test.category ?? "");
+          if (r.scope === "test" && r.testIds) return (JSON.parse(r.testIds) as number[]).includes(ot.testId);
+          if (r.scope === "category" && r.categories && test) return (JSON.parse(r.categories) as string[]).includes(test.category ?? "");
+          return r.scope === "all";
+        });
+        rows.push({
+          date: order.orderDate.toISOString().split("T")[0],
+          patientName: `${order.patientFirstName} ${order.patientLastName}`.trim().toUpperCase(),
+          patientPid: order.patientPid,
+          orderId: order.orderId,
+          orderNumber: order.orderNumber,
+          billNumber: bill?.billNumber ?? "",
+          testId: ot.testId,
+          testName: test?.name ?? "Unknown",
+          category: test?.category ?? "Other",
+          price: Number(ot.price),
+          commission: rawComm * ratio,
+          ruleType: matchedRule ? matchedRule.type : (doctor.defaultCommissionType || "percentage"),
+          ruleValue: matchedRule ? Number(matchedRule.value) : Number(doctor.defaultCommission),
+          ruleName,
+        });
+      }
+    }
+
+    rows.sort((a, b) => a.date.localeCompare(b.date));
+    const totalCommission = rows.reduce((s, r) => s + r.commission, 0);
+    const totalRevenue = rows.reduce((s, r) => s + r.price, 0);
+    const uniqueOrders = new Set(rows.map(r => r.orderId)).size;
+
+    return {
+      doctor: { id: doctor.id, name: doctor.name, specialization: doctor.specialization },
+      rows,
+      totalCommission,
+      totalRevenue,
+      orderCount: uniqueOrders,
+      testCount: rows.length,
+    };
+  }).filter(d => d.rows.length > 0);
+
+  res.json({
+    report: result,
+    grandTotal: {
+      doctors: result.length,
+      orders: result.reduce((s, d) => s + d.orderCount, 0),
+      revenue: result.reduce((s, d) => s + d.totalRevenue, 0),
+      commission: result.reduce((s, d) => s + d.totalCommission, 0),
+    },
+  });
 });
 
 export default router;

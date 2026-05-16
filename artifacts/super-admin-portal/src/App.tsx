@@ -19,6 +19,7 @@ import {
 const BooksManager     = lazy(() => import("./pages/Books"));
 const CommissionRules  = lazy(() => import("./pages/CommissionRules"));
 const CommissionReport = lazy(() => import("./pages/CommissionReport"));
+const ReferralReport   = lazy(() => import("./pages/ReferralReport"));
 const DoctorLedger     = lazy(() => import("./pages/DoctorLedger"));
 const MoneyTrailAudit  = lazy(() => import("./pages/MoneyTrailAudit"));
 
@@ -318,12 +319,13 @@ function LoginScreen({ onLogin, onLockUsb }: { onLogin: (session: Session) => vo
 }
 
 function ActiveSessionScreen({
-  session, onEject, onManageBooks, onCommissionReport, onCommissionRules, onDoctorLedger, onMoneyTrailAudit,
+  session, onEject, onManageBooks, onCommissionReport, onReferralReport, onCommissionRules, onDoctorLedger, onMoneyTrailAudit,
 }: {
   session: Session;
   onEject: () => void;
   onManageBooks: () => void;
   onCommissionReport: () => void;
+  onReferralReport: () => void;
   onCommissionRules: () => void;
   onDoctorLedger: () => void;
   onMoneyTrailAudit: () => void;
@@ -440,9 +442,13 @@ function ActiveSessionScreen({
               Referral Commission (Compliance)
             </p>
             <div className="grid grid-cols-1 gap-2">
-              <Button variant="outline" className="w-full justify-start" onClick={onCommissionReport}>
+              <Button variant="outline" className="w-full justify-start" onClick={onReferralReport}>
                 <HandCoins size={14} className="mr-2" />
-                Commission Report
+                Referral Report (Doctor Name)
+              </Button>
+              <Button variant="outline" className="w-full justify-start" onClick={onCommissionReport}>
+                <HandCoins size={14} className="mr-2 opacity-60" />
+                Commission Report (Test Summary)
               </Button>
               <Button variant="outline" className="w-full justify-start" onClick={onCommissionRules}>
                 <ListChecks size={14} className="mr-2" />
@@ -506,8 +512,8 @@ function ActiveSessionScreen({
   );
 }
 
-type SaView = "home" | "books" | "commission-report" | "commission-rules" | "doctor-ledger" | "money-trail-audit";
-const HASH_VIEWS: SaView[] = ["books", "commission-report", "commission-rules", "doctor-ledger", "money-trail-audit"];
+type SaView = "home" | "books" | "commission-report" | "referral-report" | "commission-rules" | "doctor-ledger" | "money-trail-audit";
+const HASH_VIEWS: SaView[] = ["books", "commission-report", "referral-report", "commission-rules", "doctor-ledger", "money-trail-audit"];
 function viewFromHash(): SaView {
   const h = (window.location.hash || "").replace(/^#/, "");
   return (HASH_VIEWS as string[]).includes(h) ? (h as SaView) : "home";
@@ -614,6 +620,8 @@ function App() {
           <BooksManager token={session.token} onBack={() => setView("home")} />
         ) : view === "commission-report" ? (
           <CommissionReport onBack={() => setView("home")} />
+        ) : view === "referral-report" ? (
+          <ReferralReport onBack={() => setView("home")} />
         ) : view === "commission-rules" ? (
           <CommissionRules onBack={() => setView("home")} />
         ) : view === "doctor-ledger" ? (
@@ -626,6 +634,7 @@ function App() {
             onEject={() => { setSession(null); setView("home"); }}
             onManageBooks={() => setView("books")}
             onCommissionReport={() => setView("commission-report")}
+            onReferralReport={() => setView("referral-report")}
             onCommissionRules={() => setView("commission-rules")}
             onDoctorLedger={() => setView("doctor-ledger")}
             onMoneyTrailAudit={() => setView("money-trail-audit")}
