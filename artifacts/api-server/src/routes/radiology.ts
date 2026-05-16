@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
+import { tcpProbe } from "../lib/pacs/providers.js";
 import {
   radiologyStudiesTable, radiologyFilmIssuesTable, radiologyShareLinksTable,
   testsTable, patientsTable, ordersTable, orderTestsTable,
@@ -928,38 +929,94 @@ radiologyRouter.get("/modalities", async (_req, res) => {
 // POST /api/radiology/modalities  (insert or update)
 radiologyRouter.post("/modalities", async (req, res) => {
   const b = (req.body ?? {}) as {
-    id?: number; machineName?: string; modality?: string; aeTitle?: string;
-    ipAddress?: string; port?: number; location?: string;
+    id?: number;
+    machineName?: string; modality?: string; aeTitle?: string;
+    ipAddress?: string; port?: number; location?: string; manufacturer?: string;
     autoSendEnabled?: boolean; isActive?: boolean;
+    queryEnabled?: boolean; retrieveEnabled?: boolean;
+    pollingEnabled?: boolean; pollingIntervalSeconds?: number;
+    retrieveMethod?: string; preferredTransferSyntax?: string;
+    destinationPacs?: string;
+    autoPushToConquest?: boolean; autoCreateWorklist?: boolean; autoNotifyRadiologist?: boolean;
+    notes?: string;
   };
 
   if (b.id) {
-    // Partial update of an existing modality
     const updates: Partial<typeof dicomModalitiesTable.$inferInsert> = { updatedAt: new Date() };
-    if (b.machineName !== undefined) updates.machineName = b.machineName;
-    if (b.modality !== undefined) updates.modality = b.modality;
-    if (b.aeTitle !== undefined) updates.aeTitle = b.aeTitle;
-    if (b.ipAddress !== undefined) updates.ipAddress = b.ipAddress;
-    if (b.port !== undefined) updates.port = b.port;
-    if (b.location !== undefined) updates.location = b.location;
-    if (b.autoSendEnabled !== undefined) updates.autoSendEnabled = b.autoSendEnabled;
-    if (b.isActive !== undefined) updates.isActive = b.isActive;
+    if (b.machineName          !== undefined) updates.machineName          = b.machineName;
+    if (b.modality             !== undefined) updates.modality             = b.modality;
+    if (b.aeTitle              !== undefined) updates.aeTitle              = b.aeTitle;
+    if (b.ipAddress            !== undefined) updates.ipAddress            = b.ipAddress;
+    if (b.port                 !== undefined) updates.port                 = b.port;
+    if (b.location             !== undefined) updates.location             = b.location;
+    if (b.manufacturer         !== undefined) updates.manufacturer         = b.manufacturer;
+    if (b.autoSendEnabled      !== undefined) updates.autoSendEnabled      = b.autoSendEnabled;
+    if (b.isActive             !== undefined) updates.isActive             = b.isActive;
+    if (b.queryEnabled         !== undefined) updates.queryEnabled         = b.queryEnabled;
+    if (b.retrieveEnabled      !== undefined) updates.retrieveEnabled      = b.retrieveEnabled;
+    if (b.pollingEnabled       !== undefined) updates.pollingEnabled       = b.pollingEnabled;
+    if (b.pollingIntervalSeconds !== undefined) updates.pollingIntervalSeconds = b.pollingIntervalSeconds;
+    if (b.retrieveMethod       !== undefined) updates.retrieveMethod       = b.retrieveMethod;
+    if (b.preferredTransferSyntax !== undefined) updates.preferredTransferSyntax = b.preferredTransferSyntax;
+    if (b.destinationPacs      !== undefined) updates.destinationPacs      = b.destinationPacs;
+    if (b.autoPushToConquest   !== undefined) updates.autoPushToConquest   = b.autoPushToConquest;
+    if (b.autoCreateWorklist   !== undefined) updates.autoCreateWorklist   = b.autoCreateWorklist;
+    if (b.autoNotifyRadiologist !== undefined) updates.autoNotifyRadiologist = b.autoNotifyRadiologist;
+    if (b.notes                !== undefined) updates.notes                = b.notes;
     const [row] = await db.update(dicomModalitiesTable).set(updates).where(eq(dicomModalitiesTable.id, b.id)).returning();
     res.json(row);
   } else {
     if (!b.machineName?.trim()) { res.status(400).json({ error: "machineName is required" }); return; }
     const [row] = await db.insert(dicomModalitiesTable).values({
-      machineName:     b.machineName.trim(),
-      modality:        b.modality ?? null,
-      aeTitle:         b.aeTitle ?? null,
-      ipAddress:       b.ipAddress ?? null,
-      port:            b.port ?? null,
-      location:        b.location ?? null,
-      autoSendEnabled: b.autoSendEnabled ?? true,
-      isActive:        b.isActive ?? true,
+      machineName:            b.machineName.trim(),
+      modality:               b.modality ?? null,
+      aeTitle:                b.aeTitle ?? null,
+      ipAddress:              b.ipAddress ?? null,
+      port:                   b.port ?? null,
+      location:               b.location ?? null,
+      manufacturer:           b.manufacturer ?? null,
+      autoSendEnabled:        b.autoSendEnabled ?? true,
+      isActive:               b.isActive ?? true,
+      queryEnabled:           b.queryEnabled ?? true,
+      retrieveEnabled:        b.retrieveEnabled ?? true,
+      pollingEnabled:         b.pollingEnabled ?? false,
+      pollingIntervalSeconds: b.pollingIntervalSeconds ?? 300,
+      retrieveMethod:         b.retrieveMethod ?? "C_MOVE",
+      preferredTransferSyntax: b.preferredTransferSyntax ?? null,
+      destinationPacs:        b.destinationPacs ?? "CONQUEST",
+      autoPushToConquest:     b.autoPushToConquest ?? true,
+      autoCreateWorklist:     b.autoCreateWorklist ?? true,
+      autoNotifyRadiologist:  b.autoNotifyRadiologist ?? false,
+      notes:                  b.notes ?? null,
     }).returning();
     res.status(201).json(row);
   }
+});
+
+// POST /api/radiology/modalities/:id/echo-test — TCP reachability check
+radiologyRouter.post("/modalities/:id/echo-test", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [modality] = await db.select().from(dicomModalitiesTable).where(eq(dicomModalitiesTable.id, id));
+  if (!modality) { res.status(404).json({ error: "Modality not found" }); return; }
+
+  const host = modality.ipAddress;
+  const port = modality.port;
+  if (!host || !port) {
+    res.status(400).json({ error: "No IP address or port configured for this modality" });
+    return;
+  }
+
+  const result = await tcpProbe(host, port, 5000);
+
+  await db.update(dicomModalitiesTable).set({
+    lastConnectionStatus: result.ok ? "ok" : "error",
+    ...(result.ok ? { lastSeenAt: new Date(), lastError: null } : { lastError: result.message }),
+    updatedAt: new Date(),
+  }).where(eq(dicomModalitiesTable.id, id));
+
+  res.json({ ok: result.ok, latencyMs: result.latencyMs, message: result.message });
 });
 
 // DELETE /api/radiology/modalities/:id

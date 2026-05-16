@@ -17,13 +17,29 @@ export const pacsSettingsTable = pgTable("pacs_settings", {
 export const dicomModalitiesTable = pgTable("dicom_modalities", {
   id: serial("id").primaryKey(),
   machineName: text("machine_name").notNull(),
-  modality: text("modality"),
+  modality: text("modality"),            // MR | CT | CR | DX | US | XA | MG | OT
   aeTitle: text("ae_title"),
   ipAddress: text("ip_address"),
   port: integer("port"),
   location: text("location"),
+  manufacturer: text("manufacturer"),    // scanner brand / model info
   autoSendEnabled: boolean("auto_send_enabled").notNull().default(true),
   isActive: boolean("is_active").notNull().default(true),
+
+  // Pull-agent Q/R controls
+  queryEnabled: boolean("query_enabled").notNull().default(true),
+  retrieveEnabled: boolean("retrieve_enabled").notNull().default(true),
+  pollingEnabled: boolean("polling_enabled").notNull().default(false),
+  pollingIntervalSeconds: integer("polling_interval_seconds").notNull().default(300),
+  retrieveMethod: text("retrieve_method").notNull().default("C_MOVE"),          // C_MOVE | C_GET
+  preferredTransferSyntax: text("preferred_transfer_syntax"),
+  destinationPacs: text("destination_pacs").notNull().default("CONQUEST"),      // CONQUEST | ORTHANC
+  autoPushToConquest: boolean("auto_push_to_conquest").notNull().default(true),
+  autoCreateWorklist: boolean("auto_create_worklist").notNull().default(true),
+  autoNotifyRadiologist: boolean("auto_notify_radiologist").notNull().default(false),
+  notes: text("notes"),
+
+  // Status tracking (written by agent heartbeat / echo-test)
   lastConnectionStatus: text("last_connection_status"),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
   lastError: text("last_error"),

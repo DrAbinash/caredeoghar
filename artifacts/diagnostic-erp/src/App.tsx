@@ -47,6 +47,7 @@ const PacsDashboard         = lazy(() => import("@/pages/PacsDashboard"));
 const PacsSettings          = lazy(() => import("@/pages/PacsSettings"));
 const PacsLogs              = lazy(() => import("@/pages/PacsLogs"));
 const DicomAgentDashboard   = lazy(() => import("@/pages/DicomAgentDashboard"));
+const ModalityManagement    = lazy(() => import("@/pages/ModalityManagement"));
 const ReportHub       = lazy(() => import("@/pages/ReportHub"));
 const Machines        = lazy(() => import("@/pages/Machines"));
 const FormF           = lazy(() => import("@/pages/FormF"));
@@ -84,6 +85,7 @@ const queryClient = new QueryClient({
 const ERP_NAV_ORDER = [
   "/", "/dashboard", "/my-daily-summary", "/daily-summary", "/patients", "/appointments", "/queue", "/online-bookings",
   "/radiology", "/radiology/worklist", "/radiology/report-generator", "/radiology/pacs-dashboard", "/radiology/pacs-settings", "/radiology/pacs-logs",
+  "/radiology/dicom-agent-dashboard", "/radiology/modality-management",
   "/orders", "/tests", "/packages", "/billing", "/payments", "/reports",
   "/report-generator", "/report-hub", "/inventory", "/expenses", "/staff", "/referrals",
   "/accounting", "/discounts", "/form-f", "/pacs", "/machines", "/hr-forms", "/website", "/settings",
@@ -172,6 +174,7 @@ function Router() {
               <Route path="/radiology/pacs-settings" component={PacsSettings} />
               <Route path="/radiology/pacs-logs" component={PacsLogs} />
               <Route path="/radiology/dicom-agent-dashboard" component={DicomAgentDashboard} />
+              <Route path="/radiology/modality-management" component={ModalityManagement} />
               <Route path="/packages" component={Packages} />
               <Route path="/expenses" component={Expenses} />
               <Route path="/my-day-close" component={MyDayClose} />

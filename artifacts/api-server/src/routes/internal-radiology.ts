@@ -26,6 +26,8 @@ import {
   pacsLogsTable,
   dicomPullAgentLogsTable,
   dicomPullAgentStatusTable,
+  dicomModalitiesTable,
+  pacsSettingsTable,
 } from "@workspace/db/schema";
 import { and, eq, or, sql, inArray, gte, lte } from "drizzle-orm";
 import { logger } from "../lib/logger";
@@ -1337,6 +1339,42 @@ router.post("/dicom-agent/log", async (req, res) => {
   }
 
   res.json({ ok: true, id: inserted?.id ?? null });
+});
+
+// ── GET /api/internal/dicom-agent/config ─────────────────────────────────────
+// Returns the full pull-agent configuration so the Windows agent can
+// auto-fetch it every 5 minutes without manual config.json editing.
+router.get("/dicom-agent/config", requireInternalApiKey, async (_req, res) => {
+  const [settingsRows, modalities] = await Promise.all([
+    db.select().from(pacsSettingsTable).where(eq(pacsSettingsTable.category, "conquest")),
+    db.select().from(dicomModalitiesTable)
+      .where(eq(dicomModalitiesTable.isActive, true))
+      .orderBy(dicomModalitiesTable.machineName),
+  ]);
+
+  const sm: Record<string, string> = {};
+  for (const row of settingsRows) {
+    if (row.key && row.value != null) sm[row.key] = row.value;
+  }
+
+  res.json({
+    conquest: {
+      host:    sm["conquest_host"]    ?? "127.0.0.1",
+      port:    Number(sm["conquest_port"]    ?? 5678),
+      aeTitle: sm["conquest_ae"]      ?? "CONQUEST1",
+    },
+    modalities,
+    pullSettings: {
+      pollIntervalMs:     Number(sm["pull_interval_ms"]     ?? 30_000),
+      agentAeTitle:       sm["agent_ae_title"]              ?? "DIAGNO_AGENT",
+      maxConcurrentJobs:  Number(sm["max_concurrent_jobs"]  ?? 3),
+    },
+    erpSettings: {
+      heartbeatEndpoint: "/api/internal/dicom-agent/heartbeat",
+      logEndpoint:       "/api/internal/dicom-agent/log",
+      configEndpoint:    "/api/internal/dicom-agent/config",
+    },
+  });
 });
 
 export default router;

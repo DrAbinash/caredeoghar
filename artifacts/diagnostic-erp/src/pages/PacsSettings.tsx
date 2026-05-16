@@ -572,9 +572,22 @@ export default function PacsSettings() {
 
       {activeTab === "modalities" && (
         <div className="space-y-6">
-          {/* Add new modality */}
+          {/* Link to full modality management page */}
+          <div className="rounded-xl border bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 p-4 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">Full Modality Management</p>
+              <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
+                Configure polling, C-FIND/C-MOVE, destination PACS, and test connectivity for each imaging device.
+              </p>
+            </div>
+            <a href="/erp/radiology/modality-management" className="shrink-0 inline-flex items-center gap-1.5 text-xs font-medium bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 transition-colors">
+              Open →
+            </a>
+          </div>
+
+          {/* Add new modality (quick-add) */}
           <div className="rounded-xl border bg-card p-4 space-y-3">
-            <h3 className="text-sm font-semibold">Add Imaging Device</h3>
+            <h3 className="text-sm font-semibold">Quick-Add Imaging Device</h3>
             <div className="flex flex-wrap gap-2">
               <Input placeholder="Machine name" value={newMachineName} onChange={(e) => setNewMachineName(e.target.value)} className="w-40 h-8 text-sm" />
               <select value={newModCode} onChange={(e) => setNewModCode(e.target.value)} className="h-8 text-sm border rounded-md px-2 bg-background">

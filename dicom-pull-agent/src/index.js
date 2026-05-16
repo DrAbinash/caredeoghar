@@ -59,11 +59,49 @@ const HEARTBEAT_ENABLED  = process.env.ERP_HEARTBEAT_ENABLED === "1";
 const HEARTBEAT_ENDPOINT = process.env.ERP_HEARTBEAT_ENDPOINT || `${ERP_BASE}/api/internal/dicom-agent/heartbeat`;
 const LOG_ENDPOINT       = process.env.ERP_LOG_ENDPOINT       || `${ERP_BASE}/api/internal/dicom-agent/log`;
 const AGENT_NAME         = process.env.AGENT_NAME             || AGENT_ID;
+const CONFIG_ENDPOINT    = process.env.ERP_CONFIG_ENDPOINT    || `${ERP_BASE}/api/internal/dicom-agent/config`;
+const CONFIG_FETCH_ENABLED = process.env.ERP_CONFIG_ENABLED   !== "0"; // default on
+const CONFIG_INTERVAL_MS = Number(process.env.ERP_CONFIG_INTERVAL_MS ?? 5 * 60 * 1000); // 5 min
 
 // Session-level accumulators (reset when the agent process restarts).
 let sessionStudiesFound  = 0;
 let sessionStudiesPulled = 0;
 let sessionFailed        = 0;
+
+// ── Remote config ──────────────────────────────────────────────────────────────
+// When CONFIG_FETCH_ENABLED the agent auto-fetches its config from the ERP
+// every CONFIG_INTERVAL_MS. Modality rows returned are stored here and can be
+// used by custom poll logic. Config errors are non-fatal (the agent keeps the
+// last good config / falls back to env-var config).
+
+/** @type {{ conquest: object; modalities: object[]; pullSettings: object; erpSettings: object } | null} */
+let remoteConfig = null;
+let lastConfigFetch = 0;
+
+async function fetchAgentConfig() {
+  if (!CONFIG_FETCH_ENABLED || !ERP_BASE || !API_KEY) return;
+  try {
+    const res = await fetch(CONFIG_ENDPOINT, {
+      headers: { Authorization: `Bearer ${API_KEY}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) {
+      console.warn(`[config] ERP config fetch failed: HTTP ${res.status}`);
+      return;
+    }
+    remoteConfig = await res.json();
+    lastConfigFetch = Date.now();
+    const count = remoteConfig?.modalities?.length ?? 0;
+    console.log(`[config] Loaded remote config — ${count} active modalities.`);
+  } catch (err) {
+    console.warn(`[config] Failed to fetch ERP config: ${err?.message ?? err}`);
+  }
+}
+
+async function startConfigRefreshLoop() {
+  await fetchAgentConfig(); // initial fetch at startup
+  setInterval(fetchAgentConfig, CONFIG_INTERVAL_MS);
+}
 
 // ── Startup validation ────────────────────────────────────────────────────────
 
@@ -438,6 +476,9 @@ if (!dcmtkOk) {
   console.warn("\n[agent] WARNING: DCMTK not available. Agent will poll the ERP but cannot execute DICOM operations.");
   console.warn("[agent] Install DCMTK from https://dcmtk.org or set DCMTK_DIR to the bin/ directory.\n");
 }
+
+// Start remote config refresh loop (non-blocking — errors are swallowed)
+void startConfigRefreshLoop();
 
 // Initial poll immediately, then on interval
 await poll();
