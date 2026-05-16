@@ -47,12 +47,10 @@ type BillForm = {
   dueDate?: string;
 };
 
-// "active" is a UI-only pseudo-status meaning "all except cancelled"
-const STATUSES = ["active", "draft", "pending", "partial", "paid", "cancelled"];
-const STATUS_LABELS: Record<string, string> = { active: "Active (excl. cancelled)" };
+const STATUSES = ["draft", "pending", "partial", "paid", "cancelled"];
 
 export default function Billing() {
-  const [status, setStatus] = useState("active");
+  const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -81,15 +79,9 @@ export default function Billing() {
     staleTime: 10_000,
   });
 
-  // Build query URL manually so we can pass excludeCancelled without
-  // regenerating the typed hook (which doesn't know about this param).
   const billsUrl = (() => {
     const p = new URLSearchParams();
-    if (status === "active") {
-      p.set("excludeCancelled", "1");
-    } else if (status && status !== "all") {
-      p.set("status", status);
-    }
+    if (status) p.set("status", status);
     p.set("page", String(page));
     p.set("limit", "20");
     if (dateFrom) p.set("dateFrom", dateFrom);
@@ -183,17 +175,13 @@ export default function Billing() {
               <div className="flex flex-wrap items-end gap-2">
                 <div>
                   <Label className="text-xs text-muted-foreground">Status</Label>
-                  <Select value={status} onValueChange={(v) => { setPage(1); setStatus(v); }}>
-                    <SelectTrigger className="w-44 mt-0.5 h-8 text-sm">
-                      <SelectValue placeholder="Active (excl. cancelled)" />
+                  <Select value={status || "all"} onValueChange={(v) => { setPage(1); setStatus(v === "all" ? "" : v); }}>
+                    <SelectTrigger className="w-36 mt-0.5 h-8 text-sm">
+                      <SelectValue placeholder="All Statuses" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All (incl. cancelled)</SelectItem>
-                      {STATUSES.map((s) => (
-                        <SelectItem key={s} value={s} className="capitalize">
-                          {STATUS_LABELS[s] ?? s}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      {STATUSES.map((s) => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -242,7 +230,7 @@ export default function Billing() {
                     <tr><td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">No bills match "{debouncedSearch}"</td></tr>
                   ) : (
                     searchResults.map((b) => (
-                      <tr key={b.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
+                      <tr key={b.id} className={`border-b last:border-0 ${b.status === "cancelled" ? "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/40 opacity-80" : "border-border/50 hover:bg-muted/30"}`}>
                         <td className="px-4 py-3 font-mono text-xs font-medium text-primary">{b.billNumber}</td>
                         <td className="px-4 py-3">
                           <div className="font-medium">{b.patientName}</div>
@@ -282,7 +270,7 @@ export default function Billing() {
                   <tr><td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">No bills found</td></tr>
                 ) : (
                   data?.bills?.map((b) => (
-                    <tr key={b.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
+                    <tr key={b.id} className={`border-b last:border-0 ${b.status === "cancelled" ? "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/40 opacity-80" : "border-border/50 hover:bg-muted/30"}`}>
                       <td className="px-4 py-3 font-mono text-xs font-medium text-primary">{b.billNumber}</td>
                       <td className="px-4 py-3">
                         {b.patient && (
