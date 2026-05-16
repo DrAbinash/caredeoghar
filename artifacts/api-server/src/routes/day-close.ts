@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, paymentsTable, dayClosuresTable } from "@workspace/db";
+import { db, paymentsTable, dayClosuresTable, userDayClosuresTable, billsTable, usersTable } from "@workspace/db";
 import { eq, and, gt, lte, desc, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Response, NextFunction } from "express";
@@ -265,6 +265,264 @@ dayCloseRouter.post("/:id/reopen", requireSuperAdminStaff, async (req, res) => {
   }
   req.log?.warn({ closureId: id, reopenedBy: reopenedByName }, "Day closure RE-OPENED");
   res.json(updated);
+});
+
+// ── Per-user helpers ────────────────────────────────────────────────────────
+
+const OWNER_ROLES = new Set(["admin", "super_admin", "owner"]);
+
+// Find the open-window start for a specific user:
+// MAX(last overall day close, last user's own close).
+// Both boundaries reset the window, so whichever is more recent wins.
+async function userWindowBoundary(userName: string): Promise<Date | null> {
+  const [lastOverall] = await db
+    .select({ ts: dayClosuresTable.coveredToTs })
+    .from(dayClosuresTable)
+    .where(eq(dayClosuresTable.status, "closed"))
+    .orderBy(desc(dayClosuresTable.coveredToTs))
+    .limit(1);
+
+  const [lastUser] = await db
+    .select({ ts: userDayClosuresTable.closedAt })
+    .from(userDayClosuresTable)
+    .where(eq(userDayClosuresTable.userName, userName))
+    .orderBy(desc(userDayClosuresTable.closedAt))
+    .limit(1);
+
+  const t1 = lastOverall?.ts ? new Date(lastOverall.ts) : null;
+  const t2 = lastUser?.ts    ? new Date(lastUser.ts)    : null;
+  if (!t1 && !t2) return null;
+  if (!t1) return t2;
+  if (!t2) return t1;
+  return t1 > t2 ? t1 : t2;
+}
+
+type UserSummary = {
+  totals: MethodTotals;
+  billsCount: number;
+  totalBilled: number;
+  totalDue: number;
+};
+
+async function summarizeUserWindow(
+  userName: string,
+  from: Date | null,
+  to: Date,
+): Promise<UserSummary> {
+  const pWhere = from
+    ? and(eq(paymentsTable.recordedByName, userName), gt(paymentsTable.createdAt, from), lte(paymentsTable.createdAt, to))
+    : and(eq(paymentsTable.recordedByName, userName), lte(paymentsTable.createdAt, to));
+
+  const payments = await db
+    .select({ amount: paymentsTable.amount, method: paymentsTable.method })
+    .from(paymentsTable)
+    .where(pWhere);
+
+  const totals = emptyTotals();
+  for (const p of payments) {
+    const amt    = n(p.amount);
+    const bucket = bucketMethod(p.method);
+    totals[bucket] += amt;
+    totals.total   += amt;
+    totals.count++;
+  }
+
+  const bWhere = from
+    ? and(
+        eq(billsTable.createdByName, userName),
+        gt(billsTable.createdAt, from),
+        lte(billsTable.createdAt, to),
+        sql`${billsTable.status} != 'cancelled'`,
+      )
+    : and(
+        eq(billsTable.createdByName, userName),
+        lte(billsTable.createdAt, to),
+        sql`${billsTable.status} != 'cancelled'`,
+      );
+
+  const bills = await db
+    .select({ totalAmount: billsTable.totalAmount, balanceAmount: billsTable.balanceAmount })
+    .from(billsTable)
+    .where(bWhere);
+
+  return {
+    totals,
+    billsCount:  bills.length,
+    totalBilled: bills.reduce((s, b) => s + n(b.totalAmount), 0),
+    totalDue:    bills.reduce((s, b) => s + n(b.balanceAmount), 0),
+  };
+}
+
+// ── Per-user routes ──────────────────────────────────────────────────────────
+
+// Preview: current user's open window summary.
+dayCloseRouter.get("/my-preview", async (req, res) => {
+  const session  = (req as StaffAuthRequest).staffSession;
+  const userName = session?.subjectName?.trim() ?? "";
+  if (!userName) { res.status(401).json({ error: "Not authenticated" }); return; }
+
+  const from = await userWindowBoundary(userName);
+  const to   = new Date();
+  const s    = await summarizeUserWindow(userName, from, to);
+
+  res.json({
+    userName,
+    coveredFromTs: from,
+    coveredToTs:   to,
+    expected:      s.totals,
+    billsCount:    s.billsCount,
+    paymentsCount: s.totals.count,
+    totalBilled:   s.totalBilled,
+    totalDue:      s.totalDue,
+  });
+});
+
+// List: current user's past closures.
+dayCloseRouter.get("/my-list", async (req, res) => {
+  const session  = (req as StaffAuthRequest).staffSession;
+  const userName = session?.subjectName?.trim() ?? "";
+  if (!userName) { res.status(401).json({ error: "Not authenticated" }); return; }
+
+  const rows = await db
+    .select()
+    .from(userDayClosuresTable)
+    .where(eq(userDayClosuresTable.userName, userName))
+    .orderBy(desc(userDayClosuresTable.closedAt))
+    .limit(60);
+
+  res.json(rows);
+});
+
+const UserCloseBody = z.object({
+  actuals: z.object({
+    cash:   z.coerce.number().min(0).default(0),
+    upi:    z.coerce.number().min(0).default(0),
+    card:   z.coerce.number().min(0).default(0),
+    cheque: z.coerce.number().min(0).default(0),
+    other:  z.coerce.number().min(0).default(0),
+  }),
+  varianceNote: z.string().max(2000).default(""),
+  notes:        z.string().max(2000).default(""),
+});
+
+// Close: record the current user's day close snapshot.
+dayCloseRouter.post("/my-close", async (req, res) => {
+  const session  = (req as StaffAuthRequest).staffSession;
+  const userName = session?.subjectName?.trim() ?? "";
+  const userId   = session?.subjectId ?? null;
+  if (!userName) { res.status(401).json({ error: "Not authenticated" }); return; }
+
+  const parsed = UserCloseBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid request body" }); return; }
+  const { actuals, varianceNote, notes } = parsed.data;
+
+  const inserted = await db.transaction(async (tx) => {
+    // Per-user advisory lock to prevent duplicate concurrent closes.
+    const lockId = BigInt(
+      Math.abs(userName.split("").reduce((a, c) => ((a * 31 + c.charCodeAt(0)) | 0), 0)),
+    );
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(${lockId})`);
+
+    const from = await userWindowBoundary(userName);
+    const to   = new Date();
+    const s    = await summarizeUserWindow(userName, from, to);
+
+    const totalExpected = s.totals.total;
+    const totalActual   = actuals.cash + actuals.upi + actuals.card + actuals.cheque + actuals.other;
+    const variance      = totalActual - totalExpected;
+
+    const istDate = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(to);
+
+    const [row] = await tx
+      .insert(userDayClosuresTable)
+      .values({
+        userId,
+        userName,
+        closureDate:    istDate,
+        closedAt:       to,
+        coveredFromTs:  from,
+        coveredToTs:    to,
+        expectedCash:   String(s.totals.cash),
+        expectedUpi:    String(s.totals.upi),
+        expectedCard:   String(s.totals.card),
+        expectedCheque: String(s.totals.cheque),
+        expectedOther:  String(s.totals.other),
+        totalExpected:  String(totalExpected),
+        totalBilled:    String(s.totalBilled),
+        totalDue:       String(s.totalDue),
+        billsCount:     s.billsCount,
+        paymentsCount:  s.totals.count,
+        actualCash:     String(actuals.cash),
+        actualUpi:      String(actuals.upi),
+        actualCard:     String(actuals.card),
+        actualCheque:   String(actuals.cheque),
+        actualOther:    String(actuals.other),
+        totalActual:    String(totalActual),
+        variance:       String(variance),
+        varianceNote,
+        notes,
+      })
+      .returning();
+    return row;
+  });
+
+  req.log?.info({ closureId: inserted.id, userName, variance: inserted.variance }, "User day closed");
+  res.status(201).json(inserted);
+});
+
+// Staff close status — owner/admin only. Shows which active users have
+// closed their day since the last overall close.
+dayCloseRouter.get("/staff-status", async (req, res) => {
+  const session = (req as StaffAuthRequest).staffSession;
+  if (!session || !OWNER_ROLES.has(session.role)) {
+    res.status(403).json({ error: "Owner/admin access required" });
+    return;
+  }
+
+  const lastOverall = await lastClosureBoundary();
+
+  const activeUsers = await db
+    .select({ id: usersTable.id, name: usersTable.name })
+    .from(usersTable)
+    .where(eq(usersTable.isActive, true));
+
+  const allUserCloses = await db
+    .select({
+      userName:    userDayClosuresTable.userName,
+      closedAt:    userDayClosuresTable.closedAt,
+      totalActual: userDayClosuresTable.totalActual,
+      totalBilled: userDayClosuresTable.totalBilled,
+      variance:    userDayClosuresTable.variance,
+    })
+    .from(userDayClosuresTable)
+    .where(
+      lastOverall
+        ? gt(userDayClosuresTable.closedAt, lastOverall)
+        : sql`1=1`,
+    )
+    .orderBy(desc(userDayClosuresTable.closedAt));
+
+  const closeMap = new Map<string, typeof allUserCloses[number]>();
+  for (const c of allUserCloses) {
+    if (!closeMap.has(c.userName)) closeMap.set(c.userName, c);
+  }
+
+  const users = activeUsers.map((u) => {
+    const close = closeMap.get(u.name);
+    return {
+      userId:         u.id,
+      userName:       u.name,
+      isClosed:       !!close,
+      closedAt:       close?.closedAt ?? null,
+      totalCollected: n(close?.totalActual),
+      totalBilled:    n(close?.totalBilled),
+      variance:       n(close?.variance),
+    };
+  });
+
+  res.json({ users, lastOverallClose: lastOverall });
 });
 
 export default dayCloseRouter;

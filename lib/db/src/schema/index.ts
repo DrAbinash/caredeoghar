@@ -49,3 +49,4 @@ export * from "./radiologyReportGenerator";
 export * from "./whatsappConversations";
 export * from "./pacsSettings";
 export * from "./dayClosures";
+export * from "./userDayClosures";

@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Lock, Unlock, RefreshCw, Printer, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Lock, Unlock, RefreshCw, Printer, AlertTriangle, CheckCircle2, Users, Clock } from "lucide-react";
 import { readStaffSession } from "@/lib/staffSession";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -16,6 +16,17 @@ import {
 
 type MethodTotals = { cash: number; upi: number; card: number; cheque: number; other: number; total: number; count: number };
 type StaffRow = MethodTotals & { userId: number | null; userName: string };
+
+type StaffUserStatus = {
+  userId: number;
+  userName: string;
+  isClosed: boolean;
+  closedAt: string | null;
+  totalCollected: number;
+  totalBilled: number;
+  variance: number;
+};
+type StaffStatusResult = { users: StaffUserStatus[]; lastOverallClose: string | null };
 
 type Preview = {
   coveredFromTs: string | null;
@@ -140,6 +151,7 @@ export default function DayClose() {
   const qc = useQueryClient();
   const session = readStaffSession();
   const isSuperAdmin = session?.user?.role === "super_admin";
+  const isOwner = ["admin", "super_admin", "owner"].includes(session?.user?.role ?? "");
 
   const previewQ = useQuery<Preview>({
     queryKey: ["day-close-preview"],
@@ -154,6 +166,12 @@ export default function DayClose() {
     queryKey: ["clinic-settings"],
     queryFn: () => api.get<ClinicLite>("/api/clinic-settings"),
     staleTime: 60_000,
+  });
+  const staffStatusQ = useQuery<StaffStatusResult>({
+    queryKey: ["day-close-staff-status"],
+    queryFn: () => api.get<StaffStatusResult>("/api/day-close/staff-status"),
+    refetchInterval: 30_000,
+    enabled: isOwner,
   });
 
   const [actuals, setActuals] = useState({ cash: "", upi: "", card: "", cheque: "", other: "" });
@@ -229,6 +247,70 @@ export default function DayClose() {
           <RefreshCw size={14} className={`mr-2 ${previewQ.isFetching ? "animate-spin" : ""}`} /> Refresh
         </Button>
       </div>
+
+      {/* Staff Day Close Status — owner/admin only */}
+      {isOwner && staffStatusQ.data && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users size={16} /> Staff Day Close Status
+              {(() => {
+                const users = staffStatusQ.data.users;
+                const closed = users.filter((u) => u.isClosed).length;
+                return (
+                  <span className={`ml-auto text-sm font-normal px-2 py-0.5 rounded-full ${
+                    closed === users.length ? "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300"
+                    : "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                  }`}>
+                    {closed}/{users.length} closed
+                  </span>
+                );
+              })()}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {staffStatusQ.data.users.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No active staff accounts found.</p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
+                {staffStatusQ.data.users.map((u) => (
+                  <div
+                    key={u.userId}
+                    className={`flex items-center gap-2 p-2 rounded-lg border text-sm ${
+                      u.isClosed
+                        ? "border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30"
+                        : "border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30"
+                    }`}
+                  >
+                    {u.isClosed
+                      ? <CheckCircle2 size={14} className="text-green-600 shrink-0" />
+                      : <Clock size={14} className="text-amber-600 shrink-0" />}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{u.userName}</div>
+                      {u.isClosed && u.closedAt && (
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(u.closedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })}
+                          {" · "}
+                          {inr(u.totalCollected)}
+                        </div>
+                      )}
+                      {!u.isClosed && (
+                        <div className="text-xs text-amber-600">Not yet closed</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {staffStatusQ.data.users.some((u) => !u.isClosed) && (
+              <p className="text-xs text-amber-600 mt-3 flex items-center gap-1">
+                <AlertTriangle size={12} />
+                Some staff have not closed their day. You can still close the overall day — their window will reset when you do.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Open window summary */}
       <Card>
