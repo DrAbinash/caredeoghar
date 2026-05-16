@@ -208,7 +208,7 @@ export default function AppointmentSection({ section, settings }: { section: Sec
 
   if (!config || !config.enabled) {
     return (
-      <section className="section">
+      <section id="appointment" className="section">
         <div className="container-narrow" style={{ maxWidth: 640 }}>
           <h2 className="h-section text-center" style={{ marginBottom: ".5rem" }}>{heading}</h2>
           {subheading && <p className="subtle text-center" style={{ marginBottom: "2rem" }}>{subheading}</p>}
@@ -229,7 +229,7 @@ export default function AppointmentSection({ section, settings }: { section: Sec
   }
 
   return (
-    <section className="section">
+    <section id="appointment" className="section">
       <div className="container-narrow" style={{ maxWidth: 720 }}>
         <h2 className="h-section text-center" style={{ marginBottom: ".5rem" }}>{heading}</h2>
         {subheading && <p className="subtle text-center" style={{ marginBottom: "2rem" }}>{subheading}</p>}
