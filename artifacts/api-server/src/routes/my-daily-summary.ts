@@ -400,6 +400,22 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       totalAmount: Number(r.totalAmount),
       originalCreator: r.createdByName ?? "Unknown",
     })),
+    // Discounted bills (active only — same scope as summary.discountsGiven).
+    discountBills: activeBills
+      .filter((r) => Number(r.discount ?? 0) > 0)
+      .map((r) => ({
+        billId: r.id,
+        billNumber: r.billNumber,
+        patientName: r.patientFirstName
+          ? `${r.patientFirstName} ${r.patientLastName ?? ""}`.trim()
+          : "Unknown",
+        referringDoctor: r.referringDoctor ?? null,
+        totalAmount: Number(r.totalAmount),      // post-discount (net)
+        discountGiven: Number(r.discount ?? 0),
+        grossAmount: Number(r.totalAmount) + Number(r.discount ?? 0),
+        balanceAmount: Math.max(0, Number(r.balanceAmount ?? 0)),
+        status: r.status,
+      })),
     // Dues collected: payments today on old bills (created before this period).
     duesBills,
   });

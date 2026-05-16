@@ -90,6 +90,17 @@ type MyDailySummaryData = {
     remainingDues: number;
     billStatus: string;
   }[];
+  discountBills: {
+    billId: number;
+    billNumber: string;
+    patientName: string;
+    referringDoctor: string | null;
+    totalAmount: number;      // post-discount net
+    grossAmount: number;      // before discount
+    discountGiven: number;
+    balanceAmount: number;
+    status: string;
+  }[];
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -555,10 +566,10 @@ export default function MyDailySummary() {
       )}
 
       {/* ── Discounts Given ── */}
-      {data && data.bills.filter((b) => b.discount > 0).length > 0 && (() => {
-        const discBills = data.bills.filter((b) => b.discount > 0);
-        const totalGross = discBills.reduce((s, b) => s + b.totalAmount + b.discount, 0);
-        const totalDiscount = discBills.reduce((s, b) => s + b.discount, 0);
+      {data && data.discountBills.length > 0 && (() => {
+        const discBills = data.discountBills;
+        const totalGross = discBills.reduce((s, b) => s + b.grossAmount, 0);
+        const totalDiscount = discBills.reduce((s, b) => s + b.discountGiven, 0);
         const totalPending = discBills.reduce((s, b) => s + b.balanceAmount, 0);
         return (
           <div className="bg-white dark:bg-card border border-amber-200 dark:border-amber-800 rounded-xl shadow-sm overflow-hidden">
@@ -584,20 +595,19 @@ export default function MyDailySummary() {
                 </thead>
                 <tbody className="divide-y divide-amber-50 dark:divide-amber-900/20">
                   {discBills.map((b) => {
-                    const gross = b.totalAmount + b.discount;
-                    const pct = gross > 0 ? ((b.discount / gross) * 100).toFixed(1) : "0.0";
+                    const pct = b.grossAmount > 0 ? ((b.discountGiven / b.grossAmount) * 100).toFixed(1) : "0.0";
                     return (
-                      <tr key={b.id} className="hover:bg-amber-50/60 dark:hover:bg-amber-900/10">
+                      <tr key={b.billId} className="hover:bg-amber-50/60 dark:hover:bg-amber-900/10">
                         <td className="px-3 py-2 font-semibold whitespace-nowrap">
-                          <Link href={`/billing/${b.id}`} className="text-primary hover:underline">{b.billNumber}</Link>
+                          <Link href={`/billing/${b.billId}`} className="text-primary hover:underline">{b.billNumber}</Link>
                         </td>
                         <td className="px-3 py-2 font-semibold text-gray-800 dark:text-foreground">{b.patientName}</td>
                         <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
                           {b.referringDoctor ?? <span className="text-gray-400">—</span>}
                         </td>
-                        <td className="px-3 py-2 tabular-nums text-gray-900 dark:text-foreground font-semibold">{fmt(gross)}</td>
+                        <td className="px-3 py-2 tabular-nums text-gray-900 dark:text-foreground font-semibold">{fmt(b.grossAmount)}</td>
                         <td className="px-3 py-2 tabular-nums font-bold text-amber-600 dark:text-amber-400">
-                          {fmt(b.discount)}
+                          {fmt(b.discountGiven)}
                           <span className="ml-1 text-[10px] font-normal text-amber-500 dark:text-amber-400">({pct}%)</span>
                         </td>
                         <td className="px-3 py-2 tabular-nums">
