@@ -153,14 +153,29 @@ function RecRow({ label, value, type, note }: {
 
 // ─── My Daily Summary Page ────────────────────────────────────────────────────
 
+const LS_STAFF_FILTER_KEY = "my_daily_summary_staff_filter";
+
 export default function MyDailySummary() {
   const session = readStaffSession();
+  const myName = session?.user.name ?? "";
   const isOwner = FULL_ACCESS_ROLES.has(session?.user.role ?? "");
 
   const today = todayISO();
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(today);
-  const [staffFilter, setStaffFilter] = useState("");
+
+  // Default to own name for everyone (including owners). Owners can switch
+  // to "All Staff" or another staff member. Persist choice in localStorage.
+  const savedFilter = typeof window !== "undefined" ? window.localStorage.getItem(LS_STAFF_FILTER_KEY) : null;
+  const initialFilter = isOwner
+    ? (savedFilter !== null ? savedFilter : myName)
+    : myName;
+  const [staffFilter, setStaffFilter] = useState(initialFilter);
+
+  function saveStaffFilter(name: string) {
+    setStaffFilter(name);
+    try { window.localStorage.setItem(LS_STAFF_FILTER_KEY, name); } catch { /* ignore */ }
+  }
 
   const { data: allUsers = [] } = useQuery<AppUser[]>({
     queryKey: ["users"],
@@ -236,7 +251,7 @@ export default function MyDailySummary() {
               {/* All Staff chip */}
               <button
                 type="button"
-                onClick={() => setStaffFilter("")}
+                onClick={() => saveStaffFilter("")}
                 className={`flex-shrink-0 flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-all whitespace-nowrap ${
                   staffFilter === ""
                     ? "bg-primary border-primary text-white shadow-sm"
@@ -253,7 +268,7 @@ export default function MyDailySummary() {
                   <button
                     key={u.id}
                     type="button"
-                    onClick={() => setStaffFilter(isSelected ? "" : u.name)}
+                    onClick={() => saveStaffFilter(isSelected ? "" : u.name)}
                     className={`flex-shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all whitespace-nowrap ${
                       isSelected
                         ? "bg-primary border-primary text-white shadow-sm"
