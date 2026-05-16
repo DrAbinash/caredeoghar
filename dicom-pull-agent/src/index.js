@@ -51,6 +51,20 @@ const POLL_MS         = Number(process.env.POLL_INTERVAL_MS ?? 30_000);
 const LOG_LEVEL       = process.env.LOG_LEVEL ?? "info";
 const AGENT_ID        = os.hostname();
 
+// ERP Telemetry — opt-in. Set ERP_HEARTBEAT_ENABLED=1 to enable.
+// When enabled, the agent sends a heartbeat after every poll cycle and a log
+// entry for every C-FIND / C-MOVE event. ERP errors are non-fatal and never
+// block DICOM operations.
+const HEARTBEAT_ENABLED  = process.env.ERP_HEARTBEAT_ENABLED === "1";
+const HEARTBEAT_ENDPOINT = process.env.ERP_HEARTBEAT_ENDPOINT || `${ERP_BASE}/api/internal/dicom-agent/heartbeat`;
+const LOG_ENDPOINT       = process.env.ERP_LOG_ENDPOINT       || `${ERP_BASE}/api/internal/dicom-agent/log`;
+const AGENT_NAME         = process.env.AGENT_NAME             || AGENT_ID;
+
+// Session-level accumulators (reset when the agent process restarts).
+let sessionStudiesFound  = 0;
+let sessionStudiesPulled = 0;
+let sessionFailed        = 0;
+
 // ── Startup validation ────────────────────────────────────────────────────────
 
 if (!ERP_BASE) {
@@ -70,6 +84,41 @@ function log(level, ...args) {
   if ((LEVELS[level] ?? 0) >= MIN_LEVEL) {
     console[level === "debug" ? "log" : level](`[agent][${level.toUpperCase()}]`, ...args);
   }
+}
+
+// ── ERP Telemetry helpers (fire-and-forget) ───────────────────────────────────
+
+async function postHeartbeat(extra = {}) {
+  if (!HEARTBEAT_ENABLED) return;
+  try {
+    await fetch(HEARTBEAT_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+      body: JSON.stringify({
+        agentName: AGENT_NAME,
+        agentHost: AGENT_ID,
+        stats: {
+          studiesFoundToday:  sessionStudiesFound,
+          studiesPulledToday: sessionStudiesPulled,
+          failedToday:        sessionFailed,
+        },
+        ...extra,
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch { /* non-fatal */ }
+}
+
+async function postLog(payload = {}) {
+  if (!HEARTBEAT_ENABLED) return;
+  try {
+    await fetch(LOG_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+      body: JSON.stringify({ agentName: AGENT_NAME, agentHost: AGENT_ID, ...payload }),
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch { /* non-fatal */ }
 }
 
 // ── DCMTK helpers ────────────────────────────────────────────────────────────
@@ -140,9 +189,25 @@ async function findStudies(node, dateFrom, dateTo) {
 
     const result = [...uids];
     log("info", `[node ${node.id}] C-FIND found ${result.length} studies for ${dicomDateRange}`);
+    void postLog({
+      eventType: "C_FIND",
+      sourceAeTitle: node.aeTitle,
+      sourceIp: node.host,
+      status: "SUCCESS",
+      message: `C-FIND → ${node.aeTitle} (${node.host}:${node.port}): ${result.length} studies for ${dicomDateRange}`,
+      rawPayload: { nodeId: node.id, dicomDateRange, studiesFound: result.length },
+    });
     return { ok: true, studyInstanceUIDs: result };
   } catch (err) {
     log("error", `[node ${node.id}] findscu failed:`, err.message);
+    void postLog({
+      eventType: "C_FIND",
+      sourceAeTitle: node.aeTitle,
+      sourceIp: node.host,
+      status: "FAILED",
+      message: `C-FIND → ${node.aeTitle} failed: ${err.message}`,
+      rawPayload: { nodeId: node.id, dicomDateRange, error: err.message },
+    });
     return { ok: false, error: err.message, studyInstanceUIDs: [] };
   }
 }
@@ -171,9 +236,27 @@ async function moveStudy(node, studyInstanceUID) {
   try {
     await execFileAsync(dcmtkBin("movescu"), args, { timeout: 300_000 }); // 5 min per study
     log("info", `[node ${node.id}] C-MOVE success for UID ${studyInstanceUID}`);
+    void postLog({
+      eventType: "C_MOVE",
+      sourceAeTitle: node.aeTitle,
+      sourceIp: node.host,
+      studyInstanceUID,
+      status: "SUCCESS",
+      message: `C-MOVE → ${node.aeTitle}: study ${studyInstanceUID} transferred to Conquest`,
+      rawPayload: { nodeId: node.id, studyInstanceUID },
+    });
     return { ok: true };
   } catch (err) {
     log("warn", `[node ${node.id}] C-MOVE failed for UID ${studyInstanceUID}:`, err.message);
+    void postLog({
+      eventType: "C_MOVE",
+      sourceAeTitle: node.aeTitle,
+      sourceIp: node.host,
+      studyInstanceUID,
+      status: "FAILED",
+      message: `C-MOVE → ${node.aeTitle}: UID ${studyInstanceUID} failed — ${err.message}`,
+      rawPayload: { nodeId: node.id, studyInstanceUID, error: err.message },
+    });
     return { ok: false, error: err.message };
   }
 }
@@ -269,6 +352,7 @@ async function processJob(job) {
 
   const uids = findResult.studyInstanceUIDs;
   log("info", `Job ${job.id}: found ${uids.length} studies — starting C-MOVE`);
+  sessionStudiesFound += uids.length;
 
   // Step 2: C-MOVE — pull each study into Conquest
   let pulled = 0, failed = 0;
@@ -278,8 +362,10 @@ async function processJob(job) {
     const moveResult = await moveStudy(node, uid);
     if (moveResult.ok) {
       pulled++;
+      sessionStudiesPulled++;
     } else {
       failed++;
+      sessionFailed++;
       failedUids.push(uid);
     }
   }
@@ -323,8 +409,13 @@ async function poll() {
     }
   } catch (err) {
     log("error", "Poll error:", err.message);
+    void postHeartbeat({ status: "FAILED", message: `Poll error: ${err.message}` });
   } finally {
     running = false;
+    // Heartbeat is always sent after each poll cycle (success or partial failure).
+    // ERP unreachability must never abort DICOM operations, so this is wrapped
+    // in a separate try and called only after the main work is done.
+    void postHeartbeat({ status: "INFO", message: `Poll cycle complete. Found: ${sessionStudiesFound}, Pulled: ${sessionStudiesPulled}, Failed: ${sessionFailed}` });
   }
 }
 
@@ -335,9 +426,11 @@ console.log("│  DiagnoCenter DICOM Q/R Pull Agent              │");
 console.log("└─────────────────────────────────────────────────┘");
 console.log(`  ERP URL    : ${ERP_BASE}`);
 console.log(`  Agent AE   : ${AGENT_AE}`);
+console.log(`  Agent Name : ${AGENT_NAME}`);
 console.log(`  Conquest   : ${CONQUEST_AE}@${CONQUEST_HOST}:${CONQUEST_PORT}`);
 console.log(`  Poll every : ${POLL_MS / 1000}s`);
 console.log(`  Agent ID   : ${AGENT_ID}`);
+console.log(`  Heartbeat  : ${HEARTBEAT_ENABLED ? `ENABLED → ${HEARTBEAT_ENDPOINT}` : "disabled (set ERP_HEARTBEAT_ENABLED=1 to enable)"}`);
 console.log("");
 
 const dcmtkOk = await checkDcmtk();

@@ -1,0 +1,145 @@
+Upgrade DICOM Pull Agent + ERP for multi-modality support.
+
+Do not replace existing app. Merge safely.
+
+PART A — Multi-Modality Support
+
+1. Add modality master table:
+dicom_modalities
+
+Fields:
+- id
+- modalityName
+- modalityType (MRI/CT/XRAY/USG/CR/MG/etc)
+- aeTitle
+- ipAddress
+- port
+- location
+- manufacturer
+- isEnabled
+- pollingEnabled
+- pollingIntervalSeconds
+- retrieveMethod (C_GET/C_MOVE)
+- preferredTransferSyntax
+- autoPushToConquest
+- autoCreateWorklist
+- autoNotifyRadiologist
+- createdAt
+- updatedAt
+
+2. Add frontend page:
+/radiology/modality-management
+
+3. Add UI:
+- Add modality
+- Edit modality
+- Enable/disable
+- Test connection
+- Last successful pull
+- Last error
+- Pull count today
+- Status badge ONLINE/OFFLINE
+
+4. Add modality cards:
+MRI
+CT
+XRAY
+USG
+MAMMOGRAPHY
+CR
+DR
+
+5. Add “Test DICOM Connectivity” button:
+- C-ECHO test
+- Save result to logs
+
+PART B — Dynamic Pull Agent Config API
+
+1. Add API:
+GET /api/internal/dicom-agent/config
+
+Returns:
+{
+  conquest,
+  modalities,
+  pullSettings,
+  erpSettings
+}
+
+2. Windows pull agent should auto-fetch config from ERP every 5 minutes.
+
+3. Pull agent should no longer require manual editing of config.json for modalities.
+
+4. ERP becomes central PACS controller.
+
+PART C — Pull Agent Logging Improvements
+
+1. Add rolling logs:
+logs/
+- agent.log
+- error.log
+- transfer.log
+- heartbeat.log
+
+2. Add automatic log cleanup older than 30 days.
+
+3. Add retry queue:
+failed_retrieval_queue
+
+4. Add auto retry:
+- failed C-GET
+- failed ERP post
+- failed Conquest push
+
+5. Add exponential retry delay.
+
+PART D — CT/XRAY Specific Logic
+
+1. CT:
+- auto detect large studies
+- parallel transfer support
+- transfer progress %
+
+2. XRAY:
+- faster polling interval
+- instant worklist creation
+
+3. USG:
+- optional JPG/PDF support
+- secondary capture handling
+
+PART E — PACS Monitoring Dashboard Upgrade
+
+Upgrade /radiology/pacs-dashboard:
+
+Add:
+- Online modalities
+- Modality-wise counts
+- Last pulled study
+- Failed retrievals
+- DICOM transfer queue
+- Active pull agents
+- Conquest connection status
+- Storage usage
+- Daily modality analytics graph
+
+PART F — Agent Service Management
+
+1. Add Windows service mode support.
+
+2. Add tray icon app:
+- running status
+- pause polling
+- restart service
+- open logs
+- open PACS dashboard
+
+3. Add auto-update support from ERP.
+
+PART G — Safety
+
+1. Preserve all existing APIs.
+2. Keep INTERNAL_API_KEY auth.
+3. Keep current worklist/report workflow.
+4. Run migration, typecheck, build, route tests.
+5. Fix all errors automatically.

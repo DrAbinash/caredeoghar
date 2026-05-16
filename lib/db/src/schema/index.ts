@@ -48,6 +48,7 @@ export * from "./radiologyWorklist";
 export * from "./radiologyReportGenerator";
 export * from "./whatsappConversations";
 export * from "./pacsSettings";
+export * from "./dicomAgent";
 export * from "./dayClosures";
 export * from "./userDayClosures";
 export * from "./floors";

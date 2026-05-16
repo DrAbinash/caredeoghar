@@ -3,7 +3,7 @@ import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Activity, CheckCircle2, Clock, AlertCircle, ScanSearch, Send, Layers, Wifi, WifiOff, RadioTower } from "lucide-react";
+import { RefreshCw, Activity, CheckCircle2, Clock, AlertCircle, ScanSearch, Send, Layers, Wifi, WifiOff, RadioTower, Server } from "lucide-react";
 
 type DashboardStats = {
   worklist: {
@@ -32,6 +32,20 @@ type ConquestStatus = {
   lastAccessionNumber: string | null;
 };
 
+type AgentStatus = {
+  id: number;
+  agentName: string;
+  agentHost: string;
+  lastHeartbeatAt: string | null;
+  lastSuccessfulPullAt: string | null;
+  lastErrorAt: string | null;
+  lastErrorMessage: string | null;
+  isOnline: boolean;
+  studiesFoundToday: number;
+  studiesPulledToday: number;
+  failedToday: number;
+};
+
 const STATUS_META: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
   STUDY_RECEIVED:       { label: "Study Received",      color: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",    icon: <ScanSearch size={14} /> },
   AI_DRAFT_READY:       { label: "AI Draft Ready",      color: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300", icon: <Activity size={14} /> },
@@ -45,6 +59,18 @@ const SEV_COLOR: Record<string, string> = {
   warning: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300",
   error:   "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
 };
+
+function timeAgo(iso: string | null): string {
+  if (!iso) return "—";
+  const diff = Date.now() - new Date(iso).getTime();
+  const s = Math.floor(diff / 1000);
+  if (s < 60)  return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60)  return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24)  return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
 
 function StatCard({ title, value, sub, icon }: { title: string; value: string | number; sub?: string; icon?: React.ReactNode }) {
   return (
@@ -98,6 +124,54 @@ function ConquestBadge({ conquest }: { conquest: ConquestStatus | undefined }) {
   );
 }
 
+function AgentStatusBar({ agents }: { agents: AgentStatus[] }) {
+  if (agents.length === 0) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-dashed border-gray-200 dark:border-gray-700 px-3 py-2 text-sm text-muted-foreground">
+        <Server size={15} className="shrink-0" />
+        <span>No DICOM Pull Agents connected — start the agent on your Windows server.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {agents.map((agent) => {
+        const heartbeatAge = agent.lastHeartbeatAt
+          ? Date.now() - new Date(agent.lastHeartbeatAt).getTime()
+          : Infinity;
+        const stale = heartbeatAge > 5 * 60 * 1000;
+        const online = agent.isOnline && !stale;
+
+        return (
+          <div key={agent.id}
+            className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${online
+              ? "border-green-200 bg-green-50 dark:bg-green-900/20 dark:border-green-800"
+              : "border-gray-200 bg-gray-50 dark:bg-gray-800/40 dark:border-gray-700"}`}>
+            {online
+              ? <Wifi size={14} className="text-green-600 dark:text-green-400 shrink-0" />
+              : <WifiOff size={14} className="text-gray-500 shrink-0" />}
+            <span className={`font-semibold ${online ? "text-green-700 dark:text-green-300" : "text-gray-600 dark:text-gray-300"}`}>
+              {agent.agentName}
+            </span>
+            <span className="text-xs text-muted-foreground font-mono">{agent.agentHost}</span>
+            {online && (
+              <span className="text-xs text-green-600/70 dark:text-green-400/70">
+                · ↑{agent.studiesPulledToday} pulled
+                {agent.failedToday > 0 && <span className="text-red-500 ml-1">✗{agent.failedToday} failed</span>}
+              </span>
+            )}
+            <span className="text-xs text-muted-foreground ml-0.5">· {timeAgo(agent.lastHeartbeatAt)}</span>
+            {agent.lastErrorAt && !online && (
+              <AlertCircle size={13} className="text-red-500" />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function PacsDashboard() {
   const { data, isLoading, refetch, isFetching } = useQuery<DashboardStats>({
     queryKey: ["pacs-dashboard"],
@@ -111,8 +185,15 @@ export default function PacsDashboard() {
     refetchInterval: 60_000,
   });
 
-  const stats = data?.worklist;
+  const { data: agentStatusData } = useQuery<{ agents: AgentStatus[] }>({
+    queryKey: ["dicom-agent-status"],
+    queryFn: () => api.get("/api/dicom-agent/status"),
+    refetchInterval: 30_000,
+  });
+
+  const stats  = data?.worklist;
   const events = data?.recentEvents ?? [];
+  const agents = agentStatusData?.agents ?? [];
 
   return (
     <div className="p-4 md:p-6 space-y-6">
@@ -127,7 +208,11 @@ export default function PacsDashboard() {
         }
       />
 
-      <ConquestBadge conquest={conquest} />
+      {/* Integration status badges */}
+      <div className="space-y-2">
+        <ConquestBadge conquest={conquest} />
+        <AgentStatusBar agents={agents} />
+      </div>
 
       {isLoading ? (
         <div className="text-muted-foreground text-sm">Loading dashboard…</div>

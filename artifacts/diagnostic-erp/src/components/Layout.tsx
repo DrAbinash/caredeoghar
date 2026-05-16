@@ -108,6 +108,7 @@ const navItems: NavEntry[] = [
       { path: "/radiology/pacs-dashboard", icon: Monitor, label: "PACS Dashboard" },
       { path: "/radiology/pacs-settings", icon: Settings2, label: "PACS Settings" },
       { path: "/radiology/pacs-logs", icon: FileText, label: "PACS Logs" },
+      { path: "/radiology/dicom-agent-dashboard", icon: Activity, label: "Agent Monitor" },
     ],
   },
   {

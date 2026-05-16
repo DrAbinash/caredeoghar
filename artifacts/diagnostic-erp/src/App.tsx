@@ -43,9 +43,10 @@ const Radiology       = lazy(() => import("@/pages/Radiology"));
 const RadiologyWorklist = lazy(() => import("@/pages/RadiologyWorklist"));
 const RadiologyReportEditor = lazy(() => import("@/pages/RadiologyReportEditor"));
 const RadiologyReportGen = lazy(() => import("@/pages/RadiologyReportGenerator"));
-const PacsDashboard   = lazy(() => import("@/pages/PacsDashboard"));
-const PacsSettings    = lazy(() => import("@/pages/PacsSettings"));
-const PacsLogs        = lazy(() => import("@/pages/PacsLogs"));
+const PacsDashboard         = lazy(() => import("@/pages/PacsDashboard"));
+const PacsSettings          = lazy(() => import("@/pages/PacsSettings"));
+const PacsLogs              = lazy(() => import("@/pages/PacsLogs"));
+const DicomAgentDashboard   = lazy(() => import("@/pages/DicomAgentDashboard"));
 const ReportHub       = lazy(() => import("@/pages/ReportHub"));
 const Machines        = lazy(() => import("@/pages/Machines"));
 const FormF           = lazy(() => import("@/pages/FormF"));
@@ -170,6 +171,7 @@ function Router() {
               <Route path="/radiology/pacs-dashboard" component={PacsDashboard} />
               <Route path="/radiology/pacs-settings" component={PacsSettings} />
               <Route path="/radiology/pacs-logs" component={PacsLogs} />
+              <Route path="/radiology/dicom-agent-dashboard" component={DicomAgentDashboard} />
               <Route path="/packages" component={Packages} />
               <Route path="/expenses" component={Expenses} />
               <Route path="/my-day-close" component={MyDayClose} />

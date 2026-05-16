@@ -24,6 +24,8 @@ import {
   dicomNodesTable,
   dicomPullJobsTable,
   pacsLogsTable,
+  dicomPullAgentLogsTable,
+  dicomPullAgentStatusTable,
 } from "@workspace/db/schema";
 import { and, eq, or, sql, inArray, gte, lte } from "drizzle-orm";
 import { logger } from "../lib/logger";
@@ -1172,6 +1174,169 @@ router.post("/radiology/mwl-order-status", async (req, res) => {
     internalStatus: updated.status,
     mwlStatus:      toMwlStatus(updated.status),
   });
+});
+
+// ── DICOM Pull Agent — internal endpoints ─────────────────────────────────────
+// POST /api/internal/dicom-agent/heartbeat
+// Called by the pull agent at the end of every poll cycle. Upserts the status
+// row for (agentName, agentHost). Also optionally logs a HEARTBEAT event.
+
+router.post("/dicom-agent/heartbeat", async (req, res) => {
+  const b = (req.body ?? {}) as {
+    agentName?: string;
+    agentHost?: string;
+    sourceAeTitle?: string;
+    sourceIp?: string;
+    modality?: string;
+    status?: string;
+    message?: string;
+    stats?: {
+      studiesFoundToday?: number;
+      studiesPulledToday?: number;
+      failedToday?: number;
+    };
+  };
+
+  const agentName = b.agentName?.trim() || "default";
+  const agentHost = b.agentHost?.trim() || "unknown";
+  const now = new Date();
+  const statusUpper = (b.status ?? "INFO").toUpperCase();
+  const isError = statusUpper === "FAILED";
+  const isSuccess = statusUpper === "SUCCESS";
+
+  const [existing] = await db
+    .select({ id: dicomPullAgentStatusTable.id })
+    .from(dicomPullAgentStatusTable)
+    .where(
+      and(
+        eq(dicomPullAgentStatusTable.agentName, agentName),
+        eq(dicomPullAgentStatusTable.agentHost, agentHost),
+      ),
+    )
+    .limit(1);
+
+  type StatusPatch = Partial<typeof dicomPullAgentStatusTable.$inferInsert>;
+  const patch: StatusPatch = {
+    lastHeartbeatAt: now,
+    isOnline: true,
+  };
+  if (isSuccess) patch.lastSuccessfulPullAt = now;
+  if (isError) {
+    patch.lastErrorAt = now;
+    patch.lastErrorMessage = b.message ?? null;
+  }
+  if (b.stats?.studiesFoundToday  !== undefined) patch.studiesFoundToday  = b.stats.studiesFoundToday;
+  if (b.stats?.studiesPulledToday !== undefined) patch.studiesPulledToday = b.stats.studiesPulledToday;
+  if (b.stats?.failedToday        !== undefined) patch.failedToday        = b.stats.failedToday;
+
+  if (existing) {
+    await db.update(dicomPullAgentStatusTable)
+      .set(patch)
+      .where(eq(dicomPullAgentStatusTable.id, existing.id));
+  } else {
+    await db.insert(dicomPullAgentStatusTable).values({
+      agentName,
+      agentHost,
+      lastHeartbeatAt: now,
+      isOnline: true,
+      lastSuccessfulPullAt: isSuccess ? now : null,
+      lastErrorAt: isError ? now : null,
+      lastErrorMessage: isError ? (b.message ?? null) : null,
+      studiesFoundToday:  b.stats?.studiesFoundToday  ?? 0,
+      studiesPulledToday: b.stats?.studiesPulledToday ?? 0,
+      failedToday:        b.stats?.failedToday        ?? 0,
+    });
+  }
+
+  // Optional: log the heartbeat itself so operators can see pulse in the log table.
+  if (b.message) {
+    try {
+      await db.insert(dicomPullAgentLogsTable).values({
+        agentName,
+        agentHost,
+        eventType: "HEARTBEAT",
+        sourceAeTitle: b.sourceAeTitle ?? null,
+        sourceIp:      b.sourceIp      ?? null,
+        modality:      b.modality      ?? null,
+        status:        statusUpper,
+        message:       b.message,
+      });
+    } catch { /* non-fatal */ }
+  }
+
+  res.json({ ok: true, agentName, agentHost });
+});
+
+// POST /api/internal/dicom-agent/log
+// Called by the pull agent for every operational event (C-ECHO, C-FIND, C-MOVE,
+// C-STORE, ERP_POST, etc.). Also side-effects the status row when relevant.
+
+router.post("/dicom-agent/log", async (req, res) => {
+  const b = (req.body ?? {}) as {
+    agentName?: string;
+    agentHost?: string;
+    eventType?: string;
+    sourceAeTitle?: string;
+    sourceIp?: string;
+    modality?: string;
+    studyInstanceUID?: string;
+    accessionNumber?: string;
+    patientName?: string;
+    patientId?: string | number;
+    status?: string;
+    message?: string;
+    rawPayload?: unknown;
+  };
+
+  if (!b.eventType?.trim() || !b.message?.trim()) {
+    res.status(400).json({ error: "eventType and message are required" });
+    return;
+  }
+
+  const agentName   = b.agentName?.trim()   || "default";
+  const agentHost   = b.agentHost?.trim()   || "unknown";
+  const statusUpper = (b.status ?? "INFO").toUpperCase();
+  const eventType   = b.eventType.toUpperCase();
+
+  const [inserted] = await db.insert(dicomPullAgentLogsTable).values({
+    agentName,
+    agentHost,
+    eventType,
+    sourceAeTitle: b.sourceAeTitle ?? null,
+    sourceIp:      b.sourceIp      ?? null,
+    modality:      b.modality?.toUpperCase() ?? null,
+    studyInstanceUID: b.studyInstanceUID ?? null,
+    accessionNumber:  b.accessionNumber  ?? null,
+    patientName:   b.patientName ?? null,
+    patientId:     b.patientId !== undefined ? String(b.patientId) : null,
+    status:        statusUpper,
+    message:       b.message,
+    rawPayload:    b.rawPayload ? JSON.stringify(b.rawPayload) : null,
+  }).returning({ id: dicomPullAgentLogsTable.id });
+
+  // Side-effect: update status row if applicable
+  if (statusUpper === "FAILED") {
+    try {
+      await db.update(dicomPullAgentStatusTable)
+        .set({ lastErrorAt: new Date(), lastErrorMessage: b.message ?? null })
+        .where(and(
+          eq(dicomPullAgentStatusTable.agentName, agentName),
+          eq(dicomPullAgentStatusTable.agentHost, agentHost),
+        ));
+    } catch { /* non-fatal */ }
+  }
+  if (statusUpper === "SUCCESS" && (eventType === "C_MOVE" || eventType === "C_GET" || eventType === "C_STORE")) {
+    try {
+      await db.update(dicomPullAgentStatusTable)
+        .set({ lastSuccessfulPullAt: new Date() })
+        .where(and(
+          eq(dicomPullAgentStatusTable.agentName, agentName),
+          eq(dicomPullAgentStatusTable.agentHost, agentHost),
+        ));
+    } catch { /* non-fatal */ }
+  }
+
+  res.json({ ok: true, id: inserted?.id ?? null });
 });
 
 export default router;

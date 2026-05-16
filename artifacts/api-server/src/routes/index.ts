@@ -51,6 +51,7 @@ import { systemRouter } from "./system";
 import { verifyRouter } from "./verify";
 import internalCronRouter from "./internal-cron";
 import internalRadiologyRouter from "./internal-radiology";
+import dicomAgentRouter from "./dicom-agent";
 import { publicBookingRouter } from "./public-booking";
 import { onlineBookingsRouter } from "./online-bookings";
 import { dailySummaryRouter } from "./daily-summary";
@@ -278,6 +279,8 @@ router.use(
 // DICOM / PACS — /dicom-nodes permission
 router.use("/pacs", requireStaffAuth, requireStaffPermission("/dicom-nodes"), pacsRouter);
 router.use("/dicom", requireStaffAuth, requireStaffPermission("/dicom-nodes"), dicomRouter);
+// DICOM Pull Agent Monitor — staff read-only, gated by /dicom-nodes permission
+router.use("/dicom-agent", requireStaffAuth, requireStaffPermission("/dicom-nodes"), dicomAgentRouter);
 
 // Radiology studies are tied to the orders workflow — /orders permission
 router.use("/radiology", requireStaffAuth, requireStaffPermission("/orders"), radiologyRouter);
