@@ -277,6 +277,8 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
   );
   const netCollectedOnMyBills = grossBilling - outstanding;
   const discountsGiven = activeBills.reduce((s, r) => s + Number(r.discount ?? 0), 0);
+  const duesCollectedTotal = duesBills.reduce((s, b) => s + b.duesCollected, 0);
+  const duesBillsCount = duesBills.length;
 
   // ── My Cashbox side (money I personally handled) ───────────────────────
   // Equation that balances:
@@ -348,6 +350,8 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       cashCollection,
       physicalCashInHand,
       discountsGiven,
+      duesCollectedTotal,
+      duesBillsCount,
       // cancellationCount = bills cancelled BY this staff (not bills they created that got cancelled)
       cancellationCount: cancelledByMe.length,
       billCount: activeBills.length,

@@ -36,6 +36,8 @@ type MyDailySummarySummary = {
   cashCollection: number;
   physicalCashInHand: number;
   discountsGiven: number;
+  duesCollectedTotal: number;
+  duesBillsCount: number;
   cancellationCount: number;
   cancelledByOthersCount: number;
   cancelledBySelfCount: number;
@@ -332,6 +334,7 @@ export default function MyDailySummary() {
             <MiniKpi icon={Smartphone} label="Digital Collection" value={fmt(s.digitalCollection)} sub="UPI / Card / Net Banking" iconBg="bg-violet-100 text-violet-700" border="border-l-violet-500" />
             <MiniKpi icon={Banknote} label="Physical Cash in Hand" value={fmt(s.physicalCashInHand)} sub={`Cash ${fmt(s.cashCollection)} − Exp ${fmt(s.cashExpenses)}`} iconBg="bg-blue-100 text-blue-700" border="border-l-blue-500" />
             <MiniKpi icon={Tag} label="Discounts Given" value={fmt(s.discountsGiven)} sub={s.grossBilling > 0 ? `${((s.discountsGiven / s.grossBilling) * 100).toFixed(1)}% of billing` : ""} iconBg="bg-slate-100 text-slate-700" border="border-l-slate-400" />
+            <MiniKpi icon={Receipt} label="Dues Collected" value={fmt(s.duesCollectedTotal)} sub={`${s.duesBillsCount} old bill${s.duesBillsCount !== 1 ? "s" : ""} settled`} iconBg="bg-teal-100 text-teal-700" border="border-l-teal-500" />
             <MiniKpi icon={XCircle} label="Cancellation Count" value={String(s.cancellationCount)} sub={s.cancellationCount > 0 ? `₹${s.cancelledAmount.toFixed(0)} written off` : "None"} iconBg="bg-gray-100 text-gray-700" border="border-l-gray-400" />
           </div>
 
