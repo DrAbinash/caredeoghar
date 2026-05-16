@@ -301,6 +301,7 @@ export interface Payment {
   method: PaymentMethod;
   referenceNumber?: string | null;
   notes?: string | null;
+  recordedByName?: string | null;
   createdAt: string;
 }
 

@@ -15,7 +15,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Plus, Pencil, History, Clock, ShieldAlert, Trash2, AlertTriangle, ExternalLink, Printer, Ban, Undo2, XCircle, AlertCircle } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, History, Clock, ShieldAlert, Trash2, AlertTriangle, ExternalLink, Printer, Ban, Undo2, XCircle, AlertCircle, Search, X } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useSuperAdmin, getSuperAdminToken } from "@/hooks/useSuperAdmin";
 import { readStaffSession } from "@/lib/staffSession";
@@ -125,6 +125,7 @@ export default function BillDetail({ id }: { id: number }) {
   const [reprintReason, setReprintReason] = useState<string>("");
   const [paperSize, setPaperSize] = useState<"A4" | "A5">(() => getBillPaperSize());
   const [paperMode, setPaperMode] = useState<"auto" | "manual">("auto");
+  const [paymentFilter, setPaymentFilter] = useState("");
   const billPrintLayout = getBillPrintLayout();
   const ls = getLayoutStyles(billPrintLayout);
   const queryClient = useQueryClient();
@@ -655,7 +656,27 @@ export default function BillDetail({ id }: { id: number }) {
 
         {/* Payments */}
         <div>
-          <h2 className="text-sm font-semibold mb-3">Payment History</h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold">Payment History</h2>
+            <div className="relative w-56">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <input
+                type="text"
+                value={paymentFilter}
+                onChange={(e) => setPaymentFilter(e.target.value)}
+                placeholder="Filter payments…"
+                className="w-full pl-7 pr-6 h-8 rounded-md border border-input bg-background text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              {paymentFilter && (
+                <button
+                  onClick={() => setPaymentFilter("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          </div>
           <div className="bg-card border border-card-border rounded-xl shadow-sm overflow-hidden">
             {!bill.payments?.length ? (
               <div className="p-8 text-center text-sm text-muted-foreground">No payments recorded yet</div>
@@ -666,17 +687,24 @@ export default function BillDetail({ id }: { id: number }) {
                     <th className="px-4 py-3 font-medium">Date</th>
                     <th className="px-4 py-3 font-medium">Method</th>
                     <th className="px-4 py-3 font-medium">Reference</th>
+                    <th className="px-4 py-3 font-medium">Recorded By</th>
                     <th className="px-4 py-3 font-medium text-right">Amount</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {bill.payments.map((p) => (
+                  {(paymentFilter.trim()
+                    ? bill.payments.filter((p) =>
+                        `${p.method} ${p.referenceNumber ?? ""} ${p.recordedByName ?? ""}`.toLowerCase().includes(paymentFilter.trim().toLowerCase())
+                      )
+                    : bill.payments
+                  ).map((p) => (
                     <tr key={p.id} className="border-b border-border/50 last:border-0">
                       <td className="px-4 py-3 text-muted-foreground text-xs">{new Date(p.createdAt).toLocaleString()}</td>
                       <td className="px-4 py-3 capitalize">
                         <span className="px-2 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded text-xs font-medium">{p.method}</span>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{p.referenceNumber ?? "—"}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">{p.recordedByName ?? "—"}</td>
                       <td className="px-4 py-3 text-right font-semibold text-green-600 dark:text-green-400">{formatCurrency(Number(p.amount))}</td>
                     </tr>
                   ))}
