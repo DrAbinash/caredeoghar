@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, BookOpen, Plus, Pencil, Trash2, Users, FileText,
-  Calendar, AlertTriangle, Check, X, Loader2, Star,
+  Calendar, AlertTriangle, Check, X, Loader2, Star, PersonStanding,
 } from "lucide-react";
 import {
   type Book,
@@ -111,6 +111,24 @@ export default function BooksManager({ token, onBack }: { token: string; onBack:
     },
     onError: (e: unknown) => {
       toast({ title: "Cannot delete", description: (e as Error).message, variant: "destructive" });
+    },
+  });
+
+  const setWalkInMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/super-admin/books/${id}/set-walk-in`, {
+        method: "POST",
+        headers: saAuthHeaders(),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json() as Promise<{ ok: boolean; walkInLedgerId: number; name: string }>;
+    },
+    onSuccess: (data) => {
+      toast({ title: "Walk-in destination set", description: `"${data.name}" will now receive all walk-in / self-referral bills` });
+      queryClient.invalidateQueries({ queryKey: SA_BOOKS_KEY });
+    },
+    onError: (e: unknown) => {
+      toast({ title: "Failed", description: (e as Error).message, variant: "destructive" });
     },
   });
 
@@ -237,6 +255,11 @@ export default function BooksManager({ token, onBack }: { token: string; onBack:
                             <Star size={10} /> Default
                           </span>
                         )}
+                        {b.isWalkIn && (
+                          <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide bg-blue-500/10 text-blue-500 border border-blue-500/30 rounded px-1.5 py-0.5">
+                            <PersonStanding size={10} /> Walk-in
+                          </span>
+                        )}
                         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => { setEditingId(b.id); setEditingName(b.name); }}>
                           <Pencil size={11} />
                         </Button>
@@ -269,6 +292,20 @@ export default function BooksManager({ token, onBack }: { token: string; onBack:
                   <Button variant="outline" size="sm" onClick={() => setAssignTarget(b)}>
                     <Users size={13} className="mr-1.5" /> Assign Doctors
                   </Button>
+                  {!b.isWalkIn && (
+                    <Button
+                      variant="outline" size="sm"
+                      className="border-blue-500/40 text-blue-500 hover:bg-blue-500/10"
+                      onClick={() => {
+                        if (confirm(`Set "${b.name}" as the walk-in destination?\n\nAll future Walk-in / Self (no referral) bills will go to this book.`)) {
+                          setWalkInMutation.mutate(b.id);
+                        }
+                      }}
+                      disabled={setWalkInMutation.isPending}
+                    >
+                      <PersonStanding size={13} className="mr-1.5" /> Set as Walk-in
+                    </Button>
+                  )}
                   <Button
                     variant="outline" size="sm"
                     className="border-destructive/40 text-destructive hover:bg-destructive/10"

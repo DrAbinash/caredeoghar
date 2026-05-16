@@ -330,6 +330,19 @@ async function runStartupMigrations(): Promise<void> {
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS vip_queue_enabled BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS payu_enabled BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS payu_merchant_key TEXT NOT NULL DEFAULT '';
+
+      -- ── Walk-in ledger designation ────────────────────────────────────────
+      ALTER TABLE ledgers ADD COLUMN IF NOT EXISTS is_walk_in BOOLEAN NOT NULL DEFAULT false;
+      -- Auto-detect existing book by name pattern if none is marked yet
+      UPDATE ledgers SET is_walk_in = true
+      WHERE id = (
+        SELECT id FROM ledgers
+        WHERE (LOWER(name) LIKE '%walk%' OR LOWER(name) LIKE '%self%referral%')
+          AND is_default = false
+        ORDER BY id DESC
+        LIMIT 1
+      )
+      AND NOT EXISTS (SELECT 1 FROM ledgers WHERE is_walk_in = true);
     `);
     logger.info("Startup migrations applied");
   } catch (err) {

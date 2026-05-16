@@ -6,6 +6,7 @@ export const ledgersTable = pgTable("ledgers", {
   id: serial("id").primaryKey(),
   name: text("name").notNull().unique(),
   isDefault: boolean("is_default").notNull().default(false),
+  isWalkIn: boolean("is_walk_in").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

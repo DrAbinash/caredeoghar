@@ -810,6 +810,7 @@ export interface Book {
   id: number;
   name: string;
   isDefault: boolean;
+  isWalkIn: boolean;
   doctorCount: number;
   patientCount: number;
   billCount: number;

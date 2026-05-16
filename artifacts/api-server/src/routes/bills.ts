@@ -51,6 +51,7 @@ import { orderTestsTable, testsTable, doctorsTable } from "@workspace/db";
 import { sanitizePatient } from "./patients";
 import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
 import { FULL_ACCESS_ROLES } from "../middleware/requireStaffAuth";
+import { getWalkInLedgerId } from "./ledgers";
 
 export const billsRouter = Router();
 export const paymentsRouter = Router();
@@ -71,7 +72,8 @@ async function resolveLedgerForOrder(orderId: number): Promise<number> {
     const [d] = await db.select().from(doctorsTable).where(eq(doctorsTable.id, o.doctorId));
     if (d?.ledgerId) return d.ledgerId;
   }
-  return 1;
+  // Walk-in / no-referral: route to the designated walk-in ledger
+  return getWalkInLedgerId();
 }
 
 /**
@@ -236,16 +238,8 @@ billsRouter.get("/preview-number", async (req, res) => {
     }
     ledgerId = d.ledgerId;
   } else {
-    // No params given — fall back to the first available ledger (covers Walk-in / Self bills)
-    const [firstLedger] = await db
-      .select({ id: ledgersTable.id })
-      .from(ledgersTable)
-      .orderBy(ledgersTable.id)
-      .limit(1);
-    if (!firstLedger) {
-      return res.status(400).json({ error: "Invalid request", details: [{ path: [], message: "No ledgers configured. Please set up a ledger or specify ledgerId." }] });
-    }
-    ledgerId = firstLedger.id;
+    // No params given — use the designated walk-in ledger (falls back to id=1 if none tagged)
+    ledgerId = await getWalkInLedgerId();
   }
   const next = await generateBillNumber(ledgerId);
   return res.json({ next, ledgerId });

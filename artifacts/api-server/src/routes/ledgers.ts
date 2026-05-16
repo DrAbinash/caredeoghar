@@ -27,8 +27,25 @@ import {
 
 export const ledgersRouter = Router();
 
-// ── Helper: ensure default ledger (id=1) exists ───────────────────────────────
+// ── Helper: ensure default ledger (id=1) exists + run column migrations ───────
 export async function ensureDefaultLedger(): Promise<void> {
+  // Idempotent column migration — safe to run every startup
+  await db.execute(sql`
+    ALTER TABLE ledgers ADD COLUMN IF NOT EXISTS is_walk_in BOOLEAN NOT NULL DEFAULT false
+  `);
+  // Auto-detect walk-in book by name pattern if none is marked yet
+  await db.execute(sql`
+    UPDATE ledgers SET is_walk_in = true
+    WHERE id = (
+      SELECT id FROM ledgers
+      WHERE (LOWER(name) LIKE '%walk%' OR LOWER(name) LIKE '%self%referral%')
+        AND is_default = false
+      ORDER BY id DESC
+      LIMIT 1
+    )
+    AND NOT EXISTS (SELECT 1 FROM ledgers WHERE is_walk_in = true)
+  `);
+
   const [existing] = await db.select().from(ledgersTable).where(eq(ledgersTable.id, 1));
   if (existing) return;
   await db.execute(sql`
@@ -39,6 +56,12 @@ export async function ensureDefaultLedger(): Promise<void> {
   await db.execute(sql`
     SELECT setval(pg_get_serial_sequence('ledgers', 'id'), GREATEST((SELECT COALESCE(MAX(id), 1) FROM ledgers), 1))
   `);
+}
+
+// ── Helper: get the walk-in ledger id (falls back to 1 if none tagged) ────────
+export async function getWalkInLedgerId(): Promise<number> {
+  const [wl] = await db.select({ id: ledgersTable.id }).from(ledgersTable).where(eq(ledgersTable.isWalkIn, true)).limit(1);
+  return wl?.id ?? 1;
 }
 
 // id=1 (default) also matches NULL (legacy rows)

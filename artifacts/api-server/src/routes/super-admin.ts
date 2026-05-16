@@ -446,6 +446,24 @@ superAdminRouter.post("/books/:id/assign-doctors", requireSuperAdmin, async (req
   res.json({ assigned: doctorIds.length });
 });
 
+// ── POST /api/super-admin/books/:id/set-walk-in — mark as walk-in destination ─
+superAdminRouter.post("/books/:id/set-walk-in", requireSuperAdmin, async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) {
+    res.status(400).json({ error: "Invalid book id" });
+    return;
+  }
+  const [ledger] = await db.select().from(ledgersTable).where(eq(ledgersTable.id, id));
+  if (!ledger) {
+    res.status(404).json({ error: "Book not found" });
+    return;
+  }
+  // Clear the flag from all books, then set on this one
+  await db.update(ledgersTable).set({ isWalkIn: false });
+  await db.update(ledgersTable).set({ isWalkIn: true }).where(eq(ledgersTable.id, id));
+  res.json({ ok: true, walkInLedgerId: id, name: ledger.name });
+});
+
 // ── POST /api/super-admin/books/:id/reset ────────────────────────────────────
 superAdminRouter.post("/books/:id/reset", requireSuperAdminUsb, requireSuperAdmin, async (req, res): Promise<void> => {
   const paramsParsed = ResetLedgerParams.safeParse(req.params);
