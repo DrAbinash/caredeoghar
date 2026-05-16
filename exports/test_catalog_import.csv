@@ -1,0 +1,309 @@
+code,name,category,price,duration,department,roomNumber,testType,isActive
+USG001,ECHO-Color,Radiology,2000.00,1 Day,USG,1,inhouse,t
+USG002,FETAL ANOMALY SCAN (LEVEL II),Radiology,2000.00,1 Day,USG,1,inhouse,t
+USG003,FETAL ECHO,Radiology,3000.00,1 Day,USG,1,inhouse,t
+USG004,FIBROSCAN/ELASTOGRAPHY,Radiology,3600.00,1 Day,USG,1,inhouse,t
+USG005,FOLLICULAR MONITORING,Radiology,2500.00,1 Day,USG,1,inhouse,t
+USG006,NT-SCAN,Radiology,1500.00,1 Day,USG,1,inhouse,t
+USG007,SONOMAMMOGRAPHY B/L,Radiology,3000.00,1 Day,USG,1,inhouse,t
+USG008,SONOMAMMOGRAPHY U/L,Radiology,2000.00,1 Day,USG,1,inhouse,t
+USG009,SONOSALPINGOGRAPHY,Radiology,3000.00,1 Day,USG,1,inhouse,t
+USG010,TRANSVAGINAL SONOGRAPHY (TVS),Radiology,1800.00,1 Day,USG,1,inhouse,t
+USG011,USG ANOMALY SCAN (4D),Radiology,3000.00,1 Day,USG,1,inhouse,t
+USG012,USG BRAIN,Radiology,2500.00,1 Day,USG,1,inhouse,t
+USG013,USG CHEST,Radiology,2000.00,1 Day,USG,1,inhouse,t
+USG014,USG COLOR DOPPLER,Radiology,2400.00,1 Day,USG,1,inhouse,t
+USG015,USG FETAL DOPPLER,Radiology,3000.00,1 Day,USG,1,inhouse,t
+USG016,USG FETAL WELL BEING,Radiology,1300.00,1 Day,USG,1,inhouse,t
+USG017,USG GUIDED ASPIRATION,Radiology,2500.00,1 Day,USG,1,inhouse,t
+USG018,USG GUIDED FNAC,Radiology,1000.00,1 Day,USG,1,inhouse,t
+USG019,USG LIMB DOPPLER B/L,Radiology,4800.00,1 Day,USG,1,inhouse,t
+USG020,USG LIMB DOPPLER U/L,Radiology,2500.00,1 Day,USG,1,inhouse,t
+USG021,USG LOWER ABDOMEN,Radiology,1300.00,1 Day,USG,1,inhouse,t
+USG022,USG SCROTUM/TESTIS,Radiology,2200.00,1 Day,USG,1,inhouse,t
+USG023,USG THYROID,Radiology,2400.00,1 Day,USG,1,inhouse,t
+USG024,USG UPPER ABDOMEN,Radiology,1300.00,1 Day,USG,1,inhouse,t
+USG025,USG WHOLE ABDOMEN,Radiology,1300.00,1 Day,USG,1,inhouse,t
+USG026,USG WHOLE+PREGNANCY,Radiology,2000.00,1 Day,USG,1,inhouse,t
+USG027,USG THIGH DOPPLER,Radiology,2400.00,1 Day,USG,1,inhouse,t
+USG028,USG PENIS DOPPLER,Radiology,2400.00,1 Day,USG,1,inhouse,t
+USG029,USG RENAL DOPPLER B/L,Radiology,4800.00,1 Day,USG,1,inhouse,t
+USG030,USG RENAL DOPPLER U/L,Radiology,2400.00,1 Day,USG,1,inhouse,t
+USG031,USG WHOLE ABDOMEN WITH INGUINAL REGION,Radiology,2000.00,1 Day,USG,1,inhouse,t
+USG032,USG INGUINAL REGION,Radiology,2400.00,1 Day,USG,1,inhouse,t
+USG033,USG EYE,Radiology,2000.00,1 Day,USG,1,inhouse,t
+XR001,BARIUM ENEMA,Radiology,2800.00,1 Day,X-Ray,,inhouse,t
+XR002,BARIUM MEAL,Radiology,3000.00,1 Day,X-Ray,,inhouse,t
+XR003,BARIUM MEAL FOLLOW THROUGH,Radiology,3500.00,1 Day,X-Ray,,inhouse,t
+XR004,BARIUM SWALLOW,Radiology,2500.00,1 Day,X-Ray,,inhouse,t
+XR005,CEPHALOMETRY,Radiology,600.00,1 Day,X-Ray,,inhouse,t
+XR006,INVERTOGRAM,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR007,IVU/IVP,Radiology,3200.00,1 Day,X-Ray,,inhouse,t
+XR008,OPG OPEN/CLOSE MOUTH,Radiology,600.00,1 Day,X-Ray,,inhouse,t
+XR009,OPG PAN VIEW,Radiology,600.00,1 Day,X-Ray,,inhouse,t
+XR010,RGU,Radiology,2800.00,1 Day,X-Ray,,inhouse,t
+XR011,SINOGRAM/FISTULOGRAM,Radiology,2400.00,1 Day,X-Ray,,inhouse,t
+XR012,X-RAY TM JOINT,Radiology,700.00,1 Day,X-Ray,,inhouse,t
+XR013,T-TUBE CHOLANGIOGRAM,Radiology,4000.00,1 Day,X-Ray,,inhouse,t
+XR014,URETHROGRAM (RGU+MCU),Radiology,3400.00,1 Day,X-Ray,,inhouse,t
+XR015,X RAY ERECT/SUPINE,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR016,X-RAY ANKLE JOINT AP/LAT,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR017,X-RAY AP,Radiology,400.00,1 Day,X-Ray,,inhouse,t
+XR018,XRAY AP/LAT,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR019,X-RAY AP/LAT 11X14,Radiology,1200.00,1 Day,X-Ray,,inhouse,t
+XR020,XRAY CERVICAL SPINE AP/LAT,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR021,X-RAY CHEST,Radiology,400.00,1 Day,X-Ray,,inhouse,t
+XR022,XRAY DL SPINE AP/LAT,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR023,X-RAY ELBOW JOINT AP/LAT,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR024,X-RAY HIP JOINT AP/LAT,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR025,X-RAY KNEE JOINT AP/LAT,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR026,XRAY KUB,Radiology,400.00,1 Day,X-Ray,,inhouse,t
+XR027,X-RAY LAT,Radiology,400.00,1 Day,X-Ray,,inhouse,t
+XR028,XRAY LS SPINE AP/LAT,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR029,X-RAY NASAL BONE,Radiology,400.00,1 Day,X-Ray,,inhouse,t
+XR030,X-RAY PELVIS AP,Radiology,400.00,1 Day,X-Ray,,inhouse,t
+XR031,X-RAY PNS,Radiology,400.00,1 Day,X-Ray,,inhouse,t
+XR032,X-RAY SHOULDER JOINT AP/LAT,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR033,X-RAY SKULL AP/LAT,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR034,X-RAY WRIST JOINT AP/LAT,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR035,DIGITAL MAMMOGRAPHY (SINGLE),Radiology,2000.00,1 Day,X-Ray,,inhouse,t
+XR036,DIGITAL MAMMOGRAPHY (BOTH),Radiology,3000.00,1 Day,X-Ray,,inhouse,t
+XR037,LOOPOGRAM,Radiology,3200.00,1 Day,X-Ray,,inhouse,t
+XR038,X-RAY BOTH FOREARMS AP/LAT VIEW,Radiology,1600.00,1 Day,X-Ray,,inhouse,t
+XR039,X-RAY HAND - AP & LAT,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR040,X-RAY MASTOIDS,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR041,X-RAY THIGH - AP & LAT,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR042,X-RAY THUMB - AP & LAT,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR043,X-RAY WRIST - AP & LAT,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR044,X-RAY DORSAL SPINE AP/LAT,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR045,X-RAY FEMUR AP/LAT,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR046,X-RAY FINGER AP/LAT,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR047,X-RAY FOOT AP & OBL,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR048,X-RAY FOREARM AP/LAT,Radiology,800.00,1 Day,X-Ray,,inhouse,t
+XR049,HSG,Radiology,2200.00,1 Day,X-Ray,,inhouse,t
+CT001,CBCT,Radiology,5000.00,1 Day,CT Scan,2,inhouse,t
+CT002,CECT HEAD,Radiology,4000.00,1 Day,CT Scan,2,inhouse,t
+CT003,CECT NECK,Radiology,7500.00,1 Day,CT Scan,2,inhouse,t
+CT004,CECT ORBIT,Radiology,7500.00,1 Day,CT Scan,2,inhouse,t
+CT005,CECT PNS,Radiology,7500.00,1 Day,CT Scan,2,inhouse,t
+CT006,CT ANKLE JOINT,Radiology,7500.00,1 Day,CT Scan,2,inhouse,t
+CT007,CT BODY PART,Radiology,7500.00,1 Day,CT Scan,2,inhouse,t
+CT008,CT BRAIN,Radiology,3000.00,1 Day,CT Scan,2,inhouse,t
+CT009,CT BRAIN EMRG,Radiology,3600.00,1 Day,CT Scan,2,inhouse,t
+CT010,CT CERVICAL SPINE,Radiology,7500.00,1 Day,CT Scan,2,inhouse,t
+CT011,CT CHEST,Radiology,7500.00,1 Day,CT Scan,2,inhouse,t
+CT012,CT DL SPINE,Radiology,7500.00,1 Day,CT Scan,2,inhouse,t
+CT013,CT FACE WITH 3D RECONSTRUCTION,Radiology,7500.00,1 Day,CT Scan,2,inhouse,t
+CT014,CT HIP JOINT,Radiology,7500.00,1 Day,CT Scan,2,inhouse,t
+CT015,CT KNEE JOINT,Radiology,7500.00,1 Day,CT Scan,2,inhouse,t
+CT016,CT KNEE U/L,Radiology,7500.00,1 Day,CT Scan,2,inhouse,t
+CT017,CT LOWER ABDOMEN CONTRAST,Radiology,7500.00,1 Day,CT Scan,2,inhouse,t
+CT018,CT LS SPINE,Radiology,7500.00,1 Day,CT Scan,2,inhouse,t
+CT019,CT ORBIT,Radiology,7500.00,1 Day,CT Scan,2,inhouse,t
+CT020,CT PELVIS,Radiology,7500.00,1 Day,CT Scan,2,inhouse,t
+CT021,CT PELVIS WITH 3D RECONSTRUCTION,Radiology,7500.00,1 Day,CT Scan,2,inhouse,t
+CT022,CT TEMPORAL & MASTOID,Radiology,7500.00,1 Day,CT Scan,2,inhouse,t
+CT023,CT THORACIC SPINE,Radiology,7500.00,1 Day,CT Scan,2,inhouse,t
+CT024,CT TLS SPINE,Radiology,10000.00,1 Day,CT Scan,2,inhouse,t
+CT025,CT TM JOINT,Radiology,7500.00,1 Day,CT Scan,2,inhouse,t
+CT026,CT UPPER ABDOMEN CONTRAST,Radiology,7500.00,1 Day,CT Scan,2,inhouse,t
+CT027,CT UROGRAM,Radiology,8000.00,1 Day,CT Scan,2,inhouse,t
+CT028,CT WHOLE ABDOMEN CONTRAST,Radiology,10000.00,1 Day,CT Scan,2,inhouse,t
+CT029,CT WRIST JOINT,Radiology,7500.00,1 Day,CT Scan,2,inhouse,t
+CT030,NCCT HEAD,Radiology,2500.00,1 Day,CT Scan,2,inhouse,t
+CT031,NCCT KUB,Radiology,7000.00,1 Day,CT Scan,2,inhouse,t
+MRI001,DYNAMIC MR SELLA WITH CONTRAST,Radiology,11500.00,1 Day,MRI,4,inhouse,t
+MRI002,MR ANGIOGRAPHY,Radiology,4500.00,1 Day,MRI,4,inhouse,t
+MRI003,MR SPECTROSCOPY,Radiology,3000.00,1 Day,MRI,4,inhouse,t
+MRI004,MR VENOGRAPHY,Radiology,3500.00,1 Day,MRI,4,inhouse,t
+MRI005,MRA OF NECK AND CEREBRAL VESSELS,Radiology,10000.00,1 Day,MRI,4,inhouse,t
+MRI006,MRCP,Radiology,7000.00,1 Day,MRI,4,inhouse,t
+MRI007,MRI BRACHIAL PLEXUS,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI008,MRI BRAIN,Radiology,7500.00,1 Day,MRI,4,inhouse,t
+MRI009,MRI BRAIN + ANGIO,Radiology,11000.00,1 Day,MRI,4,inhouse,t
+MRI010,MRI BRAIN WITH EPILEPSY PROTOCOL,Radiology,10000.00,1 Day,MRI,4,inhouse,t
+MRI011,MRI BRAIN WITH SPECTROSCOPY,Radiology,10500.00,1 Day,MRI,4,inhouse,t
+MRI012,MRI BRAIN WITH TACTOGRAPHY,Radiology,10000.00,1 Day,MRI,4,inhouse,t
+MRI013,MRI CARDIAC,Radiology,15000.00,1 Day,MRI,4,inhouse,t
+MRI014,MRI CARTIGRAPHY,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI015,MRI CERVICAL SPINE,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI016,MRI CERVICAL SPINE SCREENING,Radiology,3000.00,1 Day,MRI,4,inhouse,t
+MRI017,MRI CHEST/ MEDIASTINUM,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI018,MRI CISTERNOGRAPHY,Radiology,9500.00,1 Day,MRI,4,inhouse,t
+MRI019,MRI CV JUNCTION,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI020,MRI DL SPINE,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI021,MRI DORSAL SPINE SCREENING,Radiology,3000.00,1 Day,MRI,4,inhouse,t
+MRI022,MRI ENTEROGRAPHY,Radiology,12500.00,1 Day,MRI,4,inhouse,t
+MRI023,MRI FETAL,Radiology,11000.00,1 Day,MRI,4,inhouse,t
+MRI024,MRI FISTULOGRAM,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI025,MRI HAND/ PALM/ FINGER(SINGLE),Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI026,MRI JOINT,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI027,MRI JOINT- SHOULDER JOINT( SINGLE),Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI028,MRI JOINT-ANKLE JOINT(SINGLE),Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI029,MRI JOINT-ELBOW JOINT(SINGLE),Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI030,MRI JOINT-HIP JOINT(B/L)/ PELVIS,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI031,MRI JOINT-KNEE JONIT(SINGLE),Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI032,MRI JOINT-T.M. JOINT(SINGLE),Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI033,MRI JOINT-WRIST JOINT(SINGLE),Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI034,MRI L.S PLEXUS,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI035,MRI LOWER ABDOMEN,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI036,MRI LS SPINE,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI037,MRI LS SPINE SCREENING,Radiology,3000.00,1 Day,MRI,4,inhouse,t
+MRI038,MRI LS SPINE WITH SCREENING WHOLE SPINE,Radiology,14500.00,1 Day,MRI,4,inhouse,t
+MRI039,MRI MAMMOGRAPHY B/L,Radiology,15000.00,1 Day,MRI,4,inhouse,t
+MRI040,MRI MAMMOGRAPHY U/L,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI041,MRI MANDIBLE/ JAW,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI042,MRI MYELOGRAM,Radiology,6000.00,1 Day,MRI,4,inhouse,t
+MRI043,MRI NECK (PLAIN WITH CONTRAST),Radiology,11000.00,1 Day,MRI,4,inhouse,t
+MRI044,MRI NECK VESSELS / CAROTID ARTERY,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI045,MRI NECK+ANGIO,Radiology,12500.00,1 Day,MRI,4,inhouse,t
+MRI046,MRI ORBIT/ FACE,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI047,MRI PITUITARY DYNAMIC STUDY,Radiology,10500.00,1 Day,MRI,4,inhouse,t
+MRI048,MRI PNS,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI049,MRI PROSTATE (DYNAMIC CONTRAST + SPECTRO),Radiology,12500.00,1 Day,MRI,4,inhouse,t
+MRI050,MRI PROTOCOL,Radiology,2500.00,1 Day,MRI,4,inhouse,t
+MRI051,MRI RENAL ANGIOGRAPHY,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI052,MRI REPRODUCTIVE SYSTEM,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI053,MRI S.I. JOINT,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI054,MRI SCREENING,Radiology,3000.00,1 Day,MRI,4,inhouse,t
+MRI055,MRI SCROTUM,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI056,MRI TONGUE,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI057,MRI UPPER ABDOMEN,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI058,MRI UPPER LIMB ANGIOGRAPHY,Radiology,12500.00,1 Day,MRI,4,inhouse,t
+MRI059,MRI UROGRAM,Radiology,8500.00,1 Day,MRI,4,inhouse,t
+MRI060,MRI VENOGRAM LOWER LIMB U/L,Radiology,11000.00,1 Day,MRI,4,inhouse,t
+MRI061,MRI WHOLE ABDOMEN,Radiology,12500.00,1 Day,MRI,4,inhouse,t
+MRI062,MRI WHOLE SPINE SCREENING,Radiology,9000.00,1 Day,MRI,4,inhouse,t
+CARD001,ECG,Cardiology,400.00,1 Day,Cardiology,,inhouse,t
+CARD002,TMT,Cardiology,2500.00,1 Day,Cardiology,,inhouse,t
+NEU001,EEG,Neurology,2000.00,1 Day,Neurology,,inhouse,t
+NEU002,EMG/NCV B/L,Neurology,4000.00,1 Day,Neurology,,inhouse,t
+NEU003,EMG/NCV U/L,Neurology,2500.00,1 Day,Neurology,,inhouse,t
+PROC001,BLOOD TRANSFUSION,Procedure,2000.00,1 Day,Procedure,,inhouse,t
+PROC002,DIALYSIS,Procedure,1300.00,1 Day,Procedure,,inhouse,t
+PROC003,DIALYSIS DOUBLE LUMEN CATHETER,Procedure,9000.00,1 Day,Procedure,,inhouse,t
+PROC004,DIALYSIS WITH DAILYZER,Procedure,2200.00,1 Day,Procedure,,inhouse,t
+ENDO001,ENDOSCOPY GI UPPER,Endoscopy,2500.00,1 Day,Endoscopy,,inhouse,t
+PUL001,PFT,Pulmonology,2500.00,1 Day,Pulmonology,,inhouse,t
+PATH001,24 Hour Urine Proteine,Pathology,1200.00,1 Day,Pathology,7,inhouse,t
+PATH002,ABO(RH),Pathology,50.00,1 Day,Pathology,7,inhouse,t
+PATH003,AFB,Pathology,1500.00,1 Day,Pathology,7,inhouse,t
+PATH004,ALBUMIN,Pathology,100.00,1 Day,Pathology,7,inhouse,t
+PATH005,ALKALINE PHOSPHATASE,Pathology,100.00,1 Day,Pathology,7,inhouse,t
+PATH006,ALLERGY (SERUM),Pathology,9500.00,1 Day,Pathology,7,inhouse,t
+PATH007,AMH,Pathology,2800.00,1 Day,Pathology,7,inhouse,t
+PATH008,AMYLASE,Pathology,700.00,1 Day,Pathology,7,inhouse,t
+PATH009,ANA PROFILE,Pathology,3500.00,1 Day,Pathology,7,inhouse,t
+PATH010,Anemia Profile,Pathology,5000.00,1 Day,Pathology,7,inhouse,t
+PATH011,ANTI CCP,Pathology,2250.00,1 Day,Pathology,7,inhouse,t
+PATH012,ASO TITRE,Pathology,250.00,1 Day,Pathology,7,inhouse,t
+PATH013,B HCG,Pathology,1200.00,1 Day,Pathology,7,inhouse,t
+PATH014,BILE SALT PIGMENT URO,Pathology,100.00,1 Day,Pathology,7,inhouse,t
+PATH015,BILIRUBIN,Pathology,100.00,1 Day,Pathology,7,inhouse,t
+PATH016,Bilirubin (Total),Pathology,100.00,1 Day,Pathology,7,inhouse,t
+PATH017,BIOPSY BIG,Pathology,3500.00,1 Day,Pathology,7,inhouse,t
+PATH018,BIOPSY MEDIUM,Pathology,2500.00,1 Day,Pathology,7,inhouse,t
+PATH019,BIOPSY SMALL,Pathology,1800.00,1 Day,Pathology,7,inhouse,t
+PATH020,BLOOD SUGAR ( FASTING ),Pathology,50.00,1 Day,Pathology,7,inhouse,t
+PATH021,BLOOD SUGAR ( PP ),Pathology,50.00,1 Day,Pathology,7,inhouse,t
+PATH022,BLOOD SUGAR ( RANDOM),Pathology,50.00,1 Day,Pathology,7,inhouse,t
+PATH023,BLOOD UREA,Pathology,100.00,1 Day,Pathology,7,inhouse,t
+PATH024,"BT,CT",Pathology,50.00,1 Day,Pathology,7,inhouse,t
+PATH025,C3,Pathology,800.00,1 Day,Pathology,7,inhouse,t
+PATH026,C4,Pathology,800.00,1 Day,Pathology,7,inhouse,t
+PATH027,CA 15.3,Pathology,1000.00,1 Day,Pathology,7,inhouse,t
+PATH028,CA 19.9,Pathology,1800.00,1 Day,Pathology,7,inhouse,t
+PATH029,CA-125,Pathology,2000.00,1 Day,Pathology,7,inhouse,t
+PATH030,CA125,Pathology,2000.00,1 Day,Pathology,7,inhouse,t
+PATH031,CALCIUM ( Ca),Pathology,200.00,1 Day,Pathology,7,inhouse,t
+PATH032,CB-NAAT,Pathology,2500.00,1 Day,Pathology,7,inhouse,t
+PATH033,CBC(COMPLETE BLOOD COUNT),Pathology,350.00,1 Day,Pathology,7,inhouse,t
+PATH034,"CBC,BS,BU,S.CREAT,TSH",Pathology,1500.00,1 Day,Pathology,7,inhouse,t
+PATH035,CEA,Pathology,1200.00,1 Day,Pathology,7,inhouse,t
+PATH036,CHLORIDE (Cl),Pathology,200.00,1 Day,Pathology,7,inhouse,t
+PATH037,CHOLESTROL,Pathology,200.00,1 Day,Pathology,7,inhouse,t
+PATH038,COOMB'S TEST,Pathology,2000.00,1 Day,Pathology,7,inhouse,t
+PATH039,CORTISOL,Pathology,1200.00,1 Day,Pathology,7,inhouse,t
+PATH040,CPK MP,Pathology,1000.00,1 Day,Pathology,7,inhouse,t
+PATH041,CRP,Pathology,300.00,1 Day,Pathology,7,inhouse,t
+PATH042,D - DIMER,Pathology,1600.00,1 Day,Pathology,7,inhouse,t
+PATH043,DENGU,Pathology,1200.00,1 Day,Pathology,7,inhouse,t
+PATH044,DOUBLE MARKER,Pathology,3000.00,1 Day,Pathology,7,inhouse,t
+PATH045,ESR,Pathology,50.00,1 Day,Pathology,7,inhouse,t
+PATH046,FASTING  INSULIN,Pathology,1250.00,1 Day,Pathology,7,inhouse,t
+PATH047,FILARIA( ANTIGEN),Pathology,900.00,1 Day,Pathology,7,inhouse,t
+PATH048,FNAC,Pathology,2000.00,1 Day,Pathology,7,inhouse,t
+PATH049,FSH,Pathology,900.00,1 Day,Pathology,7,inhouse,t
+PATH050,"FT3,FT4,TSH",Pathology,1500.00,1 Day,Pathology,7,inhouse,t
+PATH051,"FT4,TSH",Pathology,1250.00,1 Day,Pathology,7,inhouse,t
+PATH052,HB,Pathology,50.00,1 Day,Pathology,7,inhouse,t
+PATH053,HB ELECTROPHORESIS,Pathology,1500.00,1 Day,Pathology,7,inhouse,t
+PATH054,"HB,TC,DC,ESR",Pathology,150.00,1 Day,Pathology,7,inhouse,t
+PATH055,HBAIC,Pathology,700.00,1 Day,Pathology,7,inhouse,t
+PATH056,HBSAG,Pathology,150.00,1 Day,Pathology,7,inhouse,t
+PATH057,HCV,Pathology,600.00,1 Day,Pathology,7,inhouse,t
+PATH058,HIV I & II,Pathology,300.00,1 Day,Pathology,7,inhouse,t
+PATH059,HLA-B27,Pathology,2500.00,1 Day,Pathology,7,inhouse,t
+PATH060,HSF,Pathology,200.00,1 Day,Pathology,7,inhouse,t
+PATH061,IGA,Pathology,800.00,1 Day,Pathology,7,inhouse,t
+PATH062,IGE,Pathology,1200.00,1 Day,Pathology,7,inhouse,t
+PATH063,IRON,Pathology,650.00,1 Day,Pathology,7,inhouse,t
+PATH064,IRON & TIBC,Pathology,700.00,1 Day,Pathology,7,inhouse,t
+PATH065,IRON PROFILE,Pathology,2500.00,1 Day,Pathology,7,inhouse,t
+PATH066,KALAZAR,Pathology,900.00,1 Day,Pathology,7,inhouse,t
+PATH067,KFT ( RENAL FUNCTION TEST),Pathology,800.00,1 Day,Pathology,7,inhouse,t
+PATH068,LDH,Pathology,600.00,1 Day,Pathology,7,inhouse,t
+PATH069,LFT ( LIVER FUNCTION TEST),Pathology,550.00,1 Day,Pathology,7,inhouse,t
+PATH070,LH,Pathology,900.00,1 Day,Pathology,7,inhouse,t
+PATH071,LIPASE,Pathology,700.00,1 Day,Pathology,7,inhouse,t
+PATH072,LIPID PROFILE,Pathology,600.00,1 Day,Pathology,7,inhouse,t
+PATH073,MP(SLIDE),Pathology,100.00,1 Day,Pathology,7,inhouse,t
+PATH074,MT,Pathology,100.00,1 Day,Pathology,7,inhouse,t
+PATH075,OGTT,Pathology,200.00,1 Day,Pathology,7,inhouse,t
+PATH076,PERIPHERAL BLOOD SMEAR,Pathology,500.00,1 Day,Pathology,7,inhouse,t
+PATH077,PHOSPHORUS,Pathology,700.00,1 Day,Pathology,7,inhouse,t
+PATH078,Platelet Counts,Pathology,200.00,1 Day,Pathology,7,inhouse,t
+PATH079,PLEURAL FLUID,Pathology,2500.00,1 Day,Pathology,7,inhouse,t
+PATH080,POTTASIUM (K),Pathology,200.00,1 Day,Pathology,7,inhouse,t
+PATH081,PROTHROMBIN TIME,Pathology,300.00,1 Day,Pathology,7,inhouse,t
+PATH082,PSA,Pathology,1200.00,1 Day,Pathology,7,inhouse,t
+PATH083,PVPF ANTIGEN,Pathology,300.00,1 Day,Pathology,7,inhouse,t
+PATH084,QUADRAPLE MARKER,Pathology,3500.00,1 Day,Pathology,7,inhouse,t
+PATH085,RA FACTOR,Pathology,250.00,1 Day,Pathology,7,inhouse,t
+PATH086,Rubella IgG Antiboby,Pathology,1200.00,1 Day,Pathology,7,inhouse,t
+PATH087,RUBELLA IGM ANTIBODY,Pathology,1200.00,1 Day,Pathology,7,inhouse,t
+PATH088,SERUM CREATININE,Pathology,100.00,1 Day,Pathology,7,inhouse,t
+PATH089,SERUM LITHIUM,Pathology,1000.00,1 Day,Pathology,7,inhouse,t
+PATH090,SERUM PROLACTIN,Pathology,1500.00,1 Day,Pathology,7,inhouse,t
+PATH091,SGOT,Pathology,100.00,1 Day,Pathology,7,inhouse,t
+PATH092,SGPT,Pathology,100.00,1 Day,Pathology,7,inhouse,t
+PATH093,SKIN AFB,Pathology,1500.00,1 Day,Pathology,7,inhouse,t
+PATH094,SODIUM (Na),Pathology,200.00,1 Day,Pathology,7,inhouse,t
+PATH095,SPUTAM CB,Pathology,4000.00,1 Day,Pathology,7,inhouse,t
+PATH096,SPUTAM GOLD,Pathology,3500.00,1 Day,Pathology,7,inhouse,t
+PATH097,STOOL R/E,Pathology,200.00,1 Day,Pathology,7,inhouse,t
+PATH098,SWAB CULTURE,Pathology,1500.00,1 Day,Pathology,7,inhouse,t
+PATH099,"T3,T4,TSH",Pathology,700.00,1 Day,Pathology,7,inhouse,t
+PATH100,TB GOLD,Pathology,3500.00,1 Day,Pathology,7,inhouse,t
+PATH101,"TC,DC",Pathology,50.00,1 Day,Pathology,7,inhouse,t
+PATH102,TESTOSTERONE FREE,Pathology,1800.00,1 Day,Pathology,7,inhouse,t
+PATH103,TESTOSTERONE TOTAL,Pathology,1000.00,1 Day,Pathology,7,inhouse,t
+PATH104,THALASSEMIA PROFILE,Pathology,1700.00,1 Day,Pathology,7,inhouse,t
+PATH105,THROAT SWAB CULTURE,Pathology,1500.00,1 Day,Pathology,7,inhouse,t
+PATH106,TORCH PROFILE,Pathology,4500.00,1 Day,Pathology,7,inhouse,t
+PATH107,TOTAL PROTEIN,Pathology,200.00,1 Day,Pathology,7,inhouse,t
+PATH108,TRIGLYCERIDES,Pathology,200.00,1 Day,Pathology,7,inhouse,t
+PATH109,TROP-T,Pathology,800.00,1 Day,Pathology,7,inhouse,t
+PATH110,TSH,Pathology,300.00,1 Day,Pathology,7,inhouse,t
+PATH111,UPT,Pathology,150.00,1 Day,Pathology,7,inhouse,t
+PATH112,URIC ACID,Pathology,100.00,1 Day,Pathology,7,inhouse,t
+PATH113,URINE C/S,Pathology,350.00,1 Day,Pathology,7,inhouse,t
+PATH114,URINE PCR(UPCR),Pathology,1000.00,1 Day,Pathology,7,inhouse,t
+PATH115,URINE PROTEIN CREATININE,Pathology,900.00,1 Day,Pathology,7,inhouse,t
+PATH116,URINE R/E,Pathology,100.00,1 Day,Pathology,7,inhouse,t
+PATH117,VDRL,Pathology,100.00,1 Day,Pathology,7,inhouse,t
+PATH118,VIT- B12,Pathology,1500.00,1 Day,Pathology,7,inhouse,t
+PATH119,VIT -D,Pathology,1600.00,1 Day,Pathology,7,inhouse,t
+PATH120,VIT -D 3,Pathology,2300.00,1 Day,Pathology,7,inhouse,t
+PATH121,Vitamine A,Pathology,3000.00,1 Day,Pathology,7,inhouse,t
+PATH122,WIDAL,Pathology,100.00,1 Day,Pathology,7,inhouse,t
