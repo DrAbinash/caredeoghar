@@ -322,6 +322,14 @@ async function runStartupMigrations(): Promise<void> {
 
       -- ── Online bookings time slot ────────────────────────────────────────
       ALTER TABLE online_bookings ADD COLUMN IF NOT EXISTS time_slot TEXT NOT NULL DEFAULT '';
+
+      -- ── Online booking payment gateway columns ───────────────────────────
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS online_booking_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS razorpay_key_id TEXT NOT NULL DEFAULT '';
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS online_booking_ledger_id INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS vip_queue_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS payu_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS payu_merchant_key TEXT NOT NULL DEFAULT '';
     `);
     logger.info("Startup migrations applied");
   } catch (err) {

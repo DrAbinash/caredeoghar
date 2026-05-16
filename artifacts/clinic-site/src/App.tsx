@@ -164,6 +164,22 @@ function AppShell({ settings, pages, popups, isPreview }: { settings: SiteSettin
     }
   }, [slug]);
 
+  // After the page renders, scroll to the hash anchor if present.
+  // The browser fires its native hash-scroll before React mounts the sections,
+  // so we re-run it once the DOM is ready.
+  useEffect(() => {
+    const hash = window.location.hash.replace(/^#/, "");
+    if (!hash) return;
+    // Short delay so React has committed the render with section elements.
+    const id = setTimeout(() => {
+      const el = document.getElementById(hash);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+    return () => clearTimeout(id);
+  // Run once after AppShell mounts (i.e. data is loaded and sections are ready).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   if (slug === "appointment") return null;
 
   return (

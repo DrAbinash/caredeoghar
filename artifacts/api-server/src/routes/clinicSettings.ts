@@ -33,7 +33,7 @@ clinicSettingsRouter.put("/", async (req, res) => {
     }
     update.sidebarTheme = body.sidebarTheme;
   }
-  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "billShowCode", "billShowCategory", "dayCloseAutoPrint", "lanOnlyLogin"] as const;
+  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "payuEnabled", "billShowCode", "billShowCategory", "dayCloseAutoPrint", "lanOnlyLogin", "kioskEnabled"] as const;
   for (const f of boolFields) {
     if (body[f] !== undefined) {
       if (typeof body[f] !== "boolean") {
@@ -63,6 +63,23 @@ clinicSettingsRouter.put("/", async (req, res) => {
       return;
     }
     update.razorpayKeyId = body.razorpayKeyId.trim();
+  }
+  if (body.payuMerchantKey !== undefined) {
+    if (typeof body.payuMerchantKey !== "string") {
+      res.status(400).json({ error: "payuMerchantKey must be a string" });
+      return;
+    }
+    update.payuMerchantKey = body.payuMerchantKey.trim();
+  }
+  const kioskTextFields = ["kioskUpiVpa", "kioskUpiName", "kioskWelcomeMessage", "kioskAllowedTestIds"] as const;
+  for (const f of kioskTextFields) {
+    if (body[f] !== undefined) {
+      if (typeof body[f] !== "string") {
+        res.status(400).json({ error: `${f} must be a string` });
+        return;
+      }
+      update[f] = body[f];
+    }
   }
   if (body.onlineBookingLedgerId !== undefined) {
     const n = Number(body.onlineBookingLedgerId);
