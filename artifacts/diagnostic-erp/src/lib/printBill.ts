@@ -32,6 +32,8 @@ export type PrintBillData = {
     phone?: string | null;
     gender?: string | null;
     dateOfBirth?: string | null;
+    ageValue?: number | null;
+    ageUnit?: string | null;
   } | null;
   order?: {
     doctor?: { name?: string | null } | null;
@@ -80,7 +82,12 @@ function escapeHtml(s: string): string {
   );
 }
 
-function calcAgeYrs(dob?: string | null): string {
+function calcAgeYrs(dob?: string | null, ageValue?: number | null, ageUnit?: string | null): string {
+  if (ageValue != null && ageUnit) {
+    if (ageUnit === "years") return ageValue > 0 ? `${ageValue} Yrs` : "";
+    if (ageUnit === "months") return `${ageValue} Mo`;
+    if (ageUnit === "days") return `${ageValue} D`;
+  }
   if (!dob) return "";
   const d = new Date(dob);
   if (isNaN(d.getTime())) return "";
@@ -113,7 +120,7 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
   // Strip legacy "BILL-YYYYMM-####" prefix/dashes for display; new format
   // is already pure-numeric (see replit.md "Bill Number Format").
   const billDigits = String(bill.billNumber).replace(/^BILL-?/i, "").replace(/-/g, "");
-  const ageStr = calcAgeYrs(bill.patient?.dateOfBirth);
+  const ageStr = calcAgeYrs(bill.patient?.dateOfBirth, bill.patient?.ageValue, bill.patient?.ageUnit);
   const ageGender = [ageStr, bill.patient?.gender].filter(Boolean).join(" / ").toUpperCase();
   const created = bill.createdAt ? new Date(bill.createdAt) : new Date();
   const isCancelled = (bill.status ?? "") === "cancelled";

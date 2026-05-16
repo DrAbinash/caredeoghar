@@ -2319,6 +2319,13 @@ components:
         bloodGroup:
           type: string
           nullable: true
+        ageValue:
+          type: integer
+          nullable: true
+        ageUnit:
+          type: string
+          enum: [years, months, days]
+          nullable: true
         createdAt:
           type: string
       required: [id, patientId, firstName, lastName, dateOfBirth, gender, phone, createdAt]
@@ -2360,6 +2367,13 @@ components:
           nullable: true
         bloodGroup:
           type: string
+          nullable: true
+        ageValue:
+          type: integer
+          nullable: true
+        ageUnit:
+          type: string
+          enum: [years, months, days]
           nullable: true
       required: [firstName, lastName, dateOfBirth, gender, phone]
 
@@ -2665,6 +2679,9 @@ components:
           type: string
           nullable: true
         notes:
+          type: string
+          nullable: true
+        recordedByName:
           type: string
           nullable: true
         createdAt:
@@ -3459,6 +3476,8 @@ components:
           type: string
         isDefault:
           type: boolean
+        isWalkIn:
+          type: boolean
         doctorCount:
           type: integer
         patientCount:
@@ -3469,7 +3488,7 @@ components:
           type: integer
         appointmentCount:
           type: integer
-      required: [id, name, isDefault, doctorCount, patientCount, billCount, orderCount, appointmentCount]
+      required: [id, name, isDefault, isWalkIn, doctorCount, patientCount, billCount, orderCount, appointmentCount]
 
     CreateLedgerBody:
       type: object

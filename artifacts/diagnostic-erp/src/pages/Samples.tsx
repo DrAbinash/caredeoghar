@@ -17,7 +17,7 @@ import CollectSampleModal from "@/components/CollectSampleModal";
 import SampleLabel, { printLabels } from "@/components/SampleLabel";
 import { readStaffSession } from "@/lib/staffSession";
 
-type Patient = { id: number; firstName: string; lastName: string; patientId: string; phone: string; gender: string; dateOfBirth: string };
+type Patient = { id: number; firstName: string; lastName: string; patientId: string; phone: string; gender: string; dateOfBirth: string; ageValue?: number | null; ageUnit?: string | null };
 type SampleTest = { orderTestId: number; testId: number; testCode: string; testName: string; category: string; resultStatus: string | null };
 type Sample = {
   id: number; barcode: string; orderId: number; patientId: number;
@@ -382,7 +382,7 @@ export default function Samples() {
             barcode={s.barcode}
             patientName={s.patient ? `${s.patient.firstName} ${s.patient.lastName}` : "—"}
             patientId={s.patient?.patientId}
-            age={s.patient?.dateOfBirth ? `${calcAge(s.patient.dateOfBirth)}y` : ""}
+            age={s.patient ? `${calcAge(s.patient.dateOfBirth, s.patient.ageValue, s.patient.ageUnit)}${s.patient.ageUnit === "years" ? "y" : s.patient.ageUnit === "months" ? "m" : s.patient.ageUnit === "days" ? "d" : "y"}` : ""}
             gender={s.patient?.gender}
             sampleType={s.sampleType}
             containerType={s.containerType}
@@ -537,8 +537,13 @@ function FragmentWithKey({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function calcAge(dob: string): number {
+function calcAge(dob: string, ageValue?: number | null, ageUnit?: string | null): string {
+  if (ageValue != null && ageUnit) {
+    if (ageUnit === "years") return ageValue > 0 ? `${ageValue}` : "";
+    if (ageUnit === "months") return `${ageValue}`;
+    if (ageUnit === "days") return `${ageValue}`;
+  }
   const d = new Date(dob);
-  if (Number.isNaN(d.getTime())) return 0;
-  return Math.floor((Date.now() - d.getTime()) / (365.25 * 24 * 3600 * 1000));
+  if (Number.isNaN(d.getTime())) return "";
+  return String(Math.floor((Date.now() - d.getTime()) / (365.25 * 24 * 3600 * 1000)));
 }

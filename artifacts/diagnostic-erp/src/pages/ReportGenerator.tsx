@@ -378,7 +378,16 @@ export default function ReportGenerator() {
   }, [order]);
 
   const patient = patients?.patients?.find((p) => p.id === patientId);
-  const age = patient ? new Date().getFullYear() - new Date(patient.dateOfBirth).getFullYear() : null;
+  const ageDisplay = patient ? (() => {
+    const p = patient;
+    if (p.ageValue != null && p.ageUnit) {
+      if (p.ageUnit === "years") return p.ageValue > 0 ? `${p.ageValue} Yrs` : null;
+      if (p.ageUnit === "months") return `${p.ageValue} Mo`;
+      if (p.ageUnit === "days") return `${p.ageValue} D`;
+    }
+    const years = new Date().getFullYear() - new Date(p.dateOfBirth).getFullYear();
+    return years > 0 ? `${years} Yrs` : null;
+  })() : null;
 
   const updateParam = (testIdx: number, paramIdx: number, field: keyof TestParameter, value: string) => {
     setFindings((prev) => prev.map((f, fi) =>
@@ -497,7 +506,7 @@ export default function ReportGenerator() {
       f.parameters.filter((p) => p.flag !== "normal" && p.result).map((p) => `${p.name}: ${p.result} ${p.unit}, ${p.flag}`)
     );
     const text = [
-      `Diagnostic Report for patient ${patient.firstName} ${patient.lastName}, ${age} years old.`,
+      `Diagnostic Report for patient ${patient.firstName} ${patient.lastName}, ${ageDisplay ?? ""} old.`,
       `Order number ${order.orderNumber}, dated ${new Date(order.createdAt).toLocaleDateString()}.`,
       abnormal.length > 0
         ? `Abnormal findings: ${abnormal.join("; ")}.`
@@ -623,7 +632,7 @@ export default function ReportGenerator() {
       result = result
         .replace(/\[PATIENT_NAME\]|\bPatient Name\b:\s*[^\n]*/gi, `Patient Name: ${patient.firstName} ${patient.lastName}`)
         .replace(/\[PATIENT_ID\]|\bPatient ID\b:\s*[^\n]*/gi, `Patient ID: ${patient.patientId}`)
-        .replace(/\[AGE\]|\bAge\b:\s*[^\n]*/gi, `Age: ${age} Years`)
+        .replace(/\[AGE\]|\bAge\b:\s*[^\n]*/gi, `Age: ${ageDisplay ?? ""}`)
         .replace(/\[GENDER\]|\bGender\b:\s*[^\n]*/gi, `Gender: ${patient.gender}`);
     }
     if (order) {
@@ -683,7 +692,7 @@ export default function ReportGenerator() {
       "-".repeat(40),
       `Name          : ${patient.firstName} ${patient.lastName}`,
       `Patient ID    : ${patient.patientId}`,
-      `Age / Gender  : ${age} Yrs / ${patient.gender}`,
+      `Age / Gender  : ${ageDisplay ?? "—"} / ${patient.gender}`,
       patient.bloodGroup ? `Blood Group   : ${patient.bloodGroup}` : "",
       patient.phone ? `Phone         : ${patient.phone}` : "",
       "",
@@ -1084,7 +1093,7 @@ export default function ReportGenerator() {
                         </div>
                         <div className="flex gap-2">
                           <span className="text-gray-500 dark:text-muted-foreground w-24 flex-shrink-0">Age / Gender</span>
-                          <span>{age} Yrs / <span className="capitalize">{patient?.gender}</span></span>
+                          <span>{ageDisplay ?? "—"} / <span className="capitalize">{patient?.gender}</span></span>
                         </div>
                         {patient?.bloodGroup && (
                           <div className="flex gap-2">

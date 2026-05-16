@@ -452,11 +452,17 @@ export default function BillDetail({ id }: { id: number }) {
   const formatCurrency = (n: number) =>
     new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(n);
 
-  const calcAge = (dob?: string | null) => {
+  const calcAge = (dob?: string | null, ageValue?: number | null, ageUnit?: string | null) => {
+    if (ageValue != null && ageUnit) {
+      if (ageUnit === "years") return ageValue > 0 ? `${ageValue} Yrs` : null;
+      if (ageUnit === "months") return `${ageValue} Mo`;
+      if (ageUnit === "days") return `${ageValue} D`;
+    }
     if (!dob) return null;
     const years = Math.floor((Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 3600 * 1000));
     return years > 0 ? `${years} Yrs` : null;
   };
+  const ageDisplay = bill?.patient ? calcAge(bill.patient.dateOfBirth, bill.patient.ageValue, bill.patient.ageUnit) : null;
 
   if (isLoading) return <div className="p-6 animate-pulse"><div className="h-8 bg-muted rounded w-64" /></div>;
   if (!bill) return <div className="p-6 text-muted-foreground">Bill not found.</div>;
@@ -547,6 +553,7 @@ export default function BillDetail({ id }: { id: number }) {
                 <Link href={`/patients/${bill.patient.id}`} className="font-semibold text-primary hover:underline">{bill.patient.firstName} {bill.patient.lastName}</Link>
                 <p className="text-xs text-muted-foreground mt-0.5">{bill.patient.patientId}</p>
                 <p className="text-xs text-muted-foreground">{bill.patient.phone}</p>
+                <p className="text-xs text-muted-foreground">{ageDisplay ? `${ageDisplay} / ${bill.patient.gender}` : bill.patient.gender}</p>
               </div>
             )}
             <div className="mt-3 pt-3 border-t border-border/50">

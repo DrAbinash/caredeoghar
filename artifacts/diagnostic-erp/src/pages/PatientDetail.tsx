@@ -119,7 +119,15 @@ export default function PatientDetail({ id }: { id: number }) {
     return <div className="p-6 text-muted-foreground">Patient not found.</div>;
   }
 
-  const age = new Date().getFullYear() - new Date(patient.dateOfBirth).getFullYear();
+  const ageStr = (() => {
+    if (patient.ageValue != null && patient.ageUnit) {
+      if (patient.ageUnit === "years") return patient.ageValue > 0 ? `${patient.ageValue} Yrs` : null;
+      if (patient.ageUnit === "months") return `${patient.ageValue} Mo`;
+      if (patient.ageUnit === "days") return `${patient.ageValue} D`;
+    }
+    const years = new Date().getFullYear() - new Date(patient.dateOfBirth).getFullYear();
+    return years > 0 ? `${years} Yrs` : null;
+  })();
 
   return (
     <div className="pb-8 bg-slate-50 dark:bg-slate-900/20 min-h-full">
@@ -214,7 +222,7 @@ export default function PatientDetail({ id }: { id: number }) {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-5 flex-1">
             <div>
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Date of Birth</p>
-              <p className="mt-1 text-sm font-medium">{patient.dateOfBirth} <span className="text-muted-foreground">({age}y)</span></p>
+              <p className="mt-1 text-sm font-medium">{patient.dateOfBirth} <span className="text-muted-foreground">({ageStr ?? "—"})</span></p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Gender</p>

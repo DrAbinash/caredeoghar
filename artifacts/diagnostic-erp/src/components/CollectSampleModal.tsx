@@ -14,7 +14,7 @@ import {
 import { Search, FlaskConical, Printer } from "lucide-react";
 import SampleLabel, { printLabels } from "./SampleLabel";
 
-type Patient = { id: number; firstName: string; lastName: string; patientId: string; phone: string; gender: string; dateOfBirth: string };
+type Patient = { id: number; firstName: string; lastName: string; patientId: string; phone: string; gender: string; dateOfBirth: string; ageValue?: number | null; ageUnit?: string | null };
 type OrderTest = { id: number; orderId: number; testId: number; price: string | number; testName?: string; testCode?: string };
 type Order = {
   id: number; orderNumber: string; patientId: number; status: string; createdAt: string;
@@ -145,7 +145,7 @@ export default function CollectSampleModal({ open, onOpenChange, staffName }: Pr
   if (createdSample) {
     const p = createdSample.patient;
     const fullName = p ? `${p.firstName} ${p.lastName}` : "—";
-    const ageStr = p?.dateOfBirth ? `${calcAge(p.dateOfBirth)}y` : "";
+    const ageStr = p ? `${calcAge(p.dateOfBirth, p.ageValue, p.ageUnit)}${p.ageUnit === "years" ? "y" : p.ageUnit === "months" ? "m" : p.ageUnit === "days" ? "d" : "y"}` : "";
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-md">
@@ -331,9 +331,13 @@ export default function CollectSampleModal({ open, onOpenChange, staffName }: Pr
   );
 }
 
-function calcAge(dob: string): number {
+function calcAge(dob: string, ageValue?: number | null, ageUnit?: string | null): string {
+  if (ageValue != null && ageUnit) {
+    if (ageUnit === "years") return ageValue > 0 ? `${ageValue}` : "";
+    if (ageUnit === "months") return `${ageValue}`;
+    if (ageUnit === "days") return `${ageValue}`;
+  }
   const d = new Date(dob);
-  if (Number.isNaN(d.getTime())) return 0;
-  const ms = Date.now() - d.getTime();
-  return Math.floor(ms / (365.25 * 24 * 3600 * 1000));
+  if (Number.isNaN(d.getTime())) return "";
+  return String(Math.floor((Date.now() - d.getTime()) / (365.25 * 24 * 3600 * 1000)));
 }

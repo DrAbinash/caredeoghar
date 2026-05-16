@@ -333,7 +333,8 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
     res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
     return;
   }
-  const { orderId, discount = 0, dueDate, payments: inlinePayments = [] } = parsed.data;
+  const { orderId, discount = 0, dueDate } = parsed.data;
+  const inlinePayments = Array.isArray(payload.payments) ? payload.payments : [];
   const discountReason = typeof payload?.discountReason === "string" ? payload.discountReason.trim() || null : null;
   const discountReasonNote = typeof payload?.discountReasonNote === "string" ? payload.discountReasonNote.trim() || null : null;
 
@@ -437,7 +438,7 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
     }
 
     // Compute paid amount from inline payments (validated amount > 0 by schema)
-    const validPayments = inlinePayments.filter((p) => Number.isFinite(p.amount) && p.amount > 0);
+    const validPayments = (inlinePayments as Array<{ amount: number; method?: string; referenceNumber?: string; notes?: string }>).filter((p) => Number.isFinite(p.amount) && p.amount > 0);
     const paidAmountInline = validPayments.reduce((s, p) => s + p.amount, 0);
     const balanceAmountInline = Math.max(0, totalAmount - paidAmountInline);
     const billStatus = paidAmountInline >= totalAmount - 0.01 ? "paid" : paidAmountInline > 0 ? "partial" : "pending";
@@ -465,7 +466,7 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
       await tx.insert(paymentsTable).values({
         billId: billRow.id,
         amount: p.amount.toFixed(2),
-        method: p.method,
+        method: p.method || "cash",
         referenceNumber: p.referenceNumber ?? null,
         notes: p.notes ?? null,
         recordedByName: actorName || null,
@@ -514,7 +515,7 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
     autoVoucherForPayment({
       billId: bill.id,
       amount: p.amount,
-      method: p.method,
+      method: p.method || "cash",
       billNumber: bill.billNumber,
       patientName,
       performedBy: actorName || null,

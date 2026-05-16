@@ -73,6 +73,8 @@ type Patient = {
   email?: string;
   bloodGroup?: string;
   address?: string;
+  ageValue?: number | null;
+  ageUnit?: string | null;
 };
 
 type Doctor = { id: number; name: string; specialization: string };
@@ -182,7 +184,12 @@ function printerWindowFeatures(printerName?: string) {
 function escapeHtml(s: string) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 }
-function calcAge(dateOfBirth: string): string {
+function calcAge(dateOfBirth: string, ageValue?: number | null, ageUnit?: string | null): string {
+  if (ageValue != null && ageUnit) {
+    if (ageUnit === "years") return ageValue > 0 ? `${ageValue} Yrs` : "";
+    if (ageUnit === "months") return `${ageValue} Mo`;
+    if (ageUnit === "days") return `${ageValue} D`;
+  }
   if (!dateOfBirth) return "";
   const dob = new Date(dateOfBirth);
   if (isNaN(dob.getTime())) return "";
@@ -195,7 +202,7 @@ function calcAge(dateOfBirth: string): string {
 
 async function printBill(b: LastBill, clinic: ClinicLite) {
   const p = await getPrinterSettings();
-  const ageStr = calcAge(b.patient.dateOfBirth);
+  const ageStr = calcAge(b.patient.dateOfBirth, b.patient.ageValue, b.patient.ageUnit);
   const ageLine = [ageStr, b.patient.gender].filter(Boolean).join(" / ").toUpperCase();
   const billedBy = readStaffSession()?.user?.name ?? "";
   const testCount = b.tests.length;
@@ -345,7 +352,7 @@ async function printToken(b: LastBill, clinic: ClinicLite) {
   // Nothing to print
   if (dedupedTokens.length === 0 && b.tokenNo == null) return;
 
-  const ageStr = calcAge(b.patient.dateOfBirth);
+  const ageStr = calcAge(b.patient.dateOfBirth, b.patient.ageValue, b.patient.ageUnit);
   const ageGender = [ageStr, b.patient.gender].filter(Boolean).join(" / ").toUpperCase();
   const headerLines = `
     <div class="clinic">${escapeHtml(clinic?.name || "Diagnostic Centre")}</div>
@@ -413,7 +420,8 @@ export default function BillingDesk() {
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [newPatient, setNewPatient] = useState({
     firstName: "", lastName: "", phone: "", gender: "male",
-    age: "", email: "", address: "", bloodGroup: "",
+    ageValue: "", ageUnit: "years" as "years" | "months" | "days",
+    email: "", address: "", bloodGroup: "",
   });
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef  = useRef<HTMLDivElement>(null);
@@ -655,15 +663,42 @@ export default function BillingDesk() {
   // ── Create mutations ───────────────────────────────
   const createPatientMut = useMutation({
     mutationFn: (body: typeof newPatient) => {
-      // Convert age → approximate dateOfBirth (Jan 1 of birth year)
-      const ageNum = Number(body.age);
-      const birthYear = new Date().getFullYear() - ageNum;
-      const dateOfBirth = ageNum > 0 ? `${birthYear}-01-01` : "";
-      return api.post("/api/patients", { ...body, dateOfBirth, age: undefined });
+      const ageVal = Number(body.ageValue);
+      const unit = body.ageUnit;
+      let dateOfBirth = "";
+      let ageValue: number | null = null;
+      let ageUnit: string | null = null;
+      if (!isNaN(ageVal) && ageVal >= 0) {
+        ageValue = ageVal;
+        ageUnit = unit;
+        if (unit === "years") {
+          dateOfBirth = `${new Date().getFullYear() - ageVal}-01-01`;
+        } else if (unit === "months") {
+          const d = new Date();
+          d.setMonth(d.getMonth() - ageVal);
+          dateOfBirth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        } else {
+          const d = new Date();
+          d.setDate(d.getDate() - ageVal);
+          dateOfBirth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        }
+      }
+      return api.post("/api/patients", {
+        firstName: body.firstName,
+        lastName: body.lastName,
+        phone: body.phone,
+        gender: body.gender,
+        email: body.email || null,
+        address: body.address || null,
+        bloodGroup: body.bloodGroup || null,
+        dateOfBirth,
+        ageValue,
+        ageUnit,
+      });
     },
     onSuccess: (p: Patient) => {
       setSelectedPatient(p);
-      setNewPatient({ firstName: "", lastName: "", phone: "", gender: "male", age: "", email: "", address: "", bloodGroup: "" });
+      setNewPatient({ firstName: "", lastName: "", phone: "", gender: "male", ageValue: "", ageUnit: "years", email: "", address: "", bloodGroup: "" });
       toast({ title: `Patient registered: ${p.patientId}` });
     },
     onError: () => toast({ title: "Failed to register patient", variant: "destructive" }),
@@ -1056,7 +1091,7 @@ export default function BillingDesk() {
   function resetAll() {
     setSelectedPatient(null);
     setPatientSearch("");
-    setNewPatient({ firstName: "", lastName: "", phone: "", gender: "male", age: "", email: "", address: "", bloodGroup: "" });
+    setNewPatient({ firstName: "", lastName: "", phone: "", gender: "male", ageValue: "", ageUnit: "years", email: "", address: "", bloodGroup: "" });
     setDoctorId(null);
     setDoctorSearch("");
     setNotes("");
@@ -1382,15 +1417,25 @@ export default function BillingDesk() {
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Age *</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={120}
-                        value={newPatient.age}
-                        onChange={(e) => setNewPatient({ ...newPatient, age: e.target.value })}
-                        placeholder="Years"
-                        className="h-8 text-sm"
-                      />
+                      <div className="flex gap-1">
+                        <Input
+                          type="number"
+                          min={0}
+                          max={newPatient.ageUnit === "years" ? 120 : 365}
+                          value={newPatient.ageValue}
+                          onChange={(e) => setNewPatient({ ...newPatient, ageValue: e.target.value })}
+                          placeholder="Value"
+                          className="h-8 text-sm flex-1"
+                        />
+                        <Select value={newPatient.ageUnit} onValueChange={(v) => setNewPatient({ ...newPatient, ageUnit: v as "years" | "months" | "days" })}>
+                          <SelectTrigger className="h-8 text-sm w-[90px]"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="years">Yrs</SelectItem>
+                            <SelectItem value="months">Mo</SelectItem>
+                            <SelectItem value="days">Days</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Gender *</Label>
@@ -1426,7 +1471,7 @@ export default function BillingDesk() {
                   <Button
                     size="sm"
                     className="w-full bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold"
-                    disabled={!newPatient.firstName || !newPatient.lastName || !newPatient.phone || !newPatient.age || createPatientMut.isPending}
+                    disabled={!newPatient.firstName || !newPatient.lastName || !newPatient.phone || !newPatient.ageValue || createPatientMut.isPending}
                     onClick={() => createPatientMut.mutate(newPatient)}
                   >
                     {createPatientMut.isPending ? "Registering…" : <><UserPlus size={13} className="mr-1.5" /> Register & Select</>}
@@ -2120,7 +2165,7 @@ export default function BillingDesk() {
                     {lastBill.patient.firstName} {lastBill.patient.lastName}
                   </strong>
                   {(() => {
-                    const a = calcAge(lastBill.patient.dateOfBirth);
+                    const a = calcAge(lastBill.patient.dateOfBirth, lastBill.patient.ageValue, lastBill.patient.ageUnit);
                     const ageSex = [a, lastBill.patient.gender].filter(Boolean).join(" / ");
                     return ageSex ? (
                       <strong style={{ fontSize: paperSize === "A4" ? 13 : 14, fontWeight: 800 }}>· {ageSex}</strong>

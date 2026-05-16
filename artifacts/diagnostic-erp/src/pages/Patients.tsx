@@ -34,7 +34,8 @@ import { readStaffSession, FULL_ACCESS_ROLES } from "@/lib/staffSession";
 type PatientForm = {
   firstName: string;
   lastName: string;
-  age: number;
+  ageValue: number;
+  ageUnit: "years" | "months" | "days";
   gender: "male" | "female" | "other";
   phone: string;
   email?: string;
@@ -52,7 +53,7 @@ export default function Patients() {
   const [open, setOpen] = useState(false);
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [photoErr, setPhotoErr] = useState("");
-  const [editPatient, setEditPatient] = useState<{ id: number; firstName: string; lastName: string; age: number | null; gender: string; phone: string; email: string | null; address: string | null; bloodGroup: string | null } | null>(null);
+  const [editPatient, setEditPatient] = useState<{ id: number; firstName: string; lastName: string; dateOfBirth: string; ageValue?: number | null; ageUnit?: string | null; gender: string; phone: string; email: string | null; address: string | null; bloodGroup: string | null } | null>(null);
   const queryClient = useQueryClient();
 
   // Edit access: open ERP (no session) OR admin/super_admin role.
@@ -166,10 +167,31 @@ export default function Patients() {
   };
 
   const onSubmit = (data: PatientForm) => {
-    const birthYear = new Date().getFullYear() - Number(data.age);
-    const dateOfBirth = `${birthYear}-01-01`;
-    const { age, ...rest } = data;
-    const payload: Record<string, unknown> = { ...rest, dateOfBirth };
+    const now = new Date();
+    let dateOfBirth = "";
+    if (data.ageUnit === "years") {
+      dateOfBirth = `${now.getFullYear() - data.ageValue}-01-01`;
+    } else if (data.ageUnit === "months") {
+      const d = new Date();
+      d.setMonth(d.getMonth() - data.ageValue);
+      dateOfBirth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    } else {
+      const d = new Date();
+      d.setDate(d.getDate() - data.ageValue);
+      dateOfBirth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    }
+    const payload: Record<string, unknown> = {
+      firstName: data.firstName,
+      lastName: data.lastName,
+      gender: data.gender,
+      phone: data.phone,
+      dateOfBirth,
+      ageValue: data.ageValue,
+      ageUnit: data.ageUnit,
+      email: data.email || null,
+      address: data.address || null,
+      bloodGroup: data.bloodGroup || null,
+    };
     if (photoEnabled && photoDataUrl) payload.photoDataUrl = photoDataUrl;
     createPatient.mutate({ data: payload as unknown as Parameters<typeof createPatient.mutate>[0]["data"] });
   };
@@ -246,9 +268,16 @@ export default function Patients() {
                   <tr><td colSpan={photoEnabled ? 8 : 7} className="px-4 py-12 text-center text-muted-foreground">No patients found</td></tr>
                 ) : (
                   data?.patients?.map((p) => {
-                    const age = p.dateOfBirth
-                      ? new Date().getFullYear() - new Date(p.dateOfBirth).getFullYear()
-                      : null;
+                    const ageStr = (() => {
+                      if (p.ageValue != null && p.ageUnit) {
+                        if (p.ageUnit === "years") return p.ageValue > 0 ? `${p.ageValue} Yrs` : "—";
+                        if (p.ageUnit === "months") return `${p.ageValue} Mo`;
+                        if (p.ageUnit === "days") return `${p.ageValue} D`;
+                      }
+                      if (!p.dateOfBirth) return "—";
+                      const y = new Date().getFullYear() - new Date(p.dateOfBirth).getFullYear();
+                      return y > 0 ? `${y} Yrs` : "—";
+                    })();
                     const photo = (p as { photoDataUrl?: string | null }).photoDataUrl;
                     return (
                       <tr key={p.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
@@ -265,7 +294,7 @@ export default function Patients() {
                         )}
                         <td className="px-4 py-3 font-mono text-xs font-medium text-primary">{p.patientId}</td>
                         <td className="px-4 py-3 font-medium text-foreground">{p.firstName} {p.lastName}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{age !== null ? `${age} yrs` : "—"}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{ageStr}</td>
                         <td className="px-4 py-3 capitalize text-muted-foreground">{p.gender}</td>
                         <td className="px-4 py-3 text-muted-foreground">{p.phone}</td>
                         <td className="px-4 py-3">
@@ -281,13 +310,13 @@ export default function Patients() {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  // Codegen Patient may expose age via DOB only; fall back to derived `age` if no direct field.
-                                  const px = p as typeof p & { age?: number };
                                   setEditPatient({
                                     id: p.id,
                                     firstName: p.firstName,
                                     lastName: p.lastName,
-                                    age: typeof px.age === "number" ? px.age : (age ?? null),
+                                    dateOfBirth: p.dateOfBirth,
+                                    ageValue: p.ageValue,
+                                    ageUnit: p.ageUnit,
                                     gender: p.gender,
                                     phone: p.phone,
                                     email: p.email ?? null,
@@ -348,15 +377,25 @@ export default function Patients() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Age (years) *</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  max={150}
-                  placeholder="e.g. 35"
-                  {...register("age", { required: true, min: 0, max: 150, valueAsNumber: true })}
-                  className="mt-1"
-                />
+                <Label>Age *</Label>
+                <div className="flex gap-1 mt-1">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={watch("ageUnit") === "years" ? 150 : 365}
+                    placeholder="e.g. 35"
+                    {...register("ageValue", { required: true, min: 0, max: 365, valueAsNumber: true })}
+                    className="flex-1"
+                  />
+                  <Select value={watch("ageUnit")} onValueChange={(v) => setValue("ageUnit", v as "years" | "months" | "days")}>
+                    <SelectTrigger className="w-[90px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="years">Yrs</SelectItem>
+                      <SelectItem value="months">Mo</SelectItem>
+                      <SelectItem value="days">Days</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div>
                 <Label>Gender *</Label>
@@ -472,7 +511,8 @@ export default function Patients() {
 type EditForm = {
   firstName: string;
   lastName: string;
-  age: number;
+  ageValue: number;
+  ageUnit: "years" | "months" | "days";
   gender: "male" | "female" | "other";
   phone: string;
   email?: string;
@@ -483,15 +523,27 @@ type EditForm = {
 function EditPatientDialog({
   patient, onClose, onSaved,
 }: {
-  patient: { id: number; firstName: string; lastName: string; age: number | null; gender: string; phone: string; email: string | null; address: string | null; bloodGroup: string | null };
+  patient: { id: number; firstName: string; lastName: string; ageValue?: number | null; ageUnit?: string | null; dateOfBirth: string; gender: string; phone: string; email: string | null; address: string | null; bloodGroup: string | null };
   onClose: () => void;
   onSaved: () => void;
 }) {
+  // Derive ageValue/ageUnit defaults from the patient record
+  const initialAgeVal = patient.ageValue ?? (() => {
+    const dob = new Date(patient.dateOfBirth);
+    if (!isNaN(dob.getTime())) {
+      const years = new Date().getFullYear() - dob.getFullYear();
+      return years > 0 ? years : 0;
+    }
+    return 0;
+  })();
+  const initialAgeUnit = patient.ageUnit ?? "years";
+
   const { register, handleSubmit, setValue, watch } = useForm<EditForm>({
     defaultValues: {
       firstName: patient.firstName,
       lastName: patient.lastName,
-      age: patient.age ?? 0,
+      ageValue: initialAgeVal,
+      ageUnit: initialAgeUnit as EditForm["ageUnit"],
       gender: (patient.gender as EditForm["gender"]) || "male",
       phone: patient.phone,
       email: patient.email ?? "",
@@ -502,13 +554,34 @@ function EditPatientDialog({
   const [err, setErr] = useState<string | null>(null);
 
   const save = useMutation({
-    mutationFn: (data: EditForm) =>
-      api.put(`/api/patients/${patient.id}`, {
-        ...data,
+    mutationFn: (data: EditForm) => {
+      // Recompute dateOfBirth from ageValue + ageUnit
+      const now = new Date();
+      let dobStr = patient.dateOfBirth;
+      if (data.ageUnit === "years") {
+        dobStr = `${now.getFullYear() - data.ageValue}-01-01`;
+      } else if (data.ageUnit === "months") {
+        const d = new Date();
+        d.setMonth(d.getMonth() - data.ageValue);
+        dobStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      } else if (data.ageUnit === "days") {
+        const d = new Date();
+        d.setDate(d.getDate() - data.ageValue);
+        dobStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      }
+      return api.put(`/api/patients/${patient.id}`, {
+        firstName: data.firstName,
+        lastName: data.lastName,
+        gender: data.gender,
+        phone: data.phone,
         email: data.email || null,
         address: data.address || null,
         bloodGroup: data.bloodGroup || null,
-      }),
+        dateOfBirth: dobStr,
+        ageValue: data.ageValue,
+        ageUnit: data.ageUnit,
+      });
+    },
     onSuccess: onSaved,
     onError: (e: Error) => setErr(e.message),
   });
@@ -526,8 +599,18 @@ function EditPatientDialog({
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>Age (years) *</Label>
-              <Input type="number" min={0} max={150} {...register("age", { required: true, min: 0, max: 150, valueAsNumber: true })} className="mt-1" />
+              <Label>Age *</Label>
+              <div className="flex gap-1 mt-1">
+                <Input type="number" min={0} max={watch("ageUnit") === "years" ? 150 : 365} {...register("ageValue", { required: true, min: 0, max: 365, valueAsNumber: true })} className="flex-1" />
+                <Select value={watch("ageUnit")} onValueChange={(v) => setValue("ageUnit", v as EditForm["ageUnit"])}>
+                  <SelectTrigger className="w-[90px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="years">Yrs</SelectItem>
+                    <SelectItem value="months">Mo</SelectItem>
+                    <SelectItem value="days">Days</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div>
               <Label>Gender *</Label>

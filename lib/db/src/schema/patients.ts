@@ -16,6 +16,8 @@ export const patientsTable = pgTable("patients", {
   photoDataUrl: text("photo_data_url"),
   ledgerId: integer("ledger_id"),
   portalPinHash: text("portal_pin_hash"),
+  ageValue: integer("age_value"),
+  ageUnit: text("age_unit"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

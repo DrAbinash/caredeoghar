@@ -71,6 +71,16 @@ export const PatientGender = {
   other: "other",
 } as const;
 
+export type PatientAgeUnit =
+  | (typeof PatientAgeUnit)[keyof typeof PatientAgeUnit]
+  | null;
+
+export const PatientAgeUnit = {
+  years: "years",
+  months: "months",
+  days: "days",
+} as const;
+
 export interface Patient {
   id: number;
   patientId: string;
@@ -82,6 +92,8 @@ export interface Patient {
   email?: string | null;
   address?: string | null;
   bloodGroup?: string | null;
+  ageValue?: number | null;
+  ageUnit?: PatientAgeUnit;
   createdAt: string;
 }
 
@@ -101,6 +113,16 @@ export const CreatePatientBodyGender = {
   other: "other",
 } as const;
 
+export type CreatePatientBodyAgeUnit =
+  | (typeof CreatePatientBodyAgeUnit)[keyof typeof CreatePatientBodyAgeUnit]
+  | null;
+
+export const CreatePatientBodyAgeUnit = {
+  years: "years",
+  months: "months",
+  days: "days",
+} as const;
+
 export interface CreatePatientBody {
   firstName: string;
   lastName: string;
@@ -110,6 +132,8 @@ export interface CreatePatientBody {
   email?: string | null;
   address?: string | null;
   bloodGroup?: string | null;
+  ageValue?: number | null;
+  ageUnit?: CreatePatientBodyAgeUnit;
 }
 
 export type DiagnosticTestTestType =
