@@ -52,7 +52,7 @@ function matchLedger<T extends { ledgerId: import("drizzle-orm/pg-core").PgColum
 }
 
 // ── Helper: verify super admin token ──────────────────────────────────────────
-async function verifySuperAdmin(token: string): Promise<{ valid: boolean; userName: string }> {
+export async function verifySuperAdmin(token: string): Promise<{ valid: boolean; userName: string }> {
   if (!token) return { valid: false, userName: "" };
   const [s] = await db.select().from(superAdminSessionsTable).where(eq(superAdminSessionsTable.token, token));
   if (!s || !s.isActive || new Date(s.expiresAt) < new Date()) return { valid: false, userName: "" };

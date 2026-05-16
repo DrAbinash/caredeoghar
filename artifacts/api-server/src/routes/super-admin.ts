@@ -13,18 +13,33 @@ import {
   billsTable,
   patientsTable,
   ordersTable,
+  orderTestsTable,
   appointmentsTable,
   auditRunsTable,
   clinicSettingsTable,
+  billAuditsTable,
+  paymentsTable,
 } from "@workspace/db/schema";
-import { eq, and, asc, desc, isNull, or, sql } from "drizzle-orm";
+import { eq, and, asc, desc, isNull, or, sql, inArray } from "drizzle-orm";
 import { runBooksSanity } from "./books-sanity";
+import { verifySuperAdmin } from "./ledgers";
 import {
   requireSuperAdminUsb,
   isValidUsbKey,
   isUsbGateEnforced,
 } from "../middleware/requireSuperAdminUsb";
 import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
+import {
+  CreateLedgerBody,
+  UpdateLedgerParams,
+  UpdateLedgerBody,
+  DeleteLedgerParams,
+  DeleteLedgerBody,
+  AssignDoctorsToLedgerParams,
+  AssignDoctorsToLedgerBody,
+  ResetLedgerParams,
+  ResetLedgerBody,
+} from "@workspace/api-zod";
 
 export const superAdminRouter = Router();
 
@@ -284,6 +299,219 @@ superAdminRouter.get("/books", requireSuperAdmin, async (_req, res): Promise<voi
   );
 
   res.json(result);
+});
+
+// ── POST /api/super-admin/books — create a new ledger (SA only) ───────────────
+superAdminRouter.post("/books", requireSuperAdmin, async (req, res): Promise<void> => {
+  const bodyParsed = CreateLedgerBody.safeParse(req.body);
+  if (!bodyParsed.success) {
+    res.status(400).json({ error: "Invalid request", details: bodyParsed.error.issues });
+    return;
+  }
+  const { token, name } = bodyParsed.data;
+  const { valid } = await verifySuperAdmin(token);
+  if (!valid) {
+    res.status(403).json({ error: "Super admin session expired or invalid." });
+    return;
+  }
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    res.status(400).json({ error: "name is required" });
+    return;
+  }
+  try {
+    const [created] = await db.insert(ledgersTable).values({ name: trimmedName, isDefault: false }).returning();
+    res.status(201).json(created);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Failed to create ledger";
+    if (msg.includes("unique")) {
+      res.status(409).json({ error: "A book with that name already exists" });
+      return;
+    }
+    res.status(500).json({ error: msg });
+  }
+});
+
+// ── PATCH /api/super-admin/books/:id — rename a ledger (SA only) ──────────────
+superAdminRouter.patch("/books/:id", requireSuperAdmin, async (req, res): Promise<void> => {
+  const paramsParsed = UpdateLedgerParams.safeParse(req.params);
+  const bodyParsed = UpdateLedgerBody.safeParse(req.body);
+  if (!paramsParsed.success || !bodyParsed.success) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: [
+        ...(paramsParsed.success ? [] : paramsParsed.error.issues),
+        ...(bodyParsed.success ? [] : bodyParsed.error.issues),
+      ],
+    });
+    return;
+  }
+  const id = paramsParsed.data.id;
+  const { token, name } = bodyParsed.data;
+  const { valid } = await verifySuperAdmin(token);
+  if (!valid) {
+    res.status(403).json({ error: "Super admin session expired or invalid." });
+    return;
+  }
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    res.status(400).json({ error: "name is required" });
+    return;
+  }
+  try {
+    const [updated] = await db.update(ledgersTable).set({ name: trimmedName }).where(eq(ledgersTable.id, id)).returning();
+    if (!updated) {
+      res.status(404).json({ error: "Book not found" });
+      return;
+    }
+    res.json(updated);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Failed to rename";
+    if (msg.includes("unique")) {
+      res.status(409).json({ error: "A book with that name already exists" });
+      return;
+    }
+    res.status(500).json({ error: msg });
+  }
+});
+
+// ── DELETE /api/super-admin/books/:id — delete ledger (SA only) ───────────────
+superAdminRouter.delete("/books/:id", requireSuperAdmin, async (req, res): Promise<void> => {
+  const paramsParsed = DeleteLedgerParams.safeParse(req.params);
+  const bodyParsed = DeleteLedgerBody.safeParse(req.body);
+  if (!paramsParsed.success || !bodyParsed.success) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: [
+        ...(paramsParsed.success ? [] : paramsParsed.error.issues),
+        ...(bodyParsed.success ? [] : bodyParsed.error.issues),
+      ],
+    });
+    return;
+  }
+  const id = paramsParsed.data.id;
+  const { token } = bodyParsed.data;
+  const { valid } = await verifySuperAdmin(token);
+  if (!valid) {
+    res.status(403).json({ error: "Super admin session expired or invalid." });
+    return;
+  }
+  const [ledger] = await db.select().from(ledgersTable).where(eq(ledgersTable.id, id));
+  if (!ledger) {
+    res.status(404).json({ error: "Book not found" });
+    return;
+  }
+  if (ledger.isDefault) {
+    res.status(400).json({ error: "Cannot delete the default book" });
+    return;
+  }
+  await db.update(doctorsTable).set({ ledgerId: 1 }).where(eq(doctorsTable.ledgerId, id));
+  const [bc] = await db.select({ c: sql<number>`count(*)` }).from(billsTable).where(eq(billsTable.ledgerId, id));
+  const [pc] = await db.select({ c: sql<number>`count(*)` }).from(patientsTable).where(eq(patientsTable.ledgerId, id));
+  if (Number(bc?.c ?? 0) > 0 || Number(pc?.c ?? 0) > 0) {
+    res.status(400).json({ error: "Book is not empty — reset it first before deleting" });
+    return;
+  }
+  await db.delete(ledgersTable).where(eq(ledgersTable.id, id));
+  res.json({ success: true });
+});
+
+// ── POST /api/super-admin/books/:id/assign-doctors ────────────────────────────
+superAdminRouter.post("/books/:id/assign-doctors", requireSuperAdmin, async (req, res): Promise<void> => {
+  const paramsParsed = AssignDoctorsToLedgerParams.safeParse(req.params);
+  const bodyParsed = AssignDoctorsToLedgerBody.safeParse(req.body);
+  if (!paramsParsed.success || !bodyParsed.success) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: [
+        ...(paramsParsed.success ? [] : paramsParsed.error.issues),
+        ...(bodyParsed.success ? [] : bodyParsed.error.issues),
+      ],
+    });
+    return;
+  }
+  const id = paramsParsed.data.id;
+  const { doctorIds } = bodyParsed.data;
+  const [ledger] = await db.select().from(ledgersTable).where(eq(ledgersTable.id, id));
+  if (!ledger) {
+    res.status(404).json({ error: "Book not found" });
+    return;
+  }
+  await db.update(doctorsTable)
+    .set({ ledgerId: 1 })
+    .where(and(eq(doctorsTable.ledgerId, id), doctorIds.length > 0 ? sql`${doctorsTable.id} NOT IN (${sql.join(doctorIds.map((d: number) => sql`${d}`), sql`, `)})` : sql`true`));
+  if (doctorIds.length > 0) {
+    await db.update(doctorsTable).set({ ledgerId: id }).where(inArray(doctorsTable.id, doctorIds));
+  }
+  res.json({ assigned: doctorIds.length });
+});
+
+// ── POST /api/super-admin/books/:id/reset ────────────────────────────────────
+superAdminRouter.post("/books/:id/reset", requireSuperAdminUsb, requireSuperAdmin, async (req, res): Promise<void> => {
+  const paramsParsed = ResetLedgerParams.safeParse(req.params);
+  const bodyParsed = ResetLedgerBody.safeParse(req.body);
+  if (!paramsParsed.success || !bodyParsed.success) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: [
+        ...(paramsParsed.success ? [] : paramsParsed.error.issues),
+        ...(bodyParsed.success ? [] : bodyParsed.error.issues),
+      ],
+    });
+    return;
+  }
+  const id = paramsParsed.data.id;
+  const { token, reason } = bodyParsed.data;
+  if (!reason || reason.trim().length < 3) {
+    res.status(400).json({ error: "A reason of at least 3 characters is required" });
+    return;
+  }
+  const { valid, userName } = await verifySuperAdmin(token);
+  if (!valid) {
+    res.status(403).json({ error: "Super admin session expired or invalid." });
+    return;
+  }
+  const [ledger] = await db.select().from(ledgersTable).where(eq(ledgersTable.id, id));
+  if (!ledger) {
+    res.status(404).json({ error: "Book not found" });
+    return;
+  }
+  const isDefault = id === 1;
+  const billRows = await db.select({ id: billsTable.id }).from(billsTable).where(
+    isDefault ? or(eq(billsTable.ledgerId, 1), isNull(billsTable.ledgerId)) : eq(billsTable.ledgerId, id),
+  );
+  const billIds = billRows.map(r => r.id);
+  const orderRows = await db.select({ id: ordersTable.id }).from(ordersTable).where(
+    isDefault ? or(eq(ordersTable.ledgerId, 1), isNull(ordersTable.ledgerId)) : eq(ordersTable.ledgerId, id),
+  );
+  const orderIds = orderRows.map(r => r.id);
+  const patientRows = await db.select({ id: patientsTable.id }).from(patientsTable).where(
+    isDefault ? or(eq(patientsTable.ledgerId, 1), isNull(patientsTable.ledgerId)) : eq(patientsTable.ledgerId, id),
+  );
+  const patientIds = patientRows.map(r => r.id);
+  if (billIds.length) {
+    await db.delete(paymentsTable).where(inArray(paymentsTable.billId, billIds));
+    await db.delete(billAuditsTable).where(inArray(billAuditsTable.billId, billIds));
+    await db.delete(billsTable).where(inArray(billsTable.id, billIds));
+  }
+  if (orderIds.length) {
+    await db.delete(orderTestsTable).where(inArray(orderTestsTable.orderId, orderIds));
+    await db.delete(ordersTable).where(inArray(ordersTable.id, orderIds));
+  }
+  await db.delete(appointmentsTable).where(
+    isDefault ? or(eq(appointmentsTable.ledgerId, 1), isNull(appointmentsTable.ledgerId)) : eq(appointmentsTable.ledgerId, id),
+  );
+  if (patientIds.length) {
+    await db.delete(appointmentsTable).where(inArray(appointmentsTable.patientId, patientIds));
+    await db.delete(patientsTable).where(inArray(patientsTable.id, patientIds));
+  }
+  res.json({
+    ok: true,
+    book: ledger.name,
+    by: userName,
+    reason,
+    wiped: { bills: billIds.length, orders: orderIds.length, patients: patientIds.length },
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
