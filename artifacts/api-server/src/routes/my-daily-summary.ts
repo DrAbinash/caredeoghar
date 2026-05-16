@@ -141,6 +141,67 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
     ))
     .orderBy(sql`${paymentsTable.createdAt} DESC`);
 
+  // ── Dues collected: payments in this range on bills created BEFORE start ─
+  // "Dues collection" = a follow-up payment on an old outstanding/partial bill.
+  // We pull every positive payment in the period whose parent bill was created
+  // before the period start, then aggregate by bill in JS.
+  const duesPaymentRows = await db
+    .select({
+      paymentId: paymentsTable.id,
+      paymentAmount: paymentsTable.amount,
+      paymentMethod: paymentsTable.method,
+      billId: billsTable.id,
+      billNumber: billsTable.billNumber,
+      totalAmount: billsTable.totalAmount,
+      balanceAmount: billsTable.balanceAmount,
+      billStatus: billsTable.status,
+      billCreatedAt: billsTable.createdAt,
+      patientFirstName: patientsTable.firstName,
+      patientLastName: patientsTable.lastName,
+      referringDoctor: doctorsTable.name,
+    })
+    .from(paymentsTable)
+    .innerJoin(billsTable, eq(paymentsTable.billId, billsTable.id))
+    .leftJoin(patientsTable, eq(billsTable.patientId, patientsTable.id))
+    .leftJoin(ordersTable, eq(billsTable.orderId, ordersTable.id))
+    .leftJoin(doctorsTable, eq(ordersTable.doctorId, doctorsTable.id))
+    .where(and(
+      gte(paymentsTable.createdAt, start),
+      lt(paymentsTable.createdAt, end),
+      lt(billsTable.createdAt, start),           // bill predates the period
+      sql`${paymentsTable.amount}::numeric > 0`, // positive payments only
+      ...(staffName !== null ? [eq(paymentsTable.recordedByName, staffName)] : []),
+    ))
+    .orderBy(sql`${billsTable.id} ASC`);
+
+  // Aggregate dues rows by bill
+  type DuesBillAgg = {
+    billId: number; billNumber: string;
+    patientName: string; referringDoctor: string | null;
+    totalAmount: number; duesCollected: number; remainingDues: number;
+    billStatus: string;
+  };
+  const duesByBillMap = new Map<number, DuesBillAgg>();
+  for (const r of duesPaymentRows) {
+    if (!duesByBillMap.has(r.billId)) {
+      duesByBillMap.set(r.billId, {
+        billId: r.billId,
+        billNumber: r.billNumber,
+        patientName: r.patientFirstName
+          ? `${r.patientFirstName} ${r.patientLastName ?? ""}`.trim()
+          : "Unknown",
+        referringDoctor: r.referringDoctor ?? null,
+        totalAmount: Number(r.totalAmount),
+        duesCollected: 0,
+        remainingDues: Math.max(0, Number(r.balanceAmount ?? 0)),
+        billStatus: r.billStatus ?? "pending",
+      });
+    }
+    duesByBillMap.get(r.billId)!.duesCollected += Number(r.paymentAmount);
+  }
+  const duesBills = Array.from(duesByBillMap.values())
+    .sort((a, b) => b.duesCollected - a.duesCollected);
+
   // ── Bill audits by this staff ──────────────────────────────────────────
   const billEditsRaw = await db
     .select({
@@ -339,5 +400,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       totalAmount: Number(r.totalAmount),
       originalCreator: r.createdByName ?? "Unknown",
     })),
+    // Dues collected: payments today on old bills (created before this period).
+    duesBills,
   });
 });

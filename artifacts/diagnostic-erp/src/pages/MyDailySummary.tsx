@@ -9,7 +9,7 @@ import { Link } from "wouter";
 import {
   IndianRupee, Wallet, Banknote, Smartphone, TrendingDown, RotateCcw,
   XCircle, FileEdit, Clock, Calendar, RefreshCw, Tag, CheckCircle2,
-  ArrowRight, Users, Percent,
+  ArrowRight, Users, Percent, Receipt,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -79,6 +79,16 @@ type MyDailySummaryData = {
     oldValue: string | null;
     newValue: string | null;
     createdAt: string;
+  }[];
+  duesBills: {
+    billId: number;
+    billNumber: string;
+    patientName: string;
+    referringDoctor: string | null;
+    totalAmount: number;
+    duesCollected: number;
+    remainingDues: number;
+    billStatus: string;
   }[];
 };
 
@@ -473,6 +483,75 @@ export default function MyDailySummary() {
             </div>
           </div>
         </>
+      )}
+
+      {/* ── Dues Collected ── */}
+      {data && data.duesBills.length > 0 && (
+        <div className="bg-white dark:bg-card border border-teal-200 dark:border-teal-800 rounded-xl shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-teal-100 dark:border-teal-800 flex items-center justify-between bg-teal-50 dark:bg-teal-900/20">
+            <h3 className="text-sm font-bold text-teal-900 dark:text-teal-200 flex items-center gap-2">
+              <Receipt size={14} className="text-teal-600" /> Dues Collected
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-200 dark:bg-teal-800 text-teal-800 dark:text-teal-200">
+                {data.duesBills.length} bills
+              </span>
+            </h3>
+            <span className="text-xs font-bold text-teal-700 dark:text-teal-300 tabular-nums">
+              Total collected: {fmt(data.duesBills.reduce((s, b) => s + b.duesCollected, 0))}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-teal-50 dark:bg-teal-900/10">
+                <tr>
+                  {["Bill #", "Patient Name", "Referral Doctor", "Bill Total", "Dues Collected", "Still Pending"].map((h) => (
+                    <th key={h} className="px-3 py-2.5 text-left font-semibold text-teal-800 dark:text-teal-300 whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-teal-50 dark:divide-teal-900/20">
+                {data.duesBills.map((b) => (
+                  <tr key={b.billId} className="hover:bg-teal-50/60 dark:hover:bg-teal-900/10">
+                    <td className="px-3 py-2 font-semibold whitespace-nowrap">
+                      <Link href={`/billing/${b.billId}`} className="text-primary hover:underline">{b.billNumber}</Link>
+                    </td>
+                    <td className="px-3 py-2 font-semibold text-gray-800 dark:text-foreground">{b.patientName}</td>
+                    <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                      {b.referringDoctor ?? <span className="text-gray-400">—</span>}
+                    </td>
+                    <td className="px-3 py-2 tabular-nums text-gray-900 dark:text-foreground font-semibold">{fmt(b.totalAmount)}</td>
+                    <td className="px-3 py-2 tabular-nums font-bold text-teal-700 dark:text-teal-400">{fmt(b.duesCollected)}</td>
+                    <td className="px-3 py-2 tabular-nums">
+                      {b.remainingDues > 0 ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-semibold">
+                          {fmt(b.remainingDues)}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 font-semibold">
+                          Cleared ✓
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-teal-50 dark:bg-teal-900/10 border-t-2 border-teal-200 dark:border-teal-800">
+                <tr>
+                  <td className="px-3 py-2 font-bold text-teal-800 dark:text-teal-300" colSpan={4}>
+                    Total ({data.duesBills.length} bills)
+                  </td>
+                  <td className="px-3 py-2 font-bold tabular-nums text-teal-700 dark:text-teal-300">
+                    {fmt(data.duesBills.reduce((s, b) => s + b.duesCollected, 0))}
+                  </td>
+                  <td className="px-3 py-2 font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                    {data.duesBills.some((b) => b.remainingDues > 0)
+                      ? fmt(data.duesBills.reduce((s, b) => s + b.remainingDues, 0))
+                      : <span className="text-green-600 dark:text-green-400">All cleared</span>}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
       )}
 
       {/* ── Discounts Given ── */}
