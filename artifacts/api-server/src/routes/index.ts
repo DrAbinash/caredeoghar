@@ -64,6 +64,7 @@ import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
 import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
 import userPreferencesRouter from "./userPreferences";
 import { radiologyReportGeneratorRouter } from "./radiology-report-generator";
+import { floorsRouter, roomsRouter, modalitiesRouter } from "./locations";
 
 const router: IRouter = Router();
 
@@ -256,6 +257,9 @@ router.use("/report-templates", requireStaffAuth, requireStaffPermission("/setti
 router.use("/abnormal-findings", requireStaffAuth, requireStaffPermission("/settings"), abnormalFindingsRouter);
 router.use("/machines", requireStaffAuth, requireStaffPermission("/settings"), machinesRouter);
 router.use("/departments", requireStaffAuth, requireStaffPermission("/settings"), departmentsRouter);
+router.use("/floors", requireStaffAuth, requireStaffPermission("/settings"), floorsRouter);
+router.use("/rooms", requireStaffAuth, requireStaffPermission("/settings"), roomsRouter);
+router.use("/modalities", requireStaffAuth, requireStaffPermission("/settings"), modalitiesRouter);
 router.use("/branches", requireStaffAuth, requireStaffPermission("/settings"), branchesRouter);
 router.use("/printers", requireStaffAuth, requireStaffPermission("/settings"), printersRouter);
 router.use("/vendors", requireStaffAuth, requireStaffPermission("/settings"), vendorsRouter);

@@ -99,7 +99,7 @@ type LastBill = {
   // Per-department queue tokens issued by the bill creation flow. Populated
   // by the /api/bills POST response; rendered on the separate token printer
   // (see printToken below).
-  testTokens?: Array<{ orderTestId: number; testName: string; department: string; roomNumber: string; tokenNo: number }>;
+  testTokens?: Array<{ orderTestId: number; testName: string; department: string; roomNumber: string; floorLabel: string; tokenNo: number }>;
 };
 
 // ──────────────────────────────────────────────────────
@@ -361,7 +361,7 @@ async function printToken(b: LastBill, clinic: ClinicLite) {
       <tr>
         <td class="dept">${escapeHtml(t.department)}</td>
         <td class="num">#${String(t.tokenNo).padStart(3, "0")}</td>
-        <td class="room">${t.roomNumber ? `Room ${escapeHtml(t.roomNumber)}` : "—"}</td>
+        <td class="room">${t.roomNumber ? `Room ${escapeHtml(t.roomNumber)}${t.floorLabel ? `<br><span style="font-size:9px;color:#666;font-weight:400">${escapeHtml(t.floorLabel)}</span>` : ""}` : "—"}</td>
       </tr>`).join("");
     body = `
       <div class="title">QUEUE TOKENS</div>
@@ -700,7 +700,7 @@ export default function BillingDesk() {
         id: number;
         billNumber: string;
         token?: { tokenNo: number; tokenDate: string } | null;
-        testTokens?: Array<{ orderTestId: number; testName: string; department: string; roomNumber: string; tokenNo: number }>;
+        testTokens?: Array<{ orderTestId: number; testName: string; department: string; roomNumber: string; floorLabel: string; tokenNo: number }>;
       }>("/api/bills", {
         orderId: order.id,
         discount: discountAmt,

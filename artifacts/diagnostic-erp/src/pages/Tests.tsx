@@ -40,9 +40,14 @@ type TestForm = {
   isActive: boolean;
   department?: string;
   roomNumber?: string;
+  roomId?: number | null;
+  modalityId?: number | null;
   testType?: string;
   outsourcedLabId?: number | null;
 };
+
+type RoomOption = { id: number; name: string; floorName: string | null; isActive: boolean };
+type ModalityOption = { id: number; name: string; isActive: boolean };
 
 const NO_OUTSOURCED_LAB = "__none__";
 
@@ -77,6 +82,20 @@ function useOutsourcedLabs() {
   });
 }
 
+function useRooms() {
+  return useQuery<RoomOption[]>({
+    queryKey: ["rooms"],
+    queryFn: () => api.get<RoomOption[]>("/api/rooms"),
+  });
+}
+
+function useModalities() {
+  return useQuery<ModalityOption[]>({
+    queryKey: ["modalities"],
+    queryFn: () => api.get<ModalityOption[]>("/api/modalities"),
+  });
+}
+
 export default function Tests() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
@@ -89,8 +108,12 @@ export default function Tests() {
   const { data, isLoading } = useListTests({ search: search || undefined, category: category || undefined });
   const { data: allCategories = [] } = useTestCategories();
   const { data: outsourcedLabs = [] } = useOutsourcedLabs();
+  const { data: rooms = [] } = useRooms();
+  const { data: modalities = [] } = useModalities();
   const activeCategories = allCategories.filter((c) => c.isActive);
   const activeOutsourcedLabs = outsourcedLabs.filter((l) => l.isActive);
+  const activeRooms = rooms.filter((r) => r.isActive);
+  const activeModalities = modalities.filter((m) => m.isActive);
 
   const [submitErr, setSubmitErr] = useState("");
   const [exporting, setExporting] = useState(false);
@@ -216,6 +239,8 @@ export default function Tests() {
       price: Number(data.price),
       testType,
       outsourcedLabId,
+      roomId: data.roomId ?? null,
+      modalityId: data.modalityId ?? null,
     } as unknown as Parameters<typeof createTest.mutate>[0]["data"];
     if (editTest) {
       updateTest.mutate({ id: editTest.id, data: payload as unknown as Parameters<typeof updateTest.mutate>[0]["data"] });
@@ -224,9 +249,9 @@ export default function Tests() {
     }
   };
 
-  const openEdit = (t: { id: number; code: string; name: string; category: string; price: number; duration: string; description?: string | null; isActive: boolean; department?: string; roomNumber?: string; testType?: string | null; outsourcedLabId?: number | null }) => {
-    const tx = t as typeof t & { department?: string; roomNumber?: string; testType?: string | null; outsourcedLabId?: number | null };
-    setEditTest({ id: t.id, code: t.code, name: t.name, category: t.category, price: t.price, duration: t.duration, description: t.description ?? "", isActive: t.isActive, department: tx.department, roomNumber: tx.roomNumber, testType: tx.testType ?? "inhouse", outsourcedLabId: tx.outsourcedLabId ?? null });
+  const openEdit = (t: { id: number; code: string; name: string; category: string; price: number; duration: string; description?: string | null; isActive: boolean; department?: string; roomNumber?: string; roomId?: number | null; modalityId?: number | null; testType?: string | null; outsourcedLabId?: number | null }) => {
+    const tx = t as typeof t & { department?: string; roomNumber?: string; roomId?: number | null; modalityId?: number | null; testType?: string | null; outsourcedLabId?: number | null };
+    setEditTest({ id: t.id, code: t.code, name: t.name, category: t.category, price: t.price, duration: t.duration, description: t.description ?? "", isActive: t.isActive, department: tx.department, roomNumber: tx.roomNumber, roomId: tx.roomId ?? null, modalityId: tx.modalityId ?? null, testType: tx.testType ?? "inhouse", outsourcedLabId: tx.outsourcedLabId ?? null });
     setValue("code", t.code);
     setValue("name", t.name);
     setValue("category", t.category);
@@ -235,7 +260,8 @@ export default function Tests() {
     setValue("description", t.description ?? "");
     setValue("isActive", t.isActive);
     setValue("department", tx.department ?? "Pathology");
-    setValue("roomNumber", tx.roomNumber ?? "");
+    setValue("roomId", tx.roomId ?? null);
+    setValue("modalityId", tx.modalityId ?? null);
     setValue("testType", tx.testType ?? "inhouse");
     setValue("outsourcedLabId", tx.outsourcedLabId ?? null);
     setOpen(true);
@@ -411,8 +437,42 @@ export default function Tests() {
                 <p className="text-[11px] text-muted-foreground mt-1">Drives which queue (e.g. USG room) this test routes to.</p>
               </div>
               <div>
-                <Label>Room Number</Label>
-                <Input {...register("roomNumber")} className="mt-1" placeholder="Room 4" />
+                <Label>Room / Counter</Label>
+                <Select
+                  value={String(watch("roomId") ?? "")}
+                  onValueChange={(v) => setValue("roomId", v && v !== "__none__" ? Number(v) : null)}
+                >
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="Not assigned" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Not assigned</SelectItem>
+                    {activeRooms.map((r) => (
+                      <SelectItem key={r.id} value={String(r.id)}>
+                        {r.name}{r.floorName ? ` · ${r.floorName}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {activeRooms.length === 0 && (
+                  <p className="text-[11px] text-muted-foreground mt-1">Add rooms in Settings → Locations.</p>
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Modality</Label>
+                <Select
+                  value={String(watch("modalityId") ?? "")}
+                  onValueChange={(v) => setValue("modalityId", v && v !== "__none__" ? Number(v) : null)}
+                >
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="Not assigned" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Not assigned</SelectItem>
+                    {activeModalities.map((m) => <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {activeModalities.length === 0 && (
+                  <p className="text-[11px] text-muted-foreground mt-1">Add modalities in Settings → Locations.</p>
+                )}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">

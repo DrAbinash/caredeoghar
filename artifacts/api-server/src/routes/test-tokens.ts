@@ -251,7 +251,7 @@ export async function generateTestTokensForOrder(opts: {
   patientId: number;
   priority?: number;
   source?: string;
-}): Promise<Array<{ orderTestId: number; testName: string; department: string; roomNumber: string; tokenNo: number }>> {
+}): Promise<Array<{ orderTestId: number; testName: string; department: string; roomNumber: string; floorLabel: string; tokenNo: number }>> {
   const orderTests = await db
     .select({
       orderTestId: orderTestsTable.id,
@@ -259,12 +259,13 @@ export async function generateTestTokensForOrder(opts: {
       testName: testsTable.name,
       department: testsTable.department,
       roomNumber: testsTable.roomNumber,
+      floorLabel: testsTable.floorLabel,
     })
     .from(orderTestsTable)
     .innerJoin(testsTable, eq(testsTable.id, orderTestsTable.testId))
     .where(eq(orderTestsTable.orderId, opts.orderId));
 
-  const out: Array<{ orderTestId: number; testName: string; department: string; roomNumber: string; tokenNo: number }> = [];
+  const out: Array<{ orderTestId: number; testName: string; department: string; roomNumber: string; floorLabel: string; tokenNo: number }> = [];
   for (const ot of orderTests) {
     try {
       const t = await generateTestToken({
@@ -284,6 +285,7 @@ export async function generateTestTokensForOrder(opts: {
         testName: ot.testName,
         department: t.department,
         roomNumber: t.roomNumber,
+        floorLabel: ot.floorLabel || "",
         tokenNo: t.tokenNo,
       });
     } catch (err) {

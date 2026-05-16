@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, testsTable } from "@workspace/db";
-import { orderTestsTable } from "@workspace/db";
+import { orderTestsTable, roomsTable, floorsTable } from "@workspace/db";
 import { eq, ilike, and, sql, desc, asc } from "drizzle-orm";
 import {
   ListTestsQueryParams,
@@ -66,13 +66,32 @@ testsRouter.get("/", async (req, res) => {
 
 // Sourced from req.body separately because the codegen'd CreateTestBody zod
 // strips unknown keys. Falls back to safe defaults so old callers keep working.
-function extractDeptRoom(body: unknown): { department?: string; roomNumber?: string } {
+function extractDeptRoom(body: unknown): {
+  department?: string; roomNumber?: string;
+  roomId?: number | null; modalityId?: number | null; floorLabel?: string;
+} {
   if (!body || typeof body !== "object") return {};
   const b = body as Record<string, unknown>;
-  const out: { department?: string; roomNumber?: string } = {};
+  const out: { department?: string; roomNumber?: string; roomId?: number | null; modalityId?: number | null; floorLabel?: string } = {};
   if (typeof b.department === "string" && b.department.trim()) out.department = b.department.trim();
   if (typeof b.roomNumber === "string") out.roomNumber = b.roomNumber.trim();
+  if (b.roomId !== undefined) out.roomId = b.roomId == null ? null : Number(b.roomId) || null;
+  if (b.modalityId !== undefined) out.modalityId = b.modalityId == null ? null : Number(b.modalityId) || null;
+  if (typeof b.floorLabel === "string") out.floorLabel = b.floorLabel.trim();
   return out;
+}
+
+// When a roomId is provided, resolve the room's name and floor name so the
+// legacy `roomNumber` text field and new `floorLabel` field stay in sync.
+async function resolveRoomFields(roomId: number | null | undefined): Promise<{ roomNumber?: string; floorLabel?: string }> {
+  if (!roomId) return {};
+  const [row] = await db
+    .select({ name: roomsTable.name, floorName: floorsTable.name })
+    .from(roomsTable)
+    .leftJoin(floorsTable, eq(floorsTable.id, roomsTable.floorId))
+    .where(eq(roomsTable.id, roomId));
+  if (!row) return {};
+  return { roomNumber: row.name, floorLabel: row.floorName ?? "" };
 }
 
 /** Walk the error + cause chain and return true if it looks like a PG unique-violation. */
@@ -96,6 +115,7 @@ testsRouter.post("/", async (req, res) => {
     return;
   }
   const extra = extractDeptRoom(req.body);
+  const resolved = await resolveRoomFields(extra.roomId);
   try {
     const [test] = await db.insert(testsTable).values({
       ...parsed.data,
@@ -104,7 +124,10 @@ testsRouter.post("/", async (req, res) => {
       testType: parsed.data.testType ?? undefined,
       outsourcedLabId: parsed.data.outsourcedLabId ?? undefined,
       ...(extra.department !== undefined ? { department: extra.department } : {}),
-      ...(extra.roomNumber !== undefined ? { roomNumber: extra.roomNumber } : {}),
+      ...(extra.roomId !== undefined ? { roomId: extra.roomId } : {}),
+      ...(extra.modalityId !== undefined ? { modalityId: extra.modalityId } : {}),
+      ...(resolved.roomNumber !== undefined ? { roomNumber: resolved.roomNumber } : extra.roomNumber !== undefined ? { roomNumber: extra.roomNumber } : {}),
+      ...(resolved.floorLabel !== undefined ? { floorLabel: resolved.floorLabel } : extra.floorLabel !== undefined ? { floorLabel: extra.floorLabel } : {}),
     }).returning();
     res.status(201).json({ ...test, price: Number(test.price) });
   } catch (e) {
@@ -213,7 +236,19 @@ testsRouter.put("/:id", async (req, res) => {
   }
   const extra = extractDeptRoom(req.body);
   if (extra.department !== undefined) updateData.department = extra.department;
-  if (extra.roomNumber !== undefined) updateData.roomNumber = extra.roomNumber;
+  if (extra.roomId !== undefined) updateData.roomId = extra.roomId;
+  if (extra.modalityId !== undefined) updateData.modalityId = extra.modalityId;
+  // When roomId changes, sync the denormalized roomNumber + floorLabel fields
+  if (extra.roomId !== undefined) {
+    const resolved = await resolveRoomFields(extra.roomId);
+    if (resolved.roomNumber !== undefined) updateData.roomNumber = resolved.roomNumber;
+    if (resolved.floorLabel !== undefined) updateData.floorLabel = resolved.floorLabel;
+    // Clear floorLabel when room is unset
+    if (!extra.roomId) { updateData.roomNumber = ""; updateData.floorLabel = ""; }
+  } else if (extra.roomNumber !== undefined) {
+    updateData.roomNumber = extra.roomNumber;
+  }
+  if (extra.floorLabel !== undefined && extra.roomId === undefined) updateData.floorLabel = extra.floorLabel;
   const [updated] = await db
     .update(testsTable)
     .set(updateData)

@@ -20,7 +20,7 @@ import {
   Tag, Building2, Image as ImageIcon, Upload, MessageCircle, Printer,
   Search, Globe, Copy, ExternalLink, Check, Network, MapPin, Database,
   RefreshCcw, FileCode, Send, QrCode, Palette, Bot, Inbox, ChevronRight,
-  ArrowLeft, Phone,
+  ArrowLeft, Phone, Layers,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -101,6 +101,7 @@ const TABS = [
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "users", label: "Users", icon: Users },
   { id: "departments", label: "Departments", icon: Network },
+  { id: "locations", label: "Locations", icon: Layers },
   { id: "branches", label: "Branches", icon: MapPin },
   { id: "report-templates", label: "Report Templates", icon: FileCode },
   { id: "portal", label: "Patient Portal", icon: Globe },
@@ -190,6 +191,7 @@ export default function Settings() {
         {tab === "appearance" && <AppearanceTab />}
         {tab === "users" && <UsersTab qc={qc} />}
         {tab === "departments" && <DepartmentsTab />}
+        {tab === "locations" && <LocationsTab />}
         {tab === "branches" && <BranchesTab />}
         {tab === "report-templates" && <ReportTemplatesTab />}
         {tab === "portal" && <PatientPortalTab />}
@@ -2758,6 +2760,212 @@ function DepartmentsTab() {
             <Button variant="outline" onClick={() => { setOpen(false); reset(); }}>Cancel</Button>
             <Button onClick={onSubmit} disabled={!form.name.trim()}>{editing ? "Save" : "Add"}</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ============================================================
+// LOCATIONS TAB (Floors + Rooms + Modalities)
+// ============================================================
+type Floor = { id: number; name: string; code: string; description: string | null; isActive: boolean; sortOrder: number; roomCount: number };
+type Room  = { id: number; name: string; code: string; floorId: number | null; floorName: string | null; description: string | null; isActive: boolean; sortOrder: number; testCount: number };
+type Modality = { id: number; name: string; code: string; description: string | null; isActive: boolean; sortOrder: number; testCount: number };
+
+function LocationsTab() {
+  const [sub, setSub] = useState<"floors" | "rooms" | "modalities">("floors");
+  return (
+    <div className="space-y-3">
+      <div className="bg-card border border-border rounded-xl p-4">
+        <h3 className="font-semibold flex items-center gap-2 mb-1"><Layers size={16} /> Locations Master</h3>
+        <p className="text-xs text-muted-foreground">Manage physical floors, rooms/counters, and imaging modalities. Assign them to tests in the Test Catalog — they appear on queue token slips.</p>
+        <div className="flex gap-1 mt-3 bg-muted p-1 rounded-lg w-fit">
+          {(["floors", "rooms", "modalities"] as const).map(s => (
+            <button key={s} onClick={() => setSub(s)} className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${sub === s ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+              {s === "floors" ? "Floors" : s === "rooms" ? "Rooms / Counters" : "Modalities"}
+            </button>
+          ))}
+        </div>
+      </div>
+      {sub === "floors" && <FloorsSubTab />}
+      {sub === "rooms" && <RoomsSubTab />}
+      {sub === "modalities" && <ModalitiesSubTab />}
+    </div>
+  );
+}
+
+function FloorsSubTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: rows = [], isLoading } = useQuery<Floor[]>({ queryKey: ["floors"], queryFn: () => api.get("/api/floors") });
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Floor | null>(null);
+  const [form, setForm] = useState({ name: "", code: "", description: "", sortOrder: 0, isActive: true });
+  const reset = () => { setEditing(null); setForm({ name: "", code: "", description: "", sortOrder: 0, isActive: true }); };
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["floors"] });
+  const create = useMutation({ mutationFn: (b: typeof form) => api.post("/api/floors", b), onSuccess: () => { invalidate(); setOpen(false); reset(); toast({ title: "Floor added" }); }, onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }) });
+  const update = useMutation({ mutationFn: ({ id, b }: { id: number; b: typeof form }) => api.patch(`/api/floors/${id}`, b), onSuccess: () => { invalidate(); setOpen(false); reset(); toast({ title: "Floor updated" }); }, onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }) });
+  const remove = useMutation({ mutationFn: (id: number) => api.delete(`/api/floors/${id}`), onSuccess: () => { invalidate(); qc.invalidateQueries({ queryKey: ["rooms"] }); toast({ title: "Floor deleted" }); }, onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }) });
+  const onEdit = (d: Floor) => { setEditing(d); setForm({ name: d.name, code: d.code || "", description: d.description || "", sortOrder: d.sortOrder, isActive: d.isActive }); setOpen(true); };
+  const onSubmit = () => { if (!form.name.trim()) return; if (editing) update.mutate({ id: editing.id, b: form }); else create.mutate(form); };
+  return (
+    <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div className="p-3 border-b border-border flex items-center justify-between">
+        <span className="text-sm font-medium">{rows.length} floor{rows.length !== 1 ? "s" : ""}</span>
+        <Button size="sm" onClick={() => { reset(); setOpen(true); }}><Plus size={13} className="mr-1" /> Add Floor</Button>
+      </div>
+      <table className="w-full text-sm">
+        <thead className="bg-muted/40 text-xs text-left">
+          <tr><th className="px-3 py-2">Name</th><th className="px-3 py-2">Code</th><th className="px-3 py-2 text-right">Rooms</th><th className="px-3 py-2">Status</th><th className="px-3 py-2 text-right">Actions</th></tr>
+        </thead>
+        <tbody>
+          {isLoading ? <tr><td colSpan={5} className="px-3 py-8 text-center text-xs text-muted-foreground">Loading…</td></tr>
+            : rows.length === 0 ? <tr><td colSpan={5} className="px-3 py-8 text-center text-xs text-muted-foreground">No floors yet — e.g. Ground Floor, First Floor</td></tr>
+            : rows.map(d => (
+              <tr key={d.id} className="border-t border-border/50 hover:bg-muted/20">
+                <td className="px-3 py-2 font-medium">{d.name}</td>
+                <td className="px-3 py-2 text-xs font-mono">{d.code || "—"}</td>
+                <td className="px-3 py-2 text-xs text-right">{d.roomCount}</td>
+                <td className="px-3 py-2"><Badge className={d.isActive ? "bg-emerald-100 text-emerald-700" : "bg-zinc-200 text-zinc-700"}>{d.isActive ? "active" : "inactive"}</Badge></td>
+                <td className="px-3 py-2"><div className="flex justify-end gap-1"><Button size="sm" variant="outline" onClick={() => onEdit(d)}><Pencil size={13} /></Button><Button size="sm" variant="outline" onClick={() => { if (confirm(`Delete "${d.name}"?`)) remove.mutate(d.id); }}><Trash2 size={13} className="text-rose-500" /></Button></div></td>
+              </tr>
+            ))}
+        </tbody>
+      </table>
+      <Dialog open={open} onOpenChange={o => { setOpen(o); if (!o) reset(); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{editing ? "Edit Floor" : "Add Floor"}</DialogTitle></DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2"><Label className="text-xs">Name *</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Ground Floor" /></div>
+            <div><Label className="text-xs">Code</Label><Input value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} placeholder="GF" /></div>
+            <div><Label className="text-xs">Sort Order</Label><Input type="number" value={form.sortOrder} onChange={e => setForm({ ...form, sortOrder: Number(e.target.value) })} /></div>
+            <div className="col-span-2"><Label className="text-xs">Description</Label><Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></div>
+            <label className="flex items-center gap-2 col-span-2 text-sm"><input type="checkbox" checked={form.isActive} onChange={e => setForm({ ...form, isActive: e.target.checked })} /> Active</label>
+          </div>
+          <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => { setOpen(false); reset(); }}>Cancel</Button><Button onClick={onSubmit} disabled={!form.name.trim()}>{editing ? "Save" : "Add"}</Button></div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function RoomsSubTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: rows = [], isLoading } = useQuery<Room[]>({ queryKey: ["rooms"], queryFn: () => api.get("/api/rooms") });
+  const { data: floors = [] } = useQuery<Floor[]>({ queryKey: ["floors"], queryFn: () => api.get("/api/floors") });
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Room | null>(null);
+  const [form, setForm] = useState({ name: "", code: "", floorId: "" as string, description: "", sortOrder: 0, isActive: true });
+  const reset = () => { setEditing(null); setForm({ name: "", code: "", floorId: "", description: "", sortOrder: 0, isActive: true }); };
+  const invalidate = () => { qc.invalidateQueries({ queryKey: ["rooms"] }); qc.invalidateQueries({ queryKey: ["floors"] }); };
+  const toPayload = () => ({ ...form, floorId: form.floorId ? Number(form.floorId) : null });
+  const create = useMutation({ mutationFn: () => api.post("/api/rooms", toPayload()), onSuccess: () => { invalidate(); setOpen(false); reset(); toast({ title: "Room added" }); }, onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }) });
+  const update = useMutation({ mutationFn: ({ id }: { id: number }) => api.patch(`/api/rooms/${id}`, toPayload()), onSuccess: () => { invalidate(); setOpen(false); reset(); toast({ title: "Room updated" }); }, onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }) });
+  const remove = useMutation({ mutationFn: (id: number) => api.delete(`/api/rooms/${id}`), onSuccess: () => { invalidate(); toast({ title: "Room deleted" }); }, onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }) });
+  const onEdit = (d: Room) => { setEditing(d); setForm({ name: d.name, code: d.code || "", floorId: d.floorId ? String(d.floorId) : "", description: d.description || "", sortOrder: d.sortOrder, isActive: d.isActive }); setOpen(true); };
+  const onSubmit = () => { if (!form.name.trim()) return; if (editing) update.mutate({ id: editing.id }); else create.mutate(); };
+  const activeFloors = floors.filter(f => f.isActive);
+  return (
+    <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div className="p-3 border-b border-border flex items-center justify-between">
+        <span className="text-sm font-medium">{rows.length} room{rows.length !== 1 ? "s" : ""}</span>
+        <Button size="sm" onClick={() => { reset(); setOpen(true); }}><Plus size={13} className="mr-1" /> Add Room</Button>
+      </div>
+      <table className="w-full text-sm">
+        <thead className="bg-muted/40 text-xs text-left">
+          <tr><th className="px-3 py-2">Name</th><th className="px-3 py-2">Floor</th><th className="px-3 py-2 text-right">Tests</th><th className="px-3 py-2">Status</th><th className="px-3 py-2 text-right">Actions</th></tr>
+        </thead>
+        <tbody>
+          {isLoading ? <tr><td colSpan={5} className="px-3 py-8 text-center text-xs text-muted-foreground">Loading…</td></tr>
+            : rows.length === 0 ? <tr><td colSpan={5} className="px-3 py-8 text-center text-xs text-muted-foreground">No rooms yet — e.g. USG Room, Pathology Counter 1</td></tr>
+            : rows.map(d => (
+              <tr key={d.id} className="border-t border-border/50 hover:bg-muted/20">
+                <td className="px-3 py-2 font-medium">{d.name}{d.code ? <span className="ml-1 text-xs font-mono text-muted-foreground">({d.code})</span> : null}</td>
+                <td className="px-3 py-2 text-xs">{d.floorName ?? "—"}</td>
+                <td className="px-3 py-2 text-xs text-right">{d.testCount}</td>
+                <td className="px-3 py-2"><Badge className={d.isActive ? "bg-emerald-100 text-emerald-700" : "bg-zinc-200 text-zinc-700"}>{d.isActive ? "active" : "inactive"}</Badge></td>
+                <td className="px-3 py-2"><div className="flex justify-end gap-1"><Button size="sm" variant="outline" onClick={() => onEdit(d)}><Pencil size={13} /></Button><Button size="sm" variant="outline" onClick={() => { if (confirm(`Delete "${d.name}"?`)) remove.mutate(d.id); }}><Trash2 size={13} className="text-rose-500" /></Button></div></td>
+              </tr>
+            ))}
+        </tbody>
+      </table>
+      <Dialog open={open} onOpenChange={o => { setOpen(o); if (!o) reset(); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{editing ? "Edit Room" : "Add Room / Counter"}</DialogTitle></DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2"><Label className="text-xs">Name *</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="USG Room 1" /></div>
+            <div><Label className="text-xs">Code</Label><Input value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} placeholder="USG-1" /></div>
+            <div><Label className="text-xs">Floor</Label>
+              <Select value={form.floorId || "__none__"} onValueChange={v => setForm({ ...form, floorId: v === "__none__" ? "" : v })}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="None" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No floor</SelectItem>
+                  {activeFloors.map(f => <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div><Label className="text-xs">Sort Order</Label><Input type="number" value={form.sortOrder} onChange={e => setForm({ ...form, sortOrder: Number(e.target.value) })} /></div>
+            <div><Label className="text-xs">Description</Label><Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></div>
+            <label className="flex items-center gap-2 col-span-2 text-sm"><input type="checkbox" checked={form.isActive} onChange={e => setForm({ ...form, isActive: e.target.checked })} /> Active</label>
+          </div>
+          <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => { setOpen(false); reset(); }}>Cancel</Button><Button onClick={onSubmit} disabled={!form.name.trim()}>{editing ? "Save" : "Add"}</Button></div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function ModalitiesSubTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: rows = [], isLoading } = useQuery<Modality[]>({ queryKey: ["modalities"], queryFn: () => api.get("/api/modalities") });
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Modality | null>(null);
+  const [form, setForm] = useState({ name: "", code: "", description: "", sortOrder: 0, isActive: true });
+  const reset = () => { setEditing(null); setForm({ name: "", code: "", description: "", sortOrder: 0, isActive: true }); };
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["modalities"] });
+  const create = useMutation({ mutationFn: (b: typeof form) => api.post("/api/modalities", b), onSuccess: () => { invalidate(); setOpen(false); reset(); toast({ title: "Modality added" }); }, onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }) });
+  const update = useMutation({ mutationFn: ({ id, b }: { id: number; b: typeof form }) => api.patch(`/api/modalities/${id}`, b), onSuccess: () => { invalidate(); setOpen(false); reset(); toast({ title: "Modality updated" }); }, onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }) });
+  const remove = useMutation({ mutationFn: (id: number) => api.delete(`/api/modalities/${id}`), onSuccess: () => { invalidate(); toast({ title: "Modality deleted" }); }, onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }) });
+  const onEdit = (d: Modality) => { setEditing(d); setForm({ name: d.name, code: d.code || "", description: d.description || "", sortOrder: d.sortOrder, isActive: d.isActive }); setOpen(true); };
+  const onSubmit = () => { if (!form.name.trim()) return; if (editing) update.mutate({ id: editing.id, b: form }); else create.mutate(form); };
+  return (
+    <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div className="p-3 border-b border-border flex items-center justify-between">
+        <span className="text-sm font-medium">{rows.length} modalit{rows.length !== 1 ? "ies" : "y"}</span>
+        <Button size="sm" onClick={() => { reset(); setOpen(true); }}><Plus size={13} className="mr-1" /> Add Modality</Button>
+      </div>
+      <table className="w-full text-sm">
+        <thead className="bg-muted/40 text-xs text-left">
+          <tr><th className="px-3 py-2">Name</th><th className="px-3 py-2">Code</th><th className="px-3 py-2 text-right">Tests</th><th className="px-3 py-2">Status</th><th className="px-3 py-2 text-right">Actions</th></tr>
+        </thead>
+        <tbody>
+          {isLoading ? <tr><td colSpan={5} className="px-3 py-8 text-center text-xs text-muted-foreground">Loading…</td></tr>
+            : rows.length === 0 ? <tr><td colSpan={5} className="px-3 py-8 text-center text-xs text-muted-foreground">No modalities yet — e.g. X-Ray, USG, MRI, CT, ECG</td></tr>
+            : rows.map(d => (
+              <tr key={d.id} className="border-t border-border/50 hover:bg-muted/20">
+                <td className="px-3 py-2 font-medium">{d.name}</td>
+                <td className="px-3 py-2 text-xs font-mono">{d.code || "—"}</td>
+                <td className="px-3 py-2 text-xs text-right">{d.testCount}</td>
+                <td className="px-3 py-2"><Badge className={d.isActive ? "bg-emerald-100 text-emerald-700" : "bg-zinc-200 text-zinc-700"}>{d.isActive ? "active" : "inactive"}</Badge></td>
+                <td className="px-3 py-2"><div className="flex justify-end gap-1"><Button size="sm" variant="outline" onClick={() => onEdit(d)}><Pencil size={13} /></Button><Button size="sm" variant="outline" onClick={() => { if (confirm(`Delete "${d.name}"?`)) remove.mutate(d.id); }}><Trash2 size={13} className="text-rose-500" /></Button></div></td>
+              </tr>
+            ))}
+        </tbody>
+      </table>
+      <Dialog open={open} onOpenChange={o => { setOpen(o); if (!o) reset(); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{editing ? "Edit Modality" : "Add Modality"}</DialogTitle></DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2"><Label className="text-xs">Name *</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="USG" /></div>
+            <div><Label className="text-xs">Code</Label><Input value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} placeholder="USG" /></div>
+            <div><Label className="text-xs">Sort Order</Label><Input type="number" value={form.sortOrder} onChange={e => setForm({ ...form, sortOrder: Number(e.target.value) })} /></div>
+            <div className="col-span-2"><Label className="text-xs">Description</Label><Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></div>
+            <label className="flex items-center gap-2 col-span-2 text-sm"><input type="checkbox" checked={form.isActive} onChange={e => setForm({ ...form, isActive: e.target.checked })} /> Active</label>
+          </div>
+          <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => { setOpen(false); reset(); }}>Cancel</Button><Button onClick={onSubmit} disabled={!form.name.trim()}>{editing ? "Save" : "Add"}</Button></div>
         </DialogContent>
       </Dialog>
     </div>

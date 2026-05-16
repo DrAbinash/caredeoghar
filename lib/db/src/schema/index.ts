@@ -50,3 +50,6 @@ export * from "./whatsappConversations";
 export * from "./pacsSettings";
 export * from "./dayClosures";
 export * from "./userDayClosures";
+export * from "./floors";
+export * from "./rooms";
+export * from "./modalities";

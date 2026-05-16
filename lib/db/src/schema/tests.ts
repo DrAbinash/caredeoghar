@@ -22,6 +22,12 @@ export const testsTable = pgTable("diagnostic_tests", {
   testType: text("test_type").notNull().default("inhouse"),
   // FK to outsourced_labs.id — only set when testType = 'outsourced'
   outsourcedLabId: integer("outsourced_lab_id"),
+  // FK to rooms master — null if not assigned
+  roomId: integer("room_id"),
+  // FK to modalities master — null if not assigned
+  modalityId: integer("modality_id"),
+  // Denormalized floor label for token printing (populated from rooms.floor)
+  floorLabel: text("floor_label").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
