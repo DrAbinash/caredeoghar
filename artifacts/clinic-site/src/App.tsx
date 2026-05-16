@@ -158,6 +158,14 @@ function AppShell({ settings, pages, popups, isPreview }: { settings: SiteSettin
   const [loc] = useLocation();
   const slug = loc === "/" || loc === "" ? "home" : loc.replace(/^\//, "").split("/")[0];
 
+  useEffect(() => {
+    if (slug === "appointment") {
+      window.location.replace(`${BASE}#appointment`);
+    }
+  }, [slug]);
+
+  if (slug === "appointment") return null;
+
   return (
     <>
       {isPreview && <div className="preview-banner">Preview mode — showing drafts. Visitors won't see this until you publish.</div>}

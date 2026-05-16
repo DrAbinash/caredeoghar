@@ -282,6 +282,46 @@ async function runStartupMigrations(): Promise<void> {
       -- Manual audits intentionally can repeat for the same period.
       CREATE UNIQUE INDEX IF NOT EXISTS audit_runs_cron_unique_idx
         ON audit_runs(period_from, period_to) WHERE source = 'cron';
+
+      -- ── Floors / Rooms / Modalities (Location master) ───────────────────
+      CREATE TABLE IF NOT EXISTS floors (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        code TEXT NOT NULL DEFAULT '',
+        description TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS rooms (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        code TEXT NOT NULL DEFAULT '',
+        floor_id INTEGER REFERENCES floors(id) ON DELETE SET NULL,
+        description TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS modalities (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        code TEXT NOT NULL DEFAULT '',
+        description TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      ALTER TABLE diagnostic_tests ADD COLUMN IF NOT EXISTS room_id INTEGER;
+      ALTER TABLE diagnostic_tests ADD COLUMN IF NOT EXISTS modality_id INTEGER;
+      ALTER TABLE diagnostic_tests ADD COLUMN IF NOT EXISTS floor_label TEXT NOT NULL DEFAULT '';
+
+      -- ── LAN-only login gate ──────────────────────────────────────────────
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS lan_only_login BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS lan_allowed_ips TEXT NOT NULL DEFAULT '[]';
+
+      -- ── Online bookings time slot ────────────────────────────────────────
+      ALTER TABLE online_bookings ADD COLUMN IF NOT EXISTS time_slot TEXT NOT NULL DEFAULT '';
     `);
     logger.info("Startup migrations applied");
   } catch (err) {
