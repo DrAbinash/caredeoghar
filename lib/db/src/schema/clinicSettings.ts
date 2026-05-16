@@ -48,5 +48,10 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   //   "deduct_rollover" — commission = commission - bill_discount (can go negative;
   //                       negative amount is deducted from doctor's overall ledger)
   commissionDiscountMode: text("commission_discount_mode").notNull().default("none"),
+  // Network access control — when enabled, non-admin staff can only log in from
+  // the hospital LAN (private RFC-1918 IP ranges). Extra trusted IPs can be added
+  // as a JSON array of strings in lanAllowedIps.
+  lanOnlyLogin: boolean("lan_only_login").notNull().default(false),
+  lanAllowedIps: text("lan_allowed_ips").notNull().default("[]"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

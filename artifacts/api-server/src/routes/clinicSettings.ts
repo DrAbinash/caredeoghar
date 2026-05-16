@@ -33,7 +33,7 @@ clinicSettingsRouter.put("/", async (req, res) => {
     }
     update.sidebarTheme = body.sidebarTheme;
   }
-  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "billShowCode", "billShowCategory", "dayCloseAutoPrint"] as const;
+  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "billShowCode", "billShowCategory", "dayCloseAutoPrint", "lanOnlyLogin"] as const;
   for (const f of boolFields) {
     if (body[f] !== undefined) {
       if (typeof body[f] !== "boolean") {
@@ -86,6 +86,23 @@ clinicSettingsRouter.put("/", async (req, res) => {
       return;
     }
     update.billPrintCopies = n;
+  }
+  if (body.lanAllowedIps !== undefined) {
+    if (typeof body.lanAllowedIps !== "string") {
+      res.status(400).json({ error: "lanAllowedIps must be a JSON string" });
+      return;
+    }
+    try {
+      const parsed = JSON.parse(body.lanAllowedIps);
+      if (!Array.isArray(parsed) || !parsed.every((v) => typeof v === "string")) {
+        res.status(400).json({ error: "lanAllowedIps must be a JSON array of strings" });
+        return;
+      }
+    } catch {
+      res.status(400).json({ error: "lanAllowedIps must be valid JSON" });
+      return;
+    }
+    update.lanAllowedIps = body.lanAllowedIps;
   }
   if (body.commissionDiscountMode !== undefined) {
     const valid = ["none", "deduct", "deduct_rollover"];

@@ -26,6 +26,32 @@ export const portalRouter = Router();
 // Session lifetime: 24 hours (full working day — avoids mid-shift expiry)
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 
+// ── LAN-only login helper ─────────────────────────────────────────────────────
+// Returns true if the IP is a private/loopback address (RFC 1918 + loopback)
+// or is explicitly listed in the operator's extra allowlist.
+function isLanOrAllowedIp(ip: string, extraIps: string[]): boolean {
+  // Strip IPv6-mapped IPv4 prefix (e.g. "::ffff:192.168.1.5" → "192.168.1.5")
+  const clean = ip.replace(/^::ffff:/i, "");
+
+  // Loopback — always allow (server-side calls, health checks)
+  if (clean === "127.0.0.1" || clean === "::1") return true;
+
+  // RFC 1918 private ranges
+  const parts = clean.split(".").map(Number);
+  if (parts.length === 4 && parts.every((p) => !isNaN(p))) {
+    const [a, b] = parts;
+    if (a === 10) return true;                         // 10.0.0.0/8
+    if (a === 172 && b >= 16 && b <= 31) return true;  // 172.16.0.0/12
+    if (a === 192 && b === 168) return true;            // 192.168.0.0/16
+  }
+
+  // Operator-defined extra IPs (exact match against raw or cleaned form)
+  return extraIps.some((e) => {
+    const t = e.trim();
+    return t === clean || t === ip;
+  });
+}
+
 // Allowed appointment time slots — matches the UI's fixed list.
 // The server enforces this so callers cannot inject arbitrary slot strings.
 const ALLOWED_SLOTS = new Set([
@@ -291,6 +317,25 @@ portalRouter.post("/staff-login", staffLoginLimiter, async (req, res) => {
   if (!isBcryptHash(user.pin)) {
     const hashed = await bcrypt.hash(pin, 12);
     await db.update(usersTable).set({ pin: hashed }).where(eq(usersTable.id, user.id));
+  }
+
+  // ── LAN-only login enforcement ────────────────────────────────────────────
+  // Admin role is always exempt. For all other roles, if the clinic has enabled
+  // LAN-only login, reject requests coming from outside the hospital network.
+  if (user.role !== "admin") {
+    const [cfg] = await db
+      .select({ lanOnlyLogin: clinicSettingsTable.lanOnlyLogin, lanAllowedIps: clinicSettingsTable.lanAllowedIps })
+      .from(clinicSettingsTable)
+      .limit(1);
+    if (cfg?.lanOnlyLogin) {
+      let extraIps: string[] = [];
+      try { extraIps = JSON.parse(cfg.lanAllowedIps ?? "[]"); } catch { /* ignore */ }
+      const clientIp = req.ip ?? "";
+      if (!isLanOrAllowedIp(clientIp, extraIps)) {
+        res.status(403).json({ error: "Login is only allowed from within the hospital network." });
+        return;
+      }
+    }
   }
 
   // Parse permissions JSON safely (stored as string in users.permissions)

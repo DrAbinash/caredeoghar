@@ -114,6 +114,7 @@ const TABS = [
   { id: "discount-reasons", label: "Discount Reasons", icon: Tag },
   { id: "backup", label: "Backup", icon: Database },
   { id: "manual", label: "User Manual", icon: FileDown },
+  { id: "security", label: "Security", icon: ShieldCheck },
   { id: "password", label: "Change Password", icon: KeyRound },
 ];
 
@@ -204,6 +205,7 @@ export default function Settings() {
         {tab === "discount-reasons" && <DiscountReasonsTab />}
         {tab === "backup" && <BackupTab />}
         {tab === "manual" && <ManualTab />}
+        {tab === "security" && <SecurityTab />}
         {tab === "password" && <ChangePasswordTab />}
       </div>
     </div>
@@ -2632,6 +2634,146 @@ function FormFTestsTab() {
           No tests found{search ? ` for "${search}"` : ""}. Add tests in the Test Catalog first.
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================
+// SECURITY TAB — LAN-only login restriction
+// ============================================================
+type SecuritySettings = {
+  lanOnlyLogin: boolean;
+  lanAllowedIps: string;
+};
+
+function SecurityTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data, isLoading } = useQuery<SecuritySettings>({
+    queryKey: ["clinic-settings"],
+    queryFn: () => api.get("/api/clinic-settings"),
+  });
+  const [lanOnly, setLanOnly] = useState(false);
+  const [extraIpsText, setExtraIpsText] = useState("");
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    if (data) {
+      setLanOnly(data.lanOnlyLogin ?? false);
+      let arr: string[] = [];
+      try { arr = JSON.parse(data.lanAllowedIps ?? "[]"); } catch { arr = []; }
+      setExtraIpsText(arr.join("\n"));
+      setDirty(false);
+    }
+  }, [data]);
+
+  const save = useMutation({
+    mutationFn: (body: Partial<SecuritySettings>) => api.put("/api/clinic-settings", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clinic-settings"] });
+      setDirty(false);
+      toast({ title: "Security settings saved" });
+    },
+    onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+  });
+
+  const handleSave = () => {
+    const ips = extraIpsText
+      .split(/[\n,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    save.mutate({ lanOnlyLogin: lanOnly, lanAllowedIps: JSON.stringify(ips) });
+  };
+
+  if (isLoading || !data) {
+    return <div className="bg-card border border-card-border rounded-xl p-8 text-center text-muted-foreground">Loading…</div>;
+  }
+
+  return (
+    <div className="max-w-2xl space-y-4">
+      {/* Header */}
+      <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 border border-amber-200 dark:border-amber-900 rounded-xl p-5">
+        <div className="flex items-start gap-3">
+          <div className="h-10 w-10 rounded-lg bg-amber-500 flex items-center justify-center shrink-0">
+            <ShieldCheck size={20} className="text-white" />
+          </div>
+          <div>
+            <h2 className="font-bold text-lg">Network Access Control</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Restrict staff login to the hospital's local network. Admin accounts are always exempt and can log in from anywhere.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* LAN toggle card */}
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div>
+          <h3 className="font-semibold">Hospital LAN Only</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            When enabled, non-admin staff can only sign in from IP addresses starting with <code className="bg-muted px-1 rounded">192.168.</code>, <code className="bg-muted px-1 rounded">10.</code>, or <code className="bg-muted px-1 rounded">172.16–31.</code> (standard router ranges).
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => { setLanOnly(!lanOnly); setDirty(true); }}
+          className={`w-full text-left flex items-start justify-between gap-3 px-4 py-3 rounded-lg border transition-colors ${
+            lanOnly
+              ? "bg-amber-50 border-amber-300 dark:bg-amber-950/30 dark:border-amber-800"
+              : "bg-muted/30 border-card-border"
+          }`}
+        >
+          <div>
+            <p className="text-sm font-medium">
+              {lanOnly ? "LAN restriction is ON — outside logins blocked" : "LAN restriction is OFF — login allowed from anywhere"}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {lanOnly
+                ? "Staff must be on the hospital Wi-Fi or wired network to sign in."
+                : "Staff can sign in from any network, including mobile data and home internet."}
+            </p>
+          </div>
+          <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors mt-0.5 shrink-0 ${lanOnly ? "bg-amber-500" : "bg-muted-foreground/40"}`}>
+            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${lanOnly ? "translate-x-5" : "translate-x-1"}`} />
+          </span>
+        </button>
+
+        {lanOnly && (
+          <div className="space-y-2">
+            <div>
+              <Label>Extra Allowed IPs <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <p className="text-xs text-muted-foreground mt-0.5 mb-1">
+                One IP address per line. Use this for a trusted external location (e.g. a specific doctor's office static IP). Leave blank if not needed.
+              </p>
+              <Textarea
+                value={extraIpsText}
+                onChange={(e) => { setExtraIpsText(e.target.value); setDirty(true); }}
+                placeholder={"203.0.113.45\n198.51.100.10"}
+                className="font-mono text-sm"
+                rows={4}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Info box */}
+      <div className="bg-muted/40 border border-card-border rounded-xl p-4 text-sm text-muted-foreground space-y-1">
+        <p className="font-medium text-foreground">How it works</p>
+        <ul className="list-disc pl-4 space-y-1">
+          <li>The check happens at login — existing sessions are not terminated if the user walks outside.</li>
+          <li>Admin accounts are <strong>always exempt</strong> regardless of this setting.</li>
+          <li>The fingerprint kiosk login is not affected (it operates on-premise by design).</li>
+          <li>If you turn this on accidentally and get locked out, an Admin can always log in to turn it off.</li>
+        </ul>
+      </div>
+
+      <div className="flex justify-end">
+        <Button onClick={handleSave} disabled={save.isPending || !dirty}>
+          {save.isPending ? "Saving…" : "Save Security Settings"}
+        </Button>
+      </div>
     </div>
   );
 }
