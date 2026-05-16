@@ -42,7 +42,7 @@ export async function fetchApi<T = unknown>(path: string, init?: RequestInit): P
       handleSessionExpiry();
     }
     const err = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(err?.message || res.statusText);
+    throw new Error(err?.error || err?.message || res.statusText);
   }
   return res.json() as Promise<T>;
 }
