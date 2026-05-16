@@ -555,32 +555,35 @@ export default function MyDailySummary() {
       )}
 
       {/* ── Discounts Given ── */}
-      {data && data.bills.filter((b) => b.discount > 0).length > 0 && (
-        <div className="bg-white dark:bg-card border border-amber-200 dark:border-amber-800 rounded-xl shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-amber-100 dark:border-amber-800 flex items-center justify-between bg-amber-50 dark:bg-amber-900/20">
-            <h3 className="text-sm font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2">
-              <Percent size={14} className="text-amber-600" /> Discounts Given
-              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200">
-                {data.bills.filter((b) => b.discount > 0).length} bills
+      {data && data.bills.filter((b) => b.discount > 0).length > 0 && (() => {
+        const discBills = data.bills.filter((b) => b.discount > 0);
+        const totalGross = discBills.reduce((s, b) => s + b.totalAmount + b.discount, 0);
+        const totalDiscount = discBills.reduce((s, b) => s + b.discount, 0);
+        const totalPending = discBills.reduce((s, b) => s + b.balanceAmount, 0);
+        return (
+          <div className="bg-white dark:bg-card border border-amber-200 dark:border-amber-800 rounded-xl shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-amber-100 dark:border-amber-800 flex items-center justify-between bg-amber-50 dark:bg-amber-900/20">
+              <h3 className="text-sm font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2">
+                <Percent size={14} className="text-amber-600" /> Discounts Given
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200">
+                  {discBills.length} bills
+                </span>
+              </h3>
+              <span className="text-xs font-bold text-amber-700 dark:text-amber-300 tabular-nums">
+                Total discount: {fmt(totalDiscount)}
               </span>
-            </h3>
-            <span className="text-xs font-bold text-amber-700 dark:text-amber-300 tabular-nums">
-              Total discount: {fmt(data.bills.filter((b) => b.discount > 0).reduce((s, b) => s + b.discount, 0))}
-            </span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="bg-amber-50 dark:bg-amber-900/10">
-                <tr>
-                  {["Bill #", "Patient Name", "Referral Doctor", "Total (post-disc)", "Discount", "Disc %"].map((h) => (
-                    <th key={h} className="px-3 py-2.5 text-left font-semibold text-amber-800 dark:text-amber-300 whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-amber-50 dark:divide-amber-900/20">
-                {data.bills
-                  .filter((b) => b.discount > 0)
-                  .map((b) => {
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-amber-50 dark:bg-amber-900/10">
+                  <tr>
+                    {["Bill #", "Patient Name", "Referral Doctor", "Bill Total", "Discount Given", "Still Pending"].map((h) => (
+                      <th key={h} className="px-3 py-2.5 text-left font-semibold text-amber-800 dark:text-amber-300 whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-amber-50 dark:divide-amber-900/20">
+                  {discBills.map((b) => {
                     const gross = b.totalAmount + b.discount;
                     const pct = gross > 0 ? ((b.discount / gross) * 100).toFixed(1) : "0.0";
                     return (
@@ -592,33 +595,45 @@ export default function MyDailySummary() {
                         <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
                           {b.referringDoctor ?? <span className="text-gray-400">—</span>}
                         </td>
-                        <td className="px-3 py-2 tabular-nums text-gray-900 dark:text-foreground font-semibold">{fmt(b.totalAmount)}</td>
-                        <td className="px-3 py-2 tabular-nums font-bold text-amber-600 dark:text-amber-400">{fmt(b.discount)}</td>
-                        <td className="px-3 py-2 tabular-nums text-amber-700 dark:text-amber-300">
-                          <span className="px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 font-semibold">{pct}%</span>
+                        <td className="px-3 py-2 tabular-nums text-gray-900 dark:text-foreground font-semibold">{fmt(gross)}</td>
+                        <td className="px-3 py-2 tabular-nums font-bold text-amber-600 dark:text-amber-400">
+                          {fmt(b.discount)}
+                          <span className="ml-1 text-[10px] font-normal text-amber-500 dark:text-amber-400">({pct}%)</span>
+                        </td>
+                        <td className="px-3 py-2 tabular-nums">
+                          {b.balanceAmount > 0 ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-semibold">
+                              {fmt(b.balanceAmount)}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 font-semibold">
+                              Cleared ✓
+                            </span>
+                          )}
                         </td>
                       </tr>
                     );
                   })}
-              </tbody>
-              <tfoot className="bg-amber-50 dark:bg-amber-900/10 border-t-2 border-amber-200 dark:border-amber-800">
-                <tr>
-                  <td className="px-3 py-2 font-bold text-amber-800 dark:text-amber-300" colSpan={3}>
-                    Total ({data.bills.filter((b) => b.discount > 0).length} bills)
-                  </td>
-                  <td className="px-3 py-2 font-bold tabular-nums text-gray-900 dark:text-foreground">
-                    {fmt(data.bills.filter((b) => b.discount > 0).reduce((s, b) => s + b.totalAmount, 0))}
-                  </td>
-                  <td className="px-3 py-2 font-bold tabular-nums text-amber-600 dark:text-amber-400">
-                    {fmt(data.bills.filter((b) => b.discount > 0).reduce((s, b) => s + b.discount, 0))}
-                  </td>
-                  <td />
-                </tr>
-              </tfoot>
-            </table>
+                </tbody>
+                <tfoot className="bg-amber-50 dark:bg-amber-900/10 border-t-2 border-amber-200 dark:border-amber-800">
+                  <tr>
+                    <td className="px-3 py-2 font-bold text-amber-800 dark:text-amber-300" colSpan={3}>
+                      Total ({discBills.length} bills)
+                    </td>
+                    <td className="px-3 py-2 font-bold tabular-nums text-gray-900 dark:text-foreground">{fmt(totalGross)}</td>
+                    <td className="px-3 py-2 font-bold tabular-nums text-amber-600 dark:text-amber-400">{fmt(totalDiscount)}</td>
+                    <td className="px-3 py-2 font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                      {totalPending > 0
+                        ? fmt(totalPending)
+                        : <span className="text-green-600 dark:text-green-400">All cleared</span>}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Recent Bills ── */}
       {data && data.bills.length > 0 && (
