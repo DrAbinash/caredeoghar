@@ -665,15 +665,18 @@ function PhotosTab() {
         </label>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-3">
-        {photosQ.data?.photos.map((p) => (
-          <div key={p.id} className="relative group rounded-lg overflow-hidden border border-border">
-            <img src={p.url} alt={p.alt} className="w-full h-32 object-cover" />
-            <button onClick={() => remove.mutate(p.id)} className="absolute top-1 right-1 p-1 rounded bg-black/60 text-white opacity-0 group-hover:opacity-100 transition">
-              <Trash2 size={12} />
-            </button>
-            <div className="p-2 text-[10px] text-muted-foreground truncate">{p.url.split("/").pop()}</div>
-          </div>
-        ))}
+        {photosQ.data?.photos.map((p) => {
+          const thumbSrc = p.url.startsWith("/objects/") ? `/api/storage${p.url}` : p.url;
+          return (
+            <div key={p.id} className="relative group rounded-lg overflow-hidden border border-border">
+              <img src={thumbSrc} alt={p.alt} className="w-full h-32 object-cover" />
+              <button onClick={() => remove.mutate(p.id)} className="absolute top-1 right-1 p-1 rounded bg-black/60 text-white opacity-0 group-hover:opacity-100 transition">
+                <Trash2 size={12} />
+              </button>
+              <div className="p-2 text-[10px] text-muted-foreground truncate">{p.url.split("/").pop()}</div>
+            </div>
+          );
+        })}
       </div>
     </Card>
   );

@@ -15,6 +15,7 @@ import fs from "node:fs/promises";
 import crypto from "node:crypto";
 import multer from "multer";
 import sanitizeHtml from "sanitize-html";
+import { ObjectStorageService } from "../lib/objectStorage";
 import {
   requireStaffAuth,
   requireStaffPermission,
@@ -528,17 +529,10 @@ const MIME_TO_EXT: Record<string, string> = {
   "image/vnd.microsoft.icon": ".ico",
 };
 
+const objectStorage = new ObjectStorageService();
+
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: async (_req, _file, cb) => {
-      try { await fs.mkdir(UPLOAD_DIR, { recursive: true }); cb(null, UPLOAD_DIR); }
-      catch (e) { cb(e as Error, UPLOAD_DIR); }
-    },
-    filename: (_req, file, cb) => {
-      const ext = MIME_TO_EXT[file.mimetype] ?? ".bin";
-      cb(null, `${Date.now()}${ext}`);
-    },
-  }),
+  storage: multer.memoryStorage(),
   fileFilter: (_req, file, cb) => {
     if (ALLOWED_MIME.has(file.mimetype)) cb(null, true);
     else cb(new Error(`Unsupported file type: ${file.mimetype}`));
@@ -561,24 +555,32 @@ websiteRouter.get("/photos", async (req, res) => {
 
 websiteRouter.post("/photos", requireStaffAuth, requireStaffPermission("/website"), upload.single("photo"), async (req, res) => {
   if (!req.file) { res.status(400).json({ error: "No file" }); return; }
-  const url = `/uploads/site/${req.file.filename}`;
-  const [p] = await db.insert(sitePhotosTable).values({
-    url,
-    alt: (req.body?.alt as string) ?? "",
-    category: (req.body?.category as string) ?? "general",
-  }).returning();
-  res.status(201).json(p);
+  try {
+    const uploadURL = await objectStorage.getObjectEntityUploadURL();
+    // Upload the buffer directly to the presigned URL
+    await fetch(uploadURL, {
+      method: "PUT",
+      headers: { "Content-Type": req.file.mimetype },
+      body: req.file.buffer,
+    });
+    const objectPath = objectStorage.normalizeObjectEntityPath(uploadURL);
+    const [p] = await db.insert(sitePhotosTable).values({
+      url: objectPath,
+      alt: (req.body?.alt as string) ?? "",
+      category: (req.body?.category as string) ?? "general",
+    }).returning();
+    res.status(201).json(p);
+  } catch (err) {
+    req.log.error({ err }, "Website photo upload to object storage failed");
+    res.status(500).json({ error: "Upload failed" });
+  }
 });
 
 websiteRouter.delete("/photos/:id", requireStaffAuth, requireStaffPermission("/website"), async (req, res) => {
   const id = Number(req.params.id);
   const [p] = await db.select().from(sitePhotosTable).where(eq(sitePhotosTable.id, id));
-  if (p?.url?.startsWith("/uploads/site/")) {
-    const base = path.basename(p.url);
-    const abs = path.join(UPLOAD_DIR, base);
-    if (abs.startsWith(UPLOAD_DIR + path.sep)) {
-      await fs.unlink(abs).catch(() => {});
-    }
+  if (p?.url?.startsWith("/objects/")) {
+    await objectStorage.deleteObjectEntity(p.url).catch(() => {});
   }
   await db.delete(sitePhotosTable).where(eq(sitePhotosTable.id, id));
   res.json({ ok: true });

@@ -26,6 +26,9 @@ export const ASSET_BASE = stripTrailingSlash(
  * tel:) are returned unchanged. Root-relative paths (e.g. "/uploads/x.png")
  * are prefixed with ASSET_BASE so they resolve when the site is hosted on a
  * different origin than the API/uploads server.
+ *
+ * Object-storage paths ("/objects/...") are also prefixed with the API base
+ * so they hit the `/api/storage/objects/*` serving route.
  */
 export function resolveAssetUrl(url: string | null | undefined): string {
   if (!url) return "";
