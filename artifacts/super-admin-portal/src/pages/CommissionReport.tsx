@@ -8,7 +8,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Download, FileSpreadsheet, Printer, Stethoscope } from "lucide-react";
+import { ArrowLeft, Download, FileSpreadsheet, FileText, Printer, Stethoscope } from "lucide-react";
 import {
   loadReportOrientation,
   persistReportOrientation,
@@ -22,6 +22,7 @@ import {
 import { saAuthHeaders } from "@/lib/saApi";
 import { exportCommissionPdf } from "@/lib/exportCommissionPdf";
 import { exportCommissionExcel } from "@/lib/exportCommissionExcel";
+import { exportCommissionWord } from "@/lib/exportCommissionWord";
 
 type SaDoctor = { id: number; name: string };
 const SA_DOCTORS_KEY = ["/api/super-admin/doctors-list"] as const;
@@ -139,6 +140,45 @@ export default function CommissionReport({ onBack }: { onBack: () => void }) {
       toast({ title: "Excel export failed", description: String(err), variant: "destructive" });
     } finally {
       setXlsxLoading(false);
+    }
+  };
+
+  // ─── Word Download ─────────────────────────────────────────────────────────
+  const [wordLoading, setWordLoading] = useState(false);
+
+  const handleDownloadWord = async () => {
+    if (report.length === 0) {
+      toast({ title: "No data to export", description: "Adjust the filters and try again.", variant: "destructive" });
+      return;
+    }
+    setWordLoading(true);
+    try {
+      const doctorLabel = reportDoctorId
+        ? doctors.find(d => d.id === reportDoctorId)?.name ?? "—"
+        : "All Doctors";
+      const title =
+        mode === "consolidated"
+          ? "Referral Commission – Consolidated Report"
+          : mode === "doctor-test"
+          ? "Referral Commission – Doctor + Test Detail"
+          : "Referral Commission Report";
+      await exportCommissionWord(
+        report,
+        {
+          title,
+          from,
+          to,
+          doctorFilter: doctorLabel,
+          generatedAt: new Date().toLocaleString("en-IN"),
+          grandTotal,
+        },
+        mode,
+        showPercentFixed,
+      );
+    } catch (err) {
+      toast({ title: "Word export failed", description: String(err), variant: "destructive" });
+    } finally {
+      setWordLoading(false);
     }
   };
 
@@ -405,6 +445,9 @@ export default function CommissionReport({ onBack }: { onBack: () => void }) {
               </Button>
               <Button variant="outline" size="sm" onClick={handleDownloadExcel} disabled={xlsxLoading} className="gap-1.5">
                 <FileSpreadsheet size={14} /> {xlsxLoading ? "Exporting…" : "Export Excel"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleDownloadWord} disabled={wordLoading} className="gap-1.5">
+                <FileText size={14} /> {wordLoading ? "Exporting…" : "Download Word"}
               </Button>
               <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={pdfLoading} className="gap-1.5">
                 <Download size={14} /> {pdfLoading ? "Exporting…" : "Download PDF"}

@@ -918,6 +918,9 @@ importers:
 
   artifacts/super-admin-portal:
     dependencies:
+      docx:
+        specifier: ^9.6.1
+        version: 9.6.1
       file-saver:
         specifier: ^2.0.5
         version: 2.0.5
