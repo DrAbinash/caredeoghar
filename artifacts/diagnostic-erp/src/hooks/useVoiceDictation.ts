@@ -72,12 +72,6 @@ function applyInlineSubstitutions(text: string): string {
     .replace(/\bdash\b/gi, "—");
 }
 
-declare global {
-  interface Window {
-    SpeechRecognition: new () => SpeechRecognition;
-    webkitSpeechRecognition: new () => SpeechRecognition;
-  }
-}
 
 export function useVoiceDictation(): VoiceDictationHook {
   const [status, setStatus] = useState<DictationStatus>("idle");
@@ -86,16 +80,17 @@ export function useVoiceDictation(): VoiceDictationHook {
   const [error, setError] = useState<string | null>(null);
   const [lastCommand, setLastCommand] = useState<DictationCommand | null>(null);
 
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const recognitionRef = useRef<import("../types/speech").SpeechRecognitionLike | null>(null);
   const pausedRef = useRef(false);
 
   const isSupported =
     typeof window !== "undefined" &&
     ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
 
-  const createRecognition = useCallback((): SpeechRecognition | null => {
+  const createRecognition = useCallback((): import("../types/speech").SpeechRecognitionLike | null => {
     if (!isSupported) return null;
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SR = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+    if (!SR) return null;
     const recognition = new SR();
     recognition.continuous = true;
     recognition.interimResults = true;
@@ -104,7 +99,7 @@ export function useVoiceDictation(): VoiceDictationHook {
     return recognition;
   }, [isSupported]);
 
-  const handleResult = useCallback((event: SpeechRecognitionEvent) => {
+  const handleResult = useCallback((event: import("../types/speech").SpeechRecognitionEvent) => {
     let finalText = "";
     let interim = "";
 
@@ -151,7 +146,7 @@ export function useVoiceDictation(): VoiceDictationHook {
     if (!recognition) return;
 
     recognition.onresult = handleResult;
-    recognition.onerror = (e: SpeechRecognitionErrorEvent) => {
+    recognition.onerror = (e: import("../types/speech").SpeechRecognitionErrorEvent) => {
       if (e.error === "no-speech") return; // benign
       setError(`Dictation error: ${e.error}`);
       setStatus("error");

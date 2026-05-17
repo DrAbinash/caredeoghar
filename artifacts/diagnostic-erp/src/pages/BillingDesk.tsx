@@ -1039,8 +1039,9 @@ export default function BillingDesk() {
 
   // ── Keyboard shortcuts ──────────────────────────────
   // Refs are declared here; .current assignments happen after canGenerate is defined (below).
-  const canGenerateRef = useRef(false);
-  const lastBillRef    = useRef<LastBill | null>(null);
+  const canGenerateRef     = useRef(false);
+  const lastBillRef        = useRef<LastBill | null>(null);
+  const generatePendingRef = useRef(false);
   useEffect(() => {
     function kbHandler(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement)?.tagName;
@@ -1067,7 +1068,7 @@ export default function BillingDesk() {
       // Ctrl/Cmd + P — Save & Print
       if ((e.ctrlKey || e.metaKey) && e.key === "p") {
         e.preventDefault();
-        if (canGenerateRef.current && !lastBillRef.current) {
+        if (canGenerateRef.current && !lastBillRef.current && !generatePendingRef.current) {
           printAfterSaveRef.current = true;
           generateMut.mutate();
         }
@@ -1076,7 +1077,7 @@ export default function BillingDesk() {
       // Ctrl/Cmd + S — Save (no print)
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
-        if (canGenerateRef.current && !lastBillRef.current) {
+        if (canGenerateRef.current && !lastBillRef.current && !generatePendingRef.current) {
           generateMut.mutate();
         }
         return;
@@ -1116,8 +1117,9 @@ export default function BillingDesk() {
 
   const canGenerate = !!selectedPatient && selectedTests.length > 0;
   // Update shortcut refs on every render so the keydown handler stays fresh.
-  canGenerateRef.current = canGenerate;
-  lastBillRef.current    = lastBill;
+  canGenerateRef.current     = canGenerate;
+  lastBillRef.current        = lastBill;
+  generatePendingRef.current = generateMut.isPending;
 
   // ──────────────────────────────────────────────────────
   // RENDER

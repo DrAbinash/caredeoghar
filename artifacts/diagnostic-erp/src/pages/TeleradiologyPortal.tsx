@@ -5,7 +5,7 @@
  */
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/fetchApi";
+import { fetchApi } from "@/lib/fetchApi";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -54,7 +54,7 @@ function LoginScreen({ onLogin }: { onLogin: (token: string, user: TeleUser) => 
   const [showPin, setShowPin] = useState(false);
 
   const loginMutation = useMutation({
-    mutationFn: () => api.post<{ token: string; user: TeleUser }>("/api/teleradiology-portal/login", { email, pin }),
+    mutationFn: () => fetchApi<{ token: string; user: TeleUser }>("/api/teleradiology-portal/login", { method: "POST", body: JSON.stringify({ email, pin }) }),
     onSuccess: (d) => {
       localStorage.setItem(TELE_TOKEN_KEY, d.token);
       onLogin(d.token, d.user);
@@ -135,10 +135,9 @@ function StudyDetail({ study, user, token, onBack }: { study: TeleStudy; user: T
 
   const submitMutation = useMutation({
     mutationFn: (payload: { type: "prelim" | "final"; text: string; critical?: boolean }) =>
-      api.post(
+      fetchApi(
         `/api/teleradiology-portal/assignments/${study.assignmentId}/${payload.type}`,
-        { report: payload.text, critical: payload.critical },
-        { headers: { Authorization: `Bearer ${token}` } },
+        { method: "POST", body: JSON.stringify({ report: payload.text, critical: payload.critical }), headers: { Authorization: `Bearer ${token}` } },
       ),
     onSuccess: () => {
       toast({ title: "Report submitted" });
@@ -260,7 +259,7 @@ function StudiesList({ token, user, onLogout }: { token: string; user: TeleUser;
 
   const { data: studies = [], isLoading, refetch } = useQuery<TeleStudy[]>({
     queryKey: ["tele-studies", token],
-    queryFn: () => api.get("/api/teleradiology-portal/studies", { headers: { Authorization: `Bearer ${token}` } }),
+    queryFn: (): Promise<TeleStudy[]> => fetchApi("/api/teleradiology-portal/studies", { headers: { Authorization: `Bearer ${token}` } }),
     refetchInterval: 30_000,
   });
 
@@ -364,17 +363,23 @@ export default function TeleradiologyPortal() {
   const [user, setUser] = useState<TeleUser | null>(null);
 
   // Verify existing token
-  const { isLoading: verifying } = useQuery<TeleUser>({
+  const { isLoading: verifying, data: verifiedUser, isError: verifyError } = useQuery<TeleUser>({
     queryKey: ["tele-verify", token],
-    queryFn: () => api.get("/api/teleradiology-portal/me", { headers: { Authorization: `Bearer ${token}` } }),
+    queryFn: (): Promise<TeleUser> => fetchApi("/api/teleradiology-portal/me", { headers: { Authorization: `Bearer ${token}` } }),
     enabled: !!token && !user,
     retry: false,
-    onSuccess: (u) => setUser(u),
-    onError: () => {
+  });
+
+  useEffect(() => {
+    if (verifiedUser && !user) setUser(verifiedUser);
+  }, [verifiedUser, user]);
+
+  useEffect(() => {
+    if (verifyError) {
       localStorage.removeItem(TELE_TOKEN_KEY);
       setToken(null);
-    },
-  } as Parameters<typeof useQuery>[0]);
+    }
+  }, [verifyError]);
 
   function handleLogin(newToken: string, newUser: TeleUser) {
     setToken(newToken);
