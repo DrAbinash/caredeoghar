@@ -11,7 +11,7 @@ import {
   Search, RefreshCw, CalendarDays, MonitorPlay, Tv2, Copy,
   CheckCircle2, AlertCircle, Download, Shield, Server,
   WifiOff, Filter, XCircle, Activity, BookmarkPlus, Bookmark, Trash2, ChevronDown,
-  Database, Radio, Info,
+  Database, Radio, Info, FileDown,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -165,6 +165,7 @@ export default function DicomQueryRetrieve() {
   const [page, setPage]           = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   // ── Preset state ──────────────────────────────────────────────────────────────
   const [presets, setPresets]         = useState<DicomPreset[]>(() => loadPresets(userId));
@@ -369,6 +370,109 @@ export default function DicomQueryRetrieve() {
     persistPresets(updated, userId);
     toast({ title: `Preset "${name}" deleted` });
   }, [presets, userId, toast]);
+
+  // ── CSV Export ────────────────────────────────────────────────────────────────
+
+  const handleExportCsv = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      const PAGE = 200;
+      const baseParams = () => {
+        const p = new URLSearchParams({
+          dateFrom: applied.dateFrom,
+          dateTo:   applied.dateTo,
+          limit:    String(PAGE),
+        });
+        if (applied.modalities.length)   p.set("modality",        applied.modalities.join(","));
+        if (applied.patientName)         p.set("patientName",     applied.patientName);
+        if (applied.accessionNumber)     p.set("accessionNumber", applied.accessionNumber);
+        if (applied.referringDoctor)     p.set("referringDoctor", applied.referringDoctor);
+        if (applied.studyDescription)    p.set("studyDescription",applied.studyDescription);
+        if (applied.aeTitle && searchMode === "local-db")
+                                         p.set("aeTitle",         applied.aeTitle);
+        return p;
+      };
+
+      const endpointBase = searchMode === "live-pacs"
+        ? "/api/radiology/qr-cfind"
+        : "/api/radiology/dicom-query";
+
+      const allRows: StudyRow[] = [];
+      let offset = 0;
+      let totalCount = 0;
+
+      do {
+        const p = baseParams();
+        p.set("offset", String(offset));
+        const result = await api.get<QueryResult>(`${endpointBase}?${p}`);
+        totalCount = result.total;
+        allRows.push(...result.studies);
+        offset += result.studies.length;
+        if (result.studies.length < PAGE) break;
+      } while (offset < totalCount);
+
+      const rows = allRows;
+
+      if (rows.length === 0) {
+        toast({ title: "No studies to export" });
+        return;
+      }
+
+      const csvEscape = (v: string | null | undefined) => {
+        let s = v ?? "";
+        // Neutralize formula injection: prefix leading = + - @ with a single quote
+        if (s.length > 0 && "=+-@\t\r".includes(s[0])) {
+          s = `'${s}`;
+        }
+        if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+          return `"${s.replace(/"/g, '""')}"`;
+        }
+        return s;
+      };
+
+      const pullLabel = (s: StudyRow) => {
+        if (!s.pullStatus) return "NOT PULLED";
+        return PULL_STATUS[s.pullStatus]?.label ?? s.pullStatus;
+      };
+
+      const source = (s: StudyRow) =>
+        s.source ?? s.scheduledStationAETitle ?? (searchMode === "live-pacs" ? "LIVE PACS" : "Local DB");
+
+      const header = ["Accession #", "Patient Name", "Modality", "Study Date", "Referring Doctor", "Status", "Source"];
+      const csvLines = [
+        header.join(","),
+        ...rows.map((s) =>
+          [
+            csvEscape(s.accessionNumber),
+            csvEscape(s.patientName),
+            csvEscape(s.modality),
+            csvEscape(s.studyDate),
+            csvEscape(s.referringDoctor),
+            csvEscape(pullLabel(s)),
+            csvEscape(source(s)),
+          ].join(",")
+        ),
+      ];
+
+      const blob = new Blob([csvLines.join("\n")], { type: "text/csv;charset=utf-8;" });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      const fileName =
+        applied.dateFrom === applied.dateTo
+          ? `studies-${applied.dateFrom}.csv`
+          : `studies-${applied.dateFrom}-to-${applied.dateTo}.csv`;
+      a.href     = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      toast({ title: `Exported ${rows.length} studies`, description: fileName });
+    } catch {
+      toast({ title: "CSV export failed", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  }, [applied, searchMode, toast]);
 
   function openAllSelectedOhif() {
     for (const s of selectedStudies) {
@@ -747,9 +851,9 @@ export default function DicomQueryRetrieve() {
 
       {/* ── Results Table ─────────────────────────────────────────────────────── */}
       <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b flex items-center justify-between">
-          <h2 className="text-sm font-bold flex items-center gap-2">
-            <Activity size={14} />
+        <div className="px-5 py-3 border-b flex items-center justify-between gap-3">
+          <h2 className="text-sm font-bold flex items-center gap-2 min-w-0">
+            <Activity size={14} className="shrink-0" />
             Results
             {total > 0 && <span className="text-xs font-normal text-muted-foreground">({total.toLocaleString()} studies found)</span>}
             {searchMode === "live-pacs" && data?.source && data.source !== "NONE" && (
@@ -759,7 +863,20 @@ export default function DicomQueryRetrieve() {
               </span>
             )}
           </h2>
-          {isFetching && <RefreshCw size={13} className="animate-spin text-muted-foreground" />}
+          <div className="flex items-center gap-2 shrink-0">
+            {isFetching && <RefreshCw size={13} className="animate-spin text-muted-foreground" />}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1.5"
+              disabled={total === 0 || isExporting}
+              onClick={() => void handleExportCsv()}
+              title="Export all results to CSV"
+            >
+              <FileDown size={13} className={isExporting ? "animate-pulse" : ""} />
+              {isExporting ? "Exporting…" : "Export CSV"}
+            </Button>
+          </div>
         </div>
 
         {isLoading ? (
