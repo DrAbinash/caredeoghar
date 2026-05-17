@@ -10,6 +10,11 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Printer, Stethoscope } from "lucide-react";
 import {
+  loadReportOrientation,
+  persistReportOrientation,
+  type PaperOrientation,
+} from "@/lib/paperSize";
+import {
   useGetDetailedCommissionReport,
   type CommissionTestGroupRow,
   type CommissionDoctorEntry,
@@ -25,7 +30,8 @@ const ALPHA = ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","
 
 type ReportMode = "standard" | "doctor-test" | "consolidated";
 
-const PRINT_CSS = `
+function buildPrintCss(orientation: PaperOrientation): string {
+  return `
   * { box-sizing:border-box; margin:0; padding:0; }
   body { font-family:Arial,sans-serif; font-size:13px; color:#1a1a1a; padding:24px; }
   h1 { font-size:17px; font-weight:700; text-align:center; text-transform:uppercase; letter-spacing:.08em; margin-bottom:6px; }
@@ -40,8 +46,9 @@ const PRINT_CSS = `
   td { padding:7px 10px; border:1px solid #e5e7eb; }
   .total-row td { font-weight:700; background:#fffbeb; border-top:2px solid #d97706; }
   .grand-row td { font-weight:700; background:#fef3c7; font-size:14px; }
-  @media print { @page { margin:15mm; } body { padding:0; } }
-`;
+  @media print { @page { margin:15mm; size: ${orientation}; } body { padding:0; } }
+  `;
+}
 
 export default function CommissionReport({ onBack }: { onBack: () => void }) {
   const { toast } = useToast();
@@ -60,6 +67,13 @@ export default function CommissionReport({ onBack }: { onBack: () => void }) {
 
   const [mode, setMode] = useState<ReportMode>("standard");
   const [showPercentFixed, setShowPercentFixed] = useState(true);
+  const [orientation, setOrientation] = useState<PaperOrientation>(() => loadReportOrientation());
+
+  const handleOrientationChange = (o: PaperOrientation) => {
+    persistReportOrientation(o);
+    setOrientation(o);
+    handlePrint(o);
+  };
 
   const { data: doctorsData } = useQuery({
     queryKey: SA_DOCTORS_KEY,
@@ -88,7 +102,8 @@ export default function CommissionReport({ onBack }: { onBack: () => void }) {
   const grandTotal = data?.grandTotal ?? { doctors: 0, orders: 0, revenue: 0, commission: 0 };
 
   // ─── Print ────────────────────────────────────────────────────────────────
-  const handlePrint = () => {
+  const handlePrint = (orientationOverride?: PaperOrientation) => {
+    const effectiveOrientation = orientationOverride ?? orientation;
     const doctorLabel = reportDoctorId
       ? doctors.find(d => d.id === reportDoctorId)?.name ?? "—"
       : "All Doctors";
@@ -236,7 +251,7 @@ export default function CommissionReport({ onBack }: { onBack: () => void }) {
     win.document.write(`
       <html><head>
         <title>Commission Report — ${from} to ${to}</title>
-        <style>${PRINT_CSS}</style>
+        <style>${buildPrintCss(effectiveOrientation)}</style>
       </head><body>
         ${metaBlock}
         ${bodyHtml}
@@ -287,9 +302,27 @@ export default function CommissionReport({ onBack }: { onBack: () => void }) {
                 </Select>
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1.5">
-              <Printer size={14} /> Print
-            </Button>
+            <div className="flex items-center gap-2">
+              <div className="flex rounded-md border border-border overflow-hidden text-xs">
+                {(["portrait", "landscape"] as PaperOrientation[]).map(o => (
+                  <button
+                    key={o}
+                    onClick={() => handleOrientationChange(o)}
+                    className={`px-2.5 py-1.5 font-medium transition-colors capitalize ${
+                      orientation === o
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background text-muted-foreground hover:bg-muted"
+                    }`}
+                    title={`Print in ${o}`}
+                  >
+                    {o === "portrait" ? "↕ Portrait" : "↔ Landscape"}
+                  </button>
+                ))}
+              </div>
+              <Button variant="outline" size="sm" onClick={() => handlePrint()} className="gap-1.5">
+                <Printer size={14} /> Print
+              </Button>
+            </div>
           </div>
 
           {/* Report type + column selector */}
