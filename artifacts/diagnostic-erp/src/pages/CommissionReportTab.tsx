@@ -143,7 +143,7 @@ export default function CommissionReportTab() {
     }
     setPdfLoading(true);
     try {
-      await exportPDF(toExportSections(report), buildMeta(mode, from, to, doctorLabel, grandTotal));
+      await exportPDF(toExportSections(report), buildMeta(mode, from, to, doctorLabel, grandTotal), undefined, showPercentFixed);
     } catch (err) {
       toast({ title: "PDF export failed", description: String(err), variant: "destructive" });
     } finally {
@@ -160,7 +160,7 @@ export default function CommissionReportTab() {
     }
     setXlsxLoading(true);
     try {
-      await exportExcel(toExportSections(report), buildMeta(mode, from, to, doctorLabel, grandTotal));
+      await exportExcel(toExportSections(report), buildMeta(mode, from, to, doctorLabel, grandTotal), showPercentFixed);
     } catch (err) {
       toast({ title: "Excel export failed", description: String(err), variant: "destructive" });
     } finally {
