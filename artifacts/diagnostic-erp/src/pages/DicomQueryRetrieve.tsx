@@ -39,6 +39,38 @@ function getPresetKey(userId?: number): string {
   return `dicom_qr_presets_${userId ?? "anon"}`;
 }
 
+/** Timestamp written whenever the user makes a local change (save/delete/rename/reorder). */
+function getPresetLocalTsKey(userId?: number): string {
+  return `dicom_qr_presets_local_ts_${userId ?? "anon"}`;
+}
+
+/** Timestamp written whenever we successfully receive or push presets from/to the server. */
+function getPresetServerTsKey(userId?: number): string {
+  return `dicom_qr_presets_server_ts_${userId ?? "anon"}`;
+}
+
+function loadPresetLocalTs(userId?: number): number {
+  try {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(getPresetLocalTsKey(userId)) : null;
+    return raw ? parseInt(raw, 10) : 0;
+  } catch { return 0; }
+}
+
+function loadPresetServerTs(userId?: number): number {
+  try {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(getPresetServerTsKey(userId)) : null;
+    return raw ? parseInt(raw, 10) : 0;
+  } catch { return 0; }
+}
+
+function markPresetLocalWrite(userId?: number): void {
+  try { window.localStorage.setItem(getPresetLocalTsKey(userId), String(Date.now())); } catch { /* ignore */ }
+}
+
+function markPresetServerSync(userId?: number): void {
+  try { window.localStorage.setItem(getPresetServerTsKey(userId), String(Date.now())); } catch { /* ignore */ }
+}
+
 type PaperOrientation = "landscape" | "portrait";
 
 function getPaperSizeKey(userId?: number): string {
@@ -69,9 +101,19 @@ function loadPresets(userId?: number): DicomPreset[] {
   }
 }
 
-function persistPresets(presets: DicomPreset[], userId?: number): void {
+/**
+ * Persist presets to localStorage.
+ * @param source  "local"  — a user-initiated change; bumps the local write timestamp.
+ *                "server" — data received from or confirmed by the server; bumps the server sync timestamp.
+ */
+function persistPresets(presets: DicomPreset[], userId?: number, source: "local" | "server" = "local"): void {
   try {
     window.localStorage.setItem(getPresetKey(userId), JSON.stringify(presets));
+    if (source === "local") {
+      markPresetLocalWrite(userId);
+    } else {
+      markPresetServerSync(userId);
+    }
   } catch { /* ignore quota errors */ }
 }
 
@@ -262,19 +304,41 @@ export default function DicomQueryRetrieve() {
     staleTime: 60_000,
   });
 
-  // React Query v5: use useEffect to react to query result changes
-  useEffect(() => {
-    if (serverPresetsData) {
-      setPresets(serverPresetsData.presets);
-      persistPresets(serverPresetsData.presets, userId);
-    }
-  }, [serverPresetsData, userId]);
-
   const syncPresetsMut = useMutation({
     mutationFn: (updated: DicomPreset[]) =>
       api.put<{ ok: boolean; count: number }>("/api/users/me/dicom-presets", { presets: updated }),
+    onSuccess: () => {
+      // The presets themselves are already in localStorage from the local persistPresets()
+      // call that fired before mutate(). Only advance the server-sync timestamp so the
+      // conflict-resolution logic on next load knows the server caught up.
+      // NOTE: we intentionally do NOT re-write the presets array here — doing so would
+      // let a slow in-flight response overwrite a newer local reorder with stale data.
+      markPresetServerSync(userId);
+    },
     onError: () => toast({ title: "Could not sync presets to server", variant: "destructive" }),
   });
+
+  // React Query v5: use useEffect to react to query result changes.
+  // Conflict resolution: if the user made local changes (e.g. reorder) after the last
+  // confirmed server sync and connectivity was lost, the local copy wins and is pushed
+  // back to the server. Otherwise the server is authoritative.
+  useEffect(() => {
+    if (!serverPresetsData) return;
+    const localTs  = loadPresetLocalTs(userId);
+    const serverTs = loadPresetServerTs(userId);
+    if (localTs > serverTs) {
+      // Local edits are newer than the last confirmed server sync — push local to server.
+      const localPresets = loadPresets(userId);
+      setPresets(localPresets);
+      syncPresetsMut.mutate(localPresets);
+    } else {
+      // Server is authoritative — accept its data and update the local cache.
+      setPresets(serverPresetsData.presets);
+      persistPresets(serverPresetsData.presets, userId, "server");
+    }
+  // syncPresetsMut.mutate is stable across renders (useMutation guarantee)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverPresetsData, userId]);
 
   const { data, isLoading, isFetching, refetch } = useQuery<QueryResult>({
     queryKey: ["dicom-query", applied, page, searchMode],
