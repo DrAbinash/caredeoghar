@@ -47,7 +47,7 @@ type ReportData = {
   grandTotal: { doctors: number; orders: number; revenue: number; commission: number };
 };
 
-type ReportMode = "by-doctor" | "consolidated";
+type ReportMode = "by-doctor" | "test-summary" | "consolidated";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const inr = (n: number) =>
@@ -192,7 +192,7 @@ function buildPrintHtml(
     <title>Referral Report — ${from} to ${to}</title>
     <style>${PRINT_CSS}</style>
   </head><body>
-    <h1>Referral Report (Doctor Name)</h1>
+    <h1>Referral &amp; Commission Report</h1>
     <p class='meta'>Period: ${from} to ${to} &nbsp;|&nbsp; Doctor: ${doctorLabel}</p>
     <p class='meta'>Generated: ${new Date().toLocaleString("en-IN")}</p>
     ${body}
@@ -294,9 +294,9 @@ export default function ReferralReport({ onBack }: { onBack: () => void }) {
           <Button variant="ghost" size="sm" onClick={onBack} className="mb-2 -ml-2">
             <ArrowLeft size={14} className="mr-1" /> Back
           </Button>
-          <h1 className="text-2xl font-bold">Referral Report (Doctor Name)</h1>
+          <h1 className="text-2xl font-bold">Referral &amp; Commission Report</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Per-patient, per-test referral commission — grouped by referring doctor
+            Per-patient, per-test referral commission — grouped by referring doctor, with test-summary view
           </p>
         </div>
 
@@ -337,7 +337,7 @@ export default function ReferralReport({ onBack }: { onBack: () => void }) {
             <div>
               <Label className="text-xs mb-2 block">Report View</Label>
               <div className="flex gap-1.5">
-                {(["by-doctor", "consolidated"] as ReportMode[]).map(m => (
+                {(["by-doctor", "test-summary", "consolidated"] as ReportMode[]).map(m => (
                   <button
                     key={m}
                     onClick={() => setMode(m)}
@@ -347,7 +347,7 @@ export default function ReferralReport({ onBack }: { onBack: () => void }) {
                         : "bg-background border-border hover:bg-muted text-muted-foreground"
                     }`}
                   >
-                    {m === "by-doctor" ? "By Doctor" : "Consolidated"}
+                    {m === "by-doctor" ? "By Doctor" : m === "test-summary" ? "Test Summary" : "Consolidated"}
                   </button>
                 ))}
               </div>
@@ -407,6 +407,8 @@ export default function ReferralReport({ onBack }: { onBack: () => void }) {
           </div>
         ) : mode === "consolidated" ? (
           <ConsolidatedView report={report} grandTotal={grandTotal} cols={cols} />
+        ) : mode === "test-summary" ? (
+          <TestSummaryView report={report} grandTotal={grandTotal} />
         ) : (
           <ByDoctorView report={report} grandTotal={grandTotal} cols={cols} colCount={colCount} />
         )}
@@ -546,6 +548,123 @@ function DoctorBlock({
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// ── Test Summary view (merged from Commission Report) ───────────────────────
+type TestSummaryRow = {
+  testId: number;
+  testName: string;
+  category: string;
+  count: number;
+  revenue: number;
+  commission: number;
+  ruleName: string;
+  ruleType: string;
+  ruleValue: number;
+};
+
+function TestSummaryView({
+  report,
+  grandTotal,
+}: {
+  report: DoctorEntry[];
+  grandTotal: ReportData["grandTotal"];
+}) {
+  return (
+    <div className="space-y-6">
+      {report.map((entry, idx) => {
+        // Build test-level aggregation from per-patient rows
+        const byTest: Record<number, TestSummaryRow> = {};
+        for (const row of entry.rows) {
+          if (!byTest[row.testId]) {
+            byTest[row.testId] = {
+              testId: row.testId,
+              testName: row.testName,
+              category: row.category,
+              count: 0,
+              revenue: 0,
+              commission: 0,
+              ruleName: row.ruleName,
+              ruleType: row.ruleType,
+              ruleValue: row.ruleValue,
+            };
+          }
+          byTest[row.testId].count++;
+          byTest[row.testId].revenue += row.price;
+          byTest[row.testId].commission += row.commission;
+        }
+        const rows = Object.values(byTest).sort((a, b) => b.commission - a.commission);
+        const label = ALPHA[idx] ?? String(idx + 1);
+        return (
+          <div key={entry.doctor.id} className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="flex items-center gap-3 px-5 py-3.5 border-b border-border bg-muted/30">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider w-5">{label})</span>
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <Stethoscope size={14} className="text-primary" />
+              </div>
+              <div className="flex-1">
+                <p className="font-bold text-sm">{entry.doctor.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {entry.doctor.specialization ?? ""} · {entry.orderCount} orders · {entry.testCount} tests
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground">Commission</p>
+                <p className="font-semibold text-sm text-amber-600">{inr(entry.totalCommission)}</p>
+              </div>
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/20">
+                  <th className="text-left px-5 py-2.5 text-xs font-semibold uppercase text-muted-foreground">Test Name</th>
+                  <th className="text-center px-4 py-2.5 text-xs font-semibold uppercase text-muted-foreground">No. of Tests</th>
+                  <th className="text-center px-4 py-2.5 text-xs font-semibold uppercase text-muted-foreground">% / Fixed</th>
+                  <th className="text-right px-5 py-2.5 text-xs font-semibold uppercase text-muted-foreground">Total Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, i) => (
+                  <tr key={row.testId} className={`border-b border-border last:border-0 ${i % 2 === 1 ? "bg-muted/10" : ""}`}>
+                    <td className="px-5 py-2.5 font-medium">{row.testName}</td>
+                    <td className="px-4 py-2.5 text-center tabular-nums">{row.count}</td>
+                    <td className="px-4 py-2.5 text-center tabular-nums text-muted-foreground">
+                      {row.ruleType === "percentage"
+                        ? <span className="inline-flex items-center gap-0.5">{row.ruleValue}<span className="text-xs">%</span></span>
+                        : <span className="text-xs">{inr(row.ruleValue)}</span>
+                      }
+                    </td>
+                    <td className="px-5 py-2.5 text-right font-semibold text-amber-700 tabular-nums">{inr(row.commission)}</td>
+                  </tr>
+                ))}
+                <tr className="border-t-2 border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700">
+                  <td className="px-5 py-3 font-bold text-sm" colSpan={3}>Total →</td>
+                  <td className="px-5 py-3 text-right font-bold text-base text-amber-700 tabular-nums">{inr(entry.totalCommission)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+      {report.length > 1 && (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 flex items-center justify-between dark:bg-amber-900/20 dark:border-amber-700">
+          <div>
+            <p className="font-bold text-sm">Grand Total</p>
+            <p className="text-xs text-muted-foreground">{grandTotal.doctors} doctors · {grandTotal.orders} orders</p>
+          </div>
+          <div className="flex gap-10">
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Total Revenue</p>
+              <p className="font-bold text-base">{inr(grandTotal.revenue)}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Commission Payable</p>
+              <p className="font-bold text-base text-amber-600">{inr(grandTotal.commission)}</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
