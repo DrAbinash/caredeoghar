@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   CalendarDays, RefreshCw, Send, CheckCircle2, XCircle, Clock, List,
-  Plus, AlertCircle, Server, BookOpen,
+  Plus, AlertCircle, Server, BookOpen, Copy,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -251,7 +251,18 @@ export default function MwlDashboard() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 flex-wrap">
+                          {/* Copy Accession # */}
+                          <button
+                            onClick={() => {
+                              navigator.clipboard?.writeText(p.accessionNumber).catch(() => undefined);
+                              toast({ title: "Accession # copied" });
+                            }}
+                            className="inline-flex items-center gap-0.5 text-[10px] rounded px-1.5 py-0.5 bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 font-medium"
+                            title="Copy Accession #"
+                          >
+                            <Copy size={9} /> ACC
+                          </button>
                           {p.status === "SCHEDULED" && (
                             <Button
                               size="sm"

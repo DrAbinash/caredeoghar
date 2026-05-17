@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Save, RefreshCw, Trash2, Server, Settings2, Radio, Search, ScanLine, MonitorPlay, Network, ToggleLeft, ToggleRight } from "lucide-react";
+import { Plus, Save, RefreshCw, Trash2, Server, Settings2, Radio, Search, ScanLine, MonitorPlay, Network, ToggleLeft, ToggleRight, CheckCircle2, XCircle, Wifi, WifiOff } from "lucide-react";
 
 type Setting = { id: number; key: string; value: string | null; category: string; isSecret: boolean };
 type Modality = {
@@ -431,7 +431,7 @@ export default function PacsSettings() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"settings" | "modalities" | "mwl" | "viewer" | "routing">("settings");
+  const [activeTab, setActiveTab] = useState<"settings" | "modalities" | "mwl" | "viewer" | "routing" | "tests">("settings");
   const [newKey, setNewKey] = useState("");
   const [newVal, setNewVal] = useState("");
   const [newCat, setNewCat] = useState("general");
@@ -532,6 +532,7 @@ export default function PacsSettings() {
           { key: "mwl",        icon: <Radio      size={14} className="inline mr-1" />, label: "Worklist (MWL)" },
           { key: "viewer",     icon: <MonitorPlay size={14} className="inline mr-1" />, label: "Viewer Settings" },
           { key: "routing",    icon: <Network    size={14} className="inline mr-1" />, label: "Routing Rules" },
+          { key: "tests",      icon: <Wifi       size={14} className="inline mr-1" />, label: "Connection Tests" },
         ] as const).map((tab) => (
           <button
             key={tab.key}
@@ -726,6 +727,11 @@ export default function PacsSettings() {
       {activeTab === "routing" && (
         <RoutingRulesTab />
       )}
+
+      {/* ── Connection Tests Tab ── */}
+      {activeTab === "tests" && (
+        <ConnectionTestsTab viewerMap={viewerMap} modalities={modalities} />
+      )}
     </div>
   );
 }
@@ -785,6 +791,209 @@ function ViewerField({
         >
           {saved ? "✓" : <Save size={12} />}
         </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── ConnectionTestsTab component ────────────────────────────────────────────
+
+type EchoResult = { status: "idle" | "testing" | "ok" | "fail"; message?: string };
+
+type PacsHealth = {
+  pendingRetries: number;
+  totalActiveModalities: number;
+  healthyModalities: number;
+  pulledToday: Record<string, number>;
+};
+
+function ConnectionTestsTab({
+  viewerMap,
+  modalities,
+}: {
+  viewerMap: Record<string, string>;
+  modalities: Modality[];
+}) {
+  const { toast } = useToast();
+  const [echoResults, setEchoResults] = useState<Record<number, EchoResult>>({});
+
+  const { data: health, refetch: refetchHealth, isFetching: healthFetching } = useQuery<PacsHealth>({
+    queryKey: ["pacs-health-settings"],
+    queryFn: () => api.get("/api/radiology/pacs-dashboard-ext"),
+  });
+
+  async function runEcho(id: number) {
+    setEchoResults((prev) => ({ ...prev, [id]: { status: "testing" } }));
+    try {
+      const res = await api.post<{ ok: boolean; latencyMs?: number; error?: string }>(
+        `/api/radiology/modalities/${id}/echo-test`,
+        {},
+      );
+      const ok = res.ok !== false;
+      setEchoResults((prev) => ({
+        ...prev,
+        [id]: {
+          status: ok ? "ok" : "fail",
+          message: ok
+            ? (res.latencyMs !== undefined ? `${res.latencyMs} ms` : "Reachable")
+            : (res.error ?? "C-ECHO failed"),
+        },
+      }));
+      if (ok) toast({ title: "C-ECHO OK" });
+      else toast({ title: "C-ECHO failed", variant: "destructive" });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Network error";
+      setEchoResults((prev) => ({ ...prev, [id]: { status: "fail", message: msg } }));
+      toast({ title: "C-ECHO error", description: msg, variant: "destructive" });
+    }
+  }
+
+  const VIEWER_URL_KEYS = [
+    { key: "ohif_base_url",          label: "OHIF Base URL",        desc: "Required for OHIF viewer" },
+    { key: "wado_base_url",          label: "WADO Base URL",        desc: "Required for Weasis" },
+    { key: "dicom_web_base_url",     label: "DICOMweb Base URL",    desc: "Passed to OHIF as data source" },
+    { key: "orthanc_base_url",       label: "Orthanc Base URL",     desc: "Orthanc REST API" },
+    { key: "conquest_wado_base_url", label: "Conquest WADO URL",    desc: "Conquest WADO endpoint (if used)" },
+  ];
+
+  const failedQueue = health?.pendingRetries ?? 0;
+  const healthyMods = health?.healthyModalities ?? 0;
+  const totalMods   = health?.totalActiveModalities ?? 0;
+
+  return (
+    <div className="space-y-6">
+      {/* ── Health Summary ── */}
+      <div className="rounded-xl border bg-card p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold flex items-center gap-2">
+            <Wifi size={15} /> Overall Status
+          </h3>
+          <button
+            onClick={() => void refetchHealth()}
+            disabled={healthFetching}
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+          >
+            <RefreshCw size={11} className={healthFetching ? "animate-spin" : ""} /> Refresh
+          </button>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="rounded-lg border bg-background p-3 text-center">
+            <p className={`text-2xl font-bold ${totalMods > 0 && healthyMods === totalMods ? "text-green-600" : "text-amber-600"}`}>
+              {healthyMods}/{totalMods}
+            </p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold mt-0.5">Modalities OK</p>
+          </div>
+          <div className="rounded-lg border bg-background p-3 text-center">
+            <p className={`text-2xl font-bold ${failedQueue === 0 ? "text-green-600" : "text-red-600"}`}>{failedQueue}</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold mt-0.5">Failed Queue</p>
+          </div>
+          <div className="rounded-lg border bg-background p-3 text-center">
+            <p className="text-2xl font-bold text-purple-600">{health?.pulledToday?.PULLED ?? 0}</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold mt-0.5">Pulled Today</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Viewer URL Configuration Status ── */}
+      <div className="rounded-xl border bg-card p-5 space-y-4">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <ScanLine size={15} /> Viewer URL Configuration
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          These URLs must be configured in <strong>Viewer Settings</strong> for OHIF and Weasis to work.
+          Green = configured, Red = missing.
+        </p>
+        <div className="space-y-2">
+          {VIEWER_URL_KEYS.map(({ key, label, desc }) => {
+            const val = viewerMap[key] ?? "";
+            const ok  = val.trim().length > 0;
+            return (
+              <div key={key} className={`flex items-center gap-3 rounded-lg border p-3 ${ok ? "border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-800" : "border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800"}`}>
+                {ok ? (
+                  <CheckCircle2 size={16} className="text-green-600 shrink-0" />
+                ) : (
+                  <XCircle size={16} className="text-red-500 shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold">{label}</p>
+                  <p className="text-[10px] text-muted-foreground">{desc}</p>
+                  {ok && <p className="text-[10px] font-mono text-muted-foreground truncate mt-0.5">{val}</p>}
+                </div>
+                {!ok && (
+                  <span className="text-[10px] text-red-600 font-semibold shrink-0">NOT SET</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Modality C-ECHO Tests ── */}
+      <div className="rounded-xl border bg-card p-5 space-y-4">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <Server size={15} /> Modality C-ECHO Tests
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          A C-ECHO verifies that this ERP can reach the imaging device (MRI, CT, X-Ray) over the network.
+          Green = reachable. Red = unreachable or misconfigured.
+        </p>
+        {modalities.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No modalities configured. Add them in the <strong>Modalities</strong> tab.</p>
+        ) : (
+          <div className="space-y-2">
+            {modalities.map((m) => {
+              const r = echoResults[m.id] ?? { status: "idle" };
+              return (
+                <div key={m.id} className="flex items-center gap-3 rounded-lg border bg-background p-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold">{m.machineName}</p>
+                    <p className="text-[10px] text-muted-foreground font-mono">
+                      AE: {m.aeTitle ?? "—"} · {m.ipAddress ?? "—"}:{m.port ?? "—"} · {m.modality ?? "OT"}
+                    </p>
+                    {r.status !== "idle" && r.message && (
+                      <p className={`text-[10px] font-medium mt-0.5 ${r.status === "ok" ? "text-green-600" : "text-red-600"}`}>
+                        {r.message}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {r.status === "ok"   && <CheckCircle2 size={16} className="text-green-600" />}
+                    {r.status === "fail" && <XCircle      size={16} className="text-red-500" />}
+                    {r.status === "idle" && <WifiOff      size={16} className="text-gray-400" />}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      disabled={r.status === "testing"}
+                      onClick={() => void runEcho(m.id)}
+                    >
+                      {r.status === "testing" ? (
+                        <><RefreshCw size={11} className="animate-spin mr-1" /> Testing…</>
+                      ) : (
+                        <>C-ECHO</>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Network Requirements ── */}
+      <div className="rounded-xl border bg-muted/30 p-5 space-y-3">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <Network size={15} /> Network Requirements
+        </h3>
+        <ul className="text-xs text-muted-foreground space-y-1.5 list-disc list-inside">
+          <li>DICOM port <strong>104</strong> (or configured port) must be open on each modality.</li>
+          <li>Orthanc/Conquest PACS: ports <strong>4242</strong> (DICOM) and <strong>8042</strong> (HTTP) by default.</li>
+          <li>OHIF Viewer: port <strong>3000</strong> by default (or as configured in OHIF Base URL).</li>
+          <li>The ERP server's AE Title must be registered as a known DICOM node on each modality.</li>
+          <li>Windows Pull Agent must be on the same LAN segment as the modalities, with DCMTK installed.</li>
+          <li>Firewall rules should permit DICOM traffic between this server, modalities, and PACS.</li>
+        </ul>
       </div>
     </div>
   );

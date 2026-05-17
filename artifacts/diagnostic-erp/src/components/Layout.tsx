@@ -53,6 +53,7 @@ import {
   HandCoins,
   ListChecks,
   Wallet,
+  Search,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -112,6 +113,7 @@ const navItems: NavEntry[] = [
       { path: "/radiology/modality-management", icon: Server, label: "Modalities" },
       { path: "/radiology/mwl-dashboard", icon: CalendarDays, label: "MWL Dashboard" },
       { path: "/radiology/agent-setup", icon: Settings2, label: "Agent Setup" },
+      { path: "/radiology/dicom-query-retrieve", icon: Search, label: "DICOM Q/R" },
     ],
   },
   {

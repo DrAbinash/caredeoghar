@@ -19,8 +19,10 @@ import {
   dicomModalitiesTable,
   pacsLogsTable,
   radiologyWorklistTable,
+  radiologyStudiesTable,
+  patientsTable,
 } from "@workspace/db/schema";
-import { and, asc, desc, eq, gte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
 
 const execAsync = promisify(exec);
 const router = Router();
@@ -688,6 +690,192 @@ router.get("/pacs-dashboard-ext", async (_req, res) => {
     recentPulled,
     mwlStats,
   });
+});
+
+// ─── DICOM QUERY / RETRIEVE ───────────────────────────────────────────────────
+
+// GET /api/radiology/dicom-query
+// Search radiology_studies joined with patients, enriched with pull status from
+// dicom_pulled_studies (matched on accession number).
+router.get("/dicom-query", async (req, res) => {
+  const q          = req.query as Record<string, string | undefined>;
+  const date       = q.date;
+  const dateFrom   = q.dateFrom;
+  const dateTo     = q.dateTo;
+  const modalityQ  = q.modality;
+  const patientQ   = q.patientName?.trim();
+  const accessionQ = q.accessionNumber?.trim();
+  const referringQ = q.referringDoctor?.trim();
+  const descQ      = q.studyDescription?.trim();
+  const aeTitleQ   = q.aeTitle?.trim()?.toLowerCase();
+  const limit      = Math.min(Number(q.limit) || 50, 200);
+  const offset     = Number(q.offset) || 0;
+
+  const conds = [];
+
+  // Date range
+  if (date) {
+    conds.push(eq(radiologyStudiesTable.studyDate, date));
+  } else {
+    if (dateFrom) conds.push(gte(radiologyStudiesTable.studyDate, dateFrom));
+    if (dateTo)   conds.push(lte(radiologyStudiesTable.studyDate, dateTo));
+  }
+
+  // Modality (comma-separated for multi-select)
+  if (modalityQ) {
+    const mods = modalityQ.split(",").map((m) => m.trim()).filter(Boolean);
+    if (mods.length === 1) {
+      conds.push(eq(radiologyStudiesTable.modality, mods[0]));
+    } else if (mods.length > 1) {
+      conds.push(inArray(radiologyStudiesTable.modality, mods));
+    }
+  }
+
+  // Patient name (ilike on first or last name)
+  if (patientQ) {
+    const pat = `%${patientQ}%`;
+    conds.push(or(ilike(patientsTable.firstName, pat), ilike(patientsTable.lastName, pat))!);
+  }
+
+  if (accessionQ) conds.push(ilike(radiologyStudiesTable.accessionNumber, `%${accessionQ}%`));
+  if (referringQ) conds.push(ilike(radiologyStudiesTable.referringDoctor,  `%${referringQ}%`));
+  if (descQ)      conds.push(ilike(radiologyStudiesTable.studyDescription,  `%${descQ}%`));
+
+  const rows = await db
+    .select({
+      id:                     radiologyStudiesTable.id,
+      accessionNumber:        radiologyStudiesTable.accessionNumber,
+      studyInstanceUID:       radiologyStudiesTable.studyInstanceUid,
+      modality:               radiologyStudiesTable.modality,
+      studyDate:              radiologyStudiesTable.studyDate,
+      studyDescription:       radiologyStudiesTable.studyDescription,
+      referringDoctor:        radiologyStudiesTable.referringDoctor,
+      status:                 radiologyStudiesTable.status,
+      scheduledStationAETitle: radiologyStudiesTable.scheduledStationAETitle,
+      patientId:              radiologyStudiesTable.patientId,
+      patientName:            sql<string>`COALESCE(${patientsTable.firstName} || ' ' || ${patientsTable.lastName}, '')`,
+      pullStatus:             dicomPulledStudiesTable.status,
+      pulledAt:               dicomPulledStudiesTable.pulledAt,
+    })
+    .from(radiologyStudiesTable)
+    .leftJoin(patientsTable, eq(patientsTable.id, radiologyStudiesTable.patientId))
+    .leftJoin(
+      dicomPulledStudiesTable,
+      eq(dicomPulledStudiesTable.accessionNumber, radiologyStudiesTable.accessionNumber),
+    )
+    .where(conds.length ? and(...conds) : undefined)
+    .orderBy(desc(radiologyStudiesTable.studyDate), desc(radiologyStudiesTable.createdAt))
+    .limit(aeTitleQ ? 200 : limit)   // over-fetch when filtering by AE client-side
+    .offset(aeTitleQ ? 0 : offset);
+
+  // AE-title post-filter (column is on the ERP study, not on pulled_studies)
+  const filtered = aeTitleQ
+    ? rows.filter((r) => (r.scheduledStationAETitle ?? "").toLowerCase().includes(aeTitleQ))
+    : rows;
+
+  // Pagination total (without AE filter overhead)
+  const [countRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(radiologyStudiesTable)
+    .leftJoin(patientsTable, eq(patientsTable.id, radiologyStudiesTable.patientId))
+    .where(conds.length ? and(...conds) : undefined);
+
+  const paged = aeTitleQ ? filtered.slice(offset, offset + limit) : filtered;
+
+  res.json({
+    studies: paged,
+    total:   aeTitleQ ? filtered.length : (countRow?.count ?? 0),
+    limit,
+    offset,
+  });
+});
+
+// POST /api/radiology/dicom-retrieve
+// Queue a single study for retrieval by the pull agent.
+router.post("/dicom-retrieve", async (req, res) => {
+  const body = req.body as {
+    studyInstanceUID?: string;
+    accessionNumber?: string;
+    modality?: string;
+    patientName?: string;
+    patientId?: string;
+    studyDate?: string;
+    sourceAeTitle?: string;
+  };
+
+  if (!body.studyInstanceUID && !body.accessionNumber) {
+    res.status(400).json({ error: "studyInstanceUID or accessionNumber required" });
+    return;
+  }
+
+  const uid = body.studyInstanceUID
+    ?? `REQ-${Date.now()}-${(body.accessionNumber ?? "").replace(/[^A-Za-z0-9]/g, "")}`;
+
+  const [row] = await db
+    .insert(dicomPulledStudiesTable)
+    .values({
+      studyInstanceUID: uid,
+      accessionNumber:  body.accessionNumber ?? null,
+      modality:         body.modality ?? null,
+      patientName:      body.patientName ?? null,
+      patientId:        body.patientId ?? null,
+      studyDate:        body.studyDate ?? null,
+      sourceAeTitle:    body.sourceAeTitle ?? null,
+      status:           "RETRIEVE_REQUESTED",
+    })
+    .onConflictDoUpdate({
+      target: dicomPulledStudiesTable.studyInstanceUID,
+      set: { status: "RETRIEVE_REQUESTED", lastError: null, updatedAt: new Date() },
+    })
+    .returning();
+
+  res.json({ success: true, study: row });
+});
+
+// POST /api/radiology/dicom-retrieve/bulk
+// Queue up to 50 studies for retrieval by the pull agent.
+router.post("/dicom-retrieve/bulk", async (req, res) => {
+  const body = req.body as {
+    studies?: Array<{
+      studyInstanceUID?: string;
+      accessionNumber?: string;
+      modality?: string;
+      patientName?: string;
+      patientId?: string;
+      studyDate?: string;
+      sourceAeTitle?: string;
+    }>;
+  };
+
+  if (!Array.isArray(body.studies) || body.studies.length === 0) {
+    res.status(400).json({ error: "studies array required" });
+    return;
+  }
+
+  let count = 0;
+  for (const s of body.studies.slice(0, 50)) {
+    const uid = s.studyInstanceUID
+      ?? `REQ-${Date.now()}-${count}-${(s.accessionNumber ?? Math.random().toString(36).slice(2)).replace(/[^A-Za-z0-9]/g, "")}`;
+    await db
+      .insert(dicomPulledStudiesTable)
+      .values({
+        studyInstanceUID: uid,
+        accessionNumber:  s.accessionNumber ?? null,
+        modality:         s.modality ?? null,
+        patientName:      s.patientName ?? null,
+        patientId:        s.patientId ?? null,
+        studyDate:        s.studyDate ?? null,
+        sourceAeTitle:    s.sourceAeTitle ?? null,
+        status:           "RETRIEVE_REQUESTED",
+      })
+      .onConflictDoUpdate({
+        target: dicomPulledStudiesTable.studyInstanceUID,
+        set: { status: "RETRIEVE_REQUESTED", lastError: null, updatedAt: new Date() },
+      });
+    count++;
+  }
+
+  res.json({ success: true, count });
 });
 
 export const pacsEnterpriseRouter = router;
