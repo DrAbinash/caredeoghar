@@ -257,9 +257,15 @@ export async function exportExcel(
 }
 
 // ─── Word Export ──────────────────────────────────────────────────────────────
+
+export type WordExportMode = "standard" | "doctor-test" | "consolidated";
+
+const ALPHA = ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"];
+
 export async function exportWord(
   sections: ExportDoctorSection[],
   meta: ReportMeta,
+  mode: WordExportMode = "standard",
 ): Promise<void> {
   const {
     Document, Packer, Paragraph, Table, TableRow, TableCell,
@@ -271,13 +277,21 @@ export async function exportWord(
   const HEADER_BG = "F3F4F6";
 
   const cellBorder = {
-    top: { style: BorderStyle.SINGLE, size: 1, color: "E5E7EB" },
+    top:    { style: BorderStyle.SINGLE, size: 1, color: "E5E7EB" },
     bottom: { style: BorderStyle.SINGLE, size: 1, color: "E5E7EB" },
-    left: { style: BorderStyle.SINGLE, size: 1, color: "E5E7EB" },
-    right: { style: BorderStyle.SINGLE, size: 1, color: "E5E7EB" },
+    left:   { style: BorderStyle.SINGLE, size: 1, color: "E5E7EB" },
+    right:  { style: BorderStyle.SINGLE, size: 1, color: "E5E7EB" },
   };
 
-  const makeCell = (text: string, opts: { bold?: boolean; bg?: string; align?: typeof AlignmentType[keyof typeof AlignmentType]; color?: string } = {}) =>
+  const makeCell = (
+    text: string,
+    opts: {
+      bold?: boolean;
+      bg?: string;
+      align?: typeof AlignmentType[keyof typeof AlignmentType];
+      color?: string;
+    } = {},
+  ) =>
     new TableCell({
       shading: opts.bg ? { type: ShadingType.CLEAR, fill: opts.bg } : undefined,
       borders: cellBorder,
@@ -317,16 +331,16 @@ export async function exportWord(
           new TableRow({
             children: [
               makeCell("Doctors with Referrals", { bold: true, bg: AMBER_BG }),
-              makeCell("Total Orders", { bold: true, bg: AMBER_BG }),
-              makeCell("Total Revenue", { bold: true, bg: AMBER_BG }),
-              makeCell("Commission Payable", { bold: true, bg: AMBER_BG }),
+              makeCell("Total Orders",           { bold: true, bg: AMBER_BG }),
+              makeCell("Total Revenue",          { bold: true, bg: AMBER_BG }),
+              makeCell("Commission Payable",     { bold: true, bg: AMBER_BG }),
             ],
           }),
           new TableRow({
             children: [
               makeCell(String(g.doctors), { align: AlignmentType.CENTER }),
-              makeCell(String(g.orders), { align: AlignmentType.CENTER }),
-              makeCell(INR(g.revenue), { align: AlignmentType.RIGHT }),
+              makeCell(String(g.orders),  { align: AlignmentType.CENTER }),
+              makeCell(INR(g.revenue),    { align: AlignmentType.RIGHT }),
               makeCell(INR(g.commission), { bold: true, color: "B45309", align: AlignmentType.RIGHT }),
             ],
           }),
@@ -336,58 +350,168 @@ export async function exportWord(
     );
   }
 
-  // Per-doctor sections
-  for (const section of sections) {
-    children.push(
-      new Paragraph({
-        children: [
-          new TextRun({ text: `${section.label} ${section.doctorName}`, bold: true, size: 24 }),
-          new TextRun({ text: `  —  ${section.specialization}  ·  ${section.orderCount} orders  ·  Eff. Rate: ${section.effectiveRate}%`, size: 18, color: "666666" }),
-        ],
-        spacing: { before: 200 },
-      }),
-    );
+  // ── Consolidated mode: one row per doctor, grand total ────────────────────
+  if (mode === "consolidated") {
+    const grandComm = sections.reduce((s, sec) => s + sec.totalCommission, 0);
 
-    const tableRows = [
-      // Header
+    const rows: InstanceType<typeof TableRow>[] = [
       new TableRow({
         tableHeader: true,
         children: [
-          makeCell("Test Name",    { bold: true, bg: HEADER_BG }),
-          makeCell("No of Tests",  { bold: true, bg: HEADER_BG, align: AlignmentType.CENTER }),
-          makeCell("% / Fixed",    { bold: true, bg: HEADER_BG, align: AlignmentType.CENTER }),
-          makeCell("Total Amount", { bold: true, bg: HEADER_BG, align: AlignmentType.RIGHT }),
+          makeCell("#",                    { bold: true, bg: HEADER_BG }),
+          makeCell("Referral Doctor Name", { bold: true, bg: HEADER_BG }),
+          makeCell("Commission Amount",    { bold: true, bg: HEADER_BG, align: AlignmentType.RIGHT }),
         ],
       }),
-      // Data rows
-      ...section.rows.map(r =>
+      ...sections.map((sec, i) =>
         new TableRow({
           children: [
-            makeCell(r.testName),
-            makeCell(String(r.count), { align: AlignmentType.CENTER }),
-            makeCell(r.rateLabel, { align: AlignmentType.CENTER }),
-            makeCell(INR(r.commission), { align: AlignmentType.RIGHT }),
+            makeCell(`${(ALPHA[i] ?? String(i + 1)).toUpperCase()})`),
+            makeCell(sec.doctorName),
+            makeCell(INR(sec.totalCommission), { align: AlignmentType.RIGHT }),
           ],
         }),
       ),
-      // Total row
       new TableRow({
         children: [
-          makeCell("", { bg: AMBER_BG }),
-          makeCell("", { bg: AMBER_BG }),
-          makeCell("Total →", { bold: true, bg: AMBER_BG, align: AlignmentType.RIGHT }),
-          makeCell(INR(section.totalCommission), { bold: true, bg: AMBER_BG, color: "B45309", align: AlignmentType.RIGHT }),
+          makeCell("",            { bg: AMBER_BG }),
+          makeCell("Grand Total", { bold: true, bg: AMBER_BG }),
+          makeCell(INR(grandComm), { bold: true, bg: AMBER_BG, color: "B45309", align: AlignmentType.RIGHT }),
         ],
       }),
     ];
 
     children.push(
-      new Table({
-        width: { size: 100, type: WidthType.PERCENTAGE },
-        rows: tableRows,
-      }),
-      new Paragraph({ text: "" }),
+      new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows }),
     );
+
+  // ── Doctor-test mode: flat table with subtotal per doctor ─────────────────
+  } else if (mode === "doctor-test") {
+    const grandComm = sections.reduce((s, sec) => s + sec.totalCommission, 0);
+
+    const headerRow = new TableRow({
+      tableHeader: true,
+      children: [
+        makeCell("Doctor Name",  { bold: true, bg: HEADER_BG }),
+        makeCell("Test Name",    { bold: true, bg: HEADER_BG }),
+        makeCell("No. of Tests", { bold: true, bg: HEADER_BG, align: AlignmentType.CENTER }),
+        makeCell("Total Amount", { bold: true, bg: HEADER_BG, align: AlignmentType.RIGHT }),
+      ],
+    });
+
+    const dataRows: InstanceType<typeof TableRow>[] = [];
+    for (const sec of sections) {
+      for (const row of sec.rows) {
+        dataRows.push(new TableRow({
+          children: [
+            makeCell(sec.doctorName),
+            makeCell(row.testName),
+            makeCell(String(row.count), { align: AlignmentType.CENTER }),
+            makeCell(INR(row.commission), { align: AlignmentType.RIGHT }),
+          ],
+        }));
+      }
+      dataRows.push(new TableRow({
+        children: [
+          makeCell("",                            { bg: AMBER_BG }),
+          makeCell(`${sec.doctorName} – Total`,   { bold: true, bg: AMBER_BG }),
+          makeCell("",                            { bg: AMBER_BG }),
+          makeCell(INR(sec.totalCommission),      { bold: true, bg: AMBER_BG, color: "B45309", align: AlignmentType.RIGHT }),
+        ],
+      }));
+    }
+
+    dataRows.push(new TableRow({
+      children: [
+        makeCell("",            { bg: AMBER_BG }),
+        makeCell("Grand Total", { bold: true, bg: AMBER_BG }),
+        makeCell("",            { bg: AMBER_BG }),
+        makeCell(INR(grandComm), { bold: true, bg: AMBER_BG, color: "B45309", align: AlignmentType.RIGHT }),
+      ],
+    }));
+
+    children.push(
+      new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [headerRow, ...dataRows] }),
+    );
+
+  // ── Standard mode: per-doctor sections ───────────────────────────────────
+  } else {
+    for (const section of sections) {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: `${section.label} ${section.doctorName}`, bold: true, size: 24 }),
+            new TextRun({ text: `  —  ${section.specialization}  ·  ${section.orderCount} orders  ·  Eff. Rate: ${section.effectiveRate}%`, size: 18, color: "666666" }),
+          ],
+          spacing: { before: 200 },
+        }),
+      );
+
+      const tableRows = [
+        // Header
+        new TableRow({
+          tableHeader: true,
+          children: [
+            makeCell("Test Name",    { bold: true, bg: HEADER_BG }),
+            makeCell("No of Tests",  { bold: true, bg: HEADER_BG, align: AlignmentType.CENTER }),
+            makeCell("% / Fixed",    { bold: true, bg: HEADER_BG, align: AlignmentType.CENTER }),
+            makeCell("Total Amount", { bold: true, bg: HEADER_BG, align: AlignmentType.RIGHT }),
+          ],
+        }),
+        // Data rows
+        ...section.rows.map(r =>
+          new TableRow({
+            children: [
+              makeCell(r.testName),
+              makeCell(String(r.count), { align: AlignmentType.CENTER }),
+              makeCell(r.rateLabel, { align: AlignmentType.CENTER }),
+              makeCell(INR(r.commission), { align: AlignmentType.RIGHT }),
+            ],
+          }),
+        ),
+        // Total row
+        new TableRow({
+          children: [
+            makeCell("",        { bg: AMBER_BG }),
+            makeCell("",        { bg: AMBER_BG }),
+            makeCell("Total →", { bold: true, bg: AMBER_BG, align: AlignmentType.RIGHT }),
+            makeCell(INR(section.totalCommission), { bold: true, bg: AMBER_BG, color: "B45309", align: AlignmentType.RIGHT }),
+          ],
+        }),
+      ];
+
+      children.push(
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: tableRows,
+        }),
+        new Paragraph({ text: "" }),
+      );
+    }
+
+    // Grand total row when multiple doctors
+    if (sections.length > 1 && meta.grandTotal) {
+      const g = meta.grandTotal;
+      const grandComm = sections.reduce((s, sec) => s + sec.totalCommission, 0);
+      children.push(
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [
+            new TableRow({
+              children: [
+                makeCell("", { bg: AMBER_BG }),
+                makeCell("", { bg: AMBER_BG }),
+                makeCell(
+                  `Grand Total — ${g.doctors} doctor${g.doctors !== 1 ? "s" : ""}  ·  ${g.orders} orders`,
+                  { bold: true, bg: AMBER_BG },
+                ),
+                makeCell(INR(grandComm), { bold: true, bg: AMBER_BG, color: "B45309", align: AlignmentType.RIGHT }),
+              ],
+            }),
+          ],
+        }),
+      );
+    }
   }
 
   const doc = new Document({
