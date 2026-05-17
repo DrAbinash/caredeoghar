@@ -320,9 +320,10 @@ portalRouter.post("/staff-login", staffLoginLimiter, async (req, res) => {
   }
 
   // ── LAN-only login enforcement ────────────────────────────────────────────
-  // Admin role is always exempt. For all other roles, if the clinic has enabled
-  // LAN-only login, reject requests coming from outside the hospital network.
-  if (user.role !== "admin") {
+  // Admin and super_admin roles are always exempt. For all other roles, if the
+  // clinic has enabled LAN-only login, reject requests coming from outside
+  // the hospital network.
+  if (user.role !== "admin" && user.role !== "super_admin") {
     const [cfg] = await db
       .select({ lanOnlyLogin: clinicSettingsTable.lanOnlyLogin, lanAllowedIps: clinicSettingsTable.lanAllowedIps })
       .from(clinicSettingsTable)
