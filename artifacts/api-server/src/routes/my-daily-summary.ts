@@ -64,13 +64,14 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
   const to = typeof req.query.to === "string" ? req.query.to : from;
 
   // Admin/superadmin may pass staffName to view another user's data.
-  // null = all-staff aggregate (owners only); non-owners always see their own data.
+  // null = all-staff aggregate (super-admin ONLY); regular staff always see their own data.
   const isOwner = FULL_ACCESS_ROLES.has(session.role);
+  const isSuperAdmin = session.role === "super_admin";
   const staffName: string | null =
     isOwner && typeof req.query.staffName === "string" && req.query.staffName.trim()
       ? req.query.staffName.trim()
-      : isOwner
-        ? null           // owner with no filter → aggregate all staff
+      : isSuperAdmin
+        ? null           // super-admin with no filter → aggregate all staff
         : session.subjectName;
   const displayName = staffName ?? "All Staff";
 
@@ -327,7 +328,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
 
   res.json({
     staffName: displayName,
-    isFiltered: staffName !== null && isOwner && staffName !== session.subjectName,
+    isFiltered: staffName !== null && isSuperAdmin && staffName !== session.subjectName,
     from,
     to,
     summary: {

@@ -633,13 +633,14 @@ export default function MyDailySummary() {
   const session = readStaffSession();
   const myName = session?.user.name ?? "";
   const isOwner = FULL_ACCESS_ROLES.has(session?.user.role ?? "");
+  const isSuperAdmin = session?.user.role === "super_admin";
 
   const today = todayISO();
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(today);
 
   const savedFilter = typeof window !== "undefined" ? window.localStorage.getItem(LS_STAFF_FILTER_KEY) : null;
-  const initialFilter = isOwner
+  const initialFilter = isSuperAdmin
     ? (savedFilter !== null ? savedFilter : myName)
     : myName;
   const [staffFilter, setStaffFilter] = useState(initialFilter);
@@ -663,7 +664,7 @@ export default function MyDailySummary() {
   }
 
   const queryParams = new URLSearchParams({ from, to });
-  if (isOwner && staffFilter.trim()) queryParams.set("staffName", staffFilter.trim());
+  if (isSuperAdmin && staffFilter.trim()) queryParams.set("staffName", staffFilter.trim());
 
   const { data, isLoading, refetch } = useQuery<MyDailySummaryData>({
     queryKey: ["my-daily-summary", from, to, staffFilter],
@@ -733,7 +734,7 @@ export default function MyDailySummary() {
           </div>
         </div>
 
-        {isOwner && activeStaff.length > 0 && (
+        {isSuperAdmin && activeStaff.length > 0 && (
           <div>
             <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">
               <Users size={12} /> Staff
