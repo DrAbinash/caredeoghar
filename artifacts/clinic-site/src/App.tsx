@@ -164,19 +164,36 @@ function AppShell({ settings, pages, popups, isPreview }: { settings: SiteSettin
     }
   }, [slug]);
 
-  // After the page renders, scroll to the hash anchor if present.
-  // The browser fires its native hash-scroll before React mounts the sections,
-  // so we re-run it once the DOM is ready.
+  // Scroll to hash anchor — fires on mount AND whenever the hash changes
+  // (e.g. "Book Now" clicked while already on the home page).
   useEffect(() => {
-    const hash = window.location.hash.replace(/^#/, "");
-    if (!hash) return;
-    // Short delay so React has committed the render with section elements.
-    const id = setTimeout(() => {
-      const el = document.getElementById(hash);
-      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 120);
-    return () => clearTimeout(id);
-  // Run once after AppShell mounts (i.e. data is loaded and sections are ready).
+    let tid: ReturnType<typeof setTimeout>;
+
+    function scrollToHash() {
+      clearTimeout(tid);
+      const hash = window.location.hash.replace(/^#/, "");
+      if (!hash) return;
+      // Retry a few times to handle lazy-loaded sections that aren't in the
+      // DOM immediately when the hashchange fires.
+      let attempts = 0;
+      function tryScroll() {
+        const el = document.getElementById(hash);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+        } else if (attempts < 8) {
+          attempts++;
+          tid = setTimeout(tryScroll, 150);
+        }
+      }
+      tid = setTimeout(tryScroll, 80);
+    }
+
+    scrollToHash(); // handle hash present on initial load
+    window.addEventListener("hashchange", scrollToHash);
+    return () => {
+      clearTimeout(tid);
+      window.removeEventListener("hashchange", scrollToHash);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

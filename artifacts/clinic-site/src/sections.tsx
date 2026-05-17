@@ -12,7 +12,7 @@ import { parseSocial } from "./types";
 import { buttonClass } from "./theme";
 import { resolveAssetUrl } from "./config";
 
-const SAFE_URL_RE = /^(https?:|mailto:|tel:|\/(?!\/))/i;
+const SAFE_URL_RE = /^(https?:|mailto:|tel:|\/(?!\/)|#)/i;
 function safeUrl(url: string, fallback = ""): string {
   if (!url) return fallback;
   return SAFE_URL_RE.test(url.trim()) ? url.trim() : fallback;
