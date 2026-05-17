@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { api } from "@/lib/fetchApi";
 import { readStaffSession } from "@/lib/staffSession";
+import { loadDicomQrPaperSize, persistDicomQrPaperSize, type PaperOrientation } from "@/lib/paperSize";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,25 +72,6 @@ function markPresetServerSync(userId?: number): void {
   try { window.localStorage.setItem(getPresetServerTsKey(userId), String(Date.now())); } catch { /* ignore */ }
 }
 
-type PaperOrientation = "landscape" | "portrait";
-
-function getPaperSizeKey(userId?: number): string {
-  return `dicom_qr_paper_size_${userId ?? "anon"}`;
-}
-
-function loadPaperSize(userId?: number): PaperOrientation {
-  try {
-    const raw = typeof window !== "undefined" ? window.localStorage.getItem(getPaperSizeKey(userId)) : null;
-    if (raw === "portrait" || raw === "landscape") return raw;
-  } catch { /* ignore */ }
-  return "landscape";
-}
-
-function persistPaperSize(orientation: PaperOrientation, userId?: number): void {
-  try {
-    window.localStorage.setItem(getPaperSizeKey(userId), orientation);
-  } catch { /* ignore quota errors */ }
-}
 
 function loadPresets(userId?: number): DicomPreset[] {
   try {
@@ -239,7 +221,7 @@ export default function DicomQueryRetrieve() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
-  const [paperOrientation, setPaperOrientation] = useState<PaperOrientation>(() => loadPaperSize(userId));
+  const [paperOrientation, setPaperOrientation] = useState<PaperOrientation>(() => loadDicomQrPaperSize(userId));
 
   // ── Preset state ──────────────────────────────────────────────────────────────
   // Initialize from localStorage for instant load; the API query below will
@@ -279,7 +261,7 @@ export default function DicomQueryRetrieve() {
 
   // Reload paper orientation preference when the signed-in user changes.
   useEffect(() => {
-    setPaperOrientation(loadPaperSize(userId));
+    setPaperOrientation(loadDicomQrPaperSize(userId));
   }, [userId]);
 
   // Focus save input when it appears
@@ -696,7 +678,7 @@ export default function DicomQueryRetrieve() {
   const handleSetPaperOrientation = useCallback((orientation: PaperOrientation) => {
     setPaperOrientation(prev => {
       if (prev === orientation) return prev;
-      persistPaperSize(orientation, userId);
+      persistDicomQrPaperSize(orientation, userId);
       return orientation;
     });
   }, [userId]);

@@ -4,6 +4,7 @@
  */
 
 import { saveAs } from "file-saver";
+import { loadReportOrientation, type PaperOrientation } from "@/lib/paperSize";
 
 // ─── Shared Types ─────────────────────────────────────────────────────────────
 export type ExportTestRow = {
@@ -47,11 +48,13 @@ const INR = (n: number) =>
 export async function exportPDF(
   sections: ExportDoctorSection[],
   meta: ReportMeta,
+  orientation?: PaperOrientation,
 ): Promise<void> {
   const { default: jsPDF } = await import("jspdf");
   const { default: autoTable } = await import("jspdf-autotable");
 
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const resolvedOrientation: PaperOrientation = orientation ?? loadReportOrientation();
+  const doc = new jsPDF({ orientation: resolvedOrientation, unit: "mm", format: "a4" });
   const pageW = doc.internal.pageSize.getWidth();
   let y = 18;
 

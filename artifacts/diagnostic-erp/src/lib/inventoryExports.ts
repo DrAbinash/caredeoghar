@@ -180,8 +180,9 @@ export async function exportInventoryPDF(
 ): Promise<void> {
   const { default: jsPDF } = await import("jspdf");
   const { default: autoTable } = await import("jspdf-autotable");
+  const { loadReportOrientation } = await import("@/lib/paperSize");
 
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const doc = new jsPDF({ orientation: loadReportOrientation(), unit: "mm", format: "a4" });
   const pageW = doc.internal.pageSize.getWidth();
   let y = 16;
 

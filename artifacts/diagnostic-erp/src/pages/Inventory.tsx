@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { loadReportOrientation, persistReportOrientation, type PaperOrientation } from "@/lib/paperSize";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
@@ -85,6 +86,7 @@ export default function Inventory() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
+  const [pdfOrientation, setPdfOrientation] = useState<PaperOrientation>(() => loadReportOrientation());
   const [stockDialog, setStockDialog] = useState<{ item: Item; mode: "in" | "out" | "adjust" } | null>(null);
   const [historyItem, setHistoryItem] = useState<Item | null>(null);
   const [editItem, setEditItem] = useState<Item | null>(null);
@@ -439,6 +441,11 @@ export default function Inventory() {
     };
   }
 
+  function handleSetPdfOrientation(o: PaperOrientation) {
+    persistReportOrientation(o);
+    setPdfOrientation(o);
+  }
+
   async function handleExport(kind: "excel" | "pdf" | "word") {
     if (filtered.length === 0) {
       toast({ title: "Nothing to export", description: "Adjust filters so at least one item is shown.", variant: "destructive" });
@@ -484,7 +491,7 @@ export default function Inventory() {
                   <Download size={14} className="mr-1.5" /> Download
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem onClick={() => handleExport("excel")}>
                   <FileSpreadsheet size={14} className="mr-2 text-emerald-600" />
                   Excel (.xlsx)
@@ -493,6 +500,23 @@ export default function Inventory() {
                   <FileText size={14} className="mr-2 text-red-600" />
                   PDF (.pdf)
                 </DropdownMenuItem>
+                <div className="flex items-center gap-1 px-2 pb-1">
+                  <span className="text-[10px] text-muted-foreground mr-1">PDF layout:</span>
+                  <button
+                    type="button"
+                    className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${pdfOrientation === "portrait" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
+                    onClick={(e) => { e.preventDefault(); handleSetPdfOrientation("portrait"); }}
+                  >
+                    Portrait
+                  </button>
+                  <button
+                    type="button"
+                    className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${pdfOrientation === "landscape" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
+                    onClick={(e) => { e.preventDefault(); handleSetPdfOrientation("landscape"); }}
+                  >
+                    Landscape
+                  </button>
+                </div>
                 <DropdownMenuItem onClick={() => handleExport("word")}>
                   <FileType size={14} className="mr-2 text-blue-600" />
                   Word (.docx)

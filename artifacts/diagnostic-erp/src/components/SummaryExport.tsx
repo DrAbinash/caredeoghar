@@ -2,6 +2,7 @@ import { useState } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
+import { loadSummaryPdfOrientation, persistSummaryPdfOrientation, type PaperOrientation } from "@/lib/paperSize";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -135,8 +136,8 @@ function doPrint(config: ExportConfig) {
   setTimeout(() => w.print(), 350);
 }
 
-async function downloadPDF(config: ExportConfig): Promise<void> {
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+async function downloadPDF(config: ExportConfig, orientation: PaperOrientation): Promise<void> {
+  const doc = new jsPDF({ orientation, unit: "mm", format: "a4" });
   const pageW = doc.internal.pageSize.getWidth();
 
   // Blue header bar
@@ -299,12 +300,18 @@ export function SummaryExportToolbar({
   const [emailTo, setEmailTo] = useState("");
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; error?: string } | null>(null);
+  const [pdfOrientation, setPdfOrientation] = useState<PaperOrientation>(() => loadSummaryPdfOrientation());
 
   if (!config) return null;
 
+  function handleSetOrientation(o: PaperOrientation) {
+    persistSummaryPdfOrientation(o);
+    setPdfOrientation(o);
+  }
+
   async function handlePDF() {
     setPdfBusy(true);
-    try { await downloadPDF(config!); }
+    try { await downloadPDF(config!, pdfOrientation); }
     finally { setPdfBusy(false); }
   }
 
@@ -335,15 +342,33 @@ export function SummaryExportToolbar({
           <Printer size={13} /> Print
         </Button>
 
-        <Button
-          variant="outline" size="sm"
-          className="h-8 gap-1.5 text-xs"
-          onClick={handlePDF}
-          disabled={pdfBusy}
-        >
-          {pdfBusy ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} />}
-          PDF
-        </Button>
+        <div className="flex items-center rounded-md border border-input overflow-hidden h-8">
+          <Button
+            variant="ghost" size="sm"
+            className="h-full rounded-none px-2.5 gap-1.5 text-xs border-r border-input"
+            onClick={handlePDF}
+            disabled={pdfBusy}
+          >
+            {pdfBusy ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} />}
+            PDF
+          </Button>
+          <button
+            type="button"
+            className={`px-2 h-full text-[10px] font-medium transition-colors border-r border-input ${pdfOrientation === "landscape" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"}`}
+            onClick={() => handleSetOrientation("landscape")}
+            title="Landscape PDF"
+          >
+            Land.
+          </button>
+          <button
+            type="button"
+            className={`px-2 h-full text-[10px] font-medium transition-colors ${pdfOrientation === "portrait" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"}`}
+            onClick={() => handleSetOrientation("portrait")}
+            title="Portrait PDF"
+          >
+            Port.
+          </button>
+        </div>
 
         <Button
           variant="outline" size="sm"

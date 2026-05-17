@@ -1,3 +1,5 @@
+import { loadPaperSize, persistPaperSize } from "@/lib/paperSize";
+
 export type BillLayout = "classic" | "compact" | "minimal";
 
 export const BILL_LAYOUTS: {
@@ -23,45 +25,27 @@ export const BILL_LAYOUTS: {
 ];
 
 const KEY = "diagnosticErp:billPrintLayout";
+const BILL_LAYOUTS_VALUES = ["classic", "compact", "minimal"] as const;
 
 export function getBillPrintLayout(): BillLayout {
-  try {
-    const v = localStorage.getItem(KEY);
-    if (v === "compact" || v === "minimal") return v;
-  } catch {
-    // SSR / iframe sandbox — ignore
-  }
-  return "classic";
+  return loadPaperSize(KEY, BILL_LAYOUTS_VALUES, "classic");
 }
 
 export function setBillPrintLayout(layout: BillLayout): void {
-  try {
-    localStorage.setItem(KEY, layout);
-  } catch {
-    // ignore
-  }
+  persistPaperSize(KEY, layout);
 }
 
 export type BillPaperSize = "A4" | "A5";
 
 const PAPER_KEY = "diagnosticErp:billPaperSize";
+const BILL_PAPER_SIZES = ["A4", "A5"] as const;
 
 export function getBillPaperSize(): BillPaperSize {
-  try {
-    const v = localStorage.getItem(PAPER_KEY);
-    if (v === "A4" || v === "A5") return v;
-  } catch {
-    // SSR / iframe sandbox — ignore
-  }
-  return "A5";
+  return loadPaperSize(PAPER_KEY, BILL_PAPER_SIZES, "A5");
 }
 
 export function setBillPaperSize(size: BillPaperSize): void {
-  try {
-    localStorage.setItem(PAPER_KEY, size);
-  } catch {
-    // ignore
-  }
+  persistPaperSize(PAPER_KEY, size);
 }
 
 export function getAutoBillPaperSize(testCount: number, manualSize?: BillPaperSize): BillPaperSize {
