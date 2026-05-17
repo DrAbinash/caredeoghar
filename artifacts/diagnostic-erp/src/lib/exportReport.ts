@@ -49,6 +49,7 @@ export async function exportPDF(
   sections: ExportDoctorSection[],
   meta: ReportMeta,
   orientation?: PaperOrientation,
+  showPercentFixed: boolean = true,
 ): Promise<void> {
   const { default: jsPDF } = await import("jspdf");
   const { default: autoTable } = await import("jspdf-autotable");
@@ -103,27 +104,44 @@ export async function exportPDF(
     y += 9;
 
     // Table
+    const pdfHead = showPercentFixed
+      ? [["Test Name", "No of Tests", "% / Fixed", "Total Amount"]]
+      : [["Test Name", "No of Tests", "Total Amount"]];
+    const pdfBody = showPercentFixed
+      ? [
+          ...section.rows.map(r => [r.testName, String(r.count), r.rateLabel, INR(r.commission)]),
+          ["", "", "Total →", INR(section.totalCommission)],
+        ]
+      : [
+          ...section.rows.map(r => [r.testName, String(r.count), INR(r.commission)]),
+          ["", "Total →", INR(section.totalCommission)],
+        ];
+    const pdfColStyles: Record<number, object> = showPercentFixed
+      ? {
+          0: { cellWidth: "auto" },
+          1: { halign: "center", cellWidth: 28 },
+          2: { halign: "center", cellWidth: 28 },
+          3: { halign: "right", cellWidth: 36 },
+        }
+      : {
+          0: { cellWidth: "auto" },
+          1: { halign: "center", cellWidth: 28 },
+          2: { halign: "right", cellWidth: 36 },
+        };
+    const totalColIndex = showPercentFixed ? 3 : 2;
     autoTable(doc, {
       startY: y,
-      head: [["Test Name", "No of Tests", "% / Fixed", "Total Amount"]],
-      body: [
-        ...section.rows.map(r => [r.testName, String(r.count), r.rateLabel, INR(r.commission)]),
-        ["", "", "Total →", INR(section.totalCommission)],
-      ],
+      head: pdfHead,
+      body: pdfBody,
       styles: { fontSize: 9, cellPadding: 3 },
       headStyles: { fillColor: [243, 244, 246], textColor: [80, 80, 80], fontStyle: "bold", fontSize: 8 },
-      columnStyles: {
-        0: { cellWidth: "auto" },
-        1: { halign: "center", cellWidth: 28 },
-        2: { halign: "center", cellWidth: 28 },
-        3: { halign: "right", cellWidth: 36 },
-      },
+      columnStyles: pdfColStyles,
       bodyStyles: { textColor: [30, 30, 30] },
       willDrawCell: (data) => {
         if (data.row.index === section.rows.length) {
           doc.setFillColor(255, 251, 235);
           doc.setFont("helvetica", "bold");
-          if (data.column.index === 3) doc.setTextColor(180, 83, 9);
+          if (data.column.index === totalColIndex) doc.setTextColor(180, 83, 9);
         }
       },
       margin: { left: 14, right: 14 },
@@ -152,6 +170,7 @@ type RCell = {
 export async function exportExcel(
   sections: ExportDoctorSection[],
   meta: ReportMeta,
+  showPercentFixed: boolean = true,
 ): Promise<void> {
   const writeXlsxFile = (await import("write-excel-file/browser")).default as unknown as (
     sheets: Array<{ data: RCell[][]; sheet?: string; columns?: { width: number }[] }>
@@ -223,31 +242,58 @@ export async function exportExcel(
       { value: `${s.orderCount} orders`, type: String },
       { value: `Eff. Rate: ${s.effectiveRate}%`, type: String },
     ]);
-    detailData.push([
-      { value: "Test Name",            fontWeight: "bold", backgroundColor: HEADER_BG },
-      { value: "No of Tests",          fontWeight: "bold", backgroundColor: HEADER_BG, align: "center" },
-      { value: "% / Fixed",            fontWeight: "bold", backgroundColor: HEADER_BG, align: "center" },
-      { value: "Total Amount (Rs.)",   fontWeight: "bold", backgroundColor: HEADER_BG, align: "right"  },
-    ]);
-    for (const r of s.rows) {
+    if (showPercentFixed) {
       detailData.push([
-        { value: r.testName, type: String },
-        { value: r.count,    align: "center" },
-        { value: r.rateLabel, type: String, align: "center" },
-        { value: r.commission, align: "right" },
+        { value: "Test Name",            fontWeight: "bold", backgroundColor: HEADER_BG },
+        { value: "No of Tests",          fontWeight: "bold", backgroundColor: HEADER_BG, align: "center" },
+        { value: "% / Fixed",            fontWeight: "bold", backgroundColor: HEADER_BG, align: "center" },
+        { value: "Total Amount (Rs.)",   fontWeight: "bold", backgroundColor: HEADER_BG, align: "right"  },
+      ]);
+      for (const r of s.rows) {
+        detailData.push([
+          { value: r.testName, type: String },
+          { value: r.count,    align: "center" },
+          { value: r.rateLabel, type: String, align: "center" },
+          { value: r.commission, align: "right" },
+        ]);
+      }
+      detailData.push([
+        null, null,
+        { value: "Total \u2192", fontWeight: "bold", backgroundColor: AMBER_BG, align: "right" },
+        { value: s.totalCommission, fontWeight: "bold", backgroundColor: AMBER_BG, color: "#B45309", align: "right" },
+      ]);
+    } else {
+      detailData.push([
+        { value: "Test Name",            fontWeight: "bold", backgroundColor: HEADER_BG },
+        { value: "No of Tests",          fontWeight: "bold", backgroundColor: HEADER_BG, align: "center" },
+        { value: "Total Amount (Rs.)",   fontWeight: "bold", backgroundColor: HEADER_BG, align: "right"  },
+        null,
+      ]);
+      for (const r of s.rows) {
+        detailData.push([
+          { value: r.testName, type: String },
+          { value: r.count,    align: "center" },
+          { value: r.commission, align: "right" },
+          null,
+        ]);
+      }
+      detailData.push([
+        null,
+        { value: "Total \u2192", fontWeight: "bold", backgroundColor: AMBER_BG, align: "right" },
+        { value: s.totalCommission, fontWeight: "bold", backgroundColor: AMBER_BG, color: "#B45309", align: "right" },
+        null,
       ]);
     }
-    detailData.push([
-      null, null,
-      { value: "Total \u2192", fontWeight: "bold", backgroundColor: AMBER_BG, align: "right" },
-      { value: s.totalCommission, fontWeight: "bold", backgroundColor: AMBER_BG, color: "#B45309", align: "right" },
-    ]);
     detailData.push([null]);
   }
 
+  const detailColumns = showPercentFixed
+    ? [{ width: 30 }, { width: 14 }, { width: 14 }, { width: 18 }]
+    : [{ width: 30 }, { width: 14 }, { width: 18 }, { width: 0 }];
+
   const blob = await writeXlsxFile([
     { data: summaryData, sheet: "Summary",         columns: [{ width: 28 }, { width: 20 }, { width: 10 }, { width: 10 }, { width: 16 }, { width: 18 }, { width: 12 }] },
-    { data: detailData,  sheet: "Detailed Report", columns: [{ width: 30 }, { width: 14 }, { width: 14 }, { width: 18 }] },
+    { data: detailData,  sheet: "Detailed Report", columns: detailColumns },
   ]).toBlob();
 
   saveAs(
