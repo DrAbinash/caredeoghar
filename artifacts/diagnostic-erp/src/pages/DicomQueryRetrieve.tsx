@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { api } from "@/lib/fetchApi";
 import { readStaffSession } from "@/lib/staffSession";
@@ -168,12 +168,16 @@ export default function DicomQueryRetrieve() {
   const [isExporting, setIsExporting] = useState(false);
 
   // ── Preset state ──────────────────────────────────────────────────────────────
+  // Initialize from localStorage for instant load; the API query below will
+  // replace with server data (source of truth) once it resolves.
   const [presets, setPresets]         = useState<DicomPreset[]>(() => loadPresets(userId));
   const [showPresetMenu, setShowPresetMenu] = useState(false);
   const [savePresetName, setSavePresetName] = useState("");
   const [showSaveInput, setShowSaveInput]   = useState(false);
   const presetMenuRef = useRef<HTMLDivElement>(null);
   const saveInputRef  = useRef<HTMLInputElement>(null);
+
+  const queryClient = useQueryClient();
 
   // Close preset dropdown when clicking outside
   useEffect(() => {
@@ -187,11 +191,12 @@ export default function DicomQueryRetrieve() {
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, [showPresetMenu]);
 
-  // Reload presets if the signed-in user changes (e.g. staff switches accounts
-  // without unmounting this page)
+  // Reset to the new user's localStorage cache when the signed-in user changes.
+  // The server query below will then refresh from the API.
   useEffect(() => {
     setPresets(loadPresets(userId));
-  }, [userId]);
+    void queryClient.invalidateQueries({ queryKey: ["dicom-presets"] });
+  }, [userId, queryClient]);
 
   // Focus save input when it appears
   useEffect(() => {
@@ -199,6 +204,30 @@ export default function DicomQueryRetrieve() {
   }, [showSaveInput]);
 
   // ── Queries ──────────────────────────────────────────────────────────────────
+
+  // Load presets from server — source of truth across devices.
+  // Runs only when a user is logged in. On success (via useEffect below),
+  // replace local state and update the localStorage cache for offline access.
+  const { data: serverPresetsData } = useQuery<{ presets: DicomPreset[] }>({
+    queryKey: ["dicom-presets", userId],
+    queryFn: () => api.get<{ presets: DicomPreset[] }>("/api/users/me/dicom-presets"),
+    enabled: !!userId,
+    staleTime: 60_000,
+  });
+
+  // React Query v5: use useEffect to react to query result changes
+  useEffect(() => {
+    if (serverPresetsData) {
+      setPresets(serverPresetsData.presets);
+      persistPresets(serverPresetsData.presets, userId);
+    }
+  }, [serverPresetsData, userId]);
+
+  const syncPresetsMut = useMutation({
+    mutationFn: (updated: DicomPreset[]) =>
+      api.put<{ ok: boolean; count: number }>("/api/users/me/dicom-presets", { presets: updated }),
+    onError: () => toast({ title: "Could not sync presets to server", variant: "destructive" }),
+  });
 
   const { data, isLoading, isFetching, refetch } = useQuery<QueryResult>({
     queryKey: ["dicom-query", applied, page, searchMode],
@@ -336,10 +365,11 @@ export default function DicomQueryRetrieve() {
     const updated = [preset, ...presets.filter((p) => p.name !== name)];
     setPresets(updated);
     persistPresets(updated, userId);
+    syncPresetsMut.mutate(updated);
     setSavePresetName("");
     setShowSaveInput(false);
     toast({ title: `Preset "${name}" saved` });
-  }, [savePresetName, dateFrom, dateTo, selMods, patientName, accessionNumber, referringDoctor, studyDescription, aeTitle, presets, userId, toast]);
+  }, [savePresetName, dateFrom, dateTo, selMods, patientName, accessionNumber, referringDoctor, studyDescription, aeTitle, presets, userId, syncPresetsMut, toast]);
 
   const handleLoadPreset = useCallback((preset: DicomPreset) => {
     const f = preset.filters;
@@ -368,8 +398,9 @@ export default function DicomQueryRetrieve() {
     const updated = presets.filter((p) => p.id !== id);
     setPresets(updated);
     persistPresets(updated, userId);
+    syncPresetsMut.mutate(updated);
     toast({ title: `Preset "${name}" deleted` });
-  }, [presets, userId, toast]);
+  }, [presets, userId, syncPresetsMut, toast]);
 
   // ── CSV Export ────────────────────────────────────────────────────────────────
 

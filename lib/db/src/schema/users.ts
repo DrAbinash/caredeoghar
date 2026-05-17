@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, boolean, integer, numeric, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, boolean, integer, numeric, varchar, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -20,6 +20,9 @@ export const usersTable = pgTable("users", {
   // Per-user sidebar colour preference — synced across devices via DB.
   // localStorage acts as a same-session cache; this column is the source of truth.
   sidebarTheme: text("sidebar_theme"),
+  // DICOM Q/R saved search presets — synced across devices via DB.
+  // Stores an array of DicomPreset objects as JSONB. NULL = no presets saved.
+  dicomPresets: jsonb("dicom_presets"),
   // Set to true whenever an admin creates the user or resets their PIN.
   // Cleared the moment the user successfully changes the PIN themselves.
   // Staff-login response reports this so the UI can force a PIN-change
