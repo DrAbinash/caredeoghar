@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { billsTable, paymentsTable, billAuditsTable, patientsTable, ordersTable, doctorsTable } from "@workspace/db/schema";
+import { billsTable, paymentsTable, billAuditsTable, patientsTable, ordersTable, doctorsTable, voucherAuditsTable } from "@workspace/db/schema";
 import { sql, and, eq, gte, lt } from "drizzle-orm";
 import { FULL_ACCESS_ROLES } from "../middleware/requireStaffAuth";
 import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
@@ -116,6 +116,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       billNumber: billsTable.billNumber,
       totalAmount: billsTable.totalAmount,
       createdByName: billsTable.createdByName,
+      cancelledAt: billsTable.cancelledAt,
     })
     .from(billsTable)
     .where(and(
@@ -160,6 +161,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       patientFirstName: patientsTable.firstName,
       patientLastName: patientsTable.lastName,
       referringDoctor: doctorsTable.name,
+      createdByName: billsTable.createdByName,
     })
     .from(paymentsTable)
     .innerJoin(billsTable, eq(paymentsTable.billId, billsTable.id))
@@ -179,6 +181,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
   type DuesBillAgg = {
     billId: number; billNumber: string;
     patientName: string; referringDoctor: string | null;
+    createdByName: string | null;
     totalAmount: number; duesCollected: number; remainingDues: number;
     billStatus: string;
   };
@@ -192,6 +195,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
           ? `${r.patientFirstName} ${r.patientLastName ?? ""}`.trim()
           : "Unknown",
         referringDoctor: r.referringDoctor ?? null,
+        createdByName: r.createdByName ?? null,
         totalAmount: Number(r.totalAmount),
         duesCollected: 0,
         remainingDues: Math.max(0, Number(r.balanceAmount ?? 0)),
@@ -226,6 +230,20 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
     .orderBy(sql`${billAuditsTable.createdAt} DESC`)
     .limit(50);
 
+  // ── Voucher audits by this staff ──────────────────────────────────────
+  const voucherAuditFilters = [
+    gte(voucherAuditsTable.createdAt, start),
+    lt(voucherAuditsTable.createdAt, end),
+  ];
+  if (staffName !== null) voucherAuditFilters.push(eq(voucherAuditsTable.editedBy, staffName));
+  const voucherEditsRaw = await db
+    .select()
+    .from(voucherAuditsTable)
+    .where(and(...voucherAuditFilters))
+    .orderBy(sql`${voucherAuditsTable.createdAt} DESC`)
+    .limit(200);
+
+  // ── Refunds recorded by this staff ─────────────────────────────────────
   // ── Cash expenses approved_by this staff ───────────────────────────────
   const cashExpRaw = await db.execute<{ cash_expenses: string }>(sql`
     SELECT COALESCE(SUM(amount::numeric) FILTER (WHERE LOWER(payment_mode) = 'cash'), 0)::text AS cash_expenses
@@ -404,6 +422,8 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       billNumber: r.billNumber,
       totalAmount: Number(r.totalAmount),
       originalCreator: r.createdByName ?? "Unknown",
+      cancelledAt:
+        r.cancelledAt instanceof Date ? r.cancelledAt.toISOString() : String(r.cancelledAt ?? ""),
     })),
     // Discounted bills (active only — same scope as summary.discountsGiven).
     discountBills: activeBills
@@ -423,5 +443,25 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       })),
     // Dues collected: payments today on old bills (created before this period).
     duesBills,
+    voucherEdits: voucherEditsRaw.map((r) => ({
+      id: r.id,
+      voucherId: r.voucherId,
+      changeType: r.changeType,
+      reason: r.reason,
+      oldValue: r.oldValue,
+      newValue: r.newValue,
+      editedBy: r.editedBy,
+      createdAt:
+        r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
+    })),
+    refunds: refundItems.slice(0, 50).map((p) => ({
+      id: p.id,
+      billId: p.billId,
+      amount: Number(p.amount),
+      method: p.method ?? "cash",
+      recordedBy: p.recordedByName ?? null,
+      createdAt:
+        p.createdAt instanceof Date ? p.createdAt.toISOString() : String(p.createdAt),
+    })),
   });
 });

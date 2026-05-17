@@ -10,7 +10,7 @@ import {
   IndianRupee, Wallet, Banknote, Smartphone, TrendingDown, RotateCcw,
   XCircle, FileEdit, Clock, Calendar, RefreshCw, Tag, CheckCircle2,
   ArrowRight, Users, Percent, Receipt, Lock, AlertTriangle, ShieldCheck,
-  ChevronRight,
+  ChevronRight, Info,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -88,10 +88,36 @@ type MyDailySummaryData = {
     billNumber: string;
     patientName: string;
     referringDoctor: string | null;
+    createdByName: string | null;
     totalAmount: number;
     duesCollected: number;
     remainingDues: number;
     billStatus: string;
+  }[];
+  voucherEdits: {
+    id: number;
+    voucherId: number;
+    changeType: string;
+    reason: string;
+    oldValue: string | null;
+    newValue: string | null;
+    editedBy: string;
+    createdAt: string;
+  }[];
+  refunds: {
+    id: number;
+    billId: number;
+    amount: number;
+    method: string;
+    recordedBy: string | null;
+    createdAt: string;
+  }[];
+  cancelledByMe: {
+    id: number;
+    billNumber: string;
+    totalAmount: number;
+    originalCreator: string;
+    cancelledAt: string;
   }[];
   discountBills: {
     billId: number;
@@ -625,6 +651,118 @@ function PostClosureActivityBox({ data }: { data: PostClosureActivity }) {
   );
 }
 
+// ─── Control Logs Component ───────────────────────────────────────────────────
+
+type ControlLogTab = "bill-edits" | "cancellations" | "refunds";
+
+function ControlLogs({ data }: { data: MyDailySummaryData | undefined }) {
+  const [tab, setTab] = useState<ControlLogTab>("bill-edits");
+  if (!data) return null;
+
+  const billEdits = data.billEdits ?? [];
+  const voucherEdits = data.voucherEdits ?? [];
+  const allEdits = [
+    ...billEdits.map((e) => ({ ...e, source: "Bill" as const })),
+    ...voucherEdits.map((e) => ({
+      id: e.id, billId: 0, billNumber: "—", editedBy: e.editedBy,
+      reason: e.reason, changeType: "", oldValue: null as null, newValue: null as null,
+      createdAt: e.createdAt, source: "Voucher" as const,
+    })),
+  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const cancellations = data.cancelledByMe ?? [];
+  const refunds = data.refunds ?? [];
+  const totalLogs = allEdits.length + cancellations.length + refunds.length;
+
+  if (totalLogs === 0) return (
+    <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl p-5 text-sm text-gray-500 text-center">
+      No edits, cancellations, or refunds in this period.
+    </div>
+  );
+
+  const tabs: { id: ControlLogTab; label: string; count: number }[] = [
+    { id: "bill-edits", label: "Bill & Voucher Edits", count: allEdits.length },
+    { id: "cancellations", label: "Cancellations", count: cancellations.length },
+    { id: "refunds", label: "Refunds", count: refunds.length },
+  ];
+
+  return (
+    <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 dark:border-card-border">
+        <h3 className="text-sm font-bold text-gray-900 dark:text-foreground flex items-center gap-2">
+          <FileEdit size={14} className="text-purple-600" /> Control Logs
+          <span className="text-xs font-normal text-gray-500 ml-1">— document activity in this period</span>
+        </h3>
+      </div>
+      <div className="flex border-b border-gray-100 dark:border-card-border">
+        {tabs.map((t) => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors ${tab === t.id ? "border-primary text-primary" : "border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-foreground"}`}>
+            {t.label}
+            {t.count > 0 && (
+              <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${tab === t.id ? "bg-primary/10 text-primary" : "bg-gray-100 dark:bg-muted text-gray-600"}`}>
+                {t.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+      <div className="divide-y divide-gray-100 dark:divide-card-border max-h-72 overflow-y-auto">
+        {tab === "bill-edits" && (allEdits.length === 0
+          ? <p className="px-4 py-6 text-sm text-gray-500 text-center">No edits in this period.</p>
+          : allEdits.map((e, i) => (
+            <div key={i} className="px-4 py-2.5 flex items-start gap-3 hover:bg-gray-50 dark:hover:bg-muted/20">
+              <FileEdit size={13} className="mt-0.5 text-purple-500 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${e.source === "Voucher" ? "bg-indigo-100 text-indigo-700" : "bg-purple-100 text-purple-700"}`}>{e.source}</span>
+                  {e.billNumber && e.billNumber !== "—" && (
+                    <Link href={`/billing/${e.billId}`} className="text-xs font-semibold text-primary hover:underline">{e.billNumber}</Link>
+                  )}
+                  <span className="text-xs text-gray-700 dark:text-gray-300 font-semibold">{e.editedBy}</span>
+                  <span className="text-[10px] text-gray-500">{fmtTime(e.createdAt)}</span>
+                </div>
+                {e.reason && <p className="text-xs text-gray-500 mt-0.5 truncate">{e.reason}</p>}
+              </div>
+            </div>
+          ))
+        )}
+        {tab === "cancellations" && (cancellations.length === 0
+          ? <p className="px-4 py-6 text-sm text-gray-500 text-center">No cancellations in this period.</p>
+          : cancellations.map((c, i) => (
+            <div key={i} className="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-muted/20">
+              <XCircle size={13} className="text-rose-500 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold text-gray-800 dark:text-foreground">{c.billNumber}</span>
+                  <span className="text-xs text-gray-500">created by {c.originalCreator}</span>
+                  <span className="text-[10px] text-gray-500">{fmtTime(c.cancelledAt)}</span>
+                </div>
+                <p className="text-xs text-rose-600 font-semibold">{fmt(c.totalAmount)}</p>
+              </div>
+            </div>
+          ))
+        )}
+        {tab === "refunds" && (refunds.length === 0
+          ? <p className="px-4 py-6 text-sm text-gray-500 text-center">No refunds in this period.</p>
+          : refunds.map((r, i) => (
+            <div key={i} className="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-muted/20">
+              <RotateCcw size={13} className="text-amber-500 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Link href={`/billing/${r.billId}`} className="text-xs font-semibold text-primary hover:underline">Bill #{r.billId}</Link>
+                  <span className="text-xs text-gray-500">by {r.recordedBy ?? "Unknown"}</span>
+                  <span className="text-[10px] text-gray-500">{fmtTime(r.createdAt)}</span>
+                </div>
+                <p className="text-xs text-amber-700 dark:text-amber-400 font-semibold">{fmt(Math.abs(r.amount))} via {r.method}</p>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── My Daily Summary Page ────────────────────────────────────────────────────
 
 const LS_STAFF_FILTER_KEY = "my_daily_summary_staff_filter";
@@ -810,6 +948,20 @@ export default function MyDailySummary() {
           {/* ── Post-Closure Activity Chocolate Box ── */}
           {postClosureQ.data && <PostClosureActivityBox data={postClosureQ.data} />}
 
+          {/* ── Formula callout ── */}
+          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex items-start gap-2.5">
+            <Info size={16} className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="text-xs text-amber-800 dark:text-amber-200">
+              <p className="font-semibold">Reconciliation formula</p>
+              <p className="text-[11px] mt-0.5">
+                <span className="font-semibold">Total Received</span> = Gross Billing + Dues Collected
+              </p>
+              <p className="text-[11px]">
+                <span className="font-semibold">Gross Billing</span> = Total New Bills (net of discounts)
+              </p>
+            </div>
+          </div>
+
           {/* ── Two correctly-balancing reconciliation cards ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* CARD 1 — My Billing */}
@@ -859,6 +1011,9 @@ export default function MyDailySummary() {
               </div>
             </div>
           </div>
+
+          {/* ── Control Logs (admin/super-admin only) ── */}
+          {isOwner && <ControlLogs data={data} />}
 
           {/* ── Bill Edits + Collection by Method ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -987,7 +1142,7 @@ export default function MyDailySummary() {
             <table className="w-full text-xs">
               <thead className="bg-teal-50 dark:bg-teal-900/10">
                 <tr>
-                  {["Bill #", "Patient Name", "Referral Doctor", "Bill Total", "Dues Collected", "Still Pending"].map((h) => (
+                  {["Bill #", "Patient Name", "Referral Doctor", "Created By", "Bill Total", "Dues Collected", "Still Pending"].map((h) => (
                     <th key={h} className="px-3 py-2.5 text-left font-semibold text-teal-800 dark:text-teal-300 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -1001,6 +1156,9 @@ export default function MyDailySummary() {
                     <td className="px-3 py-2 font-semibold text-gray-800 dark:text-foreground">{b.patientName}</td>
                     <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
                       {b.referringDoctor ?? <span className="text-gray-400">—</span>}
+                    </td>
+                    <td className="px-3 py-2 text-gray-600 dark:text-gray-400 whitespace-nowrap text-[11px]">
+                      {b.createdByName ?? <span className="text-gray-400">—</span>}
                     </td>
                     <td className="px-3 py-2 tabular-nums text-gray-900 dark:text-foreground font-semibold">{fmt(b.totalAmount)}</td>
                     <td className="px-3 py-2 tabular-nums font-bold text-teal-700 dark:text-teal-400">{fmt(b.duesCollected)}</td>
@@ -1020,7 +1178,7 @@ export default function MyDailySummary() {
               </tbody>
               <tfoot className="bg-teal-50 dark:bg-teal-900/10 border-t-2 border-teal-200 dark:border-teal-800">
                 <tr>
-                  <td className="px-3 py-2 font-bold text-teal-800 dark:text-teal-300" colSpan={4}>
+                  <td className="px-3 py-2 font-bold text-teal-800 dark:text-teal-300" colSpan={5}>
                     Total ({data.duesBills.length} bills)
                   </td>
                   <td className="px-3 py-2 font-bold tabular-nums text-teal-700 dark:text-teal-300">
