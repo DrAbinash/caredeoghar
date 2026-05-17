@@ -9,9 +9,13 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
-  ArrowLeft, Printer, Stethoscope, Users, FileText, IndianRupee, TrendingUp,
+  ArrowLeft, Printer, Stethoscope, Users, FileText, IndianRupee, TrendingUp, Download, FileSpreadsheet,
 } from "lucide-react";
 import { saAuthHeaders } from "@/lib/saApi";
+import { exportCommissionPdf } from "@/lib/exportCommissionPdf";
+import { exportCommissionExcel } from "@/lib/exportCommissionExcel";
+import { exportCommissionWord } from "@/lib/exportCommissionWord";
+import type { CommissionDoctorEntry, CommissionTestGroupRow } from "@workspace/api-client-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type SaDoctor = { id: number; name: string };
@@ -278,6 +282,142 @@ export default function ReferralReport({ onBack }: { onBack: () => void }) {
   const toggleCol = (key: keyof ColFlags) =>
     setCols(prev => ({ ...prev, [key]: !prev[key] }));
 
+  // ── Adapter: per-patient rows → test-grouped for export helpers ──────────
+  function toExportSections(report: DoctorEntry[]): CommissionDoctorEntry[] {
+    return report.map((entry) => {
+      const byTest: Record<number, CommissionTestGroupRow> = {};
+      for (const row of entry.rows) {
+        if (!byTest[row.testId]) {
+          byTest[row.testId] = {
+            testId: row.testId,
+            testName: row.testName,
+            category: row.category,
+            count: 0,
+            revenue: 0,
+            commission: 0,
+            ruleName: row.ruleName,
+            ruleType: row.ruleType,
+            ruleValue: row.ruleValue,
+          };
+        }
+        byTest[row.testId].count++;
+        byTest[row.testId].revenue += row.price;
+        byTest[row.testId].commission += row.commission;
+      }
+      const grouped = Object.values(byTest).sort((a, b) => b.commission - a.commission);
+      const effRate = entry.totalRevenue > 0
+        ? Math.round((entry.totalCommission / entry.totalRevenue) * 1000) / 10
+        : 0;
+      return {
+        doctor: {
+          id: entry.doctor.id,
+          name: entry.doctor.name,
+          specialization: entry.doctor.specialization ?? "",
+          defaultCommission: 0,
+          defaultCommissionType: "percentage",
+        },
+        orderCount: entry.orderCount,
+        testCount: entry.testCount,
+        totalRevenue: entry.totalRevenue,
+        totalCommission: entry.totalCommission,
+        effectiveRate: effRate,
+        grouped,
+      } as unknown as CommissionDoctorEntry;
+    });
+  }
+
+  // ─── Export helpers ────────────────────────────────────────────────────────
+  const [xlsxLoading, setXlsxLoading] = useState(false);
+  const [wordLoading, setWordLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  const doctorLabel = doctorId
+    ? doctors.find((d) => d.id === doctorId)?.name ?? "—"
+    : "All Doctors";
+  const exportMode: Parameters<typeof exportCommissionPdf>[2] =
+    mode === "consolidated" ? "consolidated" : "standard";
+
+  const handleDownloadExcel = async () => {
+    if (report.length === 0) {
+      toast({ title: "No data to export", description: "Adjust the filters and try again.", variant: "destructive" });
+      return;
+    }
+    setXlsxLoading(true);
+    try {
+      await exportCommissionExcel(
+        toExportSections(report),
+        {
+          title: "Referral & Commission Report",
+          from,
+          to,
+          doctorFilter: doctorLabel,
+          generatedAt: new Date().toLocaleString("en-IN"),
+          grandTotal,
+        },
+        exportMode,
+        cols.rate,
+      );
+    } catch (err) {
+      toast({ title: "Excel export failed", description: String(err), variant: "destructive" });
+    } finally {
+      setXlsxLoading(false);
+    }
+  };
+
+  const handleDownloadWord = async () => {
+    if (report.length === 0) {
+      toast({ title: "No data to export", description: "Adjust the filters and try again.", variant: "destructive" });
+      return;
+    }
+    setWordLoading(true);
+    try {
+      await exportCommissionWord(
+        toExportSections(report),
+        {
+          title: "Referral & Commission Report",
+          from,
+          to,
+          doctorFilter: doctorLabel,
+          generatedAt: new Date().toLocaleString("en-IN"),
+          grandTotal,
+        },
+        exportMode,
+        cols.rate,
+      );
+    } catch (err) {
+      toast({ title: "Word export failed", description: String(err), variant: "destructive" });
+    } finally {
+      setWordLoading(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (report.length === 0) {
+      toast({ title: "No data to export", description: "Adjust the filters and try again.", variant: "destructive" });
+      return;
+    }
+    setPdfLoading(true);
+    try {
+      await exportCommissionPdf(
+        toExportSections(report),
+        {
+          title: "Referral & Commission Report",
+          from,
+          to,
+          doctorFilter: doctorLabel,
+          generatedAt: new Date().toLocaleString("en-IN"),
+          grandTotal,
+        },
+        exportMode,
+        cols.rate,
+      );
+    } catch (err) {
+      toast({ title: "PDF export failed", description: String(err), variant: "destructive" });
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   const colCount = 3
     + (cols.billNo ? 1 : 0)
     + (cols.orderNo ? 1 : 0)
@@ -327,9 +467,20 @@ export default function ReferralReport({ onBack }: { onBack: () => void }) {
                 </Select>
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1.5" disabled={report.length === 0}>
-              <Printer size={14} /> Print
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1.5" disabled={report.length === 0}>
+                <Printer size={14} /> Print
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleDownloadExcel} disabled={xlsxLoading || report.length === 0} className="gap-1.5">
+                <FileSpreadsheet size={14} /> {xlsxLoading ? "Exporting…" : "Excel"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleDownloadWord} disabled={wordLoading || report.length === 0} className="gap-1.5">
+                <FileText size={14} /> {wordLoading ? "Exporting…" : "Word"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={pdfLoading || report.length === 0} className="gap-1.5">
+                <Download size={14} /> {pdfLoading ? "Exporting…" : "PDF"}
+              </Button>
+            </div>
           </div>
 
           {/* Mode + column toggles */}
