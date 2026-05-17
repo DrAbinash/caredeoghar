@@ -950,6 +950,292 @@ router.get("/dicom-query", async (req, res) => {
   });
 });
 
+// ─── DICOM C-FIND (Live PACS Search) ─────────────────────────────────────────
+//
+// GET /api/radiology/qr-cfind
+// Sends a real C-FIND request against the configured PACS. Two strategies:
+//   1. Orthanc REST API  — POST /tools/find  (preferred; no DCMTK needed)
+//   2. DCMTK findscu    — spawned as a child process against any DICOM SCP
+//
+// Returns results in the same JSON shape as /dicom-query so the frontend
+// can render them with the same table component.
+// Additional fields on the response envelope:
+//   source     — "ORTHANC_REST" | "DCMTK_FINDSCU" | "NONE"
+//   dcmtkHint  — non-null when neither Orthanc nor findscu is available
+
+router.get("/qr-cfind", async (req, res) => {
+  const q              = req.query as Record<string, string | undefined>;
+  const dateExact      = q.date?.trim();
+  const dateFrom       = q.dateFrom?.trim();
+  const dateTo         = q.dateTo?.trim();
+  const modalityQ      = q.modality?.trim();
+  const patientQ       = q.patientName?.trim();
+  const accessionQ     = q.accessionNumber?.trim();
+  const descQ          = q.studyDescription?.trim();
+  const referringQ     = q.referringDoctor?.trim();
+  const limit          = Math.min(Number(q.limit) || 50, 200);
+  const offset         = Number(q.offset) || 0;
+
+  // DICOM date range in YYYYMMDD compact format
+  const toCompact = (iso: string) => iso.replace(/-/g, "");
+  let studyDateQuery = "";
+  if (dateExact)               studyDateQuery = toCompact(dateExact);
+  else if (dateFrom && dateTo) studyDateQuery = `${toCompact(dateFrom)}-${toCompact(dateTo)}`;
+  else if (dateFrom)           studyDateQuery = `${toCompact(dateFrom)}-`;
+  else if (dateTo)             studyDateQuery = `-${toCompact(dateTo)}`;
+
+  const normalizeDate = (d: string | null): string => {
+    if (!d) return "";
+    if (d.includes("-")) return d.slice(0, 10);
+    if (/^\d{8}$/.test(d)) return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+    return d;
+  };
+
+  const modalityList = modalityQ
+    ? modalityQ.split(",").map((m) => m.trim()).filter(Boolean)
+    : [];
+
+  // Shared type for normalized study rows returned by either strategy
+  type CfindRow = {
+    id: number;
+    accessionNumber: string;
+    studyInstanceUID: string | null;
+    modality: string;
+    studyDate: string;
+    studyDescription: string | null;
+    referringDoctor: string | null;
+    status: string;
+    scheduledStationAETitle: string | null;
+    patientId: number;
+    patientName: string;
+    pullStatus: string | null;
+    pulledAt: string | null;
+    source: string;
+  };
+
+  // ── Strategy 1: Orthanc REST API ──────────────────────────────────────────
+  // If ORTHANC_URL is set but the request fails (e.g. Orthanc is down),
+  // we log the error and fall through to Strategy 2 (findscu) rather than
+  // returning 502 — this makes the feature resilient for mixed deployments.
+
+  const orthancBase = (process.env.ORTHANC_URL || "").replace(/\/$/, "");
+  const orthancUser = process.env.ORTHANC_USERNAME || "";
+  const orthancPass = process.env.ORTHANC_PASSWORD || "";
+
+  if (orthancBase) {
+    try {
+      const authHeaders: Record<string, string> =
+        orthancUser && orthancPass
+          ? { Authorization: "Basic " + Buffer.from(`${orthancUser}:${orthancPass}`).toString("base64") }
+          : {};
+
+      // Build Orthanc /tools/find query (DICOM-tag-keyed)
+      const findQuery: Record<string, string> = { QueryRetrieveLevel: "STUDY" };
+      if (studyDateQuery) findQuery["StudyDate"]               = studyDateQuery;
+      if (patientQ)       findQuery["PatientName"]             = `*${patientQ}*`;
+      if (accessionQ)     findQuery["AccessionNumber"]         = `*${accessionQ}*`;
+      if (descQ)          findQuery["StudyDescription"]        = `*${descQ}*`;
+      if (referringQ)     findQuery["ReferringPhysicianName"]  = `*${referringQ}*`;
+      // Single-modality C-FIND tag; multi-modality post-filtered in JS below
+      if (modalityList.length === 1) findQuery["ModalitiesInStudy"] = modalityList[0]!;
+
+      const findResp = await fetch(`${orthancBase}/tools/find`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body:    JSON.stringify({
+          Level:  "Study",
+          Query:  findQuery,
+          Expand: true,
+          Limit:  limit + offset + 50,   // over-fetch so JS post-filter still paginates cleanly
+        }),
+      });
+      if (!findResp.ok) throw new Error(`Orthanc /tools/find returned ${findResp.status}`);
+
+      const rawStudies = (await findResp.json()) as Record<string, unknown>[];
+
+      let idx = 1;
+      const rows: CfindRow[] = rawStudies
+        .map((s) => {
+          const mt  = (s["MainDicomTags"]        as Record<string, string>) ?? {};
+          const pt  = (s["PatientMainDicomTags"] as Record<string, string>) ?? {};
+          const mod = mt["ModalitiesInStudy"] || mt["Modality"] || "";
+          return {
+            id:                      idx++,
+            accessionNumber:         mt["AccessionNumber"]        ?? "",
+            studyInstanceUID:        mt["StudyInstanceUID"]       ?? null,
+            modality:                mod,
+            studyDate:               normalizeDate(mt["StudyDate"] ?? null),
+            studyDescription:        mt["StudyDescription"]       ?? null,
+            referringDoctor:         mt["ReferringPhysicianName"] ?? null,
+            status:                  "COMPLETED",
+            scheduledStationAETitle: null,
+            patientId:               0,
+            patientName:             pt["PatientName"] ?? mt["PatientName"] ?? "",
+            pullStatus:              "PUSHED_TO_PACS",
+            pulledAt:                null as null,
+            source:                  "LIVE_PACS",
+          };
+        })
+        // Multi-modality post-filter (when >1 modality selected, /tools/find only supports 1)
+        .filter((r) =>
+          modalityList.length === 0 ||
+          modalityList.some((m) => r.modality.toUpperCase().includes(m.toUpperCase())),
+        );
+
+      void logPacsEvent(
+        "CFIND", "CFIND_QUERY",
+        `Live C-FIND via Orthanc REST: ${rows.length} results`,
+        {},
+      );
+
+      res.json({
+        studies:   rows.slice(offset, offset + limit),
+        total:     rows.length,
+        limit,
+        offset,
+        source:    "ORTHANC_REST",
+        dcmtkHint: null,
+      });
+      return;
+    } catch (err) {
+      // Orthanc is configured but unavailable — fall through to findscu
+      req.log?.warn(
+        { err },
+        "qr-cfind: Orthanc REST failed, attempting findscu fallback",
+      );
+    }
+  }
+
+  // ── Strategy 2: DCMTK findscu ─────────────────────────────────────────────
+
+  let hasDcmtk = false;
+  try {
+    await execAsync("which findscu", { timeout: 3000 });
+    hasDcmtk = true;
+  } catch {
+    hasDcmtk = false;
+  }
+
+  // Read PACS connection from DB settings or env
+  const [pacsHost, pacsPortStr, pacsAeTitle] = await Promise.all([
+    getSetting("pacs_host", "conquest").then((v) => v ?? process.env.CONQUEST_HOST ?? ""),
+    getSetting("pacs_port", "conquest").then((v) => v ?? process.env.CONQUEST_PORT ?? "5678"),
+    getSetting("pacs_ae_title", "conquest").then((v) => v ?? process.env.PACS_AE_TITLE ?? "CONQUESTPACS"),
+  ]);
+  const pacsPort = Number(pacsPortStr) || 5678;
+
+  // Determine hint prefix based on whether Orthanc was configured but failed
+  const orthancFailedPrefix = orthancBase
+    ? "Orthanc REST API is configured but unreachable. "
+    : "";
+
+  if (!hasDcmtk) {
+    res.json({
+      studies:   [],
+      total:     0,
+      limit,
+      offset,
+      source:    "NONE",
+      dcmtkHint:
+        orthancFailedPrefix +
+        "findscu (DCMTK) is not installed on this server. " +
+        "Install DCMTK on the server (e.g. apt install dcmtk) and configure the PACS host/AE title " +
+        "in PACS Settings, or ensure Orthanc is reachable at the configured ORTHANC_URL.",
+    });
+    return;
+  }
+
+  if (!pacsHost) {
+    res.json({
+      studies:   [],
+      total:     0,
+      limit,
+      offset,
+      source:    "NONE",
+      dcmtkHint:
+        orthancFailedPrefix +
+        "PACS host is not configured. Set the CONQUEST_HOST environment variable or enter " +
+        "the PACS host in PACS Settings → Conquest to enable Live PACS C-FIND.",
+    });
+    return;
+  }
+
+  // Build findscu arguments (study-level)
+  const safeArg = (s: string) => s.replace(/[";|&$`\\]/g, "");
+  const args: string[] = [
+    "-v",
+    "-aet", "DIAGNOCENTER",
+    "-aec", pacsAeTitle,
+    "-S",
+    "-k", "QueryRetrieveLevel=STUDY",
+    "-k", `StudyDate=${safeArg(studyDateQuery)}`,
+    "-k", "StudyInstanceUID",
+    "-k", "AccessionNumber",
+    "-k", "ModalitiesInStudy",
+    "-k", "StudyDescription",
+    "-k", "PatientName",
+    "-k", "PatientID",
+    "-k", "ReferringPhysicianName",
+    "-k", "StudyDate",
+  ];
+  if (patientQ)    args.push("-k", `PatientName=*${safeArg(patientQ)}*`);
+  if (accessionQ)  args.push("-k", `AccessionNumber=*${safeArg(accessionQ)}*`);
+  if (descQ)       args.push("-k", `StudyDescription=*${safeArg(descQ)}*`);
+  if (referringQ)  args.push("-k", `ReferringPhysicianName=*${safeArg(referringQ)}*`);
+  if (modalityList.length === 1) args.push("-k", `ModalitiesInStudy=${safeArg(modalityList[0]!)}`);
+
+  args.push(pacsHost, String(pacsPort));
+
+  try {
+    const quoted = args.map((a) => `"${a.replace(/"/g, '\\"')}"`).join(" ");
+    const { stdout, stderr } = await execAsync(`findscu ${quoted}`, { timeout: 15000 });
+    const output = stdout + stderr;
+
+    // Parse DCMTK verbose output.
+    // Each result starts with a line "(0008,0052) CS [STUDY...]".
+    // Tag values appear as: (GGGG,EEEE) VR [value] # len, 1 TagName
+    const extractTag = (block: string, tag: string): string => {
+      const re = new RegExp(`\\(${tag}\\)\\s+\\S+\\s+\\[([^\\]]*)\\]`);
+      return (block.match(re)?.[1] ?? "").trim();
+    };
+
+    const blocks = output.split(/(?=\(0008,0052\)\s+CS\s+\[STUDY)/g)
+      .filter((b) => b.includes("[STUDY"));
+
+    let idx2 = 1;
+    const rows = blocks.map((block) => ({
+      id:                      idx2++,
+      accessionNumber:         extractTag(block, "0008,0050"),
+      studyInstanceUID:        extractTag(block, "0020,000d") || null,
+      modality:                extractTag(block, "0008,0061") || extractTag(block, "0008,0060"),
+      studyDate:               normalizeDate(extractTag(block, "0008,0020") || null),
+      studyDescription:        extractTag(block, "0008,1030") || null,
+      referringDoctor:         extractTag(block, "0008,0090") || null,
+      status:                  "COMPLETED",
+      scheduledStationAETitle: null as null,
+      patientId:               0,
+      patientName:             extractTag(block, "0010,0010"),
+      pullStatus:              null as null,
+      pulledAt:                null as null,
+      source:                  "LIVE_PACS",
+    }));
+
+    void logPacsEvent("CFIND", "CFIND_QUERY", `Live C-FIND via findscu: ${rows.length} results`, {});
+
+    res.json({
+      studies:   rows.slice(offset, offset + limit),
+      total:     rows.length,
+      limit,
+      offset,
+      source:    "DCMTK_FINDSCU",
+      dcmtkHint: null,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "findscu failed";
+    res.status(502).json({ error: msg, source: "DCMTK_FINDSCU" });
+  }
+});
+
 // POST /api/radiology/dicom-retrieve
 // Queue a single study for retrieval by the pull agent.
 router.post("/dicom-retrieve", async (req, res) => {

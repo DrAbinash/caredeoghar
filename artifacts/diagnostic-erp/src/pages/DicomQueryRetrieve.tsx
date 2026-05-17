@@ -11,6 +11,7 @@ import {
   Search, RefreshCw, CalendarDays, MonitorPlay, Tv2, Copy,
   CheckCircle2, AlertCircle, Download, Shield, Server,
   WifiOff, Filter, XCircle, Activity, BookmarkPlus, Bookmark, Trash2, ChevronDown,
+  Database, Radio, Info,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -67,6 +68,7 @@ type StudyRow = {
   patientName: string;
   pullStatus: string | null;
   pulledAt: string | null;
+  source?: string;
 };
 
 type QueryResult = {
@@ -74,7 +76,11 @@ type QueryResult = {
   total: number;
   limit: number;
   offset: number;
+  source?: string;
+  dcmtkHint?: string | null;
 };
+
+type SearchMode = "local-db" | "live-pacs";
 
 type Doctor = { id: number; name: string };
 
@@ -154,6 +160,8 @@ export default function DicomQueryRetrieve() {
     studyDescription: "", aeTitle: "",
   });
 
+  const [searchMode, setSearchMode] = useState<SearchMode>("local-db");
+
   const [page, setPage]           = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -192,7 +200,7 @@ export default function DicomQueryRetrieve() {
   // ── Queries ──────────────────────────────────────────────────────────────────
 
   const { data, isLoading, isFetching, refetch } = useQuery<QueryResult>({
-    queryKey: ["dicom-query", applied, page],
+    queryKey: ["dicom-query", applied, page, searchMode],
     queryFn: () => {
       const p = new URLSearchParams({
         dateFrom: applied.dateFrom,
@@ -205,8 +213,12 @@ export default function DicomQueryRetrieve() {
       if (applied.accessionNumber)      p.set("accessionNumber",    applied.accessionNumber);
       if (applied.referringDoctor)      p.set("referringDoctor",    applied.referringDoctor);
       if (applied.studyDescription)     p.set("studyDescription",   applied.studyDescription);
-      if (applied.aeTitle)              p.set("aeTitle",            applied.aeTitle);
-      return api.get<QueryResult>(`/api/radiology/dicom-query?${p}`);
+      if (applied.aeTitle && searchMode === "local-db")
+                                        p.set("aeTitle",            applied.aeTitle);
+      const endpoint = searchMode === "live-pacs"
+        ? `/api/radiology/qr-cfind?${p}`
+        : `/api/radiology/dicom-query?${p}`;
+      return api.get<QueryResult>(endpoint);
     },
   });
 
@@ -413,11 +425,51 @@ export default function DicomQueryRetrieve() {
         </a>
       </div>
 
+      {/* ── DCMTK / PACS hint banner ──────────────────────────────────────────── */}
+      {searchMode === "live-pacs" && data?.dcmtkHint && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 px-4 py-3 flex gap-3 text-sm">
+          <Info size={16} className="shrink-0 mt-0.5 text-amber-600" />
+          <div>
+            <p className="font-semibold text-amber-800 dark:text-amber-300 mb-0.5">Live PACS Search unavailable</p>
+            <p className="text-amber-700 dark:text-amber-400 text-xs leading-relaxed">{data.dcmtkHint}</p>
+          </div>
+        </div>
+      )}
+
       {/* ── Filter Panel ──────────────────────────────────────────────────────── */}
       <div className="rounded-xl border bg-card shadow-sm">
         <div className="px-5 py-3 border-b flex items-center gap-2">
           <Filter size={14} className="text-muted-foreground" />
           <h2 className="text-sm font-bold">Search Criteria</h2>
+
+          {/* Search mode toggle */}
+          <div className="flex items-center gap-0.5 rounded-lg border bg-muted/50 p-0.5 ml-3">
+            <button
+              onClick={() => { setSearchMode("local-db"); setPage(1); setSelectedIds(new Set()); }}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                searchMode === "local-db"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              title="Query local RIS database"
+            >
+              <Database size={11} />
+              Local DB
+            </button>
+            <button
+              onClick={() => { setSearchMode("live-pacs"); setPage(1); setSelectedIds(new Set()); }}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                searchMode === "live-pacs"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              title="Send live C-FIND request to PACS (Orthanc REST or findscu)"
+            >
+              <Radio size={11} />
+              Live PACS
+            </button>
+          </div>
+
           <div className="ml-auto relative" ref={presetMenuRef}>
             <Button
               size="sm"
@@ -595,13 +647,17 @@ export default function DicomQueryRetrieve() {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Station AE Title</label>
+              <label className={`text-xs font-medium ${searchMode === "live-pacs" ? "text-muted-foreground/50" : "text-muted-foreground"}`}>
+                Station AE Title
+                {searchMode === "live-pacs" && <span className="ml-1 text-[10px]">(Local DB only)</span>}
+              </label>
               <Input
                 value={aeTitle}
                 onChange={(e) => setAeTitle(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && applyFilters()}
                 placeholder="MRI_ROOM1…"
                 className="h-8 text-xs font-mono"
+                disabled={searchMode === "live-pacs"}
               />
             </div>
           </div>
@@ -609,7 +665,8 @@ export default function DicomQueryRetrieve() {
           {/* Buttons + Save Preset */}
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <Button size="sm" onClick={applyFilters} disabled={isFetching} className="gap-1.5">
-              <Search size={13} /> Query
+              {searchMode === "live-pacs" ? <Radio size={13} /> : <Search size={13} />}
+              {searchMode === "live-pacs" ? "C-FIND" : "Query"}
             </Button>
             <Button size="sm" variant="outline" onClick={clearAll} className="gap-1.5">
               <XCircle size={13} /> Clear
@@ -695,17 +752,28 @@ export default function DicomQueryRetrieve() {
             <Activity size={14} />
             Results
             {total > 0 && <span className="text-xs font-normal text-muted-foreground">({total.toLocaleString()} studies found)</span>}
+            {searchMode === "live-pacs" && data?.source && data.source !== "NONE" && (
+              <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
+                <Radio size={9} />
+                {data.source === "ORTHANC_REST" ? "Orthanc REST" : "findscu"}
+              </span>
+            )}
           </h2>
           {isFetching && <RefreshCw size={13} className="animate-spin text-muted-foreground" />}
         </div>
 
         {isLoading ? (
-          <div className="p-12 text-center text-sm text-muted-foreground">Querying studies…</div>
+          <div className="p-12 text-center text-sm text-muted-foreground">
+            {searchMode === "live-pacs" ? "Sending C-FIND to PACS…" : "Querying studies…"}
+          </div>
         ) : studies.length === 0 ? (
           <div className="p-12 text-center space-y-2">
             <Search size={36} className="mx-auto opacity-20" />
             <p className="text-sm font-medium text-muted-foreground">No studies found.</p>
-            <p className="text-xs text-muted-foreground">Try Today / Yesterday or adjust filters, then click Query.</p>
+            {searchMode === "live-pacs"
+              ? <p className="text-xs text-muted-foreground">The PACS returned no matches. Try a wider date range or fewer filters.</p>
+              : <p className="text-xs text-muted-foreground">Try Today / Yesterday or adjust filters, then click Query.</p>
+            }
           </div>
         ) : (
           <div className="overflow-x-auto">
