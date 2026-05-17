@@ -33,6 +33,9 @@ import {
 import { and, eq, or, sql, inArray, gte, lte, desc } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { todayIST } from "../lib/istDate";
+import { createOrLinkPatientFromDicom, type DicomDemographics } from "../lib/dicomPatientCreator";
+import { computeStudyPriority, applyPriorityToStudy } from "../lib/studyPriorityEngine";
+import { assignRadiologistToStudy } from "../lib/radiologistAssignment";
 
 const router = Router();
 
@@ -208,6 +211,25 @@ router.post("/radiology/studies", async (req, res) => {
     }
   }
 
+  // ── Auto-create patient from DICOM if unmatched (Phase 1 enterprise upgrade) ──
+  if (!resolvedPatientId) {
+    try {
+      const demo: DicomDemographics = {
+        patientId: rawDicomPatientId ?? undefined,
+        patientName: b.patientName,
+        sex: b.sex,
+        age: b.age,
+        studyDate: b.studyDate,
+        modality: b.modality,
+      };
+      const result = await createOrLinkPatientFromDicom(demo);
+      resolvedPatientId = result.patient.id;
+      patientMatchStatus = result.isNew ? "AUTO_CREATED" : "MATCHED_BY_DEMOGRAPHICS";
+    } catch {
+      // Gracefully keep UNMATCHED if auto-creation fails
+    }
+  }
+
   // ── Deduplication ─────────────────────────────────────────────────────────
   let existing: typeof radiologyWorklistTable.$inferSelect | undefined;
   if (studyInstanceUID) {
@@ -276,6 +298,27 @@ router.post("/radiology/studies", async (req, res) => {
       actor: "pacs",
       details: { event: "created", modality: values.modality, studyDescription: values.studyDescription },
     });
+  }
+
+  // ── Auto-priority + auto-assignment on linked study (Phase 1) ──
+  if (row.studyId) {
+    try {
+      const priorityResult = await computeStudyPriority({
+        modality: values.modality,
+        bodyPart: null,
+        studyDescription: values.studyDescription,
+        referringDoctor: values.referringDoctor,
+      });
+      await applyPriorityToStudy(row.studyId, priorityResult.priority, priorityResult.reason);
+
+      await assignRadiologistToStudy(row.studyId, {
+        modality: values.modality,
+        bodyPart: null,
+        studyId: row.studyId,
+      });
+    } catch {
+      // Never block intake on priority/assignment failure
+    }
   }
 
   res.status(201).json(row);

@@ -380,6 +380,62 @@ async function runStartupMigrations(): Promise<void> {
          AND a.ledger_id = 1
          AND o.doctor_id IS NULL
          AND wl.is_walk_in = true;
+
+      -- ── Enterprise Radiology Phase 1 ──
+      ALTER TABLE radiology_studies ADD COLUMN IF NOT EXISTS priority TEXT NOT NULL DEFAULT 'routine';
+      ALTER TABLE radiology_studies ADD COLUMN IF NOT EXISTS priority_reason TEXT;
+      ALTER TABLE radiology_studies ADD COLUMN IF NOT EXISTS priority_overridden_at TIMESTAMPTZ;
+      ALTER TABLE radiology_studies ADD COLUMN IF NOT EXISTS priority_overridden_by TEXT;
+      CREATE INDEX IF NOT EXISTS radiology_studies_priority_idx ON radiology_studies(priority);
+
+      CREATE TABLE IF NOT EXISTS radiology_priority_rules (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        priority TEXT NOT NULL,
+        body_part_pattern TEXT,
+        study_desc_pattern TEXT,
+        modality_list TEXT,
+        referring_doctor_pattern TEXT,
+        keywords TEXT,
+        location_pattern TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS radiologist_assignment_rules (
+        id SERIAL PRIMARY KEY,
+        modality TEXT NOT NULL,
+        body_part TEXT,
+        subspecialty TEXT,
+        shift_start TEXT,
+        shift_end TEXT,
+        primary_radiologist_id INTEGER NOT NULL,
+        backup_radiologist_id INTEGER,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS radiologist_subspecialties (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        subspecialty TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS radiologist_workloads (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL UNIQUE,
+        assigned_count INTEGER NOT NULL DEFAULT 0,
+        in_progress_count INTEGER NOT NULL DEFAULT 0,
+        pending_count INTEGER NOT NULL DEFAULT 0,
+        today_reported_count INTEGER NOT NULL DEFAULT 0,
+        last_assigned_at TIMESTAMPTZ,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
     `);
     logger.info("Startup migrations applied");
   } catch (err) {

@@ -7,10 +7,17 @@ import {
   billsTable, reportTemplatesTable, staffTable, radiologyPromptsTable,
   radiologyWorklistTable,
   pacsSettingsTable, dicomModalitiesTable, pacsLogsTable,
+  radiologyPriorityRulesTable,
+  radiologistAssignmentRulesTable,
+  radiologistSubspecialtiesTable,
+  radiologistWorkloadsTable,
+  usersTable,
 } from "@workspace/db/schema";
 import { and, asc, desc, eq, gte, ilike, isNull, lte, or, sql } from "drizzle-orm";
 import crypto from "node:crypto";
 import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
+import { computeStudyPriority, applyPriorityToStudy } from "../lib/studyPriorityEngine";
+import { assignRadiologistToStudy } from "../lib/radiologistAssignment";
 
 // Build an absolute https URL for share-link composition. Trusts the standard
 // reverse-proxy headers `x-forwarded-proto` / `x-forwarded-host`. The proxy
@@ -117,6 +124,26 @@ export async function generateStudiesForOrder(opts: {
           ...(opts.dicomFields?.scheduledStationAETitle ? { scheduledStationAETitle: opts.dicomFields.scheduledStationAETitle } : {}),
           ...(opts.dicomFields?.referringDoctor ? { referringDoctor: opts.dicomFields.referringDoctor } : {}),
         }).returning();
+
+        // ── Auto-priority + auto-assignment (Phase 1 enterprise upgrade) ──
+        try {
+          const priorityResult = await computeStudyPriority({
+            modality,
+            bodyPart: opts.dicomFields?.bodyPart ?? null,
+            studyDescription: opts.dicomFields?.studyDescription ?? null,
+            referringDoctor: opts.dicomFields?.referringDoctor ?? null,
+          });
+          await applyPriorityToStudy(row.id, priorityResult.priority, priorityResult.reason);
+
+          await assignRadiologistToStudy(row.id, {
+            modality,
+            bodyPart: opts.dicomFields?.bodyPart ?? null,
+            studyId: row.id,
+          });
+        } catch {
+          // Never block study creation on priority/assignment failure
+        }
+
         out.push({ orderTestId: ot.orderTestId, testName: ot.testName, modality, accessionNumber: row.accessionNumber });
         lastErr = null;
         break;
@@ -1002,6 +1029,176 @@ radiologyRouter.delete("/modalities/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(dicomModalitiesTable).where(eq(dicomModalitiesTable.id, id));
+  res.json({ ok: true });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Phase 1 — Enterprise Radiology: Priority Rules CRUD
+// ═════════════════════════════════════════════════════════════════════════════
+
+// GET /api/radiology/priority-rules
+radiologyRouter.get("/priority-rules", async (_req, res) => {
+  const rows = await db
+    .select()
+    .from(radiologyPriorityRulesTable)
+    .orderBy(asc(radiologyPriorityRulesTable.priority), asc(radiologyPriorityRulesTable.sortOrder));
+  res.json(rows);
+});
+
+// POST /api/radiology/priority-rules
+radiologyRouter.post("/priority-rules", async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const allowed = [
+    "name", "priority", "bodyPartPattern", "studyDescPattern", "modalityList",
+    "referringDoctorPattern", "keywords", "locationPattern",
+    "sortOrder", "isActive",
+  ];
+  const values: Record<string, unknown> = {};
+  for (const k of allowed) {
+    if (body[k] !== undefined) values[k] = body[k];
+  }
+  const [row] = await db.insert(radiologyPriorityRulesTable).values(values as any).returning();
+  res.status(201).json(row);
+});
+
+// PATCH /api/radiology/priority-rules/:id
+radiologyRouter.patch("/priority-rules/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const body = req.body as Record<string, unknown>;
+  const allowed = [
+    "name", "priority", "bodyPartPattern", "studyDescPattern", "modalityList",
+    "referringDoctorPattern", "keywords", "locationPattern",
+    "sortOrder", "isActive",
+  ];
+  const values: Record<string, unknown> = { updatedAt: new Date() };
+  for (const k of allowed) {
+    if (body[k] !== undefined) values[k] = body[k];
+  }
+  const [row] = await db
+    .update(radiologyPriorityRulesTable)
+    .set(values as any)
+    .where(eq(radiologyPriorityRulesTable.id, id))
+    .returning();
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  res.json(row);
+});
+
+// DELETE /api/radiology/priority-rules/:id
+radiologyRouter.delete("/priority-rules/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.delete(radiologyPriorityRulesTable).where(eq(radiologyPriorityRulesTable.id, id));
+  res.json({ ok: true });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Phase 1 — Enterprise Radiology: Assignment Rules CRUD
+// ═════════════════════════════════════════════════════════════════════════════
+
+// GET /api/radiology/assignment-rules
+radiologyRouter.get("/assignment-rules", async (_req, res) => {
+  const rows = await db
+    .select()
+    .from(radiologistAssignmentRulesTable)
+    .orderBy(asc(radiologistAssignmentRulesTable.modality), asc(radiologistAssignmentRulesTable.sortOrder));
+  res.json(rows);
+});
+
+// POST /api/radiology/assignment-rules
+radiologyRouter.post("/assignment-rules", async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const allowed = [
+    "modality", "bodyPart", "subspecialty", "shiftStart", "shiftEnd",
+    "primaryRadiologistId", "backupRadiologistId", "isActive", "sortOrder",
+  ];
+  const values: Record<string, unknown> = {};
+  for (const k of allowed) {
+    if (body[k] !== undefined) values[k] = body[k];
+  }
+  const [row] = await db.insert(radiologistAssignmentRulesTable).values(values as any).returning();
+  res.status(201).json(row);
+});
+
+// PATCH /api/radiology/assignment-rules/:id
+radiologyRouter.patch("/assignment-rules/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const body = req.body as Record<string, unknown>;
+  const allowed = [
+    "modality", "bodyPart", "subspecialty", "shiftStart", "shiftEnd",
+    "primaryRadiologistId", "backupRadiologistId", "isActive", "sortOrder",
+  ];
+  const values: Record<string, unknown> = { updatedAt: new Date() };
+  for (const k of allowed) {
+    if (body[k] !== undefined) values[k] = body[k];
+  }
+  const [row] = await db
+    .update(radiologistAssignmentRulesTable)
+    .set(values as any)
+    .where(eq(radiologistAssignmentRulesTable.id, id))
+    .returning();
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  res.json(row);
+});
+
+// DELETE /api/radiology/assignment-rules/:id
+radiologyRouter.delete("/assignment-rules/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.delete(radiologistAssignmentRulesTable).where(eq(radiologistAssignmentRulesTable.id, id));
+  res.json({ ok: true });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Phase 1 — Enterprise Radiology: Radiologist subspecialties & workload
+// ═════════════════════════════════════════════════════════════════════════════
+
+// GET /api/radiology/radiologists
+radiologyRouter.get("/radiologists", async (_req, res) => {
+  const users = await db.select({ id: usersTable.id, name: usersTable.name })
+    .from(usersTable)
+    .where(eq(usersTable.role, "radiologist"));
+  const workloads = await db.select().from(radiologistWorkloadsTable);
+  const subspecialties = await db.select().from(radiologistSubspecialtiesTable);
+  const out = users.map((u) => ({
+    ...u,
+    workload: workloads.find((w) => w.userId === u.id) ?? null,
+    subspecialties: subspecialties.filter((s) => s.userId === u.id).map((s) => s.subspecialty),
+  }));
+  res.json(out);
+});
+
+// GET /api/radiology/radiologists/:id/subspecialties
+radiologyRouter.get("/radiologists/:id/subspecialties", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const rows = await db
+    .select()
+    .from(radiologistSubspecialtiesTable)
+    .where(eq(radiologistSubspecialtiesTable.userId, id));
+  res.json(rows);
+});
+
+// POST /api/radiology/radiologists/:id/subspecialties
+radiologyRouter.post("/radiologists/:id/subspecialties", async (req, res) => {
+  const userId = Number(req.params.id);
+  if (!Number.isFinite(userId)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const subspecialty = String(req.body.subspecialty || "").trim();
+  if (!subspecialty) { res.status(400).json({ error: "subspecialty required" }); return; }
+  const [row] = await db
+    .insert(radiologistSubspecialtiesTable)
+    .values({ userId, subspecialty })
+    .onConflictDoNothing()
+    .returning();
+  res.status(201).json(row);
+});
+
+// DELETE /api/radiology/radiologists/:id/subspecialties/:subId
+radiologyRouter.delete("/radiologists/:id/subspecialties/:subId", async (req, res) => {
+  const subId = Number(req.params.subId);
+  if (!Number.isFinite(subId)) { res.status(400).json({ error: "Invalid subId" }); return; }
+  await db.delete(radiologistSubspecialtiesTable).where(eq(radiologistSubspecialtiesTable.id, subId));
   res.json({ ok: true });
 });
 
