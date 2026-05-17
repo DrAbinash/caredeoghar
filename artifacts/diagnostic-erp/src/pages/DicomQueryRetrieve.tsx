@@ -12,6 +12,7 @@ import {
   CheckCircle2, AlertCircle, Download, Shield, Server,
   WifiOff, Filter, XCircle, Activity, BookmarkPlus, Bookmark, Trash2, ChevronDown,
   Database, Radio, Info, FileDown, Pencil, Check, X, Printer,
+  GripVertical, ChevronUp,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -189,6 +190,8 @@ export default function DicomQueryRetrieve() {
   const presetMenuRef = useRef<HTMLDivElement>(null);
   const saveInputRef  = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const dragSrcIdx    = useRef<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -448,6 +451,51 @@ export default function DicomQueryRetrieve() {
   const cancelRename = useCallback((e?: React.MouseEvent) => {
     e?.stopPropagation();
     setRenamingId(null);
+  }, []);
+
+  // ── Preset reorder helpers ────────────────────────────────────────────────────
+
+  const handleMovePreset = useCallback((idx: number, dir: -1 | 1, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= presets.length) return;
+    const updated = [...presets];
+    [updated[idx], updated[newIdx]] = [updated[newIdx], updated[idx]];
+    setPresets(updated);
+    persistPresets(updated, userId);
+    syncPresetsMut.mutate(updated);
+  }, [presets, userId, syncPresetsMut]);
+
+  const handleDragStart = useCallback((idx: number) => {
+    dragSrcIdx.current = idx;
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    setDragOverIdx(idx);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, targetIdx: number) => {
+    e.preventDefault();
+    const src = dragSrcIdx.current;
+    if (src === null || src === targetIdx) {
+      setDragOverIdx(null);
+      dragSrcIdx.current = null;
+      return;
+    }
+    const updated = [...presets];
+    const [item] = updated.splice(src, 1);
+    updated.splice(targetIdx, 0, item);
+    setPresets(updated);
+    persistPresets(updated, userId);
+    syncPresetsMut.mutate(updated);
+    setDragOverIdx(null);
+    dragSrcIdx.current = null;
+  }, [presets, userId, syncPresetsMut]);
+
+  const handleDragEnd = useCallback(() => {
+    setDragOverIdx(null);
+    dragSrcIdx.current = null;
   }, []);
 
   // ── CSV Export ────────────────────────────────────────────────────────────────
@@ -894,18 +942,37 @@ export default function DicomQueryRetrieve() {
                   </div>
                 ) : (
                   <ul className="divide-y max-h-64 overflow-y-auto">
-                    {presets.map((preset) => {
+                    {presets.map((preset, idx) => {
                       const isRenaming = renamingId === preset.id;
+                      const isDragTarget = dragOverIdx === idx;
                       return (
                         <li
                           key={preset.id}
-                          className="flex items-center gap-2 px-4 py-2.5 hover:bg-muted/50 transition-colors group"
+                          onDragOver={(e) => handleDragOver(e, idx)}
+                          onDrop={(e) => handleDrop(e, idx)}
+                          onDragEnd={handleDragEnd}
+                          className={`flex items-center gap-1.5 px-3 py-2.5 transition-colors group ${
+                            isDragTarget
+                              ? "bg-primary/10 border-t-2 border-primary"
+                              : "hover:bg-muted/50"
+                          }`}
                           role={isRenaming ? undefined : "button"}
                           tabIndex={isRenaming ? undefined : 0}
                           onClick={isRenaming ? undefined : () => handleLoadPreset(preset)}
                           onKeyDown={isRenaming ? undefined : (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleLoadPreset(preset); } }}
                           style={{ cursor: isRenaming ? "default" : "pointer" }}
                         >
+                          {/* Drag handle — draggable only from here to avoid accidental drags on click-to-load */}
+                          <span
+                            draggable={!isRenaming}
+                            onDragStart={(e) => { e.stopPropagation(); handleDragStart(idx); }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="shrink-0 text-muted-foreground/40 hover:text-muted-foreground cursor-grab active:cursor-grabbing transition-colors"
+                            title="Drag to reorder"
+                            aria-label="Drag to reorder"
+                          >
+                            <GripVertical size={13} />
+                          </span>
                           <Bookmark size={13} className="shrink-0 text-muted-foreground group-hover:text-primary transition-colors" />
                           <div className="flex-1 min-w-0">
                             {isRenaming ? (
@@ -959,6 +1026,25 @@ export default function DicomQueryRetrieve() {
                             </div>
                           ) : (
                             <div className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {/* Up / Down arrows */}
+                              <button
+                                onClick={(e) => handleMovePreset(idx, -1, e)}
+                                disabled={idx === 0}
+                                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                title="Move up"
+                                aria-label={`Move ${preset.name} up`}
+                              >
+                                <ChevronUp size={11} />
+                              </button>
+                              <button
+                                onClick={(e) => handleMovePreset(idx, 1, e)}
+                                disabled={idx === presets.length - 1}
+                                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                title="Move down"
+                                aria-label={`Move ${preset.name} down`}
+                              >
+                                <ChevronDown size={11} />
+                              </button>
                               <button
                                 onClick={(e) => startRenaming(preset, e)}
                                 className="p-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 text-muted-foreground hover:text-blue-600 transition-colors"
