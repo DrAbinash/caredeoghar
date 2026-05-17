@@ -164,6 +164,134 @@ export const radiologistWorkloadsTable = pgTable("radiologist_workloads", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ── Phase 2 — Report verification + peer review + critical findings + TAT ──
+
+export const radiologyReportVerificationsTable = pgTable("radiology_report_verifications", {
+  id: serial("id").primaryKey(),
+  studyId: integer("study_id").notNull(),
+  status: text("status").notNull().default("pending_prelim"), // pending_prelim | prelim_ready | peer_review | verified | final
+  prelimBy: integer("prelim_by"),
+  prelimAt: timestamp("prelim_at", { withTimezone: true }),
+  peerReviewerId: integer("peer_reviewer_id"),
+  peerReviewedAt: timestamp("peer_reviewed_at", { withTimezone: true }),
+  peerReviewNotes: text("peer_review_notes"),
+  verifiedBy: integer("verified_by"),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  finalBy: integer("final_by"),
+  finalAt: timestamp("final_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export const radiologyCriticalFindingsTable = pgTable("radiology_critical_findings", {
+  id: serial("id").primaryKey(),
+  studyId: integer("study_id").notNull(),
+  finding: text("finding").notNull(),
+  severity: text("severity").notNull(), // critical | urgent | significant
+  category: text("category"),           // stroke | trauma | hemorrhage | pneumothorax | etc
+  notifiedClinician: text("notified_clinician"),
+  notifiedAt: timestamp("notified_at", { withTimezone: true }),
+  notificationMethod: text("notification_method"), // phone | sms | whatsapp | email | in_app
+  acknowledgedBy: text("acknowledged_by"),
+  acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const radiologyTatTrackingTable = pgTable("radiology_tat_tracking", {
+  id: serial("id").primaryKey(),
+  studyId: integer("study_id").notNull().unique(),
+  priority: text("priority").notNull().default("routine"),
+  studyReceivedAt: timestamp("study_received_at", { withTimezone: true }).notNull().defaultNow(),
+  prelimCompletedAt: timestamp("prelim_completed_at", { withTimezone: true }),
+  finalCompletedAt: timestamp("final_completed_at", { withTimezone: true }),
+  prelimMinutes: integer("prelim_minutes"),
+  finalMinutes: integer("final_minutes"),
+  slaBreached: boolean("sla_breached").notNull().default(false),
+  slaMinutes: integer("sla_minutes"), // target based on priority
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+// ── Phase 3 — Structured templates + AI enhancement + measurements ──
+
+export const radiologyStructuredTemplatesTable = pgTable("radiology_structured_templates", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  modality: text("modality").notNull(),
+  bodyPart: text("body_part"),
+  description: text("description"),
+  template: text("template").notNull(), // JSON template structure
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export const radiologyAiEnhancementsTable = pgTable("radiology_ai_enhancements", {
+  id: serial("id").primaryKey(),
+  studyId: integer("study_id").notNull(),
+  findingsJson: text("findings_json"),
+  impressionDraft: text("impression_draft"),
+  measurementExtractsJson: text("measurement_extracts_json"),
+  aiModel: text("ai_model"),
+  aiVersion: text("ai_version"),
+  reviewedBy: integer("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  accepted: boolean("accepted"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const radiologyDicomMeasurementsTable = pgTable("radiology_dicom_measurements", {
+  id: serial("id").primaryKey(),
+  studyId: integer("study_id").notNull(),
+  measurementType: text("measurement_type").notNull(), // length | area | volume | angle | density
+  value: text("value").notNull(),
+  unit: text("unit"),
+  referenceRange: text("reference_range"),
+  dicomTag: text("dicom_tag"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ── Phase 4 — Multi-site + teleradiology + DICOM routing ──
+
+export const teleradiologySitesTable = pgTable("teleradiology_sites", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  code: text("code").notNull().unique(),
+  pacsUrl: text("pacs_url"),
+  aeTitle: text("ae_title"),
+  modalityList: text("modality_list"),
+  isActive: boolean("is_active").notNull().default(true),
+  timezoneOffset: integer("timezone_offset").default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const radiologyMultiSiteWorklistTable = pgTable("radiology_multi_site_worklist", {
+  id: serial("id").primaryKey(),
+  siteId: integer("site_id").notNull(),
+  studyId: integer("study_id").notNull(),
+  externalAccessionNumber: text("external_accession_number"),
+  syncStatus: text("sync_status").notNull().default("pending"), // pending | synced | failed
+  lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+  lastSyncError: text("last_sync_error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export const dicomRoutingOptimizationLogTable = pgTable("dicom_routing_optimization_log", {
+  id: serial("id").primaryKey(),
+  studyInstanceUid: text("study_instance_uid"),
+  sourceAeTitle: text("source_ae_title"),
+  targetAeTitle: text("target_ae_title"),
+  routingDecision: text("routing_decision").notNull(), // local | remote | load_balance
+  reason: text("reason"),
+  loadFactor: integer("load_factor"),
+  success: boolean("success").notNull().default(true),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type RadiologyStudy = typeof radiologyStudiesTable.$inferSelect;
 export type RadiologyFilmIssue = typeof radiologyFilmIssuesTable.$inferSelect;
 export type RadiologyPrompt = typeof radiologyPromptsTable.$inferSelect;
@@ -171,3 +299,12 @@ export type RadiologyPriorityRule = typeof radiologyPriorityRulesTable.$inferSel
 export type RadiologistAssignmentRule = typeof radiologistAssignmentRulesTable.$inferSelect;
 export type RadiologistSubspecialty = typeof radiologistSubspecialtiesTable.$inferSelect;
 export type RadiologistWorkload = typeof radiologistWorkloadsTable.$inferSelect;
+export type RadiologyReportVerification = typeof radiologyReportVerificationsTable.$inferSelect;
+export type RadiologyCriticalFinding = typeof radiologyCriticalFindingsTable.$inferSelect;
+export type RadiologyTatTracking = typeof radiologyTatTrackingTable.$inferSelect;
+export type RadiologyStructuredTemplate = typeof radiologyStructuredTemplatesTable.$inferSelect;
+export type RadiologyAiEnhancement = typeof radiologyAiEnhancementsTable.$inferSelect;
+export type RadiologyDicomMeasurement = typeof radiologyDicomMeasurementsTable.$inferSelect;
+export type TeleradiologySite = typeof teleradiologySitesTable.$inferSelect;
+export type RadiologyMultiSiteWorklist = typeof radiologyMultiSiteWorklistTable.$inferSelect;
+export type DicomRoutingOptimizationLog = typeof dicomRoutingOptimizationLogTable.$inferSelect;

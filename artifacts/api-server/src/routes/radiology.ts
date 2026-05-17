@@ -12,12 +12,27 @@ import {
   radiologistSubspecialtiesTable,
   radiologistWorkloadsTable,
   usersTable,
+  radiologyReportVerificationsTable,
+  radiologyCriticalFindingsTable,
+  radiologyTatTrackingTable,
+  radiologyStructuredTemplatesTable,
+  radiologyAiEnhancementsTable,
+  radiologyDicomMeasurementsTable,
+  teleradiologySitesTable,
+  radiologyMultiSiteWorklistTable,
+  dicomRoutingOptimizationLogTable,
 } from "@workspace/db/schema";
 import { and, asc, desc, eq, gte, ilike, isNull, lte, or, sql } from "drizzle-orm";
 import crypto from "node:crypto";
 import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
 import { computeStudyPriority, applyPriorityToStudy } from "../lib/studyPriorityEngine";
 import { assignRadiologistToStudy } from "../lib/radiologistAssignment";
+import { createVerificationRecord, recordPrelimReport, recordPeerReview, verifyReport, finalizeReport, getVerificationQueue } from "../lib/peerReview";
+import { flagCriticalFinding, scanForCriticalFindings, getCriticalFindingsForStudy, acknowledgeFinding } from "../lib/criticalFindingsAlert";
+import { startTatTracking, recordPrelimCompleted, recordFinalCompleted, getTatStats, getTatForStudy } from "../lib/tatTracker";
+import { generateAiEnhancement, getAiEnhancement, acceptAiEnhancement, rejectAiEnhancement } from "../lib/aiReportEnhancer";
+import { syncStudyToSite, getMultiSiteWorklist, getSites } from "../lib/multiSiteWorklist";
+import { decideRouting, getRoutingStats } from "../lib/dicomRoutingOptimizer";
 
 // Build an absolute https URL for share-link composition. Trusts the standard
 // reverse-proxy headers `x-forwarded-proto` / `x-forwarded-host`. The proxy
@@ -1200,6 +1215,278 @@ radiologyRouter.delete("/radiologists/:id/subspecialties/:subId", async (req, re
   if (!Number.isFinite(subId)) { res.status(400).json({ error: "Invalid subId" }); return; }
   await db.delete(radiologistSubspecialtiesTable).where(eq(radiologistSubspecialtiesTable.id, subId));
   res.json({ ok: true });
+});
+
+// ── Phase 2 — Report verification workflow ──
+
+// GET /api/radiology/verifications
+radiologyRouter.get("/verifications", async (req, res) => {
+  const status = (req.query.status as string) || "";
+  const rows = status
+    ? await db.select().from(radiologyReportVerificationsTable).where(eq(radiologyReportVerificationsTable.status, status)).orderBy(desc(radiologyReportVerificationsTable.updatedAt)).limit(100)
+    : await db.select().from(radiologyReportVerificationsTable).orderBy(desc(radiologyReportVerificationsTable.updatedAt)).limit(100);
+  res.json(rows);
+});
+
+// POST /api/radiology/studies/:id/prelim
+radiologyRouter.post("/studies/:id/prelim", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const body = req.body as { reportText?: string; radiologistId?: number };
+  if (!body.reportText || !body.radiologistId) { res.status(400).json({ error: "reportText and radiologistId required" }); return; }
+  await createVerificationRecord(id);
+  await recordPrelimReport(id, body.radiologistId, body.reportText);
+  await recordPrelimCompleted(id);
+
+  // Scan for critical findings in the prelim report
+  const findings = scanForCriticalFindings(body.reportText);
+  for (const f of findings) {
+    f.studyId = id;
+    await flagCriticalFinding(f);
+  }
+  res.json({ ok: true });
+});
+
+// POST /api/radiology/studies/:id/peer-review
+radiologyRouter.post("/studies/:id/peer-review", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const body = req.body as { reviewerId?: number; notes?: string };
+  if (!body.reviewerId) { res.status(400).json({ error: "reviewerId required" }); return; }
+  await recordPeerReview(id, body.reviewerId, body.notes);
+  res.json({ ok: true });
+});
+
+// POST /api/radiology/studies/:id/verify
+radiologyRouter.post("/studies/:id/verify", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const body = req.body as { verifierId?: number };
+  if (!body.verifierId) { res.status(400).json({ error: "verifierId required" }); return; }
+  await verifyReport(id, body.verifierId);
+  res.json({ ok: true });
+});
+
+// POST /api/radiology/studies/:id/final
+radiologyRouter.post("/studies/:id/final", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const body = req.body as { reportText?: string; radiologistId?: number };
+  if (!body.reportText || !body.radiologistId) { res.status(400).json({ error: "reportText and radiologistId required" }); return; }
+  await finalizeReport(id, body.radiologistId, body.reportText);
+  await recordFinalCompleted(id);
+  res.json({ ok: true });
+});
+
+// ── Phase 2 — Critical findings ──
+
+// GET /api/radiology/critical-findings
+radiologyRouter.get("/critical-findings", async (req, res) => {
+  const studyId = Number(req.query.studyId || "0");
+  if (studyId) {
+    const rows = await getCriticalFindingsForStudy(studyId);
+    res.json(rows);
+  } else {
+    const rows = await db
+      .select()
+      .from(radiologyCriticalFindingsTable)
+      .where(eq(radiologyCriticalFindingsTable.acknowledgedAt, null))
+      .orderBy(desc(radiologyCriticalFindingsTable.createdAt))
+      .limit(100);
+    res.json(rows);
+  }
+});
+
+// POST /api/radiology/critical-findings
+radiologyRouter.post("/critical-findings", async (req, res) => {
+  const body = req.body as { studyId: number; finding: string; severity: string; category?: string };
+  if (!body.studyId || !body.finding || !body.severity) { res.status(400).json({ error: "studyId, finding, severity required" }); return; }
+  const row = await flagCriticalFinding(body);
+  res.status(201).json(row);
+});
+
+// PATCH /api/radiology/critical-findings/:id/acknowledge
+radiologyRouter.patch("/critical-findings/:id/acknowledge", async (req, res) => {
+  const id = Number(req.params.id);
+  const clinician = String(req.body.clinicianName || "").trim();
+  if (!clinician) { res.status(400).json({ error: "clinicianName required" }); return; }
+  await acknowledgeFinding(id, clinician);
+  res.json({ ok: true });
+});
+
+// ── Phase 2 — TAT tracking ──
+
+// GET /api/radiology/tat/stats
+radiologyRouter.get("/tat/stats", async (req, res) => {
+  const days = Math.min(Number(req.query.days || 7), 30);
+  const stats = await getTatStats(days);
+  res.json(stats);
+});
+
+// GET /api/radiology/tat/:studyId
+radiologyRouter.get("/tat/:studyId", async (req, res) => {
+  const studyId = Number(req.params.studyId);
+  if (!Number.isFinite(studyId)) { res.status(400).json({ error: "Invalid studyId" }); return; }
+  const row = await getTatForStudy(studyId);
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  res.json(row);
+});
+
+// ── Phase 3 — Structured templates ──
+
+// GET /api/radiology/structured-templates
+radiologyRouter.get("/structured-templates", async (req, res) => {
+  const modality = (req.query.modality as string) || "";
+  const conds = [];
+  if (modality) conds.push(eq(radiologyStructuredTemplatesTable.modality, modality));
+  const rows = await db
+    .select()
+    .from(radiologyStructuredTemplatesTable)
+    .where(conds.length ? and(...conds) : undefined)
+    .orderBy(asc(radiologyStructuredTemplatesTable.sortOrder));
+  res.json(rows);
+});
+
+// POST /api/radiology/structured-templates
+radiologyRouter.post("/structured-templates", async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const allowed = ["name", "modality", "bodyPart", "description", "template", "isActive", "sortOrder"];
+  const values: Record<string, unknown> = {};
+  for (const k of allowed) if (body[k] !== undefined) values[k] = body[k];
+  const [row] = await db.insert(radiologyStructuredTemplatesTable).values(values as any).returning();
+  res.status(201).json(row);
+});
+
+// PATCH /api/radiology/structured-templates/:id
+radiologyRouter.patch("/structured-templates/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const body = req.body as Record<string, unknown>;
+  const allowed = ["name", "modality", "bodyPart", "description", "template", "isActive", "sortOrder"];
+  const values: Record<string, unknown> = { updatedAt: new Date() };
+  for (const k of allowed) if (body[k] !== undefined) values[k] = body[k];
+  const [row] = await db.update(radiologyStructuredTemplatesTable).set(values as any).where(eq(radiologyStructuredTemplatesTable.id, id)).returning();
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  res.json(row);
+});
+
+// DELETE /api/radiology/structured-templates/:id
+radiologyRouter.delete("/structured-templates/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.delete(radiologyStructuredTemplatesTable).where(eq(radiologyStructuredTemplatesTable.id, id));
+  res.json({ ok: true });
+});
+
+// ── Phase 3 — AI enhancement ──
+
+// POST /api/radiology/studies/:id/ai-enhance
+radiologyRouter.post("/studies/:id/ai-enhance", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const result = await generateAiEnhancement(id);
+  res.json(result ?? { error: "Could not generate enhancement" });
+});
+
+// GET /api/radiology/studies/:id/ai-enhance
+radiologyRouter.get("/studies/:id/ai-enhance", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const row = await getAiEnhancement(id);
+  if (!row) { res.status(404).json({ error: "No enhancement found" }); return; }
+  res.json(row);
+});
+
+// POST /api/radiology/ai-enhancements/:id/accept
+radiologyRouter.post("/ai-enhancements/:id/accept", async (req, res) => {
+  const id = Number(req.params.id);
+  const reviewerId = Number(req.body.reviewerId || 0);
+  if (!Number.isFinite(id) || !Number.isFinite(reviewerId)) { res.status(400).json({ error: "Invalid id or reviewerId" }); return; }
+  await acceptAiEnhancement(id, reviewerId);
+  res.json({ ok: true });
+});
+
+// POST /api/radiology/ai-enhancements/:id/reject
+radiologyRouter.post("/ai-enhancements/:id/reject", async (req, res) => {
+  const id = Number(req.params.id);
+  const reviewerId = Number(req.body.reviewerId || 0);
+  if (!Number.isFinite(id) || !Number.isFinite(reviewerId)) { res.status(400).json({ error: "Invalid id or reviewerId" }); return; }
+  await rejectAiEnhancement(id, reviewerId);
+  res.json({ ok: true });
+});
+
+// ── Phase 3 — DICOM measurements ──
+
+// GET /api/radiology/studies/:id/measurements
+radiologyRouter.get("/studies/:id/measurements", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const rows = await db.select().from(radiologyDicomMeasurementsTable).where(eq(radiologyDicomMeasurementsTable.studyId, id));
+  res.json(rows);
+});
+
+// POST /api/radiology/studies/:id/measurements
+radiologyRouter.post("/studies/:id/measurements", async (req, res) => {
+  const studyId = Number(req.params.id);
+  if (!Number.isFinite(studyId)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const body = req.body as Record<string, unknown>;
+  const allowed = ["measurementType", "value", "unit", "referenceRange", "dicomTag", "notes"];
+  const values: Record<string, unknown> = { studyId };
+  for (const k of allowed) if (body[k] !== undefined) values[k] = body[k];
+  const [row] = await db.insert(radiologyDicomMeasurementsTable).values(values as any).returning();
+  res.status(201).json(row);
+});
+
+// ── Phase 4 — Multi-site / Teleradiology ──
+
+// GET /api/radiology/sites
+radiologyRouter.get("/sites", async (_req, res) => {
+  const rows = await getSites();
+  res.json(rows);
+});
+
+// POST /api/radiology/sites
+radiologyRouter.post("/sites", async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const allowed = ["name", "code", "pacsUrl", "aeTitle", "modalityList", "isActive", "timezoneOffset"];
+  const values: Record<string, unknown> = {};
+  for (const k of allowed) if (body[k] !== undefined) values[k] = body[k];
+  const [row] = await db.insert(teleradiologySitesTable).values(values as any).returning();
+  res.status(201).json(row);
+});
+
+// GET /api/radiology/multi-site-worklist
+radiologyRouter.get("/multi-site-worklist", async (req, res) => {
+  const siteId = Number(req.query.siteId || 0) || undefined;
+  const rows = await getMultiSiteWorklist(siteId);
+  res.json(rows);
+});
+
+// POST /api/radiology/studies/:id/sync-site
+radiologyRouter.post("/studies/:id/sync-site", async (req, res) => {
+  const studyId = Number(req.params.id);
+  const siteId = Number(req.body.siteId || 0);
+  const externalAccession = String(req.body.externalAccession || "").trim() || undefined;
+  if (!Number.isFinite(studyId) || !Number.isFinite(siteId)) { res.status(400).json({ error: "Invalid studyId or siteId" }); return; }
+  await syncStudyToSite(studyId, siteId, externalAccession);
+  res.json({ ok: true });
+});
+
+// POST /api/radiology/studies/:id/route-decision
+radiologyRouter.post("/studies/:id/route-decision", async (req, res) => {
+  const studyId = Number(req.params.id);
+  if (!Number.isFinite(studyId)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [study] = await db.select().from(radiologyStudiesTable).where(eq(radiologyStudiesTable.id, studyId));
+  if (!study) { res.status(404).json({ error: "Study not found" }); return; }
+  const result = await decideRouting(study.studyInstanceUid ?? studyId.toString(), study.modality, study.priority, study.scheduledStationAETitle ?? undefined);
+  res.json(result);
+});
+
+// GET /api/radiology/routing-stats
+radiologyRouter.get("/routing-stats", async (req, res) => {
+  const hours = Math.min(Number(req.query.hours || 24), 168);
+  const stats = await getRoutingStats(hours);
+  res.json(stats);
 });
 
 export default radiologyRouter;

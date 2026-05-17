@@ -436,6 +436,138 @@ async function runStartupMigrations(): Promise<void> {
         last_assigned_at TIMESTAMPTZ,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      -- ── Phase 2: Report verification + peer review + critical findings + TAT ──
+      CREATE TABLE IF NOT EXISTS radiology_report_verifications (
+        id SERIAL PRIMARY KEY,
+        study_id INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending_prelim',
+        prelim_by INTEGER,
+        prelim_at TIMESTAMPTZ,
+        peer_reviewer_id INTEGER,
+        peer_reviewed_at TIMESTAMPTZ,
+        peer_review_notes TEXT,
+        verified_by INTEGER,
+        verified_at TIMESTAMPTZ,
+        final_by INTEGER,
+        final_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS radiology_critical_findings (
+        id SERIAL PRIMARY KEY,
+        study_id INTEGER NOT NULL,
+        finding TEXT NOT NULL,
+        severity TEXT NOT NULL,
+        category TEXT,
+        notified_clinician TEXT,
+        notified_at TIMESTAMPTZ,
+        notification_method TEXT,
+        acknowledged_by TEXT,
+        acknowledged_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS radiology_tat_tracking (
+        id SERIAL PRIMARY KEY,
+        study_id INTEGER NOT NULL UNIQUE,
+        priority TEXT NOT NULL DEFAULT 'routine',
+        study_received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        prelim_completed_at TIMESTAMPTZ,
+        final_completed_at TIMESTAMPTZ,
+        prelim_minutes INTEGER,
+        final_minutes INTEGER,
+        sla_breached BOOLEAN NOT NULL DEFAULT FALSE,
+        sla_minutes INTEGER,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      -- ── Phase 3: Structured templates + AI enhancement + measurements ──
+      CREATE TABLE IF NOT EXISTS radiology_structured_templates (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        modality TEXT NOT NULL,
+        body_part TEXT,
+        description TEXT,
+        template TEXT NOT NULL,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS radiology_ai_enhancements (
+        id SERIAL PRIMARY KEY,
+        study_id INTEGER NOT NULL,
+        findings_json TEXT,
+        impression_draft TEXT,
+        measurement_extracts_json TEXT,
+        ai_model TEXT,
+        ai_version TEXT,
+        reviewed_by INTEGER,
+        reviewed_at TIMESTAMPTZ,
+        accepted BOOLEAN,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS radiology_dicom_measurements (
+        id SERIAL PRIMARY KEY,
+        study_id INTEGER NOT NULL,
+        measurement_type TEXT NOT NULL,
+        value TEXT NOT NULL,
+        unit TEXT,
+        reference_range TEXT,
+        dicom_tag TEXT,
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      -- ── Phase 4: Multi-site + teleradiology + DICOM routing ──
+      CREATE TABLE IF NOT EXISTS teleradiology_sites (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        code TEXT NOT NULL UNIQUE,
+        pacs_url TEXT,
+        ae_title TEXT,
+        modality_list TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        timezone_offset INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS radiology_multi_site_worklist (
+        id SERIAL PRIMARY KEY,
+        site_id INTEGER NOT NULL,
+        study_id INTEGER NOT NULL,
+        external_accession_number TEXT,
+        sync_status TEXT NOT NULL DEFAULT 'pending',
+        last_sync_at TIMESTAMPTZ,
+        last_sync_error TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS dicom_routing_optimization_log (
+        id SERIAL PRIMARY KEY,
+        study_instance_uid TEXT,
+        source_ae_title TEXT,
+        target_ae_title TEXT,
+        routing_decision TEXT NOT NULL,
+        reason TEXT,
+        load_factor INTEGER,
+        success BOOLEAN NOT NULL DEFAULT TRUE,
+        error TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      -- ── FIDO2 / WebAuthn staff credentials ──
+      CREATE TABLE IF NOT EXISTS webauthn_credentials (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        credential_id TEXT NOT NULL UNIQUE,
+        public_key TEXT NOT NULL,
+        counter BIGINT NOT NULL DEFAULT 0,
+        device_name TEXT,
+        transports TEXT,
+        last_used_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
     `);
     logger.info("Startup migrations applied");
   } catch (err) {
