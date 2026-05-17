@@ -8,7 +8,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Printer, Stethoscope } from "lucide-react";
+import { ArrowLeft, Download, Printer, Stethoscope } from "lucide-react";
 import {
   loadReportOrientation,
   persistReportOrientation,
@@ -20,6 +20,7 @@ import {
   type CommissionDoctorEntry,
 } from "@workspace/api-client-react";
 import { saAuthHeaders } from "@/lib/saApi";
+import { exportCommissionPdf } from "@/lib/exportCommissionPdf";
 
 type SaDoctor = { id: number; name: string };
 const SA_DOCTORS_KEY = ["/api/super-admin/doctors-list"] as const;
@@ -100,6 +101,46 @@ export default function CommissionReport({ onBack }: { onBack: () => void }) {
 
   const report = data?.report ?? [];
   const grandTotal = data?.grandTotal ?? { doctors: 0, orders: 0, revenue: 0, commission: 0 };
+
+  // ─── PDF Download ──────────────────────────────────────────────────────────
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    if (report.length === 0) {
+      toast({ title: "No data to export", description: "Adjust the filters and try again.", variant: "destructive" });
+      return;
+    }
+    setPdfLoading(true);
+    try {
+      const doctorLabel = reportDoctorId
+        ? doctors.find(d => d.id === reportDoctorId)?.name ?? "—"
+        : "All Doctors";
+      const title =
+        mode === "consolidated"
+          ? "Referral Commission – Consolidated Report"
+          : mode === "doctor-test"
+          ? "Referral Commission – Doctor + Test Detail"
+          : "Referral Commission Report";
+      await exportCommissionPdf(
+        report,
+        {
+          title,
+          from,
+          to,
+          doctorFilter: doctorLabel,
+          generatedAt: new Date().toLocaleString("en-IN"),
+          grandTotal,
+        },
+        mode,
+        showPercentFixed,
+        orientation,
+      );
+    } catch (err) {
+      toast({ title: "PDF export failed", description: String(err), variant: "destructive" });
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
   // ─── Print ────────────────────────────────────────────────────────────────
   const handlePrint = (orientationOverride?: PaperOrientation) => {
@@ -321,6 +362,9 @@ export default function CommissionReport({ onBack }: { onBack: () => void }) {
               </div>
               <Button variant="outline" size="sm" onClick={() => handlePrint()} className="gap-1.5">
                 <Printer size={14} /> Print
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={pdfLoading} className="gap-1.5">
+                <Download size={14} /> {pdfLoading ? "Exporting…" : "Download PDF"}
               </Button>
             </div>
           </div>
