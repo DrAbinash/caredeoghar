@@ -54,7 +54,6 @@ import {
   HandCoins,
   ListChecks,
   Wallet,
-  Search,
   BrainCircuit,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";

@@ -1,7 +1,8 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { api } from "@/lib/fetchApi";
+import { readStaffSession } from "@/lib/staffSession";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,10 +10,48 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Search, RefreshCw, CalendarDays, MonitorPlay, Tv2, Copy,
   CheckCircle2, AlertCircle, Download, Shield, Server,
-  WifiOff, Filter, XCircle, Activity,
+  WifiOff, Filter, XCircle, Activity, BookmarkPlus, Bookmark, Trash2, ChevronDown,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
+
+type DicomPresetFilters = {
+  dateFrom: string;
+  dateTo: string;
+  modalities: string[];
+  patientName: string;
+  accessionNumber: string;
+  referringDoctor: string;
+  studyDescription: string;
+  aeTitle: string;
+};
+
+type DicomPreset = {
+  id: string;
+  name: string;
+  filters: DicomPresetFilters;
+  createdAt: string;
+};
+
+function getPresetKey(userId?: number): string {
+  return `dicom_qr_presets_${userId ?? "anon"}`;
+}
+
+function loadPresets(userId?: number): DicomPreset[] {
+  try {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(getPresetKey(userId)) : null;
+    if (!raw) return [];
+    return JSON.parse(raw) as DicomPreset[];
+  } catch {
+    return [];
+  }
+}
+
+function persistPresets(presets: DicomPreset[], userId?: number): void {
+  try {
+    window.localStorage.setItem(getPresetKey(userId), JSON.stringify(presets));
+  } catch { /* ignore quota errors */ }
+}
 
 type StudyRow = {
   id: number;
@@ -93,6 +132,9 @@ export default function DicomQueryRetrieve() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
 
+  const session = readStaffSession();
+  const userId  = session?.user.id;
+
   const [dateFrom, setDateFrom]     = useState(localDate());
   const [dateTo, setDateTo]         = useState(localDate());
   const [selMods, setSelMods]       = useState<Set<string>>(new Set());
@@ -115,6 +157,37 @@ export default function DicomQueryRetrieve() {
   const [page, setPage]           = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  // ── Preset state ──────────────────────────────────────────────────────────────
+  const [presets, setPresets]         = useState<DicomPreset[]>(() => loadPresets(userId));
+  const [showPresetMenu, setShowPresetMenu] = useState(false);
+  const [savePresetName, setSavePresetName] = useState("");
+  const [showSaveInput, setShowSaveInput]   = useState(false);
+  const presetMenuRef = useRef<HTMLDivElement>(null);
+  const saveInputRef  = useRef<HTMLInputElement>(null);
+
+  // Close preset dropdown when clicking outside
+  useEffect(() => {
+    if (!showPresetMenu) return;
+    function onClickOutside(e: MouseEvent) {
+      if (presetMenuRef.current && !presetMenuRef.current.contains(e.target as Node)) {
+        setShowPresetMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [showPresetMenu]);
+
+  // Reload presets if the signed-in user changes (e.g. staff switches accounts
+  // without unmounting this page)
+  useEffect(() => {
+    setPresets(loadPresets(userId));
+  }, [userId]);
+
+  // Focus save input when it appears
+  useEffect(() => {
+    if (showSaveInput) saveInputRef.current?.focus();
+  }, [showSaveInput]);
 
   // ── Queries ──────────────────────────────────────────────────────────────────
 
@@ -232,6 +305,59 @@ export default function DicomQueryRetrieve() {
     toast({ title: "Copied to clipboard" });
   }
 
+  // ── Preset handlers ───────────────────────────────────────────────────────────
+
+  const handleSavePreset = useCallback(() => {
+    const name = savePresetName.trim();
+    if (!name) return;
+    const preset: DicomPreset = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name,
+      filters: {
+        dateFrom, dateTo,
+        modalities: Array.from(selMods),
+        patientName, accessionNumber, referringDoctor, studyDescription, aeTitle,
+      },
+      createdAt: new Date().toISOString(),
+    };
+    const updated = [preset, ...presets.filter((p) => p.name !== name)];
+    setPresets(updated);
+    persistPresets(updated, userId);
+    setSavePresetName("");
+    setShowSaveInput(false);
+    toast({ title: `Preset "${name}" saved` });
+  }, [savePresetName, dateFrom, dateTo, selMods, patientName, accessionNumber, referringDoctor, studyDescription, aeTitle, presets, userId, toast]);
+
+  const handleLoadPreset = useCallback((preset: DicomPreset) => {
+    const f = preset.filters;
+    setDateFrom(f.dateFrom);
+    setDateTo(f.dateTo);
+    setSelMods(new Set(f.modalities));
+    setPatientName(f.patientName);
+    setAccessionNumber(f.accessionNumber);
+    setReferringDoctor(f.referringDoctor);
+    setStudyDescription(f.studyDescription);
+    setAeTitle(f.aeTitle);
+    setApplied({
+      dateFrom: f.dateFrom, dateTo: f.dateTo, modalities: f.modalities,
+      patientName: f.patientName, accessionNumber: f.accessionNumber,
+      referringDoctor: f.referringDoctor, studyDescription: f.studyDescription,
+      aeTitle: f.aeTitle,
+    });
+    setPage(1);
+    setSelectedIds(new Set());
+    setShowPresetMenu(false);
+    toast({ title: `Preset "${preset.name}" loaded` });
+  }, [toast]);
+
+  const handleDeletePreset = useCallback((id: string, name: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = presets.filter((p) => p.id !== id);
+    setPresets(updated);
+    persistPresets(updated, userId);
+    toast({ title: `Preset "${name}" deleted` });
+  }, [presets, userId, toast]);
+
   function openAllSelectedOhif() {
     for (const s of selectedStudies) {
       if (s.studyInstanceUID) window.open(`/erp/radiology/viewer/${s.studyInstanceUID}`, "_blank");
@@ -292,6 +418,68 @@ export default function DicomQueryRetrieve() {
         <div className="px-5 py-3 border-b flex items-center gap-2">
           <Filter size={14} className="text-muted-foreground" />
           <h2 className="text-sm font-bold">Search Criteria</h2>
+          <div className="ml-auto relative" ref={presetMenuRef}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1.5"
+              onClick={() => setShowPresetMenu((v) => !v)}
+            >
+              <Bookmark size={12} />
+              Presets
+              {presets.length > 0 && (
+                <span className="bg-primary text-primary-foreground rounded-full text-[10px] px-1.5 py-0 font-bold leading-4">
+                  {presets.length}
+                </span>
+              )}
+              <ChevronDown size={11} className={`transition-transform ${showPresetMenu ? "rotate-180" : ""}`} />
+            </Button>
+            {showPresetMenu && (
+              <div className="absolute right-0 top-full mt-1 z-50 w-72 rounded-xl border bg-popover shadow-lg overflow-hidden">
+                {presets.length === 0 ? (
+                  <div className="px-4 py-6 text-center text-xs text-muted-foreground">
+                    <Bookmark size={20} className="mx-auto mb-2 opacity-30" />
+                    No saved presets yet.
+                    <br />Use "Save as preset" below to save your current filters.
+                  </div>
+                ) : (
+                  <ul className="divide-y max-h-64 overflow-y-auto">
+                    {presets.map((preset) => (
+                      <li
+                        key={preset.id}
+                        className="flex items-center gap-2 px-4 py-2.5 hover:bg-muted/50 transition-colors group cursor-pointer"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleLoadPreset(preset)}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleLoadPreset(preset); } }}
+                      >
+                        <Bookmark size={13} className="shrink-0 text-muted-foreground group-hover:text-primary transition-colors" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold truncate">{preset.name}</p>
+                          <p className="text-[10px] text-muted-foreground truncate">
+                            {preset.filters.modalities.length > 0
+                              ? preset.filters.modalities.join(", ")
+                              : "All modalities"}{" · "}
+                            {preset.filters.dateFrom === preset.filters.dateTo
+                              ? preset.filters.dateFrom
+                              : `${preset.filters.dateFrom} → ${preset.filters.dateTo}`}
+                          </p>
+                        </div>
+                        <button
+                          onClick={(e) => handleDeletePreset(preset.id, preset.name, e)}
+                          className="shrink-0 p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-muted-foreground hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                          title="Delete preset"
+                          aria-label={`Delete preset ${preset.name}`}
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
         </div>
         <div className="p-4 space-y-4">
 
@@ -418,14 +606,57 @@ export default function DicomQueryRetrieve() {
             </div>
           </div>
 
-          {/* Buttons */}
-          <div className="flex gap-2 pt-1">
+          {/* Buttons + Save Preset */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
             <Button size="sm" onClick={applyFilters} disabled={isFetching} className="gap-1.5">
               <Search size={13} /> Query
             </Button>
             <Button size="sm" variant="outline" onClick={clearAll} className="gap-1.5">
               <XCircle size={13} /> Clear
             </Button>
+            <div className="flex items-center gap-1.5 ml-auto">
+              {showSaveInput ? (
+                <>
+                  <Input
+                    ref={saveInputRef}
+                    value={savePresetName}
+                    onChange={(e) => setSavePresetName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleSavePreset();
+                      if (e.key === "Escape") { setShowSaveInput(false); setSavePresetName(""); }
+                    }}
+                    placeholder="Preset name…"
+                    className="h-7 text-xs w-44"
+                    maxLength={48}
+                  />
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    onClick={handleSavePreset}
+                    disabled={!savePresetName.trim()}
+                  >
+                    <BookmarkPlus size={12} /> Save
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs"
+                    onClick={() => { setShowSaveInput(false); setSavePresetName(""); }}
+                  >
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1.5"
+                  onClick={() => setShowSaveInput(true)}
+                >
+                  <BookmarkPlus size={12} /> Save as preset
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>
