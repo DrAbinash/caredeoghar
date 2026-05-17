@@ -11,7 +11,7 @@ import {
   Search, RefreshCw, CalendarDays, MonitorPlay, Tv2, Copy,
   CheckCircle2, AlertCircle, Download, Shield, Server,
   WifiOff, Filter, XCircle, Activity, BookmarkPlus, Bookmark, Trash2, ChevronDown,
-  Database, Radio, Info, FileDown, Pencil, Check, X,
+  Database, Radio, Info, FileDown, Pencil, Check, X, Printer,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -83,6 +83,15 @@ type QueryResult = {
 type SearchMode = "local-db" | "live-pacs";
 
 type Doctor = { id: number; name: string };
+
+type ClinicSettings = {
+  name?: string | null;
+  tagline?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  logoDataUrl?: string | null;
+};
 
 type PacsHealth = {
   pendingRetries: number;
@@ -166,6 +175,7 @@ export default function DicomQueryRetrieve() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   // ── Preset state ──────────────────────────────────────────────────────────────
   // Initialize from localStorage for instant load; the API query below will
@@ -269,6 +279,12 @@ export default function DicomQueryRetrieve() {
     queryKey: ["pacs-health-qr"],
     queryFn:  () => api.get("/api/radiology/pacs-dashboard-ext"),
     refetchInterval: 30_000,
+  });
+
+  const { data: clinicSettings } = useQuery<ClinicSettings>({
+    queryKey: ["clinic-settings"],
+    queryFn:  () => api.get<ClinicSettings>("/api/clinic-settings"),
+    staleTime: 5 * 60_000,
   });
 
   // ── Mutations ─────────────────────────────────────────────────────────────────
@@ -536,6 +552,221 @@ export default function DicomQueryRetrieve() {
       setIsExporting(false);
     }
   }, [applied, searchMode, toast]);
+
+  // ── PDF Export ────────────────────────────────────────────────────────────────
+
+  const handleExportPdf = useCallback(async () => {
+    setIsExportingPdf(true);
+    try {
+      const PAGE = 200;
+      const baseParams = () => {
+        const p = new URLSearchParams({
+          dateFrom: applied.dateFrom,
+          dateTo:   applied.dateTo,
+          limit:    String(PAGE),
+        });
+        if (applied.modalities.length)   p.set("modality",        applied.modalities.join(","));
+        if (applied.patientName)         p.set("patientName",     applied.patientName);
+        if (applied.accessionNumber)     p.set("accessionNumber", applied.accessionNumber);
+        if (applied.referringDoctor)     p.set("referringDoctor", applied.referringDoctor);
+        if (applied.studyDescription)    p.set("studyDescription",applied.studyDescription);
+        if (applied.aeTitle && searchMode === "local-db")
+                                         p.set("aeTitle",         applied.aeTitle);
+        return p;
+      };
+
+      const endpointBase = searchMode === "live-pacs"
+        ? "/api/radiology/qr-cfind"
+        : "/api/radiology/dicom-query";
+
+      const allRows: StudyRow[] = [];
+      let offset = 0;
+      let totalCount = 0;
+
+      do {
+        const p = baseParams();
+        p.set("offset", String(offset));
+        const result = await api.get<QueryResult>(`${endpointBase}?${p}`);
+        totalCount = result.total;
+        allRows.push(...result.studies);
+        offset += result.studies.length;
+        if (result.studies.length < PAGE) break;
+      } while (offset < totalCount);
+
+      if (allRows.length === 0) {
+        toast({ title: "No studies to export" });
+        return;
+      }
+
+      const pullLabel = (s: StudyRow) => {
+        if (!s.pullStatus) return "NOT PULLED";
+        return PULL_STATUS[s.pullStatus]?.label ?? s.pullStatus;
+      };
+
+      const sourceLabel = (s: StudyRow) =>
+        s.source ?? s.scheduledStationAETitle ?? (searchMode === "live-pacs" ? "LIVE PACS" : "Local DB");
+
+      const esc = (v: string | null | undefined) =>
+        (v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+      const clinic = clinicSettings ?? {};
+      const clinicName  = clinic.name    ?? "DiagnoCenter";
+      const clinicTag   = clinic.tagline ?? "";
+      const clinicAddr  = clinic.address ?? "";
+      const clinicPhone = clinic.phone   ?? "";
+      const clinicEmail = clinic.email   ?? "";
+      const rawLogoDataUrl = clinic.logoDataUrl ?? "";
+      const logoDataUrl = /^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,/.test(rawLogoDataUrl)
+        ? rawLogoDataUrl
+        : "";
+
+      const dateLabel =
+        applied.dateFrom === applied.dateTo
+          ? fmtDate(applied.dateFrom)
+          : `${fmtDate(applied.dateFrom)} – ${fmtDate(applied.dateTo)}`;
+
+      const activeFilters: string[] = [];
+      if (applied.modalities.length)  activeFilters.push(`Modality: ${applied.modalities.join(", ")}`);
+      if (applied.patientName)        activeFilters.push(`Patient: ${applied.patientName}`);
+      if (applied.accessionNumber)    activeFilters.push(`Accession: ${applied.accessionNumber}`);
+      if (applied.referringDoctor)    activeFilters.push(`Referring Doctor: ${applied.referringDoctor}`);
+      if (applied.studyDescription)   activeFilters.push(`Description: ${applied.studyDescription}`);
+      if (applied.aeTitle && searchMode === "local-db")
+                                      activeFilters.push(`AE Title: ${applied.aeTitle}`);
+
+      const generatedAt = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "long", timeStyle: "short" });
+
+      const rows = allRows;
+
+      const tableRows = rows.map((s, i) => `
+        <tr class="${i % 2 === 0 ? "even" : "odd"}">
+          <td>${esc(s.accessionNumber)}</td>
+          <td>${esc(s.patientName)}</td>
+          <td class="mod">${esc(s.modality)}</td>
+          <td class="nowrap">${esc(fmtDate(s.studyDate))}</td>
+          <td>${s.referringDoctor ? `Dr. ${esc(s.referringDoctor)}` : "—"}</td>
+          <td class="status">${esc(pullLabel(s))}</td>
+          <td>${esc(sourceLabel(s))}</td>
+        </tr>`).join("");
+
+      const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>DICOM Study Export – ${esc(dateLabel)}</title>
+<style>
+  @page { size: A4 landscape; margin: 14mm 12mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #111; }
+
+  /* ── Header ── */
+  .header { display: flex; align-items: flex-start; gap: 12px; border-bottom: 2px solid #1e40af; padding-bottom: 8px; margin-bottom: 10px; }
+  .logo { width: 52px; height: 52px; object-fit: contain; flex-shrink: 0; }
+  .logo-placeholder { width: 52px; height: 52px; background: #1e40af; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 18pt; font-weight: bold; flex-shrink: 0; }
+  .clinic-info { flex: 1; }
+  .clinic-name { font-size: 15pt; font-weight: bold; color: #1e40af; line-height: 1.2; }
+  .clinic-tag { font-size: 9pt; color: #555; margin-top: 1px; }
+  .clinic-contact { font-size: 8pt; color: #444; margin-top: 4px; }
+  .report-meta { text-align: right; flex-shrink: 0; }
+  .report-title { font-size: 11pt; font-weight: bold; color: #1e40af; }
+  .report-subtitle { font-size: 8pt; color: #555; margin-top: 2px; }
+
+  /* ── Filter summary ── */
+  .filters { background: #f0f4ff; border: 1px solid #c7d7f7; border-radius: 5px; padding: 6px 10px; margin-bottom: 10px; font-size: 8pt; }
+  .filters strong { color: #1e40af; }
+  .filter-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .filter-tag { background: #dbeafe; border: 1px solid #93c5fd; border-radius: 3px; padding: 1px 6px; color: #1e3a8a; }
+
+  /* ── Table ── */
+  table { width: 100%; border-collapse: collapse; font-size: 8pt; }
+  thead tr { background: #1e40af; color: #fff; }
+  thead th { padding: 5px 6px; text-align: left; white-space: nowrap; font-weight: 600; font-size: 7.5pt; }
+  tbody tr.even { background: #f9fafb; }
+  tbody tr.odd  { background: #ffffff; }
+  tbody td { padding: 4px 6px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+  .mod { font-weight: bold; text-align: center; }
+  .nowrap { white-space: nowrap; }
+  .status { font-weight: bold; font-size: 7pt; }
+
+  /* ── Footer ── */
+  .footer { margin-top: 12px; border-top: 1px solid #d1d5db; padding-top: 6px; font-size: 7.5pt; color: #6b7280; display: flex; justify-content: space-between; }
+
+  /* ── Count summary ── */
+  .summary { margin-bottom: 8px; font-size: 8.5pt; color: #374151; }
+  .summary strong { color: #1e40af; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  ${logoDataUrl
+    ? `<img class="logo" src="${logoDataUrl}" alt="Logo" />`
+    : `<div class="logo-placeholder">${esc(clinicName.charAt(0).toUpperCase())}</div>`}
+  <div class="clinic-info">
+    <div class="clinic-name">${esc(clinicName)}</div>
+    ${clinicTag  ? `<div class="clinic-tag">${esc(clinicTag)}</div>` : ""}
+    <div class="clinic-contact">
+      ${clinicAddr  ? esc(clinicAddr)  + " &nbsp;|&nbsp; " : ""}
+      ${clinicPhone ? "Ph: " + esc(clinicPhone) + (clinicEmail ? " &nbsp;|&nbsp; " : "") : ""}
+      ${clinicEmail ? esc(clinicEmail) : ""}
+    </div>
+  </div>
+  <div class="report-meta">
+    <div class="report-title">DICOM Study Export</div>
+    <div class="report-subtitle">Date range: ${esc(dateLabel)}</div>
+    <div class="report-subtitle">Source: ${searchMode === "live-pacs" ? "Live PACS" : "Local DB"}</div>
+    <div class="report-subtitle">Generated: ${esc(generatedAt)}</div>
+  </div>
+</div>
+
+<div class="filters">
+  <strong>Applied Filters</strong>
+  ${activeFilters.length > 0
+    ? `<div class="filter-tags">${activeFilters.map((f) => `<span class="filter-tag">${esc(f)}</span>`).join("")}</div>`
+    : `<span style="color:#6b7280;margin-left:8px;">No additional filters applied</span>`}
+</div>
+
+<div class="summary">Showing <strong>${rows.length}</strong>${totalCount > rows.length ? ` of ${totalCount}` : ""} studies</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Accession #</th>
+      <th>Patient Name</th>
+      <th>Mod</th>
+      <th>Study Date</th>
+      <th>Referring Doctor</th>
+      <th>Pull Status</th>
+      <th>Source</th>
+    </tr>
+  </thead>
+  <tbody>${tableRows}</tbody>
+</table>
+
+<div class="footer">
+  <span>${esc(clinicName)} &mdash; DICOM Radiology Audit Report</span>
+  <span>Total studies: ${rows.length} &nbsp;|&nbsp; ${esc(generatedAt)}</span>
+</div>
+
+<script>window.onload = function() { window.print(); };<\/script>
+</body>
+</html>`;
+
+      const win = window.open("", "_blank");
+      if (!win) {
+        toast({ title: "Pop-up blocked", description: "Allow pop-ups for this site and try again.", variant: "destructive" });
+        return;
+      }
+      win.document.write(html);
+      win.document.close();
+
+      toast({ title: `PDF ready (${rows.length} studies)`, description: "Use Print → Save as PDF in the dialog." });
+    } catch {
+      toast({ title: "PDF export failed", variant: "destructive" });
+    } finally {
+      setIsExportingPdf(false);
+    }
+  }, [applied, searchMode, clinicSettings, toast]);
 
   function openAllSelectedOhif() {
     for (const s of selectedStudies) {
@@ -983,6 +1214,17 @@ export default function DicomQueryRetrieve() {
           </h2>
           <div className="flex items-center gap-2 shrink-0">
             {isFetching && <RefreshCw size={13} className="animate-spin text-muted-foreground" />}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1.5"
+              disabled={total === 0 || isExportingPdf}
+              onClick={() => void handleExportPdf()}
+              title="Export all results as a formatted PDF report"
+            >
+              <Printer size={13} className={isExportingPdf ? "animate-pulse" : ""} />
+              {isExportingPdf ? "Preparing…" : "Export PDF"}
+            </Button>
             <Button
               size="sm"
               variant="outline"
