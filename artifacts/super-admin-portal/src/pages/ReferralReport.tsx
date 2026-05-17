@@ -408,7 +408,7 @@ export default function ReferralReport({ onBack }: { onBack: () => void }) {
         ) : mode === "consolidated" ? (
           <ConsolidatedView report={report} grandTotal={grandTotal} cols={cols} />
         ) : mode === "test-summary" ? (
-          <TestSummaryView report={report} grandTotal={grandTotal} />
+          <TestSummaryView report={report} grandTotal={grandTotal} cols={cols} />
         ) : (
           <ByDoctorView report={report} grandTotal={grandTotal} cols={cols} colCount={colCount} />
         )}
@@ -568,9 +568,11 @@ type TestSummaryRow = {
 function TestSummaryView({
   report,
   grandTotal,
+  cols,
 }: {
   report: DoctorEntry[];
   grandTotal: ReportData["grandTotal"];
+  cols: ColFlags;
 }) {
   return (
     <div className="space-y-6">
@@ -620,7 +622,7 @@ function TestSummaryView({
                 <tr className="border-b border-border bg-muted/20">
                   <th className="text-left px-5 py-2.5 text-xs font-semibold uppercase text-muted-foreground">Test Name</th>
                   <th className="text-center px-4 py-2.5 text-xs font-semibold uppercase text-muted-foreground">No. of Tests</th>
-                  <th className="text-center px-4 py-2.5 text-xs font-semibold uppercase text-muted-foreground">% / Fixed</th>
+                  {cols.rate && <th className="text-center px-4 py-2.5 text-xs font-semibold uppercase text-muted-foreground">% / Fixed</th>}
                   <th className="text-right px-5 py-2.5 text-xs font-semibold uppercase text-muted-foreground">Total Amount</th>
                 </tr>
               </thead>
@@ -629,17 +631,19 @@ function TestSummaryView({
                   <tr key={row.testId} className={`border-b border-border last:border-0 ${i % 2 === 1 ? "bg-muted/10" : ""}`}>
                     <td className="px-5 py-2.5 font-medium">{row.testName}</td>
                     <td className="px-4 py-2.5 text-center tabular-nums">{row.count}</td>
-                    <td className="px-4 py-2.5 text-center tabular-nums text-muted-foreground">
-                      {row.ruleType === "percentage"
-                        ? <span className="inline-flex items-center gap-0.5">{row.ruleValue}<span className="text-xs">%</span></span>
-                        : <span className="text-xs">{inr(row.ruleValue)}</span>
-                      }
-                    </td>
+                    {cols.rate && (
+                      <td className="px-4 py-2.5 text-center tabular-nums text-muted-foreground">
+                        {row.ruleType === "percentage"
+                          ? <span className="inline-flex items-center gap-0.5">{row.ruleValue}<span className="text-xs">%</span></span>
+                          : <span className="text-xs">{inr(row.ruleValue)}</span>
+                        }
+                      </td>
+                    )}
                     <td className="px-5 py-2.5 text-right font-semibold text-amber-700 tabular-nums">{inr(row.commission)}</td>
                   </tr>
                 ))}
                 <tr className="border-t-2 border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700">
-                  <td className="px-5 py-3 font-bold text-sm" colSpan={3}>Total →</td>
+                  <td className="px-5 py-3 font-bold text-sm" colSpan={cols.rate ? 3 : 2}>Total →</td>
                   <td className="px-5 py-3 text-right font-bold text-base text-amber-700 tabular-nums">{inr(entry.totalCommission)}</td>
                 </tr>
               </tbody>

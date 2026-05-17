@@ -280,7 +280,7 @@ export default function CommissionReportTab() {
               }}
             />
             <Label htmlFor="word-show-rate" className="text-xs cursor-pointer select-none">
-              Show % / Fixed rate column <span className="text-muted-foreground">(Word export)</span>
+              Show % / Fixed rate column
             </Label>
           </div>
         </div>
@@ -320,6 +320,7 @@ export default function CommissionReportTab() {
         <StandardView
           report={report}
           grandTotal={grandTotal}
+          showRate={showPercentFixed}
         />
       )}
     </div>
@@ -330,9 +331,11 @@ export default function CommissionReportTab() {
 function StandardView({
   report,
   grandTotal,
+  showRate,
 }: {
   report: CommissionDoctorEntry[];
   grandTotal: { doctors: number; orders: number; revenue: number; commission: number };
+  showRate: boolean;
 }) {
   return (
     <div className="space-y-6">
@@ -360,7 +363,7 @@ function StandardView({
                   <tr className="bg-muted/50 text-xs text-muted-foreground">
                     <th className="text-left px-4 py-2 font-medium">Test Name</th>
                     <th className="text-center px-4 py-2 font-medium">No. of Tests</th>
-                    <th className="text-center px-4 py-2 font-medium">% / Fixed</th>
+                    {showRate && <th className="text-center px-4 py-2 font-medium">% / Fixed</th>}
                     <th className="text-right px-4 py-2 font-medium">Total Amount</th>
                   </tr>
                 </thead>
@@ -372,17 +375,19 @@ function StandardView({
                     >
                       <td className="px-4 py-2">{row.testName}</td>
                       <td className="px-4 py-2 text-center">{row.count}</td>
-                      <td className="px-4 py-2 text-center">
-                        {row.ruleType === "percentage"
-                          ? `${row.ruleValue}%`
-                          : inr(row.ruleValue)}
-                      </td>
+                      {showRate && (
+                        <td className="px-4 py-2 text-center">
+                          {row.ruleType === "percentage"
+                            ? `${row.ruleValue}%`
+                            : inr(row.ruleValue)}
+                        </td>
+                      )}
                       <td className="px-4 py-2 text-right">{inr(row.commission)}</td>
                     </tr>
                   ))}
                   <tr className="border-t-2 border-amber-300 bg-amber-50 dark:bg-amber-900/20 font-bold">
                     <td
-                      colSpan={3}
+                      colSpan={showRate ? 3 : 2}
                       className="px-4 py-2 text-right text-sm"
                     >
                       Total →
