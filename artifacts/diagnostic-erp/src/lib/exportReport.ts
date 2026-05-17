@@ -266,6 +266,7 @@ export async function exportWord(
   sections: ExportDoctorSection[],
   meta: ReportMeta,
   mode: WordExportMode = "standard",
+  showPercentFixed: boolean = true,
 ): Promise<void> {
   const {
     Document, Packer, Paragraph, Table, TableRow, TableCell,
@@ -447,36 +448,53 @@ export async function exportWord(
         }),
       );
 
-      const tableRows = [
-        // Header
-        new TableRow({
-          tableHeader: true,
-          children: [
+      const headerCols = showPercentFixed
+        ? [
             makeCell("Test Name",    { bold: true, bg: HEADER_BG }),
             makeCell("No of Tests",  { bold: true, bg: HEADER_BG, align: AlignmentType.CENTER }),
             makeCell("% / Fixed",    { bold: true, bg: HEADER_BG, align: AlignmentType.CENTER }),
             makeCell("Total Amount", { bold: true, bg: HEADER_BG, align: AlignmentType.RIGHT }),
-          ],
-        }),
+          ]
+        : [
+            makeCell("Test Name",    { bold: true, bg: HEADER_BG }),
+            makeCell("No of Tests",  { bold: true, bg: HEADER_BG, align: AlignmentType.CENTER }),
+            makeCell("Total Amount", { bold: true, bg: HEADER_BG, align: AlignmentType.RIGHT }),
+          ];
+
+      const tableRows = [
+        // Header
+        new TableRow({ tableHeader: true, children: headerCols }),
         // Data rows
         ...section.rows.map(r =>
           new TableRow({
-            children: [
-              makeCell(r.testName),
-              makeCell(String(r.count), { align: AlignmentType.CENTER }),
-              makeCell(r.rateLabel, { align: AlignmentType.CENTER }),
-              makeCell(INR(r.commission), { align: AlignmentType.RIGHT }),
-            ],
+            children: showPercentFixed
+              ? [
+                  makeCell(r.testName),
+                  makeCell(String(r.count),   { align: AlignmentType.CENTER }),
+                  makeCell(r.rateLabel,       { align: AlignmentType.CENTER }),
+                  makeCell(INR(r.commission), { align: AlignmentType.RIGHT }),
+                ]
+              : [
+                  makeCell(r.testName),
+                  makeCell(String(r.count),   { align: AlignmentType.CENTER }),
+                  makeCell(INR(r.commission), { align: AlignmentType.RIGHT }),
+                ],
           }),
         ),
         // Total row
         new TableRow({
-          children: [
-            makeCell("",        { bg: AMBER_BG }),
-            makeCell("",        { bg: AMBER_BG }),
-            makeCell("Total →", { bold: true, bg: AMBER_BG, align: AlignmentType.RIGHT }),
-            makeCell(INR(section.totalCommission), { bold: true, bg: AMBER_BG, color: "B45309", align: AlignmentType.RIGHT }),
-          ],
+          children: showPercentFixed
+            ? [
+                makeCell("",          { bg: AMBER_BG }),
+                makeCell("",          { bg: AMBER_BG }),
+                makeCell("Total \u2192", { bold: true, bg: AMBER_BG, align: AlignmentType.RIGHT }),
+                makeCell(INR(section.totalCommission), { bold: true, bg: AMBER_BG, color: "B45309", align: AlignmentType.RIGHT }),
+              ]
+            : [
+                makeCell("",          { bg: AMBER_BG }),
+                makeCell("Total \u2192", { bold: true, bg: AMBER_BG, align: AlignmentType.RIGHT }),
+                makeCell(INR(section.totalCommission), { bold: true, bg: AMBER_BG, color: "B45309", align: AlignmentType.RIGHT }),
+              ],
         }),
       ];
 
@@ -493,22 +511,22 @@ export async function exportWord(
     if (sections.length > 1 && meta.grandTotal) {
       const g = meta.grandTotal;
       const grandComm = sections.reduce((s, sec) => s + sec.totalCommission, 0);
+      const cols = showPercentFixed ? 4 : 3;
+      const grandCells: InstanceType<typeof TableCell>[] = [];
+      for (let i = 0; i < cols - 2; i++) {
+        grandCells.push(makeCell("", { bg: AMBER_BG }));
+      }
+      grandCells.push(
+        makeCell(
+          `Grand Total — ${g.doctors} doctor${g.doctors !== 1 ? "s" : ""}  ·  ${g.orders} orders`,
+          { bold: true, bg: AMBER_BG },
+        ),
+        makeCell(INR(grandComm), { bold: true, bg: AMBER_BG, color: "B45309", align: AlignmentType.RIGHT }),
+      );
       children.push(
         new Table({
           width: { size: 100, type: WidthType.PERCENTAGE },
-          rows: [
-            new TableRow({
-              children: [
-                makeCell("", { bg: AMBER_BG }),
-                makeCell("", { bg: AMBER_BG }),
-                makeCell(
-                  `Grand Total — ${g.doctors} doctor${g.doctors !== 1 ? "s" : ""}  ·  ${g.orders} orders`,
-                  { bold: true, bg: AMBER_BG },
-                ),
-                makeCell(INR(grandComm), { bold: true, bg: AMBER_BG, color: "B45309", align: AlignmentType.RIGHT }),
-              ],
-            }),
-          ],
+          rows: [new TableRow({ children: grandCells })],
         }),
       );
     }
