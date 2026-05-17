@@ -24,9 +24,19 @@ const dicomPresetSchema = z.object({
   name:      z.string().min(1).max(200),
   filters:   dicomPresetFiltersSchema,
   createdAt: z.string(),
+  updatedAt: z.string().optional(),
 });
 
-const dicomPresetsPayloadSchema = z.array(dicomPresetSchema).max(200);
+// Tombstone: marks a preset as deleted so cross-device sync can propagate deletes.
+const dicomTombstoneSchema = z.object({
+  id:        z.string(),
+  deleted:   z.literal(true),
+  updatedAt: z.string(),
+});
+
+const dicomEntrySchema = z.union([dicomPresetSchema, dicomTombstoneSchema]);
+
+const dicomPresetsPayloadSchema = z.array(dicomEntrySchema).max(200);
 
 // Self-service: any authenticated staff member can persist their own sidebar
 // theme preference without needing the /settings permission.
@@ -47,6 +57,9 @@ router.patch("/:id/sidebar-theme", async (req: StaffAuthRequest, res) => {
 // Self-service DICOM Q/R preset sync — any authenticated staff can GET/PUT
 // their own presets. No /settings permission required so radiologists on any
 // role can access this from the PACS module.
+// The stored list can contain both active preset entries and tombstones (deleted
+// markers). Clients use the tombstones for per-entry last-write-wins merging so
+// deletes propagate correctly across devices.
 router.get("/me/dicom-presets", async (req: StaffAuthRequest, res) => {
   const id = req.staffSession?.subjectId;
   if (!id) {
@@ -78,12 +91,18 @@ router.put("/me/dicom-presets", async (req: StaffAuthRequest, res) => {
     res.status(400).json({ error: "Invalid presets payload", details: parsed.error.issues });
     return;
   }
-  const presets = parsed.data;
+  // Normalize: ensure every active preset has an updatedAt timestamp so the
+  // server always stores comparable values for future conflict resolution.
+  const now = new Date().toISOString();
+  const entries = parsed.data.map((entry) => {
+    if ("deleted" in entry) return entry;
+    return { ...entry, updatedAt: entry.updatedAt ?? entry.createdAt ?? now };
+  });
   await db
     .update(usersTable)
-    .set({ dicomPresets: presets })
+    .set({ dicomPresets: entries })
     .where(eq(usersTable.id, id));
-  res.json({ ok: true, count: presets.length });
+  res.json({ ok: true, count: entries.length });
   return;
 });
 

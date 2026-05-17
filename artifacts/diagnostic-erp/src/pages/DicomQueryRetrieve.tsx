@@ -34,69 +34,135 @@ type DicomPreset = {
   name: string;
   filters: DicomPresetFilters;
   createdAt: string;
+  updatedAt?: string;
 };
+
+/**
+ * Tombstone: marks a preset as deleted on this device so the delete can win
+ * over stale copies on other devices during cross-device sync.
+ */
+type DicomTombstone = {
+  id: string;
+  deleted: true;
+  updatedAt: string;
+};
+
+/** Union of an active preset and a deletion tombstone. */
+type DicomEntry = DicomPreset | DicomTombstone;
+
+function isActive(e: DicomEntry): e is DicomPreset {
+  return !("deleted" in e);
+}
+
+function entryTs(e: DicomEntry): string {
+  return "deleted" in e ? e.updatedAt : (e.updatedAt ?? e.createdAt);
+}
 
 function getPresetKey(userId?: number): string {
   return `dicom_qr_presets_${userId ?? "anon"}`;
 }
 
-/** Timestamp written whenever the user makes a local change (save/delete/rename/reorder). */
-function getPresetLocalTsKey(userId?: number): string {
-  return `dicom_qr_presets_local_ts_${userId ?? "anon"}`;
-}
-
-/** Timestamp written whenever we successfully receive or push presets from/to the server. */
-function getPresetServerTsKey(userId?: number): string {
-  return `dicom_qr_presets_server_ts_${userId ?? "anon"}`;
-}
-
-function loadPresetLocalTs(userId?: number): number {
-  try {
-    const raw = typeof window !== "undefined" ? window.localStorage.getItem(getPresetLocalTsKey(userId)) : null;
-    return raw ? parseInt(raw, 10) : 0;
-  } catch { return 0; }
-}
-
-function loadPresetServerTs(userId?: number): number {
-  try {
-    const raw = typeof window !== "undefined" ? window.localStorage.getItem(getPresetServerTsKey(userId)) : null;
-    return raw ? parseInt(raw, 10) : 0;
-  } catch { return 0; }
-}
-
-function markPresetLocalWrite(userId?: number): void {
-  try { window.localStorage.setItem(getPresetLocalTsKey(userId), String(Date.now())); } catch { /* ignore */ }
-}
-
-function markPresetServerSync(userId?: number): void {
-  try { window.localStorage.setItem(getPresetServerTsKey(userId), String(Date.now())); } catch { /* ignore */ }
-}
-
-
-function loadPresets(userId?: number): DicomPreset[] {
+/** Load all entries (active presets + tombstones) from localStorage. */
+function loadEntries(userId?: number): DicomEntry[] {
   try {
     const raw = typeof window !== "undefined" ? window.localStorage.getItem(getPresetKey(userId)) : null;
     if (!raw) return [];
-    return JSON.parse(raw) as DicomPreset[];
+    return JSON.parse(raw) as DicomEntry[];
   } catch {
     return [];
   }
 }
 
-/**
- * Persist presets to localStorage.
- * @param source  "local"  — a user-initiated change; bumps the local write timestamp.
- *                "server" — data received from or confirmed by the server; bumps the server sync timestamp.
- */
-function persistPresets(presets: DicomPreset[], userId?: number, source: "local" | "server" = "local"): void {
+/** Load only active presets from localStorage (filters out tombstones). */
+function loadPresets(userId?: number): DicomPreset[] {
+  return loadEntries(userId).filter(isActive);
+}
+
+/** Persist all entries (active presets + tombstones) to localStorage. */
+function persistEntries(entries: DicomEntry[], userId?: number): void {
   try {
-    window.localStorage.setItem(getPresetKey(userId), JSON.stringify(presets));
-    if (source === "local") {
-      markPresetLocalWrite(userId);
-    } else {
-      markPresetServerSync(userId);
-    }
+    window.localStorage.setItem(getPresetKey(userId), JSON.stringify(entries));
   } catch { /* ignore quota errors */ }
+}
+
+
+/**
+ * Merge server and local entry lists using per-entry last-write-wins on updatedAt,
+ * with correct ordering semantics.
+ *
+ * Content merge (which version of each entry to keep):
+ *   For each preset ID seen on either side, the entry with the newer `updatedAt`
+ *   (falling back to `createdAt` for pre-existing presets) wins. If the winner is
+ *   a tombstone, the preset is treated as deleted.
+ *
+ * Order merge (which sequence to use):
+ *   The side whose most-recent entry timestamp is larger wins the right to dictate
+ *   list order. This means offline reorders (which bump `updatedAt` on the moved
+ *   presets) propagate correctly — the reordered side has a newer max timestamp and
+ *   its sequence is used as the base. Content winners from the other side are then
+ *   substituted at those positions.
+ *
+ * Entries that only exist on one side (created/deleted offline) are appended after
+ * the ordered block in their original sequence.
+ */
+function mergeEntries(serverEntries: DicomEntry[], localEntries: DicomEntry[]): DicomEntry[] {
+  const serverById = new Map(serverEntries.map((e) => [e.id, e]));
+  const localById  = new Map(localEntries.map((e) => [e.id, e]));
+
+  // Step 1 — content merge: for each ID, pick the version with the newer timestamp.
+  const contentWinners = new Map<string, DicomEntry>();
+  for (const [id, se] of serverById) {
+    const le = localById.get(id);
+    contentWinners.set(id, le && entryTs(le) > entryTs(se) ? le : se);
+  }
+  for (const [id, le] of localById) {
+    if (!serverById.has(id)) contentWinners.set(id, le);
+  }
+
+  // Step 2 — order merge: whichever side has the newer max timestamp provides the
+  // base sequence. ISO-8601 strings compare correctly as plain strings.
+  const maxTs = (entries: DicomEntry[]) =>
+    entries.reduce((best, e) => (entryTs(e) > best ? entryTs(e) : best), "");
+
+  const baseOrder = maxTs(localEntries) > maxTs(serverEntries) ? localEntries : serverEntries;
+
+  // Step 3 — reconstruct: place content winners in base-order positions.
+  const result: DicomEntry[] = [];
+  const placed = new Set<string>();
+  for (const base of baseOrder) {
+    const winner = contentWinners.get(base.id);
+    if (winner && !placed.has(base.id)) {
+      result.push(winner);
+      placed.add(base.id);
+    }
+  }
+
+  // Step 4 — append entries present only on the other side (not in baseOrder).
+  for (const [id, entry] of contentWinners) {
+    if (!placed.has(id)) result.push(entry);
+  }
+
+  return result;
+}
+
+/**
+ * Build the full sync payload: active presets + all stored tombstones.
+ * Pass `newTombstone` when a preset was just deleted on this device so the
+ * tombstone is created (or refreshed) before writing to storage / pushing to server.
+ */
+function buildSyncEntries(
+  activePresets: DicomPreset[],
+  userId: number | undefined,
+  newTombstone?: DicomTombstone,
+): DicomEntry[] {
+  const existingTombstones = loadEntries(userId).filter(
+    (e): e is DicomTombstone => !isActive(e),
+  );
+  const tombstoneMap = new Map(existingTombstones.map((t) => [t.id, t]));
+  if (newTombstone) tombstoneMap.set(newTombstone.id, newTombstone);
+  // Remove any tombstone whose preset was just re-created as active.
+  for (const p of activePresets) tombstoneMap.delete(p.id);
+  return [...activePresets, ...tombstoneMap.values()];
 }
 
 type StudyRow = {
@@ -279,44 +345,40 @@ export default function DicomQueryRetrieve() {
   // Load presets from server — source of truth across devices.
   // Runs only when a user is logged in. On success (via useEffect below),
   // replace local state and update the localStorage cache for offline access.
-  const { data: serverPresetsData } = useQuery<{ presets: DicomPreset[] }>({
+  // The payload includes both active presets and tombstones (deleted markers).
+  const { data: serverPresetsData } = useQuery<{ presets: DicomEntry[] }>({
     queryKey: ["dicom-presets", userId],
-    queryFn: () => api.get<{ presets: DicomPreset[] }>("/api/users/me/dicom-presets"),
+    queryFn: () => api.get<{ presets: DicomEntry[] }>("/api/users/me/dicom-presets"),
     enabled: !!userId,
     staleTime: 60_000,
   });
 
   const syncPresetsMut = useMutation({
-    mutationFn: (updated: DicomPreset[]) =>
-      api.put<{ ok: boolean; count: number }>("/api/users/me/dicom-presets", { presets: updated }),
-    onSuccess: () => {
-      // The presets themselves are already in localStorage from the local persistPresets()
-      // call that fired before mutate(). Only advance the server-sync timestamp so the
-      // conflict-resolution logic on next load knows the server caught up.
-      // NOTE: we intentionally do NOT re-write the presets array here — doing so would
-      // let a slow in-flight response overwrite a newer local reorder with stale data.
-      markPresetServerSync(userId);
-    },
+    mutationFn: (entries: DicomEntry[]) =>
+      api.put<{ ok: boolean; count: number }>("/api/users/me/dicom-presets", { presets: entries }),
     onError: () => toast({ title: "Could not sync presets to server", variant: "destructive" }),
   });
 
   // React Query v5: use useEffect to react to query result changes.
-  // Conflict resolution: if the user made local changes (e.g. reorder) after the last
-  // confirmed server sync and connectivity was lost, the local copy wins and is pushed
-  // back to the server. Otherwise the server is authoritative.
+  // Per-entry last-write-wins merge: compare each preset/tombstone's updatedAt so
+  // changes made on different devices are combined rather than one device's list
+  // overwriting the other. Tombstones allow deletes to propagate across devices.
   useEffect(() => {
     if (!serverPresetsData) return;
-    const localTs  = loadPresetLocalTs(userId);
-    const serverTs = loadPresetServerTs(userId);
-    if (localTs > serverTs) {
-      // Local edits are newer than the last confirmed server sync — push local to server.
-      const localPresets = loadPresets(userId);
-      setPresets(localPresets);
-      syncPresetsMut.mutate(localPresets);
-    } else {
-      // Server is authoritative — accept its data and update the local cache.
-      setPresets(serverPresetsData.presets);
-      persistPresets(serverPresetsData.presets, userId, "server");
+    const localEntries = loadEntries(userId);
+    const merged = mergeEntries(serverPresetsData.presets, localEntries);
+    setPresets(merged.filter(isActive));
+    persistEntries(merged, userId);
+    // If the merge differs from the server, push the result back so the server
+    // reflects any locally-created presets or tombstones.
+    const needsSync =
+      merged.length !== serverPresetsData.presets.length ||
+      merged.some((m, i) => {
+        const s = serverPresetsData.presets[i];
+        return !s || m.id !== s.id || entryTs(m) !== entryTs(s);
+      });
+    if (needsSync) {
+      syncPresetsMut.mutate(merged);
     }
   // syncPresetsMut.mutate is stable across renders (useMutation guarantee)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -451,6 +513,7 @@ export default function DicomQueryRetrieve() {
   const handleSavePreset = useCallback(() => {
     const name = savePresetName.trim();
     if (!name) return;
+    const now = new Date().toISOString();
     const preset: DicomPreset = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name,
@@ -459,12 +522,14 @@ export default function DicomQueryRetrieve() {
         modalities: Array.from(selMods),
         patientName, accessionNumber, referringDoctor, studyDescription, aeTitle,
       },
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     };
     const updated = [preset, ...presets.filter((p) => p.name !== name)];
     setPresets(updated);
-    persistPresets(updated, userId);
-    syncPresetsMut.mutate(updated);
+    const syncEntries = buildSyncEntries(updated, userId);
+    persistEntries(syncEntries, userId);
+    syncPresetsMut.mutate(syncEntries);
     setSavePresetName("");
     setShowSaveInput(false);
     toast({ title: `Preset "${name}" saved` });
@@ -494,10 +559,12 @@ export default function DicomQueryRetrieve() {
 
   const handleDeletePreset = useCallback((id: string, name: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const updated = presets.filter((p) => p.id !== id);
-    setPresets(updated);
-    persistPresets(updated, userId);
-    syncPresetsMut.mutate(updated);
+    const updatedActive = presets.filter((p) => p.id !== id);
+    setPresets(updatedActive);
+    const tombstone: DicomTombstone = { id, deleted: true, updatedAt: new Date().toISOString() };
+    const syncEntries = buildSyncEntries(updatedActive, userId, tombstone);
+    persistEntries(syncEntries, userId);
+    syncPresetsMut.mutate(syncEntries);
     toast({ title: `Preset "${name}" deleted` });
   }, [presets, userId, syncPresetsMut, toast]);
 
@@ -512,10 +579,11 @@ export default function DicomQueryRetrieve() {
     if (!newName) { setRenamingId(null); return; }
     const oldPreset = presets.find((p) => p.id === id);
     if (!oldPreset || oldPreset.name === newName) { setRenamingId(null); return; }
-    const updated = presets.map((p) => p.id === id ? { ...p, name: newName } : p);
+    const updated = presets.map((p) => p.id === id ? { ...p, name: newName, updatedAt: new Date().toISOString() } : p);
     setPresets(updated);
-    persistPresets(updated, userId);
-    syncPresetsMut.mutate(updated);
+    const syncEntries = buildSyncEntries(updated, userId);
+    persistEntries(syncEntries, userId);
+    syncPresetsMut.mutate(syncEntries);
     setRenamingId(null);
     toast({ title: `Preset renamed to "${newName}"` });
   }, [renameValue, presets, userId, syncPresetsMut, toast]);
@@ -531,11 +599,16 @@ export default function DicomQueryRetrieve() {
     e.stopPropagation();
     const newIdx = idx + dir;
     if (newIdx < 0 || newIdx >= presets.length) return;
+    const now = new Date().toISOString();
     const updated = [...presets];
     [updated[idx], updated[newIdx]] = [updated[newIdx], updated[idx]];
+    // Bump updatedAt on both swapped presets so the new position wins in cross-device merge.
+    updated[idx]    = { ...updated[idx],    updatedAt: now };
+    updated[newIdx] = { ...updated[newIdx], updatedAt: now };
     setPresets(updated);
-    persistPresets(updated, userId);
-    syncPresetsMut.mutate(updated);
+    const syncEntries = buildSyncEntries(updated, userId);
+    persistEntries(syncEntries, userId);
+    syncPresetsMut.mutate(syncEntries);
   }, [presets, userId, syncPresetsMut]);
 
   const handleDragStart = useCallback((idx: number) => {
@@ -557,10 +630,12 @@ export default function DicomQueryRetrieve() {
     }
     const updated = [...presets];
     const [item] = updated.splice(src, 1);
-    updated.splice(targetIdx, 0, item);
+    // Bump updatedAt on the dragged item so its new position wins in cross-device merge.
+    updated.splice(targetIdx, 0, { ...item, updatedAt: new Date().toISOString() });
     setPresets(updated);
-    persistPresets(updated, userId);
-    syncPresetsMut.mutate(updated);
+    const syncEntries = buildSyncEntries(updated, userId);
+    persistEntries(syncEntries, userId);
+    syncPresetsMut.mutate(syncEntries);
     setDragOverIdx(null);
     dragSrcIdx.current = null;
   }, [presets, userId, syncPresetsMut]);
