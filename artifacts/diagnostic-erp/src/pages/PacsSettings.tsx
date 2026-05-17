@@ -5,8 +5,9 @@ import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Save, RefreshCw, Trash2, Server, Settings2, Radio, Search, ScanLine } from "lucide-react";
+import { Plus, Save, RefreshCw, Trash2, Server, Settings2, Radio, Search, ScanLine, MonitorPlay, Network, ToggleLeft, ToggleRight } from "lucide-react";
 
 type Setting = { id: number; key: string; value: string | null; category: string; isSecret: boolean };
 type Modality = {
@@ -430,7 +431,7 @@ export default function PacsSettings() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"settings" | "modalities" | "mwl">("settings");
+  const [activeTab, setActiveTab] = useState<"settings" | "modalities" | "mwl" | "viewer" | "routing">("settings");
   const [newKey, setNewKey] = useState("");
   const [newVal, setNewVal] = useState("");
   const [newCat, setNewCat] = useState("general");
@@ -494,6 +495,22 @@ export default function PacsSettings() {
     });
   }
 
+  // Save a single viewer setting key
+  function saveViewerKey(key: string, value: string) {
+    const existing = settings.find((s) => s.key === key && s.category === "viewer");
+    upsertSetting.mutate({
+      ...(existing ? { id: existing.id } : {}),
+      key,
+      value,
+      category: "viewer",
+      isSecret: false,
+    });
+  }
+
+  // Viewer settings form state
+  const viewerMap: Record<string, string> = {};
+  for (const s of settings) if (s.category === "viewer") viewerMap[s.key] = s.value ?? "";
+
   return (
     <div className="p-4 md:p-6 space-y-6">
       <PageHeader
@@ -508,11 +525,13 @@ export default function PacsSettings() {
       />
 
       {/* Tab bar */}
-      <div className="flex gap-2 border-b">
+      <div className="flex flex-wrap gap-2 border-b">
         {([
-          { key: "settings",   icon: <Settings2 size={14} className="inline mr-1" />, label: "Settings" },
-          { key: "modalities", icon: <Server    size={14} className="inline mr-1" />, label: "Modalities" },
-          { key: "mwl",        icon: <Radio     size={14} className="inline mr-1" />, label: "Worklist (MWL)" },
+          { key: "settings",   icon: <Settings2  size={14} className="inline mr-1" />, label: "Settings" },
+          { key: "modalities", icon: <Server     size={14} className="inline mr-1" />, label: "Modalities" },
+          { key: "mwl",        icon: <Radio      size={14} className="inline mr-1" />, label: "Worklist (MWL)" },
+          { key: "viewer",     icon: <MonitorPlay size={14} className="inline mr-1" />, label: "Viewer Settings" },
+          { key: "routing",    icon: <Network    size={14} className="inline mr-1" />, label: "Routing Rules" },
         ] as const).map((tab) => (
           <button
             key={tab.key}
@@ -631,14 +650,307 @@ export default function PacsSettings() {
 
       {activeTab === "mwl" && (
         <div className="space-y-6">
-          {/* Use a key so the MwlSettingsTab re-initialises its local state when
-              the server data arrives (settings query is async). */}
           <MwlSettingsTab
             key={settings.length}
             settings={settings}
             onSave={saveMwlKey}
           />
           <DicomMwlTestsTab />
+        </div>
+      )}
+
+      {/* ── Viewer Settings Tab ── */}
+      {activeTab === "viewer" && (
+        <div className="space-y-6">
+          <div className="rounded-xl border bg-card p-5 space-y-5">
+            <h3 className="font-semibold text-sm">Viewer Mode</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <ViewerField label="Viewer Mode" description="Which viewer buttons to show" type="select"
+                options={["WEASIS", "OHIF", "BOTH"]} value={viewerMap["viewer_mode"] ?? "BOTH"}
+                onSave={(v) => saveViewerKey("viewer_mode", v)} />
+              <ViewerField label="Default Viewer" description="Primary viewer button" type="select"
+                options={["OHIF", "WEASIS"]} value={viewerMap["default_viewer"] ?? "OHIF"}
+                onSave={(v) => saveViewerKey("default_viewer", v)} />
+              <ViewerField label="OHIF Enabled" type="select" options={["true", "false"]}
+                value={viewerMap["ohif_enabled"] ?? "true"} onSave={(v) => saveViewerKey("ohif_enabled", v)} />
+              <ViewerField label="Weasis Enabled" type="select" options={["true", "false"]}
+                value={viewerMap["weasis_enabled"] ?? "true"} onSave={(v) => saveViewerKey("weasis_enabled", v)} />
+              <ViewerField label="Viewer Open Mode" type="select" options={["NEW_TAB", "SAME_TAB", "EMBEDDED"]}
+                value={viewerMap["viewer_open_mode"] ?? "NEW_TAB"} onSave={(v) => saveViewerKey("viewer_open_mode", v)} />
+              <ViewerField label="Allow Public Viewer Links" description="False by default (requires login)" type="select"
+                options={["false", "true"]} value={viewerMap["allow_public_viewer_links"] ?? "false"}
+                onSave={(v) => saveViewerKey("allow_public_viewer_links", v)} />
+            </div>
+          </div>
+
+          <div className="rounded-xl border bg-card p-5 space-y-5">
+            <h3 className="font-semibold text-sm">OHIF Viewer URLs</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <ViewerField label="OHIF Base URL" description="e.g. http://192.168.1.10:3000" type="text"
+                value={viewerMap["ohif_base_url"] ?? ""} onSave={(v) => saveViewerKey("ohif_base_url", v)}
+                placeholder="http://192.168.1.10:3000" />
+              <ViewerField label="DICOMweb Base URL" description="e.g. http://orthanc:8042/dicom-web" type="text"
+                value={viewerMap["dicom_web_base_url"] ?? ""} onSave={(v) => saveViewerKey("dicom_web_base_url", v)}
+                placeholder="http://192.168.1.10:8042/dicom-web" />
+            </div>
+          </div>
+
+          <div className="rounded-xl border bg-card p-5 space-y-5">
+            <h3 className="font-semibold text-sm">Weasis / WADO URLs</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <ViewerField label="WADO Base URL" description="Primary WADO-URI endpoint" type="text"
+                value={viewerMap["wado_base_url"] ?? ""} onSave={(v) => saveViewerKey("wado_base_url", v)}
+                placeholder="http://192.168.1.10:8080/wado" />
+              <ViewerField label="Orthanc Base URL" description="e.g. http://192.168.1.10:8042" type="text"
+                value={viewerMap["orthanc_base_url"] ?? ""} onSave={(v) => saveViewerKey("orthanc_base_url", v)}
+                placeholder="http://192.168.1.10:8042" />
+              <ViewerField label="Conquest WADO Base URL" type="text"
+                value={viewerMap["conquest_wado_base_url"] ?? ""} onSave={(v) => saveViewerKey("conquest_wado_base_url", v)}
+                placeholder="http://192.168.1.10:8080/wado" />
+            </div>
+          </div>
+
+          <div className="rounded-xl border bg-blue-50 dark:bg-blue-950/20 p-4 text-sm text-blue-800 dark:text-blue-300">
+            <p className="font-semibold mb-1">How viewer URLs are used</p>
+            <ul className="space-y-1 text-blue-700 dark:text-blue-400 text-xs list-disc list-inside">
+              <li><strong>OHIF Base URL</strong>: Used to build <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">{"<OHIF_BASE_URL>/viewer?StudyInstanceUIDs=<UID>"}</code></li>
+              <li><strong>WADO Base URL</strong>: Used by Weasis URI scheme to fetch DICOM images</li>
+              <li><strong>DICOMweb Base URL</strong>: Passed to OHIF as the DICOMweb source</li>
+              <li>Settings are saved to <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">pacs_settings</code> with category <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">viewer</code></li>
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* ── Routing Rules Tab ── */}
+      {activeTab === "routing" && (
+        <RoutingRulesTab />
+      )}
+    </div>
+  );
+}
+
+// ─── ViewerField component ────────────────────────────────────────────────────
+
+function ViewerField({
+  label, description, type, value, onSave, options, placeholder,
+}: {
+  label: string;
+  description?: string;
+  type: "text" | "select";
+  value: string;
+  onSave: (v: string) => void;
+  options?: string[];
+  placeholder?: string;
+}) {
+  const [val, setVal] = useState(value);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => { setVal(value); }, [value]);
+
+  const dirty = val !== value;
+
+  function save() {
+    onSave(val);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <label className="text-xs font-medium text-muted-foreground">{label}</label>
+      {description && <p className="text-[11px] text-muted-foreground">{description}</p>}
+      <div className="flex gap-2">
+        {type === "select" && options ? (
+          <select
+            value={val}
+            onChange={(e) => setVal(e.target.value)}
+            className="flex-1 h-8 text-sm border rounded-md px-2 bg-background"
+          >
+            {options.map((o) => <option key={o}>{o}</option>)}
+          </select>
+        ) : (
+          <Input
+            value={val}
+            onChange={(e) => setVal(e.target.value)}
+            placeholder={placeholder}
+            className="flex-1 h-8 text-sm"
+          />
+        )}
+        <Button
+          size="sm"
+          className="h-8 px-2"
+          variant={saved ? "outline" : dirty ? "default" : "outline"}
+          onClick={save}
+        >
+          {saved ? "✓" : <Save size={12} />}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── RoutingRulesTab component ────────────────────────────────────────────────
+
+interface RoutingRule {
+  id: number;
+  name: string;
+  modalityType: string | null;
+  sourceAeTitle: string | null;
+  destinationPacs: string;
+  destinationAeTitle: string | null;
+  destinationIp: string | null;
+  destinationPort: number | null;
+  autoPush: boolean;
+  priority: number;
+  isEnabled: boolean;
+  notes: string | null;
+}
+
+function RoutingRulesTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const { data: rules = [], isLoading } = useQuery<RoutingRule[]>({
+    queryKey: ["routing-rules"],
+    queryFn: () => api.get("/api/radiology/routing-rules"),
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: (body: object) => api.post("/api/radiology/routing-rules", body),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["routing-rules"] }); toast({ title: "Rule saved" }); },
+    onError: () => toast({ title: "Failed to save rule", variant: "destructive" }),
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: (id: number) => api.patch(`/api/radiology/routing-rules/${id}/toggle`, {}),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["routing-rules"] }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => api.delete(`/api/radiology/routing-rules/${id}`),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["routing-rules"] }); toast({ title: "Rule deleted" }); },
+  });
+
+  const [name, setName] = useState("");
+  const [modality, setModality] = useState("*");
+  const [destPacs, setDestPacs] = useState("CONQUEST");
+  const [destAe, setDestAe] = useState("");
+  const [destIp, setDestIp] = useState("");
+  const [destPort, setDestPort] = useState("104");
+
+  function addRule() {
+    if (!name.trim()) return;
+    saveMutation.mutate({
+      name: name.trim(),
+      modalityType: modality === "*" ? null : modality,
+      destinationPacs: destPacs,
+      destinationAeTitle: destAe || null,
+      destinationIp: destIp || null,
+      destinationPort: destPort ? Number(destPort) : null,
+      autoPush: true,
+      isEnabled: true,
+    });
+    setName(""); setDestAe(""); setDestIp(""); setDestPort("104");
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-xl border bg-blue-50 dark:bg-blue-950/20 p-4 text-sm text-blue-800 dark:text-blue-300">
+        <p className="font-semibold mb-1">What are routing rules?</p>
+        <p className="text-xs text-blue-700 dark:text-blue-400">
+          Routing rules tell the pull agent where to forward studies after retrieval.
+          Example: all MR studies → ORTHANC2, all CT studies → CONQUEST_ARCHIVE.
+          Rules are matched by modality type and source AE title in priority order.
+        </p>
+      </div>
+
+      {/* Add new rule */}
+      <div className="rounded-xl border bg-card p-4 space-y-3">
+        <h3 className="text-sm font-semibold">Add Routing Rule</h3>
+        <div className="flex flex-wrap gap-2">
+          <Input placeholder="Rule name (e.g. MRI → Orthanc)" value={name} onChange={(e) => setName(e.target.value)} className="w-52 h-8 text-sm" />
+          <select value={modality} onChange={(e) => setModality(e.target.value)} className="h-8 text-sm border rounded-md px-2 bg-background">
+            {["*", "MR", "CT", "CR", "DX", "US", "NM", "PT", "MG"].map((m) => (
+              <option key={m} value={m}>{m === "*" ? "All modalities" : m}</option>
+            ))}
+          </select>
+          <select value={destPacs} onChange={(e) => setDestPacs(e.target.value)} className="h-8 text-sm border rounded-md px-2 bg-background">
+            <option>CONQUEST</option>
+            <option>ORTHANC</option>
+            <option>CUSTOM</option>
+          </select>
+          <Input placeholder="Dest AE Title" value={destAe} onChange={(e) => setDestAe(e.target.value)} className="w-28 h-8 text-sm" />
+          <Input placeholder="Dest IP" value={destIp} onChange={(e) => setDestIp(e.target.value)} className="w-32 h-8 text-sm" />
+          <Input placeholder="Port" value={destPort} onChange={(e) => setDestPort(e.target.value)} className="w-20 h-8 text-sm" type="number" />
+          <Button size="sm" className="h-8" onClick={addRule} disabled={saveMutation.isPending}>
+            <Plus size={13} /> Add Rule
+          </Button>
+        </div>
+      </div>
+
+      {/* Rules list */}
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading rules…</p>
+      ) : rules.length === 0 ? (
+        <div className="rounded-xl border p-8 text-center text-muted-foreground text-sm">
+          No routing rules yet. Add a rule above.
+        </div>
+      ) : (
+        <div className="rounded-xl border bg-card overflow-hidden shadow-sm">
+          <div className="px-5 py-3 border-b flex items-center justify-between">
+            <h3 className="font-semibold text-sm">Routing Rules ({rules.length})</h3>
+            <span className="text-xs text-muted-foreground">Applied in priority order (lower number = higher priority)</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-muted/30 text-xs text-muted-foreground border-b">
+                  <th className="px-4 py-2 text-left">Name</th>
+                  <th className="px-4 py-2 text-left">Modality</th>
+                  <th className="px-4 py-2 text-left">Destination</th>
+                  <th className="px-4 py-2 text-center">Priority</th>
+                  <th className="px-4 py-2 text-center">Status</th>
+                  <th className="px-4 py-2 text-left">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {rules.map((r) => (
+                  <tr key={r.id} className={`hover:bg-muted/20 transition-colors ${!r.isEnabled ? "opacity-50" : ""}`}>
+                    <td className="px-4 py-2.5 font-medium">{r.name}</td>
+                    <td className="px-4 py-2.5">
+                      <Badge variant="outline" className="font-mono text-xs">{r.modalityType ?? "*"}</Badge>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <p className="font-medium text-xs">{r.destinationPacs}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {r.destinationAeTitle ?? ""}{r.destinationIp ? ` · ${r.destinationIp}:${r.destinationPort ?? 104}` : ""}
+                      </p>
+                    </td>
+                    <td className="px-4 py-2.5 text-center text-xs font-mono">{r.priority}</td>
+                    <td className="px-4 py-2.5 text-center">
+                      <button
+                        onClick={() => toggleMutation.mutate(r.id)}
+                        className={`text-xs rounded-full px-2 py-0.5 font-medium ${r.isEnabled ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}`}
+                      >
+                        {r.isEnabled ? "Enabled" : "Disabled"}
+                      </button>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <Button
+                        size="sm" variant="ghost"
+                        className="h-7 text-red-600 hover:text-red-700"
+                        onClick={() => deleteMutation.mutate(r.id)}
+                        disabled={deleteMutation.isPending}
+                      >
+                        <Trash2 size={13} />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

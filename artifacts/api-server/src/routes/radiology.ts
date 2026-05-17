@@ -993,31 +993,9 @@ radiologyRouter.post("/modalities", async (req, res) => {
   }
 });
 
-// POST /api/radiology/modalities/:id/echo-test — TCP reachability check
-radiologyRouter.post("/modalities/:id/echo-test", async (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-
-  const [modality] = await db.select().from(dicomModalitiesTable).where(eq(dicomModalitiesTable.id, id));
-  if (!modality) { res.status(404).json({ error: "Modality not found" }); return; }
-
-  const host = modality.ipAddress;
-  const port = modality.port;
-  if (!host || !port) {
-    res.status(400).json({ error: "No IP address or port configured for this modality" });
-    return;
-  }
-
-  const result = await tcpProbe(host, port, 5000);
-
-  await db.update(dicomModalitiesTable).set({
-    lastConnectionStatus: result.ok ? "ok" : "error",
-    ...(result.ok ? { lastSeenAt: new Date(), lastError: null } : { lastError: result.message }),
-    updatedAt: new Date(),
-  }).where(eq(dicomModalitiesTable.id, id));
-
-  res.json({ ok: result.ok, latencyMs: result.latencyMs, message: result.message });
-});
+// POST /api/radiology/modalities/:id/echo-test — upgraded handler lives in
+// pacsEnterprise.ts (tries real DICOM C-ECHO via echoscu, TCP fallback).
+// This stub is intentionally removed; the new handler is mounted first.
 
 // DELETE /api/radiology/modalities/:id
 radiologyRouter.delete("/modalities/:id", async (req, res) => {

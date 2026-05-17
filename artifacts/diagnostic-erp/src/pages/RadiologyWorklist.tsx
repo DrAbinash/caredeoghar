@@ -12,7 +12,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   ScanSearch, RefreshCw, ExternalLink, Sparkles, FileEdit, CheckCircle2,
-  Search, Filter, Clock, CheckCheck, AlertCircle,
+  Search, Filter, Clock, CheckCheck, AlertCircle, MonitorPlay, Tv2,
 } from "lucide-react";
 
 type WorklistEntry = {
@@ -264,9 +264,23 @@ export default function RadiologyWorklist() {
                         title="Open in Weasis"
                         disabled={!entry.weasisUrl}
                       >
-                        <ExternalLink className="h-3 w-3 mr-1" />
+                        <Tv2 className="h-3 w-3 mr-1" />
                         Weasis
                       </Button>
+
+                      {/* Open in OHIF Viewer */}
+                      {entry.studyInstanceUID && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs text-blue-700 border-blue-300 hover:bg-blue-50"
+                          onClick={() => navigate(`/radiology/viewer/${entry.studyInstanceUID}`)}
+                          title="Open in OHIF / DICOM Viewer"
+                        >
+                          <MonitorPlay className="h-3 w-3 mr-1" />
+                          OHIF
+                        </Button>
+                      )}
 
                       {/* Create AI Draft */}
                       {entry.status !== "REPORT_FINAL" && entry.status !== "DELIVERED" && (

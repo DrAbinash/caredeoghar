@@ -27,6 +27,7 @@ import { ledgersRouter } from "./ledgers";
 import { tokensRouter } from "./tokens";
 import { testTokensRouter } from "./test-tokens";
 import { radiologyRouter } from "./radiology";
+import { pacsEnterpriseRouter } from "./pacsEnterprise";
 import displayRouter from "./display";
 import { whatsappRouter, whatsappWebhookRouter } from "./whatsapp";
 import { printersRouter } from "./printers";
@@ -281,6 +282,11 @@ router.use("/pacs", requireStaffAuth, requireStaffPermission("/dicom-nodes"), pa
 router.use("/dicom", requireStaffAuth, requireStaffPermission("/dicom-nodes"), dicomRouter);
 // DICOM Pull Agent Monitor — staff read-only, gated by /dicom-nodes permission
 router.use("/dicom-agent", requireStaffAuth, requireStaffPermission("/dicom-nodes"), dicomAgentRouter);
+
+// Enterprise PACS features (upgraded C-ECHO, viewer launch, routing rules,
+// MWL procedures, pulled-studies stats, failed-queue retry).
+// Mounted BEFORE radiologyRouter so its handlers (e.g. echo-test upgrade) win.
+router.use("/radiology", requireStaffAuth, requireStaffPermission("/orders"), pacsEnterpriseRouter);
 
 // Radiology studies are tied to the orders workflow — /orders permission
 router.use("/radiology", requireStaffAuth, requireStaffPermission("/orders"), radiologyRouter);

@@ -44,6 +44,9 @@ const RadiologyWorklist = lazy(() => import("@/pages/RadiologyWorklist"));
 const RadiologyReportEditor = lazy(() => import("@/pages/RadiologyReportEditor"));
 const RadiologyReportGen = lazy(() => import("@/pages/RadiologyReportGenerator"));
 const PacsDashboard         = lazy(() => import("@/pages/PacsDashboard"));
+const MwlDashboard          = lazy(() => import("@/pages/MwlDashboard"));
+const DicomViewer           = lazy(() => import("@/pages/DicomViewer"));
+const AgentSetup            = lazy(() => import("@/pages/AgentSetup"));
 const PacsSettings          = lazy(() => import("@/pages/PacsSettings"));
 const PacsLogs              = lazy(() => import("@/pages/PacsLogs"));
 const DicomAgentDashboard   = lazy(() => import("@/pages/DicomAgentDashboard"));
@@ -86,6 +89,7 @@ const ERP_NAV_ORDER = [
   "/", "/dashboard", "/my-daily-summary", "/daily-summary", "/patients", "/appointments", "/queue", "/online-bookings",
   "/radiology", "/radiology/worklist", "/radiology/report-generator", "/radiology/pacs-dashboard", "/radiology/pacs-settings", "/radiology/pacs-logs",
   "/radiology/dicom-agent-dashboard", "/radiology/modality-management",
+  "/radiology/mwl-dashboard", "/radiology/agent-setup",
   "/orders", "/tests", "/packages", "/billing", "/payments", "/reports",
   "/report-generator", "/report-hub", "/inventory", "/expenses", "/staff", "/referrals",
   "/accounting", "/discounts", "/form-f", "/pacs", "/machines", "/hr-forms", "/website", "/settings",
@@ -175,6 +179,9 @@ function Router() {
               <Route path="/radiology/pacs-logs" component={PacsLogs} />
               <Route path="/radiology/dicom-agent-dashboard" component={DicomAgentDashboard} />
               <Route path="/radiology/modality-management" component={ModalityManagement} />
+              <Route path="/radiology/mwl-dashboard" component={MwlDashboard} />
+              <Route path="/radiology/viewer/:studyInstanceUID" component={DicomViewer} />
+              <Route path="/radiology/agent-setup" component={AgentSetup} />
               <Route path="/packages" component={Packages} />
               <Route path="/expenses" component={Expenses} />
               <Route path="/my-day-close" component={MyDayClose} />

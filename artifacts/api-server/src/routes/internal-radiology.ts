@@ -28,8 +28,9 @@ import {
   dicomPullAgentStatusTable,
   dicomModalitiesTable,
   pacsSettingsTable,
+  radiologyScheduledProceduresTable,
 } from "@workspace/db/schema";
-import { and, eq, or, sql, inArray, gte, lte } from "drizzle-orm";
+import { and, eq, or, sql, inArray, gte, lte, desc } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { todayIST } from "../lib/istDate";
 
@@ -1374,6 +1375,70 @@ router.get("/dicom-agent/config", requireInternalApiKey, async (_req, res) => {
       logEndpoint:       "/api/internal/dicom-agent/log",
       configEndpoint:    "/api/internal/dicom-agent/config",
     },
+  });
+});
+
+// ── GET /api/internal/radiology/mwl ──────────────────────────────────────────
+// Structured MWL JSON for the Windows DICOM MWL SCP agent.
+// Returns scheduled procedures so the agent can serve DICOM C-FIND responses
+// to imaging equipment (MRI, CT, X-Ray, Ultrasound).
+// Protected by Bearer INTERNAL_API_KEY (requireInternalApiKey middleware).
+router.get("/radiology/mwl", async (req, res) => {
+  const { modality, date, status } = req.query as Record<string, string | undefined>;
+
+  const conds = [];
+  // Default: only scheduled + sent_to_mwl (not yet completed/cancelled)
+  const statusFilter = status?.toUpperCase() ?? "ACTIVE";
+  if (statusFilter === "ACTIVE") {
+    conds.push(
+      or(
+        eq(radiologyScheduledProceduresTable.status, "SCHEDULED"),
+        eq(radiologyScheduledProceduresTable.status, "SENT_TO_MWL"),
+      )!,
+    );
+  } else if (statusFilter !== "ALL") {
+    conds.push(eq(radiologyScheduledProceduresTable.status, statusFilter));
+  }
+  if (modality) conds.push(eq(radiologyScheduledProceduresTable.modality, modality.toUpperCase()));
+  if (date) {
+    const compact = date.replace(/-/g, "");
+    conds.push(eq(radiologyScheduledProceduresTable.scheduledDate, compact));
+  }
+
+  const rows = await db
+    .select()
+    .from(radiologyScheduledProceduresTable)
+    .where(conds.length ? and(...conds) : undefined)
+    .orderBy(desc(radiologyScheduledProceduresTable.createdAt))
+    .limit(500);
+
+  // Map to DICOM MWL-compatible field names
+  const procedures = rows.map((r) => ({
+    accessionNumber:             r.accessionNumber,
+    studyDescription:            r.studyDescription ?? r.procedureName ?? "",
+    requestedProcedureId:        r.procedureCode ?? r.accessionNumber,
+    requestedProcedureDescription: r.procedureName ?? r.studyDescription ?? "",
+    modality:                    r.modality ?? "OT",
+    scheduledDate:               r.scheduledDate ?? "",
+    scheduledTime:               r.scheduledTime ?? "",
+    stationAeTitle:              r.stationAeTitle ?? "",
+    bodyPartExamined:            r.bodyPartExamined ?? "",
+    patientName:                 (r.patientName ?? "").toUpperCase().replace(/\s+/g, "^"),
+    patientId:                   r.patientId ?? "",
+    patientSex:                  r.patientSex ?? "",
+    patientDob:                  (r.patientDob ?? "").replace(/-/g, ""),
+    patientAge:                  r.patientAge ?? "",
+    referringPhysicianName:      (r.referringDoctor ?? "").toUpperCase().replace(/\s+/g, "^"),
+    status:                      r.status,
+    sourceBillId:                r.sourceBillId ?? null,
+    sourceOrderId:               r.sourceOrderId ?? null,
+    id:                          r.id,
+  }));
+
+  res.json({
+    count: procedures.length,
+    fetchedAt: new Date().toISOString(),
+    procedures,
   });
 });
 

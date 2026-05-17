@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   RefreshCw, Wifi, WifiOff, Clock, CheckCircle2, AlertCircle,
-  Activity, Search, XCircle, Radio, Server, Zap,
+  Activity, Search, XCircle, Radio, Server, Zap, MonitorPlay, Tv2,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -311,7 +311,7 @@ export default function DicomAgentDashboard() {
             <table className="w-full text-xs">
               <thead className="bg-muted/40">
                 <tr>
-                  {["Time", "Agent", "Event", "Modality", "Patient", "Accession", "Study UID", "Status", "Message"].map(h => (
+                  {["Time", "Agent", "Event", "Modality", "Patient", "Accession", "Study UID", "Status", "Message", "View"].map(h => (
                     <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -341,6 +341,32 @@ export default function DicomAgentDashboard() {
                       </span>
                     </td>
                     <td className="px-3 py-2 max-w-[280px] truncate" title={log.message}>{log.message}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {log.studyInstanceUID ? (
+                        <div className="flex gap-1">
+                          <a
+                            href={`/erp/radiology/viewer/${log.studyInstanceUID}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-0.5 text-[10px] rounded px-1.5 py-0.5 bg-blue-100 text-blue-700 hover:bg-blue-200 font-medium"
+                            title="Open in OHIF Viewer"
+                          >
+                            <MonitorPlay size={10} /> OHIF
+                          </a>
+                          <a
+                            href={`/api/radiology/studies/${log.studyInstanceUID}/weasis-launch-redirect`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-0.5 text-[10px] rounded px-1.5 py-0.5 bg-slate-100 text-slate-700 hover:bg-slate-200 font-medium"
+                            title="Open in Weasis"
+                          >
+                            <Tv2 size={10} />
+                          </a>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
