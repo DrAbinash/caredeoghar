@@ -31,6 +31,7 @@ import type {
   Branch,
   CancelBillBody,
   CancelBillTestBody,
+  CancelRefundTestsBody,
   CommissionRule,
   CommissionRuleBody,
   CreateAbnormalFindingBody,
@@ -2553,6 +2554,93 @@ export const useCancelBillTest = <
   TContext
 > => {
   return useMutation(getCancelBillTestMutationOptions(options));
+};
+
+/**
+ * @summary Cancel selected tests and optionally refund their value
+ */
+export const getCancelRefundTestsUrl = (id: number) => {
+  return `/api/bills/${id}/cancel-refund-tests`;
+};
+
+export const cancelRefundTests = async (
+  id: number,
+  cancelRefundTestsBody: CancelRefundTestsBody,
+  options?: RequestInit,
+): Promise<Bill> => {
+  return customFetch<Bill>(getCancelRefundTestsUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(cancelRefundTestsBody),
+  });
+};
+
+export const getCancelRefundTestsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof cancelRefundTests>>,
+    TError,
+    { id: number; data: BodyType<CancelRefundTestsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof cancelRefundTests>>,
+  TError,
+  { id: number; data: BodyType<CancelRefundTestsBody> },
+  TContext
+> => {
+  const mutationKey = ["cancelRefundTests"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof cancelRefundTests>>,
+    { id: number; data: BodyType<CancelRefundTestsBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return cancelRefundTests(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CancelRefundTestsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof cancelRefundTests>>
+>;
+export type CancelRefundTestsMutationBody = BodyType<CancelRefundTestsBody>;
+export type CancelRefundTestsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Cancel selected tests and optionally refund their value
+ */
+export const useCancelRefundTests = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof cancelRefundTests>>,
+    TError,
+    { id: number; data: BodyType<CancelRefundTestsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof cancelRefundTests>>,
+  TError,
+  { id: number; data: BodyType<CancelRefundTestsBody> },
+  TContext
+> => {
+  return useMutation(getCancelRefundTestsMutationOptions(options));
 };
 
 /**

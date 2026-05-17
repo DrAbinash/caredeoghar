@@ -15,7 +15,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Plus, Pencil, History, Clock, ShieldAlert, Trash2, AlertTriangle, ExternalLink, Printer, Ban, Undo2, XCircle, AlertCircle, Search, X } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, History, Clock, ShieldAlert, Trash2, AlertTriangle, ExternalLink, Printer, Ban, Undo2, XCircle, AlertCircle, Search, X, CheckSquare, Square, RotateCcw } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useSuperAdmin, getSuperAdminToken } from "@/hooks/useSuperAdmin";
 import { readStaffSession } from "@/lib/staffSession";
@@ -1308,7 +1308,7 @@ export default function BillDetail({ id }: { id: number }) {
   );
 }
 
-// ─── TestsTable (per-test cancel) ──────────────────────────────────────────
+// ─── TestsTable (multi-select cancel + refund) ─────────────────────────────
 
 type OrderTest = {
   id: number;
@@ -1323,6 +1323,7 @@ type OrderTest = {
 
 type BillForTestsTable = {
   status?: string;
+  paidAmount?: number | string;
   order?: { tests?: OrderTest[] } | null;
 };
 
@@ -1336,25 +1337,66 @@ function TestsTable({
   onUpdated: () => void;
 }) {
   const { toast } = useToast();
-  const [cancelTestId, setCancelTestId] = useState<number | null>(null);
-  const [reason, setReason] = useState("");
-  const [cancelBy, setCancelBy] = useState<string>(
-    () => readStaffSession()?.user.name || ""
-  );
+  const tests = bill.order?.tests ?? [];
+  const activeTests = tests.filter((t) => (t.status ?? "active") === "active");
+  const isBillCancelled = bill.status === "cancelled";
 
-  const cancelTest = useMutation<unknown, Error, void>({
+  // Multi-select state
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [crDialogOpen, setCrDialogOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [crBy, setCrBy] = useState<string>(() => readStaffSession()?.user.name || "");
+  const [crMethod, setCrMethod] = useState("cash");
+
+  const selected = activeTests.filter((t) => selectedIds.has(t.id));
+  const selectedValue = selected.reduce((s, t) => s + Number(t.price), 0);
+
+  const toggleId = (id: number) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelectedIds(next);
+  };
+
+  const cancelRefundTests = useMutation<unknown, Error, void>({
     mutationFn: async () => {
-      if (!cancelTestId) throw new Error("No test selected");
-      return api.post(`/api/bills/${billId}/cancel-test`, {
-        orderTestId: cancelTestId,
+      if (selected.length === 0) throw new Error("No tests selected");
+      return api.post(`/api/bills/${billId}/cancel-refund-tests`, {
+        orderTestIds: selected.map((t) => t.id),
         reason,
-        performedBy: cancelBy,
+        performedBy: crBy,
+        refundMethod: crMethod,
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Tests cancelled", description: `${selected.length} test(s) removed. Bill recalculated.` });
+      setCrDialogOpen(false);
+      setReason("");
+      setSelectedIds(new Set());
+      onUpdated();
+    },
+    onError: (e) => {
+      toast({ title: "Failed to cancel tests", description: e.message, variant: "destructive" });
+    },
+  });
+
+  // Single-test cancel kept for backward compat (per-row XCircle)
+  const [singleCancelId, setSingleCancelId] = useState<number | null>(null);
+  const [singleReason, setSingleReason] = useState("");
+  const [singleBy, setSingleBy] = useState<string>(() => readStaffSession()?.user.name || "");
+
+  const cancelSingle = useMutation<unknown, Error, void>({
+    mutationFn: async () => {
+      if (!singleCancelId) throw new Error("No test selected");
+      return api.post(`/api/bills/${billId}/cancel-test`, {
+        orderTestId: singleCancelId,
+        reason: singleReason,
+        performedBy: singleBy,
       });
     },
     onSuccess: () => {
       toast({ title: "Test cancelled", description: "The test has been removed from this bill." });
-      setCancelTestId(null);
-      setReason("");
+      setSingleCancelId(null);
+      setSingleReason("");
       onUpdated();
     },
     onError: (e) => {
@@ -1362,17 +1404,24 @@ function TestsTable({
     },
   });
 
-  const tests = bill.order?.tests ?? [];
-  const activeTests = tests.filter((t) => (t.status ?? "active") === "active");
-  const isBillCancelled = bill.status === "cancelled";
-
   return (
-    <div>
-      <h2 className="text-sm font-semibold mb-3">Tests Billed</h2>
+    <div className="relative">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-semibold">Tests Billed</h2>
+        {selectedIds.size > 0 && (
+          <div className="text-xs text-muted-foreground">
+            {selectedIds.size} selected
+          </div>
+        )}
+      </div>
+
       <div className="bg-card border border-card-border rounded-xl shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs text-muted-foreground border-b border-border bg-muted/30">
+              {!isBillCancelled && activeTests.length > 1 && (
+                <th className="px-3 py-3 w-8" />
+              )}
               <th className="px-4 py-3 font-medium">Code</th>
               <th className="px-4 py-3 font-medium">Test</th>
               <th className="px-4 py-3 font-medium">Category</th>
@@ -1384,11 +1433,25 @@ function TestsTable({
           <tbody>
             {tests.map((ot) => {
               const isCancelled = (ot.status ?? "active") === "cancelled";
+              const isSelected = selectedIds.has(ot.id);
               return (
                 <tr
                   key={ot.id}
-                  className={`border-b border-border/50 last:border-0 ${isCancelled ? "opacity-50" : ""}`}
+                  className={`border-b border-border/50 last:border-0 ${isCancelled ? "opacity-50" : ""} ${isSelected ? "bg-blue-50/40 dark:bg-blue-950/10" : ""}`}
                 >
+                  {!isBillCancelled && activeTests.length > 1 && (
+                    <td className="px-3 py-3">
+                      {!isCancelled && (
+                        <button
+                          onClick={() => toggleId(ot.id)}
+                          className="text-muted-foreground hover:text-primary"
+                          title={isSelected ? "Deselect" : "Select"}
+                        >
+                          {isSelected ? <CheckSquare size={16} className="text-primary" /> : <Square size={16} />}
+                        </button>
+                      )}
+                    </td>
+                  )}
                   <td className="px-4 py-3 font-mono text-xs font-bold text-primary">{ot.test?.code}</td>
                   <td className="px-4 py-3 font-medium">
                     {ot.test?.name}
@@ -1418,7 +1481,7 @@ function TestsTable({
                     {!isCancelled && !isBillCancelled && activeTests.length > 1 && (
                       <button
                         title="Cancel this test"
-                        onClick={() => { setCancelTestId(ot.id); setReason(""); }}
+                        onClick={() => { setSingleCancelId(ot.id); setSingleReason(""); }}
                         className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950/30 text-muted-foreground hover:text-red-600"
                       >
                         <XCircle size={15} />
@@ -1432,8 +1495,112 @@ function TestsTable({
         </table>
       </div>
 
-      {/* Cancel-test dialog */}
-      <Dialog open={cancelTestId !== null} onOpenChange={(o) => { if (!o) setCancelTestId(null); }}>
+      {/* Floating action bar for multi-select */}
+      {selectedIds.size > 0 && !isBillCancelled && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-card border border-border shadow-lg rounded-lg px-4 py-3">
+          <span className="text-sm font-medium">
+            {selectedIds.size} test{selectedIds.size > 1 ? "s" : ""} selected
+          </span>
+          <span className="text-xs text-muted-foreground">
+            Refund ~₹{selectedValue.toFixed(2)}
+          </span>
+          <div className="w-px h-5 bg-border" />
+          <Button
+            size="sm"
+            variant="destructive"
+            className="gap-1.5"
+            onClick={() => {
+              setCrDialogOpen(true);
+              setReason("");
+            }}
+          >
+            <RotateCcw size={14} />
+            Cancel & Refund
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+            <X size={14} className="mr-1" /> Clear
+          </Button>
+        </div>
+      )}
+
+      {/* Multi-test cancel+refund dialog */}
+      <Dialog open={crDialogOpen} onOpenChange={setCrDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Cancel Selected Tests</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2">
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Selected tests</div>
+              <div className="max-h-40 overflow-y-auto space-y-1">
+                {selected.map((t) => (
+                  <div key={t.id} className="flex items-center justify-between text-sm">
+                    <span>{t.test?.name}</span>
+                    <span className="font-mono font-semibold">₹{Number(t.price).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between text-sm border-t border-border pt-2 mt-1">
+                <span className="text-muted-foreground">Total value to remove</span>
+                <span className="font-semibold">₹{selectedValue.toFixed(2)}</span>
+              </div>
+            </div>
+
+            {selected.length >= activeTests.length && (
+              <div className="flex gap-2 items-start rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                <span>Cannot cancel all tests. Use "Cancel Bill" to void the entire bill instead.</span>
+              </div>
+            )}
+
+            <div>
+              <Label>Reason <span className="text-red-500">*</span></Label>
+              <textarea
+                rows={2}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="e.g. Patient refused, sample inadequate, test no longer required…"
+                className="mt-1 w-full px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+              />
+            </div>
+
+            <div>
+              <Label>Performed By</Label>
+              <Input className="mt-1" value={crBy} onChange={(e) => setCrBy(e.target.value)} />
+            </div>
+
+            <div>
+              <Label>Refund Method</Label>
+              <Select value={crMethod} onValueChange={setCrMethod}>
+                <SelectTrigger className="mt-1 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="upi">UPI</SelectItem>
+                  <SelectItem value="card">Card</SelectItem>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                  <SelectItem value="cheque">Cheque</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" onClick={() => setCrDialogOpen(false)}>Close</Button>
+              <Button
+                disabled={!reason.trim() || !crBy.trim() || cancelRefundTests.isPending || selected.length >= activeTests.length}
+                onClick={() => cancelRefundTests.mutate()}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {cancelRefundTests.isPending ? "Processing…" : "Cancel & Refund"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Single-test cancel dialog (backward compat) */}
+      <Dialog open={singleCancelId !== null} onOpenChange={(o) => { if (!o) setSingleCancelId(null); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Cancel Test</DialogTitle>
@@ -1452,24 +1619,24 @@ function TestsTable({
               <Label>Reason <span className="text-red-500">*</span></Label>
               <textarea
                 rows={2}
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
+                value={singleReason}
+                onChange={(e) => setSingleReason(e.target.value)}
                 placeholder="e.g. Test not performed, patient refused…"
                 className="mt-1 w-full px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
               />
             </div>
             <div>
               <Label>Cancelled By</Label>
-              <Input className="mt-1" value={cancelBy} onChange={(e) => setCancelBy(e.target.value)} />
+              <Input className="mt-1" value={singleBy} onChange={(e) => setSingleBy(e.target.value)} />
             </div>
             <div className="flex justify-end gap-2 pt-1">
-              <Button variant="outline" onClick={() => setCancelTestId(null)}>Close</Button>
+              <Button variant="outline" onClick={() => setSingleCancelId(null)}>Close</Button>
               <Button
-                disabled={!reason.trim() || !cancelBy.trim() || cancelTest.isPending}
-                onClick={() => cancelTest.mutate()}
+                disabled={!singleReason.trim() || !singleBy.trim() || cancelSingle.isPending}
+                onClick={() => cancelSingle.mutate()}
                 className="bg-red-600 hover:bg-red-700 text-white"
               >
-                {cancelTest.isPending ? "Cancelling…" : "Cancel Test"}
+                {cancelSingle.isPending ? "Cancelling…" : "Cancel Test"}
               </Button>
             </div>
           </div>

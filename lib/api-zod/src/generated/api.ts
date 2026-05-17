@@ -1514,6 +1514,142 @@ export const CancelBillTestResponse = zod.object({
 });
 
 /**
+ * @summary Cancel selected tests and optionally refund their value
+ */
+export const CancelRefundTestsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const CancelRefundTestsBody = zod.object({
+  orderTestIds: zod.array(zod.number()),
+  reason: zod.string(),
+  performedBy: zod.string(),
+  refundMethod: zod.string().optional(),
+});
+
+export const CancelRefundTestsResponse = zod.object({
+  id: zod.number(),
+  billNumber: zod.string(),
+  orderId: zod.number(),
+  order: zod.object({
+    id: zod.number(),
+    orderNumber: zod.string(),
+    patientId: zod.number(),
+    patient: zod.object({
+      id: zod.number(),
+      patientId: zod.string(),
+      firstName: zod.string(),
+      lastName: zod.string(),
+      dateOfBirth: zod.string(),
+      gender: zod.enum(["male", "female", "other"]),
+      phone: zod.string(),
+      email: zod.string().nullish(),
+      address: zod.string().nullish(),
+      bloodGroup: zod.string().nullish(),
+      ageValue: zod.number().nullish(),
+      ageUnit: zod.enum(["years", "months", "days"]).nullish(),
+      createdAt: zod.string(),
+    }),
+    doctorId: zod.number().nullish(),
+    doctor: zod
+      .object({
+        id: zod.number(),
+        name: zod.string(),
+        specialization: zod.string(),
+        phone: zod.string().nullish(),
+        email: zod.string().nullish(),
+        hospitalAffiliation: zod.string().nullish(),
+        registrationNumber: zod
+          .string()
+          .nullish()
+          .describe(
+            "State medical council registration number — printed on PCPNDT Form F.",
+          ),
+        defaultCommission: zod.union([zod.number(), zod.string()]).nullish(),
+        defaultCommissionType: zod.string().nullish(),
+        ledgerId: zod.number().nullish(),
+        createdAt: zod.string(),
+      })
+      .nullish(),
+    status: zod.enum([
+      "pending",
+      "collected",
+      "processing",
+      "completed",
+      "cancelled",
+    ]),
+    tests: zod.array(
+      zod.object({
+        id: zod.number(),
+        testId: zod.number(),
+        test: zod.object({
+          id: zod.number(),
+          code: zod.string(),
+          name: zod.string(),
+          category: zod.string(),
+          price: zod.number(),
+          duration: zod.string(),
+          description: zod.string().nullish(),
+          isActive: zod.boolean(),
+          testType: zod.enum(["inhouse", "outsourced"]).nullish(),
+          outsourcedLabId: zod.number().nullish(),
+          createdAt: zod.string(),
+        }),
+        price: zod.number(),
+        result: zod.string().nullish(),
+        resultStatus: zod.string().nullish(),
+        status: zod.enum(["active", "cancelled"]).nullish(),
+        cancelledByName: zod.string().nullish(),
+        cancelledAt: zod.string().nullish(),
+        cancellationReason: zod.string().nullish(),
+      }),
+    ),
+    totalAmount: zod.number(),
+    notes: zod.string().nullish(),
+    collectedAt: zod.string().nullish(),
+    completedAt: zod.string().nullish(),
+    createdAt: zod.string(),
+  }),
+  patientId: zod.number(),
+  patient: zod.object({
+    id: zod.number(),
+    patientId: zod.string(),
+    firstName: zod.string(),
+    lastName: zod.string(),
+    dateOfBirth: zod.string(),
+    gender: zod.enum(["male", "female", "other"]),
+    phone: zod.string(),
+    email: zod.string().nullish(),
+    address: zod.string().nullish(),
+    bloodGroup: zod.string().nullish(),
+    ageValue: zod.number().nullish(),
+    ageUnit: zod.enum(["years", "months", "days"]).nullish(),
+    createdAt: zod.string(),
+  }),
+  subtotal: zod.number(),
+  discount: zod.number(),
+  taxAmount: zod.number(),
+  totalAmount: zod.number(),
+  paidAmount: zod.number(),
+  balanceAmount: zod.number(),
+  status: zod.enum(["draft", "pending", "partial", "paid", "cancelled"]),
+  dueDate: zod.string().nullish(),
+  payments: zod.array(
+    zod.object({
+      id: zod.number(),
+      billId: zod.number(),
+      amount: zod.number(),
+      method: zod.enum(["cash", "card", "upi", "insurance", "cheque"]),
+      referenceNumber: zod.string().nullish(),
+      notes: zod.string().nullish(),
+      recordedByName: zod.string().nullish(),
+      createdAt: zod.string(),
+    }),
+  ),
+  createdAt: zod.string(),
+});
+
+/**
  * @summary Record a refund against a bill
  */
 export const RefundBillParams = zod.object({

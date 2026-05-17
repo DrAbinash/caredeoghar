@@ -44,6 +44,7 @@ import {
   ListBillAuditsParams,
   CancelBillParams,
   CancelBillBody,
+  CancelRefundTestsBody,
   RefundBillParams,
   RefundBillBody,
 } from "@workspace/api-zod";
@@ -1416,6 +1417,179 @@ billsRouter.post("/:id/cancel-test", async (req: StaffAuthRequest, res) => {
 
   if (!result) return;
   res.json(await buildBill(result));
+});
+
+// ── Cancel selected tests and optionally refund their value ──────────────────────────────────────────────────────
+// Cancels multiple order_test rows, recalculates bill totals, and if the
+// bill is now over-paid, records a refund for the excess amount.
+billsRouter.post("/:id/cancel-refund-tests", async (req: StaffAuthRequest, res) => {
+  const paramsParsed = z.object({ id: z.coerce.number() }).safeParse(req.params);
+  const bodyParsed = CancelRefundTestsBody.safeParse(req.body);
+  if (!paramsParsed.success || !bodyParsed.success) {
+    res.status(400).json({ error: "Invalid request", details: [
+      ...(paramsParsed.success ? [] : paramsParsed.error.issues),
+      ...(bodyParsed.success ? [] : bodyParsed.error.issues),
+    ] });
+    return;
+  }
+  const id = paramsParsed.data.id;
+  const { orderTestIds, reason, performedBy, refundMethod } = bodyParsed.data;
+  const actor = performedBy.trim() || req.staffSession?.subjectName?.trim() || "";
+  if (!actor) { res.status(401).json({ error: "Staff authentication required" }); return; }
+  if (!Array.isArray(orderTestIds) || orderTestIds.length === 0) {
+    res.status(400).json({ error: "Select at least one test to cancel" }); return;
+  }
+
+  const txResult = await db.transaction(async (tx) => {
+    const [bill] = await tx.select().from(billsTable).where(eq(billsTable.id, id)).for("update");
+    if (!bill) throw Object.assign(new Error("Bill not found"), { httpStatus: 404 });
+    if (bill.status === "cancelled") throw Object.assign(new Error("Bill is already cancelled"), { httpStatus: 409 });
+
+    // Fetch all tests for this order
+    const allTests = await tx.select().from(orderTestsTable).where(eq(orderTestsTable.orderId, bill.orderId));
+    const targetIds = new Set(orderTestIds.map(Number));
+    const targets = allTests.filter((t) => targetIds.has(t.id));
+    if (targets.length !== targetIds.size) {
+      throw Object.assign(new Error("One or more selected tests do not belong to this bill"), { httpStatus: 400 });
+    }
+    const alreadyCancelled = targets.filter((t) => (t as { status?: string }).status === "cancelled");
+    if (alreadyCancelled.length > 0) {
+      throw Object.assign(new Error(`${alreadyCancelled.length} test(s) already cancelled`), { httpStatus: 409 });
+    }
+
+    // Ensure at least one active test remains
+    const remainingActive = allTests.filter(
+      (t) => !targetIds.has(t.id) && (t as { status?: string }).status !== "cancelled",
+    );
+    if (remainingActive.length === 0) {
+      throw Object.assign(new Error("Cannot cancel all tests. Use 'Cancel Bill' to void the entire bill."), { httpStatus: 400 });
+    }
+
+    // Cancel selected tests
+    const now = new Date();
+    for (const ot of targets) {
+      await tx.update(orderTestsTable).set({
+        status: "cancelled",
+        cancelledByName: actor,
+        cancelledAt: now,
+        cancellationReason: reason,
+      } as Partial<typeof orderTestsTable.$inferSelect>).where(eq(orderTestsTable.id, ot.id));
+    }
+
+    // Recalculate bill totals from remaining active tests
+    const newSubtotal = remainingActive.reduce((sum, t) => sum + Number(t.price), 0);
+    const oldDiscount = Number(bill.discount);
+    const newDiscount = Math.min(oldDiscount, newSubtotal);
+    const newTotal = Math.max(0, Math.round((newSubtotal - newDiscount + Number(bill.taxAmount)) * 100) / 100);
+    const oldPaid = Number(bill.paidAmount);
+    const oldRefund = Number(bill.refundAmount);
+
+    let refundedAmount = 0;
+    let refundRecorded = false;
+
+    // If overpaid after removing tests, auto-refund the excess
+    if (oldPaid > newTotal + 0.0001) {
+      refundedAmount = Math.round((oldPaid - newTotal) * 100) / 100;
+      const method = (refundMethod ?? "cash").trim().toLowerCase();
+      const newRefund = Math.round((oldRefund + refundedAmount) * 100) / 100;
+      const newPaid = Math.max(0, Math.round((oldPaid - refundedAmount) * 100) / 100);
+      const newBalance = Math.max(0, Math.round((newTotal - newPaid) * 100) / 100);
+      const newStatus = newPaid <= 0 ? "pending" : newPaid < newTotal ? "partial" : "paid";
+
+      await tx.insert(paymentsTable).values({
+        billId: id,
+        amount: String(-refundedAmount),
+        method,
+        referenceNumber: null,
+        notes: `REFUND (test cancel): ${reason}`,
+        recordedByName: actor,
+      });
+
+      await tx.update(billsTable).set({
+        subtotal: String(Math.round(newSubtotal * 100) / 100),
+        discount: String(Math.round(newDiscount * 100) / 100),
+        totalAmount: String(newTotal),
+        paidAmount: String(newPaid),
+        refundAmount: String(newRefund),
+        balanceAmount: String(newBalance),
+        status: newStatus,
+      }).where(eq(billsTable.id, id));
+
+      refundRecorded = true;
+    } else {
+      const newPaid = oldPaid;
+      const newBalance = Math.max(0, Math.round((newTotal - newPaid) * 100) / 100);
+      const newStatus = newPaid <= 0 ? "pending" : newPaid < newTotal ? "partial" : "paid";
+
+      await tx.update(billsTable).set({
+        subtotal: String(Math.round(newSubtotal * 100) / 100),
+        discount: String(Math.round(newDiscount * 100) / 100),
+        totalAmount: String(newTotal),
+        balanceAmount: String(newBalance),
+        status: newStatus,
+      }).where(eq(billsTable.id, id));
+    }
+
+    const [updated] = await tx.select().from(billsTable).where(eq(billsTable.id, id));
+
+    // Audit log
+    await tx.insert(billAuditsTable).values({
+      billId: id,
+      editedBy: actor,
+      reason,
+      changeType: "tests-cancelled",
+      oldValue: `cancelled ${targets.length} test(s): ${targets.map((t) => `id=${t.id}, price=₹${Number(t.price).toFixed(2)}`).join("; ")}`,
+      newValue: `subtotal=₹${newSubtotal.toFixed(2)}, total=₹${newTotal.toFixed(2)}, paid=₹${updated.paidAmount}${refundRecorded ? `, refunded=₹${refundedAmount.toFixed(2)}` : ""}`,
+    });
+
+    return { updated, targets, refundedAmount, refundRecorded, refundMethod: refundMethod ?? "cash" };
+  }).catch((err: Error & { httpStatus?: number }) => {
+    if (err.httpStatus) { res.status(err.httpStatus).json({ error: err.message }); return null; }
+    throw err;
+  });
+
+  if (!txResult) return;
+  const { updated, targets, refundedAmount, refundRecorded, refundMethod: method } = txResult;
+
+  // Voucher + email
+  if (refundRecorded && refundedAmount > 0) {
+    try {
+      const [patForVoucher] = await db
+        .select({ firstName: patientsTable.firstName, lastName: patientsTable.lastName })
+        .from(patientsTable).where(eq(patientsTable.id, updated.patientId));
+      autoVoucherForPayment({
+        billId: id, amount: -refundedAmount, method,
+        billNumber: updated.billNumber,
+        patientName: patForVoucher ? `${patForVoucher.firstName} ${patForVoucher.lastName}`.trim() : null,
+        performedBy: actor,
+      }).catch(() => {});
+    } catch { /* never block */ }
+  }
+
+  try {
+    const billForEmail = await buildBill(updated);
+    const patientName = billForEmail.patient
+      ? `${billForEmail.patient.firstName} ${billForEmail.patient.lastName}`
+      : "Unknown Patient";
+    const changes: { field: string; from: string | null; to: string | null }[] = [
+      { field: "Tests cancelled", from: null, to: `${targets.length} (commission stopped)` },
+      { field: "New Total", from: null, to: `₹${Number(updated.totalAmount).toFixed(2)}` },
+    ];
+    if (refundRecorded) {
+      changes.push({ field: "Auto Refund", from: null, to: `₹${refundedAmount.toFixed(2)} via ${method}` });
+    }
+    sendBillEditEmail({
+      billNumber: updated.billNumber,
+      patientName,
+      editedBy: actor,
+      reason: `[TESTS CANCELLED] ${reason}`,
+      changes,
+    }).catch((err) => console.error("[email] cancel-refund-tests notification failed:", err));
+  } catch (err) {
+    req.log?.warn?.({ err }, "Cancel-refund-tests email send failed");
+  }
+
+  res.json(await buildBill(updated));
 });
 
 paymentsRouter.post("/", async (req, res) => {

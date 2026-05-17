@@ -676,6 +676,31 @@ paths:
               schema:
                 $ref: "#/components/schemas/Bill"
 
+  /bills/{id}/cancel-refund-tests:
+    post:
+      operationId: cancelRefundTests
+      tags: [bills]
+      summary: Cancel selected tests and optionally refund their value
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelRefundTestsBody"
+      responses:
+        "200":
+          description: Updated bill after cancelling selected tests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bill"
+
   /bills/{id}/refund:
     post:
       operationId: refundBill
@@ -4140,6 +4165,21 @@ components:
         performedBy:
           type: string
       required: [orderTestId, reason, performedBy]
+
+    CancelRefundTestsBody:
+      type: object
+      properties:
+        orderTestIds:
+          type: array
+          items:
+            type: integer
+        reason:
+          type: string
+        performedBy:
+          type: string
+        refundMethod:
+          type: string
+      required: [orderTestIds, reason, performedBy]
 
     OutsourcedLab:
       type: object

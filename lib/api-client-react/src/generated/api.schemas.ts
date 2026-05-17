@@ -1140,6 +1140,13 @@ export interface CancelBillTestBody {
   performedBy: string;
 }
 
+export interface CancelRefundTestsBody {
+  orderTestIds: number[];
+  reason: string;
+  performedBy: string;
+  refundMethod?: string;
+}
+
 export interface OutsourcedLab {
   id: number;
   name: string;
