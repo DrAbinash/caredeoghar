@@ -347,14 +347,37 @@ async function runStartupMigrations(): Promise<void> {
       )
       AND NOT EXISTS (SELECT 1 FROM ledgers WHERE is_walk_in = true);
 
-      -- Backfill historical walk-in bills: move bills with no referring doctor
-      -- from the Default ledger into the designated Walk-in ledger (once only;
-      -- idempotent because moved bills are no longer ledger_id=1).
+      -- Backfill historical walk-in records: move bills, orders, patients,
+      -- and appointments with no referring doctor into the Walk-in ledger.
+      -- All idempotent — moved rows are no longer on ledger_id=1.
       UPDATE bills b
          SET ledger_id = wl.id
         FROM orders o, ledgers wl
        WHERE o.id = b.order_id
          AND b.ledger_id = 1
+         AND o.doctor_id IS NULL
+         AND wl.is_walk_in = true;
+
+      UPDATE orders o
+         SET ledger_id = wl.id
+        FROM ledgers wl
+       WHERE o.ledger_id = 1
+         AND o.doctor_id IS NULL
+         AND wl.is_walk_in = true;
+
+      UPDATE patients p
+         SET ledger_id = wl.id
+        FROM orders o, ledgers wl
+       WHERE p.id = o.patient_id
+         AND p.ledger_id = 1
+         AND o.doctor_id IS NULL
+         AND wl.is_walk_in = true;
+
+      UPDATE appointments a
+         SET ledger_id = wl.id
+        FROM orders o, ledgers wl
+       WHERE a.id = o.appointment_id
+         AND a.ledger_id = 1
          AND o.doctor_id IS NULL
          AND wl.is_walk_in = true;
     `);
