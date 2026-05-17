@@ -57,3 +57,4 @@ export * from "./userDayClosures";
 export * from "./floors";
 export * from "./rooms";
 export * from "./modalities";
+export * from "./aiReporting";

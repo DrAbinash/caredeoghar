@@ -54,6 +54,7 @@ import {
   ListChecks,
   Wallet,
   Search,
+  BrainCircuit,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -114,6 +115,7 @@ const navItems: NavEntry[] = [
       { path: "/radiology/mwl-dashboard", icon: CalendarDays, label: "MWL Dashboard" },
       { path: "/radiology/agent-setup", icon: Settings2, label: "Agent Setup" },
       { path: "/radiology/dicom-query-retrieve", icon: Search, label: "DICOM Q/R" },
+      { path: "/radiology/ai-reporting-settings", icon: BrainCircuit, label: "AI Reporting" },
     ],
   },
   {

@@ -67,6 +67,7 @@ import { requireStaffAuth, requireStaffPermission } from "../middleware/requireS
 import userPreferencesRouter from "./userPreferences";
 import { radiologyReportGeneratorRouter } from "./radiology-report-generator";
 import { floorsRouter, roomsRouter, modalitiesRouter } from "./locations";
+import { aiReportingRouter } from "./aiReporting";
 
 const router: IRouter = Router();
 
@@ -308,6 +309,9 @@ router.use(
 router.use("/form-f", requireStaffAuth, requireStaffPermission("/reports"), formFRouter);
 router.use("/patient-reports", requireStaffAuth, requireStaffPermission("/reports"), patientReportsRouter);
 router.use("/signatures", requireStaffAuth, requireStaffPermission("/reports"), signaturesRouter);
+
+// AI Radiology Reporting — encrypted API keys, audit logging, draft management
+router.use("/ai-reporting", requireStaffAuth, aiReportingRouter);
 
 // AI endpoints — each sub-route applies its own requireStaffPermission matching
 // the data domain it accesses (patients PHI, billing records, or radiology

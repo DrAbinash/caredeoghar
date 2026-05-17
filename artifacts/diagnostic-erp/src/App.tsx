@@ -52,6 +52,7 @@ const PacsLogs              = lazy(() => import("@/pages/PacsLogs"));
 const DicomAgentDashboard   = lazy(() => import("@/pages/DicomAgentDashboard"));
 const ModalityManagement    = lazy(() => import("@/pages/ModalityManagement"));
 const DicomQueryRetrieve    = lazy(() => import("@/pages/DicomQueryRetrieve"));
+const AiReportingSettings   = lazy(() => import("@/pages/AiReportingSettings"));
 const ReportHub       = lazy(() => import("@/pages/ReportHub"));
 const Machines        = lazy(() => import("@/pages/Machines"));
 const FormF           = lazy(() => import("@/pages/FormF"));
@@ -90,7 +91,7 @@ const ERP_NAV_ORDER = [
   "/", "/dashboard", "/my-daily-summary", "/daily-summary", "/patients", "/appointments", "/queue", "/online-bookings",
   "/radiology", "/radiology/worklist", "/radiology/report-generator", "/radiology/pacs-dashboard", "/radiology/pacs-settings", "/radiology/pacs-logs",
   "/radiology/dicom-agent-dashboard", "/radiology/modality-management",
-  "/radiology/mwl-dashboard", "/radiology/agent-setup", "/radiology/dicom-query-retrieve",
+  "/radiology/mwl-dashboard", "/radiology/agent-setup", "/radiology/dicom-query-retrieve", "/radiology/ai-reporting-settings",
   "/orders", "/tests", "/packages", "/billing", "/payments", "/reports",
   "/report-generator", "/report-hub", "/inventory", "/expenses", "/staff", "/referrals",
   "/accounting", "/discounts", "/form-f", "/pacs", "/machines", "/hr-forms", "/website", "/settings",
@@ -184,6 +185,7 @@ function Router() {
               <Route path="/radiology/viewer/:studyInstanceUID" component={DicomViewer} />
               <Route path="/radiology/agent-setup" component={AgentSetup} />
               <Route path="/radiology/dicom-query-retrieve" component={DicomQueryRetrieve} />
+              <Route path="/radiology/ai-reporting-settings" component={AiReportingSettings} />
               <Route path="/packages" component={Packages} />
               <Route path="/expenses" component={Expenses} />
               <Route path="/my-day-close" component={MyDayClose} />
