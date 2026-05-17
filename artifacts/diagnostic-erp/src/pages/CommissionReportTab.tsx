@@ -30,6 +30,7 @@ import {
   type ReportMeta,
   type WordExportMode,
 } from "@/lib/exportReport";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Download, FileSpreadsheet, FileText } from "lucide-react";
 
 const ALPHA = "abcdefghijklmnopqrstuvwxyz".split("");
@@ -93,6 +94,10 @@ export default function CommissionReportTab() {
   const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [doctorId, setDoctorId] = useState<number | null>(null);
   const [mode, setMode] = useState<ReportMode>("standard");
+  const [showPercentFixed, setShowPercentFixed] = useState<boolean>(() => {
+    const stored = sessionStorage.getItem("commission_showPercentFixed");
+    return stored === null ? true : stored === "true";
+  });
 
   const { data: doctorsData } = useListDoctors();
   const doctors = doctorsData?.doctors ?? [];
@@ -121,7 +126,7 @@ export default function CommissionReportTab() {
     }
     setWordLoading(true);
     try {
-      await exportWord(toExportSections(report), buildMeta(mode, from, to, doctorLabel, grandTotal), mode);
+      await exportWord(toExportSections(report), buildMeta(mode, from, to, doctorLabel, grandTotal), mode, showPercentFixed);
     } catch (err) {
       toast({ title: "Word export failed", description: String(err), variant: "destructive" });
     } finally {
@@ -264,6 +269,20 @@ export default function CommissionReportTab() {
             </div>
           </div>
 
+          <div className="flex items-center gap-2 ml-auto">
+            <Checkbox
+              id="word-show-rate"
+              checked={showPercentFixed}
+              onCheckedChange={(checked) => {
+                const val = checked === true;
+                setShowPercentFixed(val);
+                sessionStorage.setItem("commission_showPercentFixed", String(val));
+              }}
+            />
+            <Label htmlFor="word-show-rate" className="text-xs cursor-pointer select-none">
+              Show % / Fixed rate column <span className="text-muted-foreground">(Word export)</span>
+            </Label>
+          </div>
         </div>
       </div>
 
