@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useForm } from "react-hook-form";
-import { ShieldAlert, LogOut, ExternalLink, Copy, CheckCheck, Eye, EyeOff, Lock, BookOpen, HandCoins, ListChecks, Wallet, Usb, ShieldCheck, FolderOpen } from "lucide-react";
+import { ShieldAlert, LogOut, ExternalLink, Copy, CheckCheck, Eye, EyeOff, Lock, BookOpen, HandCoins, ListChecks, Wallet, Usb, ShieldCheck, FolderOpen, Stethoscope } from "lucide-react";
 import { setSaToken, setSaUsbKey, loadSaUsbKeyFromSession, saUsbHeader } from "./lib/saApi";
 import {
   isFsAccessSupported,
@@ -21,6 +21,7 @@ const CommissionRules  = lazy(() => import("./pages/CommissionRules"));
 const ReferralReport   = lazy(() => import("./pages/ReferralReport"));
 const DoctorLedger     = lazy(() => import("./pages/DoctorLedger"));
 const MoneyTrailAudit  = lazy(() => import("./pages/MoneyTrailAudit"));
+const DoctorManager    = lazy(() => import("./pages/DoctorManager"));
 
 function PageLoader() {
   return (
@@ -327,7 +328,7 @@ function LoginScreen({ onLogin, onLockUsb }: { onLogin: (session: Session) => vo
 }
 
 function ActiveSessionScreen({
-  session, onEject, onManageBooks, onReferralReport, onCommissionRules, onDoctorLedger, onMoneyTrailAudit,
+  session, onEject, onManageBooks, onReferralReport, onCommissionRules, onDoctorLedger, onMoneyTrailAudit, onDoctorManager,
 }: {
   session: Session;
   onEject: () => void;
@@ -336,6 +337,7 @@ function ActiveSessionScreen({
   onCommissionRules: () => void;
   onDoctorLedger: () => void;
   onMoneyTrailAudit: () => void;
+  onDoctorManager: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
@@ -472,10 +474,16 @@ function ActiveSessionScreen({
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
               Multi-Book Management
             </p>
-            <Button variant="outline" className="w-full" onClick={onManageBooks}>
-              <BookOpen size={14} className="mr-2" />
-              Manage Books / Ledgers
-            </Button>
+            <div className="grid grid-cols-1 gap-2">
+              <Button variant="outline" className="w-full justify-start" onClick={onManageBooks}>
+                <BookOpen size={14} className="mr-2" />
+                Manage Books / Ledgers
+              </Button>
+              <Button variant="outline" className="w-full justify-start" onClick={onDoctorManager}>
+                <Stethoscope size={14} className="mr-2" />
+                Manage Doctors & Data Purge
+              </Button>
+            </div>
             <p className="text-xs text-muted-foreground mt-2">
               Partition bills & patients by referral doctor groups. Resetting a book deletes its bills and restarts numbering from bill #1.
             </p>
@@ -515,8 +523,8 @@ function ActiveSessionScreen({
   );
 }
 
-type SaView = "home" | "books" | "referral-report" | "commission-rules" | "doctor-ledger" | "money-trail-audit";
-const HASH_VIEWS: SaView[] = ["books", "referral-report", "commission-rules", "doctor-ledger", "money-trail-audit"];
+type SaView = "home" | "books" | "referral-report" | "commission-rules" | "doctor-ledger" | "money-trail-audit" | "doctor-manager";
+const HASH_VIEWS: SaView[] = ["books", "referral-report", "commission-rules", "doctor-ledger", "money-trail-audit", "doctor-manager"];
 function viewFromHash(): SaView {
   const h = (window.location.hash || "").replace(/^#/, "");
   return (HASH_VIEWS as string[]).includes(h) ? (h as SaView) : "home";
@@ -632,6 +640,8 @@ function App() {
           <DoctorLedger onBack={() => setView("home")} />
         ) : view === "money-trail-audit" ? (
           <MoneyTrailAudit onBack={() => setView("home")} />
+        ) : view === "doctor-manager" ? (
+          <DoctorManager onBack={() => setView("home")} />
         ) : (
           <ActiveSessionScreen
             session={session}
@@ -641,6 +651,7 @@ function App() {
             onCommissionRules={() => setView("commission-rules")}
             onDoctorLedger={() => setView("doctor-ledger")}
             onMoneyTrailAudit={() => setView("money-trail-audit")}
+            onDoctorManager={() => setView("doctor-manager")}
           />
         )}
       </Suspense>
