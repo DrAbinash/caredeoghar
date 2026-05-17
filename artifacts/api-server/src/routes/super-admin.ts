@@ -20,6 +20,27 @@ import {
   clinicSettingsTable,
   billAuditsTable,
   paymentsTable,
+  tokensTable,
+  testTokensTable,
+  samplesTable,
+  sampleTestAssignmentsTable,
+  radiologyStudiesTable,
+  radiologyScheduledProceduresTable,
+  radiologyReportKeyImagesTable,
+  radiologyVoiceLogsTable,
+  patientReportsTable,
+  reportSharesTable,
+  formFRecordsTable,
+  onlineBookingsTable,
+  vouchersTable,
+  voucherAuditsTable,
+  commissionRulesTable,
+  doctorPayoutsTable,
+  aiReportingDraftsTable,
+  aiReportingAuditLogsTable,
+  dicomPulledStudiesTable,
+  dicomPullAgentLogsTable,
+  pacsLogsTable,
 } from "@workspace/db/schema";
 import { eq, and, asc, desc, isNull, or, sql, inArray } from "drizzle-orm";
 import { runBooksSanity } from "./books-sanity";
@@ -734,4 +755,105 @@ superAdminRouter.patch("/commission-settings", requireSuperAdminUsb, requireSupe
       .where(eq(clinicSettingsTable.id, rows[0].id));
   }
   res.json({ ok: true, commissionDiscountMode: parsed.data.commissionDiscountMode });
+});
+
+// ── POST /api/super-admin/doctors/purge — irreversible delete of all data for doctor(s) ─
+// Deletes orders, bills, patients, and all linked child records for the specified doctorIds.
+// Requires confirmation phrase to prevent accidental execution.
+superAdminRouter.post("/doctors/purge", requireSuperAdminUsb, requireSuperAdmin, async (req, res): Promise<void> => {
+  const bodyParsed = z.object({
+    doctorIds: z.array(z.number().int().positive()).min(1),
+    confirmPhrase: z.string(),
+  }).safeParse(req.body);
+  if (!bodyParsed.success) {
+    res.status(400).json({ error: "Invalid request", details: bodyParsed.error.issues });
+    return;
+  }
+  const { doctorIds, confirmPhrase } = bodyParsed.data;
+  if (confirmPhrase.trim() !== "DELETE MY DATA") {
+    res.status(403).json({ error: "Confirm phrase mismatch. Type DELETE MY DATA to proceed." });
+    return;
+  }
+
+  const idList = sql.join(doctorIds.map((d: number) => sql`${d}`), sql`, `);
+
+  // Build scoped ID lists first so every subsequent delete is exact and idempotent.
+  const orderIdsResult = await db.execute(sql`SELECT id FROM orders WHERE doctor_id IN (${idList})`);
+  const orderIds = (orderIdsResult.rows as Array<{ id: number }>).map(r => r.id);
+
+  const billIdsResult = orderIds.length > 0
+    ? await db.execute(sql`SELECT id FROM bills WHERE order_id IN (${sql.join(orderIds.map((d: number) => sql`${d}`), sql`, `)})`)
+    : { rows: [] };
+  const billIds = (billIdsResult.rows as Array<{ id: number }>).map(r => r.id);
+
+  const patientIdsResult = orderIds.length > 0
+    ? await db.execute(sql`SELECT patient_id as id FROM orders WHERE doctor_id IN (${idList})`)
+    : { rows: [] };
+  const patientIds = (patientIdsResult.rows as Array<{ id: number }>).map(r => r.id);
+
+  const appointmentIdsResult = orderIds.length > 0
+    ? await db.execute(sql`SELECT appointment_id as id FROM orders WHERE doctor_id IN (${idList}) AND appointment_id IS NOT NULL`)
+    : { rows: [] };
+  const appointmentIds = (appointmentIdsResult.rows as Array<{ id: number }>).map(r => r.id);
+
+  // ── Phase 1: child records with foreign-key dependencies ─
+  if (billIds.length > 0) {
+    await db.delete(paymentsTable).where(inArray(paymentsTable.billId, billIds));
+    await db.delete(billAuditsTable).where(inArray(billAuditsTable.billId, billIds));
+    await db.delete(formFRecordsTable).where(inArray(formFRecordsTable.billId, billIds));
+    await db.delete(onlineBookingsTable).where(inArray(onlineBookingsTable.billId, billIds));
+    await db.delete(tokensTable).where(inArray(tokensTable.billId, billIds));
+    await db.delete(testTokensTable).where(inArray(testTokensTable.billId, billIds));
+    await db.delete(vouchersTable).where(inArray(vouchersTable.billId, billIds));
+    await db.delete(patientReportsTable).where(inArray(patientReportsTable.billId, billIds));
+    await db.delete(reportSharesTable).where(inArray(reportSharesTable.reportId,
+      (await db.select({ id: patientReportsTable.id }).from(patientReportsTable).where(inArray(patientReportsTable.billId, billIds))).map(r => r.id)));
+  }
+
+  if (orderIds.length > 0) {
+    await db.delete(orderTestsTable).where(inArray(orderTestsTable.orderId, orderIds));
+    await db.delete(samplesTable).where(inArray(samplesTable.orderId, orderIds));
+    // sample_test_assignments cascade on sample_id — handled by the above
+    await db.delete(radiologyStudiesTable).where(inArray(radiologyStudiesTable.orderId, orderIds));
+    await db.execute(sql`DELETE FROM radiology_scheduled_procedures WHERE source_order_id::integer IN (${sql.join(orderIds.map((d: number) => sql`${d}`), sql`, `)})`);
+  }
+
+  if (patientIds.length > 0) {
+    await db.delete(aiReportingDraftsTable).where(inArray(aiReportingDraftsTable.patientId, patientIds));
+    await db.delete(aiReportingAuditLogsTable).where(inArray(aiReportingAuditLogsTable.patientId, patientIds));
+    await db.execute(sql`DELETE FROM dicom_pulled_studies WHERE patient_id IN (${sql.join(patientIds.map((d: number) => sql`${String(d)}`), sql`, `)})`);
+    await db.execute(sql`DELETE FROM dicom_pull_agent_logs WHERE patient_id IN (${sql.join(patientIds.map((d: number) => sql`${String(d)}`), sql`, `)})`);
+    await db.execute(sql`DELETE FROM pacs_logs WHERE patient_id IN (${sql.join(patientIds.map((d: number) => sql`${String(d)}`), sql`, `)})`);
+    await db.delete(radiologyVoiceLogsTable).where(inArray(radiologyVoiceLogsTable.patientId, patientIds));
+    await db.delete(radiologyReportKeyImagesTable).where(inArray(radiologyReportKeyImagesTable.patientId, patientIds));
+  }
+
+  // ── Phase 2: parent records ─
+  if (billIds.length > 0) {
+    await db.delete(billsTable).where(inArray(billsTable.id, billIds));
+  }
+  if (appointmentIds.length > 0) {
+    await db.delete(appointmentsTable).where(inArray(appointmentsTable.id, appointmentIds));
+  }
+  if (orderIds.length > 0) {
+    await db.delete(ordersTable).where(inArray(ordersTable.id, orderIds));
+  }
+  if (patientIds.length > 0) {
+    await db.delete(patientsTable).where(inArray(patientsTable.id, patientIds));
+  }
+
+  // ── Phase 3: doctor metadata ─
+  await db.delete(commissionRulesTable).where(inArray(commissionRulesTable.doctorId, doctorIds));
+  await db.delete(doctorPayoutsTable).where(inArray(doctorPayoutsTable.doctorId, doctorIds));
+  await db.delete(doctorsTable).where(inArray(doctorsTable.id, doctorIds));
+
+  res.json({
+    deleted: {
+      doctors: doctorIds.length,
+      orders: orderIds.length,
+      bills: billIds.length,
+      patients: patientIds.length,
+      appointments: appointmentIds.length,
+    },
+  });
 });
