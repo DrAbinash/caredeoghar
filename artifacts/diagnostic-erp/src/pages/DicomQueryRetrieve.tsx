@@ -691,6 +691,8 @@ export default function DicomQueryRetrieve() {
       const esc = (v: string | null | undefined) =>
         (v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+      const exportSession = readStaffSession();
+
       const clinic = clinicSettings ?? {};
       const clinicName  = clinic.name    ?? "DiagnoCenter";
       const clinicTag   = clinic.tagline ?? "";
@@ -773,6 +775,15 @@ export default function DicomQueryRetrieve() {
   /* ── Footer ── */
   .footer { margin-top: 12px; border-top: 1px solid #d1d5db; padding-top: 6px; font-size: 7.5pt; color: #6b7280; display: flex; justify-content: space-between; }
 
+  /* ── Signature block ── */
+  .sig-block { margin-top: 20px; display: flex; justify-content: flex-end; }
+  .sig-card { width: 220px; font-size: 8pt; color: #374151; }
+  .sig-label { font-size: 7pt; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px; }
+  .sig-name { font-weight: bold; font-size: 9pt; color: #111; }
+  .sig-role { font-size: 7.5pt; color: #555; margin-bottom: 14px; }
+  .sig-line { border-top: 1px solid #374151; margin-bottom: 3px; }
+  .sig-caption { font-size: 7pt; color: #6b7280; display: flex; justify-content: space-between; }
+
   /* ── Count summary ── */
   .summary { margin-bottom: 8px; font-size: 8.5pt; color: #374151; }
   .summary strong { color: #1e40af; }
@@ -824,6 +835,21 @@ export default function DicomQueryRetrieve() {
   </thead>
   <tbody>${tableRows}</tbody>
 </table>
+
+${exportSession ? `
+<div class="sig-block">
+  <div class="sig-card">
+    <div class="sig-label">Prepared by</div>
+    <div class="sig-name">${esc(exportSession.user.name)}</div>
+    <div class="sig-role">${esc(exportSession.user.role.replace(/_/g, " "))}</div>
+    <div class="sig-line"></div>
+    <div class="sig-caption">
+      <span>Signature</span>
+      <span>Date: __________</span>
+    </div>
+  </div>
+</div>
+` : ""}
 
 <div class="footer">
   <span>${esc(clinicName)} &mdash; DICOM Radiology Audit Report</span>
