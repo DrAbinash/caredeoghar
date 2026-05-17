@@ -772,6 +772,9 @@ export default function BillingDesk() {
         testTokens: bill.testTokens ?? [],
       };
       setLastBill(lastBillLocal);
+      // Set the ref synchronously so keyboard/click guards see it immediately —
+      // before onSettled releases generatingRef and before React re-renders.
+      lastBillRef.current = lastBillLocal;
       setShowBillToast(true);
       window.setTimeout(() => setShowBillToast(false), 5000);
       queryClient.invalidateQueries({ queryKey: ["recent-bills-today"] });
