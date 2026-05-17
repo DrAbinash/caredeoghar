@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, numeric, date } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, numeric, date, jsonb } from "drizzle-orm/pg-core";
 
 // Per-user / per-shift day close.
 // Each staff member closes their own session independently.
@@ -45,6 +45,34 @@ export const userDayClosuresTable = pgTable("user_day_closures", {
 
   // Optional handover note for the next shift.
   notes: text("notes").notNull().default(""),
+
+  // ── Denomination counting (added May 2026) ───────────────────────────────
+  // JSONB: { d500, d200, d100, d50, d20, d10, coins } — count of each note.
+  // null means denomination section was not used.
+  denominations: jsonb("denominations").$type<{
+    d500: number; d200: number; d100: number;
+    d50: number; d20: number; d10: number; coins: number;
+  } | null>().default(null),
+  // Sum of denominations × face value. null if denominations not entered.
+  denominationTotal: numeric("denomination_total", { precision: 12, scale: 2 }),
+
+  // ── Drawer status (added May 2026) ───────────────────────────────────────
+  // open | closed | mismatch | balanced | approved
+  // "open" is never stored (it's the default/absence state).
+  // "mismatch" = variance != 0 and not yet approved.
+  // "approved" = mismatch acknowledged by admin.
+  // "balanced" = variance == 0 on close.
+  drawerStatus: text("drawer_status").notNull().default("closed"),
+
+  // Admin who approved a mismatch + timestamp.
+  approvedByName: text("approved_by_name"),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  approvalNote: text("approval_note"),
+
+  // Admin who reopened this individual drawer + reason.
+  reopenedByName: text("reopened_by_name"),
+  reopenedAt: timestamp("reopened_at", { withTimezone: true }),
+  reopenReason: text("reopen_reason"),
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

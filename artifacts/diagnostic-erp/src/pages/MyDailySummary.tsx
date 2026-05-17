@@ -9,7 +9,8 @@ import { Link } from "wouter";
 import {
   IndianRupee, Wallet, Banknote, Smartphone, TrendingDown, RotateCcw,
   XCircle, FileEdit, Clock, Calendar, RefreshCw, Tag, CheckCircle2,
-  ArrowRight, Users, Percent, Receipt,
+  ArrowRight, Users, Percent, Receipt, Lock, AlertTriangle, ShieldCheck,
+  ChevronRight,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -97,12 +98,43 @@ type MyDailySummaryData = {
     billNumber: string;
     patientName: string;
     referringDoctor: string | null;
-    totalAmount: number;      // post-discount net
-    grossAmount: number;      // before discount
+    totalAmount: number;
+    grossAmount: number;
     discountGiven: number;
     balanceAmount: number;
     status: string;
   }[];
+};
+
+type PostClosureActivity = {
+  closedAt: string | null;
+  closureId?: number;
+  bills: { id: number; billNumber: string; totalAmount: number; paidAmount: number; status: string; createdAt: string }[];
+  payments: { id: number; billId: number; amount: number; method: string; createdAt: string }[];
+  billTotal: number;
+  paymentTotal: number;
+};
+
+type DrawerStatus = {
+  drawerStatus: "open" | "balanced" | "mismatch" | "approved" | "closed" | "reopened";
+  userName: string;
+  coveredFromTs: string | null;
+  coveredToTs: string;
+  expectedCash: number;
+  countedCash: number | null;
+  cashVariance: number | null;
+  expectedDigital: number;
+  countedDigital: number | null;
+  digitalVariance: number | null;
+  expectedTotal: number;
+  actualTotal: number | null;
+  totalVariance: number | null;
+  closedAt: string | null;
+  closedBy: string | null;
+  handoverNote: string | null;
+  approvedByName: string | null;
+  approvalNote: string | null;
+  closureId?: number;
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -121,6 +153,234 @@ function fmt(n: number) {
 function fmtTime(iso: string) {
   try { return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }); }
   catch { return ""; }
+}
+function fmtIst(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" });
+}
+
+// ─── Drawer Status Config ─────────────────────────────────────────────────────
+
+type DrawerStatusKey = "open" | "balanced" | "mismatch" | "approved" | "closed" | "reopened";
+
+const DRAWER_STATUS_CONFIG: Record<DrawerStatusKey, {
+  label: string;
+  border: string;
+  headerBg: string;
+  badgeBg: string;
+  badgeText: string;
+  icon: React.ElementType;
+}> = {
+  open: {
+    label: "Open",
+    border: "border-blue-300 dark:border-blue-700",
+    headerBg: "bg-gradient-to-r from-blue-600 to-blue-700",
+    badgeBg: "bg-blue-100 dark:bg-blue-900/40",
+    badgeText: "text-blue-700 dark:text-blue-300",
+    icon: Clock,
+  },
+  balanced: {
+    label: "Balanced",
+    border: "border-green-300 dark:border-green-700",
+    headerBg: "bg-gradient-to-r from-green-600 to-emerald-600",
+    badgeBg: "bg-green-100 dark:bg-green-900/40",
+    badgeText: "text-green-700 dark:text-green-300",
+    icon: CheckCircle2,
+  },
+  mismatch: {
+    label: "Mismatch",
+    border: "border-red-300 dark:border-red-700",
+    headerBg: "bg-gradient-to-r from-red-600 to-red-700",
+    badgeBg: "bg-red-100 dark:bg-red-900/40",
+    badgeText: "text-red-700 dark:text-red-300",
+    icon: AlertTriangle,
+  },
+  approved: {
+    label: "Approved",
+    border: "border-amber-300 dark:border-amber-700",
+    headerBg: "bg-gradient-to-r from-amber-600 to-orange-600",
+    badgeBg: "bg-amber-100 dark:bg-amber-900/40",
+    badgeText: "text-amber-700 dark:text-amber-300",
+    icon: ShieldCheck,
+  },
+  closed: {
+    label: "Closed",
+    border: "border-emerald-400 dark:border-emerald-600",
+    headerBg: "bg-gradient-to-r from-emerald-700 to-green-800",
+    badgeBg: "bg-emerald-100 dark:bg-emerald-900/40",
+    badgeText: "text-emerald-700 dark:text-emerald-300",
+    icon: Lock,
+  },
+  reopened: {
+    label: "Reopened",
+    border: "border-orange-300 dark:border-orange-700",
+    headerBg: "bg-gradient-to-r from-orange-500 to-amber-600",
+    badgeBg: "bg-orange-100 dark:bg-orange-900/40",
+    badgeText: "text-orange-700 dark:text-orange-300",
+    icon: AlertTriangle,
+  },
+};
+
+// ─── Drawer Status Card ───────────────────────────────────────────────────────
+
+function DrawerStatusCard({ status }: { status: DrawerStatus }) {
+  const cfg = DRAWER_STATUS_CONFIG[status.drawerStatus] ?? DRAWER_STATUS_CONFIG.open;
+  const StatusIcon = cfg.icon;
+  const isClosed = status.drawerStatus !== "open" && status.drawerStatus !== "reopened";
+  const hasMismatch = status.drawerStatus === "mismatch";
+
+  function VarCell({ label, expected, counted, variance }: {
+    label: string; expected: number; counted: number | null; variance: number | null;
+  }) {
+    const v = variance ?? 0;
+    const varColor = v === 0 ? "text-green-600 dark:text-green-400"
+      : v < 0 ? "text-red-600 dark:text-red-400"
+      : "text-amber-600 dark:text-amber-400";
+    return (
+      <div className="min-w-0">
+        <div className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">{label}</div>
+        <div className="grid grid-cols-3 gap-x-2 text-xs">
+          <div>
+            <div className="text-[10px] text-gray-400">Expected</div>
+            <div className="font-bold tabular-nums text-gray-800 dark:text-gray-200">{fmt(expected)}</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-gray-400">Counted</div>
+            <div className="font-bold tabular-nums text-gray-800 dark:text-gray-200">
+              {counted !== null ? fmt(counted) : <span className="text-gray-400">—</span>}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] text-gray-400">Variance</div>
+            <div className={`font-bold tabular-nums ${counted !== null ? varColor : "text-gray-400"}`}>
+              {counted !== null
+                ? v === 0 ? "✓" : `${v < 0 ? "−" : "+"}${fmt(Math.abs(v))}`
+                : "—"}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`bg-white dark:bg-card border-2 ${cfg.border} rounded-xl shadow-md overflow-hidden`}>
+      {/* Header */}
+      <div className={`${cfg.headerBg} px-4 py-3 flex items-center justify-between`}>
+        <div className="flex items-center gap-2">
+          <StatusIcon size={16} className="text-white" />
+          <div>
+            <h3 className="text-sm font-extrabold text-white">My Drawer Close Status</h3>
+            <p className="text-[11px] text-white/80">Shift reconciliation snapshot</p>
+          </div>
+        </div>
+        <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${cfg.badgeBg} ${cfg.badgeText}`}>
+          {cfg.label}
+        </span>
+      </div>
+
+      {/* Mismatch warning */}
+      {hasMismatch && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-950/30 border-b border-red-200 dark:border-red-800">
+          <AlertTriangle size={13} className="text-red-600 shrink-0" />
+          <p className="text-xs text-red-700 dark:text-red-300 font-semibold">
+            Cash mismatch detected — awaiting admin review.
+          </p>
+        </div>
+      )}
+
+      {/* Body */}
+      <div className="p-4 space-y-3">
+        {/* Cash + Digital breakdown */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-gray-50 dark:bg-muted/20 rounded-lg border border-gray-100 dark:border-card-border">
+          <VarCell
+            label="Cash"
+            expected={status.expectedCash}
+            counted={status.countedCash}
+            variance={status.cashVariance}
+          />
+          <VarCell
+            label="Digital (UPI / Card / Other)"
+            expected={status.expectedDigital}
+            counted={status.countedDigital}
+            variance={status.digitalVariance}
+          />
+        </div>
+
+        {/* Total row */}
+        <div className="grid grid-cols-3 gap-2 p-3 bg-gray-900 dark:bg-gray-950 rounded-lg text-white">
+          <div>
+            <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Expected</div>
+            <div className="text-base font-extrabold tabular-nums">{fmt(status.expectedTotal)}</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Actual</div>
+            <div className="text-base font-extrabold tabular-nums">
+              {status.actualTotal !== null ? fmt(status.actualTotal) : <span className="text-gray-500">—</span>}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Variance</div>
+            <div className={`text-base font-extrabold tabular-nums ${
+              status.totalVariance === null ? "text-gray-500"
+              : status.totalVariance === 0 ? "text-green-400"
+              : status.totalVariance < 0 ? "text-red-400"
+              : "text-amber-400"
+            }`}>
+              {status.totalVariance === null
+                ? "—"
+                : status.totalVariance === 0
+                  ? "Balanced"
+                  : `${status.totalVariance < 0 ? "−" : "+"}${fmt(Math.abs(status.totalVariance))}`}
+            </div>
+          </div>
+        </div>
+
+        {/* Meta row */}
+        {isClosed && (
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            {status.closedAt && (
+              <div>
+                <div className="text-[10px] text-gray-400 uppercase font-semibold">Closed At</div>
+                <div className="font-medium text-gray-700 dark:text-gray-300">{fmtIst(status.closedAt)}</div>
+              </div>
+            )}
+            {status.approvedByName && (
+              <div>
+                <div className="text-[10px] text-gray-400 uppercase font-semibold">Approved By</div>
+                <div className="font-medium text-gray-700 dark:text-gray-300">{status.approvedByName}</div>
+              </div>
+            )}
+            {status.handoverNote && (
+              <div className="col-span-2 p-2 bg-muted/30 border rounded text-[11px] text-gray-600 dark:text-gray-400">
+                <span className="font-semibold">Handover note:</span> {status.handoverNote}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex items-center gap-2 pt-1">
+          {!isClosed || status.drawerStatus === "reopened" ? (
+            <Link href="/my-day-close">
+              <Button size="sm" className="bg-blue-700 hover:bg-blue-800 text-white text-xs flex items-center gap-1.5">
+                <Lock size={12} /> Close My Drawer
+              </Button>
+            </Link>
+          ) : (
+            <Button size="sm" disabled className="text-xs flex items-center gap-1.5 opacity-60">
+              <Lock size={12} /> Drawer Closed
+            </Button>
+          )}
+          <Link href="/day-close">
+            <Button size="sm" variant="outline" className="text-xs flex items-center gap-1.5">
+              View Full Day Close <ChevronRight size={12} />
+            </Button>
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── Small Components ─────────────────────────────────────────────────────────
@@ -174,6 +434,197 @@ function RecRow({ label, value, type, note }: {
   );
 }
 
+// ─── Warning Chips ────────────────────────────────────────────────────────────
+
+function DrawerChips({ status }: { status: DrawerStatus | undefined }) {
+  if (!status) return null;
+
+  const chips: { label: string; bg: string; text: string; icon: React.ElementType }[] = [];
+
+  if (status.drawerStatus === "open") {
+    chips.push({ label: "Drawer Open", bg: "bg-blue-100 dark:bg-blue-900/40", text: "text-blue-700 dark:text-blue-300", icon: Clock });
+  }
+  if (status.drawerStatus === "balanced") {
+    chips.push({ label: "Drawer Balanced", bg: "bg-green-100 dark:bg-green-900/40", text: "text-green-700 dark:text-green-300", icon: CheckCircle2 });
+  }
+  if (status.drawerStatus === "mismatch") {
+    chips.push({ label: "Cash Mismatch", bg: "bg-red-100 dark:bg-red-900/40", text: "text-red-700 dark:text-red-300", icon: AlertTriangle });
+  }
+  if (status.cashVariance !== null && status.cashVariance !== 0 && status.drawerStatus !== "open") {
+    chips.push({ label: "Cash Mismatch", bg: "bg-red-100 dark:bg-red-900/40", text: "text-red-700 dark:text-red-300", icon: AlertTriangle });
+  }
+  if (status.digitalVariance !== null && status.digitalVariance !== 0 && status.drawerStatus !== "open") {
+    chips.push({ label: "Digital Mismatch", bg: "bg-orange-100 dark:bg-orange-900/40", text: "text-orange-700 dark:text-orange-300", icon: AlertTriangle });
+  }
+  if (status.drawerStatus === "closed" || status.drawerStatus === "balanced") {
+    chips.push({ label: "Day Closed", bg: "bg-emerald-100 dark:bg-emerald-900/40", text: "text-emerald-700 dark:text-emerald-300", icon: Lock });
+  }
+  if (status.drawerStatus === "open") {
+    chips.push({ label: "Close Pending", bg: "bg-amber-100 dark:bg-amber-900/40", text: "text-amber-700 dark:text-amber-300", icon: AlertTriangle });
+  }
+  if (status.drawerStatus === "approved") {
+    chips.push({ label: "Mismatch Approved", bg: "bg-amber-100 dark:bg-amber-900/40", text: "text-amber-700 dark:text-amber-300", icon: ShieldCheck });
+  }
+
+  // Deduplicate by label
+  const seen = new Set<string>();
+  const unique = chips.filter((c) => { if (seen.has(c.label)) return false; seen.add(c.label); return true; });
+
+  if (unique.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {unique.map((chip) => {
+        const ChipIcon = chip.icon;
+        return (
+          <span key={chip.label} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${chip.bg} ${chip.text}`}>
+            <ChipIcon size={11} />
+            {chip.label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Post-Closure Activity Chocolate Box ─────────────────────────────────────
+
+function PostClosureActivityBox({ data }: { data: PostClosureActivity }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!data.closedAt || (data.bills.length === 0 && data.payments.length === 0)) return null;
+
+  const hasBills    = data.bills.length > 0;
+  const hasPayments = data.payments.length > 0;
+
+  return (
+    <div className="bg-amber-50 dark:bg-amber-950/30 border-2 border-amber-400 dark:border-amber-600 rounded-xl shadow-md overflow-hidden">
+      {/* Header */}
+      <button
+        type="button"
+        className="w-full px-4 py-3 flex items-center justify-between gap-3 bg-amber-400/20 dark:bg-amber-900/40 hover:bg-amber-400/30 dark:hover:bg-amber-900/60 transition-colors"
+        onClick={() => setExpanded((e) => !e)}
+      >
+        <div className="flex items-center gap-2.5">
+          <div className="p-1.5 rounded-lg bg-amber-500 text-white">
+            <AlertTriangle size={14} />
+          </div>
+          <div className="text-left">
+            <p className="text-sm font-extrabold text-amber-900 dark:text-amber-200">
+              Post-Closure Activity Detected
+            </p>
+            <p className="text-[11px] text-amber-700 dark:text-amber-400">
+              Billing continued after drawer closed at {fmtIst(data.closedAt)} ·{" "}
+              {hasBills && `${data.bills.length} bill${data.bills.length !== 1 ? "s" : ""} (${fmt(data.billTotal)})`}
+              {hasBills && hasPayments && " · "}
+              {hasPayments && `${data.payments.length} payment${data.payments.length !== 1 ? "s" : ""} (${fmt(data.paymentTotal)})`}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">
+            These will be counted in the NEXT day's reconciliation
+          </span>
+          {expanded ? <ChevronRight size={14} className="text-amber-700 -rotate-90" /> : <ChevronRight size={14} className="text-amber-700 rotate-90" />}
+        </div>
+      </button>
+
+      {/* Expanded content */}
+      {expanded && (
+        <div className="p-4 space-y-4">
+          {/* Bills table */}
+          {hasBills && (
+            <div>
+              <p className="text-xs font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                <IndianRupee size={11} /> Bills Created Post-Closure
+              </p>
+              <div className="overflow-x-auto rounded-lg border border-amber-300 dark:border-amber-700">
+                <table className="w-full text-xs">
+                  <thead className="bg-amber-100 dark:bg-amber-900/40">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-amber-900 dark:text-amber-200">Bill #</th>
+                      <th className="px-3 py-2 text-right font-semibold text-amber-900 dark:text-amber-200">Amount</th>
+                      <th className="px-3 py-2 text-right font-semibold text-amber-900 dark:text-amber-200">Paid</th>
+                      <th className="px-3 py-2 text-left font-semibold text-amber-900 dark:text-amber-200">Status</th>
+                      <th className="px-3 py-2 text-left font-semibold text-amber-900 dark:text-amber-200">Time</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-amber-200 dark:divide-amber-800">
+                    {data.bills.map((b) => (
+                      <tr key={b.id} className="hover:bg-amber-100/60 dark:hover:bg-amber-900/20">
+                        <td className="px-3 py-1.5 font-semibold">
+                          <Link href={`/billing/${b.id}`} className="text-primary hover:underline">{b.billNumber}</Link>
+                        </td>
+                        <td className="px-3 py-1.5 text-right tabular-nums font-semibold">{fmt(b.totalAmount)}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums text-green-700 dark:text-green-400">{fmt(b.paidAmount)}</td>
+                        <td className="px-3 py-1.5">
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold capitalize bg-white/60 dark:bg-black/20">{b.status}</span>
+                        </td>
+                        <td className="px-3 py-1.5 text-amber-700 dark:text-amber-400">{fmtTime(b.createdAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-amber-100 dark:bg-amber-900/40 border-t border-amber-300 dark:border-amber-700">
+                    <tr>
+                      <td className="px-3 py-1.5 font-bold text-amber-900 dark:text-amber-200">Total</td>
+                      <td className="px-3 py-1.5 text-right font-bold tabular-nums text-amber-900 dark:text-amber-200">{fmt(data.billTotal)}</td>
+                      <td colSpan={3} />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Payments table */}
+          {hasPayments && (
+            <div>
+              <p className="text-xs font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                <Wallet size={11} /> Payments Collected Post-Closure
+              </p>
+              <div className="overflow-x-auto rounded-lg border border-amber-300 dark:border-amber-700">
+                <table className="w-full text-xs">
+                  <thead className="bg-amber-100 dark:bg-amber-900/40">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-amber-900 dark:text-amber-200">Bill #</th>
+                      <th className="px-3 py-2 text-right font-semibold text-amber-900 dark:text-amber-200">Amount</th>
+                      <th className="px-3 py-2 text-left font-semibold text-amber-900 dark:text-amber-200">Method</th>
+                      <th className="px-3 py-2 text-left font-semibold text-amber-900 dark:text-amber-200">Time</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-amber-200 dark:divide-amber-800">
+                    {data.payments.map((p) => (
+                      <tr key={p.id} className="hover:bg-amber-100/60 dark:hover:bg-amber-900/20">
+                        <td className="px-3 py-1.5 font-semibold">
+                          <Link href={`/billing/${p.billId}`} className="text-primary hover:underline">Bill #{p.billId}</Link>
+                        </td>
+                        <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-green-700 dark:text-green-400">{fmt(p.amount)}</td>
+                        <td className="px-3 py-1.5 capitalize text-amber-700 dark:text-amber-400">{p.method}</td>
+                        <td className="px-3 py-1.5 text-amber-700 dark:text-amber-400">{fmtTime(p.createdAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-amber-100 dark:bg-amber-900/40 border-t border-amber-300 dark:border-amber-700">
+                    <tr>
+                      <td className="px-3 py-1.5 font-bold text-amber-900 dark:text-amber-200">Total</td>
+                      <td className="px-3 py-1.5 text-right font-bold tabular-nums text-amber-900 dark:text-amber-200">{fmt(data.paymentTotal)}</td>
+                      <td colSpan={2} />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+
+          <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 rounded-lg px-3 py-2">
+            Billing is never blocked after drawer close. The above activity was recorded after your drawer was closed
+            and will automatically be included in the <strong>next reconciliation window</strong>.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── My Daily Summary Page ────────────────────────────────────────────────────
 
 const LS_STAFF_FILTER_KEY = "my_daily_summary_staff_filter";
@@ -187,8 +638,6 @@ export default function MyDailySummary() {
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(today);
 
-  // Default to own name for everyone (including owners). Owners can switch
-  // to "All Staff" or another staff member. Persist choice in localStorage.
   const savedFilter = typeof window !== "undefined" ? window.localStorage.getItem(LS_STAFF_FILTER_KEY) : null;
   const initialFilter = isOwner
     ? (savedFilter !== null ? savedFilter : myName)
@@ -222,6 +671,24 @@ export default function MyDailySummary() {
     staleTime: 2 * 60_000,
   });
 
+  // Drawer status — always fetches for the current logged-in user, not filtered staff.
+  const drawerQ = useQuery<DrawerStatus>({
+    queryKey: ["my-drawer-status"],
+    queryFn: () => api.get<DrawerStatus>("/api/day-close/my-drawer-status"),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
+  // Post-closure activity — only relevant when drawer is closed.
+  const isDrawerClosed = drawerQ.data && drawerQ.data.drawerStatus !== "open" && drawerQ.data.drawerStatus !== "reopened";
+  const postClosureQ = useQuery<PostClosureActivity>({
+    queryKey: ["my-post-closure-activity"],
+    queryFn: () => api.get<PostClosureActivity>("/api/day-close/my-post-closure-activity"),
+    enabled: !!isDrawerClosed,
+    refetchInterval: isDrawerClosed ? 60_000 : false,
+    staleTime: 30_000,
+  });
+
   const s = data?.summary;
 
   const statusColors: Record<string, string> = {
@@ -245,9 +712,11 @@ export default function MyDailySummary() {
         }
       />
 
+      {/* ── Drawer Status Warning Chips ── */}
+      {drawerQ.data && <DrawerChips status={drawerQ.data} />}
+
       {/* ── Date Range Picker ── */}
       <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl p-4 shadow-sm space-y-3">
-        {/* Date inputs + presets */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 flex-1 flex-wrap">
             <Calendar size={14} className="text-gray-500 flex-shrink-0" />
@@ -264,14 +733,12 @@ export default function MyDailySummary() {
           </div>
         </div>
 
-        {/* Admin-only staff quick-tabs */}
         {isOwner && activeStaff.length > 0 && (
           <div>
             <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">
               <Users size={12} /> Staff
             </div>
             <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-              {/* All Staff chip */}
               <button
                 type="button"
                 onClick={() => saveStaffFilter("")}
@@ -283,8 +750,6 @@ export default function MyDailySummary() {
               >
                 All Staff / Total
               </button>
-
-              {/* One chip per active staff member */}
               {activeStaff.map((u) => {
                 const isSelected = staffFilter === u.name;
                 return (
@@ -338,9 +803,15 @@ export default function MyDailySummary() {
             <MiniKpi icon={XCircle} label="Cancellation Count" value={String(s.cancellationCount)} sub={s.cancellationCount > 0 ? `₹${s.cancelledAmount.toFixed(0)} written off` : "None"} iconBg="bg-gray-100 text-gray-700" border="border-l-gray-400" />
           </div>
 
+          {/* ── Drawer Close Status Card (near cashbox) ── */}
+          {drawerQ.data && <DrawerStatusCard status={drawerQ.data} />}
+
+          {/* ── Post-Closure Activity Chocolate Box ── */}
+          {postClosureQ.data && <PostClosureActivityBox data={postClosureQ.data} />}
+
           {/* ── Two correctly-balancing reconciliation cards ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* CARD 1 — My Billing (bills I created in the date range) */}
+            {/* CARD 1 — My Billing */}
             <div className="bg-white dark:bg-card border-2 border-emerald-300 dark:border-emerald-700 rounded-xl shadow-md overflow-hidden">
               <div className="px-5 py-4 bg-gradient-to-r from-emerald-600 to-green-600">
                 <h3 className="text-base font-extrabold text-white flex items-center gap-2">
@@ -362,7 +833,7 @@ export default function MyDailySummary() {
               </div>
             </div>
 
-            {/* CARD 2 — My Cashbox (money I personally handled) */}
+            {/* CARD 2 — My Cashbox */}
             <div className="bg-white dark:bg-card border-2 border-blue-300 dark:border-blue-700 rounded-xl shadow-md overflow-hidden">
               <div className="px-5 py-4 bg-gradient-to-r from-blue-600 to-indigo-600">
                 <h3 className="text-base font-extrabold text-white flex items-center gap-2">
@@ -390,7 +861,6 @@ export default function MyDailySummary() {
 
           {/* ── Bill Edits + Collection by Method ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Bill Edits — detailed table */}
             <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl shadow-sm overflow-hidden flex flex-col">
               <div className="px-4 py-3 border-b border-gray-100 dark:border-card-border flex items-center justify-between">
                 <h3 className="text-sm font-bold text-gray-900 dark:text-foreground flex items-center gap-2">
@@ -461,7 +931,6 @@ export default function MyDailySummary() {
               )}
             </div>
 
-            {/* Collection by Method — vertical card alongside Bill Edits */}
             <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl shadow-sm overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-100 dark:border-card-border">
                 <h3 className="text-sm font-bold text-gray-900 dark:text-foreground flex items-center gap-2">

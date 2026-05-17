@@ -58,3 +58,4 @@ export * from "./floors";
 export * from "./rooms";
 export * from "./modalities";
 export * from "./aiReporting";
+export * from "./drawerAuditLog";

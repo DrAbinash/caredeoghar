@@ -8,7 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Lock, Unlock, RefreshCw, Printer, AlertTriangle, CheckCircle2, Users, Clock } from "lucide-react";
+import {
+  Lock, Unlock, RefreshCw, Printer, AlertTriangle, CheckCircle2, Users,
+  Clock, ShieldCheck, Eye, ChevronDown, ChevronUp,
+} from "lucide-react";
 import { readStaffSession } from "@/lib/staffSession";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -22,9 +25,20 @@ type StaffUserStatus = {
   userName: string;
   isClosed: boolean;
   closedAt: string | null;
+  closureId: number | null;
   totalCollected: number;
   totalBilled: number;
   variance: number;
+  drawerStatus: string;
+  expectedCash: number;
+  actualCash: number;
+  cashVariance: number | null;
+  expectedDigital: number | null;
+  actualDigital: number | null;
+  digitalVariance: number | null;
+  approvedByName: string | null;
+  approvedAt: string | null;
+  handoverNote: string | null;
 };
 type StaffStatusResult = { users: StaffUserStatus[]; lastOverallClose: string | null };
 
@@ -54,6 +68,28 @@ type Closure = {
   reopenedAt: string | null; reopenedByName: string; reopenReason: string;
 };
 
+type StaffCloseDetail = {
+  id: number;
+  userId: number | null;
+  userName: string;
+  closureDate: string;
+  closedAt: string;
+  expectedCash: string; expectedUpi: string; expectedCard: string; expectedCheque: string; expectedOther: string;
+  actualCash: string; actualUpi: string; actualCard: string; actualCheque: string; actualOther: string;
+  totalExpected: string; totalActual: string;
+  variance: string; varianceNote: string;
+  notes: string;
+  drawerStatus: string;
+  denominations: null | { d500: number; d200: number; d100: number; d50: number; d20: number; d10: number; coins: number };
+  denominationTotal: string | null;
+  approvedByName: string | null;
+  approvedAt: string | null;
+  approvalNote: string | null;
+  reopenedByName: string | null;
+  reopenedAt: string | null;
+  reopenReason: string | null;
+};
+
 type ClinicLite = { name?: string; dayCloseAutoPrint?: boolean };
 
 const inr = (n: number) =>
@@ -61,6 +97,9 @@ const inr = (n: number) =>
 
 const fmtIst = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }) : "—";
+
+const fmtTime = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" }) : "—";
 
 function n(v: string | number | undefined | null): number {
   return Number(v ?? 0) || 0;
@@ -146,6 +185,28 @@ function autoPrintSlip(c: Closure, clinic: ClinicLite) {
   w.onload = () => { w.focus(); w.print(); setTimeout(() => w.close(), 600); };
 }
 
+// ── Status helpers ────────────────────────────────────────────────────────────
+
+type DrawerStatusKey = "open" | "balanced" | "mismatch" | "approved" | "closed" | "reopened";
+
+const STATUS_CONFIG: Record<DrawerStatusKey, { label: string; badge: string }> = {
+  open:     { label: "Open",     badge: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300" },
+  balanced: { label: "Balanced", badge: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300" },
+  mismatch: { label: "Mismatch", badge: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300" },
+  approved: { label: "Approved", badge: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300" },
+  closed:   { label: "Closed",   badge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" },
+  reopened: { label: "Reopened", badge: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300" },
+};
+
+function DrawerBadge({ status }: { status: string }) {
+  const cfg = STATUS_CONFIG[status as DrawerStatusKey] ?? STATUS_CONFIG.open;
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${cfg.badge}`}>
+      {cfg.label}
+    </span>
+  );
+}
+
 export default function DayClose() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -181,7 +242,20 @@ export default function DayClose() {
   const [reopenOpen, setReopenOpen] = useState<Closure | null>(null);
   const [reopenReason, setReopenReason] = useState("");
 
-  // Pre-fill actuals from expected totals so a "balanced" close is one click.
+  // Staff drawer actions
+  const [staffDetailId, setStaffDetailId] = useState<number | null>(null);
+  const [approveOpen, setApproveOpen] = useState<StaffUserStatus | null>(null);
+  const [approveNote, setApproveNote] = useState("");
+  const [staffReopenOpen, setStaffReopenOpen] = useState<StaffUserStatus | null>(null);
+  const [staffReopenReason, setStaffReopenReason] = useState("");
+  const [staffTableExpanded, setStaffTableExpanded] = useState(true);
+
+  const staffDetailQ = useQuery<StaffCloseDetail>({
+    queryKey: ["staff-close-detail", staffDetailId],
+    queryFn: () => api.get<StaffCloseDetail>(`/api/day-close/staff-close-detail/${staffDetailId}`),
+    enabled: staffDetailId !== null,
+  });
+
   useEffect(() => {
     if (!previewQ.data) return;
     setActuals({
@@ -225,11 +299,35 @@ export default function DayClose() {
     mutationFn: (vars) =>
       api.post<Closure>(`/api/day-close/${vars.id}/reopen`, { reason: vars.reason }),
     onSuccess: () => {
-      toast({ title: "Day re-opened", description: "Subsequent closures will recompute totals from the previous closed boundary." });
+      toast({ title: "Day re-opened" });
       setReopenOpen(null);
       setReopenReason("");
       qc.invalidateQueries({ queryKey: ["day-close-preview"] });
       qc.invalidateQueries({ queryKey: ["day-close-list"] });
+    },
+    onError: (e: Error) => toast({ title: "Reopen failed", description: e.message, variant: "destructive" }),
+  });
+
+  const approveMut = useMutation<unknown, Error, { id: number; note: string }>({
+    mutationFn: (vars) =>
+      api.post(`/api/day-close/staff-close/${vars.id}/approve-mismatch`, { note: vars.note }),
+    onSuccess: () => {
+      toast({ title: "Mismatch approved" });
+      setApproveOpen(null);
+      setApproveNote("");
+      qc.invalidateQueries({ queryKey: ["day-close-staff-status"] });
+    },
+    onError: (e: Error) => toast({ title: "Approval failed", description: e.message, variant: "destructive" }),
+  });
+
+  const staffReopenMut = useMutation<unknown, Error, { id: number; reason: string }>({
+    mutationFn: (vars) =>
+      api.post(`/api/day-close/staff-close/${vars.id}/reopen`, { reason: vars.reason }),
+    onSuccess: () => {
+      toast({ title: "Staff drawer reopened" });
+      setStaffReopenOpen(null);
+      setStaffReopenReason("");
+      qc.invalidateQueries({ queryKey: ["day-close-staff-status"] });
     },
     onError: (e: Error) => toast({ title: "Reopen failed", description: e.message, variant: "destructive" }),
   });
@@ -241,74 +339,168 @@ export default function DayClose() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2"><Lock size={20} /> Day Close / Cash Drawer</h1>
-          <p className="text-sm text-muted-foreground">Reconcile expected vs collected cash for the open business day. Bills created after close belong to the next day.</p>
+          <p className="text-sm text-muted-foreground">Reconcile expected vs collected cash. Bills created after close belong to the next day.</p>
         </div>
         <Button variant="outline" size="sm" onClick={() => previewQ.refetch()} disabled={previewQ.isFetching}>
           <RefreshCw size={14} className={`mr-2 ${previewQ.isFetching ? "animate-spin" : ""}`} /> Refresh
         </Button>
       </div>
 
-      {/* Staff Day Close Status — owner/admin only */}
+      {/* ── Staff Drawer Close Reconciliation Table (owner/admin only) ─────── */}
       {isOwner && staffStatusQ.data && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <Users size={16} /> Staff Day Close Status
+              <Users size={16} /> Staff Drawer Close Status
               {(() => {
                 const users = staffStatusQ.data.users;
                 const closed = users.filter((u) => u.isClosed).length;
+                const mismatched = users.filter((u) => u.drawerStatus === "mismatch").length;
                 return (
-                  <span className={`ml-auto text-sm font-normal px-2 py-0.5 rounded-full ${
-                    closed === users.length ? "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300"
-                    : "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
-                  }`}>
-                    {closed}/{users.length} closed
+                  <span className="ml-auto flex items-center gap-2 text-sm font-normal">
+                    {mismatched > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 text-xs font-bold flex items-center gap-1">
+                        <AlertTriangle size={10} /> {mismatched} mismatch
+                      </span>
+                    )}
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                      closed === users.length
+                        ? "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300"
+                        : "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                    }`}>
+                      {closed}/{users.length} closed
+                    </span>
+                    <button
+                      className="text-muted-foreground hover:text-foreground"
+                      onClick={() => setStaffTableExpanded((e) => !e)}
+                    >
+                      {staffTableExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </button>
                   </span>
                 );
               })()}
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            {staffStatusQ.data.users.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No active staff accounts found.</p>
-            ) : (
-              <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
-                {staffStatusQ.data.users.map((u) => (
-                  <div
-                    key={u.userId}
-                    className={`flex items-center gap-2 p-2 rounded-lg border text-sm ${
-                      u.isClosed
-                        ? "border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30"
-                        : "border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30"
-                    }`}
-                  >
-                    {u.isClosed
-                      ? <CheckCircle2 size={14} className="text-green-600 shrink-0" />
-                      : <Clock size={14} className="text-amber-600 shrink-0" />}
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">{u.userName}</div>
-                      {u.isClosed && u.closedAt && (
-                        <div className="text-xs text-muted-foreground">
-                          {new Date(u.closedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })}
-                          {" · "}
-                          {inr(u.totalCollected)}
-                        </div>
-                      )}
-                      {!u.isClosed && (
-                        <div className="text-xs text-amber-600">Not yet closed</div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {staffStatusQ.data.users.some((u) => !u.isClosed) && (
-              <p className="text-xs text-amber-600 mt-3 flex items-center gap-1">
-                <AlertTriangle size={12} />
-                Some staff have not closed their day. You can still close the overall day — their window will reset when you do.
-              </p>
-            )}
-          </CardContent>
+          {staffTableExpanded && (
+            <CardContent>
+              {staffStatusQ.data.users.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No active staff accounts found.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="text-left text-xs text-muted-foreground uppercase border-b bg-muted/30">
+                      <tr>
+                        <th className="px-3 py-2">Staff</th>
+                        <th className="px-3 py-2 text-right">Exp. Cash</th>
+                        <th className="px-3 py-2 text-right">Counted Cash</th>
+                        <th className="px-3 py-2 text-right">Cash Var.</th>
+                        <th className="px-3 py-2 text-right">Exp. Digital</th>
+                        <th className="px-3 py-2 text-right">Counted Dig.</th>
+                        <th className="px-3 py-2 text-right">Dig. Var.</th>
+                        <th className="px-3 py-2">Status</th>
+                        <th className="px-3 py-2">Closed At</th>
+                        <th className="px-3 py-2 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {staffStatusQ.data.users.map((u) => {
+                        const cashVar = u.cashVariance ?? 0;
+                        const digVar = u.digitalVariance ?? 0;
+                        return (
+                          <tr key={u.userId} className={`border-b last:border-b-0 ${
+                            u.drawerStatus === "mismatch"
+                              ? "bg-red-50/40 dark:bg-red-950/10"
+                              : u.drawerStatus === "balanced" || u.drawerStatus === "closed"
+                                ? "bg-green-50/30 dark:bg-green-950/10"
+                                : ""
+                          }`}>
+                            <td className="px-3 py-2 font-medium">
+                              <div className="flex items-center gap-1.5">
+                                {u.isClosed
+                                  ? <CheckCircle2 size={12} className="text-green-600 shrink-0" />
+                                  : <Clock size={12} className="text-amber-600 shrink-0" />}
+                                {u.userName}
+                              </div>
+                              {u.handoverNote && (
+                                <div className="text-[10px] text-muted-foreground italic mt-0.5 max-w-[120px] truncate">
+                                  {u.handoverNote}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums">{inr(u.expectedCash)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">
+                              {u.isClosed ? inr(u.actualCash) : <span className="text-muted-foreground">—</span>}
+                            </td>
+                            <td className={`px-3 py-2 text-right tabular-nums font-semibold ${
+                              !u.isClosed ? "text-muted-foreground"
+                              : cashVar < 0 ? "text-red-600"
+                              : cashVar > 0 ? "text-amber-600"
+                              : "text-green-600"
+                            }`}>
+                              {u.isClosed ? (cashVar === 0 ? "✓" : `${cashVar < 0 ? "−" : "+"}${inr(Math.abs(cashVar))}`) : "—"}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums">
+                              {u.expectedDigital !== null ? inr(u.expectedDigital) : <span className="text-muted-foreground">—</span>}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums">
+                              {u.actualDigital !== null ? inr(u.actualDigital) : <span className="text-muted-foreground">—</span>}
+                            </td>
+                            <td className={`px-3 py-2 text-right tabular-nums font-semibold ${
+                              !u.isClosed ? "text-muted-foreground"
+                              : digVar < 0 ? "text-red-600"
+                              : digVar > 0 ? "text-amber-600"
+                              : "text-green-600"
+                            }`}>
+                              {u.isClosed && u.digitalVariance !== null
+                                ? (digVar === 0 ? "✓" : `${digVar < 0 ? "−" : "+"}${inr(Math.abs(digVar))}`)
+                                : "—"}
+                            </td>
+                            <td className="px-3 py-2">
+                              <DrawerBadge status={u.drawerStatus} />
+                              {u.approvedByName && (
+                                <div className="text-[10px] text-muted-foreground mt-0.5">by {u.approvedByName}</div>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
+                              {u.closedAt ? fmtTime(u.closedAt) : <span className="text-amber-600">Not closed</span>}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                {u.closureId && (
+                                  <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
+                                    onClick={() => setStaffDetailId(u.closureId)}>
+                                    <Eye size={12} className="mr-1" /> View
+                                  </Button>
+                                )}
+                                {u.drawerStatus === "mismatch" && u.closureId && (
+                                  <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-amber-600 hover:text-amber-700"
+                                    onClick={() => setApproveOpen(u)}>
+                                    <ShieldCheck size={12} className="mr-1" /> Approve
+                                  </Button>
+                                )}
+                                {isSuperAdmin && u.isClosed && u.drawerStatus !== "reopened" && u.closureId && (
+                                  <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-600 hover:text-red-700"
+                                    onClick={() => setStaffReopenOpen(u)}>
+                                    <Unlock size={12} className="mr-1" /> Reopen
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {staffStatusQ.data.users.some((u) => !u.isClosed) && (
+                <p className="text-xs text-amber-600 mt-3 flex items-center gap-1">
+                  <AlertTriangle size={12} />
+                  Some staff have not closed their day. You can still close the overall day — their window will reset.
+                </p>
+              )}
+            </CardContent>
+          )}
         </Card>
       )}
 
@@ -468,7 +660,9 @@ export default function DayClose() {
         </CardContent>
       </Card>
 
-      {/* Confirm close dialog */}
+      {/* ── Dialogs ─────────────────────────────────────────────────────────── */}
+
+      {/* Confirm close */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
           <DialogHeader>
@@ -500,7 +694,7 @@ export default function DayClose() {
         </DialogContent>
       </Dialog>
 
-      {/* Detail dialog */}
+      {/* Overall closure detail */}
       <Dialog open={!!detailOpen} onOpenChange={(o) => !o && setDetailOpen(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader><DialogTitle>Closure #{detailOpen?.id} — {detailOpen?.closureDate}</DialogTitle></DialogHeader>
@@ -541,14 +735,12 @@ export default function DayClose() {
         </DialogContent>
       </Dialog>
 
-      {/* Reopen dialog (super-admin only) */}
+      {/* Overall reopen (super-admin) */}
       <Dialog open={!!reopenOpen} onOpenChange={(o) => !o && setReopenOpen(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle className="flex items-center gap-2"><Unlock className="text-amber-600" /> Re-open Closure #{reopenOpen?.id}</DialogTitle></DialogHeader>
           <div className="space-y-3 text-sm">
-            <p className="text-muted-foreground">
-              Re-opening marks this closure as "reopened". The next day-close will recompute its window from the most recent <em>closed</em> boundary, which means transactions in the re-opened window will roll into the next close.
-            </p>
+            <p className="text-muted-foreground">Re-opening marks this closure as "reopened". Transactions in the re-opened window will roll into the next close.</p>
             <Label>Reason (required, audited)</Label>
             <Textarea value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} placeholder="e.g. Cash counted again, found ₹200 missed earlier." rows={3} />
           </div>
@@ -560,6 +752,166 @@ export default function DayClose() {
               onClick={() => reopenOpen && reopenMut.mutate({ id: reopenOpen.id, reason: reopenReason.trim() })}
             >
               {reopenMut.isPending ? "Re-opening..." : "Confirm Re-open"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Staff closure detail */}
+      <Dialog open={staffDetailId !== null} onOpenChange={(o) => !o && setStaffDetailId(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {staffDetailQ.data
+                ? `${staffDetailQ.data.userName} — ${staffDetailQ.data.closureDate}`
+                : "Staff Closure Detail"}
+            </DialogTitle>
+          </DialogHeader>
+          {staffDetailQ.isLoading && <p className="text-sm text-muted-foreground p-2">Loading…</p>}
+          {staffDetailQ.data && (() => {
+            const d = staffDetailQ.data;
+            return (
+              <div className="space-y-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <DrawerBadge status={d.drawerStatus} />
+                  <span className="text-xs text-muted-foreground">Closed at {fmtIst(d.closedAt)}</span>
+                </div>
+                <table className="w-full text-xs border-t">
+                  <thead><tr className="text-muted-foreground"><th className="text-left py-1">Method</th><th className="text-right">Expected</th><th className="text-right">Actual</th><th className="text-right">Diff</th></tr></thead>
+                  <tbody>
+                    {(["Cash","Upi","Card","Cheque","Other"] as const).map((m) => {
+                      const e = n(d[`expected${m}` as keyof StaffCloseDetail] as string);
+                      const a = n(d[`actual${m}` as keyof StaffCloseDetail] as string);
+                      const v = a - e;
+                      return (
+                        <tr key={m} className="border-t"><td className="py-1">{m}</td><td className="text-right">{inr(e)}</td><td className="text-right">{inr(a)}</td><td className={`text-right ${v < 0 ? "text-red-600" : v > 0 ? "text-amber-600" : ""}`}>{v === 0 ? "—" : inr(v)}</td></tr>
+                      );
+                    })}
+                    <tr className="border-t font-bold bg-muted/20">
+                      <td className="py-1">Total</td>
+                      <td className="text-right">{inr(n(d.totalExpected))}</td>
+                      <td className="text-right">{inr(n(d.totalActual))}</td>
+                      <td className={`text-right ${n(d.variance) < 0 ? "text-red-600" : n(d.variance) > 0 ? "text-amber-600" : "text-green-600"}`}>
+                        {n(d.variance) === 0 ? "✓" : `${n(d.variance) < 0 ? "−" : "+"}${inr(Math.abs(n(d.variance)))}`}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                {d.denominations && (
+                  <div className="p-2 bg-muted/20 border rounded text-xs">
+                    <strong>Denominations:</strong>{" "}
+                    {[
+                      { k: "d500", l: "₹500" }, { k: "d200", l: "₹200" },
+                      { k: "d100", l: "₹100" }, { k: "d50", l: "₹50" },
+                      { k: "d20", l: "₹20" }, { k: "d10", l: "₹10" },
+                      { k: "coins", l: "Coins" },
+                    ]
+                      .filter(({ k }) => (d.denominations as Record<string, number>)[k] > 0)
+                      .map(({ k, l }) => `${l}×${(d.denominations as Record<string, number>)[k]}`)
+                      .join(", ")}
+                    {" → "}<strong>{inr(n(d.denominationTotal))}</strong>
+                  </div>
+                )}
+                {d.varianceNote && (
+                  <div className="p-2 bg-amber-50 dark:bg-amber-950/30 border rounded text-xs">
+                    <strong>Variance Note:</strong> {d.varianceNote}
+                  </div>
+                )}
+                {d.notes && (
+                  <div className="p-2 bg-muted/30 border rounded text-xs">
+                    <strong>Handover:</strong> {d.notes}
+                  </div>
+                )}
+                {d.approvedByName && (
+                  <div className="p-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 rounded text-xs">
+                    <strong>Mismatch approved</strong> by {d.approvedByName} on {fmtIst(d.approvedAt)}<br/>
+                    {d.approvalNote && <span>Note: {d.approvalNote}</span>}
+                  </div>
+                )}
+                {d.reopenedByName && (
+                  <div className="p-2 bg-orange-50 dark:bg-orange-950/30 border border-orange-200 rounded text-xs">
+                    <strong>Reopened</strong> by {d.reopenedByName} on {fmtIst(d.reopenedAt)}<br/>
+                    Reason: {d.reopenReason}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          <DialogFooter>
+            <Button onClick={() => setStaffDetailId(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Approve mismatch dialog */}
+      <Dialog open={!!approveOpen} onOpenChange={(o) => !o && setApproveOpen(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldCheck className="text-amber-600" /> Approve Mismatch — {approveOpen?.userName}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            {approveOpen && (
+              <div className="p-3 bg-muted/30 rounded-lg text-xs space-y-1">
+                <div className="flex justify-between"><span>Expected Total</span><strong>{inr(approveOpen.totalCollected + (approveOpen.variance ?? 0))}</strong></div>
+                <div className="flex justify-between"><span>Counted Total</span><strong>{inr(approveOpen.totalCollected)}</strong></div>
+                <div className="flex justify-between"><span>Variance</span>
+                  <strong className={approveOpen.variance < 0 ? "text-red-600" : "text-amber-600"}>
+                    {approveOpen.variance < 0 ? "−" : "+"}{inr(Math.abs(approveOpen.variance))}
+                  </strong>
+                </div>
+              </div>
+            )}
+            <Label>Approval Note <span className="text-red-600">*</span></Label>
+            <Textarea
+              value={approveNote}
+              onChange={(e) => setApproveNote(e.target.value)}
+              placeholder="Reason for approving this mismatch — e.g. checked CCTV, confirmed change error."
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setApproveOpen(null)}>Cancel</Button>
+            <Button
+              disabled={approveMut.isPending || approveNote.trim().length < 3 || !approveOpen?.closureId}
+              onClick={() => approveOpen?.closureId && approveMut.mutate({ id: approveOpen.closureId, note: approveNote.trim() })}
+            >
+              {approveMut.isPending ? "Approving…" : "Approve Mismatch"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Staff drawer reopen (super-admin only) */}
+      <Dialog open={!!staffReopenOpen} onOpenChange={(o) => !o && setStaffReopenOpen(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Unlock className="text-red-600" /> Reopen Drawer — {staffReopenOpen?.userName}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p className="text-muted-foreground text-xs">
+              Reopening allows the staff member to re-close their drawer. The action is logged and audited.
+              This does NOT affect the overall day close boundary.
+            </p>
+            <Label>Reason (required, audited) <span className="text-red-600">*</span></Label>
+            <Textarea
+              value={staffReopenReason}
+              onChange={(e) => setStaffReopenReason(e.target.value)}
+              placeholder="e.g. Staff re-counted, found discrepancy in UPI entries."
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setStaffReopenOpen(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={staffReopenMut.isPending || staffReopenReason.trim().length < 3 || !staffReopenOpen?.closureId}
+              onClick={() => staffReopenOpen?.closureId && staffReopenMut.mutate({ id: staffReopenOpen.closureId, reason: staffReopenReason.trim() })}
+            >
+              {staffReopenMut.isPending ? "Reopening…" : "Confirm Reopen"}
             </Button>
           </DialogFooter>
         </DialogContent>

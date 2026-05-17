@@ -29,11 +29,12 @@ const loginLimiter = rateLimit({
 });
 
 // ─── Session middleware ───────────────────────────────────────────────────────
-interface TeleRequest extends ReturnType<typeof Router>["prototype"] {
+import type { Request, Response, NextFunction } from "express";
+interface TeleRequest extends Request {
   teleUser?: typeof teleradiologyUsersTable.$inferSelect;
 }
 
-async function requireTeleSession(req: TeleRequest, res: ReturnType<typeof Router>["prototype"]["response"], next: ReturnType<typeof Router>["prototype"]["next"]): Promise<void> {
+async function requireTeleSession(req: TeleRequest, res: Response, next: NextFunction): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const r = req as any;
   const token = (r.headers?.["authorization"] as string | undefined)?.replace("Bearer ", "").trim();
