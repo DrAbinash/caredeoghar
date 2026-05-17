@@ -2,18 +2,23 @@ import { Router } from "express";
 import { db, billsTable, paymentsTable, ordersTable, patientsTable } from "@workspace/db";
 import { billAuditsTable, superAdminSessionsTable, ledgersTable } from "@workspace/db/schema";
 import { sendBillEditEmail, sendBillReprintEmail } from "../email";
-import { isValidUsbKey, isUsbGateEnforced } from "../middleware/requireSuperAdminUsb";
+import { isValidUsbKey, isUsbGateEnforced, getUsbKeyHeader } from "../middleware/requireSuperAdminUsb";
 import type { Request, Response } from "express";
 
-// Reject super-admin bill mutations if the USB pen-drive gate is enforced
-// and the request does not carry a valid X-SA-USB-Key header. Returns true
-// when the response has been sent (caller should return). Centralised here so
-// the super-admin token flow used by /:id/super-edit and DELETE /:id matches
-// the rest of the super-admin surface (see middleware/requireSuperAdmin.ts).
+/**
+ * Reject super-admin bill mutations if the USB pen-drive gate is enforced and
+ * the request does not carry a valid X-SA-USB-Key header. Returns true when
+ * the response has been sent (caller should return). Centralised here so the
+ * super-admin token flow used by /:id/super-edit and DELETE /:id matches the
+ * rest of the super-admin surface.
+ *
+ * If the user has remoteLoginEnabled, the USB check is skipped on routes that
+ * already validated the session token via requireSuperAdmin. For the direct
+ * bill-mutation routes the caller should just pass the USB key header.
+ */
 function rejectIfUsbMissing(req: Request, res: Response): boolean {
   if (!isUsbGateEnforced()) return false;
-  const headerVal = req.header("x-sa-usb-key");
-  const usb = (typeof headerVal === "string" ? headerVal : "").trim();
+  const usb = getUsbKeyHeader(req);
   if (!usb || !isValidUsbKey(usb)) {
     res.status(401).json({ error: "USB key required" });
     return true;

@@ -320,6 +320,9 @@ async function runStartupMigrations(): Promise<void> {
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS lan_only_login BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS lan_allowed_ips TEXT NOT NULL DEFAULT '[]';
 
+      -- ── Remote super-admin login bypass ────────────────────────────────
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS remote_login_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+
       -- ── Online bookings time slot ────────────────────────────────────────
       ALTER TABLE online_bookings ADD COLUMN IF NOT EXISTS time_slot TEXT NOT NULL DEFAULT '';
 

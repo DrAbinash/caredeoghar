@@ -28,6 +28,10 @@ export const usersTable = pgTable("users", {
   // Staff-login response reports this so the UI can force a PIN-change
   // step before letting them into the ERP.
   mustChangePin: boolean("must_change_pin").notNull().default(false),
+  // When true, this user may log in without the USB pen-drive even when the
+  // SUPER_ADMIN_USB_KEY gate is enforced. Intended for owners who need remote
+  // access. Audited with a warning log on every login/middleware bypass.
+  remoteLoginEnabled: boolean("remote_login_enabled").notNull().default(false),
   isActive: boolean("is_active").notNull().default(true),
   maxDiscount: numeric("max_discount", { precision: 5, scale: 2 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

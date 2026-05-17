@@ -91,7 +91,7 @@ async function verifyAndStoreKey(text: string): Promise<string | null> {
   return null; // no error
 }
 
-function UsbUnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
+function UsbUnlockScreen({ onUnlocked, onSkip }: { onUnlocked: () => void; onSkip: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const fsSupported = isFsAccessSupported();
@@ -195,9 +195,18 @@ function UsbUnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
           )}
         </div>
 
-        <p className="text-center text-xs text-muted-foreground mt-6">
+        <p className="text-center text-xs text-muted-foreground mt-4">
           The key file never leaves your device or this server. No pen drive = no super-admin.
         </p>
+        <div className="text-center mt-3">
+          <button
+            type="button"
+            onClick={onSkip}
+            className="text-xs text-muted-foreground hover:text-foreground underline"
+          >
+            Don't have the pen drive? Login with PIN only
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -610,7 +619,10 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <Suspense fallback={<PageLoader />}>
         {!usbUnlocked ? (
-          <UsbUnlockScreen onUnlocked={() => setUsbUnlocked(true)} />
+          <UsbUnlockScreen
+            onUnlocked={() => setUsbUnlocked(true)}
+            onSkip={() => setUsbUnlocked(true)}
+          />
         ) : !session ? (
           <LoginScreen
             onLogin={(s) => { setSession(s); setView("home"); }}

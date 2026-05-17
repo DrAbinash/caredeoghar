@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { z } from "zod/v4";
 import { db } from "@workspace/db";
+import { logger } from "../lib/logger";
 import {
   usersTable,
   superAdminSessionsTable,
@@ -27,6 +28,7 @@ import {
   requireSuperAdminUsb,
   isValidUsbKey,
   isUsbGateEnforced,
+  getUsbKeyHeader,
 } from "../middleware/requireSuperAdminUsb";
 import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
 import {
@@ -138,7 +140,10 @@ async function verifyPin(plain: string, stored: string): Promise<boolean> {
 // Gated by the USB pen-drive middleware: without a valid X-SA-USB-Key header
 // the request is rejected before the PIN is even checked. This makes the
 // super-admin login surface invisible to anyone without the physical key.
-superAdminRouter.post("/login", requireSuperAdminUsb, loginLimiter, async (req, res): Promise<void> => {
+//
+// Exception: if the authenticated user has remoteLoginEnabled=true, the
+// USB gate is bypassed so the owner can log in from outside the hospital.
+superAdminRouter.post("/login", loginLimiter, async (req, res): Promise<void> => {
   const parsed = LoginBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid request", details: parsed.error.issues });
@@ -160,6 +165,21 @@ superAdminRouter.post("/login", requireSuperAdminUsb, loginLimiter, async (req, 
   if (!isBcryptHash(user.pin)) {
     const hashed = await bcrypt.hash(pin, 12);
     await db.update(usersTable).set({ pin: hashed }).where(eq(usersTable.id, user.id));
+  }
+
+  // USB pen-drive gate check — enforced after successful PIN so we know the
+  // user and can honour the remoteLoginEnabled bypass.
+  if (isUsbGateEnforced()) {
+    const usb = getUsbKeyHeader(req);
+    const hasUsb = usb && isValidUsbKey(usb);
+    if (!hasUsb && !user.remoteLoginEnabled) {
+      res.status(401).json({ error: "USB key required" });
+      return;
+    }
+    if (!hasUsb && user.remoteLoginEnabled) {
+      logger.warn({ userId: user.id, userName: user.name },
+        "USB gate bypassed — remoteLoginEnabled super-admin logged in without pen drive");
+    }
   }
 
   const token = generateToken();

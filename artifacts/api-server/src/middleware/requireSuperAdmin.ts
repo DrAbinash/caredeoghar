@@ -2,7 +2,8 @@ import type { Request, Response, NextFunction } from "express";
 import { db } from "@workspace/db";
 import { superAdminSessionsTable, usersTable } from "@workspace/db/schema";
 import { and, eq } from "drizzle-orm";
-import { isValidUsbKey, isUsbGateEnforced } from "./requireSuperAdminUsb";
+import { isValidUsbKey, isUsbGateEnforced, getUsbKeyHeader } from "./requireSuperAdminUsb";
+import { logger } from "../lib/logger";
 
 /**
  * Express middleware that requires a valid, active, non-expired super-admin
@@ -20,11 +21,39 @@ export async function requireSuperAdmin(
   // header. This means even a stolen session token is useless without the
   // physical pen drive plugged in.
   if (isUsbGateEnforced()) {
-    const usbHeader = req.header("x-sa-usb-key");
-    const usbVal = (typeof usbHeader === "string" ? usbHeader : "").trim();
+    const usbVal = getUsbKeyHeader(req);
     if (!usbVal || !isValidUsbKey(usbVal)) {
-      res.status(401).json({ error: "USB key required" });
-      return;
+      // Session token is present — look up the user to see if remote login
+      // is enabled for them. This lets the owner/admin log in without the
+      // pen drive while all other staff are still gated by the USB key.
+      const token = (req.header("x-sa-token") ?? "").trim();
+      if (token) {
+        const [session] = await db
+          .select()
+          .from(superAdminSessionsTable)
+          .where(and(eq(superAdminSessionsTable.token, token), eq(superAdminSessionsTable.isActive, true)));
+        if (session) {
+          const [user] = await db
+            .select({ isActive: usersTable.isActive, role: usersTable.role, remoteLoginEnabled: usersTable.remoteLoginEnabled })
+            .from(usersTable)
+            .where(eq(usersTable.id, session.userId))
+            .limit(1);
+          if (user?.isActive && user?.role === "super_admin" && user?.remoteLoginEnabled) {
+            logger.warn({ userId: session.userId, userName: session.userName, path: req.path },
+              "USB gate bypassed — remoteLoginEnabled user accessed super-admin route without pen drive");
+            // Fall through to normal token validation below
+          } else {
+            res.status(401).json({ error: "USB key required" });
+            return;
+          }
+        } else {
+          res.status(401).json({ error: "USB key required" });
+          return;
+        }
+      } else {
+        res.status(401).json({ error: "USB key required" });
+        return;
+      }
     }
   }
 

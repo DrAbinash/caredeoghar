@@ -19,6 +19,14 @@ function constantTimeEqualString(a: string, b: string): boolean {
 let warned = false;
 
 /**
+ * Shared helper: extracts and normalises the X-SA-USB-Key header value.
+ */
+export function getUsbKeyHeader(req: Request): string {
+  const headerVal = req.header(HEADER_NAME);
+  return (typeof headerVal === "string" ? headerVal : "").trim();
+}
+
+/**
  * Express middleware that validates the X-SA-USB-Key request header against the
  * SUPER_ADMIN_USB_KEY environment secret. The secret is the contents of the
  * `superadmin.key` file the operator carries on their physical USB pen drive.
