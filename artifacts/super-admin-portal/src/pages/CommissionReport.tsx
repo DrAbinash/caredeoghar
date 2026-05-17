@@ -8,7 +8,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Download, Printer, Stethoscope } from "lucide-react";
+import { ArrowLeft, Download, FileSpreadsheet, Printer, Stethoscope } from "lucide-react";
 import {
   loadReportOrientation,
   persistReportOrientation,
@@ -21,6 +21,7 @@ import {
 } from "@workspace/api-client-react";
 import { saAuthHeaders } from "@/lib/saApi";
 import { exportCommissionPdf } from "@/lib/exportCommissionPdf";
+import { exportCommissionExcel } from "@/lib/exportCommissionExcel";
 
 type SaDoctor = { id: number; name: string };
 const SA_DOCTORS_KEY = ["/api/super-admin/doctors-list"] as const;
@@ -101,6 +102,45 @@ export default function CommissionReport({ onBack }: { onBack: () => void }) {
 
   const report = data?.report ?? [];
   const grandTotal = data?.grandTotal ?? { doctors: 0, orders: 0, revenue: 0, commission: 0 };
+
+  // ─── Excel Download ────────────────────────────────────────────────────────
+  const [xlsxLoading, setXlsxLoading] = useState(false);
+
+  const handleDownloadExcel = async () => {
+    if (report.length === 0) {
+      toast({ title: "No data to export", description: "Adjust the filters and try again.", variant: "destructive" });
+      return;
+    }
+    setXlsxLoading(true);
+    try {
+      const doctorLabel = reportDoctorId
+        ? doctors.find(d => d.id === reportDoctorId)?.name ?? "—"
+        : "All Doctors";
+      const title =
+        mode === "consolidated"
+          ? "Referral Commission – Consolidated Report"
+          : mode === "doctor-test"
+          ? "Referral Commission – Doctor + Test Detail"
+          : "Referral Commission Report";
+      await exportCommissionExcel(
+        report,
+        {
+          title,
+          from,
+          to,
+          doctorFilter: doctorLabel,
+          generatedAt: new Date().toLocaleString("en-IN"),
+          grandTotal,
+        },
+        mode,
+        showPercentFixed,
+      );
+    } catch (err) {
+      toast({ title: "Excel export failed", description: String(err), variant: "destructive" });
+    } finally {
+      setXlsxLoading(false);
+    }
+  };
 
   // ─── PDF Download ──────────────────────────────────────────────────────────
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -362,6 +402,9 @@ export default function CommissionReport({ onBack }: { onBack: () => void }) {
               </div>
               <Button variant="outline" size="sm" onClick={() => handlePrint()} className="gap-1.5">
                 <Printer size={14} /> Print
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleDownloadExcel} disabled={xlsxLoading} className="gap-1.5">
+                <FileSpreadsheet size={14} /> {xlsxLoading ? "Exporting…" : "Export Excel"}
               </Button>
               <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={pdfLoading} className="gap-1.5">
                 <Download size={14} /> {pdfLoading ? "Exporting…" : "Download PDF"}
