@@ -39,6 +39,26 @@ function getPresetKey(userId?: number): string {
   return `dicom_qr_presets_${userId ?? "anon"}`;
 }
 
+type PaperOrientation = "landscape" | "portrait";
+
+function getPaperSizeKey(userId?: number): string {
+  return `dicom_qr_paper_size_${userId ?? "anon"}`;
+}
+
+function loadPaperSize(userId?: number): PaperOrientation {
+  try {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(getPaperSizeKey(userId)) : null;
+    if (raw === "portrait" || raw === "landscape") return raw;
+  } catch { /* ignore */ }
+  return "landscape";
+}
+
+function persistPaperSize(orientation: PaperOrientation, userId?: number): void {
+  try {
+    window.localStorage.setItem(getPaperSizeKey(userId), orientation);
+  } catch { /* ignore quota errors */ }
+}
+
 function loadPresets(userId?: number): DicomPreset[] {
   try {
     const raw = typeof window !== "undefined" ? window.localStorage.getItem(getPresetKey(userId)) : null;
@@ -177,6 +197,7 @@ export default function DicomQueryRetrieve() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [paperOrientation, setPaperOrientation] = useState<PaperOrientation>(() => loadPaperSize(userId));
 
   // ── Preset state ──────────────────────────────────────────────────────────────
   // Initialize from localStorage for instant load; the API query below will
@@ -213,6 +234,11 @@ export default function DicomQueryRetrieve() {
     setPresets(loadPresets(userId));
     void queryClient.invalidateQueries({ queryKey: ["dicom-presets"] });
   }, [userId, queryClient]);
+
+  // Reload paper orientation preference when the signed-in user changes.
+  useEffect(() => {
+    setPaperOrientation(loadPaperSize(userId));
+  }, [userId]);
 
   // Focus save input when it appears
   useEffect(() => {
@@ -603,6 +629,14 @@ export default function DicomQueryRetrieve() {
 
   // ── PDF Export ────────────────────────────────────────────────────────────────
 
+  const handleSetPaperOrientation = useCallback((orientation: PaperOrientation) => {
+    setPaperOrientation(prev => {
+      if (prev === orientation) return prev;
+      persistPaperSize(orientation, userId);
+      return orientation;
+    });
+  }, [userId]);
+
   const handleExportPdf = useCallback(async () => {
     setIsExportingPdf(true);
     try {
@@ -703,7 +737,7 @@ export default function DicomQueryRetrieve() {
 <meta charset="UTF-8" />
 <title>DICOM Study Export – ${esc(dateLabel)}</title>
 <style>
-  @page { size: A4 landscape; margin: 14mm 12mm; }
+  @page { size: A4 ${paperOrientation}; margin: 14mm 12mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #111; }
 
@@ -814,7 +848,7 @@ export default function DicomQueryRetrieve() {
     } finally {
       setIsExportingPdf(false);
     }
-  }, [applied, searchMode, clinicSettings, toast]);
+  }, [applied, searchMode, clinicSettings, paperOrientation, toast]);
 
   function openAllSelectedOhif() {
     for (const s of selectedStudies) {
@@ -1300,13 +1334,29 @@ export default function DicomQueryRetrieve() {
           </h2>
           <div className="flex items-center gap-2 shrink-0">
             {isFetching && <RefreshCw size={13} className="animate-spin text-muted-foreground" />}
+            <div className="flex items-center rounded-md border border-input overflow-hidden h-7">
+              <button
+                className={`px-2 h-full text-[10px] font-medium transition-colors ${paperOrientation === "landscape" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"}`}
+                onClick={() => handleSetPaperOrientation("landscape")}
+                title="A4 Landscape (wide)"
+              >
+                A4 ↔
+              </button>
+              <button
+                className={`px-2 h-full text-[10px] font-medium transition-colors border-l border-input ${paperOrientation === "portrait" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"}`}
+                onClick={() => handleSetPaperOrientation("portrait")}
+                title="A4 Portrait (tall)"
+              >
+                A4 ↕
+              </button>
+            </div>
             <Button
               size="sm"
               variant="outline"
               className="h-7 text-xs gap-1.5"
               disabled={total === 0 || isExportingPdf}
               onClick={() => void handleExportPdf()}
-              title="Export all results as a formatted PDF report"
+              title={`Export all results as a formatted PDF report (${paperOrientation === "landscape" ? "A4 Landscape" : "A4 Portrait"})`}
             >
               <Printer size={13} className={isExportingPdf ? "animate-pulse" : ""} />
               {isExportingPdf ? "Preparing…" : "Export PDF"}
