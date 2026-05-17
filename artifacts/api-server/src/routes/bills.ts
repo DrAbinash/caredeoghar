@@ -358,9 +358,12 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
     return;
   }
 
-  // Guard against double-billing: reject if a non-cancelled bill already exists
-  // for this order. Prevents accidental duplicate bills from double-clicks or
-  // network retries. The user must explicitly cancel the existing bill first.
+  // Guard against double-billing:
+  // 1) Same order — prevents re-billing an order that already has a bill.
+  // 2) Same patient within 10s — catches rapid double-clicks that create two
+  //    separate orders. The frontend also has a synchronous generatingRef
+  //    guard, but this backend fence defends against network retries,
+  //    multi-tab races, and keyboard+click races.
   const [existingBill] = await db
     .select({ id: billsTable.id, billNumber: billsTable.billNumber })
     .from(billsTable)
@@ -369,6 +372,23 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
   if (existingBill) {
     res.status(409).json({
       error: `This order already has an active bill (${existingBill.billNumber}). Cancel it first before creating a new one.`,
+    });
+    return;
+  }
+
+  const tenSecondsAgo = new Date(Date.now() - 10_000);
+  const [existingRecent] = await db
+    .select({ id: billsTable.id, billNumber: billsTable.billNumber })
+    .from(billsTable)
+    .where(and(
+      eq(billsTable.patientId, order.patientId),
+      ne(billsTable.status, "cancelled"),
+      gt(billsTable.createdAt, tenSecondsAgo),
+    ))
+    .limit(1);
+  if (existingRecent) {
+    res.status(409).json({
+      error: `A bill for this patient was just created (${existingRecent.billNumber}). Please wait a few seconds before billing again.`,
     });
     return;
   }

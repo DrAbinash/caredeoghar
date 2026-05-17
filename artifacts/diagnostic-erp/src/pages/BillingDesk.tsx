@@ -2019,7 +2019,7 @@ export default function BillingDesk() {
                 <div className="space-y-2 pt-1">
                   <Button
                     onClick={() => {
-                      if (generatingRef.current || !!lastBill) return;
+                      if (generatingRef.current || !!lastBillRef.current) return;
                       generatingRef.current = true;
                       printAfterSaveRef.current = true;
                       generateMut.mutate();
