@@ -11,7 +11,7 @@ import {
   Search, RefreshCw, CalendarDays, MonitorPlay, Tv2, Copy,
   CheckCircle2, AlertCircle, Download, Shield, Server,
   WifiOff, Filter, XCircle, Activity, BookmarkPlus, Bookmark, Trash2, ChevronDown,
-  Database, Radio, Info, FileDown,
+  Database, Radio, Info, FileDown, Pencil, Check, X,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -174,8 +174,11 @@ export default function DicomQueryRetrieve() {
   const [showPresetMenu, setShowPresetMenu] = useState(false);
   const [savePresetName, setSavePresetName] = useState("");
   const [showSaveInput, setShowSaveInput]   = useState(false);
+  const [renamingId, setRenamingId]         = useState<string | null>(null);
+  const [renameValue, setRenameValue]       = useState("");
   const presetMenuRef = useRef<HTMLDivElement>(null);
   const saveInputRef  = useRef<HTMLInputElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   const queryClient = useQueryClient();
 
@@ -202,6 +205,11 @@ export default function DicomQueryRetrieve() {
   useEffect(() => {
     if (showSaveInput) saveInputRef.current?.focus();
   }, [showSaveInput]);
+
+  // Focus rename input when it appears
+  useEffect(() => {
+    if (renamingId) renameInputRef.current?.focus();
+  }, [renamingId]);
 
   // ── Queries ──────────────────────────────────────────────────────────────────
 
@@ -401,6 +409,30 @@ export default function DicomQueryRetrieve() {
     syncPresetsMut.mutate(updated);
     toast({ title: `Preset "${name}" deleted` });
   }, [presets, userId, syncPresetsMut, toast]);
+
+  const startRenaming = useCallback((preset: DicomPreset, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setRenamingId(preset.id);
+    setRenameValue(preset.name);
+  }, []);
+
+  const commitRename = useCallback((id: string) => {
+    const newName = renameValue.trim();
+    if (!newName) { setRenamingId(null); return; }
+    const oldPreset = presets.find((p) => p.id === id);
+    if (!oldPreset || oldPreset.name === newName) { setRenamingId(null); return; }
+    const updated = presets.map((p) => p.id === id ? { ...p, name: newName } : p);
+    setPresets(updated);
+    persistPresets(updated, userId);
+    syncPresetsMut.mutate(updated);
+    setRenamingId(null);
+    toast({ title: `Preset renamed to "${newName}"` });
+  }, [renameValue, presets, userId, syncPresetsMut, toast]);
+
+  const cancelRename = useCallback((e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setRenamingId(null);
+  }, []);
 
   // ── CSV Export ────────────────────────────────────────────────────────────────
 
@@ -631,37 +663,92 @@ export default function DicomQueryRetrieve() {
                   </div>
                 ) : (
                   <ul className="divide-y max-h-64 overflow-y-auto">
-                    {presets.map((preset) => (
-                      <li
-                        key={preset.id}
-                        className="flex items-center gap-2 px-4 py-2.5 hover:bg-muted/50 transition-colors group cursor-pointer"
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => handleLoadPreset(preset)}
-                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleLoadPreset(preset); } }}
-                      >
-                        <Bookmark size={13} className="shrink-0 text-muted-foreground group-hover:text-primary transition-colors" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold truncate">{preset.name}</p>
-                          <p className="text-[10px] text-muted-foreground truncate">
-                            {preset.filters.modalities.length > 0
-                              ? preset.filters.modalities.join(", ")
-                              : "All modalities"}{" · "}
-                            {preset.filters.dateFrom === preset.filters.dateTo
-                              ? preset.filters.dateFrom
-                              : `${preset.filters.dateFrom} → ${preset.filters.dateTo}`}
-                          </p>
-                        </div>
-                        <button
-                          onClick={(e) => handleDeletePreset(preset.id, preset.name, e)}
-                          className="shrink-0 p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-muted-foreground hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
-                          title="Delete preset"
-                          aria-label={`Delete preset ${preset.name}`}
+                    {presets.map((preset) => {
+                      const isRenaming = renamingId === preset.id;
+                      return (
+                        <li
+                          key={preset.id}
+                          className="flex items-center gap-2 px-4 py-2.5 hover:bg-muted/50 transition-colors group"
+                          role={isRenaming ? undefined : "button"}
+                          tabIndex={isRenaming ? undefined : 0}
+                          onClick={isRenaming ? undefined : () => handleLoadPreset(preset)}
+                          onKeyDown={isRenaming ? undefined : (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleLoadPreset(preset); } }}
+                          style={{ cursor: isRenaming ? "default" : "pointer" }}
                         >
-                          <Trash2 size={11} />
-                        </button>
-                      </li>
-                    ))}
+                          <Bookmark size={13} className="shrink-0 text-muted-foreground group-hover:text-primary transition-colors" />
+                          <div className="flex-1 min-w-0">
+                            {isRenaming ? (
+                              <input
+                                ref={renameInputRef}
+                                value={renameValue}
+                                onChange={(e) => setRenameValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") { e.preventDefault(); commitRename(preset.id); }
+                                  if (e.key === "Escape") { e.preventDefault(); cancelRename(); }
+                                }}
+                                onBlur={() => commitRename(preset.id)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-full text-xs font-semibold bg-background border border-primary rounded px-1.5 py-0.5 outline-none ring-0 focus:ring-1 focus:ring-primary"
+                                aria-label="Rename preset"
+                              />
+                            ) : (
+                              <>
+                                <p className="text-xs font-semibold truncate">{preset.name}</p>
+                                <p className="text-[10px] text-muted-foreground truncate">
+                                  {preset.filters.modalities.length > 0
+                                    ? preset.filters.modalities.join(", ")
+                                    : "All modalities"}{" · "}
+                                  {preset.filters.dateFrom === preset.filters.dateTo
+                                    ? preset.filters.dateFrom
+                                    : `${preset.filters.dateFrom} → ${preset.filters.dateTo}`}
+                                </p>
+                              </>
+                            )}
+                          </div>
+                          {isRenaming ? (
+                            <div className="flex shrink-0 items-center gap-0.5">
+                              <button
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={(e) => { e.stopPropagation(); commitRename(preset.id); }}
+                                className="p-1 rounded hover:bg-green-100 dark:hover:bg-green-900/30 text-green-600 transition-colors"
+                                title="Save rename"
+                                aria-label="Save rename"
+                              >
+                                <Check size={11} />
+                              </button>
+                              <button
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={(e) => cancelRename(e)}
+                                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                                title="Cancel rename"
+                                aria-label="Cancel rename"
+                              >
+                                <X size={11} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={(e) => startRenaming(preset, e)}
+                                className="p-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 text-muted-foreground hover:text-blue-600 transition-colors"
+                                title="Rename preset"
+                                aria-label={`Rename preset ${preset.name}`}
+                              >
+                                <Pencil size={11} />
+                              </button>
+                              <button
+                                onClick={(e) => handleDeletePreset(preset.id, preset.name, e)}
+                                className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-muted-foreground hover:text-red-600 transition-colors"
+                                title="Delete preset"
+                                aria-label={`Delete preset ${preset.name}`}
+                              >
+                                <Trash2 size={11} />
+                              </button>
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </div>
