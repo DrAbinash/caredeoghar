@@ -617,6 +617,166 @@ router.post("/mwl-procedures", async (req, res) => {
   res.json(row);
 });
 
+// ─── DICOM Q/R QUERY ─────────────────────────────────────────────────────────
+//
+// GET /api/radiology/qr-query
+// Query params:
+//   date       — exact study date YYYY-MM-DD
+//   dateFrom   — range start YYYY-MM-DD
+//   dateTo     — range end YYYY-MM-DD
+//   modality   — comma-separated list e.g. "MR,CT"
+//   patientName      — ILIKE substring
+//   accessionNumber  — ILIKE substring
+//   referringDoctor  — ILIKE substring
+//   limit / offset   — pagination
+//
+// Queries both radiologyStudiesTable (RIS) and radiologyWorklistTable (PACS),
+// deduplicates by accession number (RIS wins), then paginates.
+
+router.get("/qr-query", async (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 50, 200);
+  const offset = Number(req.query.offset) || 0;
+  const dateParam = req.query.date as string | undefined;
+  const dateFrom = req.query.dateFrom as string | undefined;
+  const dateTo = req.query.dateTo as string | undefined;
+  const modalityParam = req.query.modality as string | undefined;
+  const patientNameParam = req.query.patientName as string | undefined;
+  const accessionParam = req.query.accessionNumber as string | undefined;
+  const referringDoctorParam = req.query.referringDoctor as string | undefined;
+
+  const modalityList = modalityParam
+    ? modalityParam.split(",").map((m) => m.trim()).filter(Boolean)
+    : [];
+
+  // ── Query RIS (radiologyStudiesTable joined with patientsTable) ──────────
+  const risConds: ReturnType<typeof eq>[] = [];
+  if (dateParam) risConds.push(eq(radiologyStudiesTable.studyDate, dateParam));
+  if (dateFrom && !dateParam) risConds.push(gte(radiologyStudiesTable.studyDate, dateFrom));
+  if (dateTo && !dateParam) risConds.push(lte(radiologyStudiesTable.studyDate, dateTo));
+  if (modalityList.length === 1) risConds.push(eq(radiologyStudiesTable.modality, modalityList[0]!));
+  if (modalityList.length > 1) risConds.push(inArray(radiologyStudiesTable.modality, modalityList));
+  if (accessionParam) risConds.push(ilike(radiologyStudiesTable.accessionNumber, `%${accessionParam}%`));
+  if (referringDoctorParam) risConds.push(ilike(radiologyStudiesTable.referringDoctor, `%${referringDoctorParam}%`));
+
+  const risQuery = db
+    .select({
+      id: radiologyStudiesTable.id,
+      accessionNumber: radiologyStudiesTable.accessionNumber,
+      studyInstanceUID: radiologyStudiesTable.studyInstanceUid,
+      modality: radiologyStudiesTable.modality,
+      patientName: sql<string>`COALESCE(${patientsTable.firstName} || ' ' || ${patientsTable.lastName}, '')`,
+      patientId: radiologyStudiesTable.patientId,
+      studyDate: radiologyStudiesTable.studyDate,
+      referringDoctor: radiologyStudiesTable.referringDoctor,
+      status: radiologyStudiesTable.status,
+    })
+    .from(radiologyStudiesTable)
+    .leftJoin(patientsTable, eq(patientsTable.id, radiologyStudiesTable.patientId))
+    .where(risConds.length ? and(...risConds) : undefined)
+    .orderBy(desc(radiologyStudiesTable.studyDate), desc(radiologyStudiesTable.id))
+    .limit(500);
+
+  // patient name filter applied in JS after join (COALESCE expression)
+  const [risRaw, pacsRaw] = await Promise.all([
+    risQuery,
+    (async () => {
+      // radiologyWorklistTable.studyDate is stored as raw DICOM compact date YYYYMMDD.
+      // Frontend sends YYYY-MM-DD so we strip dashes before comparing.
+      const toCompact = (iso: string) => iso.replace(/-/g, "");
+      const pacsConds: ReturnType<typeof eq>[] = [];
+      if (dateParam) pacsConds.push(eq(radiologyWorklistTable.studyDate, toCompact(dateParam)));
+      if (dateFrom && !dateParam) pacsConds.push(sql`${radiologyWorklistTable.studyDate} >= ${toCompact(dateFrom)}`);
+      if (dateTo && !dateParam) pacsConds.push(sql`${radiologyWorklistTable.studyDate} <= ${toCompact(dateTo)}`);
+      if (modalityList.length === 1) pacsConds.push(eq(radiologyWorklistTable.modality, modalityList[0]!));
+      if (modalityList.length > 1) pacsConds.push(inArray(radiologyWorklistTable.modality, modalityList));
+      if (accessionParam) pacsConds.push(ilike(radiologyWorklistTable.accessionNumber, `%${accessionParam}%`));
+      if (referringDoctorParam) pacsConds.push(ilike(radiologyWorklistTable.referringDoctor, `%${referringDoctorParam}%`));
+      if (patientNameParam) pacsConds.push(ilike(radiologyWorklistTable.patientName, `%${patientNameParam}%`));
+
+      return db
+        .select({
+          id: radiologyWorklistTable.id,
+          accessionNumber: radiologyWorklistTable.accessionNumber,
+          studyInstanceUID: radiologyWorklistTable.studyInstanceUID,
+          modality: radiologyWorklistTable.modality,
+          patientName: radiologyWorklistTable.patientName,
+          patientId: radiologyWorklistTable.patientId,
+          studyDate: radiologyWorklistTable.studyDate,
+          referringDoctor: radiologyWorklistTable.referringDoctor,
+          status: radiologyWorklistTable.status,
+        })
+        .from(radiologyWorklistTable)
+        .where(pacsConds.length ? and(...pacsConds) : undefined)
+        .orderBy(desc(radiologyWorklistTable.studyDate), desc(radiologyWorklistTable.id))
+        .limit(500);
+    })(),
+  ]);
+
+  // Apply patient name filter on RIS side (it's a computed expression)
+  const risFiltered = patientNameParam
+    ? risRaw.filter((r) => r.patientName.toLowerCase().includes(patientNameParam.toLowerCase()))
+    : risRaw;
+
+  // Merge: RIS rows indexed by accession number. PACS rows fill in gaps.
+  type QrRow = {
+    id: number;
+    accessionNumber: string;
+    studyInstanceUID: string | null;
+    modality: string;
+    patientName: string | null;
+    patientId: number | null;
+    studyDate: string | null;
+    referringDoctor: string | null;
+    status: string;
+    source: string;
+  };
+
+  const byAccession = new Map<string, QrRow>();
+  for (const r of risFiltered) {
+    byAccession.set(r.accessionNumber, { ...r, source: "RIS" });
+  }
+  for (const p of pacsRaw) {
+    if (!byAccession.has(p.accessionNumber)) {
+      byAccession.set(p.accessionNumber, { ...p, source: "PACS" });
+    }
+  }
+
+  // Normalize studyDate to canonical YYYY-MM-DD for both sources.
+  // RIS rows are already YYYY-MM-DD (date column).
+  // PACS rows arrive as compact DICOM YYYYMMDD — convert so frontend
+  // can display and sort consistently.
+  const normalizeDate = (d: string | null): string | null => {
+    if (!d) return null;
+    // Already ISO-like (YYYY-MM-DD or longer)?
+    if (d.includes("-")) return d.slice(0, 10);
+    // Compact YYYYMMDD (exactly 8 digits)
+    if (/^\d{8}$/.test(d)) return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+    return d;
+  };
+
+  for (const row of byAccession.values()) {
+    row.studyDate = normalizeDate(row.studyDate);
+  }
+
+  // Sort merged set by studyDate desc, then by id desc
+  const merged = Array.from(byAccession.values()).sort((a, b) => {
+    const da = a.studyDate ?? "";
+    const db2 = b.studyDate ?? "";
+    if (da !== db2) return da > db2 ? -1 : 1;
+    return (b.id ?? 0) - (a.id ?? 0);
+  });
+
+  // NOTE: Each source is pre-capped at 500 rows before merge/dedupe.
+  // This keeps memory bounded and covers typical daily/weekly queries.
+  // Very large date ranges may not return all studies; narrow the query
+  // with date, modality, or patient filters if results appear incomplete.
+
+  const total = merged.length;
+  const studies = merged.slice(offset, offset + limit);
+
+  res.json({ total, studies });
+});
+
 // ─── EXTENDED PACS DASHBOARD DATA ────────────────────────────────────────────
 //
 // GET /api/radiology/pacs-dashboard-ext

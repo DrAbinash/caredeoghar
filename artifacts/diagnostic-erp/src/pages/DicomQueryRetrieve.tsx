@@ -299,9 +299,9 @@ export default function DicomQueryRetrieve() {
           <div className="flex flex-wrap gap-2 items-center">
             <span className="text-xs font-semibold text-muted-foreground">Quick Date:</span>
             {([
-              { label: "Today",          offset: 0 },
-              { label: "Yesterday",      offset: 1 },
-              { label: "Day Before",     offset: 2 },
+              { label: "Today",      offset: 0 },
+              { label: "Yesterday",  offset: 1 },
+              { label: "Day Before", offset: 2 },
             ] as const).map(({ label, offset }) => {
               const d = localDate(offset);
               const active = applied.dateFrom === d && applied.dateTo === d;
@@ -611,7 +611,6 @@ export default function DicomQueryRetrieve() {
           <Shield size={15} /> System Health &amp; Test Sequence
         </h3>
 
-        {/* Health summary row */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="rounded-lg border bg-background p-3 text-center">
             <p className={`text-xl font-bold ${totalMods > 0 && healthyMods === totalMods ? "text-green-600" : "text-amber-600"}`}>{healthyMods}/{totalMods}</p>
@@ -633,7 +632,6 @@ export default function DicomQueryRetrieve() {
           </div>
         </div>
 
-        {/* Step-by-step test instructions */}
         <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
           <li>Confirm <strong>WADO Base URL</strong>, <strong>Orthanc Base URL</strong>, and <strong>OHIF Base URL</strong> are filled in at <a href="/erp/radiology/pacs-settings" className="underline text-primary">PACS Settings → Viewer Settings</a>.</li>
           <li>Go to <a href="/erp/radiology/modality-management" className="underline text-primary">Modality Management</a> and run <strong>C-ECHO</strong> on each device — green = reachable on the network.</li>
@@ -644,7 +642,6 @@ export default function DicomQueryRetrieve() {
           <li>After ~1–2 minutes check <a href="/erp/radiology/dicom-agent-dashboard" className="underline text-primary">Agent Monitor</a> — successful pulls show <span className="font-mono">PULLED / IN PACS</span> here.</li>
         </ol>
 
-        {/* Test value reference cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
           {[
             { title: "MRI Test Values",   mod: "MR",    ae: "MRI_SCANNER",  desc: "BRAIN MRI W/WO CONTRAST" },
@@ -660,7 +657,6 @@ export default function DicomQueryRetrieve() {
           ))}
         </div>
 
-        {/* Manual configuration checklist */}
         <div className="text-xs text-muted-foreground border-t pt-3 space-y-1">
           <p className="font-semibold text-foreground text-sm">Manual hospital-side configuration required:</p>
           <ul className="list-disc list-inside space-y-1 ml-2">
