@@ -25,6 +25,8 @@ const PROVIDERS = [
   { value: "axis", label: "Axis Bank" },
   { value: "sbi", label: "SBI" },
   { value: "kotak", label: "Kotak Mahindra" },
+  { value: "bharatpe", label: "BharatPe" },
+  { value: "phonepe", label: "PhonePe" },
   { value: "generic", label: "Generic / Other" },
 ];
 

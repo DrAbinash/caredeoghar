@@ -6,6 +6,8 @@ import { AxisBankProvider } from "./AxisBankProvider";
 import { SBIBankProvider } from "./SBIBankProvider";
 import { KotakBankProvider } from "./KotakBankProvider";
 import { GenericBankProvider } from "./GenericBankProvider";
+import { BharatPeProvider } from "./BharatPeProvider";
+import { PhonePeProvider } from "./PhonePeProvider";
 
 const PROVIDER_REGISTRY: Record<string, () => BankProvider> = {
   mock: () => new MockBankProvider(),
@@ -15,6 +17,8 @@ const PROVIDER_REGISTRY: Record<string, () => BankProvider> = {
   sbi: () => new SBIBankProvider(),
   kotak: () => new KotakBankProvider(),
   generic: () => new GenericBankProvider(),
+  bharatpe: () => new BharatPeProvider(),
+  phonepe: () => new PhonePeProvider(),
 };
 
 const PROVIDER_PREFIX_MAP: Record<string, string> = {
@@ -25,6 +29,8 @@ const PROVIDER_PREFIX_MAP: Record<string, string> = {
   sbi: "SBI",
   kotak: "KOTAK",
   generic: "GENERIC_BANK",
+  bharatpe: "BHARATPE",
+  phonepe: "PHONEPE",
 };
 
 const providerCache = new Map<string, BankProvider>();

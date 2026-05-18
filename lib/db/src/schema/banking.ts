@@ -10,6 +10,8 @@ export const BANK_PROVIDERS = [
   "sbi",
   "kotak",
   "generic",
+  "bharatpe",
+  "phonepe",
 ] as const;
 
 export const BANK_ENVIRONMENTS = ["sandbox", "production"] as const;
