@@ -796,9 +796,9 @@ export default function MyDailySummary() {
   });
   const activeStaff = allUsers.filter((u) => u.isActive).sort((a, b) => a.name.localeCompare(b.name));
 
-  function setPreset(days: number) {
-    setFrom(daysAgoISO(days - 1));
-    setTo(today);
+  function setPreset(fromDaysAgo: number, toDaysAgo: number) {
+    setFrom(daysAgoISO(fromDaysAgo));
+    setTo(daysAgoISO(toDaysAgo));
   }
 
   const queryParams = new URLSearchParams({ from, to });
@@ -862,13 +862,19 @@ export default function MyDailySummary() {
             <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-8 w-36 text-sm" />
             <span className="text-gray-500 text-sm">→</span>
             <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-8 w-36 text-sm" />
-          </div>
-          <div className="flex gap-1.5 flex-wrap">
-            {[{ label: "Today", days: 1 }, { label: "7 Days", days: 7 }, { label: "30 Days", days: 30 }].map((p) => (
-              <Button key={p.label} variant="outline" size="sm" className="h-8 text-xs px-3" onClick={() => setPreset(p.days)}>
-                {p.label}
-              </Button>
-            ))}
+            <div className="flex gap-1.5 flex-wrap ml-2">
+              {[
+                { label: "Today", fromAgo: 0, toAgo: 0 },
+                { label: "Yesterday", fromAgo: 1, toAgo: 1 },
+                { label: "Day Before", fromAgo: 2, toAgo: 2 },
+                { label: "7 Days", fromAgo: 6, toAgo: 0 },
+                { label: "30 Days", fromAgo: 29, toAgo: 0 },
+              ].map((p) => (
+                <Button key={p.label} variant="outline" size="sm" className="h-8 text-xs px-3" onClick={() => setPreset(p.fromAgo, p.toAgo)}>
+                  {p.label}
+                </Button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -957,7 +963,7 @@ export default function MyDailySummary() {
                 <span className="font-semibold">Total Received</span> = Gross Billing + Dues Collected
               </p>
               <p className="text-[11px]">
-                <span className="font-semibold">Gross Billing</span> = Total New Bills (net of discounts)
+                <span className="font-semibold">Gross Billing</span> = Total Bills Created − Discounts
               </p>
             </div>
           </div>
