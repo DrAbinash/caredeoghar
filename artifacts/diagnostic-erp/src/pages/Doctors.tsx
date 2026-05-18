@@ -4,7 +4,7 @@ import {
   useCreateDoctor,
   getListDoctorsQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient, useMutation } from "@tanstack/react-query";
+import { useQueryClient, useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import { buildCsv, downloadCsv, parseCsv } from "@/lib/csv";
 import { useToast } from "@/hooks/use-toast";
@@ -17,6 +17,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -28,8 +29,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Search, Stethoscope, Phone, Building2, Mail, Pencil, Trash2, Download, Upload } from "lucide-react";
+import { Plus, Search, Stethoscope, Phone, Building2, Mail, Pencil, Trash2, Download, Upload, AlertTriangle } from "lucide-react";
 import { useForm } from "react-hook-form";
+import { useDeleteDoctor } from "@workspace/api-client-react";
 
 // Module A (compliance): commission fields removed from staff-facing UI.
 // Referral commission is configured exclusively in the Super Admin Portal.
@@ -85,6 +87,7 @@ export default function Doctors() {
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const [dupOpen, setDupOpen] = useState(false);
 
   // Export the full doctor list as a CSV. Ignores the current search box
   // so the user always gets a complete backup with one click.
@@ -186,6 +189,9 @@ export default function Doctors() {
             </Button>
             <Button size="sm" variant="outline" onClick={exportCsv} disabled={exporting} title="Download the full doctor list as CSV">
               <Download size={14} className="mr-1" /> {exporting ? "Exporting…" : "Export CSV"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setDupOpen(true)} title="Find duplicate doctors">
+              <AlertTriangle size={14} className="mr-1" /> Find Duplicates
             </Button>
             <Button size="sm" onClick={() => { setOpen(true); reset(); }}>
               <Plus size={14} className="mr-1" /> Add Doctor
@@ -366,6 +372,136 @@ export default function Doctors() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <DuplicatesDialog open={dupOpen} onOpenChange={setDupOpen} />
     </div>
+  );
+}
+
+// ── Duplicate Doctor Finder ──────────────────────────────────────────────
+
+type DupDoctor = {
+  id: number;
+  name: string;
+  specialization: string;
+  phone?: string | null;
+  email?: string | null;
+  hospitalAffiliation?: string | null;
+  registrationNumber?: string | null;
+};
+
+type DuplicateDoctorGroup = {
+  name: string;
+  doctors: DupDoctor[];
+};
+
+function DuplicatesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const qc = useQueryClient();
+  const { data: rawRes, isLoading } = useQuery({
+    queryKey: ["all-doctors-for-dups"],
+    queryFn: () => api.get<{ doctors: DupDoctor[] }>("/api/doctors?limit=10000"),
+    enabled: open,
+  });
+  const { toast } = useToast();
+
+  const delDoc = useDeleteDoctor({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListDoctorsQueryKey() });
+        qc.invalidateQueries({ queryKey: ["all-doctors-for-dups"] });
+        toast({ title: "Duplicate deleted" });
+      },
+      onError: (e: Error) => toast({ title: "Delete failed", description: e.message, variant: "destructive" }),
+    },
+  });
+
+  const doctors = (rawRes as { doctors?: DupDoctor[] } | undefined)?.doctors ?? [];
+
+  const groups: DuplicateDoctorGroup[] = (() => {
+    const map = new Map<string, DupDoctor[]>();
+    for (const d of doctors) {
+      const key = (d.name ?? "").trim().toLowerCase();
+      if (!key) continue;
+      const arr = map.get(key) ?? [];
+      arr.push(d);
+      map.set(key, arr);
+    }
+    const out: DuplicateDoctorGroup[] = [];
+    for (const [name, list] of map) {
+      if (list.length > 1) out.push({ name, doctors: list });
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+  })();
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Duplicate Doctors</DialogTitle>
+          <DialogDescription>
+            Doctors with the same name are grouped below. Click the trash icon to delete the duplicate you don't want. Doctors linked to existing orders are protected from deletion.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto">
+          {isLoading ? (
+            <div className="p-6 text-sm text-muted-foreground">Loading doctors…</div>
+          ) : groups.length === 0 ? (
+            <div className="p-6 text-sm text-muted-foreground text-center">No duplicate doctors found. All doctor names are unique.</div>
+          ) : (
+            <div className="space-y-3">
+              {groups.map((g) => (
+                <div key={g.name} className="border border-card-border rounded-lg overflow-hidden">
+                  <div className="bg-muted/30 px-4 py-2 font-semibold text-sm border-b border-card-border flex items-center gap-2">
+                    <AlertTriangle size={14} className="text-orange-500" />
+                    {g.name}
+                    <span className="text-muted-foreground font-normal text-xs">({g.doctors.length} entries with same name)</span>
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/20">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Specialization</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Phone</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Email</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Affiliation</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Reg. No</th>
+                        <th className="px-4 py-2 w-20"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {g.doctors.map((d) => (
+                        <tr key={d.id} className="border-b border-card-border/50 last:border-0 hover:bg-muted/10">
+                          <td className="px-4 py-2 text-xs">{d.specialization}</td>
+                          <td className="px-4 py-2 text-xs font-mono">{d.phone ?? "—"}</td>
+                          <td className="px-4 py-2 text-xs">{d.email ?? "—"}</td>
+                          <td className="px-4 py-2 text-xs">{d.hospitalAffiliation ?? "—"}</td>
+                          <td className="px-4 py-2 text-xs font-mono">{d.registrationNumber ?? "—"}</td>
+                          <td className="px-4 py-2 text-right">
+                            <button
+                              onClick={() => {
+                                if (confirm(`Delete duplicate "${d.name}"?\n\nThis cannot be undone. If this doctor has been used in orders, the delete will be blocked.`)) {
+                                  delDoc.mutate({ id: d.id });
+                                }
+                              }}
+                              className="text-muted-foreground hover:text-destructive p-1 rounded hover:bg-destructive/10"
+                              disabled={delDoc.isPending}
+                              title="Delete this duplicate"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex justify-end pt-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Done</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

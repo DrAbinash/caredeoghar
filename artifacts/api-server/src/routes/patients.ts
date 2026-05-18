@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, patientsTable, patientCounterTable } from "@workspace/db";
-import { eq, ilike, or, sql, desc } from "drizzle-orm";
+import { eq, ilike, or, sql, desc, and, gt } from "drizzle-orm";
 import {
   ListPatientsQueryParams,
   CreatePatientBody,
@@ -90,6 +90,36 @@ patientsRouter.post("/", async (req, res) => {
     res.status(400).json({ error: photo.error });
     return;
   }
+
+  // Guard against duplicate patients: same phone + name within last 5 minutes.
+  // Staff often double-click "Register & Select", retry a slow request, or
+  // walk away and come back without searching for the patient they just made.
+  const phone = parsed.data.phone?.trim();
+  const firstName = parsed.data.firstName?.trim();
+  const lastName = parsed.data.lastName?.trim();
+  if (phone && firstName && lastName) {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60_000);
+    const [dup] = await db
+      .select({ id: patientsTable.id, patientId: patientsTable.patientId })
+      .from(patientsTable)
+      .where(
+        and(
+          eq(patientsTable.phone, phone),
+          ilike(patientsTable.firstName, firstName),
+          ilike(patientsTable.lastName, lastName),
+          gt(patientsTable.createdAt, fiveMinutesAgo),
+        ),
+      )
+      .limit(1);
+    if (dup) {
+      res.status(409).json({
+        error: `A patient with the same name and phone was just created (${dup.patientId}). Please search for the existing patient instead of creating a duplicate.`,
+        existingPatientId: dup.patientId,
+      });
+      return;
+    }
+  }
+
   const patientId = await generatePatientId();
   const insertValues: Record<string, unknown> = { ...parsed.data, patientId };
   if (photo.value !== undefined) insertValues.photoDataUrl = photo.value;

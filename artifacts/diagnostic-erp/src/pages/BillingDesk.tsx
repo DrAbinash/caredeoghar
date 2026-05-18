@@ -629,7 +629,21 @@ export default function BillingDesk() {
       setNewPatient({ firstName: "", lastName: "", phone: "", gender: "male", ageValue: "", ageUnit: "years", email: "", address: "", bloodGroup: "" });
       toast({ title: `Patient registered: ${p.patientId}` });
     },
-    onError: () => toast({ title: "Failed to register patient", variant: "destructive" }),
+    onError: (err: Error) => {
+      const msg = err.message || "";
+      if (msg.includes("409") || msg.includes("was just created") || msg.includes("duplicate")) {
+        // Extract patient ID from the 409 response if possible
+        const match = msg.match(/\(P-\d+\)/);
+        const pid = match ? match[0] : "";
+        toast({
+          title: `Duplicate patient${pid ? ` ${pid}` : ""}`,
+          description: "A patient with this name and phone already exists. Please search for the existing patient instead of creating a new one.",
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Failed to register patient", description: msg, variant: "destructive" });
+      }
+    },
   });
 
   const queryClient = useQueryClient();
