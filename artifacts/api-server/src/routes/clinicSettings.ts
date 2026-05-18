@@ -33,7 +33,7 @@ clinicSettingsRouter.put("/", async (req, res) => {
     }
     update.sidebarTheme = body.sidebarTheme;
   }
-  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "payuEnabled", "billShowCode", "billShowCategory", "dayCloseAutoPrint", "lanOnlyLogin", "fido2Enabled", "kioskEnabled"] as const;
+  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "payuEnabled", "phonepeEnabled", "billShowCode", "billShowCategory", "dayCloseAutoPrint", "lanOnlyLogin", "fido2Enabled", "kioskEnabled"] as const;
   for (const f of boolFields) {
     if (body[f] !== undefined) {
       if (typeof body[f] !== "boolean") {
@@ -70,6 +70,13 @@ clinicSettingsRouter.put("/", async (req, res) => {
       return;
     }
     update.payuMerchantKey = body.payuMerchantKey.trim();
+  }
+  if (body.phonepeMerchantId !== undefined) {
+    if (typeof body.phonepeMerchantId !== "string") {
+      res.status(400).json({ error: "phonepeMerchantId must be a string" });
+      return;
+    }
+    update.phonepeMerchantId = body.phonepeMerchantId.trim();
   }
   const kioskTextFields = ["kioskUpiVpa", "kioskUpiName", "kioskWelcomeMessage", "kioskAllowedTestIds"] as const;
   for (const f of kioskTextFields) {

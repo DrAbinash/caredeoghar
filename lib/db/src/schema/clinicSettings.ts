@@ -30,6 +30,9 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   // PayU India
   payuEnabled: boolean("payu_enabled").notNull().default(false),
   payuMerchantKey: text("payu_merchant_key").notNull().default(""),
+  // PhonePe
+  phonepeEnabled: boolean("phonepe_enabled").notNull().default(false),
+  phonepeMerchantId: text("phonepe_merchant_id").notNull().default(""),
   // Self-registration kiosk
   kioskEnabled: boolean("kiosk_enabled").notNull().default(false),
   kioskUpiVpa: text("kiosk_upi_vpa").notNull().default(""),

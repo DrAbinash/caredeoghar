@@ -1351,6 +1351,8 @@ type OnlineBookingSettings = {
   onlineBookingLedgerId: number;
   payuEnabled: boolean;
   payuMerchantKey: string;
+  phonepeEnabled: boolean;
+  phonepeMerchantId: string;
 };
 
 function OnlineBookingTab() {
@@ -1378,6 +1380,8 @@ function OnlineBookingTab() {
       onlineBookingLedgerId: data.onlineBookingLedgerId || 1,
       payuEnabled: data.payuEnabled ?? false,
       payuMerchantKey: data.payuMerchantKey || "",
+      phonepeEnabled: data.phonepeEnabled ?? false,
+      phonepeMerchantId: data.phonepeMerchantId || "",
     });
   }, [data]);
 
@@ -1485,11 +1489,61 @@ function OnlineBookingTab() {
         </p>
       </div>
 
+      {/* PhonePe */}
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg bg-[#6739B7] flex items-center justify-center shrink-0">
+            <CreditCard size={16} className="text-white" />
+          </div>
+          <div>
+            <h3 className="font-bold">PhonePe UPI</h3>
+            <p className="text-xs text-muted-foreground">UPI-first checkout for Indian customers. Supports all UPI apps, cards, and wallets.</p>
+          </div>
+        </div>
+        <Toggle
+          value={form.phonepeEnabled}
+          onChange={(v) => setForm({ ...form, phonepeEnabled: v })}
+          label="Use PhonePe as active payment gateway"
+          hint="When enabled, PhonePe takes priority over PayU and Razorpay."
+        />
+        <div>
+          <Label>PhonePe Merchant ID</Label>
+          <p className="text-xs text-muted-foreground mb-1">Your PhonePe Merchant ID from the PhonePe dashboard. Safe to store here.</p>
+          <Input
+            value={form.phonepeMerchantId}
+            onChange={(e) => setForm({ ...form, phonepeMerchantId: e.target.value })}
+            className="mt-1 max-w-md font-mono text-sm"
+            placeholder="e.g. M1234567890"
+          />
+        </div>
+        <div className="flex justify-end gap-2 pt-2 border-t border-card-border">
+          <Button onClick={() => save.mutate(form)} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
+        </div>
+      </div>
+
+      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-5 space-y-2">
+        <h3 className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2">
+          <KeyRound size={15} /> PhonePe API Secret (SALT Key)
+        </h3>
+        <p className="text-sm text-amber-800 dark:text-amber-300">
+          The SALT Key is used server-side for X-VERIFY signature generation. It is <strong>never</strong> sent to the browser. Add it as environment secrets:
+        </p>
+        <div className="font-mono text-sm bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 rounded px-3 py-2 select-all">
+          PHONEPE_API_SECRET=your_salt_key_here
+        </div>
+        <div className="font-mono text-sm bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 rounded px-3 py-2 select-all">
+          PHONEPE_SALT_INDEX=1
+        </div>
+        <p className="text-xs text-amber-700 dark:text-amber-400">
+          In Replit: open Secrets, add <code>PHONEPE_API_SECRET</code> and <code>PHONEPE_SALT_INDEX</code>. Then restart the API server.
+        </p>
+      </div>
+
       {/* Razorpay (legacy / fallback) */}
       <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
         <div className="flex items-center gap-2">
           <h3 className="font-bold">Razorpay (Fallback / Legacy)</h3>
-          <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">Used when PayU is disabled</span>
+          <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">Used when PhonePe & PayU are disabled</span>
         </div>
         <div>
           <Label>Razorpay Key ID</Label>

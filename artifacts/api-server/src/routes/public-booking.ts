@@ -85,8 +85,12 @@ publicBookingRouter.get("/config", async (_req, res): Promise<void> => {
   const payuSalt = process.env.PAYU_MERCHANT_SALT || "";
   const payuKey = settings.payuMerchantKey || "";
 
-  let gateway: "razorpay" | "payu" | null = null;
+  const phonepeSalt = process.env.PHONEPE_API_SECRET || "";
+  const phonepeMerchantId = process.env.PHONEPE_MERCHANT_ID || settings.phonepeMerchantId || "";
+
+  let gateway: "razorpay" | "payu" | "phonepe" | null = null;
   if (settings.payuEnabled && payuKey && payuSalt) gateway = "payu";
+  else if (settings.phonepeEnabled && phonepeMerchantId && phonepeSalt) gateway = "phonepe";
   else if (razorpayKeyId && razorpaySecret) gateway = "razorpay";
 
   res.json({
@@ -95,6 +99,7 @@ publicBookingRouter.get("/config", async (_req, res): Promise<void> => {
     vipEnabled: settings.vipQueueEnabled,
     gateway,
     payuMerchantKey: payuKey,
+    phonepeMerchantId: settings.phonepeEnabled ? phonepeMerchantId : "",
   });
 });
 
@@ -292,6 +297,188 @@ publicBookingRouter.post("/payu-failure", async (req, res): Promise<void> => {
   }
 
   res.redirect(`${clinicSiteBase}/?booking=failed&reason=${encodeURIComponent(error_Message ?? "Payment cancelled")}`);
+});
+
+// ── PhonePe helpers ───────────────────────────────────────────────────────────
+
+const PHONEPE_PROD_BASE = "https://api.phonepe.com/apis/hermes";
+const PHONEPE_STAGING_BASE = "https://api-preprod.phonepe.com/apis/hermes";
+
+function phonepeXVerify(base64Payload: string, endpoint: string, saltKey: string, saltIndex: string): string {
+  const hash = crypto.createHash("sha256").update(base64Payload + endpoint + saltKey).digest("hex");
+  return `${hash}###${saltIndex}`;
+}
+
+// ── POST /api/public/booking/phonepe-initiate ─────────────────────────────────
+// Creates a pending booking and returns the PhonePe redirect URL.
+publicBookingRouter.post("/phonepe-initiate", createOrderLimiter, async (req, res): Promise<void> => {
+  const settings = await getSettings();
+  if (!settings?.onlineBookingEnabled) {
+    res.status(403).json({ error: "Online booking is not enabled." });
+    return;
+  }
+
+  const saltKey = process.env.PHONEPE_API_SECRET || "";
+  const saltIndex = process.env.PHONEPE_SALT_INDEX || "1";
+  const merchantId = process.env.PHONEPE_MERCHANT_ID || settings.phonepeMerchantId || "";
+  if (!saltKey || !merchantId) {
+    res.status(503).json({ error: "PhonePe not configured. Please contact the clinic." });
+    return;
+  }
+
+  const {
+    name, phone, email = "", selectedDate, timeSlot = "",
+    testIds = [], packageIds = [], totalAmount,
+    notes = "", isVip = false,
+  } = req.body as {
+    name: string; phone: string; email?: string; selectedDate: string; timeSlot?: string;
+    testIds?: number[]; packageIds?: number[]; totalAmount: number;
+    notes?: string; isVip?: boolean;
+  };
+
+  if (!name?.trim() || !phone?.trim() || !selectedDate) {
+    res.status(400).json({ error: "Name, phone, and selected date are required." });
+    return;
+  }
+  if (!Array.isArray(testIds) || !Array.isArray(packageIds) || (testIds.length + packageIds.length) === 0) {
+    res.status(400).json({ error: "Please select at least one test or package." });
+    return;
+  }
+  const amount = Number(totalAmount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    res.status(400).json({ error: "Invalid total amount." });
+    return;
+  }
+
+  const bookingRef = generateBookingRef();
+  const amountPaise = Math.round(amount * 100);
+  const base = getPublicBase(req as Parameters<typeof getPublicBase>[0]);
+  const callbackUrl = `${base}/api/public/booking/phonepe-callback`;
+  const redirectUrl = `${base}/?booking=phonepe_done&ref=${encodeURIComponent(bookingRef)}`;
+
+  const payload = {
+    merchantId,
+    merchantTransactionId: bookingRef,
+    merchantUserId: `MUID-${phone.replace(/\D/g, "").slice(-10)}`,
+    amount: amountPaise,
+    callbackUrl,
+    redirectMode: "REDIRECT",
+    redirectUrl,
+    mobileNumber: phone.replace(/\D/g, "").slice(-10),
+    paymentInstrument: { type: "PAY_PAGE" },
+  };
+  const payloadStr = JSON.stringify(payload);
+  const payloadBase64 = Buffer.from(payloadStr).toString("base64");
+  const endpoint = "/pg/v1/pay";
+  const xVerify = phonepeXVerify(payloadBase64, endpoint, saltKey, saltIndex);
+
+  const isStaging = process.env.NODE_ENV !== "production";
+  const baseUrl = isStaging ? PHONEPE_STAGING_BASE : PHONEPE_PROD_BASE;
+
+  try {
+    const rpRes = await fetch(`${baseUrl}${endpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json", "X-VERIFY": xVerify },
+      body: JSON.stringify({ request: payloadBase64 }),
+    });
+    if (!rpRes.ok) {
+      const errText = await rpRes.text().catch(() => "");
+      res.status(502).json({ error: "PhonePe gateway error. Please try again.", details: errText });
+      return;
+    }
+    const rpData = (await rpRes.json()) as {
+      success: boolean;
+      code: string;
+      data?: { instrumentResponse?: { redirectInfo?: { url: string } }; transactionId?: string };
+    };
+    if (!rpData.success || !rpData.data?.instrumentResponse?.redirectInfo?.url) {
+      res.status(502).json({ error: "Could not initiate PhonePe payment. Please try again.", code: rpData.code });
+      return;
+    }
+    const redirectTo = rpData.data.instrumentResponse.redirectInfo.url;
+    const providerRef = rpData.data.transactionId || "";
+
+    await db.insert(onlineBookingsTable).values({
+      bookingRef,
+      name: name.trim(),
+      phone: phone.trim(),
+      email: email.trim(),
+      selectedDate,
+      timeSlot: timeSlot.trim(),
+      testIds: JSON.stringify(testIds),
+      packageIds: JSON.stringify(packageIds),
+      totalAmount: String(amount),
+      notes: notes.trim(),
+      isVip: Boolean(isVip) && Boolean(settings.vipQueueEnabled),
+      phonepeTransactionId: bookingRef,
+      phonepeProviderRefId: providerRef,
+      status: "pending_payment",
+    });
+
+    res.json({ bookingRef, redirectUrl: redirectTo });
+  } catch {
+    res.status(502).json({ error: "Could not connect to PhonePe. Please try again." });
+    return;
+  }
+});
+
+// ── GET /api/public/booking/phonepe-callback ──────────────────────────────────
+// PhonePe redirects browser here after payment attempt.
+publicBookingRouter.get("/phonepe-callback", async (req, res): Promise<void> => {
+  const settings = await getSettings();
+  const saltKey = process.env.PHONEPE_API_SECRET || "";
+  const saltIndex = process.env.PHONEPE_SALT_INDEX || "1";
+  const merchantId = process.env.PHONEPE_MERCHANT_ID || settings?.phonepeMerchantId || "";
+
+  const base = getPublicBase(req as Parameters<typeof getPublicBase>[0]);
+  const clinicSiteBase = base;
+
+  const { merchantTransactionId, code } = req.query as Record<string, string>;
+  if (!merchantTransactionId) {
+    res.redirect(`${clinicSiteBase}/?booking=failed&reason=missing_txn_id`);
+    return;
+  }
+
+  // Check status with PhonePe server-side
+  const isStaging = process.env.NODE_ENV !== "production";
+  const baseUrl = isStaging ? PHONEPE_STAGING_BASE : PHONEPE_PROD_BASE;
+  const endpoint = `/pg/v1/status/${encodeURIComponent(merchantId)}/${encodeURIComponent(merchantTransactionId)}`;
+  const statusVerify = phonepeXVerify("" , endpoint, saltKey, saltIndex);
+
+  try {
+    const statusRes = await fetch(`${baseUrl}${endpoint}`, {
+      method: "GET",
+      headers: { Accept: "application/json", "X-VERIFY": statusVerify, "X-MERCHANT-ID": merchantId },
+    });
+    const statusData = (await statusRes.json()) as {
+      success: boolean;
+      code: string;
+      data?: { state?: string; responseCode?: string; transactionId?: string };
+    };
+
+    const state = statusData.data?.state || "";
+    if (state === "COMPLETED" || statusData.data?.responseCode === "SUCCESS") {
+      const [booking] = await db.select().from(onlineBookingsTable)
+        .where(eq(onlineBookingsTable.phonepeTransactionId, merchantTransactionId))
+        .limit(1);
+      if (booking && booking.status === "pending_payment") {
+        await db.update(onlineBookingsTable)
+          .set({ status: "paid", phonepeProviderRefId: statusData.data?.transactionId || booking.phonepeProviderRefId })
+          .where(eq(onlineBookingsTable.id, booking.id));
+      }
+      res.redirect(`${clinicSiteBase}/?booking=success&ref=${encodeURIComponent(merchantTransactionId)}`);
+      return;
+    }
+  } catch { /* fall through to failure */ }
+
+  // Mark failed
+  const [booking] = await db.select().from(onlineBookingsTable)
+    .where(eq(onlineBookingsTable.phonepeTransactionId, merchantTransactionId))
+    .limit(1);
+  if (booking && booking.status === "pending_payment") {
+    await db.update(onlineBookingsTable).set({ status: "payment_failed" }).where(eq(onlineBookingsTable.id, booking.id));
+  }
+  res.redirect(`${clinicSiteBase}/?booking=failed&reason=${encodeURIComponent(code || "Payment not completed")}`);
 });
 
 // ── POST /api/public/booking/create-order (Razorpay — kept for backwards compat) ──

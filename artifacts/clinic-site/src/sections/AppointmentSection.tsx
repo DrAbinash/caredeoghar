@@ -6,7 +6,7 @@ function get(c: Record<string, unknown>, k: string, fb = ""): string {
   return typeof c[k] === "string" ? (c[k] as string) : fb;
 }
 
-type BookingConfig = { enabled: boolean; keyId: string; vipEnabled: boolean; gateway: "payu" | "razorpay" | null; payuMerchantKey?: string };
+type BookingConfig = { enabled: boolean; keyId: string; vipEnabled: boolean; gateway: "payu" | "razorpay" | "phonepe" | null; payuMerchantKey?: string; phonepeMerchantId?: string };
 type TestItem = { id: number; code: string; name: string; category: string; price: string };
 type PkgItem  = { id: number; code: string; name: string; price: string; description: string };
 
@@ -83,7 +83,7 @@ export default function AppointmentSection({ section, settings }: { section: Sec
     urlChecked.current = true;
     const params = new URLSearchParams(window.location.search);
     const bookingStatus = params.get("booking");
-    if (bookingStatus === "success" || bookingStatus === "link_success") {
+    if (bookingStatus === "success" || bookingStatus === "link_success" || bookingStatus === "phonepe_done") {
       setSuccessRef(params.get("ref") ?? "");
       setStep("done");
     } else if (bookingStatus === "failed") {
@@ -153,6 +153,23 @@ export default function AppointmentSection({ section, settings }: { section: Sec
     }
   }
 
+  async function handlePhonePe() {
+    setError(""); setPaying(true);
+    try {
+      const res = await bookingPost<{ bookingRef: string; redirectUrl: string }>("/api/public/booking/phonepe-initiate", {
+        name: pd.name, phone: pd.phone, email: pd.email, selectedDate: pd.date, timeSlot: pd.timeSlot,
+        testIds: Array.from(selTests), packageIds: Array.from(selPkgs),
+        totalAmount: total, notes: pd.notes, isVip: pd.isVip,
+      });
+      // Redirect to PhonePe checkout — page will come back via redirectUrl
+      window.location.href = res.redirectUrl;
+      // Don't reset paying — the page will redirect away
+    } catch (e: unknown) {
+      const msg = (e as { message?: string }).message || "Something went wrong.";
+      setError(msg); setPaying(false);
+    }
+  }
+
   async function handleRazorpay() {
     setError(""); setPaying(true);
     try {
@@ -200,11 +217,12 @@ export default function AppointmentSection({ section, settings }: { section: Sec
 
   async function handlePay() {
     if (selTests.size === 0 && selPkgs.size === 0) { setError("Please select at least one test or package."); return; }
+    if (config?.gateway === "phonepe") return handlePhonePe();
     if (config?.gateway === "payu") return handlePayU();
     return handleRazorpay();
   }
 
-  const gatewayLabel = config?.gateway === "payu" ? "PayU" : "Razorpay";
+  const gatewayLabel = config?.gateway === "phonepe" ? "PhonePe" : config?.gateway === "payu" ? "PayU" : "Razorpay";
 
   if (!config || !config.enabled) {
     return (
