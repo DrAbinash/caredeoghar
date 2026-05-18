@@ -124,6 +124,7 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
   const ageGender = [ageStr, bill.patient?.gender].filter(Boolean).join(" / ").toUpperCase();
   const created = bill.createdAt ? new Date(bill.createdAt) : new Date();
   const isCancelled = (bill.status ?? "") === "cancelled";
+  const rawDoctorName = bill.order?.doctor?.name ?? "";
 
   const fontPx = paperSize === "A5" ? 14 : 12;
   const pageMargin = paperSize === "A5" ? "3mm" : "6mm";
@@ -149,15 +150,17 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
       <em>Cancelled tests: ${cancelled.map((t) => escapeHtml(t.test?.name ?? "")).join(", ")}</em>
     </div>`;
 
-  const payRows = (bill.payments ?? []).map((p) => `
-    <tr>
-      <td style="padding:1px 4px;text-transform:capitalize">${escapeHtml(p.method)}</td>
-      <td style="padding:1px 4px;color:#666">${escapeHtml(p.referenceNumber ?? "")}</td>
-      <td style="padding:1px 4px;text-align:right">₹${Number(p.amount).toFixed(2)}</td>
-    </tr>`).join("");
+  const payRows = (bill.payments ?? []).map((p) => {
+    const ref = p.referenceNumber ? ` (${escapeHtml(p.referenceNumber)})` : "";
+    return `<tr>
+      <td style="padding:1px 0;text-transform:capitalize">${escapeHtml(p.method)}${ref ? `<span style="color:#666;font-size:${Math.round(fontPx * 0.78)}px">${ref}</span>` : ""}</td>
+      <td style="padding:1px 0;text-align:right;white-space:nowrap;font-weight:600">₹${Number(p.amount).toFixed(2)}</td>
+    </tr>`;
+  }).join("");
 
   const onePage = (copyIdx: number) => `
-    <section class="receipt" style="${copyIdx > 0 ? "page-break-before:always;" : ""}">
+    <section class="receipt" style="${copyIdx > 0 ? "page-break-before:always;" : ""}display:flex;flex-direction:column;min-height:100vh;">
+      <div style="flex:1">
       ${reprintBy || reprintReason ? `<div style="text-align:center;font-size:${fontPx - 1}px;color:#a16207;border:1px dashed #d97706;padding:2px 4px;margin-bottom:6px;text-transform:uppercase">DUPLICATE / RE-PRINT${reprintBy ? ` · BY ${escapeHtml(reprintBy)}` : ""}${reprintReason ? ` · ${escapeHtml(reprintReason)}` : ""}</div>` : ""}
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;border-bottom:2px solid #1e40af;padding-bottom:8px;margin-bottom:8px">
         <div style="flex:1;min-width:0">
@@ -179,7 +182,7 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
               <strong style="font-size:${paperSize === "A5" ? 18 : 17}px;font-weight:900;line-height:1.05">${escapeHtml(`${bill.patient?.firstName ?? ""} ${bill.patient?.lastName ?? ""}`.trim())}</strong>
               ${ageGender ? `<strong style="font-size:${paperSize === "A5" ? 14 : 14}px;font-weight:800">&middot; ${escapeHtml(ageGender)}</strong>` : ""}
             </div>
-            <div style="font-size:${paperSize === "A5" ? 13 : 13}px;font-weight:700;margin-top:3px">REF: <strong>${bill.order?.doctor?.name ? escapeHtml("DR. " + bill.order.doctor.name) : "SELF / WALK-IN"}</strong></div>
+            <div style="font-size:${paperSize === "A5" ? 13 : 13}px;font-weight:700;margin-top:3px">REF: <strong>${rawDoctorName ? escapeHtml(rawDoctorName.match(/^\s*DR\.?\s*/i) ? rawDoctorName.trim().toUpperCase() : "DR. " + rawDoctorName.trim()) : "SELF / WALK-IN"}</strong></div>
           </div>
           <div style="text-align:right;font-size:${Math.round(fontPx * 0.85)}px;line-height:1.5;flex-shrink:0">
             ${bill.patient?.phone ? `<div>PH: ${escapeHtml(bill.patient.phone)}</div>` : ""}
@@ -224,8 +227,8 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
             <td style="vertical-align:top;padding:0;overflow:hidden">
               ${qrEnabled && qrDataUrl ? `<img src="${qrDataUrl}" alt="Verify QR" style="width:${paperSize === "A5" ? 56 : 56}px;height:${paperSize === "A5" ? 56 : 56}px;display:block"/><div style="font-size:${Math.round(fontPx * 0.7)}px;color:#666;margin-top:1px;text-transform:none;white-space:nowrap">Scan to verify</div>` : ""}
             </td>
-            <td style="vertical-align:top;padding:0 8px;font-size:${Math.round(fontPx * 0.95)}px;word-break:break-word">
-              ${(bill.payments ?? []).length > 0 ? `<div style="font-weight:700;border-bottom:1px solid #ccc;padding-bottom:1px;margin-bottom:2px">PAYMENT DETAILS</div><table style="width:100%;border-collapse:collapse;font-size:${Math.round(fontPx * 0.95)}px;table-layout:fixed"><colgroup><col style="width:34%"/><col/><col style="width:30%"/></colgroup><tbody>${payRows}</tbody></table>` : ""}
+            <td style="vertical-align:top;padding:0 8px 0 0;font-size:${Math.round(fontPx * 0.95)}px;word-break:break-word">
+              ${(bill.payments ?? []).length > 0 ? `<div style="font-weight:700;border-bottom:1px solid #ccc;padding-bottom:1px;margin-bottom:3px">PAYMENT DETAILS</div><table style="width:100%;border-collapse:collapse"><tbody>${payRows}</tbody></table>` : ""}
             </td>
             <td style="vertical-align:top;padding:0">
               <table style="width:100%;border-collapse:collapse;font-size:${fontPx}px;table-layout:fixed">
@@ -243,6 +246,7 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
         </tbody>
       </table>
 
+      </div><!-- flex:1 close — pushes footer to bottom of A5 page -->
       <!--
         FOOTER BLOCK — single combined section so there is only ONE
         page-break-inside:avoid target. Having two separate avoid-blocks
@@ -251,7 +255,7 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
         for the second copy). Merged into one block; footerNote is the
         primary message since the clinic configures it.
       -->
-      <div style="margin-top:8px;border:1px solid #1e40af;border-radius:6px;padding:${paperSize === "A5" ? "8px 14px" : "6px 12px"};background:#f0f6ff;text-align:center;text-transform:none;page-break-inside:avoid">
+      <div style="margin-top:auto;border:1px solid #1e40af;border-radius:6px;padding:${paperSize === "A5" ? "8px 14px" : "6px 12px"};background:#f0f6ff;text-align:center;text-transform:none;page-break-inside:avoid">
         <div style="font-size:${fontPx + 1}px;font-weight:800;color:#1e40af;letter-spacing:0.5px">${escapeHtml(clinic?.footerNote || bill.reportCollectionNote || "Please collect your report within 7 days.")}</div>
         <div style="font-size:${Math.round(fontPx * 0.8)}px;color:#666;margin-top:3px">We wish you good health.  &middot;  Computer-generated invoice — no signature required.</div>
       </div>
@@ -263,7 +267,7 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
 <style>
   @page { size: ${paperSize} portrait; margin: ${pageMargin}; }
   *, *::before, *::after { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; width: 100%; }
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
   body { background: #fff; color: #000; font-family: Arial, sans-serif; font-size: ${fontPx}px; text-transform: uppercase; ${isBW ? "filter: grayscale(1) contrast(1.35); -webkit-print-color-adjust: exact; print-color-adjust: exact;" : ""} }
   .receipt { width: 100%; padding: ${paperSize === "A5" ? "5px 7px" : "4px 6px"}; }
   table { width: 100%; }
