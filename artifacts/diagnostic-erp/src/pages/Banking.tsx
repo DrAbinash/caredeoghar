@@ -13,8 +13,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Landmark, RefreshCw, Plus, Trash2, ArrowUpRight, ArrowDownLeft,
-  CreditCard, Activity, CheckCircle, Unlink,
-  Wallet,
+  CreditCard, Activity, CheckCircle, Unlink, Link2, Globe,
+  Wallet, Send, Clock, AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -64,6 +64,27 @@ interface BankTxn {
   reconciliationStatus: string;
 }
 
+interface PaymentRequest {
+  id: number;
+  provider: string;
+  amount: string;
+  currency: string;
+  purpose: string | null;
+  beneficiaryName: string | null;
+  status: string;
+  failureReason: string | null;
+  createdAt: string;
+}
+
+interface WebhookLog {
+  id: number;
+  provider: string;
+  eventType: string | null;
+  signatureValid: boolean | null;
+  processed: boolean;
+  createdAt: string;
+}
+
 interface BankingSummary {
   totalAccounts: number;
   unreconciledTransactions: number;
@@ -79,6 +100,10 @@ export default function Banking() {
   const [selectedAccount, setSelectedAccount] = useState<number | null>(null);
   const [viewTxOpen, setViewTxOpen] = useState(false);
   const [balanceLoading, setBalanceLoading] = useState<number | null>(null);
+  const [matchUtr, setMatchUtr] = useState("");
+  const [matchVoucherId, setMatchVoucherId] = useState("");
+  const [matchPaymentId, setMatchPaymentId] = useState("");
+  const [matchLoading, setMatchLoading] = useState(false);
 
   const [form, setForm] = useState({
     provider: "mock",
@@ -106,6 +131,21 @@ export default function Banking() {
     queryKey: ["banking", "transactions", { accountId: selectedAccount }],
     queryFn: () => api.get(`/api/banking/transactions?accountId=${selectedAccount}&limit=100`),
     enabled: viewTxOpen && selectedAccount !== null,
+  });
+
+  const unreconciledQuery = useQuery<BankTxn[]>({
+    queryKey: ["banking", "unreconciled"],
+    queryFn: () => api.get("/api/banking/reconciliation/unreconciled?limit=100"),
+  });
+
+  const paymentsQuery = useQuery<PaymentRequest[]>({
+    queryKey: ["banking", "payments"],
+    queryFn: () => api.get("/api/banking/payments?limit=100"),
+  });
+
+  const webhooksQuery = useQuery<WebhookLog[]>({
+    queryKey: ["banking", "webhooks"],
+    queryFn: () => api.get("/api/banking/webhook-logs?limit=50"),
   });
 
   const createAccount = useMutation({
@@ -150,6 +190,24 @@ export default function Banking() {
       qc.invalidateQueries({ queryKey: ["banking", "transactions"] });
     } catch (e: any) {
       toast({ title: "Import failed", description: e?.message || "Error", variant: "destructive" });
+    }
+  }
+
+  async function reconcileUtr() {
+    if (!matchUtr.trim()) return;
+    setMatchLoading(true);
+    try {
+      const body: Record<string, unknown> = { utr: matchUtr.trim() };
+      if (matchVoucherId.trim()) body.voucherId = Number(matchVoucherId.trim());
+      if (matchPaymentId.trim()) body.paymentId = Number(matchPaymentId.trim());
+      await api.post("/api/banking/reconciliation/match", body);
+      toast({ title: "Reconciled", description: `UTR ${matchUtr} matched successfully` });
+      setMatchUtr(""); setMatchVoucherId(""); setMatchPaymentId("");
+      qc.invalidateQueries({ queryKey: ["banking"] });
+    } catch (e: any) {
+      toast({ title: "Reconciliation failed", description: e?.message || "No transaction found", variant: "destructive" });
+    } finally {
+      setMatchLoading(false);
     }
   }
 
@@ -209,6 +267,8 @@ export default function Banking() {
           <TabsTrigger value="accounts">Accounts</TabsTrigger>
           <TabsTrigger value="transactions">Transactions</TabsTrigger>
           <TabsTrigger value="payments">Payments</TabsTrigger>
+          <TabsTrigger value="reconciliation">Reconciliation</TabsTrigger>
+          <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
         </TabsList>
 
         <TabsContent value="accounts">
@@ -329,12 +389,157 @@ export default function Banking() {
 
         <TabsContent value="payments">
           <Card>
-            <CardHeader>
-              <CardTitle>Payment Requests</CardTitle>
-            </CardHeader>
-            <CardContent className="text-center text-muted-foreground py-12">
-              <CreditCard className="w-8 h-8 mx-auto mb-2" />
-              Use the Payments tab to initiate payments and check their status via your bank provider.
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Beneficiary</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Purpose</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(paymentsQuery.data ?? []).map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell>{new Date(p.createdAt).toLocaleDateString("en-IN")}</TableCell>
+                      <TableCell className="font-medium">{p.beneficiaryName || "—"}</TableCell>
+                      <TableCell className="font-mono">{parseFloat(p.amount).toLocaleString("en-IN")} {p.currency}</TableCell>
+                      <TableCell className="max-w-xs truncate">{p.purpose || "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={cn(
+                          p.status === "completed" && "bg-green-50 text-green-700",
+                          p.status === "pending" && "bg-yellow-50 text-yellow-700",
+                          p.status === "failed" && "bg-red-50 text-red-700",
+                        )}>
+                          {p.status === "completed" ? <CheckCircle className="w-3 h-3 mr-1" />
+                            : p.status === "pending" ? <Clock className="w-3 h-3 mr-1" />
+                            : <AlertCircle className="w-3 h-3 mr-1" />}
+                          {p.status}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {(paymentsQuery.data ?? []).length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                        No payment requests. Initiate payouts from the Payments page.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="reconciliation">
+          <div className="space-y-4">
+            <Card>
+              <CardHeader><CardTitle>Match by UTR</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <Label>UTR / Reference</Label>
+                    <Input value={matchUtr} onChange={(e) => setMatchUtr(e.target.value)} placeholder="e.g. 123456789012" />
+                  </div>
+                  <div>
+                    <Label>Voucher ID (optional)</Label>
+                    <Input value={matchVoucherId} onChange={(e) => setMatchVoucherId(e.target.value)} placeholder="Number" />
+                  </div>
+                  <div>
+                    <Label>Payment ID (optional)</Label>
+                    <Input value={matchPaymentId} onChange={(e) => setMatchPaymentId(e.target.value)} placeholder="Number" />
+                  </div>
+                </div>
+                <Button onClick={reconcileUtr} disabled={matchLoading || !matchUtr.trim()}>
+                  <Link2 className="w-4 h-4 mr-2" />
+                  {matchLoading ? "Matching..." : "Match & Reconcile"}
+                </Button>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader><CardTitle>Unreconciled Transactions</CardTitle></CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>UTR</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(unreconciledQuery.data ?? []).map((t) => (
+                      <TableRow key={t.id}>
+                        <TableCell>{new Date(t.transactionDate).toLocaleDateString("en-IN")}</TableCell>
+                        <TableCell className="max-w-xs truncate">{t.description || "—"}</TableCell>
+                        <TableCell>
+                          <Badge variant={t.type === "credit" ? "default" : "secondary"}>
+                            {t.type === "credit" ? <ArrowDownLeft className="w-3 h-3 mr-1" /> : <ArrowUpRight className="w-3 h-3 mr-1" />}
+                            {t.type}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-mono">{parseFloat(t.amount).toLocaleString("en-IN")}</TableCell>
+                        <TableCell className="font-mono text-xs">{t.utr || "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                    {(unreconciledQuery.data ?? []).length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                          All transactions are reconciled. Great!
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="webhooks">
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Time</TableHead>
+                    <TableHead>Provider</TableHead>
+                    <TableHead>Event</TableHead>
+                    <TableHead>Signature</TableHead>
+                    <TableHead>Processed</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(webhooksQuery.data ?? []).map((w) => (
+                    <TableRow key={w.id}>
+                      <TableCell className="text-xs whitespace-nowrap">{new Date(w.createdAt).toLocaleString("en-IN")}</TableCell>
+                      <TableCell><Badge variant="outline">{w.provider}</Badge></TableCell>
+                      <TableCell className="text-xs">{w.eventType || "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant={w.signatureValid === true ? "default" : w.signatureValid === false ? "destructive" : "outline"}>
+                          {w.signatureValid === true ? <CheckCircle className="w-3 h-3 mr-1" /> : w.signatureValid === false ? <AlertCircle className="w-3 h-3 mr-1" /> : null}
+                          {w.signatureValid === true ? "Valid" : w.signatureValid === false ? "Invalid" : "Unknown"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={w.processed ? "default" : "secondary"}>{w.processed ? "Yes" : "No"}</Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {(webhooksQuery.data ?? []).length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                        No webhook logs yet. Webhooks appear when bank providers send notifications.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>

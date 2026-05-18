@@ -10,8 +10,8 @@ import { db } from "@workspace/db";
 import {
   waContactsTable, waConversationsTable, waMessagesTable,
   waBotSessionsTable, waAuditLogsTable,
-  patientsTable, doctorsTable, staffUsersTable,
-  billsTable, ordersTable, reportsTable, appointmentsTable,
+  patientsTable, doctorsTable, staffTable,
+  billsTable, ordersTable, patientReportsTable, appointmentsTable,
 } from "@workspace/db/schema";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
 import type { WhatsAppProvider } from "./WhatsAppProvider";
@@ -76,8 +76,8 @@ export class WhatsAppService {
       .where(eq(doctorsTable.phone, normalized)).limit(1);
     if (doctor) doctorId = doctor.id;
 
-    const [staff] = await db.select({ id: staffUsersTable.id }).from(staffUsersTable)
-      .where(eq(staffUsersTable.phone, normalized)).limit(1);
+    const [staff] = await db.select({ id: staffTable.id }).from(staffTable)
+      .where(eq(staffTable.phone, normalized)).limit(1);
     if (staff) staffUserId = staff.id;
 
     let contactType = "unknown";
@@ -198,11 +198,11 @@ export class WhatsAppService {
     return db.select().from(billsTable).where(eq(billsTable.patientId, patientId)).orderBy(desc(billsTable.createdAt)).limit(5);
   }
 
-  async findPendingReportsByPatientId(patientId: number): Promise<{ id: number; name: string; status: string }[]> {
-    const rows = await db.select({ id: reportsTable.id, name: reportsTable.name, status: reportsTable.status })
-      .from(reportsTable)
-      .where(and(eq(reportsTable.patientId, patientId), sql`${reportsTable.status} != 'verified'`))
-      .orderBy(desc(reportsTable.createdAt))
+  async findPendingReportsByPatientId(patientId: number): Promise<{ id: number; title: string; status: string }[]> {
+    const rows = await db.select({ id: patientReportsTable.id, title: patientReportsTable.title, status: patientReportsTable.status })
+      .from(patientReportsTable)
+      .where(and(eq(patientReportsTable.patientId, patientId), sql`${patientReportsTable.status} != 'verified'`))
+      .orderBy(desc(patientReportsTable.createdAt))
       .limit(10);
     return rows;
   }

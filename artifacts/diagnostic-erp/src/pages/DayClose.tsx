@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import {
   Lock, Unlock, RefreshCw, Printer, AlertTriangle, CheckCircle2, Users,
-  Clock, ShieldCheck, Eye, ChevronDown, ChevronUp,
+  Clock, ShieldCheck, Eye, ChevronDown, ChevronUp, Landmark,
 } from "lucide-react";
 import { readStaffSession } from "@/lib/staffSession";
 import {
@@ -249,6 +249,21 @@ export default function DayClose() {
   const [staffReopenOpen, setStaffReopenOpen] = useState<StaffUserStatus | null>(null);
   const [staffReopenReason, setStaffReopenReason] = useState("");
   const [staffTableExpanded, setStaffTableExpanded] = useState(true);
+
+  // Banking day-close summary
+  const [bankingOpen, setBankingOpen] = useState(false);
+  const bankingDate = previewQ.data?.coveredToTs
+    ? new Date(previewQ.data.coveredToTs).toISOString().split("T")[0]
+    : new Date().toISOString().split("T")[0];
+  const bankingQ = useQuery({
+    queryKey: ["day-close-banking", bankingDate],
+    queryFn: () => api.get<{ date: string; summary: Array<{
+      accountId: number; provider: string; bankName: string; nickname: string | null;
+      balance: number | null; credits: number; debits: number; net: number; transactionCount: number;
+      error?: string;
+    }> }>(`/api/banking/day-close/${bankingDate}`),
+    enabled: bankingOpen,
+  });
 
   const staffDetailQ = useQuery<StaffCloseDetail>({
     queryKey: ["staff-close-detail", staffDetailId],
@@ -515,6 +530,51 @@ export default function DayClose() {
             <div><div className="text-muted-foreground">Payments</div><div className="font-medium">{previewQ.data?.paymentsCount ?? 0}</div></div>
           </div>
         </CardContent>
+      </Card>
+
+      {/* Banking summary */}
+      <Card>
+        <CardHeader className="flex items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2"><Landmark className="w-4 h-4 text-primary" /> Banking Summary</CardTitle>
+          <Button size="sm" variant="ghost" onClick={() => setBankingOpen((v) => !v)}>
+            {bankingOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </Button>
+        </CardHeader>
+        {bankingOpen && (
+          <CardContent>
+            {bankingQ.isLoading && <p className="text-sm text-muted-foreground">Loading bank data…</p>}
+            {bankingQ.isError && <p className="text-sm text-red-600">Could not load banking summary.</p>}
+            {bankingQ.data && (
+              <div className="space-y-3">
+                {bankingQ.data.summary.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No active bank accounts configured.</p>
+                )}
+                {bankingQ.data.summary.map((s) => (
+                  <div key={s.accountId} className="flex items-center justify-between text-sm border-b last:border-b-0 py-2">
+                    <div>
+                      <div className="font-medium">{s.bankName} {s.nickname ? `(${s.nickname})` : ""}</div>
+                      <div className="text-xs text-muted-foreground">{s.provider} · {s.transactionCount} txns</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-mono">
+                        {s.error ? <span className="text-red-600 text-xs">{s.error}</span>
+                          : <span>{s.balance != null ? inr(s.balance) : "—"}</span>}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        <span className="text-green-600">↗ {inr(s.credits)}</span> · <span className="text-red-600">↘ {inr(s.debits)}</span> · Net {inr(s.net)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        )}
+        {!bankingOpen && (
+          <CardContent className="pt-0">
+            <p className="text-xs text-muted-foreground">Click to show live bank balance and transaction summary for today.</p>
+          </CardContent>
+        )}
       </Card>
 
       {/* Reconcile form */}

@@ -241,9 +241,13 @@ waChatbotRouter.post("/send", requireStaffPermission("/settings"), async (req, r
   const { phone, message, type = "text" } = req.body as { phone: string; message: string; type?: string };
   if (!phone || !message) { res.status(400).json({ error: "phone and message required" }); return; }
 
-  const result = type === "interactive" && req.body.buttons
-    ? await service.sendInteractive(phone, message, req.body.buttons)
-    : await service.sendText(phone, message);
+  let result: { ok: boolean; providerMessageId?: string; error?: string };
+  if (type === "interactive" && req.body.buttons) {
+    const r = await service.sendInteractive(phone, message, req.body.buttons);
+    result = { ...r, providerMessageId: undefined };
+  } else {
+    result = await service.sendText(phone, message);
+  }
 
   if (!result.ok) { res.status(502).json({ error: result.error || "Send failed" }); return; }
 
@@ -256,7 +260,7 @@ waChatbotRouter.post("/send", requireStaffPermission("/settings"), async (req, r
     performedBy: "staff",
   });
 
-  res.json({ ok: true, messageId: result.providerMessageId });
+  res.json({ ok: true, messageId: result.providerMessageId || null });
 });
 
 // ─── Staff API: Dashboard stats ────────────────────────────────────────────────
