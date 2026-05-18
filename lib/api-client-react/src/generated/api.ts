@@ -69,6 +69,8 @@ import type {
   DeleteLedgerBody,
   DeleteOutsourcedLab200,
   DeleteReportTemplate200,
+  DeleteTest409,
+  DeleteTestParams,
   Department,
   DetailedCommissionReport,
   DiagnosticTest,
@@ -1004,6 +1006,103 @@ export const useUpdateTest = <
   TContext
 > => {
   return useMutation(getUpdateTestMutationOptions(options));
+};
+
+/**
+ * @summary Delete test
+ */
+export const getDeleteTestUrl = (id: number, params?: DeleteTestParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/tests/${id}?${stringifiedParams}`
+    : `/api/tests/${id}`;
+};
+
+export const deleteTest = async (
+  id: number,
+  params?: DeleteTestParams,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteTestUrl(id, params), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteTestMutationOptions = <
+  TError = ErrorType<DeleteTest409>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteTest>>,
+    TError,
+    { id: number; params?: DeleteTestParams },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteTest>>,
+  TError,
+  { id: number; params?: DeleteTestParams },
+  TContext
+> => {
+  const mutationKey = ["deleteTest"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteTest>>,
+    { id: number; params?: DeleteTestParams }
+  > = (props) => {
+    const { id, params } = props ?? {};
+
+    return deleteTest(id, params, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteTestMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteTest>>
+>;
+
+export type DeleteTestMutationError = ErrorType<DeleteTest409>;
+
+/**
+ * @summary Delete test
+ */
+export const useDeleteTest = <
+  TError = ErrorType<DeleteTest409>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteTest>>,
+    TError,
+    { id: number; params?: DeleteTestParams },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteTest>>,
+  TError,
+  { id: number; params?: DeleteTestParams },
+  TContext
+> => {
+  return useMutation(getDeleteTestMutationOptions(options));
 };
 
 /**

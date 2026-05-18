@@ -236,6 +236,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DiagnosticTest"
+    delete:
+      operationId: deleteTest
+      tags: [tests]
+      summary: Delete test
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: force
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Force deletion even if test has been used in orders
+      responses:
+        "204":
+          description: Test deleted
+        "409":
+          description: Test has order references
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  refCount:
+                    type: integer
 
   # Outsourced Labs
   /outsourced-labs:

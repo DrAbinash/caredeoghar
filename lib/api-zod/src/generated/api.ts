@@ -315,6 +315,22 @@ export const UpdateTestResponse = zod.object({
 });
 
 /**
+ * @summary Delete test
+ */
+export const DeleteTestParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const deleteTestQueryForceDefault = false;
+
+export const DeleteTestQueryParams = zod.object({
+  force: zod.coerce
+    .boolean()
+    .default(deleteTestQueryForceDefault)
+    .describe("Force deletion even if test has been used in orders"),
+});
+
+/**
  * @summary List outsourced labs
  */
 export const ListOutsourcedLabsResponseItem = zod.object({

@@ -3,6 +3,7 @@ import {
   useListTests,
   useCreateTest,
   useUpdateTest,
+  useDeleteTest,
   getListTestsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
@@ -26,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Pencil, Settings2, Trash2, Download, Upload } from "lucide-react";
+import { Plus, Search, Pencil, Settings2, Trash2, Download, Upload, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 
@@ -118,6 +119,7 @@ export default function Tests() {
   const [submitErr, setSubmitErr] = useState("");
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [dupOpen, setDupOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -209,6 +211,12 @@ export default function Tests() {
       onError: (e: Error) => setSubmitErr(e.message || "Could not update the test"),
     },
   });
+  const deleteTest = useDeleteTest({
+    mutation: {
+      onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListTestsQueryKey() }); toast({ title: "Test deleted" }); },
+      onError: (e: Error) => toast({ title: "Delete failed", description: e.message, variant: "destructive" }),
+    },
+  });
 
   const { register, handleSubmit, reset, setValue, watch } = useForm<TestForm>({ defaultValues: { isActive: true } });
 
@@ -283,6 +291,9 @@ export default function Tests() {
             </Button>
             <Button size="sm" variant="outline" onClick={() => setManageOpen(true)}>
               <Settings2 size={14} className="mr-1" /> Categories
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setDupOpen(true)}>
+              <AlertTriangle size={14} className="mr-1" /> Duplicates
             </Button>
             <Button size="sm" onClick={() => { setEditTest(null); reset({ isActive: true }); setOpen(true); }}>
               <Plus size={14} className="mr-1" /> Add Test
@@ -372,7 +383,21 @@ export default function Tests() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <button onClick={() => openEdit(t)} className="text-muted-foreground hover:text-foreground"><Pencil size={14} /></button>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => openEdit(t)} className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-muted"><Pencil size={14} /></button>
+                          <button
+                            onClick={() => {
+                              if (confirm(`Delete test "${t.name}" (${t.code})?\n\nThis cannot be undone. Tests that have been used in orders cannot be deleted — mark them Inactive instead.`)) {
+                                deleteTest.mutate({ id: t.id });
+                              }
+                            }}
+                            className="text-muted-foreground hover:text-destructive p-1 rounded hover:bg-destructive/10"
+                            disabled={deleteTest.isPending}
+                            title="Delete test"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                     );

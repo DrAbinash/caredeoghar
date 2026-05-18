@@ -1,13 +1,14 @@
 import { Router } from "express";
 import { db, testsTable } from "@workspace/db";
 import { orderTestsTable, roomsTable, floorsTable } from "@workspace/db";
-import { eq, ilike, and, sql, desc, asc } from "drizzle-orm";
+import { eq, ilike, and, sql, desc, asc, count } from "drizzle-orm";
 import {
   ListTestsQueryParams,
   CreateTestBody,
   GetTestParams,
   UpdateTestParams,
   UpdateTestBody,
+  DeleteTestParams,
 } from "@workspace/api-zod";
 
 export const testsRouter = Router();
@@ -259,4 +260,40 @@ testsRouter.put("/:id", async (req, res) => {
     return;
   }
   res.json({ ...updated, price: Number(updated.price) });
+});
+
+// ── Delete a test ──────────────────────────────────────────────────────
+// Prevents deletion if the test has been used in any order. For trial-phase
+// cleanup of orphaned duplicates, set ?force=true to bypass the guard.
+testsRouter.delete("/:id", async (req, res) => {
+  const parsed = DeleteTestParams.safeParse({ id: Number(req.params.id) });
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const force = req.query.force === "true";
+
+  // Check if test exists
+  const [test] = await db.select().from(testsTable).where(eq(testsTable.id, parsed.data.id));
+  if (!test) {
+    res.status(404).json({ error: "Test not found" });
+    return;
+  }
+
+  // Check for order references
+  const [{ refCount }] = await db
+    .select({ refCount: count() })
+    .from(orderTestsTable)
+    .where(eq(orderTestsTable.testId, parsed.data.id));
+
+  if (refCount > 0 && !force) {
+    res.status(409).json({
+      error: `Cannot delete: this test has been used in ${refCount} order(s). Set it to Inactive instead, or use force=true to delete anyway.`,
+      refCount,
+    });
+    return;
+  }
+
+  await db.delete(testsTable).where(eq(testsTable.id, parsed.data.id));
+  res.status(204).send();
 });

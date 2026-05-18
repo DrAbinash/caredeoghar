@@ -1183,6 +1183,18 @@ export type ListTestsParams = {
   category?: string;
 };
 
+export type DeleteTestParams = {
+  /**
+   * Force deletion even if test has been used in orders
+   */
+  force?: boolean;
+};
+
+export type DeleteTest409 = {
+  error?: string;
+  refCount?: number;
+};
+
 export type DeleteOutsourcedLab200 = {
   success: boolean;
 };
