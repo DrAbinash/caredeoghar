@@ -83,10 +83,16 @@ title = "Referral Doctors (799 doctors) - Import CSV"
 id = "7z37YkZeMsBGMhp6CmCFT"
 uri = "file://windows-build/dist/DiagnoCenter-Portable.zip"
 type = "unspecified"
-title = "DiagnoCenter-Portable.zip — Full portable (321 MB)"
+title = "DiagnoCenter-Portable.zip (321 MB)"
 
 [[outputs]]
 id = "K8bALn1xY9SVJGrtYRzpb"
 uri = "file://windows-build/dist/SAdmin-Portable.zip"
 type = "unspecified"
-title = "SAdmin-Portable.zip — Super Admin portable (362 MB)"
+title = "SAdmin-Portable.zip (362 MB)"
+
+[[outputs]]
+id = "gQWkxpebGI4ajHCOTEpdr"
+uri = "file://windows-build/INSTALL.md"
+type = "text"
+title = "Step-by-Step Installation Guide (INSTALL.md)"

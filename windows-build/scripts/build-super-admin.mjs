@@ -7,7 +7,7 @@
 //   windows-build/dist/SuperAdmin-Portable.zip
 //   windows-build/dist/portable/SuperAdmin/SuperAdmin.exe
 //
-// The Super Admin variant reuses the *same* payload as the Diagnostic ERP
+// The Super Admin variant reuses the *same* payload as the DiagnoCenter
 // build (Postgres + Node + bundled API + both built frontends) — only three
 // things change at runtime:
 //
