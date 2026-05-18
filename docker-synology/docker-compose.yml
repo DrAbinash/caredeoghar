@@ -1,0 +1,113 @@
+# =============================================================================
+# DiagnoCenter Docker Stack for Synology NAS
+#
+# Designed for Synology DSM 7.x with Container Manager (Docker).
+# All data persists on the NAS file system — easy to back up.
+#
+# Quick Start (for beginners):
+#   1. Install Container Manager from Package Center
+#   2. Enable SSH on your NAS (Control Panel → Terminal & SNMP)
+#   3. SSH in and clone this project (or copy these files to a shared folder)
+#   4. cd to this folder, run:  docker compose up -d
+#   5. Run migrations once:  docker compose run --rm migrate
+#   6. Open http://<your-nas-ip>:8888 in your browser
+#
+# Services:
+#   db       – PostgreSQL 16 (data in ./postgres_data on NAS)
+#   api      – Express API server (internal port 8080)
+#   web      – nginx serves both SPAs + proxies /api
+#   migrate  – one-off schema runner (run manually)
+# =============================================================================
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: diagno-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-erp}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: ${DB_NAME:-diagnostic_erp}
+    volumes:
+      # NAS-friendly bind mount — data lives in the project folder
+      - ./postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-erp} -d ${DB_NAME:-diagnostic_erp}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # Optional: limit memory so the NAS stays responsive
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    networks:
+      - diagno-net
+
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: api
+    container_name: diagno-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${DB_USER:-erp}:${DB_PASSWORD:-changeme}@db:5432/${DB_NAME:-diagnostic_erp}
+      NODE_ENV: production
+      PORT: "8080"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Uncomment and fill in .env to enable features:
+      # AI_INTEGRATIONS_GEMINI_API_KEY: ${AI_INTEGRATIONS_GEMINI_API_KEY:-}
+      # ORTHANC_URL: ${ORTHANC_URL:-}
+      # ORTHANC_USERNAME: ${ORTHANC_USERNAME:-}
+      # ORTHANC_PASSWORD: ${ORTHANC_PASSWORD:-}
+      # OHIF_URL: ${OHIF_URL:-}
+      # FINGERPRINT_BRIDGE_SECRET: ${FINGERPRINT_BRIDGE_SECRET:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    networks:
+      - diagno-net
+
+  web:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: web
+    container_name: diagno-web
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-8888}:80"
+    depends_on:
+      - api
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    networks:
+      - diagno-net
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: migrate
+    container_name: diagno-migrate
+    environment:
+      DATABASE_URL: postgres://${DB_USER:-erp}:${DB_PASSWORD:-changeme}@db:5432/${DB_NAME:-diagnostic_erp}
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: ["tools"]
+    restart: "no"
+    networks:
+      - diagno-net
+
+networks:
+  diagno-net:
+    name: diagno-net
+    driver: bridge

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DiagnoCenter Windows Installation Guide</title>
+<style>
+  @page { size: A4; margin: 15mm; }
+  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 11pt; line-height: 1.6; color: #222; }
+  h1 { font-size: 22pt; color: #1a365d; border-bottom: 3px solid #3182ce; padding-bottom: 8px; margin-top: 0; }
+  h2 { font-size: 14pt; color: #2c5282; margin-top: 24px; margin-bottom: 10px; border-left: 4px solid #3182ce; padding-left: 10px; }
+  h3 { font-size: 12pt; color: #2b6cb0; margin-top: 18px; margin-bottom: 6px; }
+  .subtitle { font-size: 12pt; color: #666; margin-bottom: 20px; }
+  .cover { text-align: center; padding: 40px 0; border-bottom: 2px solid #e2e8f0; margin-bottom: 30px; }
+  .cover h1 { border: none; font-size: 26pt; }
+  .cover .version { color: #888; font-size: 11pt; margin-top: 10px; }
+  .step { background: #f7fafc; border-radius: 6px; padding: 14px 18px; margin: 12px 0; }
+  .step-num { display: inline-block; background: #3182ce; color: white; width: 26px; height: 26px; line-height: 26px; text-align: center; border-radius: 50%; font-weight: bold; font-size: 12pt; margin-right: 10px; }
+  .step-title { font-weight: bold; color: #2c5282; font-size: 11pt; }
+  .note { background: #fffaf0; border-left: 4px solid #ed8936; padding: 10px 14px; margin: 10px 0; font-size: 10pt; }
+  .warning { background: #fff5f5; border-left: 4px solid #e53e3e; padding: 10px 14px; margin: 10px 0; font-size: 10pt; }
+  .tip { background: #f0fff4; border-left: 4px solid #38a169; padding: 10px 14px; margin: 10px 0; font-size: 10pt; }
+  code { background: #edf2f7; padding: 2px 6px; border-radius: 3px; font-family: Consolas, monospace; font-size: 10pt; }
+  pre { background: #2d3748; color: #e2e8f0; padding: 12px 16px; border-radius: 6px; overflow-x: auto; font-size: 10pt; line-height: 1.4; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 10pt; }
+  th { background: #3182ce; color: white; text-align: left; padding: 8px 10px; }
+  td { border-bottom: 1px solid #e2e8f0; padding: 8px 10px; }
+  tr:nth-child(even) { background: #f7fafc; }
+  .two-col { display: flex; gap: 20px; }
+  .two-col > div { flex: 1; }
+  .page-break { page-break-before: always; }
+  footer { text-align: center; font-size: 9pt; color: #888; margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>DiagnoCenter</h1>
+  <div class="subtitle">Diagnostic Center Billing ERP</div>
+  <div class="version">Windows Installation Guide • Version 2026.05</div>
+  <div style="margin-top: 30px; color: #666; font-size: 10pt;">
+    For Windows 10 / Windows 11 PCs
+  </div>
+</div>
+
+<h2>What You Need</h2>
+<ul>
+  <li><strong>One main computer</strong> (Windows PC) to act as the server — this is the only PC that needs the installer</li>
+  <li><strong>Other computers</strong> on the same Wi-Fi or LAN — no installation needed, just a web browser</li>
+  <li><strong>Installer file:</strong> <code>DiagnoCenter-Setup.exe</code> (about 320 MB)</li>
+  <li><strong>Minimum specs:</strong> Windows 10/11, 4 GB RAM, 1 GB free disk space</li>
+</ul>
+
+<div class="tip">
+  <strong>Tip:</strong> The main server PC should be the fastest computer in your clinic. It runs the database and the web server for everyone.
+</div>
+
+<div class="page-break"></div>
+
+<h2>Step-by-Step Installation</h2>
+
+<div class="step">
+  <span class="step-num">1</span>
+  <span class="step-title">Download the Installer</span>
+  <p>Get <code>DiagnoCenter-Setup.exe</code> from the download link provided. Save it to your Desktop or Downloads folder.</p>
+  <div class="note">
+    <strong>Note:</strong> The file is about 320 MB. It may take a few minutes to download depending on your internet speed.
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-num">2</span>
+  <span class="step-title">Run the Installer</span>
+  <p>Double-click <code>DiagnoCenter-Setup.exe</code>. If Windows shows a "Windows protected your PC" warning:</p>
+  <ol>
+    <li>Click <strong>More info</strong></li>
+    <li>Click <strong>Run anyway</strong></li>
+  </ol>
+  <p>Follow the setup wizard:</p>
+  <ol>
+    <li>Click <strong>Next</strong></li>
+    <li>Choose install location (default is fine: <code>C:\Program Files\DiagnoCenter\</code>)</li>
+    <li>Click <strong>Install</strong></li>
+    <li>Wait for installation (about 1-2 minutes)</li>
+    <li>Click <strong>Finish</strong></li>
+  </ol>
+</div>
+
+<div class="step">
+  <span class="step-num">3</span>
+  <span class="step-title">Start the Server</span>
+  <p>Go to your Desktop and double-click the <strong>DiagnoCenter</strong> shortcut (or go to <code>C:\Program Files\DiagnoCenter\</code> and double-click <code>DiagnoCenter.exe</code>).</p>
+  <p>A black console window will open. <strong>Do not close this window.</strong> It is the server running.</p>
+  <p>Wait about 30 seconds. You will see:</p>
+  <pre>Launcher ready
+LAN ACCESS -- Other computers can reach this server at:
+  http://192.168.1.50:8888/</pre>
+  <p>The IP address will be different for your clinic. Write it down.</p>
+</div>
+
+<div class="warning">
+  <strong>Important:</strong> Keep this black window open all day. If you close it, the server stops and other computers cannot connect. If you accidentally close it, just double-click <code>DiagnoCenter.exe</code> again.
+</div>
+
+<div class="step">
+  <span class="step-num">4</span>
+  <span class="step-title">Open Firewall (One-Time Setup)</span>
+  <p>If other computers cannot connect, you need to open the Windows firewall:</p>
+  <ol>
+    <li>Press <code>Win + R</code>, type <code>cmd</code>, press Enter</li>
+    <li>Copy and paste this exact command, then press Enter:</li>
+  </ol>
+  <pre>netsh advfirewall firewall add rule name="DiagnoCenter" dir=in action=allow protocol=TCP localport=8888</pre>
+  <p>You should see <code>Ok.</code> — done.</p>
+</div>
+
+<div class="page-break"></div>
+
+<div class="step">
+  <span class="step-num">5</span>
+  <span class="step-title">Use on Other Computers</span>
+  <p>No installation needed on other PCs. Just open a web browser:</p>
+  <ol>
+    <li>Open <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong></li>
+    <li>In the address bar, type the LAN URL from Step 3, for example:</li>
+  </ol>
+  <pre>http://192.168.1.50:8888/</pre>
+  <p>(Replace with the actual IP shown on your server)</p>
+  <ol start="3">
+    <li>Press Enter</li>
+    <li>The login screen appears — log in with your staff PIN</li>
+  </ol>
+</div>
+
+<h2>Daily Routine</h2>
+<table>
+  <tr><th>Task</th><th>How to Do It</th></tr>
+  <tr><td>Start the server in the morning</td><td>Double-click <code>DiagnoCenter.exe</code> or the Desktop shortcut</td></tr>
+  <tr><td>Stop the server at night</td><td>Close the black console window (or press Ctrl+C inside it)</td></tr>
+  <tr><td>Print reports</td><td>Works from any computer that has a printer installed</td></tr>
+  <tr><td>Check who is connected</td><td>Look at the console window — it shows connection requests</td></tr>
+</table>
+
+<h2>Useful Tips</h2>
+
+<div class="tip">
+  <strong>Pin to taskbar:</strong> Right-click the DiagnoCenter shortcut → <strong>Pin to taskbar</strong>. Now you can start the server with one click.
+</div>
+
+<div class="tip">
+  <strong>Auto-start on boot:</strong> Press <code>Win + R</code>, type <code>shell:startup</code>, press Enter. Drag <code>DiagnoCenter.exe</code> into that folder. The server will start automatically every time the PC turns on.
+</div>
+
+<div class="tip">
+  <strong>Backup your data:</strong> The database is stored in <code>C:\Program Files\DiagnoCenter\data\pgsql\</code>. Copy the entire <code>data</code> folder to a USB drive regularly. Patient data cannot be recreated if lost.
+</div>
+
+<div class="tip">
+  <strong>Update without reinstalling:</strong> When a new version is available, use <code>DiagnoCenter-Update.zip</code> inside the ERP (go to <strong>Settings → System Update</strong>). This patches the app without losing any data.
+</div>
+
+<div class="page-break"></div>
+
+<h2>Troubleshooting</h2>
+<table>
+  <tr><th>Problem</th><th>Solution</th></tr>
+  <tr>
+    <td>"Windows protected your PC" when running the installer</td>
+    <td>Click <strong>More info</strong> → <strong>Run anyway</strong>. The software is not digitally signed yet.</td>
+  </tr>
+  <tr>
+    <td>"Cannot GET /" in the browser</td>
+    <td>The server is still starting. Wait 30 more seconds and refresh the page.</td>
+  </tr>
+  <tr>
+    <td>Other PC says "This site can't be reached"</td>
+    <td>Check Step 4 (firewall). Also make sure both PCs are on the same Wi-Fi network.</td>
+  </tr>
+  <tr>
+    <td>Forgot the LAN IP address</td>
+    <td>On the server PC, press <code>Win + R</code>, type <code>cmd</code>, type <code>ipconfig</code>, look for "IPv4 Address" under Wi-Fi or Ethernet.</td>
+  </tr>
+  <tr>
+    <td>App is slow on client computers</td>
+    <td>The server PC should be the fastest computer. If it is old or low on RAM, the whole clinic will feel slow.</td>
+  </tr>
+  <tr>
+    <td>Black console window shows errors</td>
+    <td>Take a screenshot and contact support. Common causes: port already in use (another program is using port 8888).</td>
+  </tr>
+</table>
+
+<h2>Security Checklist</h2>
+<ul>
+  <li>☐ Change the default admin PIN after first login</li>
+  <li>☐ Set up regular backups (copy the <code>data</code> folder)</li>
+  <li>☐ Enable Windows automatic updates on the server PC</li>
+  <li>☐ Use a strong Windows password on the server PC</li>
+  <li>☐ Do not expose port 8888 to the internet without a VPN</li>
+</ul>
+
+<h2>Need Help?</h2>
+<p>Contact your software support and provide:</p>
+<ol>
+  <li>The LAN URL (e.g., <code>http://192.168.1.50:8888/</code>)</li>
+  <li>A screenshot of any error message</li>
+  <li>Whether the black console window shows "Launcher ready"</li>
+</ol>
+
+<footer>
+  DiagnoCenter Diagnostic ERP • Windows Installation Guide • May 2026
+</footer>
+
+</body>
+</html>

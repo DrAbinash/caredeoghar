@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DiagnoCenter Synology NAS Installation Guide</title>
+<style>
+  @page { size: A4; margin: 15mm; }
+  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 11pt; line-height: 1.6; color: #222; }
+  h1 { font-size: 22pt; color: #1a365d; border-bottom: 3px solid #3182ce; padding-bottom: 8px; margin-top: 0; }
+  h2 { font-size: 14pt; color: #2c5282; margin-top: 24px; margin-bottom: 10px; border-left: 4px solid #3182ce; padding-left: 10px; }
+  h3 { font-size: 12pt; color: #2b6cb0; margin-top: 18px; margin-bottom: 6px; }
+  .subtitle { font-size: 12pt; color: #666; margin-bottom: 20px; }
+  .cover { text-align: center; padding: 40px 0; border-bottom: 2px solid #e2e8f0; margin-bottom: 30px; }
+  .cover h1 { border: none; font-size: 26pt; }
+  .cover .version { color: #888; font-size: 11pt; margin-top: 10px; }
+  .step { background: #f7fafc; border-radius: 6px; padding: 14px 18px; margin: 12px 0; }
+  .step-num { display: inline-block; background: #3182ce; color: white; width: 26px; height: 26px; line-height: 26px; text-align: center; border-radius: 50%; font-weight: bold; font-size: 12pt; margin-right: 10px; }
+  .step-title { font-weight: bold; color: #2c5282; font-size: 11pt; }
+  .note { background: #fffaf0; border-left: 4px solid #ed8936; padding: 10px 14px; margin: 10px 0; font-size: 10pt; }
+  .warning { background: #fff5f5; border-left: 4px solid #e53e3e; padding: 10px 14px; margin: 10px 0; font-size: 10pt; }
+  .tip { background: #f0fff4; border-left: 4px solid #38a169; padding: 10px 14px; margin: 10px 0; font-size: 10pt; }
+  code { background: #edf2f7; padding: 2px 6px; border-radius: 3px; font-family: Consolas, monospace; font-size: 10pt; }
+  pre { background: #2d3748; color: #e2e8f0; padding: 12px 16px; border-radius: 6px; overflow-x: auto; font-size: 10pt; line-height: 1.4; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 10pt; }
+  th { background: #3182ce; color: white; text-align: left; padding: 8px 10px; }
+  td { border-bottom: 1px solid #e2e8f0; padding: 8px 10px; }
+  tr:nth-child(even) { background: #f7fafc; }
+  .screenshot-placeholder { background: #e2e8f0; border: 2px dashed #a0aec0; padding: 20px; text-align: center; color: #718096; margin: 10px 0; font-style: italic; }
+  .page-break { page-break-before: always; }
+  footer { text-align: center; font-size: 9pt; color: #888; margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>DiagnoCenter</h1>
+  <div class="subtitle">Diagnostic Center Billing ERP</div>
+  <div class="version">Synology NAS Docker Installation Guide • Version 2026.05</div>
+  <div style="margin-top: 30px; color: #666; font-size: 10pt;">
+    For Synology DSM 7.x with Container Manager
+  </div>
+</div>
+
+<h2>What You Need</h2>
+<ul>
+  <li><strong>Synology NAS</strong> with DSM 7.x (DSM 6.x also works with the older Docker package)</li>
+  <li><strong>Container Manager</strong> installed from Package Center</li>
+  <li><strong>SSH enabled</strong> (needed only for the first setup)</li>
+  <li><strong>At least 4 GB RAM</strong> recommended (2 GB minimum)</li>
+  <li><strong>1 GB free disk space</strong> for the app + space for your data</li>
+  <li><strong>Any computer with a web browser</strong> to access the ERP — no installation needed</li>
+</ul>
+
+<div class="tip">
+  <strong>Why use a NAS?</strong> Your Synology NAS runs 24/7 anyway. The ERP server stays online even when all clinic computers are turned off. Plus, NAS backups are easy and reliable.
+</div>
+
+<div class="note">
+  <strong>Model recommendation:</strong> Any x86-based Synology (DS220+, DS420+, DS920+, DS1522+, etc.) works well. ARM-based models (like DS120j) will run slower but still work.
+</div>
+
+<div class="page-break"></div>
+
+<h2>Step-by-Step Installation</h2>
+
+<div class="step">
+  <span class="step-num">1</span>
+  <span class="step-title">Install Container Manager</span>
+  <ol>
+    <li>Open <strong>Package Center</strong> on your Synology</li>
+    <li>Search for <strong>Container Manager</strong></li>
+    <li>Click <strong>Install</strong></li>
+    <li>Wait for installation to complete (may take a few minutes)</li>
+  </ol>
+  <div class="screenshot-placeholder">Screenshot: Package Center showing Container Manager installed</div>
+</div>
+
+<div class="step">
+  <span class="step-num">2</span>
+  <span class="step-title">Enable SSH (One-Time Setup)</span>
+  <p>You need SSH only for copying files. You can disable it later.</p>
+  <ol>
+    <li>Open <strong>Control Panel</strong> → <strong>Terminal & SNMP</strong></li>
+    <li>Check <strong>Enable SSH service</strong></li>
+    <li>Set port to <strong>22</strong> (or your preferred port)</li>
+    <li>Click <strong>Apply</strong></li>
+  </ol>
+  <div class="screenshot-placeholder">Screenshot: Control Panel → Terminal & SNMP settings</div>
+</div>
+
+<div class="step">
+  <span class="step-num">3</span>
+  <span class="step-title">Create a Shared Folder</span>
+  <p>The app files and database will live in a shared folder on your NAS.</p>
+  <ol>
+    <li>Open <strong>File Station</strong> on your Synology</li>
+    <li>Click <strong>Create</strong> → <strong>Create New Shared Folder</strong></li>
+    <li>Name it <strong>diagno-center</strong> (or any name you prefer)</li>
+    <li>Click <strong>OK</strong></li>
+  </ol>
+</div>
+
+<div class="step">
+  <span class="step-num">4</span>
+  <span class="step-title">Upload Project Files</span>
+  <p>Copy the project folder into your new shared folder. You can do this via:</p>
+  <ul>
+    <li><strong>File Station web interface:</strong> Drag and drop the files</li>
+    <li><strong>Network share (SMB):</strong> Map the NAS drive on your computer and copy</li>
+    <li><strong>SFTP/SCP:</strong> If you are comfortable with command line</li>
+  </ul>
+  <p>The folder should look like this when done:</p>
+  <pre>diagno-center/
+  docker-synology/
+    docker-compose.yml
+    .env.example
+    README.md
+    docs/
+    postgres_data/    ← created automatically later</pre>
+</div>
+
+<div class="page-break"></div>
+
+<div class="step">
+  <span class="step-num">5</span>
+  <span class="step-title">Configure the Environment</span>
+  <p>Tell the app your settings (password, port, etc.).</p>
+  <ol>
+    <li>In File Station, go to <code>diagno-center/docker-synology/</code></li>
+    <li>Find the file <code>.env.example</code></li>
+    <li>Right-click → <strong>Rename</strong> → change to <code>.env</code></li>
+    <li>Double-click to edit (or download, edit, upload back)</li>
+  </ol>
+  <p>Change at minimum these two lines:</p>
+  <pre># Change this to a strong password
+DB_PASSWORD=changeme
+
+# Change this only if port 8888 is already in use
+HOST_PORT=8888</pre>
+  <div class="warning">
+    <strong>Important:</strong> The default password is <code>changeme</code>. You MUST change this before going live. Patient data lives in this database.
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-num">6</span>
+  <span class="step-title">Build and Start (via SSH)</span>
+  <p>Now use SSH to tell Docker to build and start everything.</p>
+  <ol>
+    <li>On your computer, open a terminal or command prompt</li>
+    <li>SSH into your Synology (replace with your NAS IP):</li>
+  </ol>
+  <pre>ssh admin@192.168.1.100</pre>
+  <p>Enter your admin password when asked.</p>
+  <ol start="3">
+    <li>Navigate to the project folder:</li>
+  </ol>
+  <pre>cd /volume1/diagno-center/docker-synology</pre>
+  <ol start="4">
+    <li>Build and start:</li>
+  </ol>
+  <pre>docker compose up -d --build</pre>
+  <div class="note">
+    <strong>Note:</strong> The first build takes 5-10 minutes because it downloads Node.js and builds the app. Be patient. On slow NAS models this may take up to 20 minutes.
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-num">7</span>
+  <span class="step-title">Create Database Tables</span>
+  <p>Run the database migration once to create all tables:</p>
+  <pre>docker compose run --rm migrate</pre>
+  <p>You will see a lot of output ending with something like:</p>
+  <pre>Using config 'drizzle.config.ts'
+[drizzle-kit] pushing...
+Done!</pre>
+  <div class="tip">
+    <strong>Tip:</strong> You only need to run this once during installation. If you ever update the app to a new version, run it again to apply schema changes.
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<div class="step">
+  <span class="step-num">8</span>
+  <span class="step-title">Open the App</span>
+  <p>On any computer in your clinic:</p>
+  <ol>
+    <li>Open <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong></li>
+    <li>In the address bar, type your NAS IP with the port:</li>
+  </ol>
+  <pre>http://192.168.1.100:8888</pre>
+  <p>(Replace <code>192.168.1.100</code> with your actual NAS IP address)</p>
+  <ol start="3">
+    <li>Press Enter</li>
+    <li>The login screen appears — log in with your staff PIN</li>
+  </ol>
+  <div class="tip">
+    <strong>Find your NAS IP:</strong> On the Synology, go to <strong>Control Panel</strong> → <strong>Network</strong> → <strong>Network Interface</strong>. Look for "IPv4 Address."
+  </div>
+</div>
+
+<h2>Daily Use</h2>
+<table>
+  <tr><th>Task</th><th>How to Do It</th></tr>
+  <tr><td>Check if running</td><td>Container Manager → <strong>Container</strong> tab → look for <code>diagno-web</code> and <code>diagno-api</code> with green status</td></tr>
+  <tr><td>Restart all services</td><td>Container Manager → select all 3 containers → <strong>Action</strong> → <strong>Restart</strong></td></tr>
+  <tr><td>View logs</td><td>Container Manager → select container → <strong>Logs</strong> tab</td></tr>
+  <tr><td>Stop everything</td><td>SSH in and run: <code>docker compose down</code></td></tr>
+  <tr><td>Start everything</td><td>SSH in and run: <code>docker compose up -d</code></td></tr>
+</table>
+
+<h2>Updating the App</h2>
+<p>When a new version is available:</p>
+<ol>
+  <li>Copy the new project files over the old ones (keep your <code>.env</code> file)</li>
+  <li>SSH into the NAS:</li>
+</ol>
+<pre>cd /volume1/diagno-center/docker-synology
+docker compose down
+docker compose up -d --build
+docker compose run --rm migrate</pre>
+<ol start="3">
+  <li>Your data in <code>postgres_data/</code> is preserved — nothing is lost</li>
+</ol>
+
+<div class="page-break"></div>
+
+<h2>Backing Up (Critical)</h2>
+
+<h3>Method 1: Copy the Database Folder (Fastest)</h3>
+<ol>
+  <li>Open <strong>File Station</strong></li>
+  <li>Navigate to <code>diagno-center/docker-synology/postgres_data/</code></li>
+  <li>Right-click → <strong>Copy to</strong> → choose another shared folder or USB drive</li>
+</ol>
+<p>Do this weekly at minimum. The database folder contains ALL patient data.</p>
+
+<h3>Method 2: Container Manager Export</h3>
+<ol>
+  <li>Container Manager → <strong>Project</strong> → select <code>diagno-center</code></li>
+  <li>Click <strong>Action</strong> → <strong>Export</strong></li>
+  <li>This creates a <code>.dcp</code> file with the whole stack</li>
+</ol>
+
+<h3>Method 3: Automated Daily Backup</h3>
+<p>Set up Synology Hyper Backup to back up the <code>postgres_data</code> folder daily to another location (another NAS, USB drive, or cloud).</p>
+
+<div class="warning">
+  <strong>Your database is your clinic's lifeblood.</strong> Without regular backups, a NAS hard drive failure could permanently destroy all patient records, bills, and reports. Back up weekly at minimum. Daily is better.
+</div>
+
+<h2>Network Access</h2>
+
+<h3>Local Network (Default)</h3>
+<p>By default, the app is only available inside your clinic's network. Anyone on the same Wi-Fi can open <code>http://nas-ip:8888</code>.</p>
+
+<h3>Access from Outside (Optional)</h3>
+<p>If you need to access the ERP from home or another clinic:</p>
+
+<p><strong>Option A: VPN (Recommended, Most Secure)</strong></p>
+<ol>
+  <li>Install <strong>VPN Server</strong> from Package Center</li>
+  <li>Set up OpenVPN or L2TP/IPSec</li>
+  <li>Connect your device to the VPN</li>
+  <li>Open the app as if you were in the clinic</li>
+</ol>
+
+<p><strong>Option B: Reverse Proxy with HTTPS</strong></p>
+<ol>
+  <li>Get a domain name (e.g., from Namecheap or GoDaddy)</li>
+  <li>In DSM: <strong>Control Panel</strong> → <strong>Login Portal</strong> → <strong>Advanced</strong> → <strong>Reverse Proxy</strong></li>
+  <li>Set up a reverse proxy rule pointing to <code>localhost:8888</code></li>
+  <li>Enable HTTPS with Let's Encrypt</li>
+</ol>
+
+<p><strong>Option C: QuickConnect (Not Recommended)</strong></p>
+<p>Synology QuickConnect works but is slower and gives less control. Not recommended for medical data.</p>
+
+<div class="page-break"></div>
+
+<h2>Troubleshooting</h2>
+<table>
+  <tr><th>Problem</th><th>Solution</th></tr>
+  <tr>
+    <td>"Cannot GET /" in browser</td>
+    <td>Wait 2 more minutes. The API container may still be starting. Check Container Manager → Logs.</td>
+  </tr>
+  <tr>
+    <td>Port 8888 already in use</td>
+    <td>Edit <code>.env</code> and change <code>HOST_PORT=8888</code> to another number like <code>HOST_PORT=8889</code>. Then restart with <code>docker compose up -d</code>.</td>
+  </tr>
+  <tr>
+    <td>Container won't start</td>
+    <td>Check RAM usage: <strong>Control Panel</strong> → <strong>Resource Monitor</strong>. Need at least 2 GB free. Close unused packages or add more RAM.</td>
+  </tr>
+  <tr>
+    <td>"Database connection error" in logs</td>
+    <td>The <code>diagno-db</code> container must be running and "healthy" before <code>diagno-api</code> starts. Restart everything: <code>docker compose restart</code>.</td>
+  </tr>
+  <tr>
+    <td>Very slow performance</td>
+    <td>Your NAS may be ARM-based (slower CPU). Consider upgrading to an x86 model (DS220+, DS420+, etc.).</td>
+  </tr>
+  <tr>
+    <td>Build takes forever</td>
+    <td>First build downloads Node.js and compiles the app. This is normal. Future updates will be much faster.</td>
+  </tr>
+  <tr>
+    <td>Lost the NAS IP address</td>
+    <td>Go to <strong>Control Panel</strong> → <strong>Network</strong> → <strong>Network Interface</strong> → look for "IPv4 Address."</td>
+  </tr>
+</table>
+
+<h2>Hardware Recommendations</h2>
+<table>
+  <tr><th>Clinic Size</th><th>RAM</th><th>Storage</th><th>Example NAS Model</th></tr>
+  <tr><td>1-5 staff</td><td>4 GB</td><td>50 GB free</td><td>Synology DS220+</td></tr>
+  <tr><td>5-15 staff</td><td>8 GB</td><td>100 GB free</td><td>Synology DS420+</td></tr>
+  <tr><td>15+ staff</td><td>16 GB</td><td>200 GB free</td><td>Synology DS920+ or DS1522+</td></tr>
+</table>
+
+<h2>Security Checklist</h2>
+<ul>
+  <li>☐ Change the default <code>DB_PASSWORD</code> in <code>.env</code> before going live</li>
+  <li>☐ Keep DSM and Container Manager updated via Package Center</li>
+  <li>☐ Enable DSM firewall and restrict port 8888 to your clinic's IP range</li>
+  <li>☐ Set up regular backups (Hyper Backup or manual copy)</li>
+  <li>☐ Use HTTPS if exposing to the internet (reverse proxy with Let's Encrypt)</li>
+  <li>☐ Disable SSH after setup if you don't need it regularly</li>
+  <li>☐ Change default admin PIN after first login</li>
+</ul>
+
+<h2>Need Help?</h2>
+<p>Contact your software support and provide:</p>
+<ol>
+  <li>Your NAS model and DSM version (found in <strong>Control Panel</strong> → <strong>Info Center</strong>)</li>
+  <li>Screenshots of any error messages from Container Manager → Logs</li>
+  <li>Which step you got stuck on</li>
+</ol>
+
+<footer>
+  DiagnoCenter Diagnostic ERP • Synology NAS Installation Guide • May 2026
+</footer>
+
+</body>
+</html>

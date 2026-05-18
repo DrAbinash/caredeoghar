@@ -96,3 +96,15 @@ id = "gQWkxpebGI4ajHCOTEpdr"
 uri = "file://windows-build/INSTALL.md"
 type = "text"
 title = "Step-by-Step Installation Guide (INSTALL.md)"
+
+[[outputs]]
+id = "UvZF4FWExRqxhQx_eOR7N"
+uri = "file://windows-build/docs/Windows-Installation-Guide.pdf"
+type = "pdf"
+title = "DiagnoCenter Windows Installation Guide"
+
+[[outputs]]
+id = "Xh0cd9WsIJDnGymxDmP4V"
+uri = "file://docker-synology/docs/Synology-NAS-Installation-Guide.pdf"
+type = "pdf"
+title = "DiagnoCenter Synology NAS Installation Guide"
