@@ -58,6 +58,7 @@ export * from "./dicomPulledStudies";
 export * from "./radiologyScheduledProcedures";
 export * from "./dicomRoutingRules";
 export * from "./dayClosures";
+export * from "./banking";
 export * from "./userDayClosures";
 export * from "./floors";
 export * from "./rooms";

@@ -69,6 +69,7 @@ import userPreferencesRouter from "./userPreferences";
 import { radiologyReportGeneratorRouter } from "./radiology-report-generator";
 import { floorsRouter, roomsRouter, modalitiesRouter } from "./locations";
 import { aiReportingRouter } from "./aiReporting";
+import { bankingRouter, bankingWebhookRouter } from "./banking";
 
 const router: IRouter = Router();
 
@@ -357,5 +358,14 @@ router.use("/users", requireStaffAuth, userPreferencesRouter);
 router.use("/users", requireStaffAuth, requireStaffPermission("/settings"), usersRouter);
 router.use("/commission", requireSuperAdmin, commissionRouter);
 router.use("/doctor-ledger", requireSuperAdmin, doctorLedgerRouter);
+
+// ─── Banking module ────────────────────────────────────────────────────────────
+// Provider-agnostic banking: balance, transactions, payments, webhooks,
+// reconciliation. Requires /banking permission for all endpoints.
+// Banking webhooks are mounted PUBLICLY before auth so bank providers can
+// POST without a staff bearer token. Signature verification happens inside
+// the handler.
+router.use("/banking/webhooks", bankingWebhookRouter);
+router.use("/banking", requireStaffAuth, requireStaffPermission("/banking"), bankingRouter);
 
 export default router;
