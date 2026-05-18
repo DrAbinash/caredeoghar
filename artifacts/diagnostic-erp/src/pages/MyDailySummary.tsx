@@ -1293,8 +1293,8 @@ export default function MyDailySummary() {
               All bills <ArrowRight size={11} />
             </Link>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+          <div className="overflow-x-auto snap-x">
+            <table className="w-full text-xs min-w-[800px]">
               <thead className="bg-gray-50 dark:bg-muted/30">
                 <tr>
                   {["Bill #", "Patient", "Total", "Paid", "Balance", "Discount", "Status", "Referral Doctor"].map((h) => (
@@ -1348,7 +1348,7 @@ export default function MyDailySummary() {
               <Wallet size={14} className="text-green-600" /> Payments Collected by Me
             </h3>
           </div>
-          <div className="divide-y divide-gray-100 dark:divide-card-border max-h-64 overflow-y-auto">
+          <div className="divide-y divide-gray-100 dark:divide-card-border">
             {data.payments.map((p) => (
               <div key={p.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-muted/20">
                 <div className="flex items-center gap-3">

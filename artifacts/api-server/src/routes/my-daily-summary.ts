@@ -380,7 +380,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       closingCashBalance: physicalCashInHand,
     },
     byMethod,
-    bills: allBillRows.slice(0, 30).map((r) => ({
+    bills: allBillRows.map((r) => ({
       id: r.id,
       billNumber: r.billNumber,
       patientName: r.patientFirstName
@@ -395,7 +395,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       createdAt:
         r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
     })),
-    payments: paymentItems.slice(0, 30).map((p) => ({
+    payments: paymentItems.map((p) => ({
       id: p.id,
       billId: p.billId,
       amount: Number(p.amount),
