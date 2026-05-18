@@ -83,7 +83,7 @@ title = "Referral Doctors (799 doctors) - Import CSV"
 id = "7z37YkZeMsBGMhp6CmCFT"
 uri = "file://windows-build/dist/DiagnoCenter-Portable.zip"
 type = "unspecified"
-title = "DiagnoCenter-Portable.zip (321 MB)"
+title = "DiagnoCenter-Portable.zip (323 MB) — Portable ZIP, unzip and run"
 
 [[outputs]]
 id = "K8bALn1xY9SVJGrtYRzpb"
@@ -101,10 +101,22 @@ title = "Step-by-Step Installation Guide (INSTALL.md)"
 id = "UvZF4FWExRqxhQx_eOR7N"
 uri = "file://windows-build/docs/Windows-Installation-Guide.pdf"
 type = "pdf"
-title = "DiagnoCenter Windows Installation Guide"
+title = "Windows Installation Guide PDF (45 KB) — Step-by-step for beginners"
 
 [[outputs]]
 id = "Xh0cd9WsIJDnGymxDmP4V"
 uri = "file://docker-synology/docs/Synology-NAS-Installation-Guide.pdf"
 type = "pdf"
-title = "DiagnoCenter Synology NAS Installation Guide"
+title = "Synology NAS Installation Guide PDF (62 KB) — NAS setup for beginners"
+
+[[outputs]]
+id = "P5A798LVIYMuIrjVCPnqS"
+uri = "file://windows-build/dist/DiagnoCenter-Setup.zip"
+type = "unspecified"
+title = "DiagnoCenter-Setup.zip (289 MB) — Zipped Windows Installer .exe"
+
+[[outputs]]
+id = "99wGP0ezptrC9u15x-WX1"
+uri = "file://windows-build/dist/DiagnoCenter-Update.zip"
+type = "unspecified"
+title = "DiagnoCenter-Update.zip (263 MB) — In-App Patch for existing installs"
