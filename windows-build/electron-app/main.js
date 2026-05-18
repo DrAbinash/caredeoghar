@@ -1,5 +1,5 @@
 // =============================================================================
-// Diagnostic ERP — Electron desktop main process.
+// DiagnoCenter — Electron desktop main process.
 //
 // Boots Postgres + the bundled API server (using the same payload tree that
 // the portable launcher uses) and shows a single BrowserWindow pointed at the
@@ -13,7 +13,7 @@
 
 "use strict";
 
-const { app, BrowserWindow, Menu, dialog, shell } = require("electron");
+const { app, BrowserWindow, Menu, dialog, shell, Tray, nativeImage, clipboard } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const net = require("node:net");
@@ -69,6 +69,7 @@ let serverProc = null;
 let pgPort = 55432;
 let httpPort = 8888;
 let shuttingDown = false;
+let tray = null;
 
 fs.mkdirSync(USER_DIR, { recursive: true });
 fs.mkdirSync(LOG_DIR,  { recursive: true });
@@ -126,7 +127,7 @@ function ensurePostgres() {
     }
     fs.appendFileSync(
       path.join(PG_DATA, "postgresql.conf"),
-      "\n# Diagnostic ERP overrides\nlisten_addresses = '127.0.0.1'\nunix_socket_directories = ''\nlogging_collector = on\nlog_directory = 'log'\n",
+      "\n# DiagnoCenter overrides\nlisten_addresses = '127.0.0.1'\nunix_socket_directories = ''\nlogging_collector = on\nlog_directory = 'log'\n",
     );
   }
 
@@ -283,7 +284,7 @@ function createWindow() {
     height: 900,
     minWidth: 1024,
     minHeight: 700,
-    title: "Diagnostic ERP Desktop",
+    title: "DiagnoCenter Desktop",
     backgroundColor: "#0f172a",
     autoHideMenuBar: true,
     webPreferences: {
@@ -312,12 +313,96 @@ function createWindow() {
 
   mainWindow.loadURL(`http://localhost:${httpPort}/`);
   mainWindow.on("closed", () => { mainWindow = null; });
+
+  // Minimize to tray instead of taskbar
+  mainWindow.on("minimize", (e) => {
+    e.preventDefault();
+    mainWindow.hide();
+    updateTray();
+  });
+}
+
+// -------- Tray / LAN helpers -----------------------------------------------
+const os = require("node:os");
+function getLanIps() {
+  const list = [];
+  for (const [iface, addrs] of Object.entries(os.networkInterfaces())) {
+    if (!iface || iface.startsWith("lo")) continue;
+    for (const a of addrs) {
+      if (a.internal) continue;
+      if (a.family === "IPv4") list.push(a.address);
+    }
+  }
+  return list;
+}
+
+function buildTrayMenu() {
+  const ips = getLanIps();
+  const lanItems = ips.map((ip) => {
+    const u = `http://${ip}:${httpPort}/`;
+    return {
+      label: `Open ${u}`,
+      click: () => { shell.openExternal(u); },
+    };
+  });
+  const copyItems = ips.map((ip) => {
+    const u = `http://${ip}:${httpPort}/`;
+    return {
+      label: `Copy ${u}`,
+      click: () => {
+        clipboard.writeText(u);
+        dialog.showMessageBox(mainWindow || undefined, { type: "info", buttons: ["OK"], message: "LAN URL copied to clipboard", detail: u });
+      },
+    };
+  });
+  const template = [
+    { label: `DiagnoCenter Desktop  —  port ${httpPort}`, enabled: false },
+    { type: "separator" },
+    ...(lanItems.length ? [
+      { label: "LAN Access", enabled: false },
+      ...lanItems,
+      ...copyItems,
+      { type: "separator" },
+    ] : []),
+    {
+      label: "Show Window",
+      click: () => {
+        if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
+      },
+    },
+    { type: "separator" },
+    { label: "Quit", click: () => cleanupAndQuit(0) },
+  ];
+  return Menu.buildFromTemplate(template);
+}
+
+function createTray() {
+  if (tray) return;
+  // Use a tiny inline PNG (16x16) for the tray icon. On Windows we can fall back
+  // to a blank nativeImage if no file exists.
+  let icon;
+  try {
+    const iconPath = path.join(PAYLOAD_ROOT, "app/web/erp/favicon.ico");
+    icon = nativeImage.createFromPath(iconPath);
+  } catch {
+    icon = nativeImage.createEmpty();
+  }
+  tray = new Tray(icon.isEmpty() ? undefined : icon);
+  tray.setToolTip(`DiagnoCenter Desktop — ${httpPort}`);
+  tray.setContextMenu(buildTrayMenu());
+  tray.on("click", () => {
+    if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
+  });
+}
+
+function updateTray() {
+  if (tray) tray.setContextMenu(buildTrayMenu());
 }
 
 // -------- Lifecycle --------------------------------------------------------
 function showSplashError(err) {
   log(`STARTUP FAILED: ${err.stack || err}`);
-  dialog.showErrorBox("Diagnostic ERP failed to start", String(err.message || err));
+  dialog.showErrorBox("DiagnoCenter failed to start", String(err.message || err));
   cleanupAndQuit(1);
 }
 
@@ -338,7 +423,7 @@ app.on("before-quit", () => cleanupAndQuit(0));
 app.whenReady().then(async () => {
   try {
     if (process.platform !== "win32" && !process.env.DIAG_ERP_FORCE_RUN) {
-      throw new Error("Diagnostic ERP Desktop runs on Windows only.");
+      throw new Error("DiagnoCenter Desktop runs on Windows only.");
     }
 
     // Apply any update staged by the previous run BEFORE we touch app paths.
@@ -361,6 +446,7 @@ app.whenReady().then(async () => {
 
     await waitForHttp(`http://127.0.0.1:${httpPort}/`);
     createWindow();
+    createTray();
   } catch (e) {
     showSplashError(e);
   }

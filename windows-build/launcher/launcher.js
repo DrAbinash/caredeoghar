@@ -369,6 +369,36 @@ function openBrowser(url) {
   }
 }
 
+// ---- LAN helpers ----------------------------------------------------------
+const os = require("node:os");
+function getLanIps() {
+  const list = [];
+  for (const [iface, addrs] of Object.entries(os.networkInterfaces())) {
+    if (!iface || iface.startsWith("lo")) continue;
+    for (const a of addrs) {
+      if (a.internal) continue;
+      if (a.family === "IPv4") list.push(a.address);
+    }
+  }
+  return list;
+}
+function printLanUrls(port) {
+  const ips = getLanIps();
+  if (!ips.length) return;
+  log("");
+  log("  ╔══════════════════════════════════════════════════════════════╗");
+  log("  ║  LAN ACCESS  —  Other computers can reach this server at:      ║");
+  for (const ip of ips) {
+    const u = `http://${ip}:${port}`;
+    log(`  ║    ${u.padEnd(58)} ║`);
+  }
+  log("  ║                                                                ║");
+  log("  ║  Open Chrome/Edge on any clinic PC and use one of the URLs    ║");
+  log("  ║  above. No extra software needed on the client PCs.          ║");
+  log("  ╚══════════════════════════════════════════════════════════════╝");
+  log("");
+}
+
 // -------- Shutdown handling -------------------------------------------------
 let shuttingDown = false;
 function cleanupAndExit(code = 0) {
@@ -425,6 +455,9 @@ async function main() {
   // Give the server a moment to bind, then open the browser.
   const openPath = VARIANT.openPath.startsWith("/") ? VARIANT.openPath : `/${VARIANT.openPath}`;
   setTimeout(() => openBrowser(`http://localhost:${ports.http}${openPath}`), 1500);
+
+  // Print LAN URLs so other clinic PCs know how to connect
+  printLanUrls(ports.http);
 
   log(`Launcher ready. Close this window (or press Ctrl+C) to stop ${VARIANT.appName}.`);
 }
