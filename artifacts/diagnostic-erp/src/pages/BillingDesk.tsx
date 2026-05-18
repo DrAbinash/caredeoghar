@@ -134,7 +134,7 @@ function useDebounce<T>(value: T, delay = 300) {
 // Component
 // ──────────────────────────────────────────────────────
 type ClinicLite = { name?: string; tagline?: string; address?: string; phone?: string; logoDataUrl?: string | null; footerNote?: string } | undefined;
-type PrinterCfg = { billPrinter?: string; barcodePrinter?: string; tokenPrinter?: string };
+type PrinterCfg = { billPrinter?: string; barcodePrinter?: string; barcodeEnabled?: string; tokenPrinter?: string; tokenEnabled?: string };
 
 function openPrintWindow(html: string) {
   const w = window.open("", "_blank", "width=420,height=600");
@@ -233,6 +233,7 @@ function code128SVG(value: string): string {
 
 async function printBarcode(b: LastBill) {
   const p = await getPrinterSettings();
+  if (p.barcodeEnabled === "false") return;
   const value = b.billNumber;
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Barcode ${escapeHtml(value)}</title>
     <style>
@@ -262,6 +263,7 @@ async function printBarcode(b: LastBill) {
 // generated before the per-test token rollout).
 async function printToken(b: LastBill, clinic: ClinicLite) {
   const p = await getPrinterSettings();
+  if (p.tokenEnabled === "false") return;
   // Group testTokens by (department, roomNumber, tokenNo) — we don't need to
   // print the same dept token twice when a bill has two pathology tests that
   // share one department-level token... wait, current generator emits one

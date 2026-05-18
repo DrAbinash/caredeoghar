@@ -172,6 +172,8 @@ async function runStartupMigrations(): Promise<void> {
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS bill_show_code BOOLEAN NOT NULL DEFAULT TRUE;
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS bill_show_category BOOLEAN NOT NULL DEFAULT TRUE;
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS day_close_auto_print BOOLEAN NOT NULL DEFAULT TRUE;
+      ALTER TABLE printer_settings ADD COLUMN IF NOT EXISTS barcode_enabled TEXT NOT NULL DEFAULT 'true';
+      ALTER TABLE printer_settings ADD COLUMN IF NOT EXISTS token_enabled TEXT NOT NULL DEFAULT 'true';
       CREATE TABLE IF NOT EXISTS day_closures (
         id SERIAL PRIMARY KEY,
         closure_date TEXT NOT NULL,

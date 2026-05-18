@@ -1708,7 +1708,7 @@ type WaConversation = {
   direction: string; messageBody: string; waMessageId: string;
   aiHandled: boolean; status: string; createdAt: string;
 };
-type PrinterCfg = { id?: number; billPrinter: string; billPrinterType: string; barcodePrinter: string; tokenPrinter: string; tokenPrinterType: string };
+type PrinterCfg = { id?: number; billPrinter: string; billPrinterType: string; barcodePrinter: string; barcodeEnabled: string; tokenPrinter: string; tokenPrinterType: string; tokenEnabled: string };
 
 const PRINTER_TABS: { key: keyof Omit<PrinterCfg, "id">; typeKey?: keyof Omit<PrinterCfg, "id">; label: string; description: string }[] = [
   { key: "billPrinter",    typeKey: "billPrinterType",   label: "Bill Printer",    description: "A4 / A5 receipts and invoice printouts." },
@@ -1829,9 +1829,22 @@ function PrinterTab() {
 
       {/* Active printer panel */}
       <div className="space-y-4">
-        <div>
-          <h3 className="font-semibold text-sm">{activeMeta.label}</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">{activeMeta.description}</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-sm">{activeMeta.label}</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">{activeMeta.description}</p>
+          </div>
+          {(activeTab === "barcodePrinter" || activeTab === "tokenPrinter") && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="accent-primary"
+                checked={cur[activeTab === "barcodePrinter" ? "barcodeEnabled" : "tokenEnabled"] !== "false"}
+                onChange={(e) => update(activeTab === "barcodePrinter" ? "barcodeEnabled" : "tokenEnabled", e.target.checked ? "true" : "false")}
+              />
+              <span className="text-xs font-medium">{cur[activeTab === "barcodePrinter" ? "barcodeEnabled" : "tokenEnabled"] !== "false" ? "Enabled" : "Disabled"}</span>
+            </label>
+          )}
         </div>
 
         <div className="grid md:grid-cols-2 gap-4">
