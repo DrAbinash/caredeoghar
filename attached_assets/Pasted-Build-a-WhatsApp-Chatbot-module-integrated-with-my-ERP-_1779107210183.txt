@@ -1,0 +1,282 @@
+Build a WhatsApp Chatbot module integrated with my ERP.
+
+GOAL:
+Create a secure WhatsApp chatbot connected to the ERP backend for patients, staff, doctors, and admin.
+
+Use WhatsApp Business Cloud API architecture, but keep provider-adapter support so we can later use Meta Cloud API, Twilio, Gupshup, WATI, Interakt, AiSensy, or other providers.
+
+Do not hardcode one provider.
+
+ARCHITECTURE:
+WhatsApp Provider
+↓
+Webhook Receiver
+↓
+WhatsApp Bot Engine
+↓
+ERP Services
+↓
+Reply Sender
+
+PHASE 1 — PROVIDER ADAPTER
+
+Create common WhatsAppProvider interface:
+- sendTextMessage()
+- sendTemplateMessage()
+- sendDocument()
+- sendImage()
+- sendInteractiveButtons()
+- verifyWebhook()
+- parseIncomingMessage()
+- markMessageRead()
+
+Create adapters:
+- MetaWhatsAppCloudProvider
+- TwilioWhatsAppProvider
+- GupshupProvider
+- WATIProvider
+- InteraktProvider
+- MockWhatsAppProvider
+
+Use MockWhatsAppProvider for local testing.
+
+PHASE 2 — ENV CONFIG
+
+Store only in backend environment variables:
+- WHATSAPP_PROVIDER
+- WHATSAPP_PHONE_NUMBER_ID
+- WHATSAPP_BUSINESS_ACCOUNT_ID
+- WHATSAPP_ACCESS_TOKEN
+- WHATSAPP_VERIFY_TOKEN
+- WHATSAPP_APP_SECRET
+- WHATSAPP_WEBHOOK_SECRET
+- WHATSAPP_BASE_URL
+
+Never expose tokens to frontend.
+
+PHASE 3 — DATABASE TABLES
+
+Create tables:
+
+whatsapp_contacts:
+- id
+- phone
+- name
+- patient_id
+- doctor_id
+- staff_user_id
+- contact_type: patient / doctor / staff / admin / unknown
+- consent_status
+- language
+- last_interaction_at
+- created_at
+
+whatsapp_conversations:
+- id
+- contact_id
+- phone
+- status: open / bot / human / closed
+- current_flow
+- last_message_at
+- assigned_user_id
+- created_at
+
+whatsapp_messages:
+- id
+- conversation_id
+- provider
+- direction: incoming / outgoing
+- message_type
+- message_text
+- template_name
+- media_url
+- provider_message_id
+- status
+- raw_payload_json
+- created_at
+
+whatsapp_bot_sessions:
+- id
+- contact_id
+- current_step
+- context_json
+- expires_at
+- created_at
+
+whatsapp_templates:
+- id
+- template_name
+- category
+- language
+- body
+- status
+- use_case
+- created_at
+
+PHASE 4 — WEBHOOK
+
+Create endpoint:
+POST /api/whatsapp/webhook/:provider
+
+Also create verification endpoint if provider needs GET webhook verification.
+
+Webhook must:
+- verify signature/token
+- parse incoming message
+- create/update contact
+- create conversation
+- store message
+- send to bot engine
+- create audit log
+
+PHASE 5 — BOT FLOWS
+
+Create bot flows:
+
+1. Main menu:
+- Book Appointment
+- Check Report Status
+- Download Report
+- Check Bill / Dues
+- Location
+- Talk to Staff
+
+2. Appointment booking:
+- ask patient name
+- mobile auto-detected
+- choose modality/department: MRI / CT / X-Ray / USG / Pathology / OPD
+- choose preferred date
+- choose slot if available
+- create appointment in ERP
+- send confirmation
+
+3. Report status:
+- ask bill number or registered mobile
+- search ERP reports
+- show pending / ready / verified
+- if ready, send secure report link or PDF
+
+4. Payment / dues:
+- fetch pending dues by mobile/bill number
+- show amount
+- send payment link placeholder
+- mark payment pending until confirmed in ERP/bank reconciliation
+
+5. Queue/token:
+- fetch token status
+- show current token and estimated wait
+
+6. Admin summary:
+Only allowed admin numbers can access.
+Commands:
+- TODAY
+- CASH
+- DUES
+- REPORTS
+- DISCOUNTS
+- CANCELS
+- DRAWER
+- ALERTS
+
+Admin replies should show:
+- today revenue
+- cash collection
+- digital collection
+- outstanding dues
+- pending reports
+- cash mismatch
+- discounts
+- cancellations
+- refund alerts
+
+7. Staff summary:
+Allowed staff can ask:
+- MY COLLECTION
+- MY DRAWER
+- MY PENDING
+- MY BILLS
+
+8. Doctor/referral summary:
+Doctor can ask:
+- TODAY PATIENTS
+- PENDING REPORTS
+- COMMISSION SUMMARY
+Only if doctor mobile is mapped.
+
+PHASE 6 — HUMAN HANDOVER
+
+Add human handover:
+- patient types “staff” or selects Talk to Staff
+- conversation status becomes human
+- notify reception dashboard
+- staff can reply from ERP
+- bot pauses until staff closes conversation
+
+PHASE 7 — ERP UI
+
+Add WhatsApp menu:
+- Dashboard
+- Conversations
+- Contacts
+- Bot Flows
+- Templates
+- Message Logs
+- Settings
+
+Conversations page:
+- live inbox
+- patient details
+- linked bill/appointment/report
+- reply box
+- assign to staff
+- close conversation
+
+PHASE 8 — NOTIFICATIONS FROM ERP
+
+Add event-based WhatsApp notifications:
+- appointment booked
+- bill created
+- payment received
+- report ready
+- report amended
+- critical result alert
+- dues reminder
+- drawer mismatch alert to owner
+- day-close pending reminder
+- discount/cancellation alert to admin
+
+Use approved templates for business-initiated messages.
+
+PHASE 9 — SECURITY
+
+- verify webhook signature
+- role-based access
+- consent tracking
+- do not send report PDF without secure token link
+- report link should expire
+- log every message
+- mask sensitive data where needed
+- allow patient opt-out STOP
+- do not expose internal financial data to unknown numbers
+
+PHASE 10 — TESTING
+
+Test:
+- webhook verification
+- incoming message saved
+- main menu works
+- appointment booking works
+- report status works
+- admin TODAY command works
+- unauthorized admin command blocked
+- human handover works
+- report link expiry works
+- message logs work
+- mock provider works
+
+IMPORTANT:
+Do not rewrite existing ERP.
+Implement as modular WhatsApp integration.
+Start with MockWhatsAppProvider and Meta WhatsApp Cloud API adapter.
+Keep provider-agnostic design.
+Preserve all existing billing, reports, appointment, day close, and audit logic.

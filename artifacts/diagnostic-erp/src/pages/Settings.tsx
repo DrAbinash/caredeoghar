@@ -1353,6 +1353,8 @@ type OnlineBookingSettings = {
   payuMerchantKey: string;
   phonepeEnabled: boolean;
   phonepeMerchantId: string;
+  bharatpeEnabled: boolean;
+  bharatpeMerchantId: string;
 };
 
 function OnlineBookingTab() {
@@ -1382,6 +1384,8 @@ function OnlineBookingTab() {
       payuMerchantKey: data.payuMerchantKey || "",
       phonepeEnabled: data.phonepeEnabled ?? false,
       phonepeMerchantId: data.phonepeMerchantId || "",
+      bharatpeEnabled: data.bharatpeEnabled ?? false,
+      bharatpeMerchantId: data.bharatpeMerchantId || "",
     });
   }, [data]);
 
@@ -1539,11 +1543,61 @@ function OnlineBookingTab() {
         </p>
       </div>
 
+      {/* BharatPe */}
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg bg-[#008CD2] flex items-center justify-center shrink-0">
+            <CreditCard size={16} className="text-white" />
+          </div>
+          <div>
+            <h3 className="font-bold">BharatPe UPI</h3>
+            <p className="text-xs text-muted-foreground">Popular merchant UPI checkout for Indian diagnostic centers.</p>
+          </div>
+        </div>
+        <Toggle
+          value={form.bharatpeEnabled}
+          onChange={(v) => setForm({ ...form, bharatpeEnabled: v })}
+          label="Use BharatPe as active payment gateway"
+          hint="When enabled, BharatPe takes highest priority over PayU, PhonePe, and Razorpay."
+        />
+        <div>
+          <Label>BharatPe Merchant ID</Label>
+          <p className="text-xs text-muted-foreground mb-1">Your BharatPe Merchant ID from the dashboard. Safe to store here.</p>
+          <Input
+            value={form.bharatpeMerchantId}
+            onChange={(e) => setForm({ ...form, bharatpeMerchantId: e.target.value })}
+            className="mt-1 max-w-md font-mono text-sm"
+            placeholder="e.g. BP1234567890"
+          />
+        </div>
+        <div className="flex justify-end gap-2 pt-2 border-t border-card-border">
+          <Button onClick={() => save.mutate(form)} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
+        </div>
+      </div>
+
+      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-5 space-y-2">
+        <h3 className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2">
+          <KeyRound size={15} /> BharatPe API Credentials
+        </h3>
+        <p className="text-sm text-amber-800 dark:text-amber-300">
+          These are used server-side for BharatPe authentication. They are <strong>never</strong> sent to the browser. Add as environment secrets:
+        </p>
+        <div className="font-mono text-sm bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 rounded px-3 py-2 select-all">
+          BHARATPE_API_KEY=your_api_key
+        </div>
+        <div className="font-mono text-sm bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 rounded px-3 py-2 select-all">
+          BHARATPE_API_SECRET=your_api_secret
+        </div>
+        <p className="text-xs text-amber-700 dark:text-amber-400">
+          In Replit: open Secrets, add <code>BHARATPE_API_KEY</code>, <code>BHARATPE_API_SECRET</code>, and <code>BHARATPE_MERCHANT_ID</code>. Then restart the API server.
+        </p>
+      </div>
+
       {/* Razorpay (legacy / fallback) */}
       <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
         <div className="flex items-center gap-2">
           <h3 className="font-bold">Razorpay (Fallback / Legacy)</h3>
-          <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">Used when PhonePe & PayU are disabled</span>
+          <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">Used when BharatPe, PhonePe & PayU are disabled</span>
         </div>
         <div>
           <Label>Razorpay Key ID</Label>

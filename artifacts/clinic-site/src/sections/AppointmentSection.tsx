@@ -6,7 +6,7 @@ function get(c: Record<string, unknown>, k: string, fb = ""): string {
   return typeof c[k] === "string" ? (c[k] as string) : fb;
 }
 
-type BookingConfig = { enabled: boolean; keyId: string; vipEnabled: boolean; gateway: "payu" | "razorpay" | "phonepe" | null; payuMerchantKey?: string; phonepeMerchantId?: string };
+type BookingConfig = { enabled: boolean; keyId: string; vipEnabled: boolean; gateway: "payu" | "razorpay" | "phonepe" | "bharatpe" | null; payuMerchantKey?: string; phonepeMerchantId?: string; bharatpeMerchantId?: string };
 type TestItem = { id: number; code: string; name: string; category: string; price: string };
 type PkgItem  = { id: number; code: string; name: string; price: string; description: string };
 
@@ -83,7 +83,7 @@ export default function AppointmentSection({ section, settings }: { section: Sec
     urlChecked.current = true;
     const params = new URLSearchParams(window.location.search);
     const bookingStatus = params.get("booking");
-    if (bookingStatus === "success" || bookingStatus === "link_success" || bookingStatus === "phonepe_done") {
+    if (bookingStatus === "success" || bookingStatus === "link_success" || bookingStatus === "phonepe_done" || bookingStatus === "bharatpe_done") {
       setSuccessRef(params.get("ref") ?? "");
       setStep("done");
     } else if (bookingStatus === "failed") {
@@ -170,6 +170,23 @@ export default function AppointmentSection({ section, settings }: { section: Sec
     }
   }
 
+  async function handleBharatPe() {
+    setError(""); setPaying(true);
+    try {
+      const res = await bookingPost<{ bookingRef: string; redirectUrl: string }>("/api/public/booking/bharatpe-initiate", {
+        name: pd.name, phone: pd.phone, email: pd.email, selectedDate: pd.date, timeSlot: pd.timeSlot,
+        testIds: Array.from(selTests), packageIds: Array.from(selPkgs),
+        totalAmount: total, notes: pd.notes, isVip: pd.isVip,
+      });
+      // Redirect to BharatPe checkout — page will come back via redirectUrl
+      window.location.href = res.redirectUrl;
+      // Don't reset paying — the page will redirect away
+    } catch (e: unknown) {
+      const msg = (e as { message?: string }).message || "Something went wrong.";
+      setError(msg); setPaying(false);
+    }
+  }
+
   async function handleRazorpay() {
     setError(""); setPaying(true);
     try {
@@ -217,12 +234,16 @@ export default function AppointmentSection({ section, settings }: { section: Sec
 
   async function handlePay() {
     if (selTests.size === 0 && selPkgs.size === 0) { setError("Please select at least one test or package."); return; }
+    if (config?.gateway === "bharatpe") return handleBharatPe();
     if (config?.gateway === "phonepe") return handlePhonePe();
     if (config?.gateway === "payu") return handlePayU();
     return handleRazorpay();
   }
 
-  const gatewayLabel = config?.gateway === "phonepe" ? "PhonePe" : config?.gateway === "payu" ? "PayU" : "Razorpay";
+  const gatewayLabel =
+    config?.gateway === "bharatpe" ? "BharatPe" :
+    config?.gateway === "phonepe" ? "PhonePe" :
+    config?.gateway === "payu" ? "PayU" : "Razorpay";
 
   if (!config || !config.enabled) {
     return (
@@ -374,7 +395,9 @@ export default function AppointmentSection({ section, settings }: { section: Sec
               <button type="button" onClick={() => setStep("select")} style={{ background: "hsl(var(--site-muted))", color: "inherit", border: "none", borderRadius: "var(--site-radius)", padding: ".6rem 1.1rem", cursor: "pointer", fontWeight: 600 }}>← Back</button>
               <button type="button" className={buttonClass(settings, "primary")} onClick={handlePay} disabled={paying} style={{ flex: 1, justifyContent: "center" }}>
                 {paying
-                  ? (config?.gateway === "payu" ? "Redirecting to PayU…" : "Processing…")
+                  ? (config?.gateway === "payu" ? "Redirecting to PayU…" :
+                     config?.gateway === "bharatpe" ? "Redirecting to BharatPe…" :
+                     config?.gateway === "phonepe" ? "Redirecting to PhonePe…" : "Processing…")
                   : `Pay ₹${total.toLocaleString("en-IN")} via ${gatewayLabel}`}
               </button>
             </div>

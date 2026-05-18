@@ -33,6 +33,9 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   // PhonePe
   phonepeEnabled: boolean("phonepe_enabled").notNull().default(false),
   phonepeMerchantId: text("phonepe_merchant_id").notNull().default(""),
+  // BharatPe
+  bharatpeEnabled: boolean("bharatpe_enabled").notNull().default(false),
+  bharatpeMerchantId: text("bharatpe_merchant_id").notNull().default(""),
   // Self-registration kiosk
   kioskEnabled: boolean("kiosk_enabled").notNull().default(false),
   kioskUpiVpa: text("kiosk_upi_vpa").notNull().default(""),

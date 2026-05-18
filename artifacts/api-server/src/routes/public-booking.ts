@@ -88,8 +88,12 @@ publicBookingRouter.get("/config", async (_req, res): Promise<void> => {
   const phonepeSalt = process.env.PHONEPE_API_SECRET || "";
   const phonepeMerchantId = process.env.PHONEPE_MERCHANT_ID || settings.phonepeMerchantId || "";
 
-  let gateway: "razorpay" | "payu" | "phonepe" | null = null;
-  if (settings.payuEnabled && payuKey && payuSalt) gateway = "payu";
+  const bharatpeApiKey = process.env.BHARATPE_API_KEY || "";
+  const bharatpeMerchantId = process.env.BHARATPE_MERCHANT_ID || settings.bharatpeMerchantId || "";
+
+  let gateway: "razorpay" | "payu" | "phonepe" | "bharatpe" | null = null;
+  if (settings.bharatpeEnabled && bharatpeMerchantId && bharatpeApiKey) gateway = "bharatpe";
+  else if (settings.payuEnabled && payuKey && payuSalt) gateway = "payu";
   else if (settings.phonepeEnabled && phonepeMerchantId && phonepeSalt) gateway = "phonepe";
   else if (razorpayKeyId && razorpaySecret) gateway = "razorpay";
 
@@ -100,6 +104,7 @@ publicBookingRouter.get("/config", async (_req, res): Promise<void> => {
     gateway,
     payuMerchantKey: payuKey,
     phonepeMerchantId: settings.phonepeEnabled ? phonepeMerchantId : "",
+    bharatpeMerchantId: settings.bharatpeEnabled ? bharatpeMerchantId : "",
   });
 });
 
@@ -481,7 +486,196 @@ publicBookingRouter.get("/phonepe-callback", async (req, res): Promise<void> => 
   res.redirect(`${clinicSiteBase}/?booking=failed&reason=${encodeURIComponent(code || "Payment not completed")}`);
 });
 
-// ── POST /api/public/booking/create-order (Razorpay — kept for backwards compat) ──
+// ── BharatPe helpers ─────────────────────────────────────────────────────────────────────────
+
+const BHARATPE_PROD_BASE = "https://api.bharatpe.in/api/v1";
+const BHARATPE_STAGING_BASE = "https://uat-api.bharatpe.in/api/v1";
+
+// ── POST /api/public/booking/bharatpe-initiate ───────────────────────────────────────────────────
+// Creates a pending booking and returns the BharatPe checkout redirect URL.
+publicBookingRouter.post("/bharatpe-initiate", createOrderLimiter, async (req, res): Promise<void> => {
+  const settings = await getSettings();
+  if (!settings?.onlineBookingEnabled) {
+    res.status(403).json({ error: "Online booking is not enabled." });
+    return;
+  }
+
+  const apiKey = process.env.BHARATPE_API_KEY || "";
+  const apiSecret = process.env.BHARATPE_API_SECRET || "";
+  const merchantId = process.env.BHARATPE_MERCHANT_ID || settings.bharatpeMerchantId || "";
+  if (!apiKey || !apiSecret || !merchantId) {
+    res.status(503).json({ error: "BharatPe not configured. Please contact the clinic." });
+    return;
+  }
+
+  const {
+    name, phone, email = "", selectedDate, timeSlot = "",
+    testIds = [], packageIds = [], totalAmount,
+    notes = "", isVip = false,
+  } = req.body as {
+    name: string; phone: string; email?: string; selectedDate: string; timeSlot?: string;
+    testIds?: number[]; packageIds?: number[]; totalAmount: number;
+    notes?: string; isVip?: boolean;
+  };
+
+  if (!name?.trim() || !phone?.trim() || !selectedDate) {
+    res.status(400).json({ error: "Name, phone, and selected date are required." });
+    return;
+  }
+  if (!Array.isArray(testIds) || !Array.isArray(packageIds) || (testIds.length + packageIds.length) === 0) {
+    res.status(400).json({ error: "Please select at least one test or package." });
+    return;
+  }
+  const amount = Number(totalAmount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    res.status(400).json({ error: "Invalid total amount." });
+    return;
+  }
+
+  const bookingRef = generateBookingRef();
+  const amountPaise = Math.round(amount * 100);
+  const base = getPublicBase(req as Parameters<typeof getPublicBase>[0]);
+  const callbackUrl = `${base}/api/public/booking/bharatpe-callback`;
+  const redirectUrl = `${base}/?booking=bharatpe_done&ref=${encodeURIComponent(bookingRef)}`;
+
+  // Build auth token using BharatPe-style HMAC
+  const timestamp = String(Date.now());
+  const authPayload = `${merchantId}:${timestamp}`;
+  const authHash = crypto.createHmac("sha256", apiSecret).update(authPayload).digest("hex");
+  const authToken = `${apiKey}:${authHash}:${timestamp}`;
+
+  const isStaging = process.env.NODE_ENV !== "production";
+  const bpBase = isStaging ? BHARATPE_STAGING_BASE : BHARATPE_PROD_BASE;
+
+  try {
+    const bpRes = await fetch(`${bpBase}/merchant/checkout/init`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "X-API-KEY": apiKey,
+        "X-MERCHANT-ID": merchantId,
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({
+        merchantId,
+        merchantTransactionId: bookingRef,
+        amount: amountPaise,
+        currency: "INR",
+        customerName: name.trim(),
+        customerMobile: phone.replace(/\D/g, "").slice(-10),
+        customerEmail: email.trim(),
+        description: `DiagnoCenter booking ${bookingRef}`,
+        callbackUrl,
+        redirectUrl,
+      }),
+    });
+    if (!bpRes.ok) {
+      const errText = await bpRes.text().catch(() => "");
+      res.status(502).json({ error: "BharatPe gateway error. Please try again.", details: errText });
+      return;
+    }
+    const bpData = (await bpRes.json()) as {
+      success: boolean;
+      code: string;
+      data?: { redirectUrl?: string; transactionId?: string };
+    };
+    if (!bpData.success || !bpData.data?.redirectUrl) {
+      res.status(502).json({ error: "Could not initiate BharatPe payment. Please try again.", code: bpData.code });
+      return;
+    }
+    const redirectTo = bpData.data.redirectUrl;
+    const providerRef = bpData.data.transactionId || "";
+
+    await db.insert(onlineBookingsTable).values({
+      bookingRef,
+      name: name.trim(),
+      phone: phone.trim(),
+      email: email.trim(),
+      selectedDate,
+      timeSlot: timeSlot.trim(),
+      testIds: JSON.stringify(testIds),
+      packageIds: JSON.stringify(packageIds),
+      totalAmount: String(amount),
+      notes: notes.trim(),
+      isVip: Boolean(isVip) && Boolean(settings.vipQueueEnabled),
+      bharatpeTransactionId: bookingRef,
+      bharatpeProviderRefId: providerRef,
+      status: "pending_payment",
+    });
+
+    res.json({ bookingRef, redirectUrl: redirectTo });
+  } catch {
+    res.status(502).json({ error: "Could not connect to BharatPe. Please try again." });
+    return;
+  }
+});
+
+// ── GET /api/public/booking/bharatpe-callback ────────────────────────────────────────────────────────────
+// BharatPe redirects browser here after payment attempt.
+publicBookingRouter.get("/bharatpe-callback", async (req, res): Promise<void> => {
+  const settings = await getSettings();
+  const apiKey = process.env.BHARATPE_API_KEY || "";
+  const apiSecret = process.env.BHARATPE_API_SECRET || "";
+  const merchantId = process.env.BHARATPE_MERCHANT_ID || settings?.bharatpeMerchantId || "";
+
+  const base = getPublicBase(req as Parameters<typeof getPublicBase>[0]);
+  const clinicSiteBase = base;
+
+  const { merchantTransactionId, status, code } = req.query as Record<string, string>;
+  if (!merchantTransactionId) {
+    res.redirect(`${clinicSiteBase}/?booking=failed&reason=missing_txn_id`);
+    return;
+  }
+
+  // Verify status server-side with BharatPe
+  const isStaging = process.env.NODE_ENV !== "production";
+  const bpBase = isStaging ? BHARATPE_STAGING_BASE : BHARATPE_PROD_BASE;
+  const timestamp = String(Date.now());
+  const authPayload = `${merchantId}:${timestamp}`;
+  const authHash = crypto.createHmac("sha256", apiSecret).update(authPayload).digest("hex");
+  const authToken = `${apiKey}:${authHash}:${timestamp}`;
+
+  try {
+    const statusRes = await fetch(`${bpBase}/merchant/transaction/${encodeURIComponent(merchantTransactionId)}/status`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "X-API-KEY": apiKey,
+        "X-MERCHANT-ID": merchantId,
+        Authorization: `Bearer ${authToken}`,
+      },
+    });
+    const statusData = (await statusRes.json()) as {
+      success: boolean;
+      code: string;
+      data?: { status?: string; transactionId?: string };
+    };
+
+    if (statusData.data?.status === "SUCCESS" || status === "success") {
+      const [booking] = await db.select().from(onlineBookingsTable)
+        .where(eq(onlineBookingsTable.bharatpeTransactionId, merchantTransactionId))
+        .limit(1);
+      if (booking && booking.status === "pending_payment") {
+        await db.update(onlineBookingsTable)
+          .set({ status: "paid", bharatpeProviderRefId: statusData.data?.transactionId || booking.bharatpeProviderRefId })
+          .where(eq(onlineBookingsTable.id, booking.id));
+      }
+      res.redirect(`${clinicSiteBase}/?booking=success&ref=${encodeURIComponent(merchantTransactionId)}`);
+      return;
+    }
+  } catch { /* fall through to failure */ }
+
+  const [booking] = await db.select().from(onlineBookingsTable)
+    .where(eq(onlineBookingsTable.bharatpeTransactionId, merchantTransactionId))
+    .limit(1);
+  if (booking && booking.status === "pending_payment") {
+    await db.update(onlineBookingsTable).set({ status: "payment_failed" }).where(eq(onlineBookingsTable.id, booking.id));
+  }
+  res.redirect(`${clinicSiteBase}/?booking=failed&reason=${encodeURIComponent(code || "Payment not completed")}`);
+});
+
+// ── POST /api/public/booking/create-order (Razorpay ─ kept for backwards compat) ──
 publicBookingRouter.post("/create-order", createOrderLimiter, async (req, res): Promise<void> => {
   const settings = await getSettings();
   if (!settings?.onlineBookingEnabled) {
