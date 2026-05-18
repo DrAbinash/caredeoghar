@@ -1824,11 +1824,11 @@ export default function BillingDesk() {
             RIGHT COLUMN — Bill Summary + Payment
         ══════════════════════════════════════════════ */}
         <div className="w-full lg:w-[35%] flex flex-col lg:overflow-hidden min-h-0">
-          <div className="flex-shrink-0 overflow-y-auto">
+          <div className="flex-1 min-h-0 overflow-y-auto">
 
-            <div className="space-y-3">
+            <div className="space-y-3 flex flex-col min-h-0">
               {/* ── Selected Tests ── */}
-              <div className="lg:flex-1 min-h-0 overflow-y-auto border-b border-card-border max-h-[34vh] lg:max-h-none">
+              <div className="flex-1 min-h-0 overflow-y-auto border-b border-card-border">
                 <div className="px-4 py-2 h-10 bg-gradient-to-r from-slate-50 via-slate-100 to-slate-100/50 dark:from-slate-800/40 dark:via-slate-700/30 dark:to-slate-900/20 border-l-[3px] border-l-slate-600 flex items-center justify-between">
                   <span className="text-sm font-bold uppercase tracking-wide text-slate-900 dark:text-slate-900">
                     Selected Tests ({selectedTests.length})
