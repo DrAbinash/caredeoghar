@@ -556,8 +556,137 @@ export default function Tests() {
         </DialogContent>
       </Dialog>
 
+      <DuplicatesDialog open={dupOpen} onOpenChange={setDupOpen} />
       <ManageCategoriesDialog open={manageOpen} onOpenChange={setManageOpen} />
     </div>
+  );
+}
+
+// ── Duplicates Finder ──────────────────────────────────────────────────────
+type DuplicateGroup = {
+  name: string;
+  tests: Array<{
+    id: number; code: string; name: string; price: number | string;
+    category: string; isActive: boolean; testType?: string | null;
+  }>;
+};
+
+function DuplicatesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const qc = useQueryClient();
+  const { data: rawRes, isLoading } = useQuery({
+    queryKey: ["all-tests-for-dups"],
+    queryFn: () => api.get<{ tests: DuplicateGroup["tests"] }>("/api/tests?limit=10000"),
+    enabled: open,
+  });
+  const { toast } = useToast();
+
+  const delTest = useDeleteTest({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListTestsQueryKey() });
+        qc.invalidateQueries({ queryKey: ["all-tests-for-dups"] });
+        toast({ title: "Duplicate deleted" });
+      },
+      onError: (e: Error) => toast({ title: "Delete failed", description: e.message, variant: "destructive" }),
+    },
+  });
+
+  const tests = (rawRes as { tests?: DuplicateGroup["tests"] } | undefined)?.tests ?? [];
+
+  const groups: DuplicateGroup[] = (() => {
+    const map = new Map<string, DuplicateGroup["tests"]>();
+    for (const t of tests) {
+      const key = (t.name ?? "").trim().toLowerCase();
+      if (!key) continue;
+      const arr = map.get(key) ?? [];
+      arr.push(t);
+      map.set(key, arr);
+    }
+    const out: DuplicateGroup[] = [];
+    for (const [name, list] of map) {
+      if (list.length > 1) out.push({ name, tests: list });
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+  })();
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Duplicate Tests</DialogTitle>
+          <DialogDescription>
+            Tests with the same name are grouped below. Click the trash icon to delete the duplicate you don't want. Tests that have been used in orders are protected from deletion.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto">
+          {isLoading ? (
+            <div className="p-6 text-sm text-muted-foreground">Loading catalog…</div>
+          ) : groups.length === 0 ? (
+            <div className="p-6 text-sm text-muted-foreground text-center">No duplicate tests found. All test names are unique.</div>
+          ) : (
+            <div className="space-y-3">
+              {groups.map((g) => (
+                <div key={g.name} className="border border-card-border rounded-lg overflow-hidden">
+                  <div className="bg-muted/30 px-4 py-2 font-semibold text-sm border-b border-card-border flex items-center gap-2">
+                    <AlertTriangle size={14} className="text-orange-500" />
+                    {g.name}
+                    <span className="text-muted-foreground font-normal text-xs">({g.tests.length} entries with same name)</span>
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/20">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Code</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Category</th>
+                        <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground">Price</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Type</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Status</th>
+                        <th className="px-4 py-2 w-20"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {g.tests.map((t) => (
+                        <tr key={t.id} className="border-b border-card-border/50 last:border-0 hover:bg-muted/10">
+                          <td className="px-4 py-2 font-mono text-xs font-bold text-primary">{t.code}</td>
+                          <td className="px-4 py-2">{t.category}</td>
+                          <td className="px-4 py-2 text-right font-semibold">₹{Number(t.price).toFixed(2)}</td>
+                          <td className="px-4 py-2">
+                            <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${(t.testType ?? "inhouse") === "outsourced" ? "bg-orange-100 text-orange-700" : "bg-teal-100 text-teal-700"}`}>
+                              {(t.testType ?? "inhouse") === "outsourced" ? "Outsourced" : "In-House"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2">
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${t.isActive ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
+                              {t.isActive ? "Active" : "Inactive"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 text-right">
+                            <button
+                              onClick={() => {
+                                if (confirm(`Delete duplicate "${t.name}" (${t.code})?\n\nThis cannot be undone. If this test has been used in orders, the delete will be blocked.`)) {
+                                  delTest.mutate({ id: t.id });
+                                }
+                              }}
+                              className="text-muted-foreground hover:text-destructive p-1 rounded hover:bg-destructive/10"
+                              disabled={delTest.isPending}
+                              title="Delete this duplicate"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex justify-end pt-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Done</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
