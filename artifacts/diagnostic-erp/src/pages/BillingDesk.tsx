@@ -784,6 +784,11 @@ export default function BillingDesk() {
           }
         });
       }
+      // Auto-reset the desk after a short delay so staff can immediately start
+      // the next bill — prevents accidental double entry of the same patient.
+      window.setTimeout(() => {
+        resetAll();
+      }, 3000);
     },
     onError: (err: Error) => {
       printAfterSaveRef.current = false;
