@@ -8,7 +8,7 @@ import {
   radiologyCriticalFindingsTable,
   radiologyStudiesTable,
 } from "@workspace/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, isNull } from "drizzle-orm";
 
 export type CriticalFindingInput = {
   studyId: number;
@@ -60,7 +60,7 @@ export async function getUnacknowledgedFindings(): Promise<typeof radiologyCriti
   return db
     .select()
     .from(radiologyCriticalFindingsTable)
-    .where(eq(radiologyCriticalFindingsTable.acknowledgedAt, null))
+    .where(isNull(radiologyCriticalFindingsTable.acknowledgedAt))
     .orderBy(desc(radiologyCriticalFindingsTable.createdAt));
 }
 

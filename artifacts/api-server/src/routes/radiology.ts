@@ -1290,7 +1290,7 @@ radiologyRouter.get("/critical-findings", async (req, res) => {
     const rows = await db
       .select()
       .from(radiologyCriticalFindingsTable)
-      .where(eq(radiologyCriticalFindingsTable.acknowledgedAt, null))
+      .where(isNull(radiologyCriticalFindingsTable.acknowledgedAt))
       .orderBy(desc(radiologyCriticalFindingsTable.createdAt))
       .limit(100);
     res.json(rows);
@@ -1299,7 +1299,7 @@ radiologyRouter.get("/critical-findings", async (req, res) => {
 
 // POST /api/radiology/critical-findings
 radiologyRouter.post("/critical-findings", async (req, res) => {
-  const body = req.body as { studyId: number; finding: string; severity: string; category?: string };
+  const body = req.body as { studyId: number; finding: string; severity: "critical" | "urgent" | "significant"; category?: string };
   if (!body.studyId || !body.finding || !body.severity) { res.status(400).json({ error: "studyId, finding, severity required" }); return; }
   const row = await flagCriticalFinding(body);
   res.status(201).json(row);

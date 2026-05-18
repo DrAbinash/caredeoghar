@@ -2,11 +2,11 @@
  * webauthn.ts
  * FIDO2 / WebAuthn / YubiKey staff authentication routes.
  *
- * Registration: POST /api/auth/webauthn/register/begin -> /api/auth/webauthn/register/complete
- * Authentication: POST /api/auth/webauthn/authenticate/begin -> /api/auth/webauthn/authenticate/complete
- * Credentials: GET /api/auth/webauthn/credentials (staff auth required)
+ * Registration:   POST /api/auth/webauthn/register/begin -> /api/auth/webauthn/register/complete
+ * Authentication: POST /api/auth/webauthn/authenticate/begin -> /api/auth/webauthn/authenticate/complete (public)
+ * Credentials:    GET  /api/auth/webauthn/credentials  (staff auth required)
  */
-import { Router } from "express";
+import { Router, type Response } from "express";
 import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
@@ -15,7 +15,7 @@ import {
 } from "@simplewebauthn/server";
 import { db } from "@workspace/db";
 import { webauthnCredentialsTable, usersTable } from "@workspace/db/schema";
-import { eq, and, gt } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
 import {
   storeChallenge,
@@ -28,15 +28,22 @@ import {
   rpFromReq,
 } from "../lib/webauthnService";
 
-const router = Router();
+const publicRouter = Router();
+const protectedRouter = Router();
 
-// ── Registration ──
+// ── Registration (staff auth required via middleware mount) ──
+
+function requireAdminOrSuperAdmin(req: StaffAuthRequest, res: Response): boolean {
+  const staff = req.staffSession;
+  if (!staff) { res.status(401).json({ error: "Staff authentication required" }); return false; }
+  if (staff.role !== "admin" && staff.role !== "super_admin") { res.status(403).json({ error: "Only admin and super-admin can manage security keys" }); return false; }
+  return true;
+}
 
 // POST /api/auth/webauthn/register/begin
-router.post("/register/begin", async (req: StaffAuthRequest, res) => {
-  const staff = req.staffSession;
-  if (!staff) { res.status(401).json({ error: "Staff authentication required" }); return; }
-
+protectedRouter.post("/register/begin", async (req: StaffAuthRequest, res) => {
+  if (!requireAdminOrSuperAdmin(req, res)) return;
+  const staff = req.staffSession!;
   const { rpID } = rpFromReq(req);
   const existing = await getCredentialsForUser(staff.subjectId);
 
@@ -58,7 +65,8 @@ router.post("/register/begin", async (req: StaffAuthRequest, res) => {
 });
 
 // POST /api/auth/webauthn/register/complete
-router.post("/register/complete", async (req, res) => {
+protectedRouter.post("/register/complete", async (req: StaffAuthRequest, res) => {
+  if (!requireAdminOrSuperAdmin(req, res)) return;
   const body = req.body as { response?: unknown; expectedChallenge?: string; deviceName?: string };
   if (!body.response || !body.expectedChallenge) { res.status(400).json({ error: "Missing response or challenge" }); return; }
 
@@ -103,13 +111,13 @@ router.post("/register/complete", async (req, res) => {
     transports,
   ).then((rows) => [rows]);
 
-  res.status(201).json({ ok: true, id: row.id, credentialId });
+  return res.status(201).json({ ok: true, id: row.id, credentialId });
 });
 
-// ── Authentication ──
+// ── Authentication (public — no staff auth needed) ──
 
 // POST /api/auth/webauthn/authenticate/begin
-router.post("/authenticate/begin", async (req, res) => {
+publicRouter.post("/authenticate/begin", async (req, res) => {
   const { rpID } = rpFromReq(req);
   const allCreds = await db.select().from(webauthnCredentialsTable);
   const opts = await generateAuthenticationOptions({
@@ -125,7 +133,7 @@ router.post("/authenticate/begin", async (req, res) => {
 });
 
 // POST /api/auth/webauthn/authenticate/complete
-router.post("/authenticate/complete", async (req, res) => {
+publicRouter.post("/authenticate/complete", async (req, res) => {
   const body = req.body as { response?: unknown; expectedChallenge?: string };
   if (!body.response || !body.expectedChallenge) { res.status(400).json({ error: "Missing response or challenge" }); return; }
   if (!consumeChallenge(body.expectedChallenge)) { res.status(400).json({ error: "Invalid or expired challenge" }); return; }
@@ -164,7 +172,6 @@ router.post("/authenticate/complete", async (req, res) => {
   const newCounter = verification.authenticationInfo?.newCounter ?? cred.counter;
   await updateCredentialCounter(cred.id, newCounter);
 
-  // Lookup user and create session
   const [user] = await db
     .select({ id: usersTable.id, name: usersTable.name, role: usersTable.role })
     .from(usersTable)
@@ -173,26 +180,25 @@ router.post("/authenticate/complete", async (req, res) => {
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
   const token = await createWebAuthnSession(user.id, user.name);
-  res.json({ token, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), user: { id: user.id, name: user.name, role: user.role } });
+  return res.json({ token, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), user: { id: user.id, name: user.name, role: user.role } });
 });
 
-// ── Credential management ──
+// ── Credential management (staff auth required via middleware mount) ──
 
 // GET /api/auth/webauthn/credentials
-router.get("/credentials", async (req: StaffAuthRequest, res) => {
-  const staff = req.staffSession;
-  if (!staff) { res.status(401).json({ error: "Staff authentication required" }); return; }
+protectedRouter.get("/credentials", async (req: StaffAuthRequest, res) => {
+  if (!requireAdminOrSuperAdmin(req, res)) return;
+  const staff = req.staffSession!;
   const rows = await getCredentialsForUser(staff.subjectId);
   res.json(rows);
 });
 
 // DELETE /api/auth/webauthn/credentials/:id
-router.delete("/credentials/:id", async (req: StaffAuthRequest, res) => {
-  const staff = req.staffSession;
-  if (!staff) { res.status(401).json({ error: "Staff authentication required" }); return; }
+protectedRouter.delete("/credentials/:id", async (req: StaffAuthRequest, res) => {
+  if (!requireAdminOrSuperAdmin(req, res)) return;
+  const staff = req.staffSession!;
   const credId = Number(req.params.id);
   if (!Number.isFinite(credId)) { res.status(400).json({ error: "Invalid id" }); return; }
-  // Verify ownership
   const [cred] = await db.select().from(webauthnCredentialsTable).where(eq(webauthnCredentialsTable.id, credId)).limit(1);
   if (!cred) { res.status(404).json({ error: "Credential not found" }); return; }
   if (cred.userId !== staff.subjectId) { res.status(403).json({ error: "Not your credential" }); return; }
@@ -200,4 +206,5 @@ router.delete("/credentials/:id", async (req: StaffAuthRequest, res) => {
   res.json({ ok: true });
 });
 
-export const webauthnRouter = router;
+export const webauthnPublicRouter = publicRouter;
+export const webauthnRouter = protectedRouter;

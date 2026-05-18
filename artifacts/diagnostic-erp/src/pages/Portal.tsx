@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Activity, User, Users as UsersIcon, LogOut, Phone, Mail, MapPin, Calendar,
   Receipt, FileText, ClipboardList, UserCog, ArrowLeft, ArrowRight, CheckCircle2,
-  AlertCircle, Clock, ChevronRight, Loader2,
+  AlertCircle, Clock, ChevronRight, Loader2, KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ import { writeStaffSession, firstPermissionedPath, firstAllowedPath, type StaffS
 
 type PortalSettings = {
   enabled: boolean;
+  fido2Enabled?: boolean;
   heading: string;
   welcomeMessage: string;
   centerName: string;
@@ -462,6 +463,8 @@ function StaffLogin() {
   const [username, setUsername] = useState("");
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
+  const [webauthnError, setWebauthnError] = useState("");
+  const [webauthnPending, setWebauthnPending] = useState(false);
   // When the freshly-issued session has must_change_pin=true the server is
   // telling us the admin set this user's PIN — keep them out of the ERP
   // until they've picked their own. The session is held in component state
@@ -471,6 +474,8 @@ function StaffLogin() {
     queryKey: ["portal-settings"],
     queryFn: () => api.get("/api/portal/settings"),
   });
+  const fido2Enabled = settings?.fido2Enabled ?? false;
+  const webauthnSupported = typeof window !== "undefined" && "PublicKeyCredential" in window;
 
   const finalizeSession = (s: StaffSession) => {
     localStorage.setItem(STAFF_KEY, JSON.stringify(s));
@@ -492,6 +497,59 @@ function StaffLogin() {
     },
     onError: (e: Error) => setError(e.message),
   });
+
+  const handleWebAuthn = async () => {
+    setWebauthnError("");
+    setWebauthnPending(true);
+    try {
+      const opts = await api.post<{
+        challenge: string;
+        rpId: string;
+        allowCredentials?: { id: string; type: string; transports?: string[] }[];
+        userVerification?: string;
+        timeout?: number;
+      }>("/api/auth/webauthn/authenticate/begin", {});
+      const publicKey: PublicKeyCredentialRequestOptions = {
+        challenge: base64UrlToBufferWA(opts.challenge),
+        rpId: opts.rpId,
+        allowCredentials: (opts.allowCredentials || []).map((c) => ({
+          id: base64UrlToBufferWA(c.id),
+          type: c.type as PublicKeyCredentialType,
+          transports: (c.transports ?? []) as AuthenticatorTransport[],
+        })),
+        userVerification: opts.userVerification as UserVerificationRequirement,
+        timeout: opts.timeout,
+      };
+      const credential = (await navigator.credentials.get({ publicKey })) as PublicKeyCredential | null;
+      if (!credential) throw new Error("Authentication cancelled");
+      const response = credential.response as AuthenticatorAssertionResponse;
+      const s = await api.post<StaffSession>("/api/auth/webauthn/authenticate/complete", {
+        response: {
+          id: credential.id,
+          rawId: credential.id,
+          type: credential.type,
+          clientExtensionResults: credential.getClientExtensionResults?.() ?? {},
+          response: {
+            authenticatorData: bufferToBase64UrlWA(response.authenticatorData),
+            clientDataJSON: bufferToBase64UrlWA(response.clientDataJSON),
+            signature: bufferToBase64UrlWA(response.signature),
+            userHandle: response.userHandle ? bufferToBase64UrlWA(response.userHandle) : undefined,
+          },
+        },
+        expectedChallenge: opts.challenge,
+      });
+      if (s.user.mustChangePin) {
+        setPendingSession(s);
+        return;
+      }
+      finalizeSession(s);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Security key sign-in failed";
+      setWebauthnError(msg);
+    } finally {
+      setWebauthnPending(false);
+    }
+  };
 
   if (pendingSession) {
     return (
@@ -568,6 +626,27 @@ function StaffLogin() {
               {login.isPending ? <><Loader2 size={16} className="mr-2 animate-spin" /> Signing in…</> : <>Sign in <ArrowRight size={16} className="ml-2" /></>}
             </Button>
           </form>
+
+          {fido2Enabled && webauthnSupported && (
+            <div className="mt-4">
+              <div className="flex items-center gap-3 my-4">
+                <div className="flex-1 h-px bg-border" />
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">or</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+              <Button
+                variant="outline"
+                className="w-full h-12 text-base"
+                onClick={handleWebAuthn}
+                disabled={webauthnPending}
+              >
+                {webauthnPending ? <><Loader2 size={16} className="mr-2 animate-spin" /> Verifying…</> : <><KeyRound size={16} className="mr-2" /> Sign in with Security Key</>}
+              </Button>
+              {webauthnError && (
+                <p className="text-xs text-destructive text-center mt-2">{webauthnError}</p>
+              )}
+            </div>
+          )}
 
           <p className="text-xs text-muted-foreground text-center mt-6">
             Forgot your PIN? Please contact your administrator.
@@ -1149,4 +1228,19 @@ function downloadText(filename: string, content: string) {
   const a = document.createElement("a");
   a.href = url; a.download = filename; document.body.appendChild(a); a.click();
   document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+function base64UrlToBufferWA(s: string): ArrayBuffer {
+  const base64 = s.replace(/-/g, "+").replace(/_/g, "/");
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+function bufferToBase64UrlWA(b: ArrayBuffer): string {
+  const bytes = new Uint8Array(b);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }

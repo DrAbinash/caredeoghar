@@ -2641,25 +2641,37 @@ function FormFTestsTab() {
 // ============================================================
 // SECURITY TAB — LAN-only login restriction
 // ============================================================
+type WebAuthnCredential = {
+  id: number;
+  deviceName: string;
+  credentialId: string;
+  createdAt: string;
+};
+
 type SecuritySettings = {
   lanOnlyLogin: boolean;
   lanAllowedIps: string;
+  fido2Enabled: boolean;
 };
 
 function SecurityTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const session = readStaffSession();
+  const isAdmin = session?.user.role === "admin" || session?.user.role === "super_admin";
   const { data, isLoading } = useQuery<SecuritySettings>({
     queryKey: ["clinic-settings"],
     queryFn: () => api.get("/api/clinic-settings"),
   });
   const [lanOnly, setLanOnly] = useState(false);
   const [extraIpsText, setExtraIpsText] = useState("");
+  const [fido2Enabled, setFido2Enabled] = useState(false);
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
     if (data) {
       setLanOnly(data.lanOnlyLogin ?? false);
+      setFido2Enabled(data.fido2Enabled ?? false);
       let arr: string[] = [];
       try { arr = JSON.parse(data.lanAllowedIps ?? "[]"); } catch { arr = []; }
       setExtraIpsText(arr.join("\n"));
@@ -2682,7 +2694,7 @@ function SecurityTab() {
       .split(/[\n,]+/)
       .map((s) => s.trim())
       .filter(Boolean);
-    save.mutate({ lanOnlyLogin: lanOnly, lanAllowedIps: JSON.stringify(ips) });
+    save.mutate({ lanOnlyLogin: lanOnly, lanAllowedIps: JSON.stringify(ips), fido2Enabled });
   };
 
   if (isLoading || !data) {
@@ -2769,6 +2781,47 @@ function SecurityTab() {
         </ul>
       </div>
 
+      {isAdmin && (
+        <>
+          {/* ── FIDO2 / Security Key Settings ───────────────────────────── */}
+          <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+            <div>
+              <h3 className="font-semibold">FIDO2 / Security Key Login</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Allow staff to register and use hardware security keys (YubiKey, Titan, Touch ID, Windows Hello) as a second authentication factor or standalone login method.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => { setFido2Enabled(!fido2Enabled); setDirty(true); }}
+              className={`w-full text-left flex items-start justify-between gap-3 px-4 py-3 rounded-lg border transition-colors ${
+                fido2Enabled
+                  ? "bg-emerald-50 border-emerald-300 dark:bg-emerald-950/30 dark:border-emerald-800"
+                  : "bg-muted/30 border-card-border"
+              }`}
+            >
+              <div>
+                <p className="text-sm font-medium">
+                  {fido2Enabled ? "FIDO2 is ON — security-key login offered" : "FIDO2 is OFF — PIN-only login"}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {fido2Enabled
+                    ? "Staff can use security keys at login. Only admins can register new keys. PIN login still works for all users."
+                    : "Staff must sign in with username and PIN only. No hardware key option is shown."}
+                </p>
+              </div>
+              <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors mt-0.5 shrink-0 ${fido2Enabled ? "bg-emerald-500" : "bg-muted-foreground/40"}`}>
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${fido2Enabled ? "translate-x-5" : "translate-x-1"}`} />
+              </span>
+            </button>
+          </div>
+
+          {/* ── My Security Keys (admin only) ────────────────────────── */}
+          <MySecurityKeys />
+        </>
+      )}
+
       <div className="flex justify-end">
         <Button onClick={handleSave} disabled={save.isPending || !dirty}>
           {save.isPending ? "Saving…" : "Save Security Settings"}
@@ -2776,6 +2829,142 @@ function SecurityTab() {
       </div>
     </div>
   );
+}
+
+function MySecurityKeys() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [registering, setRegistering] = useState(false);
+
+  const { data: creds = [], isLoading } = useQuery<WebAuthnCredential[]>({
+    queryKey: ["webauthn-credentials"],
+    queryFn: () => api.get("/api/auth/webauthn/credentials"),
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: number) => api.delete(`/api/auth/webauthn/credentials/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["webauthn-credentials"] });
+      toast({ title: "Security key removed" });
+    },
+    onError: () => toast({ title: "Failed to remove", variant: "destructive" }),
+  });
+
+  const handleRegister = async () => {
+    setRegistering(true);
+    try {
+      const opts = await api.post<{
+        challenge: string;
+        rp: { name: string; id: string };
+        user: { id: string; name: string; displayName: string };
+        pubKeyCredParams: { type: string; alg: number }[];
+        authenticatorSelection?: Record<string, unknown>;
+        attestation?: string;
+        timeout?: number;
+        excludeCredentials?: { id: string; type: string; transports?: string[] }[];
+      }>("/api/auth/webauthn/register/begin", {});
+      const publicKey: PublicKeyCredentialCreationOptions = {
+        challenge: base64UrlToBuffer(opts.challenge),
+        rp: opts.rp,
+        user: { ...opts.user, id: base64UrlToBuffer(opts.user.id) },
+        pubKeyCredParams: opts.pubKeyCredParams.map((p) => ({ type: p.type as PublicKeyCredentialType, alg: p.alg })),
+        authenticatorSelection: opts.authenticatorSelection as AuthenticatorSelectionCriteria | undefined,
+        attestation: opts.attestation as AttestationConveyancePreference | undefined,
+        timeout: opts.timeout,
+        excludeCredentials: (opts.excludeCredentials || []).map((c) => ({
+          id: base64UrlToBuffer(c.id),
+          type: c.type as PublicKeyCredentialType,
+          transports: (c.transports ?? []) as AuthenticatorTransport[],
+        })),
+      };
+      const credential = (await navigator.credentials.create({ publicKey })) as PublicKeyCredential | null;
+      if (!credential) throw new Error("Registration cancelled");
+
+      const response = credential.response as AuthenticatorAttestationResponse;
+      const clientDataJSON = bufferToBase64Url(response.clientDataJSON);
+      const attestationObject = bufferToBase64Url(response.attestationObject);
+
+      await api.post("/api/auth/webauthn/register/complete", {
+        response: {
+          id: credential.id,
+          rawId: credential.id,
+          type: credential.type,
+          clientExtensionResults: credential.getClientExtensionResults?.() ?? {},
+          response: { clientDataJSON, attestationObject, transports: response.getTransports?.() ?? [] },
+        },
+        expectedChallenge: opts.challenge,
+        deviceName: "Security Key",
+      });
+      qc.invalidateQueries({ queryKey: ["webauthn-credentials"] });
+      toast({ title: "Security key registered" });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Registration failed";
+      toast({ title: msg, variant: "destructive" });
+    } finally {
+      setRegistering(false);
+    }
+  };
+
+  return (
+    <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-semibold">My Security Keys</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Manage the hardware keys and biometric devices registered to your account.
+          </p>
+        </div>
+        <Button onClick={handleRegister} disabled={registering || isLoading} size="sm">
+          {registering ? "Registering…" : "Register New Key"}
+        </Button>
+      </div>
+
+      {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
+
+      {creds.length === 0 && !isLoading && (
+        <p className="text-sm text-muted-foreground">
+          No security keys registered yet. Click "Register New Key" to add one.
+        </p>
+      )}
+
+      <div className="space-y-2">
+        {creds.map((c) => (
+          <div key={c.id} className="flex items-center justify-between bg-muted/40 border border-card-border rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2">
+              <ShieldCheck size={16} className="text-emerald-600 shrink-0" />
+              <div>
+                <p className="text-sm font-medium">{c.deviceName}</p>
+                <p className="text-xs text-muted-foreground">Registered {new Date(c.createdAt).toLocaleDateString()}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => remove.mutate(c.id)}
+              className="text-muted-foreground hover:text-destructive p-1 rounded transition-colors"
+              title="Remove"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function base64UrlToBuffer(s: string): ArrayBuffer {
+  const base64 = s.replace(/-/g, "+").replace(/_/g, "/");
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+function bufferToBase64Url(b: ArrayBuffer): string {
+  const bytes = new Uint8Array(b);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 function ChangePasswordTab() {

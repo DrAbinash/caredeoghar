@@ -320,6 +320,9 @@ async function runStartupMigrations(): Promise<void> {
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS lan_only_login BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS lan_allowed_ips TEXT NOT NULL DEFAULT '[]';
 
+      -- ── FIDO2 / WebAuthn optional toggle ───────────────────────────────
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS fido2_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+
       -- ── Remote super-admin login bypass ────────────────────────────────
       ALTER TABLE users ADD COLUMN IF NOT EXISTS remote_login_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 
@@ -373,13 +376,19 @@ async function runStartupMigrations(): Promise<void> {
          AND o.doctor_id IS NULL
          AND wl.is_walk_in = true;
 
-      UPDATE appointments a
-         SET ledger_id = wl.id
-        FROM orders o, ledgers wl
-       WHERE a.id = o.appointment_id
-         AND a.ledger_id = 1
-         AND o.doctor_id IS NULL
-         AND wl.is_walk_in = true;
+      -- Walk-in appointment ledger backfill: skip if orders.appointment_id does not exist yet
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'appointment_id') THEN
+          UPDATE appointments a
+             SET ledger_id = wl.id
+            FROM orders o, ledgers wl
+           WHERE a.id = o.appointment_id
+             AND a.ledger_id = 1
+             AND o.doctor_id IS NULL
+             AND wl.is_walk_in = true;
+        END IF;
+      END $$;
 
       -- ── Enterprise Radiology Phase 1 ──
       ALTER TABLE radiology_studies ADD COLUMN IF NOT EXISTS priority TEXT NOT NULL DEFAULT 'routine';
@@ -566,7 +575,8 @@ async function runStartupMigrations(): Promise<void> {
         device_name TEXT,
         transports TEXT,
         last_used_at TIMESTAMPTZ,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
     logger.info("Startup migrations applied");

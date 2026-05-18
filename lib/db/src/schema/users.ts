@@ -58,6 +58,20 @@ export const superAdminSessionsTable = pgTable("super_admin_sessions", {
   isActive: boolean("is_active").notNull().default(true),
 });
 
+// FIDO2 / WebAuthn credentials for staff (YubiKey, platform authenticator, etc.)
+export const webauthnCredentialsTable = pgTable("webauthn_credentials", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  credentialId: text("credential_id").notNull().unique(),
+  publicKey: text("public_key").notNull(),
+  counter: integer("counter").notNull().default(0),
+  deviceName: text("device_name"),
+  transports: text("transports"),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
 export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertBillAuditSchema = createInsertSchema(billAuditsTable).omit({ id: true, createdAt: true });
 export type User = typeof usersTable.$inferSelect;

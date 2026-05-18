@@ -53,5 +53,8 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   // as a JSON array of strings in lanAllowedIps.
   lanOnlyLogin: boolean("lan_only_login").notNull().default(false),
   lanAllowedIps: text("lan_allowed_ips").notNull().default("[]"),
+  // FIDO2 / WebAuthn / YubiKey optional toggle — when enabled the login UI
+  // offers security-key authentication alongside PIN login.
+  fido2Enabled: boolean("fido2_enabled").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

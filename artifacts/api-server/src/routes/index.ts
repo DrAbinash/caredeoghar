@@ -55,6 +55,7 @@ import internalRadiologyRouter from "./internal-radiology";
 import dicomAgentRouter from "./dicom-agent";
 import { publicBookingRouter } from "./public-booking";
 import { onlineBookingsRouter } from "./online-bookings";
+import { webauthnRouter } from "./webauthn";
 import { dailySummaryRouter } from "./daily-summary";
 import { advancedDashboardRouter } from "./advanced-dashboard";
 import { myDailySummaryRouter } from "./my-daily-summary";
@@ -334,6 +335,14 @@ router.use("/tokens", requireStaffAuth, tokensRouter);
 router.use("/test-tokens", requireStaffAuth, testTokensRouter);
 
 // ─── Super-admin-only sensitive operational routes ────────────────────────────
+// FIDO2 / WebAuthn authentication routes:
+//   /api/auth/webauthn/authenticate/*  → public (standalone security-key login)
+//   /api/auth/webauthn/register/*      → staff auth required (credential management)
+//   /api/auth/webauthn/credentials     → staff auth required
+import { webauthnPublicRouter } from "./webauthn";
+router.use("/auth/webauthn/authenticate", webauthnPublicRouter);
+router.use("/auth/webauthn", requireStaffAuth, webauthnRouter);
+
 router.use("/backup", requireSuperAdmin, backupRouter);
 router.use("/system", requireSuperAdmin, systemRouter);
 

@@ -26,10 +26,31 @@ export const portalRouter = Router();
 // Session lifetime: 24 hours (full working day — avoids mid-shift expiry)
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 
-// ── LAN-only login helper ─────────────────────────────────────────────────────
+// ── LAN-only login helpers ────────────────────────────────────────────────────
+// Resolve the client IP from multiple sources (Express req.ip, X-Forwarded-For,
+// X-Real-Ip, socket remoteAddress). When behind a reverse proxy, req.ip can be
+// empty or unhelpful; this fallback chain prevents accidental open-gate.
+function resolveClientIp(req: Request): string {
+  if (req.ip && req.ip.trim() !== "") return req.ip.trim();
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.trim() !== "") {
+    const first = forwarded.split(",")[0].trim();
+    if (first) return first;
+  }
+  const realIp = req.headers["x-real-ip"];
+  if (typeof realIp === "string" && realIp.trim() !== "") return realIp.trim();
+  const raw = req.socket?.remoteAddress;
+  if (raw && raw.trim() !== "") return raw.trim();
+  return "";
+}
+
 // Returns true if the IP is a private/loopback address (RFC 1918 + loopback)
 // or is explicitly listed in the operator's extra allowlist.
 function isLanOrAllowedIp(ip: string, extraIps: string[]): boolean {
+  // Empty IP → cannot determine origin → DENY (prevents accidental open-gate
+  // when proxies don't forward client addresses).
+  if (!ip || ip.trim() === "") return false;
+
   // Strip IPv6-mapped IPv4 prefix (e.g. "::ffff:192.168.1.5" → "192.168.1.5")
   const clean = ip.replace(/^::ffff:/i, "");
 
@@ -134,6 +155,7 @@ portalRouter.get("/settings", async (_req, res) => {
   const s = await getSettings();
   res.json({
     enabled: s.portalEnabled,
+    fido2Enabled: s.fido2Enabled,
     heading: s.portalHeading || s.name,
     welcomeMessage: s.portalWelcomeMessage,
     centerName: s.name,
@@ -331,7 +353,7 @@ portalRouter.post("/staff-login", staffLoginLimiter, async (req, res) => {
     if (cfg?.lanOnlyLogin) {
       let extraIps: string[] = [];
       try { extraIps = JSON.parse(cfg.lanAllowedIps ?? "[]"); } catch { /* ignore */ }
-      const clientIp = req.ip ?? "";
+      const clientIp = resolveClientIp(req);
       if (!isLanOrAllowedIp(clientIp, extraIps)) {
         res.status(403).json({ error: "Login is only allowed from within the hospital network." });
         return;
