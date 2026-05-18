@@ -30,6 +30,7 @@ import { radiologyRouter } from "./radiology";
 import { pacsEnterpriseRouter } from "./pacsEnterprise";
 import displayRouter from "./display";
 import { whatsappRouter, whatsappWebhookRouter } from "./whatsapp";
+import { waChatbotRouter, waChatbotWebhookRouter } from "./waChatbot";
 import { printersRouter } from "./printers";
 import { staffRouter } from "./staff";
 import hrFormsRouter, { staffScopedHrFormsHandler } from "./hr-forms";
@@ -358,6 +359,13 @@ router.use("/users", requireStaffAuth, userPreferencesRouter);
 router.use("/users", requireStaffAuth, requireStaffPermission("/settings"), usersRouter);
 router.use("/commission", requireSuperAdmin, commissionRouter);
 router.use("/doctor-ledger", requireSuperAdmin, doctorLedgerRouter);
+
+// ─── WhatsApp Chatbot module ───────────────────────────────────────────────────
+// Provider-agnostic WhatsApp chatbot: webhook receiver, bot engine,
+// conversation inbox, contacts, templates, audit logs.
+// Webhooks are mounted PUBLICLY before auth so WhatsApp providers can POST.
+router.use("/wa-chatbot/webhook", waChatbotWebhookRouter);
+router.use("/wa-chatbot", requireStaffAuth, requireStaffPermission("/settings"), waChatbotRouter);
 
 // ─── Banking module ────────────────────────────────────────────────────────────
 // Provider-agnostic banking: balance, transactions, payments, webhooks,

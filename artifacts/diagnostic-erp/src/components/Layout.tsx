@@ -39,6 +39,7 @@ import {
   Globe,
   Download,
   ChevronRight,
+  MessageSquare,
   ShoppingCart,
   BarChart2,
   Building2,
@@ -151,6 +152,7 @@ const navItems: NavEntry[] = [
   { path: "/books-sanity", icon: ShieldCheck, label: "Books Sanity (CA)", ownerOnly: true },
   { path: "/form-f", icon: FileText, label: "Form F (PCPNDT)" },
   { path: "/website", icon: Globe, label: "Website Builder" },
+  { path: "/whatsapp-chatbot", icon: MessageSquare, label: "WhatsApp Chatbot" },
   {
     id: "imaging-grp",
     icon: Monitor,

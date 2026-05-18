@@ -48,6 +48,7 @@ export * from "./outsourcedLabs";
 export * from "./radiologyWorklist";
 export * from "./radiologyReportGenerator";
 export * from "./reportDeliveryLogs";
+export * from "./whatsapp";
 export * from "./structuredReportTemplates";
 export * from "./teleradiologyUsers";
 export * from "./hl7Schema";

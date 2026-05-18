@@ -58,6 +58,7 @@ const ReportHub       = lazy(() => import("@/pages/ReportHub"));
 const Machines        = lazy(() => import("@/pages/Machines"));
 const FormF           = lazy(() => import("@/pages/FormF"));
 const Website         = lazy(() => import("@/pages/Website"));
+const WhatsAppChatbot = lazy(() => import("@/pages/WhatsAppChatbot"));
 const Portal          = lazy(() => import("@/pages/Portal"));
 const Display         = lazy(() => import("@/pages/Display"));
 const OnlineBookings  = lazy(() => import("@/pages/OnlineBookings"));
@@ -95,7 +96,7 @@ const ERP_NAV_ORDER = [
   "/radiology/mwl-dashboard", "/radiology/agent-setup", "/radiology/ai-reporting-settings",
   "/orders", "/tests", "/packages", "/billing", "/payments", "/reports",
   "/report-generator", "/report-hub", "/inventory", "/expenses", "/staff", "/referrals",
-  "/accounting", "/discounts", "/form-f", "/pacs", "/machines", "/hr-forms", "/website", "/settings",
+  "/accounting", "/discounts", "/form-f", "/pacs", "/machines", "/hr-forms", "/website", "/whatsapp-chatbot", "/settings",
 ];
 
 function PermissionGuard() {
@@ -200,6 +201,7 @@ function Router() {
               <Route path="/website" component={Website} />
               <Route path="/outsourced-labs" component={OutsourcedLabs} />
               <Route path="/settings" component={Settings} />
+              <Route path="/whatsapp-chatbot" component={WhatsAppChatbot} />
               <Route path="/system-update" component={SystemUpdate} />
               <Route component={NotFound} />
             </Switch>
