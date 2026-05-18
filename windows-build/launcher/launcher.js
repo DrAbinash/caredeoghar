@@ -53,12 +53,12 @@ const ROOT = (() => {
     const cand = path.dirname(process.execPath);
     if (fs.existsSync(path.join(cand, "runtime"))) return cand;
   }
-  // dev fallbacks: try Diagnostic ERP first, then Super Admin
-  for (const name of ["DiagnosticERP", "SuperAdmin"]) {
+  // dev fallbacks: try DiagnoCenter first, then SAdmin
+  for (const name of ["DiagnoCenter", "SAdmin"]) {
     const cand = path.resolve(__dirname, "../dist/portable", name);
     if (fs.existsSync(path.join(cand, "runtime"))) return cand;
   }
-  return path.resolve(__dirname, "../dist/portable/DiagnosticERP");
+  return path.resolve(__dirname, "../dist/portable/DiagnoCenter");
 })();
 
 // -------- Variant config ----------------------------------------------------
@@ -133,7 +133,7 @@ function preflight() {
     ["Web static dir",    STATIC_DIR],
     ["Migration script",  MIGRATE_SCRIPT],
   ]) {
-    if (!fs.existsSync(p)) fatal(`Missing ${label}: ${p}\n\nThis launcher must run from inside the DiagnosticERP folder.`);
+    if (!fs.existsSync(p)) fatal(`Missing ${label}: ${p}\n\nThis launcher must run from inside the DiagnoCenter folder.`);
   }
 }
 

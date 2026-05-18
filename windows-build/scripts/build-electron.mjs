@@ -35,9 +35,9 @@ const APP_DIR    = path.join(BUILD_ROOT, "electron-app");
 const DIST_DIR   = path.join(BUILD_ROOT, "dist/electron");
 const PAYLOAD    = path.join(BUILD_ROOT, "dist/payload");
 const UNPACKED   = path.join(DIST_DIR, "win-unpacked");
-const ZIP_FILE   = path.join(DIST_DIR, "DiagnosticERP-Desktop-win-unpacked.zip");
+const ZIP_FILE   = path.join(DIST_DIR, "DiagnoCenter-Desktop-win-unpacked.zip");
 const NSI_FILE   = path.join(BUILD_ROOT, "installer/installer-electron.nsi");
-const OUT_FILE   = path.join(DIST_DIR, "DiagnosticERP-Desktop-Setup.exe");
+const OUT_FILE   = path.join(DIST_DIR, "DiagnoCenter-Desktop-Setup.exe");
 const EB_BIN     = path.join(APP_DIR, "node_modules/.bin/electron-builder");
 
 function log(m) { process.stdout.write(`[electron] ${m}\n`); }
@@ -60,7 +60,7 @@ async function main() {
   await mkdir(DIST_DIR, { recursive: true });
 
   // ---- Phase 1: electron-builder --win dir -------------------------------
-  if (await pathExists(path.join(UNPACKED, "Diagnostic ERP Desktop.exe"))) {
+  if (await pathExists(path.join(UNPACKED, "DiagnoCenter Desktop.exe"))) {
     log("Phase 1: win-unpacked/ already present, skipping electron-builder.");
   } else {
     log("Phase 1: electron-builder --win dir --x64 (produces win-unpacked/)…");

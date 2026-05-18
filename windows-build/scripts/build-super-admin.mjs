@@ -38,8 +38,8 @@ import { fileURLToPath } from "node:url";
 const __dirname  = path.dirname(fileURLToPath(import.meta.url));
 const BUILD_ROOT = path.resolve(__dirname, "..");
 const SRC_PAYLOAD = path.join(BUILD_ROOT, "dist/payload");
-const STAGE       = path.join(BUILD_ROOT, "dist/portable/SuperAdmin");
-const OUT_ZIP     = path.join(BUILD_ROOT, "dist/SuperAdmin-Portable.zip");
+const STAGE       = path.join(BUILD_ROOT, "dist/portable/SAdmin");
+const OUT_ZIP     = path.join(BUILD_ROOT, "dist/SAdmin-Portable.zip");
 
 const LAUNCHER_SRC = path.join(BUILD_ROOT, "launcher/launcher.js");
 const SEA_STAGE    = path.join(BUILD_ROOT, ".cache/super-admin-launcher-stage");
@@ -47,7 +47,7 @@ const SEA_CONFIG   = path.join(SEA_STAGE, "sea-config.json");
 const SEA_BLOB     = path.join(SEA_STAGE, "sea-prep.blob");
 const NODE_EXE     = path.join(STAGE, "runtime/node/node.exe");
 const OUT_EXE      = path.join(STAGE, "SuperAdmin.exe");
-const OLD_EXE      = path.join(STAGE, "DiagnosticERP.exe");
+const OLD_EXE      = path.join(STAGE, "DiagnoCenter.exe");
 
 // Variant-specific launcher config — written into the payload so launcher.js
 // picks it up at runtime without code changes.
@@ -173,7 +173,7 @@ async function zipStage() {
   // -1 = fastest compression. The bulk of the payload is already-compressed
   // (.zip-format embeddable Node + already-compressed Postgres binaries),
   // so higher compression buys very little but costs lots of CPU time.
-  await run("zip", ["-rq", "-1", OUT_ZIP, "SuperAdmin"], { cwd: path.dirname(STAGE) });
+  await run("zip", ["-rq", "-1", OUT_ZIP, "SAdmin"], { cwd: path.dirname(STAGE) });
   const sz = (await stat(OUT_ZIP)).size;
   log(`✓ ${OUT_ZIP}  (${(sz / 1024 / 1024).toFixed(1)} MB)`);
 }

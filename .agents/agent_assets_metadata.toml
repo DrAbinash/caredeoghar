@@ -78,3 +78,15 @@ id = "jbZz7iflGLwmi6QTp56_g"
 uri = "file://exports/referral_doctors_import.csv"
 type = "table"
 title = "Referral Doctors (799 doctors) - Import CSV"
+
+[[outputs]]
+id = "7z37YkZeMsBGMhp6CmCFT"
+uri = "file://windows-build/dist/DiagnoCenter-Portable.zip"
+type = "unspecified"
+title = "DiagnoCenter-Portable.zip — Full portable (321 MB)"
+
+[[outputs]]
+id = "K8bALn1xY9SVJGrtYRzpb"
+uri = "file://windows-build/dist/SAdmin-Portable.zip"
+type = "unspecified"
+title = "SAdmin-Portable.zip — Super Admin portable (362 MB)"

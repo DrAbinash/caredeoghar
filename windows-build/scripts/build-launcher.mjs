@@ -3,7 +3,7 @@
 //
 // Compiles windows-build/launcher/launcher.js into a Windows .exe using Node
 // 20's Single Executable Application (SEA) feature. The resulting .exe is
-// dropped at:   windows-build/dist/payload/DiagnosticERP.exe
+// dropped at:   windows-build/dist/payload/DiagnoCenter.exe
 //
 // Process:
 //   1. node --experimental-sea-config sea-config.json    -> sea-prep.blob
@@ -34,7 +34,7 @@ const STAGE      = path.join(BUILD_ROOT, ".cache/launcher-stage");
 const SEA_CONFIG = path.join(STAGE, "sea-config.json");
 const SEA_BLOB   = path.join(STAGE, "sea-prep.blob");
 const NODE_EXE   = path.join(PAYLOAD, "runtime/node/node.exe");
-const OUT_EXE    = path.join(PAYLOAD, "DiagnosticERP.exe");
+const OUT_EXE    = path.join(PAYLOAD, "DiagnoCenter.exe");
 
 function log(m) { process.stdout.write(`[launcher] ${m}\n`); }
 
@@ -72,7 +72,7 @@ async function main() {
   log("Generating SEA blob with the local Node runtime…");
   await run(process.execPath, ["--experimental-sea-config", SEA_CONFIG]);
 
-  log("Copying Windows node.exe -> DiagnosticERP.exe …");
+  log("Copying Windows node.exe -> DiagnoCenter.exe …");
   await cp(NODE_EXE, OUT_EXE);
 
   log("Injecting SEA blob with postject…");

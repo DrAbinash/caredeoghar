@@ -27,11 +27,11 @@
   !error "OUT_FILE must be defined: -DOUT_FILE=DiagnosticERP-Setup.exe"
 !endif
 
-!define APP_NAME      "Diagnostic Center Billing ERP"
-!define APP_SHORT     "DiagnosticERP"
-!define APP_PUBLISHER "Diagnostic ERP"
+!define APP_NAME      "DiagnoCenter Billing ERP"
+!define APP_SHORT     "DiagnoCenter"
+!define APP_PUBLISHER "DiagnoCenter"
 !define APP_VERSION   "1.0.0"
-!define EXE_NAME      "DiagnosticERP.exe"
+!define EXE_NAME      "DiagnoCenter.exe"
 !define UNINST_KEY    "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_SHORT}"
 
 ; The .zip we embed is itself deflate-compressed already; running NSIS LZMA on
@@ -86,7 +86,7 @@ Section "Install"
   FileWrite $0 'if (Test-Path $$tmp) { Remove-Item $$tmp -Recurse -Force }$\r$\n'
   FileWrite $0 'New-Item -ItemType Directory -Path $$tmp | Out-Null$\r$\n'
   FileWrite $0 'Expand-Archive -LiteralPath $$zip -DestinationPath $$tmp -Force$\r$\n'
-  FileWrite $0 '# Zip wraps everything in a top-level "DiagnosticERP" folder; flatten it.$\r$\n'
+  FileWrite $0 '# Zip wraps everything in a top-level "DiagnoCenter" folder; flatten it.$\r$\n'
   FileWrite $0 '$$root = Get-ChildItem $$tmp | Select-Object -First 1$\r$\n'
   FileWrite $0 'Get-ChildItem -LiteralPath $$root.FullName -Force | ForEach-Object {$\r$\n'
   FileWrite $0 '  Move-Item -LiteralPath $$_.FullName -Destination $$installDir -Force$\r$\n'

@@ -17,14 +17,14 @@
   !error "PAYLOAD_ZIP must be defined: -DPAYLOAD_ZIP=path\\to\\DiagnosticERP-Desktop-win-unpacked.zip"
 !endif
 !ifndef OUT_FILE
-  !error "OUT_FILE must be defined: -DOUT_FILE=DiagnosticERP-Desktop-Setup.exe"
+  !error "OUT_FILE must be defined: -DOUT_FILE=DiagnoCenter-Desktop-Setup.exe"
 !endif
 
-!define APP_NAME      "Diagnostic ERP Desktop"
-!define APP_SHORT     "DiagnosticERPDesktop"
-!define APP_PUBLISHER "Diagnostic ERP"
+!define APP_NAME      "DiagnoCenter Desktop"
+!define APP_SHORT     "DiagnoCenterDesktop"
+!define APP_PUBLISHER "DiagnoCenter"
 !define APP_VERSION   "1.0.0"
-!define EXE_NAME      "Diagnostic ERP Desktop.exe"
+!define EXE_NAME      "DiagnoCenter.exe"
 !define UNINST_KEY    "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_SHORT}"
 
 SetCompress off

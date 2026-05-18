@@ -18,7 +18,7 @@
   },
   "build": {
     "appId": "com.diagnosticerp.desktop",
-    "productName": "Diagnostic ERP Desktop",
+    "productName": "DiagnoCenter Desktop",
     "directories": {
       "output": "../dist/electron"
     },
@@ -38,7 +38,7 @@
     "compression": "store",
     "win": {
       "target": [{ "target": "nsis", "arch": ["x64"] }],
-      "artifactName": "DiagnosticERP-Desktop-Setup-${version}.${ext}",
+      "artifactName": "DiagnoCenter-Desktop-Setup-${version}.${ext}",
       "signAndEditExecutable": false
     },
     "nsis": {
@@ -47,7 +47,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Diagnostic ERP Desktop"
+      "shortcutName": "DiagnoCenter Desktop"
     }
   }
 }

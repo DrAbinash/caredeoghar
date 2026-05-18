@@ -2,12 +2,12 @@
 // build-installer.mjs
 //
 // Compiles windows-build/installer/installer.nsi into a Windows installer .exe
-// using makensis. Output: windows-build/dist/DiagnosticERP-Setup.exe
+// using makensis. Output: windows-build/dist/DiagnoCenter-Setup.exe
 //
 // Pre-requisites (run beforehand):
 //   pnpm --filter @workspace/windows-build run build:payload
 //   pnpm --filter @workspace/windows-build run build:launcher
-//   pnpm --filter @workspace/windows-build run build:portable     # creates dist/portable/DiagnosticERP
+//   pnpm --filter @workspace/windows-build run build:portable     # creates dist/portable/DiagnoCenter
 // =============================================================================
 
 import { spawn } from "node:child_process";
@@ -20,9 +20,9 @@ const BUILD_ROOT = path.resolve(__dirname, "..");
 // We embed the portable .zip as a single file inside the installer (extracted
 // at install time via PowerShell Expand-Archive) instead of asking NSIS to
 // File-list 5000+ individual files. See installer.nsi for the rationale.
-const SOURCE_ZIP = path.join(BUILD_ROOT, "dist/DiagnosticERP-Portable.zip");
+const SOURCE_ZIP = path.join(BUILD_ROOT, "dist/DiagnoCenter-Portable.zip");
 const NSI    = path.join(BUILD_ROOT, "installer/installer.nsi");
-const OUT    = path.join(BUILD_ROOT, "dist/DiagnosticERP-Setup.exe");
+const OUT    = path.join(BUILD_ROOT, "dist/DiagnoCenter-Setup.exe");
 
 function log(m) { process.stdout.write(`[installer] ${m}\n`); }
 
