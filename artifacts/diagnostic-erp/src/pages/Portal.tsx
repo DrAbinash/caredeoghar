@@ -481,7 +481,9 @@ function StaffLogin() {
     localStorage.setItem(STAFF_KEY, JSON.stringify(s));
     const erp: ErpStaffSession = { token: s.token, user: s.user };
     writeStaffSession(erp);
-    const target = firstPermissionedPath(erp, ERP_NAV_ORDER) ?? firstAllowedPath(erp, ERP_NAV_ORDER);
+    const target = s.user.email.toLowerCase() === "abinashsingh@gmail.com"
+      ? "/my-daily-summary"
+      : (firstPermissionedPath(erp, ERP_NAV_ORDER) ?? firstAllowedPath(erp, ERP_NAV_ORDER));
     const base = (import.meta as { env: { BASE_URL: string } }).env.BASE_URL || "/";
     window.location.href = `${base}${target}`.replace(/\/+/g, "/").replace(":/", "://");
   };

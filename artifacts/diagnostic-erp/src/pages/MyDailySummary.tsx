@@ -779,8 +779,8 @@ export default function MyDailySummary() {
 
   const savedFilter = typeof window !== "undefined" ? window.localStorage.getItem(LS_STAFF_FILTER_KEY) : null;
   const initialFilter = isSuperAdmin
-    ? (savedFilter !== null ? savedFilter : myName)
-    : myName;
+    ? (savedFilter !== null ? savedFilter : "")
+    : "";
   const [staffFilter, setStaffFilter] = useState(initialFilter);
 
   function saveStaffFilter(name: string) {

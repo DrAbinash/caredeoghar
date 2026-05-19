@@ -6,6 +6,9 @@ This pnpm monorepo, built with TypeScript, provides a comprehensive Diagnostic E
 
 I prefer iterative development. I want to be asked before you make any major changes to the codebase. I prefer clear and concise explanations.
 
+- **Default staff landing page**: `abinashsingh@gmail.com` lands on `/my-daily-summary` after login; all other staff users land on their first permitted page.
+- **My Daily Summary staff filter**: Defaults to "All Staff / Total" (not the logged-in user's name).
+
 # System Architecture
 
 ## Stack
