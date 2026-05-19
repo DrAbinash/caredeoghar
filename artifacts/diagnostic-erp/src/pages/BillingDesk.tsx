@@ -2033,6 +2033,8 @@ export default function BillingDesk() {
         const paperSize = getAutoBillPaperSize(lastBill.tests.length, getBillPaperSize());
         return (
         <div key={copyIdx} className="billing-desk-receipt" style={copyIdx > 0 ? { pageBreakBefore: "always" } : undefined}>
+          {/* CSS page-break-before is more reliable than inline style in some browsers */}
+          {copyIdx > 0 && <style>{`.billing-desk-receipt:nth-of-type(${copyIdx + 1}) { page-break-before: always; }`}</style>}
           <style>{`
             @media print {
               html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
@@ -2054,7 +2056,7 @@ export default function BillingDesk() {
               .billing-desk-receipt .bdr-keep-case { text-transform: none !important; }
               .billing-desk-receipt .bdr-spacer { display: none !important; }
               .billing-desk-receipt .bdr-footer { margin-top: 6px !important; }
-              @page { size: ${paperSize}; margin: 0; }
+              @page { size: ${paperSize}; margin: ${paperSize === "A5" ? "3mm" : "6mm"}; }
             }
             .billing-desk-receipt {
               display: none;
@@ -2087,7 +2089,7 @@ export default function BillingDesk() {
             .bdr-summary tr.bdr-grand td { font-weight: 700; border-top: 2px solid #000; padding-top: 4px; font-size: ${paperSize === "A4" ? "12.5px" : "14px"}; }
             .bdr-footer { text-align: center; font-size: ${paperSize === "A4" ? "10.5px" : "12px"}; color: #555; border-top: 1px solid #888; padding-top: 5px; margin-top: 6px; }
             .bdr-footer p { margin: 2px 0; }
-            .bdr-spacer { flex: 1 1 auto; min-height: ${paperSize === "A4" ? "16mm" : "10mm"}; }
+            .bdr-spacer { display: none !important; }
           `}</style>
 
           <div className="bdr-header" style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between", textAlign: "center", paddingBottom: 1, marginBottom: 1 }}>

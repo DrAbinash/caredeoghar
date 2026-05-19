@@ -159,8 +159,7 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
   }).join("");
 
   const onePage = (copyIdx: number) => `
-    <section class="receipt" style="${copyIdx > 0 ? "page-break-before:always;" : ""}display:flex;flex-direction:column;min-height:100vh;">
-      <div style="flex:1">
+    <section class="receipt" style="${copyIdx > 0 ? "page-break-before:always;" : ""}">
       ${reprintBy || reprintReason ? `<div style="text-align:center;font-size:${fontPx - 1}px;color:#a16207;border:1px dashed #d97706;padding:2px 4px;margin-bottom:6px;text-transform:uppercase">DUPLICATE / RE-PRINT${reprintBy ? ` · BY ${escapeHtml(reprintBy)}` : ""}${reprintReason ? ` · ${escapeHtml(reprintReason)}` : ""}</div>` : ""}
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;border-bottom:2px solid #1e40af;padding-bottom:8px;margin-bottom:8px">
         <div style="flex:1;min-width:0">
@@ -246,7 +245,6 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
         </tbody>
       </table>
 
-      </div><!-- flex:1 close — pushes footer to bottom of A5 page -->
       <!--
         FOOTER BLOCK — single combined section so there is only ONE
         page-break-inside:avoid target. Having two separate avoid-blocks
@@ -255,7 +253,7 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
         for the second copy). Merged into one block; footerNote is the
         primary message since the clinic configures it.
       -->
-      <div style="margin-top:auto;border:1px solid #1e40af;border-radius:6px;padding:${paperSize === "A5" ? "8px 14px" : "6px 12px"};background:#f0f6ff;text-align:center;text-transform:none;page-break-inside:avoid">
+      <div style="margin-top:8px;border:1px solid #1e40af;border-radius:6px;padding:${paperSize === "A5" ? "8px 14px" : "6px 12px"};background:#f0f6ff;text-align:center;text-transform:none;page-break-inside:avoid">
         <div style="font-size:${fontPx + 1}px;font-weight:800;color:#1e40af;letter-spacing:0.5px">${escapeHtml(clinic?.footerNote || bill.reportCollectionNote || "Please collect your report within 7 days.")}</div>
         <div style="font-size:${Math.round(fontPx * 0.8)}px;color:#666;margin-top:3px">We wish you good health.  &middot;  Computer-generated invoice — no signature required.</div>
       </div>
@@ -267,7 +265,7 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
 <style>
   @page { size: ${paperSize} portrait; margin: ${pageMargin}; }
   *, *::before, *::after { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
+  html, body { margin: 0; padding: 0; width: 100%; }
   body { background: #fff; color: #000; font-family: Arial, sans-serif; font-size: ${fontPx}px; text-transform: uppercase; ${isBW ? "filter: grayscale(1) contrast(1.35); -webkit-print-color-adjust: exact; print-color-adjust: exact;" : ""} }
   .receipt { width: 100%; padding: ${paperSize === "A5" ? "5px 7px" : "4px 6px"}; }
   table { width: 100%; }
