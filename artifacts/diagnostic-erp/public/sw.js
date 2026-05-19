@@ -1,34 +1,49 @@
 /**
- * ERP Service Worker
+ * ERP Service Worker (v2 — offline-first)
  *
  * Caching strategies:
- *   Static assets (hashed Vite output) → Cache-first
- *   API GET requests                   → Stale-while-revalidate (instant from cache,
- *                                         background refresh keeps data current)
- *   Mutations + auth + version check   → Network-only (never cached)
+ *   SPA shell (index.html)               → Precache on install, network-first,
+ *                                             fallback to cached when offline
+ *   Static assets (hashed Vite output)   → Cache-first (immutable hashes)
+ *   API GET requests                     → Stale-while-revalidate (24 h max age)
+ *   Mutations + auth + version check     → Network-only (never cached)
+ *   SPA navigation (non-asset GET)       → Offline: serve cached index.html
  *
- * This makes the ERP feel significantly faster after the first visit:
- * data loads instantly from the local cache while a fresh copy is fetched
- * silently in the background.  It also keeps the app usable when the
- * network drops briefly.
+ * This SW makes the desktop/Electron build truly offline-capable:
+ * reopening the browser while disconnected still loads the full ERP shell,
+ * which then shows cached data and an offline indicator.
  */
 
-const STATIC_CACHE = "erp-static-v1";
-const API_CACHE    = "erp-api-v1";
+const STATIC_CACHE = "erp-static-v2";
+const API_CACHE    = "erp-api-v2";
+const SHELL_CACHE  = "erp-shell-v2";
 
-// Maximum age for cached API responses (24 h).
-// Stale responses older than this are re-fetched synchronously.
 const MAX_API_AGE_MS = 24 * 60 * 60 * 1000;
 
-// These paths must ALWAYS hit the real network.
+// Paths that must ALWAYS hit the real network
 const NETWORK_ONLY_PREFIXES = [
-  "/api/version",              // our deployment-detection poll
+  "/api/version",
   "/api/login",
   "/api/logout",
   "/api/super-admin/login",
   "/api/super-admin/usb",
   "/api/backup",
   "/api/system",
+  "/api/sync/push",
+  "/api/sync/pull",
+  "/api/sync/trigger",
+];
+
+// Paths that should NOT be redirected to index.html (real files/API)
+const SKIP_SHELL_PATHS = [
+  "/assets/",
+  "/api/",
+  "/uploads/",
+  "/favicon",
+  "/opengraph",
+  "/sw.js",
+  "/manifest",
+  ".js", ".css", ".woff2", ".woff", ".ttf", ".svg", ".png", ".jpg", ".jpeg", ".ico", ".json",
 ];
 
 function isNetworkOnly(url) {
@@ -42,7 +57,7 @@ function isApiGet(request, url) {
 function isStaticAsset(url) {
   const p = url.pathname;
   return (
-    p.includes("/assets/") ||   // Vite hashed chunks
+    p.includes("/assets/") ||
     p.endsWith(".js")  ||
     p.endsWith(".css") ||
     p.endsWith(".woff2") ||
@@ -54,23 +69,38 @@ function isStaticAsset(url) {
   );
 }
 
-// ─── Lifecycle ────────────────────────────────────────────────────────────────
+function isShellRequest(request, url) {
+  // SPA navigation: GET, same-origin, not a static file, not an API call
+  return (
+    request.method === "GET" &&
+    url.origin === self.location.origin &&
+    !isStaticAsset(url) &&
+    !isApiGet(request, url) &&
+    !SKIP_SHELL_PATHS.some((s) => url.pathname.includes(s))
+  );
+}
+
+// ─── Lifecycle ─────────────────────────────────────────────────────────────────────────────
 
 self.addEventListener("install", (event) => {
-  // Activate immediately — we don't use a precache manifest so there is no
-  // risk of serving mixed v1/v2 assets.
-  event.waitUntil(self.skipWaiting());
+  // Precache the SPA shell so it is available offline immediately
+  event.waitUntil(
+    caches
+      .open(SHELL_CACHE)
+      .then((cache) => cache.add("./index.html"))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     Promise.all([
       self.clients.claim(),
-      // Remove any caches from a previous SW version
+      // Remove old caches
       caches.keys().then((keys) =>
         Promise.all(
           keys
-            .filter((k) => k !== STATIC_CACHE && k !== API_CACHE)
+            .filter((k) => ![STATIC_CACHE, API_CACHE, SHELL_CACHE].includes(k))
             .map((k) => caches.delete(k))
         )
       ),
@@ -78,7 +108,7 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// ─── Fetch interception ───────────────────────────────────────────────────────
+// ─── Fetch interception ──────────────────────────────────────────────────────────
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
@@ -104,20 +134,16 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(cacheFirst(request, STATIC_CACHE));
     return;
   }
+
+  // SPA navigation → network-first, fallback to cached index.html when offline
+  if (isShellRequest(request, url)) {
+    event.respondWith(networkFirstShell(request));
+    return;
+  }
 });
 
-// ─── Strategies ───────────────────────────────────────────────────────────────
+// ─── Strategies ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Stale-while-revalidate:
- *   1. If a fresh-enough cached response exists, return it immediately and
- *      refresh the cache entry in the background.
- *   2. If the cached entry is too old (or absent), fetch from the network,
- *      store the result, and return it.
- *   3. If offline and a cached response exists (even stale), return it.
- *   4. If offline and nothing is cached, return a 503 JSON sentinel so the
- *      ERP can display a friendly offline message.
- */
 async function staleWhileRevalidate(request, cacheName, maxAgeMs) {
   const cache  = await caches.open(cacheName);
   const cached = await cache.match(request);
@@ -126,7 +152,6 @@ async function staleWhileRevalidate(request, cacheName, maxAgeMs) {
     try {
       const response = await fetch(request.clone());
       if (response.ok) {
-        // Annotate with cache timestamp
         const body    = await response.clone().arrayBuffer();
         const headers = new Headers(response.headers);
         headers.set("x-sw-cached-at", String(Date.now()));
@@ -139,7 +164,7 @@ async function staleWhileRevalidate(request, cacheName, maxAgeMs) {
       }
       return response;
     } catch {
-      return null; // network failure
+      return null;
     }
   };
 
@@ -148,16 +173,14 @@ async function staleWhileRevalidate(request, cacheName, maxAgeMs) {
     const age      = Date.now() - cachedAt;
 
     if (age < maxAgeMs) {
-      // Fresh enough — serve from cache and revalidate silently
       void fetchAndStore();
       return cached;
     }
-    // Stale — fetch synchronously but fall back to stale if offline
   }
 
   const fresh = await fetchAndStore();
   if (fresh)  return fresh;
-  if (cached) return cached; // offline fallback (even stale is better than nothing)
+  if (cached) return cached;
 
   return new Response(
     JSON.stringify({ error: "offline", message: "No cached data available." }),
@@ -165,11 +188,6 @@ async function staleWhileRevalidate(request, cacheName, maxAgeMs) {
   );
 }
 
-/**
- * Cache-first:
- *   Return the cached asset immediately.  If not cached yet, fetch, store,
- *   and return.  Hashed filenames mean a stale cache entry is never wrong.
- */
 async function cacheFirst(request, cacheName) {
   const cache  = await caches.open(cacheName);
   const cached = await cache.match(request);
@@ -182,4 +200,47 @@ async function cacheFirst(request, cacheName) {
   } catch {
     return new Response("Offline", { status: 503 });
   }
+}
+
+/**
+ * Network-first shell strategy:
+ *   1. Try to fetch index.html from the network.
+ *   2. If successful, cache it and return it.
+ *   3. If offline, return the cached index.html (SPA shell).
+ *   4. If neither exists, return a minimal offline HTML page.
+ *
+ * This lets the SPA boot and render the offline indicator even when
+ * the browser is opened without any network connection.
+ */
+async function networkFirstShell(request) {
+  const cache = await caches.open(SHELL_CACHE);
+
+  try {
+    const fresh = await fetch("./index.html");
+    if (fresh.ok) {
+      const clone = fresh.clone();
+      await cache.put("./index.html", clone);
+      return fresh;
+    }
+  } catch {
+    // Network failure — fall through to cached copy
+  }
+
+  const cached = await cache.match("./index.html");
+  if (cached) return cached;
+
+  // Absolute fallback: minimal HTML that the SPA can mount into
+  return new Response(
+    `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><title>DiagnoCenter</title>
+<style>body{font-family:system-ui;margin:0;display:flex;align-items:center;justify-content:center;height:100vh;background:#0f172a;color:#fff}
+#root{text-align:center}
+h1{margin:0 0 .5rem;font-size:1.5rem}
+p{margin:0;color:#94a3b8}
+</style></head>
+<body><div id="root"><h1>DiagnoCenter</h1><p>Offline — no cached shell available.</p></div></body>
+</html>`,
+    { status: 200, headers: { "Content-Type": "text/html" } }
+  );
 }

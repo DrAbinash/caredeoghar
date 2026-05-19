@@ -100,6 +100,28 @@ syncRouter.post("/trigger", async (_req, res) => {
   res.json({ ok: true, message: "Sync acknowledged. In desktop/offline mode the local engine will process queued changes." });
 });
 
+// ─── SEED: download full table snapshots for initial offline setup ───────────────────────────────────────────────────────
+const SEED_TABLES = [
+  "users", "patients", "doctors", "diagnostic_tests", "test_packages",
+  "discount_reasons", "clinic_settings", "printers", "departments", "floors", "rooms",
+] as const;
+
+syncRouter.get("/seed", async (req, res) => {
+  const table = req.query["table"];
+  if (!table || typeof table !== "string" || !SEED_TABLES.includes(table as typeof SEED_TABLES[number])) {
+    res.status(400).json({ error: "Invalid table", allowed: SEED_TABLES });
+    return;
+  }
+  try {
+    // MVP stub — returns empty rows for all tables.
+    // Real implementation: import each Drizzle table and run db.select().from(table)
+    const rows: unknown[] = [];
+    res.json({ ok: true, table, rows });
+  } catch (err) {
+    res.status(500).json({ error: String((err as Error).message) });
+  }
+});
+
 // ─── HELPER: apply one change to the cloud DB ──────────────────────────────
 async function applyChangeToCloud(
   change: z.infer<typeof PushBody>["changes"][number],

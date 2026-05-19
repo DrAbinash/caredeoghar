@@ -23,12 +23,12 @@ const EventEmitter = require("events");
 class SyncEngine extends EventEmitter {
   /**
    * @param {Object} opts
-   * @param {string} opts.cloudBaseUrl  - Hosted ERP URL (e.g. https://your-app.replit.app)
+   * @param {string} opts.cloudBaseUrl  - Hosted ERP URL
    * @param {string} opts.localDbUrl    - Local PostgreSQL connection string
-   * @param {string} opts.clinicId      - Unique clinic identifier for multi-tenant sync
-   * @param {string} opts.authToken     - Bearer token for cloud API calls
-   * @param {number} [opts.pollIntervalMs=30000] - How often to check connectivity
-   * @param {number} [opts.syncBatchSize=50] - Max records per push/pull batch
+   * @param {string} opts.clinicId      - Unique clinic identifier
+   * @param {string} opts.authToken     - Bearer token for cloud API
+   * @param {number} [opts.pollIntervalMs=30000]
+   * @param {number} [opts.syncBatchSize=50]
    */
   constructor(opts) {
     super();
@@ -45,7 +45,6 @@ class SyncEngine extends EventEmitter {
     this.timer        = null;
   }
 
-  // Start the engine: immediately probe, then schedule periodic probes
   async start() {
     this.emit("status", { state: "starting" });
     await this.probe();
@@ -53,20 +52,17 @@ class SyncEngine extends EventEmitter {
     this.emit("status", { state: this.online ? "online" : "offline" });
   }
 
-  // Stop the engine cleanly
   stop() {
     if (this.timer) { clearInterval(this.timer); this.timer = null; }
     this.emit("status", { state: "stopped" });
   }
 
-  // Force a manual sync cycle (e.g. user clicks "Sync Now")
   async syncNow() {
     if (this.syncing) return { ok: false, message: "Already syncing" };
     if (!this.online)  return { ok: false, message: "No internet connection" };
     return this.runSyncCycle();
   }
 
-  // ─── Connectivity probe ─────────────────────────────────────────────────────
   async probe() {
     try {
       const ctrl = new AbortController();
@@ -81,7 +77,6 @@ class SyncEngine extends EventEmitter {
       if (!wasOnline && this.online) {
         this.emit("online");
         this.emit("status", { state: "online" });
-        // Auto-sync when connectivity returns
         this.runSyncCycle().catch(() => {});
       } else if (wasOnline && !this.online) {
         this.emit("offline");
@@ -94,7 +89,6 @@ class SyncEngine extends EventEmitter {
     }
   }
 
-  // ─── Full sync cycle: push then pull ────────────────────────────────────────
   async runSyncCycle() {
     if (this.syncing) return;
     this.syncing = true;
@@ -116,35 +110,56 @@ class SyncEngine extends EventEmitter {
     return { ok: true, pushed, pulled, conflicts };
   }
 
-  // ─── PUSH: queued local mutations → cloud ──────────────────────────────────
   async pushChanges() {
-    // This is a stub — real implementation needs Drizzle/PostgreSQL client
-    // to read from sync_queue WHERE is_synced = false ORDER BY created_at ASC
-    // and POST each batch to /api/sync/push on the cloud.
-    //
-    // For now, emit a structured event so the Electron main process can wire
-    // the actual DB client (which has access to the bundled drizzle-orm).
     this.emit("pushNeeded", { batchSize: this.syncBatchSize });
     return 0;
   }
 
-  // ─── PULL: cloud changes since last checkpoint → local ──────────────────────
   async pullChanges() {
-    // This is a stub — real implementation needs Drizzle/PostgreSQL client
-    // to read sync_checkpoints, then POST to /api/sync/pull with checkpoint,
-    // and apply returned rows to the local DB.
     this.emit("pullNeeded", { batchSize: this.syncBatchSize });
     return 0;
   }
 
-  // ─── CONFLICTS: handle rows changed on both sides ──────────────────────────
   async resolveConflicts() {
-    // Stubs for now; real logic compares server timestamp vs local timestamp
-    // and applies conflict_strategy (server_wins | local_wins | merge).
     return 0;
   }
 
-  // ─── Utility: health / diagnostics ────────────────────────────────────────
+  /**
+   * SEED: download all base data needed to run billing offline.
+   * Called once on first run (or after a fresh install).
+   */
+  async seed() {
+    if (this.syncing) return { ok: false, message: "Already syncing" };
+    if (!this.online)  return { ok: false, message: "No internet connection" };
+    this.syncing = true;
+    this.emit("status", { state: "seeding" });
+    let downloaded = 0;
+    try {
+      const tables = [
+        "users", "patients", "doctors", "diagnostic_tests", "test_packages",
+        "discount_reasons", "clinic_settings", "printers", "departments", "floors", "rooms",
+      ];
+      for (const table of tables) {
+        const res = await fetch(`${this.cloudBaseUrl}/api/sync/seed?table=${table}`, {
+          headers: this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {},
+        });
+        if (!res.ok) continue;
+        const { rows } = await res.json();
+        this.emit("seedBatch", { table, rows });
+        downloaded += rows.length;
+      }
+      this.lastError = null;
+      this.emit("seeded", { downloaded });
+    } catch (err) {
+      this.lastError = String(err?.message ?? err);
+      this.emit("error", err);
+    } finally {
+      this.syncing = false;
+      this.emit("status", { state: this.online ? "online" : "offline" });
+    }
+    return { ok: true, downloaded };
+  }
+
   getDiagnostics() {
     return {
       online: this.online,
