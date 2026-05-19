@@ -130,6 +130,27 @@ type MyDailySummaryData = {
     balanceAmount: number;
     status: string;
   }[];
+  byStaff?: {
+    name: string;
+    grossBilled: number;
+    activeBilling: number;
+    cancelled: number;
+    outstanding: number;
+    netCollected: number;
+    billCount: number;
+    cashIn: number;
+    digitalIn: number;
+    cashRefunded: number;
+    digitalRefunded: number;
+    netCash: number;
+    netDigital: number;
+    totalReceived: number;
+    cashExpenses: number;
+    physicalCashInHand: number;
+    duesCollected: number;
+    discountsGiven: number;
+    cancellationCount: number;
+  }[];
 };
 
 type PostClosureActivity = {
@@ -1017,6 +1038,86 @@ export default function MyDailySummary() {
               </div>
             </div>
           </div>
+
+          {/* ── Per-Staff Breakdown (All Staff / Total only) ── */}
+          {data?.byStaff && data.byStaff.length > 0 && (
+            <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100 dark:border-card-border bg-gray-50 dark:bg-muted/30">
+                <h3 className="text-sm font-bold text-gray-900 dark:text-foreground flex items-center gap-2">
+                  <Users size={14} className="text-emerald-600" /> Per-Staff Breakdown
+                </h3>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Billing + Cash details for each staff member (All Staff view)</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 dark:bg-muted/30 sticky top-0">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Staff</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Gross Billed</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Active</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Cancelled</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Outstanding</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Net Collected</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Bills</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Cash In</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Digital In</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Net Cash</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Net Digital</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Total Received</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Cash Exp</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Phys. Cash</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Dues</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Disc.</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Canc.</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-card-border">
+                    {data.byStaff.map((st) => (
+                      <tr key={st.name} className="hover:bg-emerald-50/40 dark:hover:bg-muted/20">
+                        <td className="px-3 py-2 font-semibold whitespace-nowrap text-gray-800 dark:text-gray-200">{st.name}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmt(st.grossBilled)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmt(st.activeBilling)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-red-600 dark:text-red-400">{st.cancelled > 0 ? fmt(st.cancelled) : "—"}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-amber-600 dark:text-amber-400">{st.outstanding > 0 ? fmt(st.outstanding) : "—"}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-emerald-700 dark:text-emerald-400">{fmt(st.netCollected)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-gray-500">{st.billCount}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-blue-700 dark:text-blue-400">{fmt(st.cashIn)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-violet-700 dark:text-violet-400">{fmt(st.digitalIn)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-blue-700 dark:text-blue-400">{fmt(st.netCash)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-violet-700 dark:text-violet-400">{fmt(st.netDigital)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-green-700 dark:text-green-400">{fmt(st.totalReceived)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-orange-600 dark:text-orange-400">{st.cashExpenses > 0 ? fmt(st.cashExpenses) : "—"}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-blue-800 dark:text-blue-300">{fmt(st.physicalCashInHand)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-teal-600 dark:text-teal-400">{st.duesCollected > 0 ? fmt(st.duesCollected) : "—"}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-slate-600 dark:text-slate-400">{st.discountsGiven > 0 ? fmt(st.discountsGiven) : "—"}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-red-500">{st.cancellationCount > 0 ? st.cancellationCount : "—"}</td>
+                      </tr>
+                    ))}
+                    {/* Total row */}
+                    <tr className="bg-gray-100 dark:bg-gray-900/40 font-bold border-t-2 border-gray-200 dark:border-gray-700">
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-900 dark:text-gray-100">TOTAL</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{fmt(data.byStaff.reduce((a, st) => a + st.grossBilled, 0))}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{fmt(data.byStaff.reduce((a, st) => a + st.activeBilling, 0))}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{fmt(data.byStaff.reduce((a, st) => a + st.cancelled, 0))}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{fmt(data.byStaff.reduce((a, st) => a + st.outstanding, 0))}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-emerald-700 dark:text-emerald-400">{fmt(data.byStaff.reduce((a, st) => a + st.netCollected, 0))}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{data.byStaff.reduce((a, st) => a + st.billCount, 0)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{fmt(data.byStaff.reduce((a, st) => a + st.cashIn, 0))}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{fmt(data.byStaff.reduce((a, st) => a + st.digitalIn, 0))}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{fmt(data.byStaff.reduce((a, st) => a + st.netCash, 0))}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{fmt(data.byStaff.reduce((a, st) => a + st.netDigital, 0))}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-green-700 dark:text-green-400">{fmt(data.byStaff.reduce((a, st) => a + st.totalReceived, 0))}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{fmt(data.byStaff.reduce((a, st) => a + st.cashExpenses, 0))}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{fmt(data.byStaff.reduce((a, st) => a + st.physicalCashInHand, 0))}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{fmt(data.byStaff.reduce((a, st) => a + st.duesCollected, 0))}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{fmt(data.byStaff.reduce((a, st) => a + st.discountsGiven, 0))}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{data.byStaff.reduce((a, st) => a + st.cancellationCount, 0)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* ── Control Logs (admin/super-admin only) ── */}
           {isOwner && <ControlLogs data={data} />}

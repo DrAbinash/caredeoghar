@@ -303,6 +303,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
   // Equation that balances:
   //   Cash In − Cash Refunded − Cash Expenses = Physical Cash in Hand
   //   Digital In − Digital Refunded         = Net Digital Collection
+  // Shared helper
   const isDigital = (m: string | null | undefined) =>
     ["upi", "card", "online", "bank", "cheque", "neft", "rtgs"].includes(
       (m ?? "").toLowerCase(),
@@ -344,11 +345,105 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
     byMethod[m] = (byMethod[m] ?? 0) + Number(p.amount);
   }
 
+  // ── Per-staff breakdown (only when viewing All Staff aggregate) ──
+  type StaffRow = {
+    name: string;
+    grossBilled: number;
+    activeBilling: number;
+    cancelled: number;
+    outstanding: number;
+    netCollected: number;
+    billCount: number;
+    cashIn: number;
+    digitalIn: number;
+    cashRefunded: number;
+    digitalRefunded: number;
+    netCash: number;
+    netDigital: number;
+    totalReceived: number;
+    cashExpenses: number;
+    physicalCashInHand: number;
+    duesCollected: number;
+    discountsGiven: number;
+    cancellationCount: number;
+  };
+  let byStaff: StaffRow[] | undefined;
+  if (staffName === null) {
+    // Collect all unique staff names from bills and payments
+    const staffSet = new Set<string>();
+    for (const r of allBillRows) if (r.createdByName) staffSet.add(r.createdByName);
+    for (const p of allPaymentRows) if (p.recordedByName) staffSet.add(p.recordedByName);
+    for (const r of cancelledByMeRows) if (r.createdByName) staffSet.add(r.createdByName);
+    const names = Array.from(staffSet).sort();
+
+    // Cash expenses per person (only needed for all-staff mode)
+    const cashExpPerPerson: Record<string, number> = {};
+    const cashExpRows = await db.execute<{ approved_by: string; amount: string }>(sql`
+      SELECT approved_by, COALESCE(SUM(amount::numeric), 0)::text AS amount
+      FROM expenses
+      WHERE expense_date >= ${from} AND expense_date <= ${to}
+        AND approved_by IS NOT NULL
+      GROUP BY approved_by
+    `);
+    for (const r of cashExpRows.rows) {
+      cashExpPerPerson[r.approved_by] = Number(r.amount);
+    }
+
+    byStaff = names.map((name) => {
+      const sbills = allBillRows.filter((r) => r.createdByName === name);
+      const sactive = sbills.filter((r) => r.status !== "cancelled");
+      const scancelled = sbills.filter((r) => r.status === "cancelled");
+      const spayPos = allPaymentRows.filter((p) => p.recordedByName === name && Number(p.amount) > 0);
+      const spayNeg = allPaymentRows.filter((p) => p.recordedByName === name && Number(p.amount) < 0);
+      const scancelledByMe = cancelledByMeRows.filter((r) => r.createdByName === name);
+
+      const sGrossBilled = sbills.reduce((s, r) => s + Number(r.totalAmount), 0);
+      const sActiveBilling = sactive.reduce((s, r) => s + Number(r.totalAmount), 0);
+      const sCancelled = scancelled.reduce((s, r) => s + Number(r.totalAmount), 0);
+      const sOutstanding = sactive.reduce((s, r) => s + Math.max(0, Number(r.balanceAmount ?? 0)), 0);
+      const sNetCollected = sActiveBilling - sOutstanding;
+      const sCashIn = spayPos.reduce((s, p) => s + (isDigital(p.method) ? 0 : Number(p.amount)), 0);
+      const sDigitalIn = spayPos.reduce((s, p) => s + (isDigital(p.method) ? Number(p.amount) : 0), 0);
+      const sCashRef = spayNeg.reduce((s, p) => s + (isDigital(p.method) ? 0 : Math.abs(Number(p.amount))), 0);
+      const sDigitalRef = spayNeg.reduce((s, p) => s + (isDigital(p.method) ? Math.abs(Number(p.amount)) : 0), 0);
+      const sNetCash = sCashIn - sCashRef;
+      const sNetDigital = sDigitalIn - sDigitalRef;
+      const sTotalRec = spayPos.reduce((s, p) => s + Number(p.amount), 0);
+      const sCashExp = cashExpPerPerson[name] ?? 0;
+      const sPhysCash = sNetCash - sCashExp;
+      const sDues = duesBills.filter((d) => d.createdByName === name).reduce((s, d) => s + d.duesCollected, 0);
+      const sDiscounts = sactive.reduce((s, r) => s + Number(r.discount ?? 0), 0);
+
+      return {
+        name,
+        grossBilled: sGrossBilled,
+        activeBilling: sActiveBilling,
+        cancelled: sCancelled,
+        outstanding: sOutstanding,
+        netCollected: sNetCollected,
+        billCount: sactive.length,
+        cashIn: sCashIn,
+        digitalIn: sDigitalIn,
+        cashRefunded: sCashRef,
+        digitalRefunded: sDigitalRef,
+        netCash: sNetCash,
+        netDigital: sNetDigital,
+        totalReceived: sTotalRec,
+        cashExpenses: sCashExp,
+        physicalCashInHand: sPhysCash,
+        duesCollected: sDues,
+        discountsGiven: sDiscounts,
+        cancellationCount: scancelledByMe.length,
+      };
+    });
+  }
+
   res.json({
     staffName: displayName,
     isFiltered: staffName !== null && isSuperAdmin && staffName !== session.subjectName,
     from,
     to,
+    byStaff,
     summary: {
       grossBilling,
       grossBilledIncludingCancelled,
