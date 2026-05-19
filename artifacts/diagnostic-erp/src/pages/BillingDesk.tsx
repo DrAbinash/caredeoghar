@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import QRCode from "qrcode";
 import { api } from "@/lib/fetchApi";
+import { incrementPendingSyncCount } from "@/hooks/useSyncStatus";
 import { readStaffSession } from "@/lib/staffSession";
 import { getBillPrintLayout, getLayoutStyles, getAutoBillPaperSize, getBillPaperSize } from "@/lib/billPrintLayout";
 import {
@@ -717,6 +718,8 @@ export default function BillingDesk() {
       // Set the ref synchronously so keyboard/click guards see it immediately —
       // before onSettled releases generatingRef and before React re-renders.
       lastBillRef.current = lastBillLocal;
+      // Track this mutation for offline sync (desktop builds queue it locally)
+      incrementPendingSyncCount(2); // order + bill
       setShowBillToast(true);
       window.setTimeout(() => setShowBillToast(false), 5000);
       queryClient.invalidateQueries({ queryKey: ["recent-bills-today"] });

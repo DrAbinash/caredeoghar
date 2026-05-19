@@ -71,6 +71,7 @@ import { radiologyReportGeneratorRouter } from "./radiology-report-generator";
 import { floorsRouter, roomsRouter, modalitiesRouter } from "./locations";
 import { aiReportingRouter } from "./aiReporting";
 import { bankingRouter, bankingWebhookRouter } from "./banking";
+import { syncRouter } from "./sync";
 
 const router: IRouter = Router();
 
@@ -375,5 +376,8 @@ router.use("/wa-chatbot", requireStaffAuth, requireStaffPermission("/settings"),
 // the handler.
 router.use("/banking/webhooks", bankingWebhookRouter);
 router.use("/banking", requireStaffAuth, requireStaffPermission("/banking"), bankingRouter);
+
+// Offline sync — push/pull changes between local desktop instance and cloud.
+router.use("/sync", requireStaffAuth, syncRouter);
 
 export default router;

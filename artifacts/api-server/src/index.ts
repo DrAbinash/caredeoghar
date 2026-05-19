@@ -580,6 +580,28 @@ async function runStartupMigrations(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      -- ── Sync queue + checkpoints (offline-first desktop sync) ──
+      CREATE TABLE IF NOT EXISTS sync_queue (
+        id SERIAL PRIMARY KEY,
+        action TEXT NOT NULL,
+        table_name TEXT NOT NULL,
+        local_id INTEGER,
+        cloud_id INTEGER,
+        payload JSONB,
+        conflict_strategy TEXT NOT NULL DEFAULT 'server_wins',
+        is_synced BOOLEAN NOT NULL DEFAULT FALSE,
+        synced_at TIMESTAMPTZ,
+        sync_result TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS sync_checkpoints (
+        id SERIAL PRIMARY KEY,
+        table_name TEXT NOT NULL UNIQUE,
+        last_pulled_at TIMESTAMPTZ,
+        last_pushed_at TIMESTAMPTZ,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
     `);
     logger.info("Startup migrations applied");
   } catch (err) {

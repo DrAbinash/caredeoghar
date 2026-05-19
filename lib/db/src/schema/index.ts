@@ -58,6 +58,7 @@ export * from "./dicomAgent";
 export * from "./dicomPulledStudies";
 export * from "./radiologyScheduledProcedures";
 export * from "./dicomRoutingRules";
+export * from "./syncQueue";
 export * from "./dayClosures";
 export * from "./banking";
 export * from "./userDayClosures";
