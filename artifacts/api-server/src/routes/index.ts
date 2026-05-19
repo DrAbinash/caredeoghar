@@ -68,6 +68,7 @@ import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
 import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
 import userPreferencesRouter from "./userPreferences";
 import { radiologyReportGeneratorRouter } from "./radiology-report-generator";
+import { structuredReportTemplatesRouter } from "./structuredReportTemplates";
 import { floorsRouter, roomsRouter, modalitiesRouter } from "./locations";
 import { aiReportingRouter } from "./aiReporting";
 import { bankingRouter, bankingWebhookRouter } from "./banking";
@@ -304,6 +305,15 @@ router.use(
   requireStaffAuth,
   requireStaffPermission("/orders"),
   radiologyReportGeneratorRouter,
+);
+
+// Structured report templates — modality/body-part based templates with
+// picklists, macros, and placeholders. Mounted at /api/radiology/structured-report-templates
+router.use(
+  "/radiology/structured-report-templates",
+  requireStaffAuth,
+  requireStaffPermission("/orders"),
+  structuredReportTemplatesRouter,
 );
 
 // Clinical report & compliance routes — /reports permission.

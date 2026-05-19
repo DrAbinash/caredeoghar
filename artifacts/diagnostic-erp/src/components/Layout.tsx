@@ -111,6 +111,7 @@ const navItems: NavEntry[] = [
       { path: "/radiology", icon: Radio, label: "Study Workflow" },
       { path: "/radiology/worklist", icon: ScanSearch, label: "PACS Worklist" },
       { path: "/radiology/dicom-qr", icon: Search, label: "DICOM Q/R" },
+      { path: "/radiology/reporting-workspace", icon: FilePen, label: "Reporting Workspace" },
       { path: "/radiology/report-generator", icon: FilePen, label: "Report Generator" },
       { path: "/radiology/pacs-dashboard", icon: Monitor, label: "PACS Dashboard" },
       { path: "/radiology/pacs-settings", icon: Settings2, label: "PACS Settings" },

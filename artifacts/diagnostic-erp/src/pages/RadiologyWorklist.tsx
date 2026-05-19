@@ -297,15 +297,27 @@ export default function RadiologyWorklist() {
                         </Button>
                       )}
 
-                      {/* Open Report Editor */}
+                      {/* Open Reporting Workspace */}
                       <Button
                         size="sm"
                         className="h-7 px-2 text-xs"
-                        onClick={() => navigate(`/radiology/report/${entry.id}`)}
-                        title="Open Report Editor"
+                        onClick={() => navigate(`/radiology/reporting-workspace/${entry.id}`)}
+                        title="Open Reporting Workspace"
                       >
                         <FileEdit className="h-3 w-3 mr-1" />
-                        Report
+                        Workspace
+                      </Button>
+
+                      {/* Open Report Editor (legacy) */}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => navigate(`/radiology/report/${entry.id}`)}
+                        title="Open Legacy Report Editor"
+                      >
+                        <FileEdit className="h-3 w-3 mr-1" />
+                        Editor
                       </Button>
 
                       {/* Mark Final (only if in progress or AI draft ready, not already final) */}

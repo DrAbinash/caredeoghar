@@ -36,6 +36,10 @@ import {
   patientsTable,
   radiologyTextMacrosTable,
   radiologyReportPreferencesTable,
+  radiologyImageReferencesTable,
+  radiologyNormalSnippetsTable,
+  radiologistStylePreferencesTable,
+  radiologyReportLifecycleLogTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, isNull, asc, ilike, or } from "drizzle-orm";
 import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
@@ -1176,4 +1180,180 @@ radiologyReportGeneratorRouter.put("/preferences", async (req: StaffAuthRequest,
     .where(eq(radiologyReportPreferencesTable.userId, Number(userId)))
     .returning();
   res.json(row);
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// NORMAL SNIPPETS — one-click shortcuts for common normal reports
+// ════════════════════════════════════════════════════════════════════════════
+
+radiologyReportGeneratorRouter.get("/normal-snippets", async (req: StaffAuthRequest, res: Response) => {
+  const modality = String(req.query.modality || "").trim() || undefined;
+  const bodyPart = String(req.query.bodyPart || "").trim() || undefined;
+  const query = db.select().from(radiologyNormalSnippetsTable).where(eq(radiologyNormalSnippetsTable.isGlobal, true)).orderBy(asc(radiologyNormalSnippetsTable.sortOrder));
+  const rows = await query;
+  const filtered = rows.filter((r) => {
+    if (modality && r.modality && r.modality !== modality) return false;
+    if (bodyPart && r.bodyPart && r.bodyPart !== bodyPart) return false;
+    return true;
+  });
+  res.json(filtered);
+});
+
+const NormalSnippetSchema = z.object({
+  shortcut: z.string().min(1).max(50),
+  label: z.string().min(1).max(100),
+  modality: z.string().max(20).optional(),
+  bodyPart: z.string().max(30).optional(),
+  text: z.string().min(1).max(5000),
+  impression: z.string().max(2000).optional(),
+  recommendation: z.string().max(2000).optional(),
+  isGlobal: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+radiologyReportGeneratorRouter.post("/normal-snippets", async (req: StaffAuthRequest, res: Response) => {
+  const userName = req.staffSession?.subjectName;
+  const role = req.staffSession?.role;
+  if (!userName) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const parsed = NormalSnippetSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
+  const data = parsed.data;
+  const isGlobal = role === "super_admin" ? (data.isGlobal ?? false) : false;
+  const [row] = await db.insert(radiologyNormalSnippetsTable).values({
+    shortcut: data.shortcut,
+    label: data.label,
+    modality: data.modality || null,
+    bodyPart: data.bodyPart || null,
+    text: data.text,
+    impression: data.impression || null,
+    recommendation: data.recommendation || null,
+    isGlobal,
+    createdBy: userName,
+    sortOrder: data.sortOrder ?? 0,
+  }).returning();
+  res.status(201).json(row);
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// IMAGE REFERENCES — key image pointers for reports
+// ════════════════════════════════════════════════════════════════════════════
+
+radiologyReportGeneratorRouter.get("/image-references", async (req: Request, res: Response) => {
+  const draftId = req.query.draftId ? Number(req.query.draftId) : null;
+  const studyId = req.query.studyId ? Number(req.query.studyId) : null;
+  if (!draftId && !studyId) { res.status(400).json({ error: "draftId or studyId required" }); return; }
+  const conds = [];
+  if (draftId) conds.push(eq(radiologyImageReferencesTable.draftId, draftId));
+  if (studyId) conds.push(eq(radiologyImageReferencesTable.studyId, studyId));
+  const rows = await db.select().from(radiologyImageReferencesTable).where(conds.length ? and(...conds) : undefined).orderBy(asc(radiologyImageReferencesTable.createdAt));
+  res.json(rows);
+});
+
+const ImageRefSchema = z.object({
+  draftId: z.number().int(),
+  studyId: z.number().int().optional(),
+  seriesNumber: z.string().max(20).optional(),
+  imageNumber: z.string().max(20).optional(),
+  description: z.string().min(1).max(500),
+});
+
+radiologyReportGeneratorRouter.post("/image-references", async (req: StaffAuthRequest, res: Response) => {
+  const parsed = ImageRefSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
+  const [row] = await db.insert(radiologyImageReferencesTable).values({
+    draftId: parsed.data.draftId,
+    studyId: parsed.data.studyId ?? null,
+    seriesNumber: parsed.data.seriesNumber ?? null,
+    imageNumber: parsed.data.imageNumber ?? null,
+    description: parsed.data.description,
+  }).returning();
+  res.status(201).json(row);
+});
+
+radiologyReportGeneratorRouter.delete("/image-references/:id", async (req: StaffAuthRequest, res: Response) => {
+  const id = Number(req.params.id);
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.delete(radiologyImageReferencesTable).where(eq(radiologyImageReferencesTable.id, id));
+  res.json({ success: true });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// RADIOLOGIST STYLE PREFERENCES — AI impression style settings
+// ════════════════════════════════════════════════════════════════════════════
+
+const StylePreferencesSchema = z.object({
+  impressionStyle: z.enum(["concise", "detailed", "academic", "diagnostic"]),
+  terminologyLevel: z.enum(["simple", "standard", "advanced"]),
+  autoNumberImpressions: z.boolean(),
+  includeDifferential: z.boolean(),
+  includeMeasurements: z.boolean(),
+});
+
+radiologyReportGeneratorRouter.get("/style-preferences", async (req: StaffAuthRequest, res: Response) => {
+  const userId = req.staffSession?.subjectId;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const rows = await db.select().from(radiologistStylePreferencesTable).where(eq(radiologistStylePreferencesTable.userId, Number(userId)));
+  if (rows.length === 0) {
+    res.json({ impressionStyle: "concise", terminologyLevel: "standard", autoNumberImpressions: true, includeDifferential: false, includeMeasurements: false });
+    return;
+  }
+  res.json(rows[0]);
+});
+
+radiologyReportGeneratorRouter.put("/style-preferences", async (req: StaffAuthRequest, res: Response) => {
+  const userId = req.staffSession?.subjectId;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const parsed = StylePreferencesSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
+  const data = parsed.data;
+  const existing = await db.select().from(radiologistStylePreferencesTable).where(eq(radiologistStylePreferencesTable.userId, Number(userId)));
+  if (existing.length === 0) {
+    const [row] = await db.insert(radiologistStylePreferencesTable).values({
+      userId: Number(userId),
+      ...data,
+    }).returning();
+    res.status(201).json(row);
+    return;
+  }
+  const [row] = await db.update(radiologistStylePreferencesTable).set(data).where(eq(radiologistStylePreferencesTable.userId, Number(userId))).returning();
+  res.json(row);
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// REPORT LIFECYCLE LOG — audit trail for report edits/amendments/reprints
+// ════════════════════════════════════════════════════════════════════════════
+
+radiologyReportGeneratorRouter.get("/lifecycle-log", async (req: Request, res: Response) => {
+  const studyId = req.query.studyId ? Number(req.query.studyId) : null;
+  const draftId = req.query.draftId ? Number(req.query.draftId) : null;
+  if (!studyId && !draftId) { res.status(400).json({ error: "studyId or draftId required" }); return; }
+  const conds = [];
+  if (studyId) conds.push(eq(radiologyReportLifecycleLogTable.studyId, studyId));
+  if (draftId) conds.push(eq(radiologyReportLifecycleLogTable.draftId, draftId));
+  const rows = await db.select().from(radiologyReportLifecycleLogTable).where(conds.length ? and(...conds) : undefined).orderBy(desc(radiologyReportLifecycleLogTable.createdAt));
+  res.json(rows);
+});
+
+radiologyReportGeneratorRouter.post("/log-action", async (req: StaffAuthRequest, res: Response) => {
+  const parsed = z.object({
+    studyId: z.number().int(),
+    draftId: z.number().int().optional(),
+    action: z.string().min(1),
+    oldValue: z.string().optional(),
+    newValue: z.string().optional(),
+    details: z.string().optional(),
+  }).safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
+  const data = parsed.data;
+  const [row] = await db.insert(radiologyReportLifecycleLogTable).values({
+    studyId: data.studyId,
+    draftId: data.draftId ?? null,
+    action: data.action,
+    actorId: req.staffSession?.subjectId ? Number(req.staffSession.subjectId) : null,
+    actorName: req.staffSession?.subjectName || "unknown",
+    oldValue: data.oldValue ?? null,
+    newValue: data.newValue ?? null,
+    details: data.details ?? null,
+  }).returning();
+  res.status(201).json(row);
 });

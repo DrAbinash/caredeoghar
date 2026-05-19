@@ -632,6 +632,85 @@ async function runStartupMigrations(): Promise<void> {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       CREATE INDEX IF NOT EXISTS rad_prefs_user_idx ON radiology_report_preferences(user_id);
+
+      CREATE TABLE IF NOT EXISTS structured_report_templates (
+        id SERIAL PRIMARY KEY,
+        template_name TEXT NOT NULL,
+        modality TEXT NOT NULL,
+        body_part TEXT NOT NULL,
+        study_type TEXT,
+        sections_json TEXT NOT NULL DEFAULT '{}',
+        default_findings TEXT,
+        default_impression TEXT,
+        macros_json TEXT NOT NULL DEFAULT '[]',
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        is_preset BOOLEAN NOT NULL DEFAULT FALSE,
+        created_by TEXT,
+        updated_by TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS srt_modality_idx ON structured_report_templates(modality);
+      CREATE INDEX IF NOT EXISTS srt_body_part_idx ON structured_report_templates(body_part);
+      CREATE INDEX IF NOT EXISTS srt_preset_idx ON structured_report_templates(is_preset);
+
+      CREATE TABLE IF NOT EXISTS radiology_image_references (
+        id SERIAL PRIMARY KEY,
+        draft_id INTEGER NOT NULL,
+        study_id INTEGER,
+        series_number TEXT,
+        image_number TEXT,
+        description TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS rad_img_refs_draft_idx ON radiology_image_references(draft_id);
+      CREATE INDEX IF NOT EXISTS rad_img_refs_study_idx ON radiology_image_references(study_id);
+
+      CREATE TABLE IF NOT EXISTS radiology_normal_snippets (
+        id SERIAL PRIMARY KEY,
+        shortcut TEXT NOT NULL,
+        label TEXT NOT NULL,
+        modality TEXT,
+        body_part TEXT,
+        text TEXT NOT NULL,
+        impression TEXT,
+        recommendation TEXT,
+        is_global BOOLEAN NOT NULL DEFAULT FALSE,
+        created_by TEXT,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS rad_snippets_shortcut_idx ON radiology_normal_snippets(shortcut);
+      CREATE INDEX IF NOT EXISTS rad_snippets_modality_idx ON radiology_normal_snippets(modality);
+
+      CREATE TABLE IF NOT EXISTS radiologist_style_preferences (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL UNIQUE,
+        impression_style TEXT NOT NULL DEFAULT 'concise',
+        terminology_level TEXT NOT NULL DEFAULT 'standard',
+        auto_number_impressions BOOLEAN NOT NULL DEFAULT TRUE,
+        include_differential BOOLEAN NOT NULL DEFAULT FALSE,
+        include_measurements BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS radiology_report_lifecycle_log (
+        id SERIAL PRIMARY KEY,
+        study_id INTEGER NOT NULL,
+        draft_id INTEGER,
+        action TEXT NOT NULL,
+        actor_id INTEGER,
+        actor_name TEXT NOT NULL,
+        old_value TEXT,
+        new_value TEXT,
+        details TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS rad_lifecycle_study_idx ON radiology_report_lifecycle_log(study_id);
+      CREATE INDEX IF NOT EXISTS rad_lifecycle_action_idx ON radiology_report_lifecycle_log(action);
     `);
     logger.info("Startup migrations applied");
   } catch (err) {

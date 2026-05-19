@@ -38,7 +38,7 @@ function table(headers: string[], rows: string[][]): Table {
     rows: [
       new TableRow({
         children: headers.map((h) => new TableCell({
-          children: [new Paragraph({ text: h, bold: true, ...bodyOpts })],
+          children: [new Paragraph({ children: [new TextRun({ text: h, bold: true, ...bodyOpts })] })],
           borders: {
             top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
             bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
@@ -69,7 +69,7 @@ const doc = new Document({
     },
     headers: {
       default: new Header({
-        children: [new Paragraph({ text: "DiagnoCenter \u2014 TextRad-Inspired Radiology Reporting Integration", alignment: AlignmentType.RIGHT, size: 18 })],
+        children: [new Paragraph({ children: [new TextRun({ text: "DiagnoCenter \u2014 TextRad-Inspired Radiology Reporting Integration", size: 18 })] })],
       }),
     },
     footers: {

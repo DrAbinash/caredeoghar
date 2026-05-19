@@ -44,6 +44,7 @@ const Radiology       = lazy(() => import("@/pages/Radiology"));
 const RadiologyWorklist = lazy(() => import("@/pages/RadiologyWorklist"));
 const RadiologyReportEditor = lazy(() => import("@/pages/RadiologyReportEditor"));
 const RadiologyReportGen = lazy(() => import("@/pages/RadiologyReportGenerator"));
+const RadiologyReportingWorkspace = lazy(() => import("@/pages/RadiologyReportingWorkspace"));
 const PacsDashboard         = lazy(() => import("@/pages/PacsDashboard"));
 const MwlDashboard          = lazy(() => import("@/pages/MwlDashboard"));
 const DicomViewer           = lazy(() => import("@/pages/DicomViewer"));
@@ -180,6 +181,12 @@ function Router() {
               </Route>
               <Route path="/radiology/report/:studyId">
                 {(params) => <RadiologyReportEditor studyId={Number(params.studyId)} />}
+              </Route>
+              <Route path="/radiology/reporting-workspace">
+                {() => <RadiologyReportingWorkspace />}
+              </Route>
+              <Route path="/radiology/reporting-workspace/:studyId">
+                {(params) => <RadiologyReportingWorkspace studyId={Number(params.studyId)} />}
               </Route>
               <Route path="/radiology/pacs-dashboard" component={PacsDashboard} />
               <Route path="/radiology/pacs-settings" component={PacsSettings} />

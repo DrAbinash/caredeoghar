@@ -157,3 +157,83 @@ export const radiologyReportKeyImagesTable = pgTable(
     byStudy: index("rad_key_images_study_idx").on(t.studyId),
   }),
 );
+
+// radiology_image_references — structured key image references attached to a report draft
+export const radiologyImageReferencesTable = pgTable(
+  "radiology_image_references",
+  {
+    id: serial("id").primaryKey(),
+    draftId: integer("draft_id").notNull(),
+    studyId: integer("study_id"),
+    seriesNumber: text("series_number"),
+    imageNumber: text("image_number"),
+    description: text("description").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  },
+  (t) => ({
+    byDraft: index("rad_img_refs_draft_idx").on(t.draftId),
+    byStudy: index("rad_img_refs_study_idx").on(t.studyId),
+  }),
+);
+
+// radiology_normal_snippets — one-click normal report shortcuts
+export const radiologyNormalSnippetsTable = pgTable(
+  "radiology_normal_snippets",
+  {
+    id: serial("id").primaryKey(),
+    shortcut: text("shortcut").notNull(),
+    label: text("label").notNull(),
+    modality: text("modality"),
+    bodyPart: text("body_part"),
+    text: text("text").notNull(),
+    impression: text("impression"),
+    recommendation: text("recommendation"),
+    isGlobal: boolean("is_global").notNull().default(false),
+    createdBy: text("created_by"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  },
+  (t) => ({
+    byShortcut: index("rad_snippets_shortcut_idx").on(t.shortcut),
+    byModality: index("rad_snippets_modality_idx").on(t.modality),
+  }),
+);
+
+// radiologist_style_preferences — per-radiologist AI impression style
+export const radiologistStylePreferencesTable = pgTable(
+  "radiologist_style_preferences",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull().unique(),
+    impressionStyle: text("impression_style").notNull().default("concise"),
+    terminologyLevel: text("terminology_level").notNull().default("standard"),
+    autoNumberImpressions: boolean("auto_number_impressions").notNull().default(true),
+    includeDifferential: boolean("include_differential").notNull().default(false),
+    includeMeasurements: boolean("include_measurements").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  },
+);
+
+// radiology_report_lifecycle_log — audit trail for report edits/amendments/reprints
+export const radiologyReportLifecycleLogTable = pgTable(
+  "radiology_report_lifecycle_log",
+  {
+    id: serial("id").primaryKey(),
+    studyId: integer("study_id").notNull(),
+    draftId: integer("draft_id"),
+    action: text("action").notNull(),
+    actorId: integer("actor_id"),
+    actorName: text("actor_name").notNull(),
+    oldValue: text("old_value"),
+    newValue: text("new_value"),
+    details: text("details"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    byStudy: index("rad_lifecycle_study_idx").on(t.studyId),
+    byAction: index("rad_lifecycle_action_idx").on(t.action),
+  }),
+);
