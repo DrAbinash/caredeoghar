@@ -34,8 +34,10 @@ import {
   radiologyStudiesTable,
   radiologyWorklistTable,
   patientsTable,
+  radiologyTextMacrosTable,
+  radiologyReportPreferencesTable,
 } from "@workspace/db/schema";
-import { eq, and, desc, isNull } from "drizzle-orm";
+import { eq, and, desc, isNull, asc, ilike, or } from "drizzle-orm";
 import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
 
 // ── Upload directory ──────────────────────────────────────────────────────────
@@ -574,74 +576,119 @@ function escHtml(v: string): string {
     .replaceAll('"', "&quot;");
 }
 
-function buildReportHtml(input: {
-  patientName?: string;
-  age?: string;
-  sex?: string;
-  patientId?: string;
-  referringDoctor?: string;
-  accessionNumber?: string;
-  studyDate?: string;
-  clinicalHistory?: string;
-  findingsSections?: Record<string, string>;
-  rawFindings?: string;
-  impression?: string[];
-  recommendation?: string;
-  template: ReportTemplate;
-  keyImages?: Array<{ imageUrl: string; caption: string; includeInReport: boolean }>;
-}): string {
-  const t = input.template;
-  const sections = input.findingsSections ?? {};
-  const impressionBullets = (input.impression ?? []).filter(Boolean);
-  const includedImages = (input.keyImages ?? []).filter((img) => img.includeInReport);
+// Preference-aware section heading formatter
+  function fmtHeading(text: string, headingCase: "all_caps" | "title_case"): string {
+    if (headingCase === "all_caps") return text.toUpperCase();
+    return text.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+  }
 
-  const sectionsHtml = t.sections
-    .map((name) => {
-      const content = sections[name] ?? input.rawFindings ?? "";
-      return `<p style="margin:4px 0;"><strong><u>${escHtml(name)}</u></strong><br/>${escHtml(content).replaceAll("\n", "<br/>") || "<em style='color:#aaa;'>—</em>"}</p>`;
-    })
-    .join("\n");
+  function buildReportHtml(input: {
+    patientName?: string;
+    age?: string;
+    sex?: string;
+    patientId?: string;
+    referringDoctor?: string;
+    accessionNumber?: string;
+    studyDate?: string;
+    clinicalHistory?: string;
+    findingsSections?: Record<string, string>;
+    rawFindings?: string;
+    impression?: string[];
+    recommendation?: string;
+    template: ReportTemplate;
+    keyImages?: Array<{ imageUrl: string; caption: string; includeInReport: boolean }>;
+    preferences?: {
+      headingCase?: "all_caps" | "title_case";
+      sectionSpacing?: "spaced" | "compact";
+      impressionStyle?: "bulleted" | "numbered" | "plain";
+      showEndOfReportFooter?: boolean;
+      footerText?: string | null;
+      headerLine1?: string | null;
+      headerLine2Source?: "template_name" | "custom";
+      headerLine2Custom?: string | null;
+    };
+  }): string {
+    const t = input.template;
+    const sections = input.findingsSections ?? {};
+    const impressionBullets = (input.impression ?? []).filter(Boolean);
+    const includedImages = (input.keyImages ?? []).filter((img) => img.includeInReport);
+    const prefs = input.preferences ?? {};
+    const hc = prefs.headingCase ?? "all_caps";
+    const ss = prefs.sectionSpacing ?? "spaced";
+    const ist = prefs.impressionStyle ?? "bulleted";
+    const sp = ss === "compact" ? "2px" : "10px";
+    const sp2 = ss === "compact" ? "4px" : "12px";
 
-  const imagesHtml =
-    includedImages.length > 0
-      ? `<h3 style="margin:12px 0 6px;"><u>KEY IMAGES</u></h3>
-<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:8px 0;">
-${includedImages
-  .map(
-    (img) => `  <figure style="margin:0;text-align:center;page-break-inside:avoid;">
-    <img src="${escHtml(img.imageUrl)}" style="max-width:100%;max-height:220px;object-fit:contain;border:1px solid #ccc;border-radius:4px;" />
-    <figcaption style="font-size:11px;color:#555;margin-top:4px;">${escHtml(img.caption)}</figcaption>
-  </figure>`,
-  )
-  .join("\n")}
-</div>`
+    const sectionsHtml = t.sections
+      .map((name) => {
+        const content = sections[name] ?? input.rawFindings ?? "";
+        const title = fmtHeading(name, hc);
+        return `<p style="margin:${sp} 0;"><strong><u>${escHtml(title)}</u></strong><br/>${escHtml(content).replaceAll("\n", "<br/>") || "<em style='color:#aaa;'>—</em>"}</p>`;
+      })
+      .join("\n");
+
+    const imagesHtml =
+      includedImages.length > 0
+        ? `<h3 style="margin:${sp2} 0 ${sp};"><u>${fmtHeading("Key Images", hc)}</u></h3>
+  <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:8px 0;">
+  ${includedImages
+    .map(
+      (img) => `  <figure style="margin:0;text-align:center;page-break-inside:avoid;">
+      <img src="${escHtml(img.imageUrl)}" style="max-width:100%;max-height:220px;object-fit:contain;border:1px solid #ccc;border-radius:4px;" />
+      <figcaption style="font-size:11px;color:#555;margin-top:4px;">${escHtml(img.caption)}</figcaption>
+    </figure>`,
+    )
+    .join("\n")}
+  </div>`
+        : "";
+
+    let impressionHtml = "";
+    if (impressionBullets.length > 0) {
+      if (ist === "numbered") {
+        impressionHtml = `<ol style="margin:4px 0 0 22px;padding:0;">${impressionBullets.map((b) => `<li>${escHtml(b)}</li>`).join("")}</ol>`;
+      } else if (ist === "plain") {
+        impressionHtml = `<p style="margin:4px 0;">${impressionBullets.map((b) => escHtml(b)).join("; ")}</p>`;
+      } else {
+        impressionHtml = `<ul style="margin:4px 0 0 18px;padding:0;">${impressionBullets.map((b) => `<li>${escHtml(b)}</li>`).join("")}</ul>`;
+      }
+    } else {
+      impressionHtml = `<p style="margin:4px 0;color:#aaa;"><em>Draft impression — not verified.</em></p>`;
+    }
+
+    const line2 = prefs.headerLine2Source === "custom" && prefs.headerLine2Custom
+      ? prefs.headerLine2Custom
+      : t.studyName;
+
+    const headerHtml = prefs.headerLine1
+      ? `<p style="margin:0 0 2px;"><strong>${escHtml(prefs.headerLine1)}</strong></p>
+    <p style="margin:0 0 2px;"><strong>${escHtml(line2)}</strong></p>`
+      : `<p style="margin:0 0 2px;"><strong>NAME: ${escHtml(input.patientName ?? "")} &nbsp;&nbsp; AGE/SEX: ${escHtml(input.age ?? "")}/${escHtml(input.sex ?? "")} &nbsp;&nbsp; UHID: ${escHtml(input.patientId ?? "")} &nbsp;&nbsp; ACC: ${escHtml(input.accessionNumber ?? "")}</strong></p>
+    <p style="margin:0 0 2px;"><strong>REF. BY: ${escHtml(input.referringDoctor ?? "")} &nbsp;&nbsp; DATE: ${escHtml(input.studyDate ?? "")}</strong></p>`;
+
+    const footerBlock = prefs.showEndOfReportFooter !== false
+      ? `<hr style="border:none;border-top:1px solid #999;margin:${sp2} 0 4px;" />
+    ${prefs.footerText ? `<p style="font-size:11px;color:#444;margin:0 0 2px;">${escHtml(prefs.footerText)}</p>` : ""}
+    <p style="font-size:11px;color:#666;font-style:italic;margin:0;">Please correlate with clinical history and findings. Report issued by authorized radiologist only.</p>`
       : "";
 
-  const impressionHtml =
-    impressionBullets.length > 0
-      ? `<ul style="margin:4px 0 0 18px;padding:0;">${impressionBullets.map((b) => `<li>${escHtml(b)}</li>`).join("")}</ul>`
-      : `<p style="margin:4px 0;color:#aaa;"><em>Draft impression — not verified.</em></p>`;
-
-  return `<div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.45;color:#111;max-width:720px;margin:0 auto;">
-  <p style="margin:0 0 2px;"><strong>NAME: ${escHtml(input.patientName ?? "")} &nbsp;&nbsp; AGE/SEX: ${escHtml(input.age ?? "")}/${escHtml(input.sex ?? "")} &nbsp;&nbsp; UHID: ${escHtml(input.patientId ?? "")} &nbsp;&nbsp; ACC: ${escHtml(input.accessionNumber ?? "")}</strong></p>
-  <p style="margin:0 0 2px;"><strong>REF. BY: ${escHtml(input.referringDoctor ?? "")} &nbsp;&nbsp; DATE: ${escHtml(input.studyDate ?? "")}</strong></p>
-  <hr style="border:none;border-top:2px solid #000;margin:6px 0;" />
-  <h2 style="text-align:center;text-decoration:underline;font-size:15px;margin:8px 0;"><strong>${escHtml(t.studyName)}</strong></h2>
-  <h3 style="margin:10px 0 4px;"><u>TECHNIQUE</u></h3>
-  <p style="margin:0 0 8px;">${escHtml(t.technique)}</p>
-  ${input.clinicalHistory ? `<h3 style="margin:10px 0 4px;"><u>CLINICAL HISTORY</u></h3><p style="margin:0 0 8px;">${escHtml(input.clinicalHistory)}</p>` : ""}
-  <hr style="border:none;border-top:2px solid #000;margin:6px 0;" />
-  <h3 style="margin:10px 0 4px;"><u>FINDINGS / OBSERVATION</u></h3>
-  ${sectionsHtml}
-  ${imagesHtml}
-  <h3 style="margin:12px 0 4px;"><u>IMPRESSION</u></h3>
-  ${impressionHtml}
-  <h3 style="margin:12px 0 4px;"><u>RECOMMENDATION</u></h3>
-  <p style="margin:0 0 8px;">${escHtml(input.recommendation ?? "Please correlate with clinical findings.")}</p>
-  <hr style="border:none;border-top:1px solid #999;margin:12px 0 4px;" />
-  <p style="font-size:11px;color:#666;font-style:italic;margin:0;">Please correlate with clinical history and findings. Report issued by authorized radiologist only.</p>
-</div>`.trim();
-}
+    return `<div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.45;color:#111;max-width:720px;margin:0 auto;">
+    ${headerHtml}
+    <hr style="border:none;border-top:2px solid #000;margin:6px 0;" />
+    <h2 style="text-align:center;text-decoration:underline;font-size:15px;margin:8px 0;"><strong>${escHtml(t.studyName)}</strong></h2>
+    <h3 style="margin:${sp} 0 ${sp};"><u>${fmtHeading("Technique", hc)}</u></h3>
+    <p style="margin:0 0 ${sp};">${escHtml(t.technique)}</p>
+    ${input.clinicalHistory ? `<h3 style="margin:${sp} 0 ${sp};"><u>${fmtHeading("Clinical History", hc)}</u></h3><p style="margin:0 0 ${sp};">${escHtml(input.clinicalHistory)}</p>` : ""}
+    <hr style="border:none;border-top:2px solid #000;margin:6px 0;" />
+    <h3 style="margin:${sp} 0 ${sp};"><u>${fmtHeading("Findings / Observation", hc)}</u></h3>
+    ${sectionsHtml}
+    ${imagesHtml}
+    <h3 style="margin:${sp2} 0 ${sp};"><u>${fmtHeading("Impression", hc)}</u></h3>
+    ${impressionHtml}
+    <h3 style="margin:${sp2} 0 ${sp};"><u>${fmtHeading("Recommendation", hc)}</u></h3>
+    <p style="margin:0 0 ${sp};">${escHtml(input.recommendation ?? "Please correlate with clinical findings.")}</p>
+    ${footerBlock}
+  </div>`.trim();
+  }
 
 // ── Router ────────────────────────────────────────────────────────────────────
 
@@ -716,6 +763,16 @@ const GenerateBody = z.object({
       }),
     )
     .optional(),
+  preferences: z.object({
+    headingCase: z.enum(["all_caps", "title_case"]).optional(),
+    sectionSpacing: z.enum(["spaced", "compact"]).optional(),
+    impressionStyle: z.enum(["bulleted", "numbered", "plain"]).optional(),
+    showEndOfReportFooter: z.boolean().optional(),
+    footerText: z.string().optional().nullable(),
+    headerLine1: z.string().optional().nullable(),
+    headerLine2Source: z.enum(["template_name", "custom"]).optional(),
+    headerLine2Custom: z.string().optional().nullable(),
+  }).optional(),
 });
 
 radiologyReportGeneratorRouter.post("/generate", async (req: Request, res: Response) => {
@@ -732,6 +789,7 @@ radiologyReportGeneratorRouter.post("/generate", async (req: Request, res: Respo
     ...data,
     patientId: data.patientId != null ? String(data.patientId) : undefined,
     template,
+    preferences: data.preferences,
   });
 
   const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -939,4 +997,183 @@ radiologyReportGeneratorRouter.delete("/key-images/:id", async (req: StaffAuthRe
   }
 
   res.json({ success: true });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// TEXT MACROS
+// ════════════════════════════════════════════════════════════════════════════
+
+// GET /macros — list macros for the authenticated user plus globals
+radiologyReportGeneratorRouter.get("/macros", async (req: StaffAuthRequest, res: Response) => {
+  const userName = req.staffSession?.subjectName;
+  if (!userName) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const modality = String(req.query.modality || "").trim() || undefined;
+  const query = db
+    .select()
+    .from(radiologyTextMacrosTable)
+    .where(
+      or(
+        eq(radiologyTextMacrosTable.createdBy, userName),
+        eq(radiologyTextMacrosTable.isGlobal, true),
+      ),
+    )
+    .orderBy(asc(radiologyTextMacrosTable.sortOrder), desc(radiologyTextMacrosTable.createdAt));
+  const rows = await query;
+  const filtered = modality
+    ? rows.filter((r) => !r.modality || r.modality === modality)
+    : rows;
+  res.json(filtered);
+});
+
+const CreateMacroSchema = z.object({
+  shortcut: z.string().min(1).max(50),
+  expansion: z.string().min(1).max(2000),
+  modality: z.string().max(20).optional(),
+  isGlobal: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+// POST /macros — create a new macro
+radiologyReportGeneratorRouter.post("/macros", async (req: StaffAuthRequest, res: Response) => {
+  const userName = req.staffSession?.subjectName;
+  if (!userName) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const parsed = CreateMacroSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
+  const data = parsed.data;
+  const isGlobal = req.staffSession?.role === "super_admin" ? (data.isGlobal ?? false) : false;
+  const [row] = await db.insert(radiologyTextMacrosTable).values({
+    createdBy: userName,
+    shortcut: data.shortcut,
+    expansion: data.expansion,
+    modality: data.modality || null,
+    isGlobal,
+    sortOrder: data.sortOrder ?? 0,
+  }).returning();
+  res.status(201).json(row);
+});
+
+const UpdateMacroSchema = z.object({
+  shortcut: z.string().min(1).max(50).optional(),
+  expansion: z.string().min(1).max(2000).optional(),
+  modality: z.string().max(20).optional().nullable(),
+  isGlobal: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+// PUT /macros/:id — update a macro (owner or super-admin only)
+radiologyReportGeneratorRouter.put("/macros/:id", async (req: StaffAuthRequest, res: Response) => {
+  const userName = req.staffSession?.subjectName;
+  const role = req.staffSession?.role;
+  if (!userName) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const id = Number(req.params.id);
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [existing] = await db.select().from(radiologyTextMacrosTable).where(eq(radiologyTextMacrosTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  const canEdit = existing.createdBy === userName || role === "super_admin";
+  if (!canEdit) { res.status(403).json({ error: "Forbidden" }); return; }
+  const parsed = UpdateMacroSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
+  const update: Record<string, unknown> = {};
+  if (parsed.data.shortcut !== undefined) update.shortcut = parsed.data.shortcut;
+  if (parsed.data.expansion !== undefined) update.expansion = parsed.data.expansion;
+  if (parsed.data.modality !== undefined) update.modality = parsed.data.modality;
+  if (parsed.data.isGlobal !== undefined && role === "super_admin") update.isGlobal = parsed.data.isGlobal;
+  if (parsed.data.sortOrder !== undefined) update.sortOrder = parsed.data.sortOrder;
+  const [row] = await db.update(radiologyTextMacrosTable).set(update).where(eq(radiologyTextMacrosTable.id, id)).returning();
+  res.json(row);
+});
+
+// DELETE /macros/:id — delete a macro (owner or super-admin only)
+radiologyReportGeneratorRouter.delete("/macros/:id", async (req: StaffAuthRequest, res: Response) => {
+  const userName = req.staffSession?.subjectName;
+  const role = req.staffSession?.role;
+  if (!userName) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const id = Number(req.params.id);
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [existing] = await db.select().from(radiologyTextMacrosTable).where(eq(radiologyTextMacrosTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  const canDelete = existing.createdBy === userName || role === "super_admin";
+  if (!canDelete) { res.status(403).json({ error: "Forbidden" }); return; }
+  await db.delete(radiologyTextMacrosTable).where(eq(radiologyTextMacrosTable.id, id));
+  res.json({ success: true });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// REPORT PREFERENCES
+// ════════════════════════════════════════════════════════════════════════════
+
+const PreferencesSchema = z.object({
+  headingCase: z.enum(["all_caps", "title_case"]),
+  sectionSpacing: z.enum(["spaced", "compact"]),
+  impressionStyle: z.enum(["bulleted", "numbered", "plain"]),
+  showEndOfReportFooter: z.boolean(),
+  footerText: z.string().max(500).optional(),
+  headerLine1: z.string().max(200).optional(),
+  headerLine2Source: z.enum(["template_name", "custom"]),
+  headerLine2Custom: z.string().max(200).optional(),
+  workspaceLayout: z.enum(["3_panel", "preview_first", "workflow"]),
+});
+
+// GET /preferences — fetch preferences for the authenticated user
+radiologyReportGeneratorRouter.get("/preferences", async (req: StaffAuthRequest, res: Response) => {
+  const userId = req.staffSession?.subjectId;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const rows = await db.select().from(radiologyReportPreferencesTable).where(eq(radiologyReportPreferencesTable.userId, Number(userId)));
+  if (rows.length === 0) {
+    // Return defaults without creating a row yet
+    res.json({
+      headingCase: "all_caps",
+      sectionSpacing: "spaced",
+      impressionStyle: "bulleted",
+      showEndOfReportFooter: true,
+      footerText: null,
+      headerLine1: null,
+      headerLine2Source: "template_name",
+      headerLine2Custom: null,
+      workspaceLayout: "3_panel",
+    });
+    return;
+  }
+  res.json(rows[0]);
+});
+
+// PUT /preferences — create or update preferences
+radiologyReportGeneratorRouter.put("/preferences", async (req: StaffAuthRequest, res: Response) => {
+  const userId = req.staffSession?.subjectId;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const parsed = PreferencesSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
+  const data = parsed.data;
+  const existing = await db.select().from(radiologyReportPreferencesTable).where(eq(radiologyReportPreferencesTable.userId, Number(userId)));
+  if (existing.length === 0) {
+    const [row] = await db.insert(radiologyReportPreferencesTable).values({
+      userId: Number(userId),
+      headingCase: data.headingCase,
+      sectionSpacing: data.sectionSpacing,
+      impressionStyle: data.impressionStyle,
+      showEndOfReportFooter: data.showEndOfReportFooter,
+      footerText: data.footerText || null,
+      headerLine1: data.headerLine1 || null,
+      headerLine2Source: data.headerLine2Source,
+      headerLine2Custom: data.headerLine2Custom || null,
+      workspaceLayout: data.workspaceLayout,
+    }).returning();
+    res.status(201).json(row);
+    return;
+  }
+  const [row] = await db.update(radiologyReportPreferencesTable)
+    .set({
+      headingCase: data.headingCase,
+      sectionSpacing: data.sectionSpacing,
+      impressionStyle: data.impressionStyle,
+      showEndOfReportFooter: data.showEndOfReportFooter,
+      footerText: data.footerText || null,
+      headerLine1: data.headerLine1 || null,
+      headerLine2Source: data.headerLine2Source,
+      headerLine2Custom: data.headerLine2Custom || null,
+      workspaceLayout: data.workspaceLayout,
+    })
+    .where(eq(radiologyReportPreferencesTable.userId, Number(userId)))
+    .returning();
+  res.json(row);
 });

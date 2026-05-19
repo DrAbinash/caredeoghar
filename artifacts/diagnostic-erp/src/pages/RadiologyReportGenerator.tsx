@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import PageHeader from "@/components/PageHeader";
 import VoiceDictationButton from "@/components/VoiceDictationButton";
@@ -32,6 +32,22 @@ import {
   User,
   ClipboardList,
   Upload,
+  Type,
+  Settings,
+  Layout,
+  LayoutTemplate,
+  PanelLeft,
+  Workflow,
+  Pencil,
+  Mic,
+  MicOff,
+  Loader2 as LoaderIcon,
+  X,
+  Plus,
+  Search,
+  Grid3X3,
+  ChevronDown,
+  Hash,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -69,6 +85,27 @@ interface StudyDemog {
   studyDescription: string | null;
 }
 
+interface TextMacro {
+  id: number;
+  shortcut: string;
+  expansion: string;
+  modality: string | null;
+  isGlobal: boolean;
+  sortOrder: number;
+}
+
+interface ReportPreferences {
+  headingCase: "all_caps" | "title_case";
+  sectionSpacing: "spaced" | "compact";
+  impressionStyle: "bulleted" | "numbered" | "plain";
+  showEndOfReportFooter: boolean;
+  footerText: string | null;
+  headerLine1: string | null;
+  headerLine2Source: "template_name" | "custom";
+  headerLine2Custom: string | null;
+  workspaceLayout: "3_panel" | "preview_first" | "workflow";
+}
+
 const EMPTY_DEMOG: StudyDemog = {
   patientName: "",
   age: "",
@@ -84,6 +121,35 @@ const EMPTY_DEMOG: StudyDemog = {
   studyDescription: null,
 };
 
+const DEFAULT_PREFERENCES: ReportPreferences = {
+  headingCase: "all_caps",
+  sectionSpacing: "spaced",
+  impressionStyle: "bulleted",
+  showEndOfReportFooter: true,
+  footerText: null,
+  headerLine1: null,
+  headerLine2Source: "template_name",
+  headerLine2Custom: null,
+  workspaceLayout: "3_panel",
+};
+
+// ── Utility ───────────────────────────────────────────────────────────────────
+
+function useLocalStorage<T>(key: string, initial: T) {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? (JSON.parse(raw) as T) : initial;
+    } catch {
+      return initial;
+    }
+  });
+  useEffect(() => {
+    localStorage.setItem(key, JSON.stringify(value));
+  }, [key, value]);
+  return [value, setValue] as const;
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function RadiologyReportGenerator({ studyId }: { studyId?: number }) {
@@ -95,17 +161,15 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
   const [templateId, setTemplateId] = useState("MRI_BRAIN_PLAIN");
   const template = templates.find((t) => t.templateId === templateId) ?? templates[0] ?? null;
 
-  // Demog (auto-filled from study or manual)
+  // Demog
   const [demog, setDemog] = useState<StudyDemog>(EMPTY_DEMOG);
   const [studyLoading, setStudyLoading] = useState(false);
 
   // Report content
   const [clinicalHistory, setClinicalHistory] = useState("");
   const [findingsSections, setFindingsSections] = useState<Record<string, string>>({});
-  const [impressionRaw, setImpressionRaw] = useState(""); // newline-separated
-  const [recommendation, setRecommendation] = useState(
-    "Please correlate with clinical findings.",
-  );
+  const [impressionRaw, setImpressionRaw] = useState("");
+  const [recommendation, setRecommendation] = useState("Please correlate with clinical findings.");
 
   // Key images
   const [keyImages, setKeyImages] = useState<KeyImage[]>([]);
@@ -119,9 +183,33 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
   const [saving, setSaving] = useState(false);
   const [finalSaving, setFinalSaving] = useState(false);
 
+  // ── TextRad features ────────────────────────────────────────────────────────
+
+  // Text macros
+  const [macros, setMacros] = useState<TextMacro[]>([]);
+  const [showMacroManager, setShowMacroManager] = useState(false);
+
+  // Report preferences
+  const [preferences, setPreferences] = useState<ReportPreferences>(DEFAULT_PREFERENCES);
+  const [showPreferences, setShowPreferences] = useState(false);
+  const [prefsSaving, setPrefsSaving] = useState(false);
+
+  // Workspace layout
+  const [layout, setLayout] = useLocalStorage<ReportPreferences["workspaceLayout"]>("rrg_layout", "3_panel");
+
+  // Template library enhancement
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [templateFilter, setTemplateFilter] = useState<string>("All");
+  const [recentTemplates, setRecentTemplates] = useLocalStorage<string[]>("rrg_recent_templates", []);
+
+  // Enhanced dictation overlay
+  const [showDictation, setShowDictation] = useState(false);
+  const [dictationTranscript, setDictationTranscript] = useState("");
+  const [dictationListening, setDictationListening] = useState(false);
+  const dictationRef = useRef<any>(null);
+
   // ── Effects ─────────────────────────────────────────────────────────────────
 
-  // Load template list once
   useEffect(() => {
     void api
       .get<{ templates: ReportTemplate[] }>("/api/radiology/report-generator/templates")
@@ -129,14 +217,12 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
       .catch(() => undefined);
   }, []);
 
-  // When studyId changes, load study data and existing draft
   useEffect(() => {
     if (!studyId) return;
     void loadStudyData(studyId);
     void loadExistingDraft(studyId);
   }, [studyId]);
 
-  // When template changes, preserve existing section text, add/remove keys
   useEffect(() => {
     if (!template) return;
     setFindingsSections((prev) => {
@@ -148,12 +234,55 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
     });
   }, [templateId, template]);
 
-  // ── Data loaders ─────────────────────────────────────────────────────────────
+  // Load macros and preferences once
+  useEffect(() => {
+    void loadMacros();
+    void loadPreferences();
+  }, []);
+
+  // Sync layout preference with localStorage
+  useEffect(() => {
+    setPreferences((p) => ({ ...p, workspaceLayout: layout }));
+  }, [layout]);
+
+  // ── Data loaders ────────────────────────────────────────────────────────────
+
+  async function loadMacros() {
+    try {
+      const rows = await api.get<TextMacro[]>("/api/radiology/report-generator/macros");
+      setMacros(rows);
+    } catch { /* ignore */ }
+  }
+
+  async function loadPreferences() {
+    try {
+      const p = await api.get<ReportPreferences & { workspaceLayout?: string }>("/api/radiology/report-generator/preferences");
+      const merged: ReportPreferences = {
+        ...DEFAULT_PREFERENCES,
+        ...p,
+        workspaceLayout: (p.workspaceLayout as ReportPreferences["workspaceLayout"]) || layout || "3_panel",
+      };
+      setPreferences(merged);
+      setLayout(merged.workspaceLayout);
+    } catch { /* ignore */ }
+  }
+
+  async function savePreferences(prefs: ReportPreferences) {
+    setPrefsSaving(true);
+    try {
+      const saved = await api.put<ReportPreferences>("/api/radiology/report-generator/preferences", prefs);
+      setPreferences(saved);
+      toast({ title: "Preferences saved" });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Failed to save preferences", description: String(e) });
+    } finally {
+      setPrefsSaving(false);
+    }
+  }
 
   async function loadStudyData(sid: number) {
     setStudyLoading(true);
     try {
-      // Try internal worklist first, then radiology_studies
       const wl = await api
         .get<{
           success: boolean;
@@ -170,11 +299,9 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
             accessionNumber: string;
             referringDoctor?: string | null;
           }>;
-          entries?: Array<unknown>;
         }>(`/api/radiology/worklist?limit=1&studyId=${sid}`)
         .catch(() => null);
 
-      // Fallback: try the internal study endpoint
       const study = await api
         .get<{
           success?: boolean;
@@ -219,7 +346,6 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
           studyDescription: s.studyDescription ?? null,
         });
         if (s.clinicalHistory) setClinicalHistory(s.clinicalHistory);
-        // Auto-pick modality-matching template
         pickTemplateForModality(s.modality, s.studyDescription);
       } else if (wl?.items?.[0]) {
         const w = wl.items[0];
@@ -271,7 +397,6 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
       }
       if (latest.recommendation) setRecommendation(latest.recommendation);
       if (latest.formattedReportHtml) setPreviewHtml(latest.formattedReportHtml);
-      // Also load key images for this draft
       await loadKeyImages(latest.id, sid);
     } catch { /* ignore */ }
   }
@@ -287,7 +412,7 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
     } catch { /* ignore */ }
   }
 
-  // ── Template helpers ─────────────────────────────────────────────────────────
+  // ── Template helpers ────────────────────────────────────────────────────────
 
   function pickTemplateForModality(modality: string, description?: string | null) {
     const m = modality.toUpperCase();
@@ -328,6 +453,42 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
     }
   }
 
+  function trackRecentTemplate(id: string) {
+    setRecentTemplates((prev) => {
+      const next = [id, ...prev.filter((x) => x !== id)].slice(0, 10);
+      return next;
+    });
+  }
+
+  // ── Text macro expansion ────────────────────────────────────────────────────
+
+  const expandMacros = useCallback(
+    (text: string, modalityFilter?: string) => {
+      let result = text;
+      const applicable = macros.filter((m) => !m.modality || m.modality === modalityFilter);
+      for (const macro of applicable) {
+        const re = new RegExp(`\\b${macro.shortcut.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "g");
+        result = result.replace(re, macro.expansion);
+      }
+      return result;
+    },
+    [macros],
+  );
+
+  function handleTextareaMacro(
+    e: React.KeyboardEvent<HTMLTextAreaElement>,
+    value: string,
+    setter: (v: string) => void,
+  ) {
+    if (e.key === " " || e.key === "Enter") {
+      const expanded = expandMacros(value, template?.modality);
+      if (expanded !== value) {
+        e.preventDefault();
+        setter(expanded);
+      }
+    }
+  }
+
   // ── Actions ──────────────────────────────────────────────────────────────────
 
   function buildPayload() {
@@ -352,6 +513,16 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
         caption: img.caption,
         includeInReport: img.includeInReport,
       })),
+      preferences: {
+        headingCase: preferences.headingCase,
+        sectionSpacing: preferences.sectionSpacing,
+        impressionStyle: preferences.impressionStyle,
+        showEndOfReportFooter: preferences.showEndOfReportFooter,
+        footerText: preferences.footerText,
+        headerLine1: preferences.headerLine1,
+        headerLine2Source: preferences.headerLine2Source,
+        headerLine2Custom: preferences.headerLine2Custom,
+      },
     };
   }
 
@@ -423,7 +594,6 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
       return;
     }
 
-    // Generate latest HTML first if no preview
     let html = previewHtml;
     if (!html) {
       setGenerating(true);
@@ -441,7 +611,6 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
 
     setFinalSaving(true);
     try {
-      // Save final draft record
       const impression = impressionRaw
         .split("\n")
         .map((s) => s.trim())
@@ -462,7 +631,6 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
         formattedReportText: html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(),
       });
 
-      // Create official patient_report record
       const reportRes = await api.post<{ success: boolean; report?: { id: number } }>(
         "/api/patient-reports",
         {
@@ -481,10 +649,8 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
 
       toast({
         title: "Final report saved",
-        description: `Report #${reportRes.report?.id ?? "—"} created. Sign it from the Reports module.`,
+        description: `Report #${reportRes.report?.id ?? "\u2014"} created. Sign it from the Reports module.`,
       });
-
-      // Navigate to patient reports
       navigate("/reports");
     } catch (e) {
       toast({ variant: "destructive", title: "Final save failed", description: String(e) });
@@ -553,13 +719,447 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
     window.print();
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────────
+  // ── Enhanced dictation ─────────────────────────────────────────────────────
+
+  function startDictationOverlay() {
+    setShowDictation(true);
+    setDictationTranscript("");
+    startListening();
+  }
+
+  function startListening() {
+    const win = window as any;
+    const SR: (new () => any) | undefined = win.SpeechRecognition ?? win.webkitSpeechRecognition;
+    if (!SR) {
+      alert("Voice dictation requires Chrome or Edge.");
+      return;
+    }
+    const recognition = new SR();
+    recognition.lang = "en-IN";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.onresult = (event: any) => {
+      let final = "";
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          final += event.results[i][0].transcript + " ";
+        } else {
+          interim += event.results[i][0].transcript;
+        }
+      }
+      setDictationTranscript((prev) => prev + final + interim);
+    };
+    recognition.onend = () => setDictationListening(false);
+    recognition.onerror = () => setDictationListening(false);
+    recognition.start();
+    dictationRef.current = recognition;
+    setDictationListening(true);
+  }
+
+  function stopListening() {
+    dictationRef.current?.stop();
+    setDictationListening(false);
+  }
+
+  function acceptDictation() {
+    const cleaned = dictationTranscript.trim();
+    if (cleaned) {
+      setClinicalHistory((v) => v + (v ? "\n" : "") + cleaned);
+    }
+    setShowDictation(false);
+    setDictationTranscript("");
+    stopListening();
+  }
+
+  // ── Template filtering ──────────────────────────────────────────────────────
 
   const modalities = [...new Set(templates.map((t) => t.modality))];
+  const modalityCounts: Record<string, number> = {};
+  for (const t of templates) modalityCounts[t.modality] = (modalityCounts[t.modality] ?? 0) + 1;
+
+  const filteredTemplates = (() => {
+    let pool = templates;
+    if (templateFilter !== "All" && templateFilter !== "Recent" && templateFilter !== "User") {
+      pool = pool.filter((t) => t.modality === templateFilter);
+    }
+    if (templateFilter === "Recent") {
+      pool = recentTemplates
+        .map((id) => templates.find((t) => t.templateId === id))
+        .filter(Boolean) as ReportTemplate[];
+    }
+    if (templateSearch.trim()) {
+      const q = templateSearch.toLowerCase();
+      pool = pool.filter((t) => t.studyName.toLowerCase().includes(q) || t.technique.toLowerCase().includes(q));
+    }
+    return pool;
+  })();
+
+  // ── Render helpers ─────────────────────────────────────────────────────────
+
+  const isWorkflowMode = layout === "workflow";
+  const workflowStep = isWorkflowMode ? (templateId ? (previewHtml ? 3 : 2) : 1) : 0;
+
+  function renderTemplateLibrary() {
+    const pills = ["All", "Recent", ...modalities];
+    return (
+      <div className="rounded-lg border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <LayoutTemplate size={15} />
+          <h3 className="font-semibold text-sm">Template Library</h3>
+          <span className="text-[11px] text-muted-foreground ml-auto">{filteredTemplates.length} results</span>
+        </div>
+        {/* Search */}
+        <div className="relative">
+          <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="h-8 pl-7 text-sm"
+            placeholder="Search templates..."
+            value={templateSearch}
+            onChange={(e) => setTemplateSearch(e.target.value)}
+          />
+        </div>
+        {/* Modality pills */}
+        <div className="flex flex-wrap gap-1.5">
+          {pills.map((m) => (
+            <button
+              key={m}
+              onClick={() => setTemplateFilter(m)}
+              className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
+                templateFilter === m
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-muted text-muted-foreground border-border hover:bg-accent"
+              }`}
+            >
+              {m}
+              {m !== "All" && m !== "Recent" && m !== "User" && (
+                <span className="ml-1 opacity-70">{modalityCounts[m] ?? 0}</span>
+              )}
+            </button>
+          ))}
+        </div>
+        {/* Template list */}
+        <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+          {filteredTemplates.map((t) => (
+            <button
+              key={t.templateId}
+              onClick={() => {
+                setTemplateId(t.templateId);
+                trackRecentTemplate(t.templateId);
+                setTemplateFilter("All");
+                setTemplateSearch("");
+              }}
+              className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                templateId === t.templateId
+                  ? "bg-primary/10 text-primary font-medium border border-primary/20"
+                  : "hover:bg-muted border border-transparent"
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="truncate">{t.studyName}</span>
+                <Badge variant="outline" className="text-[10px] ml-2 shrink-0">{t.modality}</Badge>
+              </div>
+              <p className="text-[11px] text-muted-foreground truncate mt-0.5">{t.technique}</p>
+            </button>
+          ))}
+          {filteredTemplates.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-4">No templates match your search.</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  function renderMacroManager() {
+    const [newShortcut, setNewShortcut] = useState("");
+    const [newExpansion, setNewExpansion] = useState("");
+    const [newModality, setNewModality] = useState("");
+    const [savingMacro, setSavingMacro] = useState(false);
+
+    async function createMacro() {
+      if (!newShortcut.trim() || !newExpansion.trim()) return;
+      setSavingMacro(true);
+      try {
+        const row = await api.post<TextMacro>("/api/radiology/report-generator/macros", {
+          shortcut: newShortcut.trim(),
+          expansion: newExpansion.trim(),
+          modality: newModality || undefined,
+        });
+        setMacros((prev) => [...prev, row]);
+        setNewShortcut("");
+        setNewExpansion("");
+        setNewModality("");
+        toast({ title: "Macro created" });
+      } catch (e) {
+        toast({ variant: "destructive", title: "Failed", description: String(e) });
+      } finally {
+        setSavingMacro(false);
+      }
+    }
+
+    async function deleteMacro(id: number) {
+      try {
+        await api.delete(`/api/radiology/report-generator/macros/${id}`);
+        setMacros((prev) => prev.filter((m) => m.id !== id));
+        toast({ title: "Macro deleted" });
+      } catch (e) {
+        toast({ variant: "destructive", title: "Failed", description: String(e) });
+      }
+    }
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowMacroManager(false)}>
+        <div className="bg-card border rounded-xl shadow-lg w-full max-w-lg mx-4 p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-base flex items-center gap-2">
+              <Hash size={16} />
+              Text Macros
+            </h3>
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setShowMacroManager(false)}><X size={14} /></Button>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Type the shortcut followed by space or Enter in any text field to expand it.
+          </p>
+          {/* Create */}
+          <div className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
+            <div>
+              <Label className="text-xs">Shortcut</Label>
+              <Input className="h-8 text-sm" value={newShortcut} onChange={(e) => setNewShortcut(e.target.value)} placeholder="e.g. .pol" />
+            </div>
+            <div>
+              <Label className="text-xs">Expansion</Label>
+              <Input className="h-8 text-sm" value={newExpansion} onChange={(e) => setNewExpansion(e.target.value)} placeholder="Full phrase..." />
+            </div>
+            <Button size="sm" className="h-8" onClick={() => void createMacro()} disabled={savingMacro}>
+              {savingMacro ? <LoaderIcon size={12} className="animate-spin" /> : <Plus size={12} />}
+            </Button>
+          </div>
+          <div className="flex gap-2">
+            <div className="w-28">
+              <Label className="text-xs">Modality filter (opt)</Label>
+              <Select value={newModality} onValueChange={setNewModality}>
+                <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Any" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Any</SelectItem>
+                  {modalities.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {/* List */}
+          <div className="space-y-1 max-h-56 overflow-y-auto">
+            {macros.map((m) => (
+              <div key={m.id} className="flex items-center justify-between px-3 py-2 rounded-md border text-sm">
+                <div className="min-w-0">
+                  <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{m.shortcut}</code>
+                  <span className="mx-2 text-muted-foreground">\u2192</span>
+                  <span className="text-muted-foreground truncate">{m.expansion}</span>
+                  {m.modality && <Badge variant="outline" className="text-[10px] ml-2">{m.modality}</Badge>}
+                  {m.isGlobal && <Badge className="text-[10px] ml-2">Global</Badge>}
+                </div>
+                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-destructive" onClick={() => void deleteMacro(m.id)}>
+                  <Trash2 size={12} />
+                </Button>
+              </div>
+            ))}
+            {macros.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No macros yet. Create your first one above.</p>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderPreferencesPanel() {
+    const [draft, setDraft] = useState<ReportPreferences>(preferences);
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowPreferences(false)}>
+        <div className="bg-card border rounded-xl shadow-lg w-full max-w-lg mx-4 p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-base flex items-center gap-2">
+              <Settings size={16} />
+              Report Preferences
+            </h3>
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setShowPreferences(false)}><X size={14} /></Button>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Heading Case</Label>
+              <div className="flex gap-2 mt-1">
+                {(["all_caps", "title_case"] as const).map((v) => (
+                  <Button
+                    key={v}
+                    size="sm"
+                    variant={draft.headingCase === v ? "default" : "outline"}
+                    className="h-7 text-xs"
+                    onClick={() => setDraft((d) => ({ ...d, headingCase: v }))}
+                  >
+                    {v === "all_caps" ? "ALL CAPS" : "Title Case"}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Section Spacing</Label>
+              <div className="flex gap-2 mt-1">
+                {(["spaced", "compact"] as const).map((v) => (
+                  <Button
+                    key={v}
+                    size="sm"
+                    variant={draft.sectionSpacing === v ? "default" : "outline"}
+                    className="h-7 text-xs"
+                    onClick={() => setDraft((d) => ({ ...d, sectionSpacing: v }))}
+                  >
+                    {v === "spaced" ? "Spaced" : "Compact"}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Impression Style</Label>
+              <div className="flex gap-2 mt-1">
+                {(["bulleted", "numbered", "plain"] as const).map((v) => (
+                  <Button
+                    key={v}
+                    size="sm"
+                    variant={draft.impressionStyle === v ? "default" : "outline"}
+                    className="h-7 text-xs"
+                    onClick={() => setDraft((d) => ({ ...d, impressionStyle: v }))}
+                  >
+                    {v === "bulleted" ? "Bulleted" : v === "numbered" ? "Numbered" : "Plain"}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={draft.showEndOfReportFooter}
+                onCheckedChange={(v) => setDraft((d) => ({ ...d, showEndOfReportFooter: v }))}
+              />
+              <Label className="text-sm">Show "End of Report" footer</Label>
+            </div>
+            <div>
+              <Label className="text-xs">Footer Text (optional, appears above disclaimer)</Label>
+              <Input
+                className="h-8 text-sm mt-1"
+                value={draft.footerText ?? ""}
+                onChange={(e) => setDraft((d) => ({ ...d, footerText: e.target.value || null }))}
+                placeholder="e.g. Department of Radiology & Imaging"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Header Line 1 (institution / department)</Label>
+              <Input
+                className="h-8 text-sm mt-1"
+                value={draft.headerLine1 ?? ""}
+                onChange={(e) => setDraft((d) => ({ ...d, headerLine1: e.target.value || null }))}
+                placeholder="e.g. AIIMS PATNA — DEPARTMENT OF RADIOLOGY"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Header Line 2</Label>
+              <div className="flex gap-2 mt-1">
+                <Button
+                  size="sm"
+                  variant={draft.headerLine2Source === "template_name" ? "default" : "outline"}
+                  className="h-7 text-xs"
+                  onClick={() => setDraft((d) => ({ ...d, headerLine2Source: "template_name" }))}
+                >
+                  Use Template Name
+                </Button>
+                <Button
+                  size="sm"
+                  variant={draft.headerLine2Source === "custom" ? "default" : "outline"}
+                  className="h-7 text-xs"
+                  onClick={() => setDraft((d) => ({ ...d, headerLine2Source: "custom" }))}
+                >
+                  Custom
+                </Button>
+              </div>
+              {draft.headerLine2Source === "custom" && (
+                <Input
+                  className="h-8 text-sm mt-1"
+                  value={draft.headerLine2Custom ?? ""}
+                  onChange={(e) => setDraft((d) => ({ ...d, headerLine2Custom: e.target.value || null }))}
+                  placeholder="e.g. MRI BRAIN WITH CONTRAST"
+                />
+              )}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <Button size="sm" variant="outline" onClick={() => setShowPreferences(false)}>Cancel</Button>
+            <Button size="sm" onClick={() => { void savePreferences(draft); setShowPreferences(false); }} disabled={prefsSaving}>
+              {prefsSaving ? <LoaderIcon size={12} className="animate-spin mr-1" /> : null}
+              Save Preferences
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderDictationOverlay() {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm">
+        <div className="bg-card border rounded-xl shadow-2xl w-full max-w-2xl mx-4 p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <Mic size={18} />
+              Dictate or Type
+            </h2>
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => { setShowDictation(false); stopListening(); }}>
+              <X size={14} />
+            </Button>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {dictationListening
+              ? "Listening... speak clearly. Transcript appears below in real time."
+              : "Click Start to begin voice dictation, or type directly into the box."}
+          </p>
+          <Textarea
+            className="text-sm min-h-[200px] resize-y"
+            value={dictationTranscript}
+            onChange={(e) => setDictationTranscript(e.target.value)}
+            placeholder="Your transcript will appear here..."
+          />
+          <div className="flex gap-2 justify-center">
+            {!dictationListening ? (
+              <Button size="sm" onClick={startListening} className="gap-1">
+                <Mic size={14} /> Start Listening
+              </Button>
+            ) : (
+              <Button size="sm" variant="destructive" onClick={stopListening} className="gap-1">
+                <MicOff size={14} /> Stop
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={() => setDictationTranscript("")} className="gap-1">
+              <Trash2 size={14} /> Clear
+            </Button>
+            <Button size="sm" variant="outline" onClick={acceptDictation} className="gap-1">
+              <CheckCircle2 size={14} /> Insert into Report
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Layout helpers ──────────────────────────────────────────────────────────
+
+  const layoutGridClass =
+    layout === "3_panel"
+      ? "grid xl:grid-cols-[320px_1fr_1fr] gap-4"
+      : layout === "preview_first"
+        ? "grid xl:grid-cols-[280px_1.5fr_1fr] gap-4"
+        : "grid xl:grid-cols-[280px_1fr_1fr] gap-4";
+
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col h-full">
-      {/* Print-only style: only show preview panel */}
+      {/* Print-only style */}
       <style>{`
         @media print {
           .no-print { display: none !important; }
@@ -569,20 +1169,62 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
         .print-only { display: none; }
       `}</style>
 
+      {/* Overlays */}
+      {showMacroManager && renderMacroManager()}
+      {showPreferences && renderPreferencesPanel()}
+      {showDictation && renderDictationOverlay()}
+
       {/* Header */}
       <div className="no-print">
         <PageHeader
           title="Radiology Report Generator"
           subtitle={
             studyId
-              ? `Study ${studyId}${demog.accessionNumber ? ` · ACC ${demog.accessionNumber}` : ""}`
+              ? `Study ${studyId}${demog.accessionNumber ? ` \u00b7 ACC ${demog.accessionNumber}` : ""}`
               : "Manual Mode"
           }
           actions={
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap items-center">
+              {/* Layout toggle */}
+              <div className="flex items-center border rounded-md overflow-hidden">
+                <button
+                  title="3-Panel"
+                  onClick={() => setLayout("3_panel")}
+                  className={`px-2 py-1.5 text-xs flex items-center gap-1 ${layout === "3_panel" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                >
+                  <Grid3X3 size={12} /> 3-Panel
+                </button>
+                <button
+                  title="Preview First"
+                  onClick={() => setLayout("preview_first")}
+                  className={`px-2 py-1.5 text-xs flex items-center gap-1 ${layout === "preview_first" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                >
+                  <PanelLeft size={12} /> Preview
+                </button>
+                <button
+                  title="Workflow"
+                  onClick={() => setLayout("workflow")}
+                  className={`px-2 py-1.5 text-xs flex items-center gap-1 ${layout === "workflow" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                >
+                  <Workflow size={12} /> Workflow
+                </button>
+              </div>
+
               <Button size="sm" variant="outline" onClick={() => navigate("/radiology/worklist")}>
                 <ArrowLeft size={14} className="mr-1" />
                 Worklist
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setShowMacroManager(true)}>
+                <Type size={14} className="mr-1" />
+                Macros
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setShowPreferences(true)}>
+                <Settings size={14} className="mr-1" />
+                Preferences
+              </Button>
+              <Button size="sm" variant="outline" onClick={startDictationOverlay}>
+                <Mic size={14} className="mr-1" />
+                Dictate
               </Button>
               <Button size="sm" variant="outline" onClick={() => void saveDraft()} disabled={saving}>
                 {saving ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Save size={14} className="mr-1" />}
@@ -590,7 +1232,7 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
               </Button>
               <Button size="sm" onClick={() => void generate()} disabled={generating}>
                 {generating ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Eye size={14} className="mr-1" />}
-                Generate Preview
+                Generate
               </Button>
               <Button size="sm" variant="outline" onClick={handlePrint}>
                 <Printer size={14} className="mr-1" />
@@ -602,121 +1244,64 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
                 onClick={() => void saveFinal()}
                 disabled={finalSaving || generating}
               >
-                {finalSaving ? (
-                  <Loader2 size={14} className="mr-1 animate-spin" />
-                ) : (
-                  <CheckCircle2 size={14} className="mr-1" />
-                )}
-                Save Final Report
+                {finalSaving ? <Loader2 size={14} className="mr-1 animate-spin" /> : <CheckCircle2 size={14} className="mr-1" />}
+                Save Final
               </Button>
             </div>
           }
         />
       </div>
 
-      <div className="flex-1 overflow-auto p-4">
-        <div className="grid xl:grid-cols-2 gap-4 items-start">
-          {/* ── LEFT: Form ── */}
-          <div className="space-y-4 no-print">
-            {/* Template Selector */}
-            <div className="rounded-lg border bg-card p-4 space-y-3">
-              <h3 className="font-semibold text-sm flex items-center gap-2">
-                <ClipboardList size={15} />
-                Study &amp; Template
-              </h3>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label className="text-xs mb-1 block">Modality</Label>
-                  <Select
-                    value={template?.modality ?? ""}
-                    onValueChange={(m) => {
-                      const first = templates.find((t) => t.modality === m);
-                      if (first) setTemplateId(first.templateId);
-                    }}
-                  >
-                    <SelectTrigger className="h-8 text-sm">
-                      <SelectValue placeholder="Modality" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {modalities.map((m) => (
-                        <SelectItem key={m} value={m}>
-                          {m}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs mb-1 block">Template</Label>
-                  <Select value={templateId} onValueChange={setTemplateId}>
-                    <SelectTrigger className="h-8 text-sm">
-                      <SelectValue placeholder="Template" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {templates
-                        .filter((t) => t.modality === (template?.modality ?? templates[0]?.modality))
-                        .map((t) => (
-                          <SelectItem key={t.templateId} value={t.templateId}>
-                            {t.studyName}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              {template && (
-                <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">
-                  {template.technique}
-                </p>
-              )}
-            </div>
+      {/* Workflow step indicator */}
+      {isWorkflowMode && (
+        <div className="no-print px-4 pt-3">
+          <div className="flex items-center gap-3 text-sm">
+            <span className={`px-3 py-1 rounded-full ${workflowStep >= 1 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+              1. Select Template
+            </span>
+            <span className="text-muted-foreground">\u2192</span>
+            <span className={`px-3 py-1 rounded-full ${workflowStep >= 2 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+              2. Enter Findings
+            </span>
+            <span className="text-muted-foreground">\u2192</span>
+            <span className={`px-3 py-1 rounded-full ${workflowStep >= 3 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+              3. Preview & Save
+            </span>
+          </div>
+        </div>
+      )}
 
-            {/* Patient Demographics */}
+      <div className="flex-1 overflow-auto p-4">
+        <div className={layoutGridClass + " items-start"}>
+          {/* ── LEFT: Template Library + Demographics ── */}
+          <div className="space-y-4 no-print">
+            {renderTemplateLibrary()}
+
+            {/* Demographics */}
             <div className="rounded-lg border bg-card p-4 space-y-3">
               <h3 className="font-semibold text-sm flex items-center gap-2">
                 <User size={15} />
                 Patient Demographics
                 {studyLoading && <Loader2 size={12} className="animate-spin" />}
                 {studyId && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 px-2 text-xs ml-auto"
-                    onClick={() => void loadStudyData(studyId)}
-                  >
-                    <RefreshCw size={11} className="mr-1" />
-                    Reload
+                  <Button size="sm" variant="ghost" className="h-6 px-2 text-xs ml-auto" onClick={() => void loadStudyData(studyId)}>
+                    <RefreshCw size={11} className="mr-1" /> Reload
                   </Button>
                 )}
               </h3>
               <div className="grid grid-cols-2 gap-2">
                 <div className="col-span-2">
                   <Label className="text-xs mb-1 block">Patient Name</Label>
-                  <Input
-                    className="h-8 text-sm"
-                    value={demog.patientName}
-                    onChange={(e) => setDemog((d) => ({ ...d, patientName: e.target.value }))}
-                    placeholder="Full name"
-                  />
+                  <Input className="h-8 text-sm" value={demog.patientName} onChange={(e) => setDemog((d) => ({ ...d, patientName: e.target.value }))} placeholder="Full name" />
                 </div>
                 <div>
                   <Label className="text-xs mb-1 block">Age</Label>
-                  <Input
-                    className="h-8 text-sm"
-                    value={demog.age}
-                    onChange={(e) => setDemog((d) => ({ ...d, age: e.target.value }))}
-                    placeholder="e.g. 45Y"
-                  />
+                  <Input className="h-8 text-sm" value={demog.age} onChange={(e) => setDemog((d) => ({ ...d, age: e.target.value }))} placeholder="e.g. 45Y" />
                 </div>
                 <div>
                   <Label className="text-xs mb-1 block">Sex</Label>
-                  <Select
-                    value={demog.sex}
-                    onValueChange={(v) => setDemog((d) => ({ ...d, sex: v }))}
-                  >
-                    <SelectTrigger className="h-8 text-sm">
-                      <SelectValue placeholder="Sex" />
-                    </SelectTrigger>
+                  <Select value={demog.sex} onValueChange={(v) => setDemog((d) => ({ ...d, sex: v }))}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Sex" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="M">Male</SelectItem>
                       <SelectItem value="F">Female</SelectItem>
@@ -726,89 +1311,59 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
                 </div>
                 <div>
                   <Label className="text-xs mb-1 block">UHID</Label>
-                  <Input
-                    className="h-8 text-sm"
-                    value={demog.uhid}
-                    onChange={(e) => setDemog((d) => ({ ...d, uhid: e.target.value }))}
-                    placeholder="Patient ID"
-                  />
+                  <Input className="h-8 text-sm" value={demog.uhid} onChange={(e) => setDemog((d) => ({ ...d, uhid: e.target.value }))} placeholder="Patient ID" />
                 </div>
                 <div>
                   <Label className="text-xs mb-1 block">Accession No.</Label>
-                  <Input
-                    className="h-8 text-sm"
-                    value={demog.accessionNumber}
-                    onChange={(e) => setDemog((d) => ({ ...d, accessionNumber: e.target.value }))}
-                    placeholder="ACC-..."
-                  />
+                  <Input className="h-8 text-sm" value={demog.accessionNumber} onChange={(e) => setDemog((d) => ({ ...d, accessionNumber: e.target.value }))} placeholder="ACC-..." />
                 </div>
                 <div>
                   <Label className="text-xs mb-1 block">Ref. Doctor</Label>
-                  <Input
-                    className="h-8 text-sm"
-                    value={demog.referringDoctor}
-                    onChange={(e) => setDemog((d) => ({ ...d, referringDoctor: e.target.value }))}
-                    placeholder="Referring physician"
-                  />
+                  <Input className="h-8 text-sm" value={demog.referringDoctor} onChange={(e) => setDemog((d) => ({ ...d, referringDoctor: e.target.value }))} placeholder="Referring physician" />
                 </div>
                 <div>
                   <Label className="text-xs mb-1 block">Study Date</Label>
-                  <Input
-                    className="h-8 text-sm"
-                    value={demog.studyDate}
-                    onChange={(e) => setDemog((d) => ({ ...d, studyDate: e.target.value }))}
-                    placeholder="YYYY-MM-DD"
-                  />
+                  <Input className="h-8 text-sm" value={demog.studyDate} onChange={(e) => setDemog((d) => ({ ...d, studyDate: e.target.value }))} placeholder="YYYY-MM-DD" />
                 </div>
               </div>
               {demog.patientId && (
                 <div className="flex gap-2 flex-wrap text-[11px]">
                   <Badge variant="outline" className="text-[11px]">PID: {demog.patientId}</Badge>
                   {demog.testId && <Badge variant="outline" className="text-[11px]">TestID: {demog.testId}</Badge>}
-                  {!demog.testId && (
-                    <Badge variant="destructive" className="text-[11px]">
-                      No test linked — final save disabled
-                    </Badge>
-                  )}
+                  {!demog.testId && <Badge variant="destructive" className="text-[11px]">No test linked \u2014 final save disabled</Badge>}
                 </div>
               )}
             </div>
+          </div>
 
+          {/* ── CENTER: Editor Form ── */}
+          <div className="space-y-4 no-print">
             {/* Clinical History */}
             <div className="rounded-lg border bg-card p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <Label className="text-sm font-semibold">Clinical History</Label>
-                <VoiceDictationButton
-                  onInsert={(t) => setClinicalHistory((v) => v + t)}
-                  draftId={draftId ?? undefined}
-                  studyId={studyId}
-                  targetField="clinicalHistory"
-                />
+                <VoiceDictationButton onInsert={(t) => setClinicalHistory((v) => v + t)} draftId={draftId ?? undefined} studyId={studyId} targetField="clinicalHistory" />
               </div>
               <Textarea
                 className="text-sm min-h-[70px] resize-y"
                 value={clinicalHistory}
                 onChange={(e) => setClinicalHistory(e.target.value)}
-                placeholder="Enter clinical history, symptoms, and indication for the study..."
+                onKeyDown={(e) => handleTextareaMacro(e, clinicalHistory, setClinicalHistory)}
+                placeholder="Enter clinical history, symptoms, and indication..."
               />
             </div>
 
-            {/* Findings sections (per template) */}
+            {/* Findings sections */}
             {template && (
               <div className="rounded-lg border bg-card p-4 space-y-3">
                 <h3 className="font-semibold text-sm">Findings / Observation</h3>
                 {template.sections.map((section) => (
                   <div key={section} className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        {section}
-                      </Label>
+                      <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{section}</Label>
                       <VoiceDictationButton
                         onInsert={(t) =>
-                          setFindingsSections((prev) => ({
-                            ...prev,
-                            [section]: (prev[section] ?? "") + t,
-                          }))
+                          setFindingsSections((prev) => ({ ...prev, [section]: (prev[section] ?? "") + t }))
                         }
                         draftId={draftId ?? undefined}
                         studyId={studyId}
@@ -820,10 +1375,12 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
                       className="text-sm min-h-[64px] resize-y"
                       value={findingsSections[section] ?? ""}
                       onChange={(e) =>
-                        setFindingsSections((prev) => ({
-                          ...prev,
-                          [section]: e.target.value,
-                        }))
+                        setFindingsSections((prev) => ({ ...prev, [section]: e.target.value }))
+                      }
+                      onKeyDown={(e) =>
+                        handleTextareaMacro(e, findingsSections[section] ?? "", (v) =>
+                          setFindingsSections((prev) => ({ ...prev, [section]: v })),
+                        )
                       }
                       placeholder={`Describe ${section.toLowerCase()}...`}
                     />
@@ -844,18 +1401,8 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
                     </Badge>
                   )}
                 </h3>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                  onClick={() => imageInputRef.current?.click()}
-                  disabled={uploading}
-                >
-                  {uploading ? (
-                    <Loader2 size={12} className="animate-spin mr-1" />
-                  ) : (
-                    <Upload size={12} className="mr-1" />
-                  )}
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => imageInputRef.current?.click()} disabled={uploading}>
+                  {uploading ? <Loader2 size={12} className="animate-spin mr-1" /> : <Upload size={12} className="mr-1" />}
                   Upload
                 </Button>
                 <input
@@ -870,58 +1417,29 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
                   }}
                 />
               </div>
-
               <p className="text-[11px] text-muted-foreground">
-                Upload JPG/PNG/WebP screenshots from DICOM viewer. Toggle to include/exclude in the report. Images appear between FINDINGS and IMPRESSION.
+                Upload JPG/PNG/WebP screenshots from DICOM viewer. Toggle to include/exclude in the report.
               </p>
-
               {keyImages.length === 0 && (
                 <div className="flex items-center justify-center h-16 border border-dashed rounded-lg text-muted-foreground text-sm">
                   No key images yet
                 </div>
               )}
-
               <div className="grid grid-cols-2 gap-3">
                 {keyImages.map((img) => (
                   <div
                     key={img.id}
-                    className={`relative rounded-lg border p-2 space-y-2 ${
-                      img.includeInReport ? "border-border" : "border-dashed opacity-60"
-                    }`}
+                    className={`relative rounded-lg border p-2 space-y-2 ${img.includeInReport ? "border-border" : "border-dashed opacity-60"}`}
                   >
-                    <img
-                      src={img.imageUrl}
-                      alt={img.caption || "Key image"}
-                      className="w-full h-28 object-contain rounded bg-muted"
-                    />
+                    <img src={img.imageUrl} alt={img.caption || "Key image"} className="w-full h-28 object-contain rounded bg-muted" />
                     <div className="flex items-center gap-1">
-                      <Switch
-                        checked={img.includeInReport}
-                        onCheckedChange={() => void toggleInclude(img)}
-                        className="scale-75"
-                      />
-                      <span className="text-[10px] text-muted-foreground">
-                        {img.includeInReport ? "In report" : "Excluded"}
-                      </span>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-5 w-5 p-0 ml-auto text-destructive hover:text-destructive"
-                        onClick={() => void deleteKeyImage(img.id)}
-                      >
+                      <Switch checked={img.includeInReport} onCheckedChange={() => void toggleInclude(img)} className="scale-75" />
+                      <span className="text-[10px] text-muted-foreground">{img.includeInReport ? "In report" : "Excluded"}</span>
+                      <Button size="sm" variant="ghost" className="h-5 w-5 p-0 ml-auto text-destructive hover:text-destructive" onClick={() => void deleteKeyImage(img.id)}>
                         <Trash2 size={11} />
                       </Button>
                     </div>
-                    <Input
-                      className="h-7 text-xs"
-                      placeholder="Caption..."
-                      defaultValue={img.caption}
-                      onBlur={(e) => {
-                        if (e.target.value !== img.caption) {
-                          void updateCaption(img, e.target.value);
-                        }
-                      }}
-                    />
+                    <Input className="h-7 text-xs" placeholder="Caption..." defaultValue={img.caption} onBlur={(e) => { if (e.target.value !== img.caption) void updateCaption(img, e.target.value); }} />
                   </div>
                 ))}
               </div>
@@ -934,17 +1452,13 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
                   <Label className="text-sm font-semibold">Impression</Label>
                   <p className="text-[11px] text-muted-foreground">One bullet point per line</p>
                 </div>
-                <VoiceDictationButton
-                  onInsert={(t) => setImpressionRaw((v) => v + t)}
-                  draftId={draftId ?? undefined}
-                  studyId={studyId}
-                  targetField="impression"
-                />
+                <VoiceDictationButton onInsert={(t) => setImpressionRaw((v) => v + t)} draftId={draftId ?? undefined} studyId={studyId} targetField="impression" />
               </div>
               <Textarea
                 className="text-sm min-h-[80px] resize-y"
                 value={impressionRaw}
                 onChange={(e) => setImpressionRaw(e.target.value)}
+                onKeyDown={(e) => handleTextareaMacro(e, impressionRaw, setImpressionRaw)}
                 placeholder={"1. Finding one\n2. Finding two\n3. ..."}
               />
             </div>
@@ -956,13 +1470,14 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
                 className="text-sm min-h-[60px] resize-y"
                 value={recommendation}
                 onChange={(e) => setRecommendation(e.target.value)}
+                onKeyDown={(e) => handleTextareaMacro(e, recommendation, setRecommendation)}
               />
             </div>
 
             {/* Safety note */}
             <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 p-3">
               <p className="text-[11px] text-amber-800 dark:text-amber-300">
-                <strong>Draft only.</strong> Voice dictation and AI assistance create draft content. The final report must be explicitly saved and then signed by an authorized radiologist in the Reports module.
+                <strong>Draft only.</strong> Voice dictation and AI assistance create draft content. The final report must be explicitly saved and then signed by an authorized radiologist.
               </p>
             </div>
           </div>
@@ -974,43 +1489,22 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
                 <span className="text-sm font-semibold flex items-center gap-2">
                   <FileText size={14} />
                   Report Preview
-                  {draftId && (
-                    <Badge variant="outline" className="text-[11px]">
-                      Draft #{draftId}
-                    </Badge>
-                  )}
+                  {draftId && <Badge variant="outline" className="text-[11px]">Draft #{draftId}</Badge>}
                 </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 text-xs"
-                  onClick={() => void generate()}
-                  disabled={generating}
-                >
-                  {generating ? (
-                    <Loader2 size={12} className="animate-spin mr-1" />
-                  ) : (
-                    <RefreshCw size={12} className="mr-1" />
-                  )}
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => void generate()} disabled={generating}>
+                  {generating ? <Loader2 size={12} className="animate-spin mr-1" /> : <RefreshCw size={12} className="mr-1" />}
                   Refresh
                 </Button>
               </div>
               <div className="p-4 min-h-[600px] report-preview-content">
                 {previewHtml ? (
-                  <div
-                    dangerouslySetInnerHTML={{ __html: previewHtml }}
-                    className="text-sm leading-relaxed"
-                  />
+                  <div dangerouslySetInnerHTML={{ __html: previewHtml }} className="text-sm leading-relaxed" />
                 ) : (
                   <div className="flex flex-col items-center justify-center h-60 text-muted-foreground gap-3">
                     <FileText size={40} className="opacity-30" />
-                    <p className="text-sm">Fill in the form and click "Generate Preview"</p>
+                    <p className="text-sm">Fill in the form and click "Generate"</p>
                     <Button size="sm" onClick={() => void generate()} disabled={generating}>
-                      {generating ? (
-                        <Loader2 size={14} className="mr-1 animate-spin" />
-                      ) : (
-                        <Eye size={14} className="mr-1" />
-                      )}
+                      {generating ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Eye size={14} className="mr-1" />}
                       Generate Preview
                     </Button>
                   </div>

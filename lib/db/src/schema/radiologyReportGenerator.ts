@@ -67,6 +67,66 @@ export const radiologyVoiceLogsTable = pgTable(
   }),
 );
 
+// radiology_text_macros — user-defined shortcut expansions for report dictation.
+// e.g. shortcut ".pol" expands to "polydipsia, polyuria, and polyphagia."
+export const radiologyTextMacrosTable = pgTable(
+  "radiology_text_macros",
+  {
+    id: serial("id").primaryKey(),
+    createdBy: text("created_by").notNull(),          // staff username / email
+    shortcut: text("shortcut").notNull(),              // trigger text, e.g. ".pol"
+    expansion: text("expansion").notNull(),            // full replacement text
+    modality: text("modality"),                        // optional filter: MRI | CT | USG | X-RAY
+    isGlobal: boolean("is_global").notNull().default(false), // admin-created global macros
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => ({
+    byCreator: index("rad_macros_creator_idx").on(t.createdBy),
+    byShortcut: index("rad_macros_shortcut_idx").on(t.shortcut),
+    byModality: index("rad_macros_modality_idx").on(t.modality),
+  }),
+);
+
+// radiology_report_preferences — per-user formatting settings for generated reports.
+export const radiologyReportPreferencesTable = pgTable(
+  "radiology_report_preferences",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull().unique(),      // FK → staff.id
+    // Section heading case: "all_caps" | "title_case"
+    headingCase: text("heading_case").notNull().default("all_caps"),
+    // Section spacing: "spaced" | "compact"
+    sectionSpacing: text("section_spacing").notNull().default("spaced"),
+    // Impression style: "bulleted" | "numbered" | "plain"
+    impressionStyle: text("impression_style").notNull().default("bulleted"),
+    // Show "End of Report" footer line
+    showEndOfReportFooter: boolean("show_end_of_report_footer").notNull().default(true),
+    // Optional footer text above "End of Report"
+    footerText: text("footer_text"),
+    // Two-line header: line 1 (department / institution)
+    headerLine1: text("header_line_1"),
+    // Two-line header: line 2 source — "template_name" | "custom"
+    headerLine2Source: text("header_line_2_source").notNull().default("template_name"),
+    // Custom line 2 text (when headerLine2Source === "custom")
+    headerLine2Custom: text("header_line_2_custom"),
+    // Workspace layout preference: "3_panel" | "preview_first" | "workflow"
+    workspaceLayout: text("workspace_layout").notNull().default("3_panel"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => ({
+    byUser: index("rad_prefs_user_idx").on(t.userId),
+  }),
+);
+
 // radiology_report_key_images — screenshots captured from DICOM viewer or
 // uploaded by the technician / radiologist to annotate the report.
 // Only JPG/PNG/WebP screenshots (not raw DICOM data) are stored here.

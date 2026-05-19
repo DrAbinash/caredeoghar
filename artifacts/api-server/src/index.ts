@@ -602,6 +602,36 @@ async function runStartupMigrations(): Promise<void> {
         last_pushed_at TIMESTAMPTZ,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS radiology_text_macros (
+        id SERIAL PRIMARY KEY,
+        created_by TEXT NOT NULL,
+        shortcut TEXT NOT NULL,
+        expansion TEXT NOT NULL,
+        modality TEXT,
+        is_global BOOLEAN NOT NULL DEFAULT FALSE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS rad_macros_creator_idx ON radiology_text_macros(created_by);
+      CREATE INDEX IF NOT EXISTS rad_macros_shortcut_idx ON radiology_text_macros(shortcut);
+      CREATE INDEX IF NOT EXISTS rad_macros_modality_idx ON radiology_text_macros(modality);
+      CREATE TABLE IF NOT EXISTS radiology_report_preferences (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL UNIQUE,
+        heading_case TEXT NOT NULL DEFAULT 'all_caps',
+        section_spacing TEXT NOT NULL DEFAULT 'spaced',
+        impression_style TEXT NOT NULL DEFAULT 'bulleted',
+        show_end_of_report_footer BOOLEAN NOT NULL DEFAULT TRUE,
+        footer_text TEXT,
+        header_line_1 TEXT,
+        header_line_2_source TEXT NOT NULL DEFAULT 'template_name',
+        header_line_2_custom TEXT,
+        workspace_layout TEXT NOT NULL DEFAULT '3_panel',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS rad_prefs_user_idx ON radiology_report_preferences(user_id);
     `);
     logger.info("Startup migrations applied");
   } catch (err) {

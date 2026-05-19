@@ -47,6 +47,7 @@ export * from "./onlineBookings";
 export * from "./outsourcedLabs";
 export * from "./radiologyWorklist";
 export * from "./radiologyReportGenerator";
+export { radiologyTextMacrosTable, radiologyReportPreferencesTable } from "./radiologyReportGenerator";
 export * from "./reportDeliveryLogs";
 export * from "./whatsapp";
 export * from "./structuredReportTemplates";

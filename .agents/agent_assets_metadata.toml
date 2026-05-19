@@ -120,3 +120,9 @@ id = "99wGP0ezptrC9u15x-WX1"
 uri = "file://windows-build/dist/DiagnoCenter-Update.zip"
 type = "unspecified"
 title = "DiagnoCenter-Update.zip (263 MB) — In-App Patch for existing installs"
+
+[[outputs]]
+id = "5sjHlv_osxDWRSb4WZVIx"
+uri = "file://TextRad_Feature_Integration_Document.docx"
+type = "word_document"
+title = "TextRad Feature Integration Document (Word)"
