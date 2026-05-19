@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { db, ordersTable, patientsTable, billsTable, paymentsTable, orderTestsTable, testsTable } from "@workspace/db";
+import { db, ordersTable, patientsTable, billsTable, paymentsTable, orderTestsTable, testsTable, samplesTable } from "@workspace/db";
 import { accountsTable, vouchersTable } from "@workspace/db/schema";
-import { eq, sql, gte, lte, and, desc } from "drizzle-orm";
+import { eq, sql, gte, lte, and, desc, isNotNull } from "drizzle-orm";
 import { z } from "zod/v4";
 import { GetRevenueReportQueryParams } from "@workspace/api-zod";
 
@@ -633,4 +633,74 @@ reportsRouter.get("/daily-summary/pdf", async (req, res) => {
     ],
     "Prepared By Accounts / Admin",
   ));
+});
+
+reportsRouter.get("/outsourced", async (req, res) => {
+  const q = DateRangeQuery.safeParse(req.query);
+  if (!q.success) { res.status(400).json({ error: "Invalid request", details: q.error.issues }); return; }
+  const range = resolveDateRange(q.data.from, q.data.to);
+  if (!range) { res.status(400).json({ error: "Invalid range: 'from' must be on or before 'to'" }); return; }
+  const { fromDate, toDate } = range;
+  const conds = [isNotNull(samplesTable.outsourceSentAt)];
+  if (fromDate) conds.push(gte(samplesTable.outsourceSentAt, fromDate));
+  if (toDate) conds.push(lte(samplesTable.outsourceSentAt, toDate));
+
+  const rows = await db
+    .select({
+      id: samplesTable.id,
+      barcode: samplesTable.barcode,
+      sampleType: samplesTable.sampleType,
+      status: samplesTable.status,
+      outsourceLab: samplesTable.outsourceLab,
+      outsourceSentAt: samplesTable.outsourceSentAt,
+      outsourceExpectedAt: samplesTable.outsourceExpectedAt,
+      outsourceReceivedAt: samplesTable.outsourceReceivedAt,
+      outsourceTrackingId: samplesTable.outsourceTrackingId,
+      orderId: samplesTable.orderId,
+      patientId: samplesTable.patientId,
+    })
+    .from(samplesTable)
+    .where(and(...conds))
+    .orderBy(desc(samplesTable.outsourceSentAt));
+
+  const patientIds = [...new Set(rows.map((r) => r.patientId))];
+  const orderIds = [...new Set(rows.map((r) => r.orderId))];
+
+  const patients = patientIds.length > 0
+    ? await db.select({ id: patientsTable.id, firstName: patientsTable.firstName, lastName: patientsTable.lastName })
+        .from(patientsTable).where(sql`${patientsTable.id} = ANY(${patientIds})`)
+    : [];
+  const orders = orderIds.length > 0
+    ? await db.select({ id: ordersTable.id, orderNumber: ordersTable.orderNumber })
+        .from(ordersTable).where(sql`${ordersTable.id} = ANY(${orderIds})`)
+    : [];
+
+  const patientMap = new Map(patients.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
+  const orderMap = new Map(orders.map((o) => [o.id, o.orderNumber]));
+
+  const byLab: Record<string, { sent: number; received: number; pending: number }> = {};
+  for (const r of rows) {
+    const lab = r.outsourceLab ?? "Unknown";
+    if (!byLab[lab]) byLab[lab] = { sent: 0, received: 0, pending: 0 };
+    byLab[lab].sent++;
+    if (r.outsourceReceivedAt) byLab[lab].received++;
+    else byLab[lab].pending++;
+  }
+
+  const mappedRows = rows.map((r) => ({
+    id: r.id,
+    barcode: r.barcode,
+    sampleType: r.sampleType,
+    status: r.status,
+    outsourceLab: r.outsourceLab,
+    outsourceSentAt: r.outsourceSentAt?.toISOString() ?? null,
+    outsourceExpectedAt: r.outsourceExpectedAt,
+    outsourceReceivedAt: r.outsourceReceivedAt?.toISOString() ?? null,
+    outsourceTrackingId: r.outsourceTrackingId,
+    patientName: patientMap.get(r.patientId) ?? "—",
+    orderNumber: orderMap.get(r.orderId) ?? "—",
+    tests: [] as Array<{ testName: string; testCode: string }>,
+  }));
+
+  res.json({ rows: mappedRows, byLab });
 });

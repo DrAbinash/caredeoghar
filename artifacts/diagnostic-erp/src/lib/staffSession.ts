@@ -83,6 +83,7 @@ export const PERMISSIONED_PATHS: ReadonlySet<string> = new Set([
   "/patient-reports",
   "/signatures",
   "/banking",
+  "/samples",
 ]);
 
 // Permission aliases — paths whose access is granted by another permission.

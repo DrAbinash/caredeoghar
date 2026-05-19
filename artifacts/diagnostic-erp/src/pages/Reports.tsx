@@ -18,7 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { TrendingUp, FlaskConical, Sparkles, RefreshCw, CalendarDays, ArrowUpDown, CreditCard, ChevronDown, ChevronUp, Download } from "lucide-react";
+import { TrendingUp, FlaskConical, Sparkles, RefreshCw, CalendarDays, ArrowUpDown, CreditCard, ChevronDown, ChevronUp, Download, Truck } from "lucide-react";
 
 // Module A (compliance): Commission tab removed — moved to Super Admin Portal.
 const TABS = [
@@ -27,6 +27,7 @@ const TABS = [
   { id: "daily",            label: "Daily Report",     icon: CalendarDays },
   { id: "income-expense",   label: "Income / Expense", icon: ArrowUpDown },
   { id: "payment-methods",  label: "Payment Methods",  icon: CreditCard },
+  { id: "outsourced",       label: "Outsourced Labs",  icon: Truck },
   { id: "ai",               label: "AI Insights",      icon: Sparkles },
 ];
 
@@ -82,6 +83,12 @@ export default function Reports() {
 
   const [dailyDate, setDailyDate] = useState(new Date().toISOString().split("T")[0]);
   const [expandedMethod, setExpandedMethod] = useState<string | null>(null);
+  const [outsourceDateFrom, setOutsourceDateFrom] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString().slice(0, 10);
+  });
+  const [outsourceDateTo, setOutsourceDateTo] = useState(() => new Date().toISOString().slice(0, 10));
 
   const { data: revenue } = useGetRevenueReport({ period });
   const { data: popular } = useGetPopularTests();
@@ -669,9 +676,123 @@ export default function Reports() {
           </div>
         )}
 
+        {/* Outsourced Labs Tab */}
+        {activeTab === "outsourced" && (
+          <OutsourcedReportTab dateFrom={outsourceDateFrom} dateTo={outsourceDateTo} setDateFrom={setOutsourceDateFrom} setDateTo={setOutsourceDateTo} />
+        )}
+
         {/* AI Insights Tab */}
         {activeTab === "ai" && (
           <AIInsightsTab dateFrom={dateFrom} dateTo={dateTo} setDateFrom={setDateFrom} setDateTo={setDateTo} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+type OutsourcedSampleRow = {
+  id: number; barcode: string; sampleType: string; status: string;
+  outsourceLab: string | null; outsourceSentAt: string | null;
+  outsourceExpectedAt: string | null; outsourceReceivedAt: string | null;
+  outsourceTrackingId: string | null;
+  patientName: string; orderNumber: string;
+  tests: Array<{ testName: string; testCode: string }>;
+};
+type OutsourcedReportData = {
+  rows: OutsourcedSampleRow[];
+  byLab: Record<string, { sent: number; received: number; pending: number }>;
+};
+
+function OutsourcedReportTab({ dateFrom, dateTo, setDateFrom, setDateTo }: {
+  dateFrom: string; dateTo: string;
+  setDateFrom: (v: string) => void; setDateTo: (v: string) => void;
+}) {
+  const { data, isLoading } = useQuery<OutsourcedReportData>({
+    queryKey: ["outsourced-report", dateFrom, dateTo],
+    queryFn: () => api.get(`/api/reports/outsourced?from=${dateFrom}&to=${dateTo}`),
+  });
+  const rows = data?.rows ?? [];
+  const byLab = data?.byLab ?? {};
+  const sent = rows.filter((r) => r.outsourceSentAt).length;
+  const received = rows.filter((r) => r.outsourceReceivedAt).length;
+  const pending = sent - received;
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-card border border-card-border rounded-xl p-5 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-semibold text-sm">Outsourced Sample Report</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Track samples sent to external labs and their return status</p>
+          </div>
+          <div className="flex items-end gap-3 flex-wrap">
+            <div><p className="text-xs text-muted-foreground mb-1">From</p><Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-36 h-8 text-xs" /></div>
+            <div><p className="text-xs text-muted-foreground mb-1">To</p><Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-36 h-8 text-xs" /></div>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg p-3 text-center">
+            <p className="text-xl font-bold text-blue-800 dark:text-blue-300">{sent}</p>
+            <p className="text-[10px] text-blue-600 dark:text-blue-400 uppercase tracking-wide">Sent</p>
+          </div>
+          <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 rounded-lg p-3 text-center">
+            <p className="text-xl font-bold text-emerald-800 dark:text-emerald-300">{received}</p>
+            <p className="text-[10px] text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">Received</p>
+          </div>
+          <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-lg p-3 text-center">
+            <p className="text-xl font-bold text-amber-800 dark:text-amber-300">{pending}</p>
+            <p className="text-[10px] text-amber-600 dark:text-amber-400 uppercase tracking-wide">Pending</p>
+          </div>
+        </div>
+        {Object.keys(byLab).length > 0 && (
+          <div className="mb-4 grid grid-cols-2 md:grid-cols-4 gap-2">
+            {Object.entries(byLab).map(([lab, counts]) => (
+              <div key={lab} className="bg-muted/40 rounded-md px-3 py-2 text-xs">
+                <p className="font-semibold truncate">{lab}</p>
+                <p className="text-muted-foreground mt-0.5">Sent {counts.sent} · Recv {counts.received} · Pend {counts.pending}</p>
+              </div>
+            ))}
+          </div>
+        )}
+        {isLoading ? (
+          <div className="animate-pulse space-y-2"><div className="h-8 bg-muted rounded" /><div className="h-8 bg-muted rounded" /><div className="h-8 bg-muted rounded" /></div>
+        ) : rows.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground text-sm">No outsourced samples in this date range</div>
+        ) : (
+          <div className="border border-card-border rounded-lg overflow-hidden">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/60"><tr>
+                <th className="text-left px-3 py-2 font-semibold">Barcode</th>
+                <th className="text-left px-3 py-2 font-semibold">Patient</th>
+                <th className="text-left px-3 py-2 font-semibold">Lab</th>
+                <th className="text-left px-3 py-2 font-semibold">Sent</th>
+                <th className="text-left px-3 py-2 font-semibold">Expected</th>
+                <th className="text-left px-3 py-2 font-semibold">Received</th>
+                <th className="text-left px-3 py-2 font-semibold">Status</th>
+              </tr></thead>
+              <tbody className="divide-y divide-card-border">
+                {rows.map((r) => (
+                  <tr key={r.id} className="hover:bg-muted/30">
+                    <td className="px-3 py-2 font-mono font-bold">{r.barcode}</td>
+                    <td className="px-3 py-2">{r.patientName}</td>
+                    <td className="px-3 py-2">{r.outsourceLab ?? "—"}</td>
+                    <td className="px-3 py-2">{r.outsourceSentAt ? new Date(r.outsourceSentAt).toLocaleDateString("en-IN") : "—"}</td>
+                    <td className="px-3 py-2">{r.outsourceExpectedAt ?? "—"}</td>
+                    <td className="px-3 py-2">{r.outsourceReceivedAt ? new Date(r.outsourceReceivedAt).toLocaleDateString("en-IN") : "—"}</td>
+                    <td className="px-3 py-2">
+                      {r.outsourceReceivedAt ? (
+                        <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 font-extrabold text-[10px]">RECEIVED</span>
+                      ) : r.outsourceSentAt ? (
+                        <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 font-extrabold text-[10px]">PENDING</span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-400 font-extrabold text-[10px]">NOT SENT</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

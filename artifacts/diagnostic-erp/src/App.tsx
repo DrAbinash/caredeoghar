@@ -65,6 +65,7 @@ const OnlineBookings  = lazy(() => import("@/pages/OnlineBookings"));
 const DailySummary    = lazy(() => import("@/pages/DailySummary"));
 const MyDailySummary  = lazy(() => import("@/pages/MyDailySummary"));
 const OutsourcedLabs  = lazy(() => import("@/pages/OutsourcedLabs"));
+const Samples         = lazy(() => import("@/pages/Samples"));
 const Kiosk           = lazy(() => import("@/pages/Kiosk"));
 const NotFound        = lazy(() => import("@/pages/not-found"));
 
@@ -97,6 +98,7 @@ const ERP_NAV_ORDER = [
   "/orders", "/tests", "/packages", "/billing", "/payments", "/reports",
   "/report-generator", "/report-hub", "/inventory", "/expenses", "/staff", "/referrals",
   "/accounting", "/discounts", "/form-f", "/pacs", "/machines", "/hr-forms", "/website", "/whatsapp-chatbot", "/settings",
+  "/samples",
 ];
 
 function PermissionGuard() {
@@ -200,6 +202,7 @@ function Router() {
               <Route path="/machines" component={Machines} />
               <Route path="/website" component={Website} />
               <Route path="/outsourced-labs" component={OutsourcedLabs} />
+              <Route path="/samples" component={Samples} />
               <Route path="/settings" component={Settings} />
               <Route path="/whatsapp-chatbot" component={WhatsAppChatbot} />
               <Route path="/system-update" component={SystemUpdate} />

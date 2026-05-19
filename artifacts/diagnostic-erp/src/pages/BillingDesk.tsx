@@ -78,7 +78,7 @@ type Patient = {
 };
 
 type Doctor = { id: number; name: string; specialization: string };
-type Test   = { id: number; name: string; code: string; price: number; category: string; isActive?: boolean };
+type Test   = { id: number; name: string; code: string; price: number; category: string; isActive?: boolean; testType?: string | null; outsourcedLabId?: number | null };
 // Tests embedded in a package carry their per-package discount overrides.
 type PkgTest = Test & { discountPct?: number; discountAmount?: number };
 type Pkg    = { id: number; packageCode: string; name: string; price: number; discountPct: number; discountAmount?: number; isActive?: boolean; tests: PkgTest[] };
@@ -1690,6 +1690,9 @@ export default function BillingDesk() {
                                 <FlaskConical size={11} className={added ? "text-primary" : "text-slate-900 dark:text-slate-900"} />
                                 <span className="text-[10px] font-mono font-extrabold text-primary bg-primary/10 px-1.5 py-0.5 rounded flex-shrink-0">#{t.id}</span>
                                 <span className="flex-1 font-bold text-slate-900 dark:text-slate-900 truncate">{t.name}</span>
+                                {t.testType === "outsourced" && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 font-extrabold flex-shrink-0">OUT</span>
+                                )}
                                 <span className="text-xs text-slate-900 dark:text-slate-900 font-mono flex-shrink-0">{t.code}</span>
                                 <span className={`text-xs font-extrabold flex-shrink-0 ${added ? "text-primary" : ""}`}>{inr(t.price)}</span>
                                 {added ? <CheckCircle2 size={12} className="text-primary flex-shrink-0" /> : <Plus size={12} className="text-slate-900 dark:text-slate-900 flex-shrink-0" />}
@@ -1800,6 +1803,9 @@ export default function BillingDesk() {
                           <div className="text-xs text-slate-900 dark:text-slate-900 capitalize">{t.category}
                             {t.source === "package" && <span className="ml-1 text-orange-500">· pkg</span>}
                           </div>
+                          {(t as any).testType === "outsourced" && (
+                            <div className="text-[10px] text-orange-600 dark:text-orange-400 font-extrabold mt-0.5">External Lab</div>
+                          )}
                         </div>
                         <span className="text-sm font-bold flex-shrink-0">{inr(t.price)}</span>
                         <button onClick={() => removeTest(t.testId)} className="text-slate-900 dark:text-slate-900 hover:text-destructive transition-colors flex-shrink-0">

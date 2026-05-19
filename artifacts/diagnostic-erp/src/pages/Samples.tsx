@@ -9,6 +9,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
   Plus, TestTube, Search, Printer, Inbox, FlaskConical, CheckCircle2,
   XCircle, AlertOctagon, ExternalLink, RefreshCw, Trash2, Truck,
   PackageCheck, ChevronRight, ChevronDown,
@@ -81,9 +84,16 @@ export default function Samples() {
   const [rejectReason, setRejectReason] = useState("");
   const [outsourcingSample, setOutsourcingSample] = useState<Sample | null>(null);
   const [outsourceForm, setOutsourceForm] = useState({ lab: "", expected: "", tracking: "" });
+  const [outsourceCustom, setOutsourceCustom] = useState(false);
 
   const session = readStaffSession();
   const staffName = session?.user?.name ?? "";
+
+  const { data: outsourcedLabsList = [] } = useQuery<Array<{ id: number; name: string; isActive: boolean }>>({
+    queryKey: ["outsourced-labs"],
+    queryFn: () => api.get("/api/outsourced-labs"),
+  });
+  const activeLabs = outsourcedLabsList.filter((l) => l.isActive !== false);
 
   const { data, isLoading, refetch } = useQuery<{ samples: Sample[]; counters: Record<string, number> }>({
     queryKey: ["samples", { statusFilter, dateFrom, dateTo, outsourcedOnly, search }],
@@ -124,6 +134,7 @@ export default function Samples() {
       qc.invalidateQueries({ queryKey: ["samples"] });
       setOutsourcingSample(null);
       setOutsourceForm({ lab: "", expected: "", tracking: "" });
+      setOutsourceCustom(false);
     },
     onError: (err) => alert((err as Error).message),
   });
@@ -341,7 +352,7 @@ export default function Samples() {
                               </Button>
                             ))}
                             {!s.isOutsourced && s.status !== "rejected" && s.status !== "reported" && (
-                              <Button size="sm" variant="ghost" title="Send to external lab" onClick={() => { setOutsourcingSample(s); setOutsourceForm({ lab: "", expected: "", tracking: "" }); }}>
+                              <Button size="sm" variant="ghost" title="Send to external lab" onClick={() => { setOutsourcingSample(s); setOutsourceForm({ lab: "", expected: "", tracking: "" }); setOutsourceCustom(false); }}>
                                 <Truck size={14} />
                               </Button>
                             )}
@@ -428,8 +439,26 @@ export default function Samples() {
                 {" "}({outsourcingSample.tests.length} test{outsourcingSample.tests.length === 1 ? "" : "s"}) to a referral lab.
               </div>
               <div>
-                <Label className="text-xs">External Lab Name *</Label>
-                <Input value={outsourceForm.lab} onChange={(e) => setOutsourceForm({ ...outsourceForm, lab: e.target.value })} placeholder="SRL Diagnostics" className="mt-1" autoFocus />
+                <Label className="text-xs">External Lab *</Label>
+                {activeLabs.length > 0 ? (
+                  <>
+                    <Select value={outsourceCustom ? "__custom__" : outsourceForm.lab} onValueChange={(v) => {
+                      if (v === "__custom__") { setOutsourceCustom(true); setOutsourceForm({ ...outsourceForm, lab: "" }); }
+                      else { setOutsourceCustom(false); setOutsourceForm({ ...outsourceForm, lab: v }); }
+                    }}>
+                      <SelectTrigger className="mt-1 text-sm"><SelectValue placeholder="Choose a lab" /></SelectTrigger>
+                      <SelectContent>
+                        {activeLabs.map((l) => <SelectItem key={l.id} value={l.name}>{l.name}</SelectItem>)}
+                        <SelectItem value="__custom__">Other (type manually)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {outsourceCustom && (
+                      <Input value={outsourceForm.lab} onChange={(e) => setOutsourceForm({ ...outsourceForm, lab: e.target.value })} placeholder="Enter lab name" className="mt-2" autoFocus />
+                    )}
+                  </>
+                ) : (
+                  <Input value={outsourceForm.lab} onChange={(e) => setOutsourceForm({ ...outsourceForm, lab: e.target.value })} placeholder="SRL Diagnostics" className="mt-1" autoFocus />
+                )}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -443,7 +472,7 @@ export default function Samples() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setOutsourcingSample(null)}>Cancel</Button>
-                <Button onClick={() => outsourceMut.mutate(outsourcingSample)} disabled={!outsourceForm.lab.trim() || outsourceMut.isPending}>
+                <Button onClick={() => outsourceMut.mutate(outsourcingSample)} disabled={!outsourceForm.lab.trim() || outsourceForm.lab === "__custom__" || outsourceMut.isPending}>
                   {outsourceMut.isPending ? "Sending…" : "Mark as Sent"}
                 </Button>
               </DialogFooter>

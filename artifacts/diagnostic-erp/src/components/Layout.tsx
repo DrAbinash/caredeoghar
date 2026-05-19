@@ -57,6 +57,7 @@ import {
   Wallet,
   BrainCircuit,
   Landmark,
+  TestTube,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -132,6 +133,7 @@ const navItems: NavEntry[] = [
       { path: "/orders", icon: ClipboardList, label: "Orders" },
     ],
   },
+  { path: "/samples", icon: TestTube, label: "Samples" },
   { path: "/reports", icon: BarChart3, label: "Reports" },
   { path: "/report-generator", icon: FilePen, label: "Report Generator" },
   { path: "/report-hub", icon: FileText, label: "Report Hub" },
