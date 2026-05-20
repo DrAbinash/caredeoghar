@@ -300,6 +300,13 @@ export default function Banking() {
     supervisorName: "", notes: "",
   });
 
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [paymentForm, setPaymentForm] = useState({
+    bankAccountId: "", amount: "", currency: "INR",
+    purpose: "", beneficiaryName: "", beneficiaryAccount: "", beneficiaryIfsc: "",
+    billId: "", voucherId: "",
+  });
+
   const [form, setForm] = useState({
     provider: "mock",
     bankName: "",
@@ -488,6 +495,17 @@ export default function Banking() {
       qc.invalidateQueries({ queryKey: ["banking", "shifts"] });
     },
     onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+
+  const createPayment = useMutation({
+    mutationFn: (body: unknown) => api.post("/api/banking/payments", body),
+    onSuccess: () => {
+      toast({ title: "Payment initiated" });
+      setPaymentDialogOpen(false);
+      setPaymentForm({ bankAccountId: "", amount: "", currency: "INR", purpose: "", beneficiaryName: "", beneficiaryAccount: "", beneficiaryIfsc: "", billId: "", voucherId: "" });
+      qc.invalidateQueries({ queryKey: ["banking", "payments"] });
+    },
+    onError: (e: Error) => toast({ title: "Payment failed", description: e.message, variant: "destructive" }),
   });
 
   // ── Actions ──────────────────────────────────────────────────────────────────
@@ -749,9 +767,13 @@ export default function Banking() {
 
         {/* ── Payments ───────────────────────────────────────────────────────── */}
         <TabsContent value="payments">
-          <Card>
-            <CardContent className="p-0">
-              <Table>
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button onClick={() => setPaymentDialogOpen(true)}><Send className="w-4 h-4 mr-2" /> Initiate Payout</Button>
+            </div>
+            <Card>
+              <CardContent className="p-0">
+                <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
@@ -785,7 +807,7 @@ export default function Banking() {
                   {(paymentsQuery.data ?? []).length === 0 && (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                        No payment requests. Initiate payouts from the Payments page.
+                        No payment requests. Click Initiate Payout to start a transfer.
                       </TableCell>
                     </TableRow>
                   )}
@@ -793,6 +815,7 @@ export default function Banking() {
               </Table>
             </CardContent>
           </Card>
+          </div>
         </TabsContent>
 
         {/* ── Reconciliation (Enterprise) ──────────────────────────────────── */}
@@ -1623,6 +1646,88 @@ export default function Banking() {
               notes: shiftForm.notes || null,
             })}>
               <CheckCircle className="w-4 h-4 mr-2" /> Record Closure
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Initiate Payout Dialog */}
+      <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Initiate Payout</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Bank Account</Label>
+              <Select value={paymentForm.bankAccountId} onValueChange={(v) => setPaymentForm(f => ({ ...f, bankAccountId: v }))}>
+                <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
+                <SelectContent>
+                  {(accountsQuery.data ?? []).map((a) => (
+                    <SelectItem key={a.id} value={String(a.id)}>{a.bankName} {a.accountNickname ? `(${a.accountNickname})` : ""} [{a.provider}]</SelectItem>
+                  ))}
+                  {(accountsQuery.data ?? []).length === 0 && (
+                    <SelectItem value="" disabled>No active accounts</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Amount (₹)</Label>
+                <Input type="number" value={paymentForm.amount} onChange={(e) => setPaymentForm(f => ({ ...f, amount: e.target.value }))} placeholder="5000" />
+              </div>
+              <div>
+                <Label>Currency</Label>
+                <Input value={paymentForm.currency} onChange={(e) => setPaymentForm(f => ({ ...f, currency: e.target.value }))} placeholder="INR" />
+              </div>
+            </div>
+            <div>
+              <Label>Purpose</Label>
+              <Input value={paymentForm.purpose} onChange={(e) => setPaymentForm(f => ({ ...f, purpose: e.target.value }))} placeholder="Vendor payment / Salary / Refund" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Beneficiary Name</Label>
+                <Input value={paymentForm.beneficiaryName} onChange={(e) => setPaymentForm(f => ({ ...f, beneficiaryName: e.target.value }))} placeholder="Receiver name" />
+              </div>
+              <div>
+                <Label>Beneficiary Account</Label>
+                <Input value={paymentForm.beneficiaryAccount} onChange={(e) => setPaymentForm(f => ({ ...f, beneficiaryAccount: e.target.value }))} placeholder="Account number" />
+              </div>
+            </div>
+            <div>
+              <Label>Beneficiary IFSC</Label>
+              <Input value={paymentForm.beneficiaryIfsc} onChange={(e) => setPaymentForm(f => ({ ...f, beneficiaryIfsc: e.target.value }))} placeholder="HDFC0001234" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Link Bill ID (optional)</Label>
+                <Input type="number" value={paymentForm.billId} onChange={(e) => setPaymentForm(f => ({ ...f, billId: e.target.value }))} placeholder="123" />
+              </div>
+              <div>
+                <Label>Link Voucher ID (optional)</Label>
+                <Input type="number" value={paymentForm.voucherId} onChange={(e) => setPaymentForm(f => ({ ...f, voucherId: e.target.value }))} placeholder="456" />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>Cancel</Button>
+            <Button onClick={() => {
+              const body: Record<string, unknown> = {
+                bankAccountId: Number(paymentForm.bankAccountId),
+                amount: parseFloat(paymentForm.amount),
+                currency: paymentForm.currency || "INR",
+                purpose: paymentForm.purpose || undefined,
+                beneficiaryName: paymentForm.beneficiaryName || undefined,
+                beneficiaryAccount: paymentForm.beneficiaryAccount || undefined,
+                beneficiaryIfsc: paymentForm.beneficiaryIfsc || undefined,
+              };
+              if (paymentForm.billId.trim()) body.billId = Number(paymentForm.billId.trim());
+              if (paymentForm.voucherId.trim()) body.voucherId = Number(paymentForm.voucherId.trim());
+              createPayment.mutate(body);
+            }} disabled={!paymentForm.bankAccountId || !paymentForm.amount || createPayment.isPending}>
+              <Send className="w-4 h-4 mr-2" /> {createPayment.isPending ? "Sending..." : "Send Payment"}
             </Button>
           </DialogFooter>
         </DialogContent>
