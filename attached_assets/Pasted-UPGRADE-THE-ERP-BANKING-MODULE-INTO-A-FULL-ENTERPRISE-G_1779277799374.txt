@@ -1,0 +1,274 @@
+UPGRADE THE ERP BANKING MODULE INTO A FULL ENTERPRISE-GRADE HOSPITAL FINANCIAL RECONCILIATION SYSTEM.
+
+STACK:
+- Frontend: React + Vite + Tailwind
+- Backend: Node.js + Express + TypeScript
+- Database: PostgreSQL + Drizzle ORM
+- Deployment: Replit + Docker compatible
+- Architecture: Modular provider-based banking integration
+
+====================================================
+OBJECTIVES
+====================================================
+
+BUILD A COMPLETE BANKING + PAYMENT RECONCILIATION ECOSYSTEM FOR A MULTISPECIALITY HOSPITAL / DIAGNOSTIC CENTER ERP.
+
+SYSTEM MUST SUPPORT:
+- Real-time bank transaction sync
+- Dynamic QR payment workflows
+- Automated reconciliation
+- Daily collection matching
+- UTR mapping with bills
+- Refund workflows
+- Shift/day closing
+- Fraud detection
+- Audit trails
+- Multi-bank architecture
+- Multi-payment-gateway architecture
+
+====================================================
+BANKING PROVIDERS
+====================================================
+
+CREATE PROVIDER-BASED ARCHITECTURE:
+
+src/services/banking/providers/
+
+PROVIDERS:
+- ICICIBankProvider.ts
+- HDFCBankProvider.ts
+- AxisBankProvider.ts
+- SBIBankProvider.ts
+- KotakBankProvider.ts
+- GenericBankProvider.ts
+
+COMMON INTERFACE:
+- fetchBalance()
+- fetchTransactions()
+- verifyTransaction()
+- initiatePayout()
+- transactionStatus()
+- registerWebhook()
+- verifyWebhookSignature()
+
+====================================================
+PAYMENT GATEWAY PROVIDERS
+====================================================
+
+CREATE:
+
+src/services/payments/providers/
+
+SUPPORT:
+- Razorpay
+- PhonePe
+- BharatPe
+- Cashfree
+- GenericUPIProvider
+
+FEATURES:
+- Dynamic QR generation
+- Payment link generation
+- Real-time payment webhook
+- Auto invoice marking
+- Auto receipt generation
+- Refund initiation
+- Partial payment handling
+
+====================================================
+AUTO RECONCILIATION ENGINE
+====================================================
+
+CREATE BACKGROUND RECONCILIATION ENGINE.
+
+EVERY 5 MINUTES:
+- Pull latest bank transactions
+- Pull gateway settlements
+- Match ERP invoices
+
+MATCHING PRIORITY:
+1. Exact UTR
+2. Exact invoice reference
+3. Exact amount + time
+4. Mobile number + amount
+5. Patient ID + amount
+
+ADD CONFIDENCE SCORE:
+- 100%
+- 90%
+- 80%
+- Manual review required
+
+AUTO CLOSE MATCHED DUES.
+
+====================================================
+FRAUD DETECTION ENGINE
+====================================================
+
+CREATE ALERTS FOR:
+- Duplicate UTR usage
+- Invoice edited after payment
+- Deleted bill after collection
+- Refund without approval
+- Collection mismatch
+- Shift mismatch
+- Backdated edits
+- Multiple manual overrides
+
+STORE ALL EVENTS IN AUDIT LOG.
+
+====================================================
+SHIFT/DAY CLOSING SYSTEM
+====================================================
+
+CREATE:
+- Shift close
+- Day close
+- Drawer close
+- Bank close
+
+FEATURES:
+- Cash tally
+- UPI tally
+- Card tally
+- Bank tally
+- Short/excess calculation
+- Supervisor approval
+- Immutable closure records
+
+====================================================
+BANKING SETTINGS PANEL
+====================================================
+
+CREATE SETTINGS → BANKING PANEL.
+
+FEATURES:
+- Add/edit bank accounts
+- Add API credentials
+- Enable sandbox/live mode
+- Webhook status
+- IP whitelist info
+- Connection testing
+- Sync status monitor
+- Last successful sync
+- Failed sync logs
+
+====================================================
+DATABASE TABLES
+====================================================
+
+CREATE:
+- bank_accounts
+- bank_transactions
+- gateway_transactions
+- reconciliation_logs
+- webhook_logs
+- payout_requests
+- refund_requests
+- fraud_alerts
+- shift_closures
+- day_closures
+- banking_audit_logs
+
+====================================================
+WEBHOOK SYSTEM
+====================================================
+
+CREATE SECURE WEBHOOK ENDPOINTS:
+
+/api/banking/webhooks/icici
+/api/banking/webhooks/hdfc
+/api/payments/webhooks/razorpay
+/api/payments/webhooks/phonepe
+
+VERIFY:
+- Signature validation
+- Timestamp validation
+- Replay protection
+
+====================================================
+SECURITY
+====================================================
+
+USE:
+- ENV secrets only
+- AES encryption for stored credentials
+- JWT authentication
+- Role-based permissions
+- Banking admin roles
+- Audit logging
+
+====================================================
+ERP DASHBOARD
+====================================================
+
+ADD REAL-TIME WIDGETS:
+- Today bank collections
+- Pending reconciliation
+- Failed payments
+- Collection mismatch alerts
+- Refund pending approval
+- Daily bank summary
+- Shift-wise collection
+- Gateway settlement status
+
+====================================================
+ACCOUNTING
+====================================================
+
+AUTO CREATE:
+- Ledger entries
+- Receipt vouchers
+- Payment vouchers
+- Contra entries
+- Refund vouchers
+
+EXPORT:
+- Tally-compatible XML/Excel
+
+====================================================
+UI REQUIREMENTS
+====================================================
+
+MODERN ENTERPRISE UI:
+- Minimal
+- Fast
+- Responsive
+- Hospital-grade professional design
+- Left sidebar banking module
+- Realtime sync indicators
+- Reconciliation color coding
+
+====================================================
+DEPLOYMENT
+====================================================
+
+ENSURE:
+- Docker compatible
+- Environment-based configs
+- Works on Replit deployment
+- Supports VPS migration later
+
+====================================================
+FINAL OUTPUT REQUIRED
+====================================================
+
+GENERATE:
+1. Full backend architecture
+2. Database schema
+3. API routes
+4. Banking services
+5. Reconciliation engine
+6. UI screens
+7. Admin dashboard
+8. ENV template
+9. Docker config
+10. Webhook handlers
+11. Audit system
+12. Fraud detection engine
+13. Sample test transactions
+14. Seed data
+15. API testing utilities
+
+DO NOT GENERATE PLACEHOLDER UI ONLY.
+BUILD PRODUCTION-READY IMPLEMENTATION.
