@@ -4,7 +4,7 @@
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
-    "dev": "BASE_PATH=/mobile/ node server/serve.js",
+    "dev": "PORT=3003 BASE_PATH=/mobile/ node server/serve.js",
     "build": "node scripts/build.js",
     "serve": "node server/serve.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"

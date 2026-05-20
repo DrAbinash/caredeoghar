@@ -68,7 +68,7 @@ backupRouter.post("/run", async (req, res) => {
       performedBy,
     });
 
-    const filename = `diagnocenter_backup_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+    const filename = `care_diagnostics_backup_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.send(json);

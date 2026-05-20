@@ -130,9 +130,9 @@ function serveIndexHtml(res) {
   // Rewrite absolute asset paths (e.g. /_expo/static/...) to be prefixed
   // with the deployed basePath so they resolve through the shared proxy.
   const prefix = basePath || "";
-  // Match quoted URLs that start with / and are NOT already prefixed
+  // Rewrite all quoted URLs that start with / (but not // which is protocol-relative)
   html = html.replace(
-    /(href|src)="(\/(?!\/|_expo\/static\/css\/native-tabs\.module|_expo\/static\/js\/web\/entry|favicon\.ico))/g,
+    /(href|src)="(\/(?!\/))/g,
     (_m, attr, url) => `${attr}="${prefix}${url}`
   );
   // Also rewrite the Expo font face URLs inside the <style> block
@@ -149,14 +149,7 @@ const appName = getAppName();
 
 const port = parseInt(process.env.PORT || "3003", 10);
 
-const server = http.createServer();
-
-// Open port immediately (synchronous from workflow perspective)
-server.listen(port, "0.0.0.0", () => {
-  console.log(`Serving static Expo build on port ${port}`);
-});
-
-server.on("request", (req, res) => {
+const server = http.createServer((req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host}`);
   let pathname = url.pathname;
 
@@ -195,4 +188,8 @@ server.on("request", (req, res) => {
       res.end("Not Found");
     }
   }
+});
+
+server.listen(port, "0.0.0.0", () => {
+  console.log(`Serving static Expo build on port ${port}`);
 });

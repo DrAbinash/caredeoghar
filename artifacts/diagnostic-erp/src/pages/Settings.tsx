@@ -2374,7 +2374,7 @@ function WhatsappTab() {
                   value={cur.webhookVerifyToken ?? ""}
                   onChange={(e) => update("webhookVerifyToken", e.target.value)}
                   className="mt-1 font-mono"
-                  placeholder="e.g. diagnocenter_wh_secret_2026"
+                  placeholder="e.g. care_diagnostics_wh_secret_2026"
                 />
                 <p className="text-[11px] text-muted-foreground mt-1">A secret string you choose — must match exactly in Meta's webhook config.</p>
               </div>
