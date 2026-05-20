@@ -108,6 +108,20 @@ export type BuildPrintHtmlOpts = {
   reprintReason?: string;
 };
 
+/**
+ * Build a single-page A5 (or A4) bill receipt HTML string.
+ *
+ * Layout matches the CARE DIAGNOSTICS scanned receipt:
+ *   • Header: clinic name right-aligned, logo below on right
+ *   • Title: "INVOICE / RECEIPT" right-aligned
+ *   • Patient block: compact bordered 2-line demographics
+ *   • Test table: # | Code | Test | Category | Amount
+ *   • Bottom row: QR (left) | Payment details (center) | Totals (right)
+ *   • Footer: report collection note + signature line
+ *
+ * Everything is black/grey — no brand colour theme so it prints
+ * reliably on B&W thermal printers.
+ */
 export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
   const { bill, clinic, paperSize, isBW, qrDataUrl, reprintBy, reprintReason } = opts;
   const copies = Math.max(1, Math.min(2, Number(clinic?.billPrintCopies ?? 1) || 1));
@@ -117,8 +131,6 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
 
   const tests = (bill.order?.tests ?? []).filter((t) => (t.status ?? "active") !== "cancelled");
   const cancelled = (bill.order?.tests ?? []).filter((t) => (t.status ?? "active") === "cancelled");
-  // Strip legacy "BILL-YYYYMM-####" prefix/dashes for display; new format
-  // is already pure-numeric (see replit.md "Bill Number Format").
   const billDigits = String(bill.billNumber).replace(/^BILL-?/i, "").replace(/-/g, "");
   const ageStr = calcAgeYrs(bill.patient?.dateOfBirth, bill.patient?.ageValue, bill.patient?.ageUnit);
   const ageGender = [ageStr, bill.patient?.gender].filter(Boolean).join(" / ").toUpperCase();
@@ -126,79 +138,101 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
   const isCancelled = (bill.status ?? "") === "cancelled";
   const rawDoctorName = bill.order?.doctor?.name ?? "";
 
-  const fontPx = paperSize === "A5" ? 14 : 12;
-  const pageMargin = paperSize === "A5" ? "3mm" : "6mm";
-  const headerNameSize = paperSize === "A5" ? "20px" : "20px";
+  /* ── Sizing tuned for A5 portrait (148 × 210 mm) ── */
+  const isA5 = paperSize === "A5";
+  const bodyPx = isA5 ? 13 : 12;
+  const pageMargin = isA5 ? "3mm" : "6mm";
+  const clinicNameSize = isA5 ? "22px" : "22px";
+  const titleSize = isA5 ? "15px" : "14px";
+  const patientNameSize = isA5 ? "17px" : "16px";
+  const patientMetaSize = isA5 ? "13px" : "12px";
+  const tablePx = isA5 ? 13 : 11.5;
+  const payPx = isA5 ? 12 : 11;
+  const totalPx = isA5 ? 13 : 12;
+  const footerPx = isA5 ? 12 : 11;
+  const tinyPx = isA5 ? 10 : 9;
+
   const colCount = 3 + (showCode ? 1 : 0) + (showCategory ? 1 : 0);
 
+  /* ── Test rows ── */
   const testRows = tests.map((t, i) => {
     const code = t.test?.code ?? "";
     const name = t.test?.name ?? "";
     const cat = t.test?.category ?? "";
-    const tdPad = paperSize === "A5" ? "4px 5px" : "2px 4px";
+    const tdPad = isA5 ? "3px 5px" : "2px 4px";
     return `<tr>
-      <td style="padding:${tdPad};border-bottom:1px solid #eee">${i + 1}</td>
-      ${showCode ? `<td style="padding:${tdPad};border-bottom:1px solid #eee;font-family:monospace">${escapeHtml(code)}</td>` : ""}
-      <td style="padding:${tdPad};border-bottom:1px solid #eee">${escapeHtml(name)}</td>
-      ${showCategory ? `<td style="padding:${tdPad};border-bottom:1px solid #eee">${escapeHtml(cat)}</td>` : ""}
-      <td style="padding:${tdPad};border-bottom:1px solid #eee;text-align:right">₹${Number(t.price).toFixed(2)}</td>
+      <td style="padding:${tdPad};border-bottom:1px solid #ddd">${i + 1}</td>
+      ${showCode ? `<td style="padding:${tdPad};border-bottom:1px solid #ddd;font-family:monospace;font-size:${Math.round(tablePx * 0.92)}px">${escapeHtml(code)}</td>` : ""}
+      <td style="padding:${tdPad};border-bottom:1px solid #ddd">${escapeHtml(name)}</td>
+      ${showCategory ? `<td style="padding:${tdPad};border-bottom:1px solid #ddd">${escapeHtml(cat)}</td>` : ""}
+      <td style="padding:${tdPad};border-bottom:1px solid #ddd;text-align:right;font-weight:600">₹${Number(t.price).toFixed(2)}</td>
     </tr>`;
   }).join("");
 
   const cancelledRows = cancelled.length === 0 ? "" : `
-    <div style="margin-top:4px;font-size:${fontPx - 1}px;color:#999;text-transform:none">
+    <div style="margin-top:3px;font-size:${tablePx - 1}px;color:#999;text-transform:none">
       <em>Cancelled tests: ${cancelled.map((t) => escapeHtml(t.test?.name ?? "")).join(", ")}</em>
     </div>`;
 
+  /* ── Payment rows ── */
   const payRows = (bill.payments ?? []).map((p) => {
     const ref = p.referenceNumber ? ` (${escapeHtml(p.referenceNumber)})` : "";
     return `<tr>
-      <td style="padding:1px 0;text-transform:capitalize">${escapeHtml(p.method)}${ref ? `<span style="color:#666;font-size:${Math.round(fontPx * 0.78)}px">${ref}</span>` : ""}</td>
-      <td style="padding:1px 0;text-align:right;white-space:nowrap;font-weight:600">₹${Number(p.amount).toFixed(2)}</td>
+      <td style="padding:1px 0;text-transform:capitalize;font-size:${payPx}px">${escapeHtml(p.method)}${ref ? `<span style="color:#666;font-size:${Math.round(payPx * 0.85)}px">${ref}</span>` : ""}</td>
+      <td style="padding:1px 0;text-align:right;white-space:nowrap;font-weight:600;font-size:${payPx}px">₹${Number(p.amount).toFixed(2)}</td>
     </tr>`;
   }).join("");
 
+  /* ── One receipt page ── */
   const onePage = (copyIdx: number) => `
     <section class="receipt" style="${copyIdx > 0 ? "page-break-before:always;" : ""}">
-      ${reprintBy || reprintReason ? `<div style="text-align:center;font-size:${fontPx - 1}px;color:#a16207;border:1px dashed #d97706;padding:2px 4px;margin-bottom:6px;text-transform:uppercase">DUPLICATE / RE-PRINT${reprintBy ? ` · BY ${escapeHtml(reprintBy)}` : ""}${reprintReason ? ` · ${escapeHtml(reprintReason)}` : ""}</div>` : ""}
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;border-bottom:2px solid #1e40af;padding-bottom:8px;margin-bottom:8px">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:${headerNameSize};font-weight:800;color:#1e40af;line-height:1.15">${escapeHtml(clinic?.name || "Diagnostic Centre")}</div>
-          ${clinic?.tagline ? `<div style="font-size:${Math.round(fontPx * 0.75)}px;color:#666;margin-top:1px;text-transform:none">${escapeHtml(clinic.tagline)}</div>` : ""}
-          ${clinic?.address ? `<div style="font-size:${Math.round(fontPx * 0.75)}px;color:#444;margin-top:2px;text-transform:none">${escapeHtml(clinic.address.replace(/\s*\n\s*/g, ", ").trim())}</div>` : ""}
-          <div style="font-size:${Math.round(fontPx * 0.75)}px;color:#444;margin-top:1px;text-transform:none">${[clinic?.phone && `Ph: ${clinic.phone}`, clinic?.email, clinic?.website].filter(Boolean).map((s) => escapeHtml(String(s))).join("  •  ")}</div>
-          ${clinic?.gstin ? `<div style="font-size:${Math.round(fontPx * 0.65)}px;color:#666;margin-top:1px;text-transform:none">GSTIN: ${escapeHtml(clinic.gstin)}</div>` : ""}
+      ${reprintBy || reprintReason ? `<div style="text-align:center;font-size:${tinyPx}px;color:#a16207;border:1px dashed #d97706;padding:2px 4px;margin-bottom:5px;text-transform:uppercase">DUPLICATE / RE-PRINT${reprintBy ? ` · BY ${escapeHtml(reprintBy)}` : ""}${reprintReason ? ` · ${escapeHtml(reprintReason)}` : ""}</div>` : ""}
+
+      <!-- HEADER: clinic name right, logo right-bottom -->
+      <div style="text-align:right;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:4px">
+        <div style="font-size:${clinicNameSize};font-weight:800;line-height:1.1">${escapeHtml(clinic?.name || "Diagnostic Centre")}</div>
+        ${clinic?.tagline ? `<div style="font-size:${Math.round(bodyPx * 0.78)}px;color:#555;margin-top:1px">${escapeHtml(clinic.tagline)}</div>` : ""}
+        <div style="font-size:${tinyPx}px;color:#444;margin-top:2px;line-height:1.3">
+          ${clinic?.address ? `<div>${escapeHtml(clinic.address.replace(/\s*\n\s*/g, ", ").trim())}</div>` : ""}
+          <div>${[clinic?.phone && `Ph: ${clinic.phone}`, clinic?.email, clinic?.website].filter(Boolean).map((s) => escapeHtml(String(s))).join("  ·  ")}</div>
         </div>
-        ${clinic?.logoDataUrl ? `<img src="${clinic.logoDataUrl}" alt="logo" style="max-height:${paperSize === "A5" ? 56 : 64}px;max-width:${paperSize === "A5" ? 120 : 150}px;object-fit:contain;flex-shrink:0"/>` : ""}
+        ${clinic?.logoDataUrl ? `<img src="${clinic.logoDataUrl}" alt="logo" style="max-height:${isA5 ? 44 : 48}px;max-width:${isA5 ? 100 : 120}px;object-fit:contain;margin-top:4px"/>` : ""}
       </div>
 
-      <div style="text-align:center;font-size:${fontPx + 1}px;font-weight:700;letter-spacing:1px;margin:0 0 6px">INVOICE / RECEIPT${isCancelled ? " — CANCELLED" : ""}</div>
+      <!-- TITLE -->
+      <div style="text-align:right;font-size:${titleSize};font-weight:700;letter-spacing:1px;margin:0 0 4px;text-transform:uppercase">INVOICE / RECEIPT${isCancelled ? " — CANCELLED" : ""}</div>
 
-      <div style="border-top:1px solid #ccc;border-bottom:1px solid #ccc;padding:5px 0;margin-bottom:6px">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
-          <div style="line-height:1.25">
-            <div style="display:flex;align-items:baseline;flex-wrap:wrap;gap:0 5px">
-              <strong style="font-size:${paperSize === "A5" ? 18 : 17}px;font-weight:900;line-height:1.05">${escapeHtml(`${bill.patient?.firstName ?? ""} ${bill.patient?.lastName ?? ""}`.trim())}</strong>
-              ${ageGender ? `<strong style="font-size:${paperSize === "A5" ? 14 : 14}px;font-weight:800">&middot; ${escapeHtml(ageGender)}</strong>` : ""}
-            </div>
-            <div style="font-size:${paperSize === "A5" ? 13 : 13}px;font-weight:700;margin-top:3px">REF: <strong>${rawDoctorName ? escapeHtml(rawDoctorName.match(/^\s*DR\.?\s*/i) ? rawDoctorName.trim().toUpperCase() : "DR. " + rawDoctorName.trim()) : "SELF / WALK-IN"}</strong></div>
-          </div>
-          <div style="text-align:right;font-size:${Math.round(fontPx * 0.85)}px;line-height:1.5;flex-shrink:0">
-            ${bill.patient?.phone ? `<div>PH: ${escapeHtml(bill.patient.phone)}</div>` : ""}
-            <div>${created.toLocaleDateString("en-IN")} ${created.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</div>
-            <div>ID: ${escapeHtml(bill.patient?.patientId ?? "")} &middot; BILL: ${escapeHtml(billDigits)}</div>
-          </div>
-        </div>
+      <!-- PATIENT BLOCK: compact bordered 2-liner -->
+      <div style="border-top:1px solid #888;border-bottom:1px solid #888;padding:4px 0;margin-bottom:5px">
+        <table style="width:100%;border-collapse:collapse">
+          <tr>
+            <td style="vertical-align:top;padding:0">
+              <div style="display:flex;align-items:baseline;flex-wrap:wrap;gap:0 6px;line-height:1.2">
+                <strong style="font-size:${patientNameSize};font-weight:900">${escapeHtml(`${bill.patient?.firstName ?? ""} ${bill.patient?.lastName ?? ""}`.trim())}</strong>
+                ${ageGender ? `<strong style="font-size:${patientMetaSize};font-weight:800">· ${escapeHtml(ageGender)}</strong>` : ""}
+              </div>
+              <div style="font-size:${patientMetaSize};font-weight:700;margin-top:2px">
+                REF: <strong>${rawDoctorName ? escapeHtml(rawDoctorName.match(/^\s*DR\.?\s*/i) ? rawDoctorName.trim().toUpperCase() : "DR. " + rawDoctorName.trim()) : "SELF / WALK-IN"}</strong>
+              </div>
+            </td>
+            <td style="vertical-align:top;text-align:right;padding:0;font-size:${tinyPx + 1}px;line-height:1.45;white-space:nowrap">
+              ${bill.patient?.phone ? `<div>PH: ${escapeHtml(bill.patient.phone)}</div>` : ""}
+              <div>${created.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })} ${created.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</div>
+              <div>ID: ${escapeHtml(bill.patient?.patientId ?? "")} · BILL: ${escapeHtml(billDigits)}</div>
+            </td>
+          </tr>
+        </table>
       </div>
 
-      <table style="width:100%;border-collapse:collapse;font-size:${fontPx}px">
+      <!-- TEST TABLE -->
+      <table style="width:100%;border-collapse:collapse;font-size:${tablePx}px;margin-bottom:3px">
         <thead>
-          <tr style="background:#f4f4f4">
-            <th style="padding:${paperSize === "A5" ? "5px 5px" : "3px 4px"};text-align:left;border-bottom:1px solid #ccc">#</th>
-            ${showCode ? `<th style="padding:${paperSize === "A5" ? "5px 5px" : "3px 4px"};text-align:left;border-bottom:1px solid #ccc">Code</th>` : ""}
-            <th style="padding:${paperSize === "A5" ? "5px 5px" : "3px 4px"};text-align:left;border-bottom:1px solid #ccc">Test</th>
-            ${showCategory ? `<th style="padding:${paperSize === "A5" ? "5px 5px" : "3px 4px"};text-align:left;border-bottom:1px solid #ccc">Category</th>` : ""}
-            <th style="padding:${paperSize === "A5" ? "5px 5px" : "3px 4px"};text-align:right;border-bottom:1px solid #ccc">Amount (₹)</th>
+          <tr style="border-bottom:1px solid #888">
+            <th style="padding:${isA5 ? "4px 5px" : "3px 4px"};text-align:left;font-weight:700">#</th>
+            ${showCode ? `<th style="padding:${isA5 ? "4px 5px" : "3px 4px"};text-align:left;font-weight:700">Code</th>` : ""}
+            <th style="padding:${isA5 ? "4px 5px" : "3px 4px"};text-align:left;font-weight:700">Test</th>
+            ${showCategory ? `<th style="padding:${isA5 ? "4px 5px" : "3px 4px"};text-align:left;font-weight:700">Category</th>` : ""}
+            <th style="padding:${isA5 ? "4px 5px" : "3px 4px"};text-align:right;font-weight:700">Amount (₹)</th>
           </tr>
         </thead>
         <tbody>
@@ -208,36 +242,31 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
       ${cancelledRows}
 
       <!--
-        BOTTOM SECTION — table-based 3-column layout (NOT flexbox).
-        Tables with table-layout:fixed render predictably in every print
-        engine; flexbox columns can collapse/overlap on physical printers
-        especially on A4 where there's lots of horizontal space. The
-        explicit pixel widths on the QR + Totals columns guarantee the
-        middle column gets the remaining space without crowding either side.
+        BOTTOM ROW — table-based 3-column layout.
+        Left: QR  |  Middle: Payment details  |  Right: Totals
       -->
-      <table style="width:100%;border-collapse:separate;border-spacing:0;margin-top:8px;table-layout:fixed">
+      <table style="width:100%;border-collapse:separate;border-spacing:0;margin-top:6px;table-layout:fixed">
         <colgroup>
-          <col style="width:${qrEnabled && qrDataUrl ? "70px" : "0"}"/>
+          <col style="width:${qrEnabled && qrDataUrl ? "72px" : "0"}"/>
           <col/>
-          <col style="width:${paperSize === "A4" ? "210px" : "175px"}"/>
+          <col style="width:${isA5 ? "170px" : "200px"}"/>
         </colgroup>
         <tbody>
           <tr>
             <td style="vertical-align:top;padding:0;overflow:hidden">
-              ${qrEnabled && qrDataUrl ? `<img src="${qrDataUrl}" alt="Verify QR" style="width:${paperSize === "A5" ? 56 : 56}px;height:${paperSize === "A5" ? 56 : 56}px;display:block"/><div style="font-size:${Math.round(fontPx * 0.7)}px;color:#666;margin-top:1px;text-transform:none;white-space:nowrap">Scan to verify</div>` : ""}
+              ${qrEnabled && qrDataUrl ? `<img src="${qrDataUrl}" alt="Verify QR" style="width:${isA5 ? 54 : 56}px;height:${isA5 ? 54 : 56}px;display:block"/><div style="font-size:${tinyPx}px;color:#666;margin-top:1px;text-transform:none;white-space:nowrap">Scan to verify</div>` : ""}
             </td>
-            <td style="vertical-align:top;padding:0 8px 0 0;font-size:${Math.round(fontPx * 0.95)}px;word-break:break-word">
-              ${(bill.payments ?? []).length > 0 ? `<div style="font-weight:700;border-bottom:1px solid #ccc;padding-bottom:1px;margin-bottom:3px">PAYMENT DETAILS</div><table style="width:100%;border-collapse:collapse"><tbody>${payRows}</tbody></table>` : ""}
+            <td style="vertical-align:top;padding:0 8px 0 0;font-size:${payPx}px;word-break:break-word">
+              ${(bill.payments ?? []).length > 0 ? `<div style="font-weight:700;border-bottom:1px solid #999;padding-bottom:1px;margin-bottom:2px;font-size:${payPx + 1}px">PAYMENT DETAILS</div><table style="width:100%;border-collapse:collapse"><tbody>${payRows}</tbody></table>` : ""}
             </td>
             <td style="vertical-align:top;padding:0">
-              <table style="width:100%;border-collapse:collapse;font-size:${fontPx}px;table-layout:fixed">
+              <table style="width:100%;border-collapse:collapse;font-size:${totalPx}px;table-layout:fixed">
                 <tbody>
-                  <tr><td style="padding:1px 4px">Subtotal</td><td style="padding:1px 4px;text-align:right;white-space:nowrap">₹${Number(bill.subtotal).toFixed(2)}</td></tr>
-                  ${Number(bill.discount) > 0 ? `<tr><td style="padding:1px 4px">Discount</td><td style="padding:1px 4px;text-align:right;color:green;white-space:nowrap">−₹${Number(bill.discount).toFixed(2)}</td></tr>` : ""}
-                  ${Number(bill.taxAmount ?? 0) > 0 ? `<tr><td style="padding:1px 4px">Tax</td><td style="padding:1px 4px;text-align:right;white-space:nowrap">₹${Number(bill.taxAmount).toFixed(2)}</td></tr>` : ""}
-                  <tr><td style="padding:2px 4px;border-top:1px solid #000;font-weight:700">Total</td><td style="padding:2px 4px;border-top:1px solid #000;text-align:right;font-weight:700;white-space:nowrap">₹${Number(bill.totalAmount).toFixed(2)}</td></tr>
-                  <tr><td style="padding:1px 4px">Paid</td><td style="padding:1px 4px;text-align:right;color:green;white-space:nowrap">₹${Number(bill.paidAmount).toFixed(2)}</td></tr>
-                  <tr><td style="padding:2px 4px;border-top:1px solid #000;font-weight:700">Balance</td><td style="padding:2px 4px;border-top:1px solid #000;text-align:right;font-weight:700;white-space:nowrap;color:${Number(bill.balanceAmount) > 0 ? "#c62828" : "green"}">₹${Number(bill.balanceAmount).toFixed(2)}${Number(bill.balanceAmount) === 0 ? " (PAID)" : ""}</td></tr>
+                  <tr><td style="padding:1px 3px">Subtotal</td><td style="padding:1px 3px;text-align:right;white-space:nowrap">₹${Number(bill.subtotal).toFixed(2)}</td></tr>
+                  ${Number(bill.discount) > 0 ? `<tr><td style="padding:1px 3px">Discount</td><td style="padding:1px 3px;text-align:right;white-space:nowrap;color:green">−₹${Number(bill.discount).toFixed(2)}</td></tr>` : ""}
+                  <tr><td style="padding:2px 3px;border-top:1px solid #000;font-weight:700">Total</td><td style="padding:2px 3px;border-top:1px solid #000;text-align:right;font-weight:700;white-space:nowrap">₹${Number(bill.totalAmount).toFixed(2)}</td></tr>
+                  <tr><td style="padding:1px 3px">Paid</td><td style="padding:1px 3px;text-align:right;white-space:nowrap;color:green">₹${Number(bill.paidAmount).toFixed(2)}</td></tr>
+                  <tr><td style="padding:2px 3px;border-top:1px solid #000;font-weight:700">Balance</td><td style="padding:2px 3px;border-top:1px solid #000;text-align:right;font-weight:700;white-space:nowrap;color:${Number(bill.balanceAmount) > 0 ? "#c62828" : "green"}">₹${Number(bill.balanceAmount).toFixed(2)}${Number(bill.balanceAmount) === 0 ? " (PAID)" : ""}</td></tr>
                 </tbody>
               </table>
             </td>
@@ -245,17 +274,23 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
         </tbody>
       </table>
 
-      <!--
-        FOOTER BLOCK — single combined section so there is only ONE
-        page-break-inside:avoid target. Having two separate avoid-blocks
-        caused browsers to push both onto a new page when they didn't fit
-        together after the totals, producing a blank page 2 (and page 4
-        for the second copy). Merged into one block; footerNote is the
-        primary message since the clinic configures it.
-      -->
-      <div style="margin-top:8px;border:1px solid #1e40af;border-radius:6px;padding:${paperSize === "A5" ? "8px 14px" : "6px 12px"};background:#f0f6ff;text-align:center;text-transform:none;page-break-inside:avoid">
-        <div style="font-size:${fontPx + 1}px;font-weight:800;color:#1e40af;letter-spacing:0.5px">${escapeHtml(clinic?.footerNote || bill.reportCollectionNote || "Please collect your report within 7 days.")}</div>
-        <div style="font-size:${Math.round(fontPx * 0.8)}px;color:#666;margin-top:3px">We wish you good health.  &middot;  Computer-generated invoice — no signature required.</div>
+      <!-- FOOTER: note + signature line -->
+      <div style="margin-top:8px;border-top:1px solid #888;padding-top:5px;text-align:center;page-break-inside:avoid">
+        <div style="font-size:${footerPx}px;font-weight:700;color:#000;margin-bottom:2px">${escapeHtml(clinic?.footerNote || bill.reportCollectionNote || "Please collect your report within 7 days.")}</div>
+        <div style="font-size:${tinyPx + 1}px;color:#555;margin-bottom:6px">We wish you good health. · Computer-generated invoice — no signature required.</div>
+        <!-- Signature line area (blank space + line) -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:8px;gap:16px">
+          <div style="flex:1;text-align:left">
+            <div style="border-bottom:1px solid #000;width:120px;margin-bottom:2px"></div>
+            <div style="font-size:${tinyPx}px;color:#555">Authorised Signature</div>
+          </div>
+          <div style="flex:1;text-align:right;font-size:${tinyPx}px;color:#555">
+            ${(() => {
+              const n = (typeof window !== "undefined" && window.localStorage.getItem("erp_session")) ? JSON.parse(window.localStorage.getItem("erp_session") || "{}").user?.name : "";
+              return n ? `<div>Billed by: ${escapeHtml(n)}</div>` : "";
+            })()}
+          </div>
+        </div>
       </div>
     </section>`;
 
@@ -266,8 +301,8 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
   @page { size: ${paperSize} portrait; margin: ${pageMargin}; }
   *, *::before, *::after { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; width: 100%; }
-  body { background: #fff; color: #000; font-family: Arial, sans-serif; font-size: ${fontPx}px; text-transform: uppercase; ${isBW ? "filter: grayscale(1) contrast(1.35); -webkit-print-color-adjust: exact; print-color-adjust: exact;" : ""} }
-  .receipt { width: 100%; padding: ${paperSize === "A5" ? "5px 7px" : "4px 6px"}; }
+  body { background: #fff; color: #000; font-family: Arial, sans-serif; font-size: ${bodyPx}px; ${isBW ? "filter: grayscale(1) contrast(1.35); -webkit-print-color-adjust: exact; print-color-adjust: exact;" : ""} }
+  .receipt { width: 100%; padding: ${isA5 ? "4px 5px" : "4px 6px"}; }
   table { width: 100%; }
 </style></head><body>${pages}</body></html>`;
 }
