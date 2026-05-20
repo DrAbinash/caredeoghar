@@ -1,4 +1,4 @@
-# DiagnoCenter Desktop Module
+# Care Diagnostics Desktop Module
 
 Unified folder for all Windows/desktop utilities and the offline sync engine.
 
