@@ -16,7 +16,7 @@ import {
   Landmark, RefreshCw, Plus, Trash2, ArrowUpRight, ArrowDownLeft,
   CreditCard, Activity, CheckCircle, Unlink, Link2, Globe,
   Wallet, Send, Clock, AlertCircle, ShieldAlert, Ban, FileCheck,
-  XCircle, RotateCcw, ScrollText, Banknote, Eye, Fingerprint,
+  XCircle, RotateCcw, ScrollText, Banknote, Eye, Fingerprint, Calendar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -169,6 +169,59 @@ interface ShiftClosure {
   notes: string;
 }
 
+// Day Close integration types
+interface DcMethodTotals {
+  cash: number; upi: number; card: number; cheque: number; other: number;
+  total: number; count: number;
+}
+interface DcMyPreview {
+  userName: string;
+  coveredFromTs: string | null;
+  coveredToTs: string;
+  expected: DcMethodTotals;
+  billsCount: number;
+  paymentsCount: number;
+  totalBilled: number;
+  totalDue: number;
+}
+interface DcMyClose {
+  id: number;
+  closureDate: string;
+  closedAt: string;
+  coveredFromTs: string | null;
+  expectedCash: string; expectedUpi: string; expectedCard: string; expectedCheque: string; expectedOther: string;
+  totalExpected: string; totalActual: string; variance: string;
+  billsCount: number; paymentsCount: number;
+  drawerStatus: string;
+  notes: string;
+}
+interface DcOwnerPreview {
+  coveredFromTs: string | null;
+  coveredToTs: string;
+  expected: DcMethodTotals;
+  byStaff: (DcMethodTotals & { userId: number | null; userName: string })[];
+  billsCount: number; paymentsCount: number;
+}
+interface DcOwnerClosure {
+  id: number;
+  closureDate: string;
+  closedAt: string;
+  closedByName: string;
+  coveredFromTs: string | null;
+  coveredToTs: string;
+  expectedCash: string; expectedUpi: string; expectedCard: string; expectedCheque: string; expectedOther: string;
+  actualCash: string; actualUpi: string; actualCard: string; actualCheque: string; actualOther: string;
+  totalExpected: string; totalActual: string; variance: string;
+  billsCount: number; paymentsCount: number;
+  status: "closed" | "reopened";
+  reopenedAt: string | null; reopenedByName: string; reopenReason: string;
+}
+interface DcBankSummary {
+  accountId: number; provider: string; bankName: string; nickname: string | null;
+  balance: number | null; credits: number; debits: number; net: number;
+  transactionCount: number; error?: string;
+}
+
 // ── Severity / Status helpers ────────────────────────────────────────────────
 
 const severityColor = (s: string) => {
@@ -223,6 +276,10 @@ export default function Banking() {
   const [matchVoucherId, setMatchVoucherId] = useState("");
   const [matchPaymentId, setMatchPaymentId] = useState("");
   const [matchLoading, setMatchLoading] = useState(false);
+
+  // Day Close integration state
+  const [dcDate, setDcDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [dcView, setDcView] = useState<"my" | "owner">("my");
 
   // Enterprise state
   const [batchThreshold, setBatchThreshold] = useState(80);
@@ -321,6 +378,33 @@ export default function Banking() {
     queryKey: ["banking", "shifts"],
     queryFn: () => api.get("/api/banking/shift-closures?limit=100"),
     enabled: tab === "shifts",
+  });
+
+  // Day Close integration queries
+  const dcMyPreviewQ = useQuery<DcMyPreview>({
+    queryKey: ["banking", "day-close", "my-preview", dcDate],
+    queryFn: () => api.get("/api/day-close/my-preview"),
+    enabled: tab === "day-close" && dcView === "my",
+  });
+  const dcMyListQ = useQuery<DcMyClose[]>({
+    queryKey: ["banking", "day-close", "my-list"],
+    queryFn: () => api.get("/api/day-close/my-list"),
+    enabled: tab === "day-close" && dcView === "my",
+  });
+  const dcOwnerPreviewQ = useQuery<DcOwnerPreview>({
+    queryKey: ["banking", "day-close", "preview", dcDate],
+    queryFn: () => api.get("/api/day-close/preview"),
+    enabled: tab === "day-close" && dcView === "owner",
+  });
+  const dcOwnerListQ = useQuery<DcOwnerClosure[]>({
+    queryKey: ["banking", "day-close", "list", dcDate],
+    queryFn: () => api.get("/api/day-close"),
+    enabled: tab === "day-close" && dcView === "owner",
+  });
+  const dcBankQ = useQuery<{ date: string; summary: DcBankSummary[] }>({
+    queryKey: ["banking", "day-close-banking", dcDate],
+    queryFn: () => api.get(`/api/banking/day-close/${dcDate}`),
+    enabled: tab === "day-close",
   });
 
   // ── Mutations ────────────────────────────────────────────────────────────────
@@ -542,6 +626,7 @@ export default function Banking() {
           <TabsTrigger value="gateways">Gateways</TabsTrigger>
           <TabsTrigger value="shifts">Shifts</TabsTrigger>
           <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
+          <TabsTrigger value="day-close">Day Close</TabsTrigger>
         </TabsList>
 
         {/* ── Accounts ─────────────────────────────────────────────────────── */}
@@ -1141,6 +1226,164 @@ export default function Banking() {
               </Table>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Day Close */}
+        <TabsContent value="day-close">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-muted-foreground" />
+                <Input type="date" value={dcDate} onChange={(e) => setDcDate(e.target.value)} className="w-40" />
+              </div>
+              <div className="flex bg-muted rounded-lg p-1">
+                <Button size="sm" variant={dcView === "my" ? "default" : "ghost"} onClick={() => setDcView("my")}>My Close</Button>
+                <Button size="sm" variant={dcView === "owner" ? "default" : "ghost"} onClick={() => setDcView("owner")}>Owner View</Button>
+              </div>
+            </div>
+            {dcView === "my" && (
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2"><Clock className="w-4 h-4 text-primary" /> My Day -- Close Preview</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {dcMyPreviewQ.isLoading && <p className="text-sm text-muted-foreground">Loading preview...</p>}
+                    {dcMyPreviewQ.isError && <p className="text-sm text-red-600">Could not load preview.</p>}
+                    {dcMyPreviewQ.data && (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                          <div className="rounded-lg border p-3"><div className="text-muted-foreground text-xs">Cash</div><div className="font-semibold">₹{dcMyPreviewQ.data.expected.cash.toLocaleString("en-IN")}</div></div>
+                          <div className="rounded-lg border p-3"><div className="text-muted-foreground text-xs">UPI</div><div className="font-semibold">₹{dcMyPreviewQ.data.expected.upi.toLocaleString("en-IN")}</div></div>
+                          <div className="rounded-lg border p-3"><div className="text-muted-foreground text-xs">Card</div><div className="font-semibold">₹{dcMyPreviewQ.data.expected.card.toLocaleString("en-IN")}</div></div>
+                          <div className="rounded-lg border p-3"><div className="text-muted-foreground text-xs">Total</div><div className="font-bold text-lg">₹{dcMyPreviewQ.data.expected.total.toLocaleString("en-IN")}</div></div>
+                        </div>
+                        <div className="flex gap-4 text-xs text-muted-foreground">
+                          <span>Bills: {dcMyPreviewQ.data.billsCount}</span>
+                          <span>Payments: {dcMyPreviewQ.data.paymentsCount}</span>
+                          <span>Total Billed: ₹{dcMyPreviewQ.data.totalBilled.toLocaleString("en-IN")}</span>
+                          <span>Total Due: ₹{dcMyPreviewQ.data.totalDue.toLocaleString("en-IN")}</span>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2"><CardTitle className="text-base">My Closure History</CardTitle></CardHeader>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow><TableHead>Date</TableHead><TableHead>Expected</TableHead><TableHead>Actual</TableHead><TableHead>Variance</TableHead><TableHead>Drawer</TableHead><TableHead>Bills</TableHead></TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(dcMyListQ.data ?? []).map((c) => (
+                          <TableRow key={c.id}>
+                            <TableCell>{new Date(c.closureDate).toLocaleDateString("en-IN")}</TableCell>
+                            <TableCell>₹{parseFloat(c.totalExpected).toLocaleString("en-IN")}</TableCell>
+                            <TableCell>₹{parseFloat(c.totalActual).toLocaleString("en-IN")}</TableCell>
+                            <TableCell><Badge variant={parseFloat(c.variance) === 0 ? "default" : parseFloat(c.variance) < 0 ? "destructive" : "secondary"}>₹{parseFloat(c.variance).toLocaleString("en-IN")}</Badge></TableCell>
+                            <TableCell><Badge variant="outline">{c.drawerStatus}</Badge></TableCell>
+                            <TableCell>{c.billsCount}</TableCell>
+                          </TableRow>
+                        ))}
+                        {(dcMyListQ.data ?? []).length === 0 && (
+                          <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-6">No closures recorded yet.</TableCell></TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+            {dcView === "owner" && (
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2"><Landmark className="w-4 h-4 text-primary" /> Owner Day-Close Preview</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {dcOwnerPreviewQ.isLoading && <p className="text-sm text-muted-foreground">Loading...</p>}
+                    {dcOwnerPreviewQ.isError && <p className="text-sm text-red-600">Could not load preview.</p>}
+                    {dcOwnerPreviewQ.data && (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                          <div className="rounded-lg border p-3"><div className="text-muted-foreground text-xs">Cash</div><div className="font-semibold">₹{dcOwnerPreviewQ.data.expected.cash.toLocaleString("en-IN")}</div></div>
+                          <div className="rounded-lg border p-3"><div className="text-muted-foreground text-xs">UPI</div><div className="font-semibold">₹{dcOwnerPreviewQ.data.expected.upi.toLocaleString("en-IN")}</div></div>
+                          <div className="rounded-lg border p-3"><div className="text-muted-foreground text-xs">Card</div><div className="font-semibold">₹{dcOwnerPreviewQ.data.expected.card.toLocaleString("en-IN")}</div></div>
+                          <div className="rounded-lg border p-3"><div className="text-muted-foreground text-xs">Total</div><div className="font-bold text-lg">₹{dcOwnerPreviewQ.data.expected.total.toLocaleString("en-IN")}</div></div>
+                        </div>
+                        <div className="text-xs text-muted-foreground">Bills: {dcOwnerPreviewQ.data.billsCount} · Payments: {dcOwnerPreviewQ.data.paymentsCount}</div>
+                        {dcOwnerPreviewQ.data.byStaff.length > 0 && (
+                          <Table>
+                            <TableHeader><TableRow><TableHead>Staff</TableHead><TableHead>Count</TableHead><TableHead>Total</TableHead></TableRow></TableHeader>
+                            <TableBody>
+                              {dcOwnerPreviewQ.data.byStaff.map((s) => (
+                                <TableRow key={s.userId ?? s.userName}><TableCell>{s.userName}</TableCell><TableCell>{s.count}</TableCell><TableCell>₹{s.total.toLocaleString("en-IN")}</TableCell></TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2"><CardTitle className="text-base">Past Closures</CardTitle></CardHeader>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow><TableHead>Date</TableHead><TableHead>Closed By</TableHead><TableHead>Expected</TableHead><TableHead>Actual</TableHead><TableHead>Variance</TableHead><TableHead>Status</TableHead></TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(dcOwnerListQ.data ?? []).map((c) => (
+                          <TableRow key={c.id}>
+                            <TableCell>{new Date(c.closureDate).toLocaleDateString("en-IN")}</TableCell>
+                            <TableCell>{c.closedByName}</TableCell>
+                            <TableCell>₹{parseFloat(c.totalExpected).toLocaleString("en-IN")}</TableCell>
+                            <TableCell>₹{parseFloat(c.totalActual).toLocaleString("en-IN")}</TableCell>
+                            <TableCell><Badge variant={parseFloat(c.variance) === 0 ? "default" : parseFloat(c.variance) < 0 ? "destructive" : "secondary"}>₹{parseFloat(c.variance).toLocaleString("en-IN")}</Badge></TableCell>
+                            <TableCell><Badge variant={c.status === "closed" ? "default" : "secondary"}>{c.status}</Badge></TableCell>
+                          </TableRow>
+                        ))}
+                        {(dcOwnerListQ.data ?? []).length === 0 && (
+                          <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-6">No closures recorded yet.</TableCell></TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2"><Landmark className="w-4 h-4 text-primary" /> Bank Summary for {dcDate}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {dcBankQ.isLoading && <p className="text-sm text-muted-foreground">Loading bank data...</p>}
+                {dcBankQ.isError && <p className="text-sm text-red-600">Could not load bank summary.</p>}
+                {dcBankQ.data && (
+                  <div className="space-y-3">
+                    {dcBankQ.data.summary.length === 0 && <p className="text-sm text-muted-foreground">No active bank accounts configured.</p>}
+                    {dcBankQ.data.summary.map((s) => (
+                      <div key={s.accountId} className="flex items-center justify-between text-sm border-b last:border-b-0 py-2">
+                        <div>
+                          <div className="font-medium">{s.bankName} {s.nickname ? `(${s.nickname})` : ""}</div>
+                          <div className="text-xs text-muted-foreground">{s.provider.toUpperCase()} · {s.transactionCount} txns</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-mono">Bal: {s.balance != null ? `₹${s.balance.toLocaleString("en-IN")}` : "N/A"}</div>
+                          <div className="text-xs text-green-600">Cr: ₹{s.credits.toLocaleString("en-IN")}</div>
+                          <div className="text-xs text-red-600">Dr: ₹{s.debits.toLocaleString("en-IN")}</div>
+                          <div className="text-xs font-medium">Net: ₹{s.net.toLocaleString("en-IN")}</div>
+                          {s.error && <div className="text-xs text-red-500">{s.error}</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
 
