@@ -4,7 +4,7 @@ import {
   bankAccountsTable, bankTransactionsTable, paymentRequestsTable,
   webhookLogsTable, bankAuditLogsTable,
   reconciliationLogsTable, fraudAlertsTable, gatewayTransactionsTable,
-  refundRequestsTable,
+  refundRequestsTable, shiftClosuresTable,
   BANK_PROVIDERS, BANK_ENVIRONMENTS, BANK_ACCOUNT_STATUS,
 } from "@workspace/db/schema";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
@@ -543,6 +543,87 @@ router.patch("/refunds/:id/reject", requireStaffAuth, async (req: StaffAuthReque
     updatedAt: new Date(),
   }).where(and(eq(refundRequestsTable.id, id), eq(refundRequestsTable.status, "requested"))).returning();
   if (!updated) { apiError(res, 404, "Refund request not found or already processed"); return; }
+  res.json(updated);
+});
+
+// ---- Shift Closures (May 2026) ----------------------------------------------
+
+router.get("/shift-closures", requireStaffAuth, async (req, res) => {
+  const limit = req.query.limit ? Number(req.query.limit) : 100;
+  const rows = await db.select().from(shiftClosuresTable).orderBy(desc(shiftClosuresTable.endedAt)).limit(limit);
+  res.json(rows);
+});
+
+router.post("/shift-closures", requireStaffAuth, async (req: StaffAuthRequest, res) => {
+  const body = z.object({
+    shiftLabel: z.string().optional().default("Morning"),
+    denominations: z.object({
+      d500: z.number().int().min(0).optional().default(0),
+      d200: z.number().int().min(0).optional().default(0),
+      d100: z.number().int().min(0).optional().default(0),
+      d50: z.number().int().min(0).optional().default(0),
+      d20: z.number().int().min(0).optional().default(0),
+      d10: z.number().int().min(0).optional().default(0),
+      coins: z.number().int().min(0).optional().default(0),
+    }),
+    supervisorName: z.string().optional().nullable(),
+    notes: z.string().max(2000).optional().nullable(),
+  }).safeParse(req.body);
+  if (!body.success) { apiErrorFromZod(res, 400, "Validation failed", body.error); return; }
+
+  const d = body.data.denominations;
+  const denomTotal =
+    d.d500 * 500 + d.d200 * 200 + d.d100 * 100 +
+    d.d50 * 50 + d.d20 * 20 + d.d10 * 10 + d.coins;
+
+  const now = new Date();
+  const [inserted] = await db.insert(shiftClosuresTable).values({
+    userId: req.staffSession?.subjectId ?? 0,
+    userName: req.staffSession?.subjectName || "staff",
+    shiftLabel: body.data.shiftLabel,
+    startedAt: now,
+    endedAt: now,
+    expectedCash: "0",
+    expectedUpi: "0",
+    expectedCard: "0",
+    expectedCheque: "0",
+    expectedOther: "0",
+    expectedTotal: "0",
+    actualCash: String(denomTotal),
+    actualUpi: "0",
+    actualCard: "0",
+    actualCheque: "0",
+    actualOther: "0",
+    actualTotal: String(denomTotal),
+    variance: String(denomTotal),
+    varianceNote: "",
+    denominations: d,
+    denominationTotal: String(denomTotal),
+    supervisorName: body.data.supervisorName ?? null,
+    status: "closed",
+    notes: body.data.notes ?? "",
+    createdAt: now,
+    updatedAt: now,
+  }).returning();
+  res.status(201).json(inserted);
+});
+
+router.patch("/shift-closures/:id", requireStaffAuth, async (req: StaffAuthRequest, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) { apiError(res, 400, "Invalid id"); return; }
+  const body = z.object({
+    status: z.enum(["open", "closing", "closed", "approved", "reopened"]).optional(),
+    supervisorName: z.string().optional().nullable(),
+    notes: z.string().max(2000).optional().nullable(),
+  }).safeParse(req.body);
+  if (!body.success) { apiErrorFromZod(res, 400, "Validation failed", body.error); return; }
+  const [updated] = await db.update(shiftClosuresTable).set({
+    status: body.data.status ?? undefined,
+    supervisorName: body.data.supervisorName ?? undefined,
+    notes: body.data.notes ?? undefined,
+    updatedAt: new Date(),
+  }).where(eq(shiftClosuresTable.id, id)).returning();
+  if (!updated) { apiError(res, 404, "Shift closure not found"); return; }
   res.json(updated);
 });
 

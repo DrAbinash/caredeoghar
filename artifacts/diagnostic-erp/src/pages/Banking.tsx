@@ -11,10 +11,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import {
   Landmark, RefreshCw, Plus, Trash2, ArrowUpRight, ArrowDownLeft,
   CreditCard, Activity, CheckCircle, Unlink, Link2, Globe,
-  Wallet, Send, Clock, AlertCircle,
+  Wallet, Send, Clock, AlertCircle, ShieldAlert, Ban, FileCheck,
+  XCircle, RotateCcw, ScrollText, Banknote, Eye, Fingerprint,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +29,7 @@ const PROVIDERS = [
   { value: "kotak", label: "Kotak Mahindra" },
   { value: "bharatpe", label: "BharatPe" },
   { value: "phonepe", label: "PhonePe" },
+  { value: "cashfree", label: "Cashfree" },
   { value: "generic", label: "Generic / Other" },
 ];
 
@@ -40,6 +43,8 @@ const STATUS_OPTIONS = [
   { value: "inactive", label: "Inactive" },
   { value: "suspended", label: "Suspended" },
 ];
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 interface BankAccount {
   id: number;
@@ -92,6 +97,120 @@ interface BankingSummary {
   webhooks24h: number;
 }
 
+// Enterprise types
+interface ReconciliationLog {
+  id: number;
+  bankTransactionId: number | null;
+  billId: number | null;
+  paymentId: number | null;
+  voucherId: number | null;
+  matchStrategy: string;
+  confidenceScore: number;
+  autoClosed: boolean;
+  performedBy: string;
+  createdAt: string;
+}
+
+interface FraudAlert {
+  id: number;
+  alertType: string;
+  severity: string;
+  status: string;
+  billId: number | null;
+  paymentId: number | null;
+  description: string;
+  resolutionNote: string | null;
+  resolutionAction: string | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+}
+
+interface GatewayTransaction {
+  id: number;
+  provider: string;
+  gatewayOrderId: string;
+  amount: string;
+  currency: string;
+  status: string;
+  settlementStatus: string;
+  utr: string | null;
+  bankTransactionId: number | null;
+  createdAt: string;
+}
+
+interface RefundRequest {
+  id: number;
+  billId: number;
+  paymentId: number;
+  amount: string;
+  reason: string;
+  status: string;
+  requestedBy: string;
+  requestedAt: string;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  rejectedBy: string | null;
+  rejectedAt: string | null;
+  rejectionReason: string | null;
+}
+
+interface ShiftClosure {
+  id: number;
+  userName: string;
+  startedAt: string;
+  endedAt: string | null;
+  supervisorName: string | null;
+  denominations: Record<string, number> | null;
+  actualTotal: string;
+  expectedTotal: string;
+  variance: string;
+  status: string;
+  notes: string;
+}
+
+// ── Severity / Status helpers ────────────────────────────────────────────────
+
+const severityColor = (s: string) => {
+  switch (s) {
+    case "critical": return "bg-red-100 text-red-800";
+    case "high": return "bg-orange-100 text-orange-800";
+    case "medium": return "bg-yellow-100 text-yellow-800";
+    case "low": return "bg-blue-100 text-blue-800";
+    default: return "bg-gray-100 text-gray-800";
+  }
+};
+
+const fraudStatusColor = (s: string) => {
+  switch (s) {
+    case "resolved": return "bg-green-100 text-green-800";
+    case "investigating": return "bg-yellow-100 text-yellow-800";
+    case "false_positive": return "bg-blue-100 text-blue-800";
+    case "escalated": return "bg-purple-100 text-purple-800";
+    default: return "bg-red-100 text-red-800";
+  }
+};
+
+const refundStatusColor = (s: string) => {
+  switch (s) {
+    case "approved": return "bg-green-100 text-green-800";
+    case "processed": return "bg-blue-100 text-blue-800";
+    case "rejected": return "bg-red-100 text-red-800";
+    default: return "bg-yellow-100 text-yellow-800";
+  }
+};
+
+const gatewayStatusColor = (s: string) => {
+  switch (s) {
+    case "captured": return "bg-green-100 text-green-800";
+    case "settled": return "bg-blue-100 text-blue-800";
+    case "failed": return "bg-red-100 text-red-800";
+    default: return "bg-yellow-100 text-yellow-800";
+  }
+};
+
+// ── Component ────────────────────────────────────────────────────────────────
+
 export default function Banking() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -105,6 +224,25 @@ export default function Banking() {
   const [matchPaymentId, setMatchPaymentId] = useState("");
   const [matchLoading, setMatchLoading] = useState(false);
 
+  // Enterprise state
+  const [batchThreshold, setBatchThreshold] = useState(80);
+  const [batchLoading, setBatchLoading] = useState(false);
+  const [batchResult, setBatchResult] = useState<{
+    processed: number; matched: number; autoClosed: number; failed: number;
+  } | null>(null);
+  const [fraudFilter, setFraudFilter] = useState<{ status?: string; severity?: string }>({});
+  const [resolveAlertId, setResolveAlertId] = useState<number | null>(null);
+  const [resolveNote, setResolveNote] = useState("");
+  const [resolveAction, setResolveAction] = useState<string>("approved");
+  const [refundForm, setRefundForm] = useState({ billId: "", paymentId: "", amount: "", reason: "" });
+  const [refundDialogOpen, setRefundDialogOpen] = useState(false);
+  const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
+  const [shiftForm, setShiftForm] = useState({
+    shiftLabel: "Morning",
+    d500: 0, d200: 0, d100: 0, d50: 0, d20: 0, d10: 0, coins: 0,
+    supervisorName: "", notes: "",
+  });
+
   const [form, setForm] = useState({
     provider: "mock",
     bankName: "",
@@ -116,6 +254,8 @@ export default function Banking() {
     status: "active" as const,
     credentialKey: "",
   });
+
+  // ── Queries ────────────────────────────────────────────────────────────────
 
   const accountsQuery = useQuery<BankAccount[]>({
     queryKey: ["banking", "accounts"],
@@ -148,6 +288,43 @@ export default function Banking() {
     queryFn: () => api.get("/api/banking/webhook-logs?limit=50"),
   });
 
+  const reconciliationLogsQuery = useQuery<ReconciliationLog[]>({
+    queryKey: ["banking", "reconciliation-logs"],
+    queryFn: () => api.get("/api/banking/reconciliation/logs?limit=100"),
+    enabled: tab === "reconciliation",
+  });
+
+  const fraudAlertsQuery = useQuery<FraudAlert[]>({
+    queryKey: ["banking", "fraud-alerts", fraudFilter],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (fraudFilter.status) params.set("status", fraudFilter.status);
+      if (fraudFilter.severity) params.set("severity", fraudFilter.severity);
+      return api.get(`/api/banking/fraud/alerts?limit=100&${params.toString()}`);
+    },
+    enabled: tab === "fraud",
+  });
+
+  const gatewayQuery = useQuery<GatewayTransaction[]>({
+    queryKey: ["banking", "gateways"],
+    queryFn: () => api.get("/api/banking/gateway-transactions?limit=100"),
+    enabled: tab === "gateways",
+  });
+
+  const refundsQuery = useQuery<RefundRequest[]>({
+    queryKey: ["banking", "refunds"],
+    queryFn: () => api.get("/api/banking/refunds?limit=100"),
+    enabled: tab === "refunds",
+  });
+
+  const shiftsQuery = useQuery<ShiftClosure[]>({
+    queryKey: ["banking", "shifts"],
+    queryFn: () => api.get("/api/banking/shift-closures?limit=100"),
+    enabled: tab === "shifts",
+  });
+
+  // ── Mutations ────────────────────────────────────────────────────────────────
+
   const createAccount = useMutation({
     mutationFn: (body: unknown) => api.post("/api/banking/accounts", body),
     onSuccess: () => {
@@ -170,6 +347,66 @@ export default function Banking() {
     },
     onError: (e: Error) => toast({ title: "Remove failed", description: e.message, variant: "destructive" }),
   });
+
+  const resolveAlert = useMutation({
+    mutationFn: (body: { id: number; status: string; resolutionNote: string; resolutionAction: string }) =>
+      api.patch(`/api/banking/fraud/alerts/${body.id}`, {
+        status: body.status,
+        resolutionNote: body.resolutionNote || undefined,
+        resolutionAction: body.resolutionAction,
+      }),
+    onSuccess: () => {
+      toast({ title: "Alert resolved" });
+      setResolveAlertId(null);
+      setResolveNote("");
+      setResolveAction("approved");
+      qc.invalidateQueries({ queryKey: ["banking", "fraud-alerts"] });
+    },
+    onError: (e: Error) => toast({ title: "Failed to resolve", description: e.message, variant: "destructive" }),
+  });
+
+  const createRefund = useMutation({
+    mutationFn: (body: { billId: number; paymentId: number; amount: number; reason: string }) =>
+      api.post("/api/banking/refunds", body),
+    onSuccess: () => {
+      toast({ title: "Refund requested" });
+      setRefundDialogOpen(false);
+      setRefundForm({ billId: "", paymentId: "", amount: "", reason: "" });
+      qc.invalidateQueries({ queryKey: ["banking", "refunds"] });
+    },
+    onError: (e: Error) => toast({ title: "Request failed", description: e.message, variant: "destructive" }),
+  });
+
+  const approveRefund = useMutation({
+    mutationFn: (id: number) => api.patch(`/api/banking/refunds/${id}/approve`, {}),
+    onSuccess: () => {
+      toast({ title: "Refund approved" });
+      qc.invalidateQueries({ queryKey: ["banking", "refunds"] });
+    },
+    onError: (e: Error) => toast({ title: "Approval failed", description: e.message, variant: "destructive" }),
+  });
+
+  const rejectRefund = useMutation({
+    mutationFn: (vars: { id: number; reason: string }) => api.patch(`/api/banking/refunds/${vars.id}/reject`, { reason: vars.reason }),
+    onSuccess: () => {
+      toast({ title: "Refund rejected" });
+      qc.invalidateQueries({ queryKey: ["banking", "refunds"] });
+    },
+    onError: (e: Error) => toast({ title: "Rejection failed", description: e.message, variant: "destructive" }),
+  });
+
+  const createShift = useMutation({
+    mutationFn: (body: unknown) => api.post("/api/banking/shift-closures", body),
+    onSuccess: () => {
+      toast({ title: "Shift closure recorded" });
+      setShiftDialogOpen(false);
+      setShiftForm({ shiftLabel: "Morning", d500: 0, d200: 0, d100: 0, d50: 0, d20: 0, d10: 0, coins: 0, supervisorName: "", notes: "" });
+      qc.invalidateQueries({ queryKey: ["banking", "shifts"] });
+    },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+
+  // ── Actions ──────────────────────────────────────────────────────────────────
 
   async function fetchBalance(accountId: number) {
     setBalanceLoading(accountId);
@@ -211,9 +448,41 @@ export default function Banking() {
     }
   }
 
+  async function runBatchReconcile() {
+    setBatchLoading(true);
+    try {
+      const result = await api.post<{
+        processed: number; matched: number; autoClosed: number; failed: number;
+      }>("/api/banking/reconciliation/batch", { autoCloseThreshold: batchThreshold });
+      setBatchResult(result);
+      toast({ title: "Batch reconcile complete", description: `${result.matched} matched, ${result.autoClosed} auto-closed` });
+      qc.invalidateQueries({ queryKey: ["banking"] });
+    } catch (e: any) {
+      toast({ title: "Batch reconcile failed", description: e?.message || "Error", variant: "destructive" });
+    } finally {
+      setBatchLoading(false);
+    }
+  }
+
+  async function runFraudCheck() {
+    try {
+      const result = await api.post<{ totalAlerts: number; byRule: Record<string, number> }>("/api/banking/fraud/run-check", {});
+      toast({ title: `Fraud check complete`, description: `${result.totalAlerts} alerts raised` });
+      qc.invalidateQueries({ queryKey: ["banking", "fraud-alerts"] });
+    } catch (e: any) {
+      toast({ title: "Fraud check failed", description: e?.message || "Error", variant: "destructive" });
+    }
+  }
+
   const accounts = accountsQuery.data ?? [];
   const summary = summaryQuery.data ?? { totalAccounts: 0, unreconciledTransactions: 0, pendingPayments: 0, webhooks24h: 0 };
   const transactions = transactionsQuery.data ?? [];
+
+  // ── Denomination helpers ───────────────────────────────────────────────────
+  const shiftTotal =
+    shiftForm.d500 * 500 + shiftForm.d200 * 200 + shiftForm.d100 * 100 +
+    shiftForm.d50 * 50 + shiftForm.d20 * 20 + shiftForm.d10 * 10 +
+    shiftForm.coins;
 
   return (
     <div className="space-y-6 p-4">
@@ -263,14 +532,19 @@ export default function Banking() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="mb-4">
+        <TabsList className="mb-4 flex-wrap">
           <TabsTrigger value="accounts">Accounts</TabsTrigger>
           <TabsTrigger value="transactions">Transactions</TabsTrigger>
           <TabsTrigger value="payments">Payments</TabsTrigger>
           <TabsTrigger value="reconciliation">Reconciliation</TabsTrigger>
+          <TabsTrigger value="fraud">Fraud</TabsTrigger>
+          <TabsTrigger value="refunds">Refunds</TabsTrigger>
+          <TabsTrigger value="gateways">Gateways</TabsTrigger>
+          <TabsTrigger value="shifts">Shifts</TabsTrigger>
           <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
         </TabsList>
 
+        {/* ── Accounts ─────────────────────────────────────────────────────── */}
         <TabsContent value="accounts">
           <Card>
             <CardContent className="p-0">
@@ -336,6 +610,7 @@ export default function Banking() {
           </Card>
         </TabsContent>
 
+        {/* ── Transactions ───────────────────────────────────────────────────── */}
         <TabsContent value="transactions">
           <Card>
             <CardContent className="p-0">
@@ -387,6 +662,7 @@ export default function Banking() {
           </Card>
         </TabsContent>
 
+        {/* ── Payments ───────────────────────────────────────────────────────── */}
         <TabsContent value="payments">
           <Card>
             <CardContent className="p-0">
@@ -434,8 +710,48 @@ export default function Banking() {
           </Card>
         </TabsContent>
 
+        {/* ── Reconciliation (Enterprise) ──────────────────────────────────── */}
         <TabsContent value="reconciliation">
           <div className="space-y-4">
+            {/* Batch Reconcile */}
+            <Card>
+              <CardHeader><CardTitle className="flex items-center gap-2"><RefreshCw className="w-5 h-5" /> Batch Reconcile</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <div className="flex-1">
+                    <Label>Auto-Close Confidence Threshold: {batchThreshold}%</Label>
+                    <Slider value={[batchThreshold]} onValueChange={(v) => setBatchThreshold(v[0])} min={0} max={100} step={5} className="mt-2" />
+                    <p className="text-xs text-muted-foreground mt-1">Dues with confidence above this will be auto-closed.</p>
+                  </div>
+                  <Button onClick={runBatchReconcile} disabled={batchLoading} className="shrink-0">
+                    {batchLoading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Link2 className="w-4 h-4 mr-2" />}
+                    {batchLoading ? "Running..." : "Run Batch Reconcile"}
+                  </Button>
+                </div>
+                {batchResult && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-muted rounded-lg p-3 text-center">
+                      <div className="text-2xl font-bold">{batchResult.processed}</div>
+                      <div className="text-xs text-muted-foreground">Processed</div>
+                    </div>
+                    <div className="bg-green-50 rounded-lg p-3 text-center">
+                      <div className="text-2xl font-bold text-green-700">{batchResult.matched}</div>
+                      <div className="text-xs text-green-700">Matched</div>
+                    </div>
+                    <div className="bg-blue-50 rounded-lg p-3 text-center">
+                      <div className="text-2xl font-bold text-blue-700">{batchResult.autoClosed}</div>
+                      <div className="text-xs text-blue-700">Auto-Closed</div>
+                    </div>
+                    <div className="bg-red-50 rounded-lg p-3 text-center">
+                      <div className="text-2xl font-bold text-red-700">{batchResult.failed}</div>
+                      <div className="text-xs text-red-700">Failed</div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Manual UTR match */}
             <Card>
               <CardHeader><CardTitle>Match by UTR</CardTitle></CardHeader>
               <CardContent className="space-y-3">
@@ -459,6 +775,8 @@ export default function Banking() {
                 </Button>
               </CardContent>
             </Card>
+
+            {/* Unreconciled list */}
             <Card>
               <CardHeader><CardTitle>Unreconciled Transactions</CardTitle></CardHeader>
               <CardContent className="p-0">
@@ -498,9 +816,290 @@ export default function Banking() {
                 </Table>
               </CardContent>
             </Card>
+
+            {/* Reconciliation Logs */}
+            <Card>
+              <CardHeader><CardTitle>Reconciliation Logs</CardTitle></CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Time</TableHead>
+                      <TableHead>Strategy</TableHead>
+                      <TableHead>Confidence</TableHead>
+                      <TableHead>Auto-Closed</TableHead>
+                      <TableHead>By</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(reconciliationLogsQuery.data ?? []).map((l) => (
+                      <TableRow key={l.id}>
+                        <TableCell className="text-xs whitespace-nowrap">{new Date(l.createdAt).toLocaleString("en-IN")}</TableCell>
+                        <TableCell><Badge variant="outline">{l.matchStrategy}</Badge></TableCell>
+                        <TableCell>
+                          <span className={cn(
+                            "font-mono text-sm font-bold",
+                            l.confidenceScore >= 80 ? "text-green-700" : l.confidenceScore >= 50 ? "text-yellow-700" : "text-red-700",
+                          )}>
+                            {l.confidenceScore}%
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          {l.autoClosed ? <Badge className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" /> Yes</Badge>
+                            : <Badge variant="secondary">No</Badge>}
+                        </TableCell>
+                        <TableCell className="text-xs">{l.performedBy}</TableCell>
+                      </TableRow>
+                    ))}
+                    {(reconciliationLogsQuery.data ?? []).length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                          No reconciliation logs yet. Run batch reconcile to generate entries.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 
+        {/* ── Fraud Detection ────────────────────────────────────────────────── */}
+        <TabsContent value="fraud">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Button onClick={runFraudCheck}><ShieldAlert className="w-4 h-4 mr-2" /> Run Fraud Check</Button>
+              <div className="flex gap-2">
+                <Select value={fraudFilter.status || "all"} onValueChange={(v) => setFraudFilter(f => ({ ...f, status: v === "all" ? undefined : v }))}>
+                  <SelectTrigger className="w-32"><SelectValue placeholder="Status" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="open">Open</SelectItem>
+                    <SelectItem value="investigating">Investigating</SelectItem>
+                    <SelectItem value="resolved">Resolved</SelectItem>
+                    <SelectItem value="false_positive">False Positive</SelectItem>
+                    <SelectItem value="escalated">Escalated</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={fraudFilter.severity || "all"} onValueChange={(v) => setFraudFilter(f => ({ ...f, severity: v === "all" ? undefined : v }))}>
+                  <SelectTrigger className="w-32"><SelectValue placeholder="Severity" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Severities</SelectItem>
+                    <SelectItem value="critical">Critical</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="low">Low</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <Card>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Time</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Severity</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Bill/Payment</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(fraudAlertsQuery.data ?? []).map((a) => (
+                      <TableRow key={a.id}>
+                        <TableCell className="text-xs whitespace-nowrap">{new Date(a.createdAt).toLocaleString("en-IN")}</TableCell>
+                        <TableCell><Badge variant="outline" className="uppercase">{a.alertType.replace(/_/g, " ")}</Badge></TableCell>
+                        <TableCell><Badge className={severityColor(a.severity)}>{a.severity}</Badge></TableCell>
+                        <TableCell><Badge className={fraudStatusColor(a.status)}>{a.status}</Badge></TableCell>
+                        <TableCell className="max-w-xs truncate">{a.description}</TableCell>
+                        <TableCell className="text-xs">
+                          {a.billId && <span className="block">Bill #{a.billId}</span>}
+                          {a.paymentId && <span className="block">Pay #{a.paymentId}</span>}
+                          {!a.billId && !a.paymentId && "—"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {a.status === "open" && (
+                            <Button size="sm" variant="outline" onClick={() => setResolveAlertId(a.id)}>
+                              <FileCheck className="w-3 h-3 mr-1" /> Resolve
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {(fraudAlertsQuery.data ?? []).length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                          No fraud alerts. Run a fraud check to scan for anomalies.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* ── Refunds ────────────────────────────────────────────────────────── */}
+        <TabsContent value="refunds">
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button onClick={() => setRefundDialogOpen(true)}><Plus className="w-4 h-4 mr-2" /> Request Refund</Button>
+            </div>
+            <Card>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Time</TableHead>
+                      <TableHead>Bill</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Reason</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Requested By</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(refundsQuery.data ?? []).map((r) => (
+                      <TableRow key={r.id}>
+                        <TableCell className="text-xs whitespace-nowrap">{new Date(r.requestedAt).toLocaleString("en-IN")}</TableCell>
+                        <TableCell className="font-mono">#{r.billId}</TableCell>
+                        <TableCell className="font-mono">₹{parseFloat(r.amount).toLocaleString("en-IN")}</TableCell>
+                        <TableCell className="max-w-xs truncate">{r.reason}</TableCell>
+                        <TableCell><Badge className={refundStatusColor(r.status)}>{r.status}</Badge></TableCell>
+                        <TableCell className="text-xs">{r.requestedBy}</TableCell>
+                        <TableCell className="text-right space-x-1">
+                          {r.status === "requested" && (
+                            <>
+                              <Button size="sm" variant="outline" className="text-green-700" onClick={() => approveRefund.mutate(r.id)}>
+                                <CheckCircle className="w-3 h-3 mr-1" /> Approve
+                              </Button>
+                              <Button size="sm" variant="outline" className="text-red-700" onClick={() => {
+                                const reason = window.prompt("Rejection reason:");
+                                if (reason) rejectRefund.mutate({ id: r.id, reason });
+                              }}>
+                                <Ban className="w-3 h-3 mr-1" /> Reject
+                              </Button>
+                            </>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {(refundsQuery.data ?? []).length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                          No refund requests. Create one to get started.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* ── Gateways ───────────────────────────────────────────────────────── */}
+        <TabsContent value="gateways">
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Time</TableHead>
+                    <TableHead>Provider</TableHead>
+                    <TableHead>Order ID</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Settlement</TableHead>
+                    <TableHead>UTR</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(gatewayQuery.data ?? []).map((g) => (
+                    <TableRow key={g.id}>
+                      <TableCell className="text-xs whitespace-nowrap">{new Date(g.createdAt).toLocaleString("en-IN")}</TableCell>
+                      <TableCell><Badge variant="outline" className="uppercase">{g.provider}</Badge></TableCell>
+                      <TableCell className="font-mono text-xs">{g.gatewayOrderId}</TableCell>
+                      <TableCell className="font-mono">{parseFloat(g.amount).toLocaleString("en-IN")} {g.currency}</TableCell>
+                      <TableCell><Badge className={gatewayStatusColor(g.status)}>{g.status}</Badge></TableCell>
+                      <TableCell>
+                        <Badge variant={g.settlementStatus === "settled" ? "default" : g.settlementStatus === "pending" ? "secondary" : "outline"}>
+                          {g.settlementStatus}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{g.utr || "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                  {(gatewayQuery.data ?? []).length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                        No gateway transactions. Gateway entries appear when payment providers settle funds.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Shifts ─────────────────────────────────────────────────────────── */}
+        <TabsContent value="shifts">
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button onClick={() => setShiftDialogOpen(true)}><Banknote className="w-4 h-4 mr-2" /> Close Shift</Button>
+            </div>
+            <Card>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Staff</TableHead>
+                      <TableHead>Opened</TableHead>
+                      <TableHead>Closed</TableHead>
+                      <TableHead>Physical Total</TableHead>
+                      <TableHead>Expected</TableHead>
+                      <TableHead>Difference</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Supervisor</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(shiftsQuery.data ?? []).map((s) => (
+                      <TableRow key={s.id}>
+                        <TableCell className="font-medium">{s.userName}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">{new Date(s.startedAt).toLocaleString("en-IN")}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">{s.endedAt ? new Date(s.endedAt).toLocaleString("en-IN") : "—"}</TableCell>
+                        <TableCell className="font-mono">₹{parseFloat(s.actualTotal).toLocaleString("en-IN")}</TableCell>
+                        <TableCell className="font-mono">₹{parseFloat(s.expectedTotal).toLocaleString("en-IN")}</TableCell>
+                        <TableCell className={cn("font-mono", parseFloat(s.variance) !== 0 ? "text-red-700 font-bold" : "text-green-700")}>
+                          ₹{parseFloat(s.variance).toLocaleString("en-IN")}
+                        </TableCell>
+                        <TableCell><Badge variant={s.status === "closed" ? "default" : s.status === "adjusted" ? "secondary" : "outline"}>{s.status}</Badge></TableCell>
+                        <TableCell className="text-xs">{s.supervisorName || "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                    {(shiftsQuery.data ?? []).length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                          No shift closures recorded. Record one to track cash handovers.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* ── Webhooks ───────────────────────────────────────────────────────── */}
         <TabsContent value="webhooks">
           <Card>
             <CardContent className="p-0">
@@ -544,6 +1143,10 @@ export default function Banking() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* ════════════════════════════════════════════════════════════════════════
+          DIALOGS
+         ════════════════════════════════════════════════════════════════════════ */}
 
       {/* Add Account Dialog */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
@@ -661,6 +1264,143 @@ export default function Banking() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Resolve Fraud Alert Dialog */}
+      <Dialog open={resolveAlertId !== null} onOpenChange={(open) => !open && setResolveAlertId(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Resolve Fraud Alert #{resolveAlertId}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Resolution Action</Label>
+              <Select value={resolveAction} onValueChange={setResolveAction}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                  <SelectItem value="adjusted">Adjusted</SelectItem>
+                  <SelectItem value="escalated">Escalated</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Resolution Note</Label>
+              <Input value={resolveNote} onChange={(e) => setResolveNote(e.target.value)} placeholder="Explain the resolution..." />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResolveAlertId(null)}>Cancel</Button>
+            <Button onClick={() => {
+              if (resolveAlertId) resolveAlert.mutate({ id: resolveAlertId, status: "resolved", resolutionNote: resolveNote, resolutionAction: resolveAction });
+            }}>
+              <FileCheck className="w-4 h-4 mr-2" /> Resolve
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Request Refund Dialog */}
+      <Dialog open={refundDialogOpen} onOpenChange={setRefundDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Request Refund</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Bill ID</Label>
+                <Input type="number" value={refundForm.billId} onChange={(e) => setRefundForm(f => ({ ...f, billId: e.target.value }))} placeholder="123" />
+              </div>
+              <div>
+                <Label>Payment ID</Label>
+                <Input type="number" value={refundForm.paymentId} onChange={(e) => setRefundForm(f => ({ ...f, paymentId: e.target.value }))} placeholder="456" />
+              </div>
+            </div>
+            <div>
+              <Label>Amount (₹)</Label>
+              <Input type="number" value={refundForm.amount} onChange={(e) => setRefundForm(f => ({ ...f, amount: e.target.value }))} placeholder="500.00" />
+            </div>
+            <div>
+              <Label>Reason</Label>
+              <Input value={refundForm.reason} onChange={(e) => setRefundForm(f => ({ ...f, reason: e.target.value }))} placeholder="e.g. Duplicate payment" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRefundDialogOpen(false)}>Cancel</Button>
+            <Button onClick={() => {
+              createRefund.mutate({
+                billId: Number(refundForm.billId),
+                paymentId: Number(refundForm.paymentId),
+                amount: parseFloat(refundForm.amount),
+                reason: refundForm.reason,
+              });
+            }} disabled={!refundForm.billId || !refundForm.paymentId || !refundForm.amount || !refundForm.reason}>
+              <Send className="w-4 h-4 mr-2" /> Submit Request
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Close Shift Dialog */}
+      <Dialog open={shiftDialogOpen} onOpenChange={setShiftDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Close Shift — Cash Denomination</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <DenominationInput label="₹500" value={shiftForm.d500} onChange={(v) => setShiftForm(f => ({ ...f, d500: v }))} />
+              <DenominationInput label="₹200" value={shiftForm.d200} onChange={(v) => setShiftForm(f => ({ ...f, d200: v }))} />
+              <DenominationInput label="₹100" value={shiftForm.d100} onChange={(v) => setShiftForm(f => ({ ...f, d100: v }))} />
+              <DenominationInput label="₹50" value={shiftForm.d50} onChange={(v) => setShiftForm(f => ({ ...f, d50: v }))} />
+              <DenominationInput label="₹20" value={shiftForm.d20} onChange={(v) => setShiftForm(f => ({ ...f, d20: v }))} />
+              <DenominationInput label="₹10" value={shiftForm.d10} onChange={(v) => setShiftForm(f => ({ ...f, d10: v }))} />
+              <DenominationInput label="Coins" value={shiftForm.coins} onChange={(v) => setShiftForm(f => ({ ...f, coins: v }))} />
+            </div>
+            <div className="bg-muted rounded-lg p-4 flex items-center justify-between">
+              <span className="font-medium">Total Physical Cash</span>
+              <span className="text-xl font-bold font-mono">₹{shiftTotal.toLocaleString("en-IN")}</span>
+            </div>
+            <div>
+              <Label>Supervisor Name (optional)</Label>
+              <Input value={shiftForm.supervisorName} onChange={(e) => setShiftForm(f => ({ ...f, supervisorName: e.target.value }))} placeholder="Verifier name" />
+            </div>
+            <div>
+              <Label>Notes (optional)</Label>
+              <Input value={shiftForm.notes} onChange={(e) => setShiftForm(f => ({ ...f, notes: e.target.value }))} placeholder="Any remarks..." />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShiftDialogOpen(false)}>Cancel</Button>
+            <Button onClick={() => createShift.mutate({
+              shiftLabel: shiftForm.shiftLabel,
+              denominations: { d500: shiftForm.d500, d200: shiftForm.d200, d100: shiftForm.d100, d50: shiftForm.d50, d20: shiftForm.d20, d10: shiftForm.d10, coins: shiftForm.coins },
+              supervisorName: shiftForm.supervisorName || null,
+              notes: shiftForm.notes || null,
+            })}>
+              <CheckCircle className="w-4 h-4 mr-2" /> Record Closure
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ── Small sub-component for denomination input ───────────────────────────────
+
+function DenominationInput({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  return (
+    <div className="flex items-center gap-3">
+      <Label className="w-14 shrink-0">{label}</Label>
+      <Input
+        type="number"
+        min={0}
+        value={value}
+        onChange={(e) => onChange(Math.max(0, Number(e.target.value) || 0))}
+        className="text-right"
+      />
     </div>
   );
 }
