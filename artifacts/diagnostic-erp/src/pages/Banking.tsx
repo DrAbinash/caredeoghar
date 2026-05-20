@@ -135,6 +135,10 @@ interface GatewayTransaction {
   status: string;
   settlementStatus: string;
   utr: string | null;
+  gatewayFee: string | null;
+  netSettled: string | null;
+  settlementUtr: string | null;
+  settlementDate: string | null;
   bankTransactionId: number | null;
   createdAt: string;
 }
@@ -291,6 +295,10 @@ export default function Banking() {
     processed: number; matched: number; autoClosed: number; failed: number;
   } | null>(null);
   const [fraudFilter, setFraudFilter] = useState<{ status?: string; severity?: string }>({});
+  const [gatewaySettlementFilter, setGatewaySettlementFilter] = useState<string>("all");
+  const [reconciliationSchedule, setReconciliationSchedule] = useState({ enabled: true, threshold: 80, frequencyMinutes: 5 });
+  const [exportFormat, setExportFormat] = useState<string>("excel");
+  const [exportLoading, setExportLoading] = useState(false);
   const [resolveAlertId, setResolveAlertId] = useState<number | null>(null);
   const [resolveNote, setResolveNote] = useState("");
   const [resolveAction, setResolveAction] = useState<string>("approved");
@@ -646,10 +654,15 @@ export default function Banking() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Webhooks (24h)</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Pending Settlements</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{summary.webhooks24h}</div>
+            <div className="text-3xl font-bold">
+              {(() => {
+                const pending = (gatewayQuery.data ?? []).filter(g => g.settlementStatus === "pending").length;
+                return pending;
+              })()}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -734,58 +747,89 @@ export default function Banking() {
           </Card>
         </TabsContent>
 
-        {/* ── Transactions ───────────────────────────────────────────────────── */}
+        {/* ── Transactions ──────────────────────────────────────────────────── */}
         <TabsContent value="transactions">
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>UTR</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {transactions.map((t) => (
-                    <TableRow key={t.id}>
-                      <TableCell>{new Date(t.transactionDate).toLocaleDateString("en-IN")}</TableCell>
-                      <TableCell className="max-w-xs truncate">{t.description || "—"}</TableCell>
-                      <TableCell>
-                        <Badge variant={t.type === "credit" ? "default" : "secondary"}>
-                          {t.type === "credit" ? <ArrowDownLeft className="w-3 h-3 mr-1" /> : <ArrowUpRight className="w-3 h-3 mr-1" />}
-                          {t.type}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-mono">{parseFloat(t.amount).toLocaleString("en-IN")}</TableCell>
-                      <TableCell className="font-mono text-xs">{t.utr || "—"}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={cn(
-                          t.reconciliationStatus === "matched" && "bg-green-50 text-green-700",
-                          t.reconciliationStatus === "unreconciled" && "bg-yellow-50 text-yellow-700",
-                        )}>
-                          {t.reconciliationStatus === "matched" ? <CheckCircle className="w-3 h-3 mr-1" /> : <Unlink className="w-3 h-3 mr-1" />}
-                          {t.reconciliationStatus}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {transactions.length === 0 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex gap-2">
+                <Select value={exportFormat} onValueChange={(v) => setExportFormat(v)}>
+                  <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="excel">Excel</SelectItem>
+                    <SelectItem value="csv">CSV</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" size="sm" onClick={async () => {
+                  setExportLoading(true);
+                  try {
+                    const resp = await api.get<{ exportUrl?: string; data?: { headers: string[]; rows: Record<string, unknown>[] } }>(`/api/banking/export?format=${exportFormat}&accountId=${selectedAccount || ""}`);
+                    if (resp.exportUrl) { window.open(resp.exportUrl, "_blank"); }
+                    else if (resp.data && exportFormat === "csv") {
+                      const csv = [resp.data.headers.join(","), ...resp.data.rows.map((r: any) => resp.data!.headers.map((h: string) => `"${String(r[h] ?? "").replace(/"/g, "")}"`).join(","))].join("\n");
+                      const blob = new Blob([csv], { type: "text/csv" });
+                      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `bank-statement-${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(a.href);
+                    }
+                    toast({ title: "Export ready" });
+                  } catch (e: any) {
+                    toast({ title: "Export failed", description: e?.message || "Error", variant: "destructive" });
+                  } finally { setExportLoading(false); }
+                }} disabled={exportLoading || transactions.length === 0}>
+                  {exportLoading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <ScrollText className="w-4 h-4 mr-2" />}
+                  Export
+                </Button>
+              </div>
+              <span className="text-xs text-muted-foreground">{transactions.length} transaction{transactions.length !== 1 ? "s" : ""} shown</span>
+            </div>
+            <Card>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                        No transactions. Select an account and import transactions from the provider.
-                      </TableCell>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>UTR</TableHead>
+                      <TableHead>Status</TableHead>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {transactions.map((t) => (
+                      <TableRow key={t.id}>
+                        <TableCell>{new Date(t.transactionDate).toLocaleDateString("en-IN")}</TableCell>
+                        <TableCell className="max-w-xs truncate">{t.description || "—"}</TableCell>
+                        <TableCell>
+                          <Badge variant={t.type === "credit" ? "default" : "secondary"}>
+                            {t.type === "credit" ? <ArrowDownLeft className="w-3 h-3 mr-1" /> : <ArrowUpRight className="w-3 h-3 mr-1" />}
+                            {t.type}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-mono">{parseFloat(t.amount).toLocaleString("en-IN")}</TableCell>
+                        <TableCell className="font-mono text-xs">{t.utr || "—"}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={cn(
+                            t.reconciliationStatus === "matched" && "bg-green-50 text-green-700",
+                            t.reconciliationStatus === "unreconciled" && "bg-yellow-50 text-yellow-700",
+                          )}>
+                            {t.reconciliationStatus === "matched" ? <CheckCircle className="w-3 h-3 mr-1" /> : <Unlink className="w-3 h-3 mr-1" />}
+                            {t.reconciliationStatus}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {transactions.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                          No transactions. Select an account and import transactions from the provider.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
-
         {/* ── Payments ───────────────────────────────────────────────────────── */}
         <TabsContent value="payments">
           <div className="space-y-4">
@@ -943,6 +987,56 @@ export default function Banking() {
                     )}
                   </TableBody>
                 </Table>
+              </CardContent>
+            </Card>
+
+            {/* Automated Reconciliation Scheduler */}
+            <Card>
+              <CardHeader><CardTitle className="flex items-center gap-2"><Clock className="w-5 h-5" /> Auto-Reconciliation Scheduler</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="flex items-center gap-2">
+                    <input id="auto-recon" type="checkbox" checked={reconciliationSchedule.enabled} onChange={(e) => setReconciliationSchedule(s => ({ ...s, enabled: e.target.checked }))} className="h-4 w-4" />
+                    <Label htmlFor="auto-recon" className="cursor-pointer">Enabled</Label>
+                  </div>
+                  <div>
+                    <Label>Frequency</Label>
+                    <Select value={String(reconciliationSchedule.frequencyMinutes)} onValueChange={(v) => setReconciliationSchedule(s => ({ ...s, frequencyMinutes: Number(v) }))}>
+                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="5">Every 5 minutes</SelectItem>
+                        <SelectItem value="15">Every 15 minutes</SelectItem>
+                        <SelectItem value="30">Every 30 minutes</SelectItem>
+                        <SelectItem value="60">Every hour</SelectItem>
+                        <SelectItem value="360">Every 6 hours</SelectItem>
+                        <SelectItem value="720">Every 12 hours</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Threshold: {reconciliationSchedule.threshold}%</Label>
+                    <Slider value={[reconciliationSchedule.threshold]} onValueChange={(v) => setReconciliationSchedule(s => ({ ...s, threshold: v[0] }))} min={0} max={100} step={5} className="mt-2" />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Server runs auto-sync every 5 min (configured in cron). This UI is for visibility and future scheduling.</span>
+                  <Button size="sm" variant="outline" onClick={async () => {
+                    setBatchLoading(true);
+                    try {
+                      await api.post("/api/internal-cron/banking-auto-sync", {});
+                      toast({ title: "Auto-sync triggered" });
+                      qc.invalidateQueries({ queryKey: ["banking", "transactions"] });
+                      qc.invalidateQueries({ queryKey: ["banking", "reconciliation-logs"] });
+                    } catch (e: any) {
+                      toast({ title: "Trigger failed", description: e?.message || "Error", variant: "destructive" });
+                    } finally {
+                      setBatchLoading(false);
+                    }
+                  }} disabled={batchLoading}>
+                    {batchLoading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                    Trigger Now
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
@@ -1135,50 +1229,81 @@ export default function Banking() {
 
         {/* ── Gateways ───────────────────────────────────────────────────────── */}
         <TabsContent value="gateways">
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Time</TableHead>
-                    <TableHead>Provider</TableHead>
-                    <TableHead>Order ID</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Settlement</TableHead>
-                    <TableHead>UTR</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(gatewayQuery.data ?? []).map((g) => (
-                    <TableRow key={g.id}>
-                      <TableCell className="text-xs whitespace-nowrap">{new Date(g.createdAt).toLocaleString("en-IN")}</TableCell>
-                      <TableCell><Badge variant="outline" className="uppercase">{g.provider}</Badge></TableCell>
-                      <TableCell className="font-mono text-xs">{g.gatewayOrderId}</TableCell>
-                      <TableCell className="font-mono">{parseFloat(g.amount).toLocaleString("en-IN")} {g.currency}</TableCell>
-                      <TableCell><Badge className={gatewayStatusColor(g.status)}>{g.status}</Badge></TableCell>
-                      <TableCell>
-                        <Badge variant={g.settlementStatus === "settled" ? "default" : g.settlementStatus === "pending" ? "secondary" : "outline"}>
-                          {g.settlementStatus}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">{g.utr || "—"}</TableCell>
-                    </TableRow>
-                  ))}
-                  {(gatewayQuery.data ?? []).length === 0 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Select value={gatewaySettlementFilter} onValueChange={(v) => setGatewaySettlementFilter(v)}>
+                <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="settled">Settled</SelectItem>
+                  <SelectItem value="failed">Failed</SelectItem>
+                </SelectContent>
+              </Select>
+              {(() => {
+                const data = gatewayQuery.data ?? [];
+                const pending = data.filter(g => g.settlementStatus === "pending").length;
+                const settled = data.filter(g => g.settlementStatus === "settled").length;
+                const pendingAmt = data.filter(g => g.settlementStatus === "pending").reduce((s, g) => s + parseFloat(g.amount), 0);
+                return (
+                  <div className="flex gap-2 text-sm">
+                    <div className="bg-yellow-50 rounded-lg px-3 py-1 border border-yellow-200"><span className="text-xs text-yellow-700">Pending</span> <b className="text-yellow-800">{pending}</b> <span className="text-xs text-yellow-600">(₹{pendingAmt.toLocaleString("en-IN")})</span></div>
+                    <div className="bg-green-50 rounded-lg px-3 py-1 border border-green-200"><span className="text-xs text-green-700">Settled</span> <b className="text-green-800">{settled}</b></div>
+                  </div>
+                );
+              })()}
+            </div>
+            <Card>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                        No gateway transactions. Gateway entries appear when payment providers settle funds.
-                      </TableCell>
+                      <TableHead>Time</TableHead>
+                      <TableHead>Provider</TableHead>
+                      <TableHead>Order ID</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Fee</TableHead>
+                      <TableHead>Net</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Settlement</TableHead>
+                      <TableHead>UTR</TableHead>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {(gatewayQuery.data ?? []).filter(g => gatewaySettlementFilter === "all" || g.settlementStatus === gatewaySettlementFilter).map((g) => (
+                      <TableRow key={g.id}>
+                        <TableCell className="text-xs whitespace-nowrap">{new Date(g.createdAt).toLocaleString("en-IN")}</TableCell>
+                        <TableCell><Badge variant="outline" className="uppercase">{g.provider}</Badge></TableCell>
+                        <TableCell className="font-mono text-xs">{g.gatewayOrderId}</TableCell>
+                        <TableCell className="font-mono">{parseFloat(g.amount).toLocaleString("en-IN")} {g.currency}</TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">{g.gatewayFee != null ? `₹${parseFloat(g.gatewayFee).toLocaleString("en-IN")}` : "—"}</TableCell>
+                        <TableCell className="font-mono text-xs">{g.netSettled != null ? `₹${parseFloat(g.netSettled).toLocaleString("en-IN")}` : "—"}</TableCell>
+                        <TableCell><Badge className={gatewayStatusColor(g.status)}>{g.status}</Badge></TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-0.5">
+                            <Badge variant={g.settlementStatus === "settled" ? "default" : g.settlementStatus === "pending" ? "secondary" : "outline"}>
+                              {g.settlementStatus}
+                            </Badge>
+                            {g.settlementDate && <span className="text-[10px] text-muted-foreground">{new Date(g.settlementDate).toLocaleDateString("en-IN")}</span>}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{g.utr || g.settlementUtr || "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                    {(gatewayQuery.data ?? []).filter(g => gatewaySettlementFilter === "all" || g.settlementStatus === gatewaySettlementFilter).length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                          {gatewaySettlementFilter === "all" ? "No gateway transactions yet." : `No ${gatewaySettlementFilter} settlements.`}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
-
-        {/* ── Shifts ─────────────────────────────────────────────────────────── */}
+{/* ── Shifts ─────────────────────────────────────────────────────────── */}
         <TabsContent value="shifts">
           <div className="space-y-4">
             <div className="flex justify-end">

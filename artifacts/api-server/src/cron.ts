@@ -406,7 +406,7 @@ export async function fireBankingAutoSync() {
   for (const account of accounts) {
     try {
       const config = (account.providerConfig as Record<string, unknown> | null) ?? undefined;
-      const provider = createProvider(account.provider, config);
+      const provider = await createProvider(account.provider, config);
       const since = new Date(Date.now() - 48 * 60 * 60 * 1000); // last 48 hours
       const txs = await provider.getTransactions(account.maskedAccountNumber, { fromDate: since, limit: 200 });
       const values = txs.map((t) => ({

@@ -11,7 +11,7 @@ export async function getProviderForAccount(bankAccountId: number) {
   const [account] = await db.select().from(bankAccountsTable).where(eq(bankAccountsTable.id, bankAccountId));
   if (!account) throw new Error(`Bank account ${bankAccountId} not found`);
   const config = (account.providerConfig as Record<string, unknown> | null) ?? undefined;
-  return { account, provider: createProvider(account.provider, config) };
+  return { account, provider: await createProvider(account.provider, config) };
 }
 
 export async function logAudit(entry: {
@@ -229,7 +229,7 @@ export async function handleWebhook(
   rawBody: string,
   signature: string,
 ): Promise<{ verified: boolean; payload?: WebhookPayload; logId: number }> {
-  const provider = createProvider(providerName);
+  const provider = await createProvider(providerName);
   let verified = false;
   let processingError: string | null = null;
   let payload: WebhookPayload | undefined;

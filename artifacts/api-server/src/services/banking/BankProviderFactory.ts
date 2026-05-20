@@ -1,4 +1,5 @@
 import type { BankProvider, ProviderCredentials } from "./BankProvider";
+import { db, clinicSettingsTable } from "@workspace/db";
 import { MockBankProvider } from "./MockBankProvider";
 import { ICICIBankProvider } from "./ICICIBankProvider";
 import { HDFCBankProvider } from "./HDFCBankProvider";
@@ -42,22 +43,34 @@ export function getCredentialPrefix(provider: string): string {
   return PROVIDER_PREFIX_MAP[provider.toLowerCase()] || provider.toUpperCase();
 }
 
-export function loadProviderCredentials(provider: string): ProviderCredentials {
+export async function loadProviderCredentials(provider: string): Promise<ProviderCredentials> {
   const prefix = getCredentialPrefix(provider);
+  // Read from clinic_settings as fallback for merchant IDs / app IDs
+  let dbMerchantId: string | undefined;
+  let dbAppId: string | undefined;
+  try {
+    const [settings] = await db.select().from(clinicSettingsTable).limit(1);
+    if (settings) {
+      if (provider === "bharatpe") dbMerchantId = settings.bharatpeMerchantId || undefined;
+      if (provider === "phonepe") dbMerchantId = settings.phonepeMerchantId || undefined;
+      if (provider === "cashfree") dbAppId = settings.cashfreeAppId || undefined;
+    }
+  } catch { /* ignore DB read errors */ }
   return {
     apiKey: process.env[`${prefix}_API_KEY`] || undefined,
     apiSecret: process.env[`${prefix}_API_SECRET`] || undefined,
     clientId: process.env[`${prefix}_CLIENT_ID`] || undefined,
-    merchantId: process.env[`${prefix}_MERCHANT_ID`] || undefined,
+    merchantId: process.env[`${prefix}_MERCHANT_ID`] || dbMerchantId || undefined,
     webhookSecret: process.env[`${prefix}_WEBHOOK_SECRET`] || undefined,
     baseUrl: process.env[`${prefix}_BASE_URL`] || undefined,
+    appId: dbAppId,
   };
 }
 
-export function createProvider(
+export async function createProvider(
   provider: string,
   config?: Record<string, unknown>,
-): BankProvider {
+): Promise<BankProvider> {
   const cacheKey = `${provider}:${JSON.stringify(config ?? {})}`;
   const cached = providerCache.get(cacheKey);
   if (cached) return cached;
@@ -67,7 +80,7 @@ export function createProvider(
     throw new Error(`Unknown bank provider: "${provider}". Supported: ${Object.keys(PROVIDER_REGISTRY).join(", ")}`);
   }
   const instance = factory();
-  const credentials = loadProviderCredentials(provider);
+  const credentials = await loadProviderCredentials(provider);
   instance.initialize(credentials, config);
   providerCache.set(cacheKey, instance);
   return instance;

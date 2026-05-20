@@ -64,6 +64,7 @@ export interface ProviderCredentials {
   merchantId?: string;
   webhookSecret?: string;
   baseUrl?: string;
+  appId?: string;
   [key: string]: string | undefined;
 }
 

@@ -638,5 +638,30 @@ router.patch("/shift-closures/:id", requireStaffAuth, async (req: StaffAuthReque
   res.json(updated);
 });
 
+router.get("/export", async (req, res) => {
+  const format = String(req.query.format || "csv");
+  const accountId = req.query.accountId ? Number(req.query.accountId) : undefined;
+  const fromDate = req.query.fromDate ? new Date(String(req.query.fromDate)) : undefined;
+  const toDate = req.query.toDate ? new Date(String(req.query.toDate)) : undefined;
+  const conditions = [];
+  if (accountId) conditions.push(eq(bankTransactionsTable.bankAccountId, accountId));
+  if (fromDate) conditions.push(gte(bankTransactionsTable.transactionDate, fromDate));
+  if (toDate) conditions.push(gte(bankTransactionsTable.transactionDate, toDate));
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const rows = await db.select().from(bankTransactionsTable).where(where).orderBy(desc(bankTransactionsTable.transactionDate)).limit(5000);
+  const headers = ["Date", "Description", "Type", "Amount", "UTR", "Status", "Provider", "Account"];
+  const data = rows.map((t) => ({
+    Date: new Date(t.transactionDate).toLocaleDateString("en-IN"),
+    Description: t.description || "",
+    Type: t.type,
+    Amount: t.amount,
+    UTR: t.utr || "",
+    Status: t.reconciliationStatus,
+    Provider: t.provider,
+    Account: String(t.bankAccountId),
+  }));
+  res.json({ format, count: rows.length, headers, rows: data });
+});
+
 export const bankingRouter = router;
 export default router;

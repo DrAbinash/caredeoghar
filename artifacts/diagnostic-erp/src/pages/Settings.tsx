@@ -1355,6 +1355,8 @@ type OnlineBookingSettings = {
   phonepeMerchantId: string;
   bharatpeEnabled: boolean;
   bharatpeMerchantId: string;
+  cashfreeEnabled: boolean;
+  cashfreeAppId: string;
 };
 
 function OnlineBookingTab() {
@@ -1386,6 +1388,8 @@ function OnlineBookingTab() {
       phonepeMerchantId: data.phonepeMerchantId || "",
       bharatpeEnabled: data.bharatpeEnabled ?? false,
       bharatpeMerchantId: data.bharatpeMerchantId || "",
+      cashfreeEnabled: data.cashfreeEnabled ?? false,
+      cashfreeAppId: data.cashfreeAppId || "",
     });
   }, [data]);
 
@@ -1590,6 +1594,53 @@ function OnlineBookingTab() {
         </div>
         <p className="text-xs text-amber-700 dark:text-amber-400">
           In Replit: open Secrets, add <code>BHARATPE_API_KEY</code>, <code>BHARATPE_API_SECRET</code>, and <code>BHARATPE_MERCHANT_ID</code>. Then restart the API server.
+        </p>
+      </div>
+
+      {/* Cashfree */}
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg bg-[#1E3A8A] flex items-center justify-center shrink-0">
+            <CreditCard size={16} className="text-white" />
+          </div>
+          <div>
+            <h3 className="font-bold">Cashfree Payments</h3>
+            <p className="text-xs text-muted-foreground">Full-stack payment gateway with UPI, cards, and netbanking.</p>
+          </div>
+        </div>
+        <Toggle
+          value={form.cashfreeEnabled}
+          onChange={(v) => setForm({ ...form, cashfreeEnabled: v })}
+          label="Use Cashfree as active payment gateway"
+          hint="When enabled, Cashfree takes priority over other providers."
+        />
+        <div>
+          <Label>Cashfree App ID</Label>
+          <p className="text-xs text-muted-foreground mb-1">Your Cashfree App ID from the dashboard. Safe to store here.</p>
+          <Input
+            value={form.cashfreeAppId}
+            onChange={(e) => setForm({ ...form, cashfreeAppId: e.target.value })}
+            className="mt-1 max-w-md font-mono text-sm"
+            placeholder="e.g. 1234567890abcdef"
+          />
+        </div>
+        <div className="flex justify-end gap-2 pt-2 border-t border-card-border">
+          <Button onClick={() => save.mutate(form)} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
+        </div>
+      </div>
+
+      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-5 space-y-2">
+        <h3 className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2">
+          <KeyRound size={15} /> Cashfree API Secret
+        </h3>
+        <p className="text-sm text-amber-800 dark:text-amber-300">
+          The Secret Key is used server-side for signature generation. It is <strong>never</strong> sent to the browser. Add it as an environment secret:
+        </p>
+        <div className="font-mono text-sm bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 rounded px-3 py-2 select-all">
+          CASHFREE_API_SECRET=your_secret_key_here
+        </div>
+        <p className="text-xs text-amber-700 dark:text-amber-400">
+          In Replit: open Secrets, add <code>CASHFREE_API_SECRET</code>. Then restart the API server.
         </p>
       </div>
 

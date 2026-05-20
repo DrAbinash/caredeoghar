@@ -33,7 +33,7 @@ clinicSettingsRouter.put("/", async (req, res) => {
     }
     update.sidebarTheme = body.sidebarTheme;
   }
-  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "payuEnabled", "phonepeEnabled", "bharatpeEnabled", "billShowCode", "billShowCategory", "dayCloseAutoPrint", "lanOnlyLogin", "fido2Enabled", "kioskEnabled"] as const;
+  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "payuEnabled", "phonepeEnabled", "bharatpeEnabled", "cashfreeEnabled", "billShowCode", "billShowCategory", "dayCloseAutoPrint", "lanOnlyLogin", "fido2Enabled", "kioskEnabled"] as const;
   for (const f of boolFields) {
     if (body[f] !== undefined) {
       if (typeof body[f] !== "boolean") {
@@ -84,6 +84,13 @@ clinicSettingsRouter.put("/", async (req, res) => {
       return;
     }
     update.bharatpeMerchantId = body.bharatpeMerchantId.trim();
+  }
+  if (body.cashfreeAppId !== undefined) {
+    if (typeof body.cashfreeAppId !== "string") {
+      res.status(400).json({ error: "cashfreeAppId must be a string" });
+      return;
+    }
+    update.cashfreeAppId = body.cashfreeAppId.trim();
   }
   const kioskTextFields = ["kioskUpiVpa", "kioskUpiName", "kioskWelcomeMessage", "kioskAllowedTestIds"] as const;
   for (const f of kioskTextFields) {
