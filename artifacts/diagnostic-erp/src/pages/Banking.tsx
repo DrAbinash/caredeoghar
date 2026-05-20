@@ -281,6 +281,9 @@ export default function Banking() {
   const [dcDate, setDcDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [dcView, setDcView] = useState<"my" | "owner">("my");
 
+  // Balance refresh state
+  const [refreshAllLoading, setRefreshAllLoading] = useState(false);
+
   // Enterprise state
   const [batchThreshold, setBatchThreshold] = useState(80);
   const [batchLoading, setBatchLoading] = useState(false);
@@ -593,9 +596,27 @@ export default function Banking() {
           <Landmark className="w-6 h-6 text-primary" />
           Banking
         </h1>
-        <Button onClick={() => setAddOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" /> Add Account
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={async () => {
+            setRefreshAllLoading(true);
+            try {
+              const result = await api.post<{ refreshed: number; results: { accountId: number; balance: number | null; error?: string }[] }>("/api/banking/accounts/refresh-all", {});
+              const errors = result.results.filter(r => r.error).length;
+              toast({ title: `Refreshed ${result.refreshed} accounts`, description: errors > 0 ? `${errors} failed — see Accounts tab` : "All balances updated" });
+              qc.invalidateQueries({ queryKey: ["banking", "accounts"] });
+            } catch (e: any) {
+              toast({ title: "Refresh failed", description: e?.message || "Error", variant: "destructive" });
+            } finally {
+              setRefreshAllLoading(false);
+            }
+          }} disabled={refreshAllLoading}>
+            {refreshAllLoading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+            Refresh All
+          </Button>
+          <Button onClick={() => setAddOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" /> Add Account
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

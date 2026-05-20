@@ -282,6 +282,30 @@ export async function reconcileByUtr(utr: string, voucherId?: number, paymentId?
   return updated ?? txn;
 }
 
+export async function refreshAllBalances(performedBy?: string): Promise<{ accountId: number; balance: number | null; error?: string }[]> {
+  const accounts = await db.select().from(bankAccountsTable).where(eq(bankAccountsTable.status, "active"));
+  const results: { accountId: number; balance: number | null; error?: string }[] = [];
+  for (const acct of accounts) {
+    try {
+      const { account, provider } = await getProviderForAccount(acct.id);
+      const bal = await provider.getBalance(account.maskedAccountNumber);
+      await logAudit({
+        action: "balance_check", provider: account.provider, bankAccountId: account.id,
+        status: "success", amount: bal.available, details: { balance: bal }, performedBy: performedBy || "system",
+      });
+      results.push({ accountId: acct.id, balance: bal.available });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await logAudit({
+        action: "balance_check", provider: acct.provider, bankAccountId: acct.id,
+        status: "error", details: { error: msg }, performedBy: performedBy || "system",
+      });
+      results.push({ accountId: acct.id, balance: null, error: msg });
+    }
+  }
+  return results;
+}
+
 export async function getUnreconciledTransactions(bankAccountId?: number, limit = 100) {
   const conditions = [eq(bankTransactionsTable.reconciliationStatus, "unreconciled")];
   if (bankAccountId) conditions.push(eq(bankTransactionsTable.bankAccountId, bankAccountId));

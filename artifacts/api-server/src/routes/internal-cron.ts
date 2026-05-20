@@ -1,5 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
-import { runDailySummary, runMonthEndCommission } from "../cron";
+import { runDailySummary, runMonthEndCommission, fireBankingAutoSync } from "../cron";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -38,6 +38,16 @@ router.post("/month-end-commission", async (_req, res) => {
   } catch (err) {
     logger.error({ err }, "internal-cron month-end-commission failed");
     res.status(500).json({ error: "month-end-commission failed" });
+  }
+});
+
+router.post("/banking-auto-sync", async (_req, res) => {
+  try {
+    await fireBankingAutoSync();
+    res.json({ ok: true, fired: "banking-auto-sync", at: new Date().toISOString() });
+  } catch (err) {
+    logger.error({ err }, "internal-cron banking-auto-sync failed");
+    res.status(500).json({ error: "banking-auto-sync failed" });
   }
 });
 

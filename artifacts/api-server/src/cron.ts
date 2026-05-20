@@ -392,7 +392,7 @@ function scheduleBankingAutoSync() {
   console.log("[cron] Banking auto-sync scheduler started (runs every 5 minutes)");
 }
 
-async function fireBankingAutoSync() {
+export async function fireBankingAutoSync() {
   const { db } = await import("@workspace/db");
   const { bankAccountsTable, bankTransactionsTable } = await import("@workspace/db/schema");
   const { eq, and, gte } = await import("drizzle-orm");

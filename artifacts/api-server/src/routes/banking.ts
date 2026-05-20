@@ -122,6 +122,17 @@ router.get("/accounts/:id/balance", async (req: StaffAuthRequest, res) => {
   }
 });
 
+router.post("/accounts/refresh-all", async (req: StaffAuthRequest, res) => {
+  try {
+    const { refreshAllBalances } = await import("../services/banking/BankingService");
+    const results = await refreshAllBalances(req.staffSession?.subjectName || "staff");
+    res.json({ refreshed: results.length, results });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    apiError(res, 502, msg);
+  }
+});
+
 // ---- Transactions -----------------------------------------------------------
 
 router.get("/accounts/:id/transactions", async (req: StaffAuthRequest, res) => {
