@@ -136,4 +136,10 @@ title = "TextRad Feature Integration Document (Word)"
 id = "c7_WycO2fjd4xtG-HRhHu"
 uri = "file://exports/care-diagnostics-mobile-playstore.tar.gz"
 type = "unspecified"
-title = "Care Diagnostics Mobile - PlayStore Package"
+title = "Care Diagnostics Mobile - PlayStore Package (Android)"
+
+[[outputs]]
+id = "nQPYYFJuRYL5orl0N9MOI"
+uri = "file://exports/care-diagnostics-windows.tar.gz"
+type = "unspecified"
+title = "Care Diagnostics Desktop - Windows Distribution"

@@ -1,8 +1,14 @@
 import { useCallback } from "react";
 
 function getBaseUrl(): string {
+  // 1. Desktop app override (Electron injects this)
+  if (typeof window !== "undefined" && (window as any).__CARE_API_DOMAIN__) {
+    return `https://${(window as any).__CARE_API_DOMAIN__}`;
+  }
+  // 2. Build-time environment variable
   const domain = process.env.EXPO_PUBLIC_DOMAIN;
   if (domain) return `https://${domain}`;
+  // 3. Fallback
   return "https://localhost";
 }
 
