@@ -1,0 +1,16 @@
+node_modules/
+.expo/
+.expo-shared/
+dist/
+*.jks
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+*.tar.gz
+*.aab
+*.apk
+.env
+.env.local
+.env.production
+.DS_Store

@@ -131,3 +131,9 @@ id = "5sjHlv_osxDWRSb4WZVIx"
 uri = "file://TextRad_Feature_Integration_Document.docx"
 type = "word_document"
 title = "TextRad Feature Integration Document (Word)"
+
+[[outputs]]
+id = "c7_WycO2fjd4xtG-HRhHu"
+uri = "file://exports/care-diagnostics-mobile-playstore.tar.gz"
+type = "unspecified"
+title = "Care Diagnostics Mobile - PlayStore Package"
