@@ -106,10 +106,11 @@ const navItems: NavEntry[] = [
   {
     id: "radiology-grp",
     icon: Radio,
-    label: "Radiology",
+    label: "Radiology & Imaging",
     children: [
       { path: "/radiology", icon: Radio, label: "Study Workflow" },
       { path: "/radiology/worklist", icon: ScanSearch, label: "PACS Worklist" },
+      { path: "/pacs", icon: Monitor, label: "PACS Viewer" },
       { path: "/radiology/dicom-qr", icon: Search, label: "DICOM Q/R" },
       { path: "/radiology/reporting-workspace", icon: FilePen, label: "Reporting Workspace" },
       { path: "/radiology/report-generator", icon: FilePen, label: "Report Generator" },
@@ -118,9 +119,9 @@ const navItems: NavEntry[] = [
       { path: "/radiology/pacs-logs", icon: FileText, label: "PACS Logs" },
       { path: "/radiology/dicom-agent-dashboard", icon: Activity, label: "Agent Monitor" },
       { path: "/radiology/modality-management", icon: Server, label: "Modalities" },
+      { path: "/dicom-nodes", icon: Server, label: "DICOM Nodes" },
       { path: "/radiology/mwl-dashboard", icon: CalendarDays, label: "MWL Dashboard" },
       { path: "/radiology/agent-setup", icon: Settings2, label: "Agent Setup" },
-      { path: "/radiology/dicom-query-retrieve", icon: Search, label: "DICOM Q/R" },
       { path: "/radiology/ai-reporting-settings", icon: BrainCircuit, label: "AI Reporting" },
     ],
   },
@@ -157,15 +158,6 @@ const navItems: NavEntry[] = [
   { path: "/form-f", icon: FileText, label: "Form F (PCPNDT)" },
   { path: "/website", icon: Globe, label: "Website Builder" },
   { path: "/whatsapp-chatbot", icon: MessageSquare, label: "WhatsApp Chatbot" },
-  {
-    id: "imaging-grp",
-    icon: Monitor,
-    label: "Imaging",
-    children: [
-      { path: "/pacs", icon: Monitor, label: "PACS Viewer" },
-      { path: "/dicom-nodes", icon: Server, label: "DICOM Nodes" },
-    ],
-  },
   { path: "/machines", icon: Wrench, label: "Machines" },
   {
     id: "settings-grp",
@@ -295,7 +287,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       const active = n.children.some((c) =>
         c.path === "/" ? location === "/" : location === c.path || location.startsWith(c.path + "/"),
       );
-      initialOpen[n.id] = active || n.id === "imaging-grp";
+      initialOpen[n.id] = active;
     }
   }
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(initialOpen);

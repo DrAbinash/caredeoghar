@@ -96,10 +96,12 @@ const ERP_NAV_ORDER = [
   "/radiology", "/radiology/worklist", "/radiology/dicom-qr", "/radiology/report-generator", "/radiology/pacs-dashboard", "/radiology/pacs-settings", "/radiology/pacs-logs",
   "/radiology/dicom-agent-dashboard", "/radiology/modality-management",
   "/radiology/mwl-dashboard", "/radiology/agent-setup", "/radiology/ai-reporting-settings",
+  "/radiology/viewer",
   "/orders", "/tests", "/packages", "/billing", "/payments", "/reports",
   "/report-generator", "/report-hub", "/inventory", "/expenses", "/staff", "/referrals",
-  "/accounting", "/discounts", "/form-f", "/pacs", "/machines", "/hr-forms", "/website", "/whatsapp-chatbot", "/settings",
+  "/accounting", "/discounts", "/form-f", "/machines", "/hr-forms", "/website", "/whatsapp-chatbot", "/settings",
   "/samples",
+  "/pacs", "/dicom-nodes",
 ];
 
 function PermissionGuard() {
