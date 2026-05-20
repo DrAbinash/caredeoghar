@@ -94,7 +94,7 @@ title = "DiagnoCenter-Portable.zip (323 MB) — Portable ZIP, unzip and run"
 id = "K8bALn1xY9SVJGrtYRzpb"
 uri = "file://windows-build/dist/SAdmin-Portable.zip"
 type = "unspecified"
-title = "SAdmin-Portable.zip (362 MB)"
+title = "SAdmin-Portable.zip — Super Admin Portal Portable (357 MB)"
 
 [[outputs]]
 id = "gQWkxpebGI4ajHCOTEpdr"
@@ -143,3 +143,9 @@ id = "nQPYYFJuRYL5orl0N9MOI"
 uri = "file://exports/care-diagnostics-windows.tar.gz"
 type = "unspecified"
 title = "Care Diagnostics Desktop - Windows Distribution"
+
+[[outputs]]
+id = "80ya1cF1r_6OkfHRrTfm2"
+uri = "file://windows-build/dist/CareDiagnostics-Portable.zip"
+type = "unspecified"
+title = "CareDiagnostics-Portable.zip — Portable Windows ERP (334 MB, no install needed)"

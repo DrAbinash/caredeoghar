@@ -5,7 +5,7 @@
 // Application" (SEA) feature. The .exe is then placed at the root of a
 // portable folder with this layout:
 //
-//   DiagnosticERP.exe                ← this script (compiled into node.exe)
+//   CareDiagnostics.exe              ← this script (compiled into node.exe)
 //   runtime/node/node.exe            ← second copy of Node, used to run the
 //                                      bundled API server (which imports many
 //                                      node_modules that SEA can't bundle).
@@ -43,7 +43,7 @@ const os = require("node:os");
 
 // -------- Locate the portable folder ---------------------------------------
 // When running as a SEA .exe, process.execPath is the bundled launcher exe
-// (DiagnosticERP.exe, SuperAdmin.exe, …) and the real files are alongside it.
+// (CareDiagnostics.exe, SuperAdmin.exe, …) and the real files are alongside it.
 // When running with `node launcher.js` for testing, the layout is the same
 // relative to __dirname (inside the dist/portable tree).
 const ROOT = (() => {
@@ -53,12 +53,12 @@ const ROOT = (() => {
     const cand = path.dirname(process.execPath);
     if (fs.existsSync(path.join(cand, "runtime"))) return cand;
   }
-  // dev fallbacks: try DiagnoCenter first, then SAdmin
-  for (const name of ["DiagnoCenter", "SAdmin"]) {
+  // dev fallbacks: try CareDiagnostics first, then SAdmin
+  for (const name of ["CareDiagnostics", "SAdmin"]) {
     const cand = path.resolve(__dirname, "../dist/portable", name);
     if (fs.existsSync(path.join(cand, "runtime"))) return cand;
   }
-  return path.resolve(__dirname, "../dist/portable/DiagnoCenter");
+  return path.resolve(__dirname, "../dist/portable/CareDiagnostics");
 })();
 
 // -------- Variant config ----------------------------------------------------

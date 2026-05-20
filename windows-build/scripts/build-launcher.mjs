@@ -3,12 +3,12 @@
 //
 // Compiles windows-build/launcher/launcher.js into a Windows .exe using Node
 // 20's Single Executable Application (SEA) feature. The resulting .exe is
-// dropped at:   windows-build/dist/payload/DiagnoCenter.exe
+// dropped at:   windows-build/dist/payload/CareDiagnostics.exe
 //
 // Process:
 //   1. node --experimental-sea-config sea-config.json    -> sea-prep.blob
-//   2. cp runtime/node/node.exe -> DiagnosticERP.exe     (copy of Windows node)
-//   3. npx postject DiagnosticERP.exe NODE_SEA_BLOB sea-prep.blob …
+//   2. cp runtime/node/node.exe -> CareDiagnostics.exe     (copy of Windows node)
+//   3. npx postject CareDiagnostics.exe NODE_SEA_BLOB sea-prep.blob …
 //
 // We use the *Windows* node.exe that build-payload.mjs already downloaded as
 // the host binary — that's what makes this cross-compile work from Linux.
@@ -34,7 +34,7 @@ const STAGE      = path.join(BUILD_ROOT, ".cache/launcher-stage");
 const SEA_CONFIG = path.join(STAGE, "sea-config.json");
 const SEA_BLOB   = path.join(STAGE, "sea-prep.blob");
 const NODE_EXE   = path.join(PAYLOAD, "runtime/node/node.exe");
-const OUT_EXE    = path.join(PAYLOAD, "DiagnoCenter.exe");
+const OUT_EXE    = path.join(PAYLOAD, "CareDiagnostics.exe");
 
 function log(m) { process.stdout.write(`[launcher] ${m}\n`); }
 
@@ -72,7 +72,7 @@ async function main() {
   log("Generating SEA blob with the local Node runtime…");
   await run(process.execPath, ["--experimental-sea-config", SEA_CONFIG]);
 
-  log("Copying Windows node.exe -> DiagnoCenter.exe …");
+  log("Copying Windows node.exe -> CareDiagnostics.exe …");
   await cp(NODE_EXE, OUT_EXE);
 
   log("Injecting SEA blob with postject…");

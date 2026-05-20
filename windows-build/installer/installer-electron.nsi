@@ -14,17 +14,17 @@
 ; =============================================================================
 
 !ifndef PAYLOAD_ZIP
-  !error "PAYLOAD_ZIP must be defined: -DPAYLOAD_ZIP=path\\to\\DiagnosticERP-Desktop-win-unpacked.zip"
+  !error "PAYLOAD_ZIP must be defined: -DPAYLOAD_ZIP=path\\to\\CareDiagnostics-Desktop-win-unpacked.zip"
 !endif
 !ifndef OUT_FILE
-  !error "OUT_FILE must be defined: -DOUT_FILE=DiagnoCenter-Desktop-Setup.exe"
+  !error "OUT_FILE must be defined: -DOUT_FILE=CareDiagnostics-Desktop-Setup.exe"
 !endif
 
 !define APP_NAME      "Care Diagnostics Desktop"
 !define APP_SHORT     "CareDiagnosticsDesktop"
 !define APP_PUBLISHER "Care Diagnostics"
 !define APP_VERSION   "1.0.0"
-!define EXE_NAME      "DiagnoCenter.exe"
+!define EXE_NAME      "CareDiagnostics.exe"
 !define UNINST_KEY    "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_SHORT}"
 
 SetCompress off

@@ -2,8 +2,8 @@
 ; Diagnostic Center Billing ERP — Windows installer (NSIS)
 ;
 ; Built on Linux with:
-;   makensis -DPAYLOAD_ZIP=...DiagnosticERP-Portable.zip \
-;            -DOUT_FILE=...DiagnosticERP-Setup.exe installer.nsi
+;   makensis -DPAYLOAD_ZIP=...CareDiagnostics-Portable.zip \
+;            -DOUT_FILE=...CareDiagnostics-Setup.exe installer.nsi
 ;
 ; Strategy:
 ;   The portable folder contains ~5000 files (mostly bundled node_modules).
@@ -21,17 +21,17 @@
 ; =============================================================================
 
 !ifndef PAYLOAD_ZIP
-  !error "PAYLOAD_ZIP must be defined: -DPAYLOAD_ZIP=path\\to\\DiagnosticERP-Portable.zip"
+  !error "PAYLOAD_ZIP must be defined: -DPAYLOAD_ZIP=path\\to\\CareDiagnostics-Portable.zip"
 !endif
 !ifndef OUT_FILE
-  !error "OUT_FILE must be defined: -DOUT_FILE=DiagnosticERP-Setup.exe"
+  !error "OUT_FILE must be defined: -DOUT_FILE=CareDiagnostics-Setup.exe"
 !endif
 
 !define APP_NAME      "Care Diagnostics"
 !define APP_SHORT     "CareDiagnostics"
 !define APP_PUBLISHER "Care Diagnostics"
 !define APP_VERSION   "1.0.0"
-!define EXE_NAME      "DiagnoCenter.exe"
+!define EXE_NAME      "CareDiagnostics.exe"
 !define UNINST_KEY    "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_SHORT}"
 
 ; The .zip we embed is itself deflate-compressed already; running NSIS LZMA on
