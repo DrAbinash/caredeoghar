@@ -123,6 +123,7 @@ const navItems: NavEntry[] = [
       { path: "/radiology/mwl-dashboard", icon: CalendarDays, label: "MWL Dashboard" },
       { path: "/radiology/agent-setup", icon: Settings2, label: "Agent Setup" },
       { path: "/radiology/ai-reporting-settings", icon: BrainCircuit, label: "AI Reporting" },
+      { path: "/teleradiology", icon: Globe, label: "Teleradiology Portal" },
     ],
   },
   {

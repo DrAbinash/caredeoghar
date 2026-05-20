@@ -68,7 +68,7 @@ const ERP_NAV_ORDER = [
   "/", "/dashboard", "/patients", "/appointments", "/queue", "/orders",
   "/tests", "/packages", "/billing", "/payments", "/reports",
   "/report-generator", "/inventory", "/expenses", "/staff", "/referrals",
-  "/accounting", "/discounts", "/form-f", "/pacs", "/settings",
+  "/accounting", "/discounts", "/form-f", "/pacs", "/settings", "/teleradiology",
 ];
 
 type Patient = {

@@ -63,6 +63,8 @@ const WhatsAppChatbot = lazy(() => import("@/pages/WhatsAppChatbot"));
 const Portal          = lazy(() => import("@/pages/Portal"));
 const Display         = lazy(() => import("@/pages/Display"));
 const OnlineBookings  = lazy(() => import("@/pages/OnlineBookings"));
+const TeleradiologyPortal = lazy(() => import("@/pages/TeleradiologyPortal"));
+const MobileViewer    = lazy(() => import("@/pages/MobileViewer"));
 const DailySummary    = lazy(() => import("@/pages/DailySummary"));
 const MyDailySummary  = lazy(() => import("@/pages/MyDailySummary"));
 const OutsourcedLabs  = lazy(() => import("@/pages/OutsourcedLabs"));
@@ -96,7 +98,7 @@ const ERP_NAV_ORDER = [
   "/radiology", "/radiology/worklist", "/radiology/dicom-qr", "/radiology/report-generator", "/radiology/pacs-dashboard", "/radiology/pacs-settings", "/radiology/pacs-logs",
   "/radiology/dicom-agent-dashboard", "/radiology/modality-management",
   "/radiology/mwl-dashboard", "/radiology/agent-setup", "/radiology/ai-reporting-settings",
-  "/radiology/viewer",
+  "/radiology/viewer", "/teleradiology",
   "/orders", "/tests", "/packages", "/billing", "/payments", "/reports",
   "/report-generator", "/report-hub", "/inventory", "/expenses", "/staff", "/referrals",
   "/accounting", "/discounts", "/form-f", "/machines", "/hr-forms", "/website", "/whatsapp-chatbot", "/settings",
@@ -133,6 +135,8 @@ function Router() {
       <Switch>
         <Route path="/portal" component={Portal} />
         <Route path="/portal/:rest*" component={Portal} />
+        <Route path="/teleradiology" component={TeleradiologyPortal} />
+        <Route path="/teleradiology/:rest*" component={TeleradiologyPortal} />
         <Route path="/display" component={Display} />
         <Route path="/kiosk" component={Kiosk} />
         <Route>
@@ -200,6 +204,7 @@ function Router() {
               <Route path="/radiology/viewer/:studyInstanceUID" component={DicomViewer} />
               <Route path="/radiology/agent-setup" component={AgentSetup} />
               <Route path="/radiology/ai-reporting-settings" component={AiReportingSettings} />
+              <Route path="/m/viewer/:studyInstanceUID" component={MobileViewer} />
               <Route path="/packages" component={Packages} />
               <Route path="/expenses" component={Expenses} />
               <Route path="/my-day-close" component={MyDayClose} />
