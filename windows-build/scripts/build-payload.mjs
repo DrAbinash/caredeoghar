@@ -231,7 +231,7 @@ async function fetchPostgres() {
 
 async function writeManifest() {
   const manifest = {
-    name: "Diagnostic Center Billing ERP",
+    name: "Care Diagnostics",
     builtAt: new Date().toISOString(),
     nodeVersion: NODE_VERSION,
     postgresVersion: PG_VERSION,

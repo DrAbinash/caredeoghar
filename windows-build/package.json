@@ -3,7 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Build Windows .exe distributions of the Diagnostic Center Billing ERP (portable launcher, NSIS installer, Electron desktop app).",
+  "description": "Build Windows .exe distributions of Care Diagnostics (portable launcher, NSIS installer, Electron desktop app).",
+
   "scripts": {
     "build:payload": "node scripts/build-payload.mjs",
     "build:launcher": "node scripts/build-launcher.mjs",

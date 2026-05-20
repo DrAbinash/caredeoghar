@@ -20,9 +20,9 @@
   !error "OUT_FILE must be defined: -DOUT_FILE=DiagnoCenter-Desktop-Setup.exe"
 !endif
 
-!define APP_NAME      "DiagnoCenter Desktop"
-!define APP_SHORT     "DiagnoCenterDesktop"
-!define APP_PUBLISHER "DiagnoCenter"
+!define APP_NAME      "Care Diagnostics Desktop"
+!define APP_SHORT     "CareDiagnosticsDesktop"
+!define APP_PUBLISHER "Care Diagnostics"
 !define APP_VERSION   "1.0.0"
 !define EXE_NAME      "DiagnoCenter.exe"
 !define UNINST_KEY    "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_SHORT}"

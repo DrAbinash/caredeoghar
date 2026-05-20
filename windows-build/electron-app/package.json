@@ -2,7 +2,7 @@
   "name": "@workspace/diagnostic-erp-desktop",
   "version": "1.0.0",
   "private": true,
-  "description": "Native Windows desktop app for the Diagnostic Center Billing ERP.",
+  "description": "Native Windows desktop app for Care Diagnostics.",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -17,8 +17,8 @@
     "@tootallnate/once": "npm:@tootallnate/once@^3.0.1"
   },
   "build": {
-    "appId": "com.diagnosticerp.desktop",
-    "productName": "DiagnoCenter Desktop",
+    "appId": "com.carediagnostics.desktop",
+    "productName": "Care Diagnostics Desktop",
     "directories": {
       "output": "../dist/electron"
     },
@@ -38,7 +38,7 @@
     "compression": "store",
     "win": {
       "target": [{ "target": "nsis", "arch": ["x64"] }],
-      "artifactName": "DiagnoCenter-Desktop-Setup-${version}.${ext}",
+      "artifactName": "CareDiagnostics-Desktop-Setup-${version}.${ext}",
       "signAndEditExecutable": false
     },
     "nsis": {
@@ -47,7 +47,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "DiagnoCenter Desktop"
+      "shortcutName": "Care Diagnostics Desktop"
     }
   }
 }

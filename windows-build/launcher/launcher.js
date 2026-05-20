@@ -68,8 +68,8 @@ const ROOT = (() => {
 // behaviour so existing builds are unaffected.
 const VARIANT = (() => {
   const defaults = {
-    appName:         "Diagnostic Center Billing ERP",
-    openPath:        "/",
+    appName:         "Care Diagnostics",
+    openPath:        "/erp/",
     dbName:          "diagnostic_erp",
     dbUser:          "erp",
     dataDirName:     "data",
@@ -133,7 +133,7 @@ function preflight() {
     ["Web static dir",    STATIC_DIR],
     ["Migration script",  MIGRATE_SCRIPT],
   ]) {
-    if (!fs.existsSync(p)) fatal(`Missing ${label}: ${p}\n\nThis launcher must run from inside the DiagnoCenter folder.`);
+    if (!fs.existsSync(p)) fatal(`Missing ${label}: ${p}\n\nThis launcher must run from inside the Care Diagnostics folder.`);
   }
 }
 

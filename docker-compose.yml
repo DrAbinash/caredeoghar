@@ -1,5 +1,5 @@
 # =============================================================================
-# Diagnostic Center Billing ERP — docker-compose stack
+# Care Diagnostics — docker-compose stack
 #
 # Quick start (Windows / macOS / Linux / Synology):
 #   1. Copy .env.docker.example to .env  (or just rely on the defaults below)

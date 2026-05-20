@@ -1,6 +1,6 @@
 // =============================================================================
 // desktop/sync/src/engine.js
-// Offline-first sync engine for DiagnoCenter ERP
+// Offline-first sync engine for Care Diagnostics ERP
 //
 // Runs inside the Windows/Electron build. Manages the sync lifecycle:
 //   1. Detect internet connectivity (via HEAD to cloud API)

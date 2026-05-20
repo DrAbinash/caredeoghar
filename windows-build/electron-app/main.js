@@ -1,5 +1,5 @@
 // =============================================================================
-// DiagnoCenter — Electron desktop main process.
+// Care Diagnostics — Electron desktop main process.
 //
 // Boots Postgres + the bundled API server (using the same payload tree that
 // the portable launcher uses) and shows a single BrowserWindow pointed at the
@@ -127,7 +127,7 @@ function ensurePostgres() {
     }
     fs.appendFileSync(
       path.join(PG_DATA, "postgresql.conf"),
-      "\n# DiagnoCenter overrides\nlisten_addresses = '127.0.0.1'\nunix_socket_directories = ''\nlogging_collector = on\nlog_directory = 'log'\n",
+      "\n# Care Diagnostics overrides\nlisten_addresses = '127.0.0.1'\nunix_socket_directories = ''\nlogging_collector = on\nlog_directory = 'log'\n",
     );
   }
 
@@ -284,7 +284,7 @@ function createWindow() {
     height: 900,
     minWidth: 1024,
     minHeight: 700,
-    title: "DiagnoCenter Desktop",
+    title: "Care Diagnostics Desktop",
     backgroundColor: "#0f172a",
     autoHideMenuBar: true,
     webPreferences: {
@@ -388,7 +388,7 @@ function createTray() {
     icon = nativeImage.createEmpty();
   }
   tray = new Tray(icon.isEmpty() ? undefined : icon);
-  tray.setToolTip(`DiagnoCenter Desktop — ${httpPort}`);
+  tray.setToolTip(`Care Diagnostics Desktop — ${httpPort}`);
   tray.setContextMenu(buildTrayMenu());
   tray.on("click", () => {
     if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
@@ -402,7 +402,7 @@ function updateTray() {
 // -------- Lifecycle --------------------------------------------------------
 function showSplashError(err) {
   log(`STARTUP FAILED: ${err.stack || err}`);
-  dialog.showErrorBox("DiagnoCenter failed to start", String(err.message || err));
+  dialog.showErrorBox("Care Diagnostics failed to start", String(err.message || err));
   cleanupAndQuit(1);
 }
 
@@ -423,7 +423,7 @@ app.on("before-quit", () => cleanupAndQuit(0));
 app.whenReady().then(async () => {
   try {
     if (process.platform !== "win32" && !process.env.DIAG_ERP_FORCE_RUN) {
-      throw new Error("DiagnoCenter Desktop runs on Windows only.");
+      throw new Error("Care Diagnostics Desktop runs on Windows only.");
     }
 
     // Apply any update staged by the previous run BEFORE we touch app paths.

@@ -1,5 +1,5 @@
 # =============================================================================
-# DiagnoCenter Docker Stack for Synology NAS
+# Care Diagnostics Docker Stack for Synology NAS
 #
 # Designed for Synology DSM 7.x with Container Manager (Docker).
 # All data persists on the NAS file system — easy to back up.

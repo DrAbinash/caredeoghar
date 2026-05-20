@@ -20,9 +20,9 @@ const BUILD_ROOT = path.resolve(__dirname, "..");
 // We embed the portable .zip as a single file inside the installer (extracted
 // at install time via PowerShell Expand-Archive) instead of asking NSIS to
 // File-list 5000+ individual files. See installer.nsi for the rationale.
-const SOURCE_ZIP = path.join(BUILD_ROOT, "dist/DiagnoCenter-Portable.zip");
+const SOURCE_ZIP = path.join(BUILD_ROOT, "dist/CareDiagnostics-Portable.zip");
 const NSI    = path.join(BUILD_ROOT, "installer/installer.nsi");
-const OUT    = path.join(BUILD_ROOT, "dist/DiagnoCenter-Setup.exe");
+const OUT    = path.join(BUILD_ROOT, "dist/CareDiagnostics-Setup.exe");
 
 function log(m) { process.stdout.write(`[installer] ${m}\n`); }
 

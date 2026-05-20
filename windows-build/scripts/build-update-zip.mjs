@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BUILD_ROOT = path.resolve(__dirname, "..");
 const PAYLOAD_DIR = path.join(BUILD_ROOT, "dist/payload");
-const OUT_ZIP = path.join(BUILD_ROOT, "dist/DiagnoCenter-Update.zip");
+const OUT_ZIP = path.join(BUILD_ROOT, "dist/CareDiagnostics-Update.zip");
 
 function log(m) { process.stdout.write(`[update-zip] ${m}\n`); }
 function run(cmd, args, opts = {}) {

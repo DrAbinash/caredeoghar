@@ -1,4 +1,4 @@
-# DiagnoCenter Offline Desktop Installation Guide
+# Care Diagnostics Offline Desktop Installation Guide
 
 ## What You Need
 
@@ -9,19 +9,19 @@
 ## Step 1: Download the Installer
 
 1. In the **Files** panel on the left, click `windows-build` → `dist`
-2. Right-click `DiagnoCenter-Setup.exe` and choose **Download**
+2. Right-click `CareDiagnostics-Setup.exe` and choose **Download**
 3. Save it to your computer (e.g., Desktop or Downloads)
 
 ## Step 2: Install on the Main Server PC
 
-1. Double-click `DiagnoCenter-Setup.exe`
+1. Double-click `CareDiagnostics-Setup.exe`
 2. Follow the installer wizard (Next → Next → Install → Finish)
-3. It will install to `C:\Program Files\DiagnoCenter\`
+3. It will install to `C:\Program Files\CareDiagnostics\`
 
 ## Step 3: Start the Server
 
-1. Go to `C:\Program Files\DiagnoCenter\`
-2. Double-click `DiagnoCenter.exe`
+1. Go to `C:\Program Files\CareDiagnostics\`
+2. Double-click `CareDiagnostics.exe`
 3. A black console window will open — **do not close it**
 4. Wait about 30 seconds for "Launcher ready"
 5. Look for a box showing:
@@ -40,7 +40,7 @@ If other computers can't connect:
 1. Press `Win + R`, type `cmd`, press Enter
 2. Copy-paste this exact command and press Enter:
    ```
-   netsh advfirewall firewall add rule name="DiagnoCenter" dir=in action=allow protocol=TCP localport=8888
+   netsh advfirewall firewall add rule name="CareDiagnostics" dir=in action=allow protocol=TCP localport=8888
    ```
 3. You should see "Ok." — done!
 
@@ -60,22 +60,22 @@ No installation needed on other PCs!
 
 | Task | How |
 |------|-----|
-| **Start the server** | Double-click `DiagnoCenter.exe` on the main PC |
+| **Start the server** | Double-click `CareDiagnostics.exe` on the main PC |
 | **Stop the server** | Close the black console window (or press Ctrl+C) |
 | **Print reports** | Works from any computer that has a printer installed |
 
 ## Tips
 
-- **Pin to taskbar:** Right-click `DiagnoCenter.exe` → Pin to taskbar for one-click start
-- **Auto-start:** Press `Win + R`, type `shell:startup`, drag `DiagnoCenter.exe` into that folder
-- **Backup:** The database is in `C:\Program Files\DiagnoCenter\data\pgsql\`. Copy the `data` folder regularly to a USB drive
-- **Updates:** Use `DiagnoCenter-Update.zip` inside the ERP (Settings → System Update) to patch without reinstalling
+- **Pin to taskbar:** Right-click `CareDiagnostics.exe` → Pin to taskbar for one-click start
+- **Auto-start:** Press `Win + R`, type `shell:startup`, drag `CareDiagnostics.exe` into that folder
+- **Backup:** The database is in `C:\Program Files\CareDiagnostics\data\pgsql\`. Copy the `data` folder regularly to a USB drive
+- **Updates:** Use `CareDiagnostics-Update.zip` inside the ERP (Settings → System Update) to patch without reinstalling
 
 ## Optional: Electron Desktop App
 
 If you prefer a desktop window instead of a browser:
 
-- Download `dist/electron/DiagnoCenter-Desktop-Setup.exe`
+- Download `dist/electron/CareDiagnostics-Desktop-Setup.exe`
 - Install it on the main PC
 - It runs in the system tray — right-click the tray icon to see LAN URLs
 

@@ -1,6 +1,6 @@
-# DiagnoCenter on Synology NAS (Docker)
+# Care Diagnostics on Synology NAS (Docker)
 
-Run the Diagnostic Center Billing ERP on your Synology NAS using Docker / Container Manager. Perfect for clinics that want a 24/7 server without leaving a PC running.
+Run Care Diagnostics on your Synology NAS using Docker / Container Manager. Perfect for clinics that want a 24/7 server without leaving a PC running.
 
 ## What You Need
 

@@ -13,8 +13,8 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BUILD_ROOT = path.resolve(__dirname, "..");
 const PAYLOAD = path.join(BUILD_ROOT, "dist/payload");
-const STAGE   = path.join(BUILD_ROOT, "dist/portable/DiagnoCenter");
-const OUT_ZIP = path.join(BUILD_ROOT, "dist/DiagnoCenter-Portable.zip");
+const STAGE   = path.join(BUILD_ROOT, "dist/portable/CareDiagnostics");
+const OUT_ZIP = path.join(BUILD_ROOT, "dist/CareDiagnostics-Portable.zip");
 
 function log(m) { process.stdout.write(`[portable] ${m}\n`); }
 
@@ -35,7 +35,7 @@ async function main() {
   log(`Zipping → ${OUT_ZIP}`);
   await rm(OUT_ZIP, { force: true });
   // Use system zip (always available in the Replit nix env).
-  await run("zip", ["-rq", OUT_ZIP, "DiagnoCenter"], { cwd: path.dirname(STAGE) });
+  await run("zip", ["-rq", OUT_ZIP, "CareDiagnostics"], { cwd: path.dirname(STAGE) });
 
   const sz = (await stat(OUT_ZIP)).size;
   log(`✓ ${OUT_ZIP}  (${(sz / 1024 / 1024).toFixed(1)} MB)`);

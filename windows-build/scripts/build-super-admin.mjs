@@ -7,7 +7,7 @@
 //   windows-build/dist/SuperAdmin-Portable.zip
 //   windows-build/dist/portable/SuperAdmin/SuperAdmin.exe
 //
-// The Super Admin variant reuses the *same* payload as the DiagnoCenter
+// The Super Admin variant reuses the *same* payload as the Care Diagnostics
 // build (Postgres + Node + bundled API + both built frontends) — only three
 // things change at runtime:
 //
@@ -115,7 +115,7 @@ async function writeVariantConfig() {
     variant: "super-admin",
     description:
       "Standalone portable build of the Super Admin Portal. Bundles the same " +
-      "Postgres + Node + API server as the main Diagnostic ERP build, but " +
+      "Postgres + Node + API server as the main Care Diagnostics build, but " +
       "auto-opens the Super Admin UI and uses a separate database and ports.",
     launcherConfig: LAUNCHER_CONFIG,
   };
@@ -159,7 +159,7 @@ async function buildLauncherExe() {
   // Drop the original DiagnosticERP.exe — this build is super-admin only.
   if (await pathExists(OLD_EXE)) {
     await unlink(OLD_EXE);
-    log("Removed bundled DiagnosticERP.exe (super-admin variant)");
+    log("Removed bundled CareDiagnostics.exe (super-admin variant)");
   }
 
   const sz = (await stat(OUT_EXE)).size;
