@@ -19,6 +19,8 @@ export function startCronScheduler() {
   scheduleMonthEndCommission();
   scheduleDicomAutoPull();
   scheduleMonthlyAudit();
+  scheduleBankingAutoSync();
+  scheduleFraudDetection();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -375,4 +377,87 @@ async function fireMonthEndCommission(now: Date) {
   } catch (err) {
     console.error("[cron] Failed to send month-end commission email:", err);
   }
+}
+
+// ── Banking Auto-Sync (every 5 minutes) ──────────────────────────────────────────────────────────────
+
+function scheduleBankingAutoSync() {
+  cron.schedule("*/5 * * * *", async () => {
+    try {
+      await fireBankingAutoSync();
+    } catch (err) {
+      console.error("[cron] Banking auto-sync failed:", err);
+    }
+  });
+  console.log("[cron] Banking auto-sync scheduler started (runs every 5 minutes)");
+}
+
+async function fireBankingAutoSync() {
+  const { db } = await import("@workspace/db");
+  const { bankAccountsTable, bankTransactionsTable } = await import("@workspace/db/schema");
+  const { eq, and, gte } = await import("drizzle-orm");
+  const { createProvider } = await import("./services/banking/BankProviderFactory");
+  const { batchReconcile } = await import("./services/banking/ReconciliationEngine");
+
+  const accounts = await db.select().from(bankAccountsTable).where(eq(bankAccountsTable.status, "active"));
+  if (accounts.length === 0) return;
+
+  let imported = 0;
+  for (const account of accounts) {
+    try {
+      const config = (account.providerConfig as Record<string, unknown> | null) ?? undefined;
+      const provider = createProvider(account.provider, config);
+      const since = new Date(Date.now() - 48 * 60 * 60 * 1000); // last 48 hours
+      const txs = await provider.getTransactions(account.maskedAccountNumber, { fromDate: since, limit: 200 });
+      const values = txs.map((t) => ({
+        bankAccountId: account.id,
+        provider: account.provider,
+        externalTransactionId: t.externalTransactionId,
+        transactionDate: t.transactionDate,
+        description: t.description,
+        amount: String(t.amount),
+        type: t.type,
+        balanceAfter: t.balanceAfter !== undefined ? String(t.balanceAfter) : null,
+        utr: t.utr ?? null,
+        referenceNumber: t.referenceNumber ?? null,
+        rawPayload: t.rawPayload ?? null,
+        reconciliationStatus: "unreconciled" as const,
+      }));
+      if (values.length > 0) {
+        await db.insert(bankTransactionsTable).values(values).onConflictDoNothing();
+        imported += values.length;
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[cron] Auto-sync failed for ${account.provider} account #${account.id}:`, msg);
+    }
+  }
+
+  if (imported > 0) {
+    console.log(`[cron] Banking auto-sync imported ${imported} transactions`);
+    // Run batch reconciliation on new transactions
+    try {
+      const result = await batchReconcile({ autoCloseThreshold: 80, performedBy: "cron" });
+      console.log(`[cron] Auto-reconciliation: ${result.matched} matched, ${result.autoClosed} auto-closed, ${result.failed} failed`);
+    } catch (err) {
+      console.error("[cron] Auto-reconciliation failed:", err);
+    }
+  }
+}
+
+// ── Fraud Detection (every 30 minutes) ─────────────────────────────────────────────────────────────
+
+function scheduleFraudDetection() {
+  cron.schedule("*/30 * * * *", async () => {
+    try {
+      const { runFraudDetection } = await import("./services/banking/FraudDetectionEngine");
+      const result = await runFraudDetection();
+      if (result.totalAlerts > 0) {
+        console.log(`[cron] Fraud detection: ${result.totalAlerts} alerts raised`);
+      }
+    } catch (err) {
+      console.error("[cron] Fraud detection failed:", err);
+    }
+  });
+  console.log("[cron] Fraud detection scheduler started (runs every 30 minutes)");
 }

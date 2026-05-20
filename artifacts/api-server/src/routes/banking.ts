@@ -3,6 +3,8 @@ import { db } from "@workspace/db";
 import {
   bankAccountsTable, bankTransactionsTable, paymentRequestsTable,
   webhookLogsTable, bankAuditLogsTable,
+  reconciliationLogsTable, fraudAlertsTable, gatewayTransactionsTable,
+  refundRequestsTable,
   BANK_PROVIDERS, BANK_ENVIRONMENTS, BANK_ACCOUNT_STATUS,
 } from "@workspace/db/schema";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
@@ -364,6 +366,184 @@ router.get("/audit-logs", async (req, res) => {
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   const rows = await db.select().from(bankAuditLogsTable).where(where).orderBy(desc(bankAuditLogsTable.createdAt)).limit(limit);
   res.json(rows);
+});
+
+// ---- Enterprise Reconciliation Engine (May 2026) ----------------------------
+
+import { batchReconcile, manualReconcile } from "../services/banking/ReconciliationEngine";
+
+router.post("/reconciliation/batch", requireStaffAuth, async (req: StaffAuthRequest, res) => {
+  const body = z.object({
+    fromDate: z.string().optional().nullable(),
+    toDate: z.string().optional().nullable(),
+    autoCloseThreshold: z.number().min(0).max(100).optional().default(80),
+  }).safeParse(req.body);
+  if (!body.success) { apiErrorFromZod(res, 400, "Validation failed", body.error); return; }
+  try {
+    const result = await batchReconcile({
+      fromDate: body.data.fromDate ? new Date(body.data.fromDate) : undefined,
+      toDate: body.data.toDate ? new Date(body.data.toDate) : undefined,
+      autoCloseThreshold: body.data.autoCloseThreshold,
+      performedBy: req.staffSession?.subjectName || "staff",
+    });
+    res.json(result);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    apiError(res, 502, `Batch reconcile failed: ${msg}`);
+  }
+});
+
+router.post("/reconciliation/manual", requireStaffAuth, async (req: StaffAuthRequest, res) => {
+  const body = z.object({
+    bankTransactionId: z.number().int().positive(),
+    billId: z.number().int().positive().optional().nullable(),
+    paymentId: z.number().int().positive().optional().nullable(),
+    voucherId: z.number().int().positive().optional().nullable(),
+  }).safeParse(req.body);
+  if (!body.success) { apiErrorFromZod(res, 400, "Validation failed", body.error); return; }
+  const ok = await manualReconcile(
+    body.data.bankTransactionId,
+    body.data.billId ?? undefined,
+    body.data.paymentId ?? undefined,
+    body.data.voucherId ?? undefined,
+    req.staffSession?.subjectName || "staff",
+  );
+  if (!ok) { apiError(res, 404, "Bank transaction not found"); return; }
+  res.json({ reconciled: true });
+});
+
+router.get("/reconciliation/logs", requireStaffAuth, async (req, res) => {
+  const limit = req.query.limit ? Number(req.query.limit) : 100;
+  const rows = await db.select().from(reconciliationLogsTable).orderBy(desc(reconciliationLogsTable.createdAt)).limit(limit);
+  res.json(rows);
+});
+
+// ---- Fraud Detection (May 2026) ---------------------------------------------
+
+import { runFraudDetection } from "../services/banking/FraudDetectionEngine";
+
+router.post("/fraud/run-check", requireStaffAuth, async (req: StaffAuthRequest, res) => {
+  try {
+    const result = await runFraudDetection();
+    res.json(result);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    apiError(res, 502, `Fraud check failed: ${msg}`);
+  }
+});
+
+router.get("/fraud/alerts", requireStaffAuth, async (req, res) => {
+  const status = req.query.status ? String(req.query.status) : undefined;
+  const severity = req.query.severity ? String(req.query.severity) : undefined;
+  const limit = req.query.limit ? Number(req.query.limit) : 100;
+  const conditions = [];
+  if (status) conditions.push(eq(fraudAlertsTable.status, status));
+  if (severity) conditions.push(eq(fraudAlertsTable.severity, severity));
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const rows = await db.select().from(fraudAlertsTable).where(where).orderBy(desc(fraudAlertsTable.createdAt)).limit(limit);
+  res.json(rows);
+});
+
+router.patch("/fraud/alerts/:id", requireStaffAuth, async (req: StaffAuthRequest, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) { apiError(res, 400, "Invalid id"); return; }
+  const body = z.object({
+    status: z.enum(["open", "investigating", "resolved", "false_positive", "escalated"]),
+    resolutionNote: z.string().max(2000).optional(),
+    resolutionAction: z.enum(["approved", "rejected", "adjusted", "escalated"]).optional(),
+  }).safeParse(req.body);
+  if (!body.success) { apiErrorFromZod(res, 400, "Validation failed", body.error); return; }
+  const [updated] = await db.update(fraudAlertsTable).set({
+    status: body.data.status,
+    resolutionNote: body.data.resolutionNote ?? null,
+    resolutionAction: body.data.resolutionAction ?? null,
+    resolvedBy: req.staffSession?.subjectName || "staff",
+    resolvedAt: new Date(),
+  }).where(eq(fraudAlertsTable.id, id)).returning();
+  if (!updated) { apiError(res, 404, "Alert not found"); return; }
+  res.json(updated);
+});
+
+// ---- Gateway Transactions (May 2026) ------------------------------------------
+
+router.get("/gateway-transactions", requireStaffAuth, async (req, res) => {
+  const provider = req.query.provider ? String(req.query.provider) : undefined;
+  const status = req.query.status ? String(req.query.status) : undefined;
+  const limit = req.query.limit ? Number(req.query.limit) : 100;
+  const conditions = [];
+  if (provider) conditions.push(eq(gatewayTransactionsTable.provider, provider));
+  if (status) conditions.push(eq(gatewayTransactionsTable.status, status));
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const rows = await db.select().from(gatewayTransactionsTable).where(where).orderBy(desc(gatewayTransactionsTable.createdAt)).limit(limit);
+  res.json(rows);
+});
+
+// ---- Refund Requests (May 2026) -----------------------------------------------
+
+router.get("/refunds", requireStaffAuth, async (req, res) => {
+  const status = req.query.status ? String(req.query.status) : undefined;
+  const limit = req.query.limit ? Number(req.query.limit) : 100;
+  const conditions = [];
+  if (status) conditions.push(eq(refundRequestsTable.status, status));
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const rows = await db.select().from(refundRequestsTable).where(where).orderBy(desc(refundRequestsTable.createdAt)).limit(limit);
+  res.json(rows);
+});
+
+router.post("/refunds", requireStaffAuth, async (req: StaffAuthRequest, res) => {
+  const body = z.object({
+    billId: z.number().int().positive(),
+    paymentId: z.number().int().positive(),
+    amount: z.union([z.number().positive(), z.string().regex(/^\d+(\.\d+)?$/)]).transform((v) => parseFloat(String(v))),
+    reason: z.string().trim().min(1),
+  }).safeParse(req.body);
+  if (!body.success) { apiErrorFromZod(res, 400, "Validation failed", body.error); return; }
+  const [inserted] = await db.insert(refundRequestsTable).values({
+    billId: body.data.billId,
+    paymentId: body.data.paymentId,
+    amount: String(body.data.amount),
+    reason: body.data.reason,
+    requestedBy: req.staffSession?.subjectName || "staff",
+    requestedById: req.staffSession?.subjectId ?? null,
+    requestedAt: new Date(),
+    status: "requested",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }).returning();
+  res.status(201).json(inserted);
+});
+
+router.patch("/refunds/:id/approve", requireStaffAuth, async (req: StaffAuthRequest, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) { apiError(res, 400, "Invalid id"); return; }
+  const body = z.object({ note: z.string().max(2000).optional() }).safeParse(req.body);
+  if (!body.success) { apiErrorFromZod(res, 400, "Validation failed", body.error); return; }
+  const [updated] = await db.update(refundRequestsTable).set({
+    status: "approved",
+    approvedBy: req.staffSession?.subjectName || "staff",
+    approvedById: req.staffSession?.subjectId ?? null,
+    approvedAt: new Date(),
+    approvalNote: body.data.note ?? null,
+    updatedAt: new Date(),
+  }).where(and(eq(refundRequestsTable.id, id), eq(refundRequestsTable.status, "requested"))).returning();
+  if (!updated) { apiError(res, 404, "Refund request not found or already processed"); return; }
+  res.json(updated);
+});
+
+router.patch("/refunds/:id/reject", requireStaffAuth, async (req: StaffAuthRequest, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) { apiError(res, 400, "Invalid id"); return; }
+  const body = z.object({ reason: z.string().min(1).max(2000) }).safeParse(req.body);
+  if (!body.success) { apiErrorFromZod(res, 400, "Validation failed", body.error); return; }
+  const [updated] = await db.update(refundRequestsTable).set({
+    status: "rejected",
+    rejectedBy: req.staffSession?.subjectName || "staff",
+    rejectedAt: new Date(),
+    rejectionReason: body.data.reason,
+    updatedAt: new Date(),
+  }).where(and(eq(refundRequestsTable.id, id), eq(refundRequestsTable.status, "requested"))).returning();
+  if (!updated) { apiError(res, 404, "Refund request not found or already processed"); return; }
+  res.json(updated);
 });
 
 export const bankingRouter = router;

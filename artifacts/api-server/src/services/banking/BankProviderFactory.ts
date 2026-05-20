@@ -8,6 +8,7 @@ import { KotakBankProvider } from "./KotakBankProvider";
 import { GenericBankProvider } from "./GenericBankProvider";
 import { BharatPeProvider } from "./BharatPeProvider";
 import { PhonePeProvider } from "./PhonePeProvider";
+import { CashfreeProvider } from "./CashfreeProvider";
 
 const PROVIDER_REGISTRY: Record<string, () => BankProvider> = {
   mock: () => new MockBankProvider(),
@@ -19,6 +20,7 @@ const PROVIDER_REGISTRY: Record<string, () => BankProvider> = {
   generic: () => new GenericBankProvider(),
   bharatpe: () => new BharatPeProvider(),
   phonepe: () => new PhonePeProvider(),
+  cashfree: () => new CashfreeProvider(),
 };
 
 const PROVIDER_PREFIX_MAP: Record<string, string> = {
@@ -31,6 +33,7 @@ const PROVIDER_PREFIX_MAP: Record<string, string> = {
   generic: "GENERIC_BANK",
   bharatpe: "BHARATPE",
   phonepe: "PHONEPE",
+  cashfree: "CASHFREE",
 };
 
 const providerCache = new Map<string, BankProvider>();

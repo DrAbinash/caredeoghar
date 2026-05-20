@@ -711,6 +711,154 @@ async function runStartupMigrations(): Promise<void> {
       );
       CREATE INDEX IF NOT EXISTS rad_lifecycle_study_idx ON radiology_report_lifecycle_log(study_id);
       CREATE INDEX IF NOT EXISTS rad_lifecycle_action_idx ON radiology_report_lifecycle_log(action);
+
+      -- Enterprise Banking Upgrade (May 2026)
+      CREATE TABLE IF NOT EXISTS reconciliation_logs (
+        id SERIAL PRIMARY KEY,
+        bank_transaction_id INTEGER NOT NULL,
+        bill_id INTEGER,
+        payment_id INTEGER,
+        voucher_id INTEGER,
+        confidence_score INTEGER NOT NULL DEFAULT 0,
+        match_strategy TEXT NOT NULL DEFAULT 'none',
+        status TEXT NOT NULL DEFAULT 'pending',
+        review_reason TEXT,
+        auto_closed BOOLEAN NOT NULL DEFAULT FALSE,
+        auto_closed_amount NUMERIC(14,2),
+        resolved_by TEXT,
+        resolved_at TIMESTAMPTZ,
+        resolution_note TEXT,
+        match_metadata JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS rec_log_bank_txn_idx ON reconciliation_logs(bank_transaction_id);
+      CREATE INDEX IF NOT EXISTS rec_log_status_idx ON reconciliation_logs(status);
+      CREATE INDEX IF NOT EXISTS rec_log_bill_idx ON reconciliation_logs(bill_id);
+
+      CREATE TABLE IF NOT EXISTS fraud_alerts (
+        id SERIAL PRIMARY KEY,
+        alert_type TEXT NOT NULL,
+        severity TEXT NOT NULL DEFAULT 'medium',
+        status TEXT NOT NULL DEFAULT 'open',
+        bill_id INTEGER,
+        payment_id INTEGER,
+        bank_transaction_id INTEGER,
+        user_id INTEGER,
+        user_name TEXT,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        affected_amount NUMERIC(14,2),
+        evidence JSONB,
+        resolved_by TEXT,
+        resolved_at TIMESTAMPTZ,
+        resolution_note TEXT,
+        resolution_action TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS fraud_status_idx ON fraud_alerts(status);
+      CREATE INDEX IF NOT EXISTS fraud_type_idx ON fraud_alerts(alert_type);
+      CREATE INDEX IF NOT EXISTS fraud_severity_idx ON fraud_alerts(severity);
+
+      CREATE TABLE IF NOT EXISTS shift_closures (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        user_name TEXT NOT NULL,
+        shift_label TEXT NOT NULL DEFAULT 'Morning',
+        started_at TIMESTAMPTZ NOT NULL,
+        ended_at TIMESTAMPTZ,
+        expected_cash NUMERIC(12,2) NOT NULL DEFAULT '0',
+        expected_upi NUMERIC(12,2) NOT NULL DEFAULT '0',
+        expected_card NUMERIC(12,2) NOT NULL DEFAULT '0',
+        expected_cheque NUMERIC(12,2) NOT NULL DEFAULT '0',
+        expected_other NUMERIC(12,2) NOT NULL DEFAULT '0',
+        expected_total NUMERIC(12,2) NOT NULL DEFAULT '0',
+        actual_cash NUMERIC(12,2) NOT NULL DEFAULT '0',
+        actual_upi NUMERIC(12,2) NOT NULL DEFAULT '0',
+        actual_card NUMERIC(12,2) NOT NULL DEFAULT '0',
+        actual_cheque NUMERIC(12,2) NOT NULL DEFAULT '0',
+        actual_other NUMERIC(12,2) NOT NULL DEFAULT '0',
+        actual_total NUMERIC(12,2) NOT NULL DEFAULT '0',
+        variance NUMERIC(12,2) NOT NULL DEFAULT '0',
+        variance_note TEXT NOT NULL DEFAULT '',
+        denominations JSONB,
+        denomination_total NUMERIC(12,2),
+        bank_deposit_amount NUMERIC(12,2),
+        bank_deposit_ref TEXT,
+        supervisor_id INTEGER,
+        supervisor_name TEXT,
+        approved_at TIMESTAMPTZ,
+        approval_note TEXT,
+        status TEXT NOT NULL DEFAULT 'open',
+        user_day_closure_id INTEGER,
+        notes TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS shift_user_idx ON shift_closures(user_id);
+      CREATE INDEX IF NOT EXISTS shift_status_idx ON shift_closures(status);
+      CREATE INDEX IF NOT EXISTS shift_date_idx ON shift_closures(started_at);
+
+      CREATE TABLE IF NOT EXISTS gateway_transactions (
+        id SERIAL PRIMARY KEY,
+        provider TEXT NOT NULL,
+        external_transaction_id TEXT,
+        external_order_id TEXT,
+        amount NUMERIC(14,2) NOT NULL,
+        currency TEXT NOT NULL DEFAULT 'INR',
+        gateway_fee NUMERIC(14,2),
+        tax_on_fee NUMERIC(14,2),
+        net_settled NUMERIC(14,2),
+        settlement_utr TEXT,
+        settlement_date TIMESTAMPTZ,
+        settlement_status TEXT NOT NULL DEFAULT 'pending',
+        method TEXT,
+        method_detail TEXT,
+        payer_vpa TEXT,
+        payer_phone TEXT,
+        bill_id INTEGER,
+        payment_id INTEGER,
+        status TEXT NOT NULL DEFAULT 'initiated',
+        failure_reason TEXT,
+        raw_payload JSONB,
+        reconciliation_status TEXT NOT NULL DEFAULT 'unreconciled',
+        bank_transaction_id INTEGER,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS gw_txn_provider_idx ON gateway_transactions(provider);
+      CREATE INDEX IF NOT EXISTS gw_txn_status_idx ON gateway_transactions(status);
+      CREATE INDEX IF NOT EXISTS gw_txn_bill_idx ON gateway_transactions(bill_id);
+      CREATE INDEX IF NOT EXISTS gw_txn_ext_id_idx ON gateway_transactions(external_transaction_id);
+
+      CREATE TABLE IF NOT EXISTS refund_requests (
+        id SERIAL PRIMARY KEY,
+        bill_id INTEGER NOT NULL,
+        payment_id INTEGER NOT NULL,
+        amount NUMERIC(14,2) NOT NULL,
+        currency TEXT NOT NULL DEFAULT 'INR',
+        reason TEXT NOT NULL,
+        requested_by TEXT NOT NULL,
+        requested_by_id INTEGER,
+        requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        status TEXT NOT NULL DEFAULT 'requested',
+        approved_by TEXT,
+        approved_by_id INTEGER,
+        approved_at TIMESTAMPTZ,
+        approval_note TEXT,
+        rejected_by TEXT,
+        rejected_at TIMESTAMPTZ,
+        rejection_reason TEXT,
+        gateway_refund_id TEXT,
+        gateway_refund_status TEXT,
+        gateway_refund_raw JSONB,
+        completed_at TIMESTAMPTZ,
+        completed_by TEXT,
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS refund_bill_idx ON refund_requests(bill_id);
+      CREATE INDEX IF NOT EXISTS refund_status_idx ON refund_requests(status);
     `);
     logger.info("Startup migrations applied");
   } catch (err) {
