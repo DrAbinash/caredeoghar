@@ -2,7 +2,7 @@ import { pgTable, serial, text, timestamp, boolean, integer } from "drizzle-orm/
 
 export const clinicSettingsTable = pgTable("clinic_settings", {
   id: serial("id").primaryKey(),
-  name: text("name").notNull().default("DiagnoCenter"),
+  name: text("name").notNull().default("Care Diagnostics"),
   tagline: text("tagline").notNull().default("Diagnostic & Pathology Services"),
   address: text("address").notNull().default(""),
   email: text("email").notNull().default(""),

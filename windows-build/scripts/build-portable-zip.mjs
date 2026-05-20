@@ -1,8 +1,8 @@
 // =============================================================================
 // build-portable-zip.mjs
 //
-// Wraps windows-build/dist/payload/ + the compiled DiagnoCenter.exe into a
-// distributable .zip:   windows-build/dist/DiagnosticERP-Portable.zip
+// Wraps windows-build/dist/payload/ + the compiled CareDiagnostics.exe into a
+// distributable .zip:   windows-build/dist/CareDiagnostics-Portable.zip
 // =============================================================================
 
 import { spawn } from "node:child_process";

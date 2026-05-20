@@ -1,4 +1,4 @@
-# CONQUEST PACS → DiagnoCenter ERP Integration Setup
+# CONQUEST PACS → Care Diagnostics ERP Integration Setup
 
 When CONQUEST receives a DICOM study this hook fires automatically and pushes
 the study metadata to the ERP. The study then appears in the **PACS Worklist**
@@ -200,7 +200,7 @@ CONQUEST PACS
       │  POST /api/internal/radiology/studies
       │  Authorization: Bearer INTERNAL_API_KEY
       ▼
-DiagnoCenter ERP API Server
+Care Diagnostics ERP API Server
       │
       │  Upsert into radiology_worklist table
       │  (dedup by StudyInstanceUID + AccessionNumber)

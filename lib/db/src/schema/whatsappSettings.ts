@@ -16,7 +16,7 @@ export const whatsappSettingsTable = pgTable("whatsapp_settings", {
   webhookVerifyToken: text("webhook_verify_token").notNull().default(""),
   // Meta AI Business Assistant (Gemini-powered auto-reply)
   aiAssistantEnabled: boolean("ai_assistant_enabled").notNull().default(false),
-  aiAssistantName: text("ai_assistant_name").notNull().default("DiagnoCenter Assistant"),
+  aiAssistantName: text("ai_assistant_name").notNull().default("Care Diagnostics Assistant"),
   aiSystemPrompt: text("ai_system_prompt").notNull().default(""),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

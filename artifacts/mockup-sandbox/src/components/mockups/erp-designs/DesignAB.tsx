@@ -49,7 +49,7 @@ export function DesignAB() {
             boxShadow: "0 4px 14px rgba(59,130,246,0.45)"
           }}>D</div>
           <div>
-            <div className="text-white font-bold text-sm tracking-tight">DiagnoCenter</div>
+            <div className="text-white font-bold text-sm tracking-tight">Care Diagnostics</div>
             <div className="text-[10px] font-medium" style={{ color: "#93c5fd" }}>Medical ERP</div>
           </div>
         </div>

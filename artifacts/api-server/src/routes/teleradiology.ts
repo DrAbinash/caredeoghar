@@ -123,7 +123,7 @@ function renderPatientView(p: {
   token: string;
 }): string {
   const { study, patient, test, clinic, report } = p;
-  const clinicName = escapeHtml(clinic?.name ?? "Diagnostic Center");
+  const clinicName = escapeHtml(clinic?.name ?? "Care Diagnostics");
   const heroColor = "#0ea5e9";
   const ready = report && (report.status === "verified" || report.status === "delivered");
   // The viewer is public — never link to the staff-authenticated PDF route.
@@ -173,7 +173,7 @@ function renderRadiologistView(p: {
   token: string;
 }): string {
   const { study, patient, test, clinic } = p;
-  const clinicName = escapeHtml(clinic?.name ?? "Diagnostic Center");
+  const clinicName = escapeHtml(clinic?.name ?? "Care Diagnostics");
   const draft = study.finalReport || study.prelimReport || "";
   const fullName = [patient?.firstName, patient?.lastName].filter(Boolean).join(" ");
   return `<!doctype html><html><head><meta charset="utf-8">

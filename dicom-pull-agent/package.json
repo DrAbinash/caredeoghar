@@ -1,8 +1,8 @@
 {
-  "name": "diagnocenter-dicom-pull-agent",
+  "name": "care-diagnostics-dicom-pull-agent",
   "version": "1.0.0",
   "private": true,
-  "description": "DICOM Q/R Pull Agent for DiagnoCenter ERP. Runs on the Conquest PACS server machine, polls the ERP for pending pull jobs, executes DCMTK findscu + movescu to pull studies from imaging machines (MRI/CT/X-Ray/USG) into Conquest automatically.",
+  "description": "DICOM Q/R Pull Agent for Care Diagnostics ERP. Runs on the Conquest PACS server machine, polls the ERP for pending pull jobs, executes DCMTK findscu + movescu to pull studies from imaging machines (MRI/CT/X-Ray/USG) into Conquest automatically.",
   "type": "module",
   "main": "src/index.js",
   "scripts": {

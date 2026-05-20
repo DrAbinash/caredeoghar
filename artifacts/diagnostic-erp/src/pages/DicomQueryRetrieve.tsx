@@ -815,7 +815,7 @@ export default function DicomQueryRetrieve() {
       const exportSession = readStaffSession();
 
       const clinic = clinicSettings ?? {};
-      const clinicName  = clinic.name    ?? "DiagnoCenter";
+      const clinicName  = clinic.name    ?? "Care Diagnostics";
       const clinicTag   = clinic.tagline ?? "";
       const clinicAddr  = clinic.address ?? "";
       const clinicPhone = clinic.phone   ?? "";

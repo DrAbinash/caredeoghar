@@ -398,7 +398,7 @@ router.post("/:id/biometric/register/begin", async (req, res) => {
   const existing = await db.select().from(staffBiometricCredentialsTable).where(eq(staffBiometricCredentialsTable.staffId, id));
 
   const opts = await generateRegistrationOptions({
-    rpName: "Diagnostic Center ERP",
+    rpName: "Care Diagnostics ERP",
     rpID,
     userName: staff.staffId,
     userDisplayName: `${staff.firstName} ${staff.lastName}`,

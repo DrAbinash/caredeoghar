@@ -42,7 +42,7 @@ export class WhatsAppBotEngine {
     // Opt-in
     if (text === "start" || text === "subscribe") {
       await db.update(waContactsTable).set({ consentStatus: "granted" }).where(eq(waContactsTable.id, contact.id));
-      return { text: "Welcome back! You are now subscribed to DiagnoCenter WhatsApp updates." };
+      return { text: "Welcome back! You are now subscribed to Care Diagnostics WhatsApp updates." };
     }
 
     // Check consent

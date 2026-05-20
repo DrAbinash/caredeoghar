@@ -1,5 +1,5 @@
 /**
- * DiagnoCenter Windows DICOM Pull Agent v1.3
+ * Care Diagnostics Windows DICOM Pull Agent v1.3
  *
  * Runs on a Windows workstation inside the diagnostic center LAN.
  * Every poll cycle:
@@ -41,7 +41,7 @@ const { logger }              = require("./logger");
 const { refreshConfig, getConfig, FETCH_INTERVAL_MS } = require("./config");
 
 // ─── Startup banner ───────────────────────────────────────────────────────────
-logger.info("DiagnoCenter DICOM Pull Agent starting", {
+logger.info("Care Diagnostics DICOM Pull Agent starting", {
   version: "1.3.0",
   node:    process.version,
   platform: process.platform,

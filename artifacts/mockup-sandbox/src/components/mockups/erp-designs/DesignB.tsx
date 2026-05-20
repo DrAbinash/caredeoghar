@@ -34,7 +34,7 @@ export function DesignB() {
         <div className="px-5 py-4 flex items-center gap-2.5 border-b border-gray-100">
           <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white text-sm font-bold">D</div>
           <div>
-            <div className="text-gray-900 font-bold text-sm">DiagnoCenter</div>
+            <div className="text-gray-900 font-bold text-sm">Care Diagnostics</div>
             <div className="text-blue-500 text-[10px] font-medium">Medical ERP</div>
           </div>
         </div>

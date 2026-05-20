@@ -40,7 +40,7 @@ export function DesignA() {
           <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold"
             style={{ background: "linear-gradient(135deg, #7c3aed, #4f46e5)" }}>D</div>
           <div>
-            <div className="text-white font-bold text-sm tracking-tight">DiagnoCenter</div>
+            <div className="text-white font-bold text-sm tracking-tight">Care Diagnostics</div>
             <div className="text-violet-400 text-[10px]">ERP v2</div>
           </div>
         </div>

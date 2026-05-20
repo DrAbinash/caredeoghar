@@ -36,7 +36,7 @@ export function DesignC() {
           <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-sm font-bold"
             style={{ background: "linear-gradient(135deg, #22d3ee, #818cf8)", boxShadow: "0 0 12px rgba(34,211,238,0.4)" }}>D</div>
           <div>
-            <div className="text-white font-bold text-sm">DiagnoCenter</div>
+            <div className="text-white font-bold text-sm">Care Diagnostics</div>
             <div className="text-[10px] font-medium" style={{ color: "#22d3ee" }}>Medical ERP</div>
           </div>
         </div>

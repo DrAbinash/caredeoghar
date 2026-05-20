@@ -265,7 +265,7 @@ export function buildPatientMessagePrompt(
   return `Draft a short, professional and warm SMS/WhatsApp message (max 60 words) for a diagnostic center to send a patient.
 
 Patient Name: ${patient.firstName} ${patient.lastName}
-Center Name: DiagnoCenter
+Center Name: Care Diagnostics
 
 Message purpose: ${purpose}
 

@@ -56,7 +56,7 @@ function readManifest(): Record<string, unknown> | null {
 systemRouter.get("/info", (_req: Request, res: Response) => {
   const manifest = readManifest();
   res.json({
-    name: (manifest?.["name"] as string) || "Diagnostic Center Billing ERP",
+    name: (manifest?.["name"] as string) || "Care Diagnostics Billing ERP",
     builtAt: manifest?.["builtAt"] || null,
     nodeVersion: manifest?.["nodeVersion"] || null,
     postgresVersion: manifest?.["postgresVersion"] || null,

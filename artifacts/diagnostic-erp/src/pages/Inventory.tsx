@@ -432,7 +432,7 @@ export default function Inventory() {
     if (search) parts.push(`Search: "${search}"`);
     return {
       title: "Inventory Stock Report",
-      subtitle: "Diagnostic Center Billing ERP",
+      subtitle: "Care Diagnostics Billing ERP",
       filterLabel: parts.length ? parts.join(" · ") : "All items",
       generatedAt: new Date().toLocaleString("en-IN", {
         day: "2-digit", month: "short", year: "numeric",

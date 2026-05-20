@@ -1,5 +1,5 @@
 ; =============================================================================
-; Diagnostic Center Billing ERP — Windows installer (NSIS)
+; Care Diagnostics Billing ERP — Windows installer (NSIS)
 ;
 ; Built on Linux with:
 ;   makensis -DPAYLOAD_ZIP=...CareDiagnostics-Portable.zip \
@@ -86,7 +86,7 @@ Section "Install"
   FileWrite $0 'if (Test-Path $$tmp) { Remove-Item $$tmp -Recurse -Force }$\r$\n'
   FileWrite $0 'New-Item -ItemType Directory -Path $$tmp | Out-Null$\r$\n'
   FileWrite $0 'Expand-Archive -LiteralPath $$zip -DestinationPath $$tmp -Force$\r$\n'
-  FileWrite $0 '# Zip wraps everything in a top-level "DiagnoCenter" folder; flatten it.$\r$\n'
+  FileWrite $0 '# Zip wraps everything in a top-level "CareDiagnostics" folder; flatten it.$\r$\n'
   FileWrite $0 '$$root = Get-ChildItem $$tmp | Select-Object -First 1$\r$\n'
   FileWrite $0 'Get-ChildItem -LiteralPath $$root.FullName -Force | ForEach-Object {$\r$\n'
   FileWrite $0 '  Move-Item -LiteralPath $$_.FullName -Destination $$installDir -Force$\r$\n'

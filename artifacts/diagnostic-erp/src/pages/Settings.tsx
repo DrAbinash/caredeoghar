@@ -141,7 +141,7 @@ function downloadTextFile(filename: string, content: string) {
 
 function buildManualText() {
   return [
-    "Diagnostic Center Billing ERP User Manual",
+    "Care Diagnostics Billing ERP User Manual",
     "",
     "1. Getting Started",
     "- Use the Dashboard to review daily counts, revenue, and pending work.",

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-DiagnoCenter is a TypeScript pnpm monorepo for a diagnostic-center ERP. Production components include an Express 5 API server (`artifacts/api-server/src/index.ts` and `src/app.ts`), PostgreSQL via Drizzle (`lib/db`), React/Vite staff and super-admin frontends, a public clinic-site frontend, and a workstation-local fingerprint bridge service (`bridge-service/src/index.js`). The application manages patient records, bills, test orders/results, appointments, staff users, inventory, accounting, referral commission workflows, website-builder content, backups, AI-assisted report/billing features, and biometric attendance/login.
+Care Diagnostics is a TypeScript pnpm monorepo for a diagnostic-center ERP. Production components include an Express 5 API server (`artifacts/api-server/src/index.ts` and `src/app.ts`), PostgreSQL via Drizzle (`lib/db`), React/Vite staff and super-admin frontends, a public clinic-site frontend, and a workstation-local fingerprint bridge service (`bridge-service/src/index.js`). The application manages patient records, bills, test orders/results, appointments, staff users, inventory, accounting, referral commission workflows, website-builder content, backups, AI-assisted report/billing features, and biometric attendance/login.
 
 Production assumptions for scans: mockup sandbox code is dev-only; `NODE_ENV` is `production`; deployed traffic is TLS-terminated by the platform; source-level HTTPS certificate management is out of scope. Windows/Electron packaging is in scope only when it changes production/server trust boundaries or exposes the same API/data surfaces.
 

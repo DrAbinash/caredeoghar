@@ -356,7 +356,7 @@ function buildTrayMenu() {
     };
   });
   const template = [
-    { label: `DiagnoCenter Desktop  —  port ${httpPort}`, enabled: false },
+    { label: `Care Diagnostics Desktop  —  port ${httpPort}`, enabled: false },
     { type: "separator" },
     ...(lanItems.length ? [
       { label: "LAN Access", enabled: false },

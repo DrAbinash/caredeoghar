@@ -205,7 +205,7 @@ export default function AppointmentSection({ section, settings }: { section: Sec
         amount: res.amountPaise,
         currency: "INR",
         order_id: res.razorpayOrderId,
-        name: settings.siteTitle || "Diagnostic Center",
+        name: settings.siteTitle || "Care Diagnostics",
         description: `Test booking — ${res.bookingRef}`,
         prefill: { name: pd.name, contact: pd.phone, email: pd.email },
         theme: { color: "#6366f1" },

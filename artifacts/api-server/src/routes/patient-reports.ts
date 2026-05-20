@@ -745,7 +745,7 @@ async function buildReportHtml(reportId: number, autoPrint: boolean): Promise<st
       <div class="hdr">
         ${clinic?.logoDataUrl ? `<img src="${clinic.logoDataUrl}" alt="logo"/>` : ""}
         <div>
-          <div class="name">${escapeHtml(clinic?.name ?? "DiagnoCenter")}</div>
+          <div class="name">${escapeHtml(clinic?.name ?? "Care Diagnostics")}</div>
           <div class="tagline">${escapeHtml(clinic?.tagline ?? "")}</div>
         </div>
         <div class="contact">

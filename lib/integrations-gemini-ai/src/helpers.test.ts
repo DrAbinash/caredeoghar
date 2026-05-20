@@ -383,10 +383,10 @@ describe("buildPatientMessagePrompt", () => {
     expect(prompt).toContain("Priya Mehta");
   });
 
-  it("includes the center name DiagnoCenter", () => {
+  it("includes the center name Care Diagnostics", () => {
     const prompt = buildPatientMessagePrompt(SAMPLE_MSG_PATIENT, "followup");
 
-    expect(prompt).toContain("DiagnoCenter");
+    expect(prompt).toContain("Care Diagnostics");
   });
 
   it("includes follow-up purpose text for 'followup' type", () => {
@@ -450,7 +450,7 @@ describe("generatePatientMessage", () => {
       ok: true,
       status: 200,
       json: async () => ({
-        candidates: [{ content: { parts: [{ text: "Dear Priya, your results are ready at DiagnoCenter." }] } }],
+        candidates: [{ content: { parts: [{ text: "Dear Priya, your results are ready at Care Diagnostics." }] } }],
       }),
     } as unknown as Response);
 
@@ -459,12 +459,12 @@ describe("generatePatientMessage", () => {
       apiKey: "test-key",
     });
 
-    expect(result).toBe("Dear Priya, your results are ready at DiagnoCenter.");
+    expect(result).toBe("Dear Priya, your results are ready at Care Diagnostics.");
 
     const [, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(init.body as string);
     expect(body.contents[0].parts[0].text).toContain("Priya Mehta");
-    expect(body.contents[0].parts[0].text).toContain("DiagnoCenter");
+    expect(body.contents[0].parts[0].text).toContain("Care Diagnostics");
   });
 
   it("sends the request with maxTokens capped at 200 by default", async () => {

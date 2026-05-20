@@ -1,4 +1,4 @@
-# DiagnoCenter ERP — Complete Feature Reference
+# Care Diagnostics ERP — Complete Feature Reference
 
 > Auto-generated feature documentation derived from the live codebase.
 > Regenerate with: `pnpm --filter @workspace/scripts run generate:features`

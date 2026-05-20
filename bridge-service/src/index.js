@@ -1,4 +1,4 @@
-// DiagnoCenter Fingerprint Bridge
+// Care Diagnostics Fingerprint Bridge
 // -------------------------------------------------------------
 // Runs on each workstation that has a USB fingerprint scanner.
 // Browser pages call http://127.0.0.1:8765/* for capture/identify.

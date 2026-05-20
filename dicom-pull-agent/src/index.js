@@ -1,5 +1,5 @@
 /**
- * DiagnoCenter DICOM Q/R Pull Agent
+ * Care Diagnostics DICOM Q/R Pull Agent
  * ──────────────────────────────────────────────────────────────────────────────
  * Runs on the Conquest PACS server machine (Windows/Linux).
  * Polls the ERP API for pending pull jobs, executes DCMTK findscu + movescu
@@ -460,7 +460,7 @@ async function poll() {
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 console.log("┌─────────────────────────────────────────────────┐");
-console.log("│  DiagnoCenter DICOM Q/R Pull Agent              │");
+console.log("│  Care Diagnostics DICOM Q/R Pull Agent          │");
 console.log("└─────────────────────────────────────────────────┘");
 console.log(`  ERP URL    : ${ERP_BASE}`);
 console.log(`  Agent AE   : ${AGENT_AE}`);

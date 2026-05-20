@@ -1113,7 +1113,7 @@ export default function RadiologyReportingWorkspace({ studyId }: { studyId?: num
             <option value="concise">Concise</option>
             <option value="detailed">Detailed</option>
             <option value="academic">Academic</option>
-            <option value="diagnostic">Diagnostic Center</option>
+            <option value="diagnostic">Care Diagnostics</option>
           </select>
           <div className="flex items-center gap-1.5">
             <Checkbox id="diff" checked={stylePrefs.includeDifferential} onCheckedChange={(c) => setStylePrefs((p) => ({ ...p, includeDifferential: c === true }))} />

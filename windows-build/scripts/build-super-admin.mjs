@@ -47,7 +47,7 @@ const SEA_CONFIG   = path.join(SEA_STAGE, "sea-config.json");
 const SEA_BLOB     = path.join(SEA_STAGE, "sea-prep.blob");
 const NODE_EXE     = path.join(STAGE, "runtime/node/node.exe");
 const OUT_EXE      = path.join(STAGE, "SuperAdmin.exe");
-const OLD_EXE      = path.join(STAGE, "DiagnoCenter.exe");
+const OLD_EXE      = path.join(STAGE, "CareDiagnostics.exe");
 
 // Variant-specific launcher config — written into the payload so launcher.js
 // picks it up at runtime without code changes.

@@ -2,12 +2,12 @@
 // build-installer.mjs
 //
 // Compiles windows-build/installer/installer.nsi into a Windows installer .exe
-// using makensis. Output: windows-build/dist/DiagnoCenter-Setup.exe
+// using makensis. Output: windows-build/dist/CareDiagnostics-Setup.exe
 //
 // Pre-requisites (run beforehand):
 //   pnpm --filter @workspace/windows-build run build:payload
 //   pnpm --filter @workspace/windows-build run build:launcher
-//   pnpm --filter @workspace/windows-build run build:portable     # creates dist/portable/DiagnoCenter
+//   pnpm --filter @workspace/windows-build run build:portable     # creates dist/portable/CareDiagnostics
 // =============================================================================
 
 import { spawn } from "node:child_process";

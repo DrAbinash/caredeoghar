@@ -1,8 +1,8 @@
-# DiagnoCenter Fingerprint Bridge
+# Care Diagnostics Fingerprint Bridge
 
 A small Node.js service that runs **locally on each workstation** to bridge
 USB fingerprint scanners (ZKTeco, Mantra MFS100, Morpho/IDEMIA, etc.) with
-the DiagnoCenter ERP.
+the Care Diagnostics ERP.
 
 The browser cannot talk to USB biometric devices directly. This bridge:
 

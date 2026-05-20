@@ -1,4 +1,4 @@
-# DiagnoCenter DICOM Q/R Pull Agent
+# Care Diagnostics DICOM Q/R Pull Agent
 
 Runs on the **Conquest PACS server machine** (same Windows PC or on the LAN).
 Polls the ERP for pending pull jobs and automatically executes DCMTK `findscu` + `movescu`
@@ -38,7 +38,7 @@ node src/index.js
 
 | Variable | Default | Description |
 |---|---|---|
-| `ERP_BASE_URL` | — | **Required.** Base URL of the DiagnoCenter ERP |
+| `ERP_BASE_URL` | — | **Required.** Base URL of the Care Diagnostics ERP |
 | `INTERNAL_API_KEY` | — | **Required.** Must match `INTERNAL_API_KEY` on the ERP server |
 | `DCMTK_DIR` | (PATH) | Path to DCMTK `bin/` folder if not in system PATH |
 | `AGENT_AE_TITLE` | `DIAGNO_AGENT` | AE Title this agent uses when connecting to modalities |

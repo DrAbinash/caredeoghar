@@ -312,7 +312,7 @@ export default function ReportGenerator() {
     queryFn: () => api.get("/api/clinic-settings"),
     staleTime: 60_000,
   });
-  const labName = clinic?.name ? `${clinic.name} Laboratory` : "DiagnoCenter Laboratory";
+  const labName = clinic?.name ? `${clinic.name} Laboratory` : "Care Diagnostics Laboratory";
   const [reportDate, setReportDate] = useState(new Date().toISOString().slice(0, 10));
   const [outputFormat, setOutputFormat] = useState<"print" | "html" | "text">("print");
   const [speaking, setSpeaking] = useState(false);

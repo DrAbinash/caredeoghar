@@ -69,7 +69,7 @@ const doc = new Document({
     },
     headers: {
       default: new Header({
-        children: [new Paragraph({ children: [new TextRun({ text: "DiagnoCenter \u2014 TextRad-Inspired Radiology Reporting Integration", size: 18 })] })],
+        children: [new Paragraph({ children: [new TextRun({ text: "Care Diagnostics \u2014 TextRad-Inspired Radiology Reporting Integration", size: 18 })] })],
       }),
     },
     footers: {
@@ -85,15 +85,15 @@ const doc = new Document({
         spacing: { after: 400 },
       }),
       new Paragraph({
-        text: "DiagnoCenter Diagnostic ERP \u2014 Radiology Report Generator Enhancement",
+        text: "Care Diagnostics Diagnostic ERP \u2014 Radiology Report Generator Enhancement",
         alignment: AlignmentType.CENTER,
         spacing: { after: 200 },
       }),
       p("Version 1.0 \u2014 May 2026"),
-      p("This document describes the complete integration of TextRad-inspired features into the existing DiagnoCenter Radiology Report Generator. All features are built, tested, and deployed within the existing pnpm monorepo architecture."),
+      p("This document describes the complete integration of TextRad-inspired features into the existing Care Diagnostics Radiology Report Generator. All features are built, tested, and deployed within the existing pnpm monorepo architecture."),
 
       h1("1. Executive Summary"),
-      p("The Radiology Report Generator in DiagnoCenter has been enhanced with five major TextRad-inspired feature groups that improve radiologist workflow efficiency, report consistency, and user experience:"),
+      p("The Radiology Report Generator in Care Diagnostics has been enhanced with five major TextRad-inspired feature groups that improve radiologist workflow efficiency, report consistency, and user experience:"),
       p("1. \u00a0\u00a0", b("Text Macros"), " \u2014 User-defined shortcut expansions for rapid dictation and typing."),
       p("2. \u00a0\u00a0", b("Report Preferences"), " \u2014 Per-user formatting controls for heading case, spacing, impression style, headers, and footers."),
       p("3. \u00a0\u00a0", b("Workspace Layouts"), " \u2014 Three layout modes (3-Panel, Preview-First, Workflow) with localStorage persistence."),

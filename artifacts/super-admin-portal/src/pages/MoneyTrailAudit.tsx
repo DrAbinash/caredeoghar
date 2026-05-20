@@ -435,7 +435,7 @@ function ReportView({ report, forArchive }: { report: Report; forArchive?: { id:
             </div>
           </div>
           <div>
-            <p className="font-bold mb-12">For DiagnoCenter (Super Admin):</p>
+            <p className="font-bold mb-12">For Care Diagnostics (Super Admin):</p>
             <div className="border-t border-gray-400 pt-1">
               <p>{forArchive?.completedBy || "Authorised Signatory"}</p>
               <p className="text-xs text-gray-600 mt-2">{forArchive ? `Audit #${forArchive.id}` : ""}</p>
@@ -444,7 +444,7 @@ function ReportView({ report, forArchive }: { report: Report; forArchive?: { id:
           </div>
         </div>
         <p className="text-[10px] text-gray-500 mt-8 text-center">
-          Generated automatically from the DiagnoCenter ERP. Snapshot stored permanently in audit_runs.
+          Generated automatically from the Care Diagnostics ERP. Snapshot stored permanently in audit_runs.
         </p>
       </div>
     </div>

@@ -873,7 +873,7 @@ export default function Dashboard() {
     <div className="pb-10">
       <PageHeader
         title="Dashboard"
-        subtitle="Diagnostic Center Overview"
+        subtitle="Care Diagnostics Overview"
         actions={
           <div className="flex items-center gap-2 flex-wrap">
             <SummaryExportToolbar config={exportConfig} emailEndpoint="/api/dashboard/my-daily-summary/send-email" />

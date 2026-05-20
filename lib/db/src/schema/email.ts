@@ -8,7 +8,7 @@ export const emailSettingsTable = pgTable("email_settings", {
   smtpPassword: text("smtp_password").notNull().default(""),
   smtpSecure: boolean("smtp_secure").notNull().default(false),
   fromAddress: text("from_address").notNull().default(""),
-  fromName: text("from_name").notNull().default("DiagnoCenter ERP"),
+  fromName: text("from_name").notNull().default("Care Diagnostics ERP"),
   adminEmail: text("admin_email").notNull().default(""),
   extraRecipients: text("extra_recipients").notNull().default("[]"),
   billEditEnabled: boolean("bill_edit_enabled").notNull().default(true),

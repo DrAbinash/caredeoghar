@@ -48,7 +48,7 @@ protectedRouter.post("/register/begin", async (req: StaffAuthRequest, res) => {
   const existing = await getCredentialsForUser(staff.subjectId);
 
   const opts = await generateRegistrationOptions({
-    rpName: "Diagnostic Center ERP",
+    rpName: "Care Diagnostics ERP",
     rpID,
     userName: staff.subjectName,
     userDisplayName: staff.subjectName,

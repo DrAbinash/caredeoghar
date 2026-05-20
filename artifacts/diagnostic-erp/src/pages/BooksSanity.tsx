@@ -70,7 +70,7 @@ export default function BooksSanity() {
   function exportCsv() {
     if (!data) return;
     const lines: string[] = [];
-    lines.push(`"DiagnoCenter Books Sanity Report"`);
+    lines.push(`"Care Diagnostics Books Sanity Report"`);
     lines.push(`"Period","${data.range.from}","to","${data.range.to}"`);
     lines.push(`"Generated at","${data.generatedAt}"`);
     lines.push("");
@@ -250,7 +250,7 @@ export default function BooksSanity() {
               </div>
             </div>
             <div>
-              <p className="font-bold mb-12">For DiagnoCenter:</p>
+              <p className="font-bold mb-12">For Care Diagnostics:</p>
               <div className="border-t border-gray-400 pt-1">
                 <p>Authorised Signatory</p>
                 <p className="text-xs text-gray-600 mt-2">Name: ____________</p>
@@ -259,7 +259,7 @@ export default function BooksSanity() {
             </div>
           </div>
           <p className="text-[10px] text-gray-500 mt-8 text-center">
-            This report is generated automatically from the DiagnoCenter ERP. Every flagged row references the original bill in the system audit log.
+            This report is generated automatically from the Care Diagnostics ERP. Every flagged row references the original bill in the system audit log.
           </p>
         </div>
       )}

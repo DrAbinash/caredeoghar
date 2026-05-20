@@ -14,7 +14,7 @@ const superAdminTs = read("artifacts/api-server/src/routes/super-admin.ts");
 const navMatches = [...layoutTsx.matchAll(/\{ path: "([^"]+)", icon: [^,]+, label: "([^"]+)" \}/g)].map((m) => `- ${m[2]} (${m[1]})`);
 const moduleMatches = [...settingsTsx.matchAll(/\{ path: "([^"]+)", label: "([^"]+)" \}/g)].map((m) => `- ${m[2]} (${m[1]})`);
 
-const content = `# DiagnoCenter ERP — Complete Feature Reference
+const content = `# Care Diagnostics ERP — Complete Feature Reference
 
 > Auto-generated feature documentation derived from the live codebase.
 > Regenerate with: \`pnpm --filter @workspace/scripts run generate:features\`

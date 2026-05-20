@@ -524,7 +524,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
           {!sidebarCollapsed && (
             <div className="flex-1 min-w-0">
-              <div className="text-base font-bold text-sidebar-foreground leading-tight tracking-tight truncate">{clinic?.name || "DiagnoCenter"}</div>
+              <div className="text-base font-bold text-sidebar-foreground leading-tight tracking-tight truncate">{clinic?.name || "Care Diagnostics"}</div>
               <div className="text-[11px] uppercase tracking-wider text-sidebar-foreground/60 font-medium">{clinic?.tagline || "Billing ERP"}</div>
             </div>
           )}
@@ -833,7 +833,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <Activity size={20} className="text-white" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-base font-bold text-sidebar-foreground leading-tight tracking-tight truncate">{clinic?.name || "DiagnoCenter"}</div>
+              <div className="text-base font-bold text-sidebar-foreground leading-tight tracking-tight truncate">{clinic?.name || "Care Diagnostics"}</div>
               <div className="text-[11px] uppercase tracking-wider text-sidebar-foreground/60 font-medium">{clinic?.tagline || "Billing ERP"}</div>
             </div>
             <button className="text-sidebar-foreground ml-auto" onClick={() => setSidebarOpen(false)}>
@@ -929,7 +929,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <Activity size={14} className="text-white" />
             </div>
             <span className="font-semibold text-sm truncate">
-              {flatNavLeaves(visibleNav).find(n => n.path === "/" ? location === "/" : location === n.path || location.startsWith(n.path + "/"))?.label ?? "DiagnoCenter"}
+              {flatNavLeaves(visibleNav).find(n => n.path === "/" ? location === "/" : location === n.path || location.startsWith(n.path + "/"))?.label ?? "Care Diagnostics"}
             </span>
           </div>
           <div className="ml-auto flex items-center gap-1">

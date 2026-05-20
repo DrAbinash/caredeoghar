@@ -109,7 +109,7 @@ export default function Display() {
             <div className="h-12 w-12 rounded-lg bg-white/10 flex items-center justify-center"><Tv size={28} /></div>
           )}
           <div>
-            <div className="text-2xl sm:text-3xl font-extrabold tracking-tight">{clinic?.name || "DiagnoCenter"}</div>
+            <div className="text-2xl sm:text-3xl font-extrabold tracking-tight">{clinic?.name || "Care Diagnostics"}</div>
             <div className="text-sm text-white/60">Live Queue Display · {data?.date ?? ""}</div>
           </div>
         </div>

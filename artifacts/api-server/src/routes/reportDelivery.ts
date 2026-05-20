@@ -77,7 +77,7 @@ reportDeliveryRouter.post("/send", async (req, res): Promise<void> => {
   const [clinic] = await db.select().from(clinicSettingsTable).limit(1);
 
   const patientFirstName = patient?.firstName ?? "Patient";
-  const clinicName = clinic?.name ?? "Diagnostic Center";
+  const clinicName = clinic?.name ?? "Care Diagnostics";
   const phone = recipientPhone ?? patient?.phone ?? null;
   const email = recipientEmail ?? patient?.email ?? null;
 
@@ -212,7 +212,7 @@ reportDeliveryRouter.get("/preview", async (req, res): Promise<void> => {
   const [clinic] = await db.select().from(clinicSettingsTable).limit(1);
 
   const patientFirstName = patient?.firstName ?? "Patient";
-  const clinicName = clinic?.name ?? "Diagnostic Center";
+  const clinicName = clinic?.name ?? "Care Diagnostics";
   const pdfLink = report?.publicToken
     ? `${process.env["SITE_URL"] ?? ""}/api/p/r/${report.publicToken}/pdf`
     : null;

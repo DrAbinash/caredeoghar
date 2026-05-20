@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>DiagnoCenter Windows Installation Guide</title>
+<title>Care Diagnostics Windows Installation Guide</title>
 <style>
   @page { size: A4; margin: 15mm; }
   body { font-family: "Segoe UI", Arial, sans-serif; font-size: 11pt; line-height: 1.6; color: #222; }
@@ -34,8 +34,8 @@
 <body>
 
 <div class="cover">
-  <h1>DiagnoCenter</h1>
-  <div class="subtitle">Diagnostic Center Billing ERP</div>
+  <h1>Care Diagnostics</h1>
+  <div class="subtitle">Care Diagnostics Billing ERP</div>
   <div class="version">Windows Installation Guide • Version 2026.05</div>
   <div style="margin-top: 30px; color: #666; font-size: 10pt;">
     For Windows 10 / Windows 11 PCs
@@ -46,7 +46,7 @@
 <ul>
   <li><strong>One main computer</strong> (Windows PC) to act as the server — this is the only PC that needs the installer</li>
   <li><strong>Other computers</strong> on the same Wi-Fi or LAN — no installation needed, just a web browser</li>
-  <li><strong>Installer file:</strong> <code>DiagnoCenter-Setup.exe</code> (about 320 MB)</li>
+  <li><strong>Installer file:</strong> <code>Care Diagnostics-Setup.exe</code> (about 320 MB)</li>
   <li><strong>Minimum specs:</strong> Windows 10/11, 4 GB RAM, 1 GB free disk space</li>
 </ul>
 
@@ -61,7 +61,7 @@
 <div class="step">
   <span class="step-num">1</span>
   <span class="step-title">Download the Installer</span>
-  <p>Get <code>DiagnoCenter-Setup.exe</code> from the download link provided. Save it to your Desktop or Downloads folder.</p>
+  <p>Get <code>Care Diagnostics-Setup.exe</code> from the download link provided. Save it to your Desktop or Downloads folder.</p>
   <div class="note">
     <strong>Note:</strong> The file is about 320 MB. It may take a few minutes to download depending on your internet speed.
   </div>
@@ -70,7 +70,7 @@
 <div class="step">
   <span class="step-num">2</span>
   <span class="step-title">Run the Installer</span>
-  <p>Double-click <code>DiagnoCenter-Setup.exe</code>. If Windows shows a "Windows protected your PC" warning:</p>
+  <p>Double-click <code>Care Diagnostics-Setup.exe</code>. If Windows shows a "Windows protected your PC" warning:</p>
   <ol>
     <li>Click <strong>More info</strong></li>
     <li>Click <strong>Run anyway</strong></li>
@@ -78,7 +78,7 @@
   <p>Follow the setup wizard:</p>
   <ol>
     <li>Click <strong>Next</strong></li>
-    <li>Choose install location (default is fine: <code>C:\Program Files\DiagnoCenter\</code>)</li>
+    <li>Choose install location (default is fine: <code>C:\Program Files\Care Diagnostics\</code>)</li>
     <li>Click <strong>Install</strong></li>
     <li>Wait for installation (about 1-2 minutes)</li>
     <li>Click <strong>Finish</strong></li>
@@ -88,7 +88,7 @@
 <div class="step">
   <span class="step-num">3</span>
   <span class="step-title">Start the Server</span>
-  <p>Go to your Desktop and double-click the <strong>DiagnoCenter</strong> shortcut (or go to <code>C:\Program Files\DiagnoCenter\</code> and double-click <code>DiagnoCenter.exe</code>).</p>
+  <p>Go to your Desktop and double-click the <strong>Care Diagnostics</strong> shortcut (or go to <code>C:\Program Files\Care Diagnostics\</code> and double-click <code>Care Diagnostics.exe</code>).</p>
   <p>A black console window will open. <strong>Do not close this window.</strong> It is the server running.</p>
   <p>Wait about 30 seconds. You will see:</p>
   <pre>Launcher ready
@@ -98,7 +98,7 @@ LAN ACCESS -- Other computers can reach this server at:
 </div>
 
 <div class="warning">
-  <strong>Important:</strong> Keep this black window open all day. If you close it, the server stops and other computers cannot connect. If you accidentally close it, just double-click <code>DiagnoCenter.exe</code> again.
+  <strong>Important:</strong> Keep this black window open all day. If you close it, the server stops and other computers cannot connect. If you accidentally close it, just double-click <code>Care Diagnostics.exe</code> again.
 </div>
 
 <div class="step">
@@ -109,7 +109,7 @@ LAN ACCESS -- Other computers can reach this server at:
     <li>Press <code>Win + R</code>, type <code>cmd</code>, press Enter</li>
     <li>Copy and paste this exact command, then press Enter:</li>
   </ol>
-  <pre>netsh advfirewall firewall add rule name="DiagnoCenter" dir=in action=allow protocol=TCP localport=8888</pre>
+  <pre>netsh advfirewall firewall add rule name="Care Diagnostics" dir=in action=allow protocol=TCP localport=8888</pre>
   <p>You should see <code>Ok.</code> — done.</p>
 </div>
 
@@ -134,7 +134,7 @@ LAN ACCESS -- Other computers can reach this server at:
 <h2>Daily Routine</h2>
 <table>
   <tr><th>Task</th><th>How to Do It</th></tr>
-  <tr><td>Start the server in the morning</td><td>Double-click <code>DiagnoCenter.exe</code> or the Desktop shortcut</td></tr>
+  <tr><td>Start the server in the morning</td><td>Double-click <code>Care Diagnostics.exe</code> or the Desktop shortcut</td></tr>
   <tr><td>Stop the server at night</td><td>Close the black console window (or press Ctrl+C inside it)</td></tr>
   <tr><td>Print reports</td><td>Works from any computer that has a printer installed</td></tr>
   <tr><td>Check who is connected</td><td>Look at the console window — it shows connection requests</td></tr>
@@ -143,19 +143,19 @@ LAN ACCESS -- Other computers can reach this server at:
 <h2>Useful Tips</h2>
 
 <div class="tip">
-  <strong>Pin to taskbar:</strong> Right-click the DiagnoCenter shortcut → <strong>Pin to taskbar</strong>. Now you can start the server with one click.
+  <strong>Pin to taskbar:</strong> Right-click the Care Diagnostics shortcut → <strong>Pin to taskbar</strong>. Now you can start the server with one click.
 </div>
 
 <div class="tip">
-  <strong>Auto-start on boot:</strong> Press <code>Win + R</code>, type <code>shell:startup</code>, press Enter. Drag <code>DiagnoCenter.exe</code> into that folder. The server will start automatically every time the PC turns on.
+  <strong>Auto-start on boot:</strong> Press <code>Win + R</code>, type <code>shell:startup</code>, press Enter. Drag <code>Care Diagnostics.exe</code> into that folder. The server will start automatically every time the PC turns on.
 </div>
 
 <div class="tip">
-  <strong>Backup your data:</strong> The database is stored in <code>C:\Program Files\DiagnoCenter\data\pgsql\</code>. Copy the entire <code>data</code> folder to a USB drive regularly. Patient data cannot be recreated if lost.
+  <strong>Backup your data:</strong> The database is stored in <code>C:\Program Files\Care Diagnostics\data\pgsql\</code>. Copy the entire <code>data</code> folder to a USB drive regularly. Patient data cannot be recreated if lost.
 </div>
 
 <div class="tip">
-  <strong>Update without reinstalling:</strong> When a new version is available, use <code>DiagnoCenter-Update.zip</code> inside the ERP (go to <strong>Settings → System Update</strong>). This patches the app without losing any data.
+  <strong>Update without reinstalling:</strong> When a new version is available, use <code>Care Diagnostics-Update.zip</code> inside the ERP (go to <strong>Settings → System Update</strong>). This patches the app without losing any data.
 </div>
 
 <div class="page-break"></div>
@@ -207,7 +207,7 @@ LAN ACCESS -- Other computers can reach this server at:
 </ol>
 
 <footer>
-  DiagnoCenter Diagnostic ERP • Windows Installation Guide • May 2026
+  Care Diagnostics Diagnostic ERP • Windows Installation Guide • May 2026
 </footer>
 
 </body>

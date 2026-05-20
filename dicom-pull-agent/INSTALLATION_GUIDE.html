@@ -237,7 +237,7 @@
         <div class="subtitle">Automatic study retrieval from imaging machines into Conquest PACS</div>
       </div>
       <div class="meta">
-        DiagnoCenter ERP<br>
+        Care Diagnostics ERP<br>
         Prepared: May 2026<br>
         Technician copy
       </div>
@@ -335,7 +335,7 @@ Patient scanned on machine  →  DICOM Pull Agent runs findscu (finds study)  �
       <p>Open <strong>Notepad</strong>, paste the content below, and fill in your actual values. Then save as:</p>
       <pre>C:\DicomPullAgent\start-agent.bat</pre>
       <pre>@echo off
-REM ── DiagnoCenter DICOM Pull Agent Startup ──────────────────────────────────
+REM ── Care Diagnostics DICOM Pull Agent Startup ──────────────────────────────────
 REM  Edit the values below to match your environment, then save this file.
 
 REM ERP server address (your published Replit app URL)
@@ -409,7 +409,7 @@ DIAGNO_AGENT  = 127.0.0.1      9999</pre>
     <div class="step-body">
       <p>Double-click <code>C:\DicomPullAgent\start-agent.bat</code>. A Command Prompt window opens and you should see:</p>
       <pre>┌─────────────────────────────────────────────────┐
-│  DiagnoCenter DICOM Q/R Pull Agent              │
+│  Care Diagnostics DICOM Q/R Pull Agent              │
 └─────────────────────────────────────────────────┘
   ERP URL    : https://your-erp.replit.app
   Agent AE   : DIAGNO_AGENT
@@ -450,7 +450,7 @@ DCMTK findscu found ✓
         <tr><td>Application</td><td>Startup directory</td><td><code>C:\DicomPullAgent</code></td></tr>
         <tr><td>Application</td><td>Arguments</td><td><code>src\index.js</code></td></tr>
         <tr><td>Environment</td><td>(one per line)</td><td>All variables from Step 4 (without "set " prefix)</td></tr>
-        <tr><td>Details</td><td>Display name</td><td><code>DiagnoCenter DICOM Pull Agent</code></td></tr>
+        <tr><td>Details</td><td>Display name</td><td><code>Care Diagnostics DICOM Pull Agent</code></td></tr>
       </table>
       <p style="margin-top:8px">Click <strong>Install service</strong>. Then start it:</p>
       <pre>C:\DicomPullAgent\nssm.exe start DicomPullAgent</pre>
@@ -505,7 +505,7 @@ DCMTK findscu found ✓
 
   <!-- Footer -->
   <div class="footer">
-    <span>DiagnoCenter ERP — DICOM Pull Agent Installation Guide</span>
+    <span>Care Diagnostics ERP — DICOM Pull Agent Installation Guide</span>
     <span>Keep this document with the Conquest PC for future reference</span>
     <span>Version 1.0 — May 2026</span>
   </div>

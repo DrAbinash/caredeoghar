@@ -233,13 +233,13 @@ async function networkFirstShell(request) {
   return new Response(
     `<!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8"/><title>DiagnoCenter</title>
+<head><meta charset="UTF-8"/><title>Care Diagnostics</title>
 <style>body{font-family:system-ui;margin:0;display:flex;align-items:center;justify-content:center;height:100vh;background:#0f172a;color:#fff}
 #root{text-align:center}
 h1{margin:0 0 .5rem;font-size:1.5rem}
 p{margin:0;color:#94a3b8}
 </style></head>
-<body><div id="root"><h1>DiagnoCenter</h1><p>Offline — no cached shell available.</p></div></body>
+<body><div id="root"><h1>Care Diagnostics</h1><p>Offline — no cached shell available.</p></div></body>
 </html>`,
     { status: 200, headers: { "Content-Type": "text/html" } }
   );

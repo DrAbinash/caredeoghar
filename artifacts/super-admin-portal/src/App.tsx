@@ -245,7 +245,7 @@ function LoginScreen({ onLogin, onLockUsb }: { onLogin: (session: Session) => vo
             <ShieldAlert className="w-8 h-8 text-primary" />
           </div>
           <h1 className="text-2xl font-bold text-foreground tracking-tight">Super Admin</h1>
-          <p className="text-sm text-muted-foreground mt-1">Diagnostic Center Billing ERP</p>
+          <p className="text-sm text-muted-foreground mt-1">Care Diagnostics Billing ERP</p>
         </div>
 
         {/* Login card */}
