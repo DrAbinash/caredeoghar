@@ -119,10 +119,35 @@ function tryStaticFile(urlPath, res) {
   return true;
 }
 
+function serveIndexHtml(res) {
+  const indexPath = path.join(STATIC_ROOT, "index.html");
+  if (!fs.existsSync(indexPath)) {
+    res.writeHead(404, { "content-type": "text/html" });
+    res.end("<h1>index.html not found</h1>");
+    return;
+  }
+  let html = fs.readFileSync(indexPath, "utf-8");
+  // Rewrite absolute asset paths (e.g. /_expo/static/...) to be prefixed
+  // with the deployed basePath so they resolve through the shared proxy.
+  const prefix = basePath || "";
+  // Match quoted URLs that start with / and are NOT already prefixed
+  html = html.replace(
+    /(href|src)="(\/(?!\/|_expo\/static\/css\/native-tabs\.module|_expo\/static\/js\/web\/entry|favicon\.ico))/g,
+    (_m, attr, url) => `${attr}="${prefix}${url}`
+  );
+  // Also rewrite the Expo font face URLs inside the <style> block
+  html = html.replace(
+    /url\("\/assets\/([^"]+)"\)/g,
+    (_m, assetPath) => `url("${prefix}/assets/${assetPath}")`
+  );
+  res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+  res.end(html);
+}
+
 const landingPageTemplate = fs.readFileSync(TEMPLATE_PATH, "utf-8");
 const appName = getAppName();
 
-const port = parseInt(process.env.PORT || "3000", 10);
+const port = parseInt(process.env.PORT || "3003", 10);
 
 const server = http.createServer();
 
@@ -152,8 +177,10 @@ server.on("request", (req, res) => {
     }
 
     if (pathname === "/") {
-      // Serve the built Expo web app directly instead of the Expo Go landing page
-      return serveStaticFile("/index.html", res);
+      // Serve the built Expo web app directly instead of the Expo Go landing page.
+      // Rewrite absolute asset paths so they resolve under the deployed basePath
+      // (e.g. /mobile/) instead of the root domain.
+      return serveIndexHtml(res);
     }
   }
 
