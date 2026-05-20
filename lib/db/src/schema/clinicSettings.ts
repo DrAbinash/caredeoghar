@@ -45,6 +45,8 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   kioskUpiName: text("kiosk_upi_name").notNull().default(""),
   kioskWelcomeMessage: text("kiosk_welcome_message").notNull().default(""),
   kioskAllowedTestIds: text("kiosk_allowed_test_ids").notNull().default("[]"),
+  // Online booking test whitelist
+  onlineBookingAllowedTestIds: text("online_booking_allowed_test_ids").notNull().default("[]"),
   sidebarTheme: text("sidebar_theme").notNull().default("navy"),
   billDefaultPaperSize: text("bill_default_paper_size").notNull().default("A5"),
   billShowCode: boolean("bill_show_code").notNull().default(true),

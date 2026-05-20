@@ -34,6 +34,7 @@ clinicSettingsRouter.put("/", async (req, res) => {
     update.sidebarTheme = body.sidebarTheme;
   }
   const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "payuEnabled", "phonepeEnabled", "bharatpeEnabled", "cashfreeEnabled", "billShowCode", "billShowCategory", "dayCloseAutoPrint", "lanOnlyLogin", "fido2Enabled", "kioskEnabled"] as const;
+  const textFields = ["kioskUpiVpa", "kioskUpiName", "kioskWelcomeMessage", "kioskAllowedTestIds", "onlineBookingAllowedTestIds", "razorpayKeyId", "payuMerchantKey", "phonepeMerchantId", "bharatpeMerchantId", "cashfreeAppId", "formFTestIds", "quickTestIds", "footerNote", "commissionDiscountMode", "lanAllowedIps", "billDefaultPaperSize", "name", "tagline", "address", "email", "phone", "website", "gstin", "logoDataUrl", "portalHeading", "portalWelcomeMessage", "sidebarTheme"] as const;
   for (const f of boolFields) {
     if (body[f] !== undefined) {
       if (typeof body[f] !== "boolean") {
@@ -92,8 +93,8 @@ clinicSettingsRouter.put("/", async (req, res) => {
     }
     update.cashfreeAppId = body.cashfreeAppId.trim();
   }
-  const kioskTextFields = ["kioskUpiVpa", "kioskUpiName", "kioskWelcomeMessage", "kioskAllowedTestIds"] as const;
-  for (const f of kioskTextFields) {
+  const arrayJsonTextFields = ["kioskUpiVpa", "kioskUpiName", "kioskWelcomeMessage", "kioskAllowedTestIds", "onlineBookingAllowedTestIds"] as const;
+  for (const f of arrayJsonTextFields) {
     if (body[f] !== undefined) {
       if (typeof body[f] !== "string") {
         res.status(400).json({ error: `${f} must be a string` });

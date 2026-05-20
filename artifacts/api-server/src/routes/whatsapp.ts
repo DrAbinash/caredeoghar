@@ -200,12 +200,12 @@ async function handleAiReply(params: {
     website: clinicSettingsTable.website,
   }).from(clinicSettingsTable).limit(1);
 
-  const clinicName    = clinic?.name    ?? "DiagnoCenter";
+  const clinicName    = clinic?.name    ?? "Care Diagnostics";
   const clinicAddress = clinic?.address ?? "";
   const clinicPhone   = clinic?.phone   ?? "";
   const clinicEmail   = clinic?.email   ?? "";
   const clinicWeb     = clinic?.website ?? "";
-  const assistantName = s.aiAssistantName || "DiagnoCenter Assistant";
+  const assistantName = s.aiAssistantName || "Care Diagnostics Assistant";
 
   const defaultSystemPrompt = `You are ${assistantName}, the AI assistant for ${clinicName} diagnostic center.
 ${clinic?.tagline ? `Tagline: ${clinic.tagline}` : ""}
@@ -427,7 +427,7 @@ export async function sendReportDelivery(params: {
   const viewerLine = params.viewerUrl && s.includeViewerLink !== false
     ? `\nView images: ${params.viewerUrl}`
     : "";
-  const defaultBody = `Hello ${params.patientName}, your ${params.testName} report (${params.reportNumber}) is ready.\nDownload: ${params.reportUrl}${viewerLine}\n— DiagnoCenter`;
+  const defaultBody = `Hello ${params.patientName}, your ${params.testName} report (${params.reportNumber}) is ready.\nDownload: ${params.reportUrl}${viewerLine}\n— Care Diagnostics`;
   const body = tpl
     ? tpl
         .replace(/\{\{name\}\}/g, params.patientName)

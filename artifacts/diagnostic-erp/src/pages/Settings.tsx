@@ -1357,6 +1357,7 @@ type OnlineBookingSettings = {
   bharatpeMerchantId: string;
   cashfreeEnabled: boolean;
   cashfreeAppId: string;
+  onlineBookingAllowedTestIds: number[];
 };
 
 function OnlineBookingTab() {
@@ -1390,6 +1391,7 @@ function OnlineBookingTab() {
       bharatpeMerchantId: data.bharatpeMerchantId || "",
       cashfreeEnabled: data.cashfreeEnabled ?? false,
       cashfreeAppId: data.cashfreeAppId || "",
+      onlineBookingAllowedTestIds: data.onlineBookingAllowedTestIds || [],
     });
   }, [data]);
 
@@ -1672,6 +1674,14 @@ function OnlineBookingTab() {
         </div>
       </div>
 
+      {/* Test Whitelist */}
+      <OnlineBookingTestPicker
+        allowedIds={form.onlineBookingAllowedTestIds}
+        onChange={(ids) => setForm({ ...form, onlineBookingAllowedTestIds: ids })}
+        onSave={() => save.mutate(form)}
+        isPending={save.isPending}
+      />
+
       {bookingQrUrl && (
         <div className="bg-card border border-card-border rounded-xl p-5 space-y-3">
           <h3 className="font-bold">WhatsApp Booking QR (Fallback)</h3>
@@ -1687,6 +1697,99 @@ function OnlineBookingTab() {
               <p className="text-muted-foreground">Use this as a temporary booking entry point while online payment is being configured.</p>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OnlineBookingTestPicker({ allowedIds, onChange, onSave, isPending }: { allowedIds: number[]; onChange: (ids: number[]) => void; onSave: () => void; isPending: boolean }) {
+  const [search, setSearch] = useState("");
+  const { data: testsData, isLoading } = useQuery<{ tests: { id: number; name: string; code: string; category: string; price: number }[] }>({
+    queryKey: ["tests"],
+    queryFn: () => api.get("/api/tests"),
+  });
+
+  const allTests = testsData?.tests ?? [];
+  const filtered = useMemo(() => {
+    if (!search.trim()) return allTests;
+    const q = search.toLowerCase();
+    return allTests.filter((t) => (t.name + " " + (t.code || "") + " " + (t.category || "")).toLowerCase().includes(q));
+  }, [allTests, search]);
+
+  const isSelected = (id: number) => allowedIds.includes(id);
+
+  const toggle = (id: number) => {
+    if (isSelected(id)) onChange(allowedIds.filter((x) => x !== id));
+    else onChange([...allowedIds, id]);
+  };
+
+  const categories = useMemo(() => {
+    const map: Record<string, typeof allTests> = {};
+    for (const t of filtered) {
+      const cat = t.category || "Uncategorized";
+      if (!map[cat]) map[cat] = [];
+      map[cat].push(t);
+    }
+    return Object.entries(map).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [filtered]);
+
+  return (
+    <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-bold">Tests Available for Online Booking</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Only the selected tests will appear on the mobile app and public website. {allowedIds.length} test(s) selected.
+          </p>
+        </div>
+        <Button onClick={onSave} disabled={isPending} size="sm">{isPending ? "Saving…" : "Save Selection"}</Button>
+      </div>
+
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Search tests by name, code, or category…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
+      {isLoading ? (
+        <div className="text-center text-muted-foreground py-8">Loading tests…</div>
+      ) : allTests.length === 0 ? (
+        <div className="text-center text-muted-foreground py-8">No tests found in catalog.</div>
+      ) : (
+        <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+          {categories.map(([cat, tests]) => (
+            <div key={cat}>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{cat}</p>
+              <div className="space-y-1">
+                {tests.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => toggle(t.id)}
+                    className={`w-full text-left flex items-start justify-between gap-3 px-3 py-2 rounded-md border transition-colors ${isSelected(t.id) ? "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-800" : "bg-muted/20 border-card-border hover:bg-muted/40"}`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isSelected(t.id) ? "bg-green-600 border-green-600" : "border-muted-foreground/40"}`}>
+                        {isSelected(t.id) && <Check size={12} className="text-white" />}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{t.name}</p>
+                        <p className="text-xs text-muted-foreground">{t.code || "—"} · Rs. {t.price ?? 0}</p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 && search.trim() && (
+            <div className="text-center text-muted-foreground py-6">No tests match "{search}"</div>
+          )}
         </div>
       )}
     </div>
@@ -2313,7 +2416,7 @@ function WhatsappTab() {
                 value={cur.aiAssistantName ?? ""}
                 onChange={(e) => update("aiAssistantName", e.target.value)}
                 className="mt-1"
-                placeholder="e.g. DiagnoCenter Assistant"
+                placeholder="e.g. Care Diagnostics Assistant"
               />
               <p className="text-[11px] text-muted-foreground mt-1">Shown to patients as the sender name in the AI's greeting context.</p>
             </div>
@@ -4014,7 +4117,7 @@ function KioskSettingsTab() {
               <Label className="text-xs">UPI Holder Name</Label>
               <Input
                 className="mt-1"
-                placeholder="e.g. DiagnoCenter"
+                placeholder="e.g. Care Diagnostics"
                 value={upiName}
                 onChange={e => setUpiName(e.target.value)}
               />

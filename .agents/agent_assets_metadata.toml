@@ -1,5 +1,10 @@
 uploads = []
-generated = []
+
+[[generated]]
+id = "mUN3VMYklsHfcwrj2b-kO"
+uri = "file://artifacts/diagno-booking-mobile/assets/images/icon.png"
+type = "image"
+title = "app icon medical"
 
 [[outputs]]
 id = "oRd0cMLyeXJ02-c6LyANS"

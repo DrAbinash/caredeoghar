@@ -45,7 +45,7 @@ router.post("/", async (req, res) => {
       : (existing?.smtpPassword ?? ""),
     smtpSecure: smtpSecure ?? false,
     fromAddress: fromAddress ?? "",
-    fromName: fromName ?? "DiagnoCenter ERP",
+    fromName: fromName ?? "Care Diagnostics ERP",
     adminEmail: adminEmail ?? "",
     extraRecipients: JSON.stringify(Array.isArray(extraRecipients) ? extraRecipients : []),
     billEditEnabled: billEditEnabled ?? true,
@@ -69,7 +69,7 @@ router.post("/test", async (_req, res) => {
       billNumber: "BILL-TEST-0001",
       patientName: "Test Patient",
       editedBy: "System Test",
-      reason: "This is a test email from DiagnoCenter ERP",
+      reason: "This is a test email from Care Diagnostics ERP",
       changes: [
         { field: "Status", from: "pending", to: "paid" },
         { field: "Discount", from: "0.00", to: "100.00" },

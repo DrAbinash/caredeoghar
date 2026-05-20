@@ -196,7 +196,7 @@ async function createPatientBillAndTokens(params: {
 kioskRouter.get("/config", async (_req, res): Promise<void> => {
   const s = await getKioskSettings();
   if (!s) {
-    res.json({ enabled: false, clinicName: "DiagnoCenter", tagline: "", logoDataUrl: null, upiVpa: "", upiName: "", welcomeMessage: "", razorpayEnabled: false });
+    res.json({ enabled: false, clinicName: "Care Diagnostics", tagline: "", logoDataUrl: null, upiVpa: "", upiName: "", welcomeMessage: "", razorpayEnabled: false });
     return;
   }
   const settings = s as Record<string, unknown>;

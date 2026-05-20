@@ -300,7 +300,7 @@ onlineBookingsRouter.post("/:id/payment-link", async (req, res): Promise<void> =
         amount: amountPaise,
         currency: "INR",
         accept_partial: false,
-        description: `DiagnoCenter booking ${booking.bookingRef}`,
+        description: `Care Diagnostics booking ${booking.bookingRef}`,
         customer: {
           name: booking.name,
           contact: booking.phone.replace(/[^0-9]/g, "").slice(0, 10),

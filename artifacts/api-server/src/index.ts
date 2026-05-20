@@ -338,6 +338,8 @@ async function runStartupMigrations(): Promise<void> {
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS vip_queue_enabled BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS payu_enabled BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS payu_merchant_key TEXT NOT NULL DEFAULT '';
+      -- ── Online booking test whitelist ────────────────────────────────────
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS online_booking_allowed_test_ids TEXT NOT NULL DEFAULT '[]';
 
       -- ── Walk-in ledger designation ────────────────────────────────────────
       ALTER TABLE ledgers ADD COLUMN IF NOT EXISTS is_walk_in BOOLEAN NOT NULL DEFAULT false;

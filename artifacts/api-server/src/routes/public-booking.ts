@@ -11,6 +11,12 @@ import {
 } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 
+const otpStore = new Map<string, { code: string; name: string; expiresAt: number }>();
+
+function generateOtp(): string {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
 export const publicBookingRouter = Router();
 
 const bookingLimiter = rateLimit({
@@ -97,6 +103,14 @@ publicBookingRouter.get("/config", async (_req, res): Promise<void> => {
   else if (settings.phonepeEnabled && phonepeMerchantId && phonepeSalt) gateway = "phonepe";
   else if (razorpayKeyId && razorpaySecret) gateway = "razorpay";
 
+  let allowedTestIds: number[] = [];
+  try {
+    const parsed = JSON.parse(settings?.onlineBookingAllowedTestIds || "[]");
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      allowedTestIds = parsed.filter((v: unknown) => typeof v === "number" && Number.isInteger(v) && v > 0);
+    }
+  } catch { /* ignore */ }
+
   res.json({
     enabled: settings.onlineBookingEnabled,
     keyId: razorpayKeyId,
@@ -105,12 +119,42 @@ publicBookingRouter.get("/config", async (_req, res): Promise<void> => {
     payuMerchantKey: payuKey,
     phonepeMerchantId: settings.phonepeEnabled ? phonepeMerchantId : "",
     bharatpeMerchantId: settings.bharatpeEnabled ? bharatpeMerchantId : "",
+    allowedTestIds,
   });
+});
+
+// GET /api/public/booking/my-bookings
+publicBookingRouter.get("/my-bookings", async (req, res): Promise<void> => {
+  const phone = String(req.query.phone || "");
+  if (!phone) { res.json({ bookings: [] }); return; }
+  const rows = await db.select()
+    .from(onlineBookingsTable)
+    .where(eq(onlineBookingsTable.phone, phone))
+    .orderBy(onlineBookingsTable.id)
+    .limit(50);
+  res.json({ bookings: rows });
+});
+
+// GET /api/public/booking/my-reports
+publicBookingRouter.get("/my-reports", async (req, res): Promise<void> => {
+  const phone = String(req.query.phone || "");
+  if (!phone) { res.json({ reports: [] }); return; }
+  // Stub: return empty for now; reports table integration is future work
+  res.json({ reports: [] });
 });
 
 // GET /api/public/booking/tests
 publicBookingRouter.get("/tests", async (_req, res): Promise<void> => {
-  const tests = await db
+  const settings = await getSettings();
+  let allowedTestIds: number[] = [];
+  try {
+    const parsed = JSON.parse(settings?.onlineBookingAllowedTestIds || "[]");
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      allowedTestIds = parsed.filter((v: unknown) => typeof v === "number" && Number.isInteger(v) && v > 0);
+    }
+  } catch { /* ignore */ }
+
+  const baseQuery = db
     .select({
       id: testsTable.id,
       code: testsTable.code,
@@ -123,7 +167,15 @@ publicBookingRouter.get("/tests", async (_req, res): Promise<void> => {
     .from(testsTable)
     .where(and(eq(testsTable.isActive, true)))
     .orderBy(testsTable.category, testsTable.name);
-  res.json({ tests });
+
+  const tests = await baseQuery;
+
+  // If whitelist is configured, only return those tests; otherwise return all active tests
+  const filtered = allowedTestIds.length > 0
+    ? tests.filter((t) => allowedTestIds.includes(t.id))
+    : tests;
+
+  res.json({ tests: filtered });
 });
 
 // GET /api/public/booking/packages
@@ -185,7 +237,7 @@ publicBookingRouter.post("/payu-initiate", createOrderLimiter, async (req, res):
   const bookingRef = generateBookingRef();
   const txnid = bookingRef;
   const amountStr = amount.toFixed(2);
-  const productinfo = "DiagnoCenter Test Booking";
+  const productinfo = "Care Diagnostics Test Booking";
   const firstname = name.trim().split(" ")[0] ?? name.trim();
   const emailStr = email.trim();
 
@@ -565,7 +617,7 @@ publicBookingRouter.post("/bharatpe-initiate", createOrderLimiter, async (req, r
         customerName: name.trim(),
         customerMobile: phone.replace(/\D/g, "").slice(-10),
         customerEmail: email.trim(),
-        description: `DiagnoCenter booking ${bookingRef}`,
+        description: `Care Diagnostics booking ${bookingRef}`,
         callbackUrl,
         redirectUrl,
       }),
@@ -789,4 +841,32 @@ publicBookingRouter.post("/verify-payment", bookingLimiter, async (req, res): Pr
 
   await db.update(onlineBookingsTable).set({ razorpayPaymentId, razorpaySignature, status: "paid" }).where(eq(onlineBookingsTable.id, booking.id));
   res.json({ success: true, bookingRef: booking.bookingRef });
+});
+
+// ── OTP endpoints (mobile login) ─────────────────────────────────────────────
+publicBookingRouter.post("/send-otp", bookingLimiter, async (req, res): Promise<void> => {
+  const { phone, name } = req.body || {};
+  if (!phone || typeof phone !== "string" || !/^\d{10}$/.test(phone)) {
+    res.status(400).json({ error: "Valid 10-digit phone number required" });
+    return;
+  }
+  const code = generateOtp();
+  otpStore.set(phone, { code, name: name || "", expiresAt: Date.now() + 5 * 60 * 1000 });
+  res.json({ sent: true, phone, code });
+});
+
+publicBookingRouter.post("/verify-otp", bookingLimiter, async (req, res): Promise<void> => {
+  const { phone, code, name } = req.body || {};
+  if (!phone || !code) { res.status(400).json({ error: "Phone and OTP required" }); return; }
+  const record = otpStore.get(phone);
+  if (!record || record.expiresAt < Date.now()) {
+    res.status(400).json({ error: "OTP expired or not found" });
+    return;
+  }
+  if (record.code !== String(code)) {
+    res.status(400).json({ error: "Invalid OTP" });
+    return;
+  }
+  otpStore.delete(phone);
+  res.json({ verified: true, phone, name: name || record.name });
 });

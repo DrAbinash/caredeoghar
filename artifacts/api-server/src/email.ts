@@ -68,7 +68,7 @@ export async function sendBillEditEmail(params: {
           </thead>
           <tbody>${changeRows}</tbody>
         </table>
-        <p style="margin:16px 0 0;font-size:11px;color:#94a3b8">Sent by DiagnoCenter ERP • ${new Date().toLocaleString("en-IN")}</p>
+        <p style="margin:16px 0 0;font-size:11px;color:#94a3b8">Sent by Care Diagnostics ERP • ${new Date().toLocaleString("en-IN")}</p>
       </div>
     </div>`;
 
@@ -111,7 +111,7 @@ export async function sendBillReprintEmail(params: {
         <p style="margin:0 0 8px"><strong>Re-printed by:</strong> ${params.reprintedBy}</p>
         <p style="margin:0 0 8px"><strong>Reason:</strong> ${params.reason}</p>
         <p style="margin:0 0 8px"><strong>Re-print count:</strong> #${params.reprintCount}</p>
-        <p style="margin:16px 0 0;font-size:11px;color:#94a3b8">DiagnoCenter ERP • ${new Date().toLocaleString("en-IN")}</p>
+        <p style="margin:16px 0 0;font-size:11px;color:#94a3b8">Care Diagnostics ERP • ${new Date().toLocaleString("en-IN")}</p>
       </div>
     </div>`;
 
@@ -201,7 +201,7 @@ export async function sendCommissionMonthEndEmail(params: {
           </thead>
           <tbody>${doctorRows}</tbody>
         </table>
-        <p style="margin:16px 0 0;font-size:11px;color:#94a3b8">DiagnoCenter ERP — Automated Month-End Commission Report • Generated ${new Date().toLocaleString("en-IN")}</p>
+        <p style="margin:16px 0 0;font-size:11px;color:#94a3b8">Care Diagnostics ERP — Automated Month-End Commission Report • Generated ${new Date().toLocaleString("en-IN")}</p>
       </div>
     </div>`;
 
@@ -257,14 +257,14 @@ export async function sendDailySummaryEmail(params: {
       </div>
       <div style="background:white;padding:20px;border-radius:0 0 8px 8px;border:1px solid #e2e8f0">
         <table style="width:100%;border-collapse:collapse">${rowHtml}</table>
-        <p style="margin:16px 0 0;font-size:11px;color:#94a3b8">DiagnoCenter ERP — Automated Daily Report</p>
+        <p style="margin:16px 0 0;font-size:11px;color:#94a3b8">Care Diagnostics ERP — Automated Daily Report</p>
       </div>
     </div>`;
 
   await transport.sendMail({
     from: `"${s.fromName}" <${s.fromAddress}>`,
     to: recipients.join(", "),
-    subject: `[Daily Report] DiagnoCenter — ${params.date}`,
+    subject: `[Daily Report] Care Diagnostics — ${params.date}`,
     html,
   });
 }

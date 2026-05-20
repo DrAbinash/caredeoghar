@@ -115,7 +115,7 @@ export class WhatsAppBotEngine {
   // ── Main Menu ───────────────────────────────────────────────────────────────────────
   private showMainMenu(contact: { name?: string | null }): BotReply {
     return {
-      text: `Hello${contact.name ? ` ${contact.name}` : ""}! Welcome to DiagnoCenter.\n\nPlease reply with a number:\n1. Book Appointment\n2. Check Report Status\n3. Download Report\n4. Check Bill / Dues\n5. Location\n6. Talk to Staff`,
+      text: `Hello${contact.name ? ` ${contact.name}` : ""}! Welcome to Care Diagnostics.\n\nPlease reply with a number:\n1. Book Appointment\n2. Check Report Status\n3. Download Report\n4. Check Bill / Dues\n5. Location\n6. Talk to Staff`,
       buttons: [
         { id: "1", title: "Book" },
         { id: "2", title: "Report Status" },
@@ -269,7 +269,7 @@ export class WhatsAppBotEngine {
   private async showLocation(): Promise<BotReply> {
     const [clinic] = await db.select({ address: clinicSettingsTable.address, phone: clinicSettingsTable.phone, website: clinicSettingsTable.website }).from(clinicSettingsTable).limit(1);
     return {
-      text: `DiagnoCenter\n${clinic?.address || "Visit us for address details."}\n\nPhone: ${clinic?.phone || "N/A"}\n${clinic?.website ? `Website: ${clinic.website}` : ""}\n\nReply MENU to return to main menu.`,
+      text: `Care Diagnostics\n${clinic?.address || "Visit us for address details."}\n\nPhone: ${clinic?.phone || "N/A"}\n${clinic?.website ? `Website: ${clinic.website}` : ""}\n\nReply MENU to return to main menu.`,
     };
   }
 
