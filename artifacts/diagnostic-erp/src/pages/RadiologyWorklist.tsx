@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { api } from "@/lib/fetchApi";
+import { readStaffSession } from "@/lib/staffSession";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -141,17 +142,40 @@ export default function RadiologyWorklist() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [modalityFilter, setModalityFilter] = useState("all");
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+
+  const staffRole = readStaffSession()?.user?.role ?? "unknown";
 
   const { data: entries = [], isLoading, refetch } = useQuery<WorklistEntry[]>({
     queryKey: ["radiology-pacs-worklist", statusFilter, modalityFilter],
-    queryFn: () => {
+    queryFn: async () => {
       const params = new URLSearchParams();
       if (statusFilter !== "all") params.set("status", statusFilter);
       if (modalityFilter !== "all") params.set("modality", modalityFilter);
-      return api.get<WorklistEntry[]>(`/api/radiology/pacs-worklist?${params}`);
+      const url = `/api/radiology/pacs-worklist?${params.toString()}`;
+      console.log("[PACS-WORKLIST] Fetching:", url);
+      try {
+        const result = await api.get<WorklistEntry[]>(url);
+        console.log("[PACS-WORKLIST] Response count:", result.length);
+        if (result.length > 0) {
+          console.log("[PACS-WORKLIST] Sample entry:", JSON.stringify(result[0]).slice(0, 300));
+        } else {
+          console.warn("[PACS-WORKLIST] Zero results returned from API.");
+        }
+        return result;
+      } catch (err) {
+        console.error("[PACS-WORKLIST] Auth/fetch error:", err);
+        throw err;
+      }
     },
+    staleTime: 0,
     refetchInterval: 30_000,
   });
+
+  useEffect(() => {
+    if (!isLoading) setLastRefresh(new Date());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries]);
 
   const aiDraftMutation = useMutation({
     mutationFn: (entry: WorklistEntry) =>
@@ -231,6 +255,15 @@ export default function RadiologyWorklist() {
 
         <TabsContent value="pacs-worklist">
           <div className="flex flex-col gap-4">
+            {/* ── DEBUG BANNER ── */}
+            <div className="rounded-lg border border-blue-300 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-700 p-3 font-mono text-xs space-y-0.5">
+              <div className="text-blue-800 dark:text-blue-300 font-semibold text-sm mb-1">PACS Worklist — Diagnostic Info</div>
+              <div><span className="text-blue-600 dark:text-blue-400 select-none">API endpoint : </span>GET /api/radiology/pacs-worklist</div>
+              <div><span className="text-blue-600 dark:text-blue-400 select-none">Staff role   : </span>{staffRole}</div>
+              <div><span className="text-blue-600 dark:text-blue-400 select-none">Studies      : </span>{isLoading ? "loading…" : `${entries.length} returned`}</div>
+              <div><span className="text-blue-600 dark:text-blue-400 select-none">Last refresh : </span>{lastRefresh ? lastRefresh.toLocaleTimeString() : "pending…"}</div>
+            </div>
+
             <div className="flex justify-end">
               <Button variant="outline" size="sm" onClick={() => void refetch()}>
                 <RefreshCw className="h-4 w-4 mr-1" /> Refresh PACS Studies

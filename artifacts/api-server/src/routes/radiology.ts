@@ -283,6 +283,8 @@ radiologyRouter.get("/pacs-worklist", async (req, res) => {
   const modality = (req.query.modality as string) || "";
   const search = (req.query.search as string)?.trim() || "";
 
+  req.log.info({ status: status || "all", modality: modality || "all", search: search || "" }, "[pacs-worklist] route hit — staff auth passed");
+
   const conds: ReturnType<typeof eq>[] = [];
   if (status && status !== "all") conds.push(eq(radiologyWorklistTable.status, status));
   if (modality && modality !== "all") conds.push(eq(radiologyWorklistTable.modality, modality));
@@ -305,8 +307,7 @@ radiologyRouter.get("/pacs-worklist", async (req, res) => {
     );
   }
 
-  // eslint-disable-next-line no-console
-  console.log(`[pacs-worklist] ${filtered.length} rows returned (raw=${rows.length}) for status=${status || "all"} modality=${modality || "all"}`);
+  req.log.info({ rowsReturned: filtered.length, rawRows: rows.length, status: status || "all", modality: modality || "all" }, "[pacs-worklist] query complete");
   res.json(filtered);
 });
 
