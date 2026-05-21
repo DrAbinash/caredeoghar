@@ -128,6 +128,7 @@ type MyDailySummaryData = {
     grossAmount: number;
     discountGiven: number;
     balanceAmount: number;
+    discountReason: string | null;
     status: string;
   }[];
   byStaff?: {
@@ -1326,7 +1327,7 @@ export default function MyDailySummary() {
               <table className="w-full text-xs">
                 <thead className="bg-amber-50 dark:bg-amber-900/10">
                   <tr>
-                    {["Bill #", "Patient Name", "Referral Doctor", "Bill Total", "Discount Given", "Still Pending"].map((h) => (
+                    {["Bill #", "Patient Name", "Referral Doctor", "Bill Total", "Discount Given", "Reason", "Still Pending"].map((h) => (
                       <th key={h} className="px-3 py-2.5 text-left font-semibold text-amber-800 dark:text-amber-300 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -1347,6 +1348,9 @@ export default function MyDailySummary() {
                         <td className="px-3 py-2 tabular-nums font-bold text-amber-600 dark:text-amber-400">
                           {fmt(b.discountGiven)}
                           <span className="ml-1 text-[10px] font-normal text-amber-500 dark:text-amber-400">({pct}%)</span>
+                        </td>
+                        <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                          {b.discountReason ?? <span className="text-gray-400">—</span>}
                         </td>
                         <td className="px-3 py-2 tabular-nums">
                           {b.balanceAmount > 0 ? (
@@ -1370,6 +1374,7 @@ export default function MyDailySummary() {
                     </td>
                     <td className="px-3 py-2 font-bold tabular-nums text-gray-900 dark:text-foreground">{fmt(totalGross)}</td>
                     <td className="px-3 py-2 font-bold tabular-nums text-amber-600 dark:text-amber-400">{fmt(totalDiscount)}</td>
+                    <td />
                     <td className="px-3 py-2 font-bold tabular-nums text-amber-600 dark:text-amber-400">
                       {totalPending > 0
                         ? fmt(totalPending)

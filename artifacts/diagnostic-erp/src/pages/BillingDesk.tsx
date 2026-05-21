@@ -1092,7 +1092,7 @@ export default function BillingDesk() {
     localStorage.setItem("billingDesk:quickDoctors", JSON.stringify(next));
   }
 
-  const canGenerate = !!selectedPatient && selectedTests.length > 0;
+  const canGenerate = !!selectedPatient && selectedTests.length > 0 && !(discountAmt > 0 && !discountReason);
   // Update shortcut refs on every render so the keydown handler stays fresh.
   canGenerateRef.current = canGenerate;
   lastBillRef.current    = lastBill;
@@ -1920,8 +1920,12 @@ export default function BillingDesk() {
                   </div>
                   {discountAmt > 0 && (
                     <div className="space-y-1 pl-[62px]">
-                      <select value={discountReason} onChange={(e) => setDiscountReason(e.target.value)} className="w-full h-7 text-xs border border-card-border rounded-md px-2 bg-background">
-                        <option value="">— Select reason —</option>
+                      <select
+                        value={discountReason}
+                        onChange={(e) => setDiscountReason(e.target.value)}
+                        className={`w-full h-7 text-xs border rounded-md px-2 bg-background ${!discountReason ? "border-red-400 text-red-600" : "border-card-border"}`}
+                      >
+                        <option value="">— Select reason * —</option>
                         {discountReasons.filter(r => r.isActive).map(r => <option key={r.id} value={r.label}>{r.label}</option>)}
                       </select>
                       <Input placeholder="Custom note (optional)…" value={discountNote} onChange={(e) => setDiscountNote(e.target.value)} className="h-7 text-xs" maxLength={200} />
@@ -2018,9 +2022,9 @@ export default function BillingDesk() {
                       printAfterSaveRef.current = true;
                       generateMut.mutate();
                     }}
-                    disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || !!lastBill || (needsFormF && (!husbandName.trim() || !patientAddress.trim())) || (needsDicom && !dicomFieldsComplete)}
+                    disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || !!lastBill || (discountAmt > 0 && !discountReason) || (needsFormF && (!husbandName.trim() || !patientAddress.trim())) || (needsDicom && !dicomFieldsComplete)}
                     className={`w-full h-12 text-lg font-bold border-0 shadow-lg disabled:shadow-none ${lastBill ? "bg-green-600 text-white disabled:bg-green-600 disabled:text-white disabled:opacity-80" : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white disabled:from-muted disabled:to-muted disabled:text-slate-900 dark:text-slate-900"}`}
-                    title={lastBill ? `Bill ${lastBill.billNumber} already saved — click Reset to start a new bill` : needsFormF && (!husbandName.trim() || !patientAddress.trim()) ? "Fill Husband Name & Address for PCPNDT Form F" : needsDicom && !dicomFieldsComplete ? "Fill all 4 DICOM Worklist fields before generating bill" : undefined}
+                    title={lastBill ? `Bill ${lastBill.billNumber} already saved — click Reset to start a new bill` : discountAmt > 0 && !discountReason ? "Select a discount reason before generating bill" : needsFormF && (!husbandName.trim() || !patientAddress.trim()) ? "Fill Husband Name & Address for PCPNDT Form F" : needsDicom && !dicomFieldsComplete ? "Fill all 4 DICOM Worklist fields before generating bill" : undefined}
                   >
                     {lastBill ? <><CheckCircle2 size={18} className="mr-2" />Bill Saved ✓</> : generateMut.isPending ? <><Printer size={18} className="mr-2 animate-spin" />Saving…</> : <><Printer size={18} className="mr-2" />Save &amp; Print</>}
                   </Button>

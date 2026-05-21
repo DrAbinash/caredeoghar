@@ -344,6 +344,11 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
   const discountReason = typeof payload?.discountReason === "string" ? payload.discountReason.trim() || null : null;
   const discountReasonNote = typeof payload?.discountReasonNote === "string" ? payload.discountReasonNote.trim() || null : null;
 
+  if (discount > 0 && !discountReason) {
+    res.status(400).json({ error: "Discount reason is required when a discount is given" });
+    return;
+  }
+
   // Optional DICOM MWL fields captured at billing desk and written into the
   // auto-generated radiology study rows. Not part of the Zod schema so we read
   // them directly from the raw payload — same pattern as discountReason above.

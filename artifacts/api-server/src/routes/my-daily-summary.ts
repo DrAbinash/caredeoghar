@@ -86,6 +86,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       paidAmount: billsTable.paidAmount,
       balanceAmount: billsTable.balanceAmount,
       discount: billsTable.discount,
+      discountReason: billsTable.discountReason,
       status: billsTable.status,
       createdAt: billsTable.createdAt,
       createdByName: billsTable.createdByName,
@@ -534,6 +535,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
         discountGiven: Number(r.discount ?? 0),
         grossAmount: Number(r.totalAmount) + Number(r.discount ?? 0),
         balanceAmount: Math.max(0, Number(r.balanceAmount ?? 0)),
+        discountReason: r.discountReason ?? null,
         status: r.status,
       })),
     // Dues collected: payments today on old bills (created before this period).
