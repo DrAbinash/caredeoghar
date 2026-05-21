@@ -275,6 +275,41 @@ radiologyRouter.get("/worklist", async (req, res) => {
   res.json(filtered);
 });
 
+// GET /api/radiology/pacs-worklist?status=&modality=&search=
+// Staff-authenticated view of radiology_worklist (PACS-pushed studies).
+// Different from /api/radiology/worklist which queries radiology_studies (RIS-driven).
+radiologyRouter.get("/pacs-worklist", async (req, res) => {
+  const status = (req.query.status as string) || "";
+  const modality = (req.query.modality as string) || "";
+  const search = (req.query.search as string)?.trim() || "";
+
+  const conds: ReturnType<typeof eq>[] = [];
+  if (status && status !== "all") conds.push(eq(radiologyWorklistTable.status, status));
+  if (modality && modality !== "all") conds.push(eq(radiologyWorklistTable.modality, modality));
+
+  const rows = await db
+    .select()
+    .from(radiologyWorklistTable)
+    .where(conds.length > 0 ? and(...conds) : undefined)
+    .orderBy(desc(radiologyWorklistTable.createdAt))
+    .limit(500);
+
+  let filtered = rows;
+  if (search) {
+    const s = search.toLowerCase();
+    filtered = rows.filter((r) =>
+      r.patientName.toLowerCase().includes(s) ||
+      r.accessionNumber.toLowerCase().includes(s) ||
+      (r.studyDescription ?? "").toLowerCase().includes(s) ||
+      (r.referringDoctor ?? "").toLowerCase().includes(s)
+    );
+  }
+
+  // eslint-disable-next-line no-console
+  console.log(`[pacs-worklist] ${filtered.length} rows returned (raw=${rows.length}) for status=${status || "all"} modality=${modality || "all"}`);
+  res.json(filtered);
+});
+
 // GET /api/radiology/options — modalities + departments + status enum
 radiologyRouter.get("/options", (_req, res) => {
   res.json({

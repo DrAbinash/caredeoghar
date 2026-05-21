@@ -72,12 +72,12 @@ export default function RadiologyWorklist() {
   const [modalityFilter, setModalityFilter] = useState("all");
 
   const { data: entries = [], isLoading, refetch } = useQuery<WorklistEntry[]>({
-    queryKey: ["radiology-worklist", statusFilter, modalityFilter],
+    queryKey: ["radiology-pacs-worklist", statusFilter, modalityFilter],
     queryFn: () => {
       const params = new URLSearchParams();
       if (statusFilter !== "all") params.set("status", statusFilter);
       if (modalityFilter !== "all") params.set("modality", modalityFilter);
-      return api.get<WorklistEntry[]>(`/api/internal/radiology/worklist?${params}`);
+      return api.get<WorklistEntry[]>(`/api/radiology/pacs-worklist?${params}`);
     },
     refetchInterval: 30_000,
   });
