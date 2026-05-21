@@ -864,6 +864,148 @@ async function runStartupMigrations(): Promise<void> {
       );
       CREATE INDEX IF NOT EXISTS refund_bill_idx ON refund_requests(bill_id);
       CREATE INDEX IF NOT EXISTS refund_status_idx ON refund_requests(status);
+
+      -- ── Enterprise Radiology / PACS ──
+      CREATE TABLE IF NOT EXISTS radiologist_performance_stats (
+        id SERIAL PRIMARY KEY,
+        radiologist_id INTEGER NOT NULL,
+        radiologist_name TEXT NOT NULL,
+        period_type TEXT NOT NULL DEFAULT 'daily',
+        period_date TEXT NOT NULL,
+        total_studies INTEGER NOT NULL DEFAULT 0,
+        reported_studies INTEGER NOT NULL DEFAULT 0,
+        preliminary_reports INTEGER NOT NULL DEFAULT 0,
+        final_reports INTEGER NOT NULL DEFAULT 0,
+        avg_tat_minutes INTEGER,
+        stat_studies INTEGER NOT NULL DEFAULT 0,
+        emergency_studies INTEGER NOT NULL DEFAULT 0,
+        routine_studies INTEGER NOT NULL DEFAULT 0,
+        ai_drafts_used INTEGER NOT NULL DEFAULT 0,
+        ai_drafts_accepted INTEGER NOT NULL DEFAULT 0,
+        critical_findings_flagged INTEGER NOT NULL DEFAULT 0,
+        modality_breakdown TEXT NOT NULL DEFAULT '{}',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS perf_stats_rad_period_idx ON radiologist_performance_stats(radiologist_id, period_type, period_date);
+      CREATE INDEX IF NOT EXISTS perf_stats_date_idx ON radiologist_performance_stats(period_date);
+
+      CREATE TABLE IF NOT EXISTS critical_findings_alerts (
+        id SERIAL PRIMARY KEY,
+        worklist_id INTEGER,
+        study_id INTEGER,
+        accession_number TEXT NOT NULL,
+        patient_id INTEGER,
+        patient_name TEXT NOT NULL,
+        modality TEXT NOT NULL DEFAULT 'OT',
+        study_description TEXT,
+        severity TEXT NOT NULL DEFAULT 'high',
+        finding_type TEXT NOT NULL,
+        description TEXT NOT NULL,
+        flagged_by TEXT NOT NULL,
+        flagged_by_id INTEGER,
+        ai_confidence NUMERIC(3,2),
+        acknowledged BOOLEAN NOT NULL DEFAULT FALSE,
+        acknowledged_by TEXT,
+        acknowledged_at TIMESTAMPTZ,
+        escalated_to TEXT,
+        escalation_sent BOOLEAN NOT NULL DEFAULT FALSE,
+        notification_channels TEXT NOT NULL DEFAULT '[]',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        resolved_at TIMESTAMPTZ,
+        status TEXT NOT NULL DEFAULT 'active'
+      );
+      CREATE INDEX IF NOT EXISTS cf_alert_worklist_idx ON critical_findings_alerts(worklist_id);
+      CREATE INDEX IF NOT EXISTS cf_alert_status_idx ON critical_findings_alerts(status);
+      CREATE INDEX IF NOT EXISTS cf_alert_severity_idx ON critical_findings_alerts(severity);
+      CREATE INDEX IF NOT EXISTS cf_alert_created_idx ON critical_findings_alerts(created_at);
+
+      CREATE TABLE IF NOT EXISTS ai_server_health_log (
+        id SERIAL PRIMARY KEY,
+        provider TEXT NOT NULL,
+        model TEXT,
+        endpoint TEXT,
+        status TEXT NOT NULL DEFAULT 'unknown',
+        latency_ms INTEGER,
+        success BOOLEAN NOT NULL DEFAULT TRUE,
+        error_message TEXT,
+        http_status INTEGER,
+        tokens_used INTEGER,
+        quota_remaining INTEGER,
+        check_type TEXT NOT NULL DEFAULT 'actual_call',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS ai_health_provider_idx ON ai_server_health_log(provider);
+      CREATE INDEX IF NOT EXISTS ai_health_status_idx ON ai_server_health_log(status);
+      CREATE INDEX IF NOT EXISTS ai_health_created_idx ON ai_server_health_log(created_at);
+
+      CREATE TABLE IF NOT EXISTS pacs_archive_lifecycle (
+        id SERIAL PRIMARY KEY,
+        study_instance_uid TEXT NOT NULL UNIQUE,
+        accession_number TEXT,
+        modality TEXT,
+        patient_id INTEGER,
+        original_size_bytes NUMERIC(20,0),
+        compressed_size_bytes NUMERIC(20,0),
+        compression_ratio NUMERIC(5,2),
+        compression_method TEXT,
+        tier TEXT NOT NULL DEFAULT 'hot',
+        last_accessed_at TIMESTAMPTZ,
+        moved_to_tier_at TIMESTAMPTZ,
+        scheduled_for_archive_at TIMESTAMPTZ,
+        archived_at TIMESTAMPTZ,
+        restored_at TIMESTAMPTZ,
+        restore_count INTEGER NOT NULL DEFAULT 0,
+        auto_compressed BOOLEAN NOT NULL DEFAULT FALSE,
+        retention_days INTEGER,
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS archive_uid_idx ON pacs_archive_lifecycle(study_instance_uid);
+      CREATE INDEX IF NOT EXISTS archive_tier_idx ON pacs_archive_lifecycle(tier);
+      CREATE INDEX IF NOT EXISTS archive_patient_idx ON pacs_archive_lifecycle(patient_id);
+
+      CREATE TABLE IF NOT EXISTS watchdog_status (
+        id SERIAL PRIMARY KEY,
+        service_name TEXT NOT NULL UNIQUE,
+        display_name TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'unknown',
+        last_heartbeat TIMESTAMPTZ,
+        last_error TEXT,
+        restart_count INTEGER NOT NULL DEFAULT 0,
+        max_restarts INTEGER NOT NULL DEFAULT 5,
+        auto_restart_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        consecutive_failures INTEGER NOT NULL DEFAULT 0,
+        check_interval_seconds INTEGER NOT NULL DEFAULT 60,
+        next_check_at TIMESTAMPTZ,
+        metadata TEXT NOT NULL DEFAULT '{}',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS watchdog_status_idx ON watchdog_status(status);
+      CREATE INDEX IF NOT EXISTS watchdog_heartbeat_idx ON watchdog_status(last_heartbeat);
+
+      CREATE TABLE IF NOT EXISTS ris_sync_status (
+        id SERIAL PRIMARY KEY,
+        sync_type TEXT NOT NULL,
+        source_system TEXT NOT NULL,
+        target_system TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'idle',
+        last_sync_at TIMESTAMPTZ,
+        next_sync_at TIMESTAMPTZ,
+        items_pending INTEGER NOT NULL DEFAULT 0,
+        items_synced INTEGER NOT NULL DEFAULT 0,
+        items_failed INTEGER NOT NULL DEFAULT 0,
+        avg_sync_time_ms INTEGER,
+        error_message TEXT,
+        error_count INTEGER NOT NULL DEFAULT 0,
+        is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS ris_sync_type_idx ON ris_sync_status(sync_type);
+      CREATE INDEX IF NOT EXISTS ris_sync_status_idx ON ris_sync_status(status);
     `);
     logger.info("Startup migrations applied");
   } catch (err) {

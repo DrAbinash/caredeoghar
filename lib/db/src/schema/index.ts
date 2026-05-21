@@ -75,3 +75,4 @@ export * from "./rooms";
 export * from "./modalities";
 export * from "./aiReporting";
 export * from "./drawerAuditLog";
+export * from "./enterpriseRadiology";

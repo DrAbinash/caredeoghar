@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import {
   RefreshCw, Activity, CheckCircle2, Clock, AlertCircle, ScanSearch, Send,
   Layers, Wifi, WifiOff, RadioTower, Server, XCircle, RotateCcw, Trash2,
-  TrendingUp, Database, HardDrive, Tv2, MonitorPlay,
+  TrendingUp, Database, HardDrive, Tv2, MonitorPlay, Zap, BrainCircuit,
+  Bell, BellRing, ShieldCheck, ShieldAlert, Users, BarChart3, Gauge,
+  Archive, Cpu, HeartPulse, Fingerprint, AlertTriangle,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -251,6 +253,58 @@ export default function PacsDashboard() {
   const agents  = agentStatusData?.agents ?? [];
   const pulled  = ext?.recentPulled ?? [];
 
+  // ── Enterprise monitoring hooks ──
+  const { data: queueData } = useQuery<Record<string, any>>({
+    queryKey: ["queue-monitor"],
+    queryFn: () => api.get("/api/radiology/queue-monitor") as Promise<Record<string, any>>,
+    refetchInterval: 15_000,
+  });
+
+  const { data: aiHealth } = useQuery<Record<string, any>>({
+    queryKey: ["ai-health"],
+    queryFn: () => api.get("/api/radiology/ai-health") as Promise<Record<string, any>>,
+    refetchInterval: 60_000,
+  });
+
+  const { data: criticalData, refetch: refetchCritical } = useQuery<Record<string, any>>({
+    queryKey: ["critical-findings"],
+    queryFn: () => api.get("/api/radiology/critical-findings") as Promise<Record<string, any>>,
+    refetchInterval: 15_000,
+  });
+
+  const { data: risSync } = useQuery<Record<string, any>>({
+    queryKey: ["ris-sync-status"],
+    queryFn: () => api.get("/api/radiology/ris-sync-status") as Promise<Record<string, any>>,
+    refetchInterval: 30_000,
+  });
+
+  const { data: perfStats } = useQuery<Record<string, any>>({
+    queryKey: ["performance-stats"],
+    queryFn: () => api.get("/api/radiology/performance-stats") as Promise<Record<string, any>>,
+    refetchInterval: 60_000,
+  });
+
+  const { data: archiveData } = useQuery<Record<string, any>>({
+    queryKey: ["archive-lifecycle"],
+    queryFn: () => api.get("/api/radiology/archive-lifecycle") as Promise<Record<string, any>>,
+    refetchInterval: 120_000,
+  });
+
+  const { data: watchdogData } = useQuery<Record<string, any>>({
+    queryKey: ["watchdog"],
+    queryFn: () => api.get("/api/radiology/watchdog") as Promise<Record<string, any>>,
+    refetchInterval: 30_000,
+  });
+
+  const ackCritical = useMutation({
+    mutationFn: (id: number) => api.post(`/api/radiology/critical-findings/${id}/acknowledge`, {}),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["critical-findings"] }); toast({ title: "Alert acknowledged" }); },
+  });
+  const resolveCritical = useMutation({
+    mutationFn: (id: number) => api.post(`/api/radiology/critical-findings/${id}/resolve`, {}),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["critical-findings"] }); toast({ title: "Alert resolved" }); },
+  });
+
   // Chart data — modality breakdown
   const modalityChartData = Object.entries(stats?.byModality ?? {})
     .map(([mod, count]) => ({ name: mod, count }))
@@ -313,6 +367,377 @@ export default function PacsDashboard() {
             <StatCard title="Pushed to PACS"       value={pushedCount} icon={<Send size={16} />} variant={pushedCount > 0 ? "success" : "default"} />
             <StatCard title="Duplicate Skipped"    value={dupSkipped} icon={<HardDrive size={16} />} sub="today" />
             <StatCard title="Failed Retrievals"    value={failedToday + (ext?.pendingRetries ?? 0)} icon={<AlertCircle size={16} />} variant={(failedToday + (ext?.pendingRetries ?? 0)) > 0 ? "danger" : "default"} sub={ext?.pendingRetries ? `${ext.pendingRetries} in retry queue` : undefined} />
+          </div>
+
+          {/* ── Row 3: Enterprise Command Center ── */}
+          <div className="rounded-xl border bg-card shadow-sm">
+            <div className="px-5 py-3 border-b flex items-center justify-between">
+              <h3 className="font-semibold text-sm flex items-center gap-2">
+                <Zap size={14} /> Enterprise Command Center
+              </h3>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                  Live
+                </span>
+              </div>
+            </div>
+            <div className="p-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+              {/* Queue depth */}
+              <StatCard
+                title="Queue Pending"
+                value={(queueData?.worklistPending ?? 0) + (queueData?.studiesScheduled ?? 0)}
+                icon={<Gauge size={16} />}
+                variant={(queueData?.worklistPending ?? 0) > 10 ? "warn" : "default"}
+                sub={`${queueData?.worklistAiDraft ?? 0} AI drafts ready`}
+              />
+              {/* Critical findings */}
+              <StatCard
+                title="Critical Alerts"
+                value={criticalData?.count ?? 0}
+                icon={<HeartPulse size={16} />}
+                variant={(criticalData?.count ?? 0) > 0 ? "danger" : "success"}
+                sub={(criticalData?.count ?? 0) > 0 ? `${criticalData?.count} unacknowledged` : "All clear"}
+              />
+              {/* AI health */}
+              <StatCard
+                title="AI Servers"
+                value={aiHealth?.providers ? Object.values(aiHealth.providers).filter((p: any) => p.lastStatus === "healthy").length : 0}
+                icon={<BrainCircuit size={16} />}
+                variant={aiHealth?.providers && Object.values(aiHealth.providers).some((p: any) => p.lastStatus !== "healthy") ? "warn" : "default"}
+                sub={aiHealth?.providers ? `${Object.keys(aiHealth.providers).length} providers` : "No data"}
+              />
+              {/* RIS sync */}
+              <StatCard
+                title="RIS Sync"
+                value={`${risSync?.healthyChannels ?? 0}/${risSync?.totalChannels ?? 0}`}
+                icon={<Activity size={16} />}
+                variant={(risSync?.failedTotal ?? 0) > 0 ? "warn" : "default"}
+                sub={risSync?.pendingTotal ? `${risSync.pendingTotal} pending` : "All synced"}
+              />
+              {/* Radiologist productivity */}
+              <StatCard
+                title="Rad Productivity"
+                value={perfStats?.totals?.reportedStudies ?? 0}
+                icon={<Users size={16} />}
+                sub={perfStats?.totals?.avgTat ? `Avg TAT ${perfStats.totals.avgTat}m` : "No data"}
+              />
+              {/* Archive */}
+              <StatCard
+                title="Archive Tier"
+                value={archiveData?.tierCounts?.reduce((s: number, t: any) => s + (t.tier === "hot" ? 0 : t.count), 0) ?? 0}
+                icon={<Archive size={16} />}
+                sub={archiveData?.tierCounts?.find((t: any) => t.tier === "hot")?.count ? `${archiveData.tierCounts.find((t: any) => t.tier === "hot")?.count} hot` : "No data"}
+              />
+              {/* Watchdog */}
+              <StatCard
+                title="Watchdog"
+                value={`${watchdogData?.healthyCount ?? 0}/${watchdogData?.services?.length ?? 0}`}
+                icon={<ShieldCheck size={16} />}
+                variant={(watchdogData?.downCount ?? 0) > 0 ? "danger" : "success"}
+                sub={(watchdogData?.downCount ?? 0) > 0 ? `${watchdogData?.downCount} down` : "All healthy"}
+              />
+            </div>
+          </div>
+
+          {/* ── Enterprise: Critical Findings Feed ── */}
+          {(criticalData?.alerts?.length ?? 0) > 0 && (
+            <div className="rounded-xl border border-red-200 bg-red-50/30 dark:bg-red-950/10 shadow-sm">
+              <div className="px-5 py-3 border-b border-red-200 flex items-center justify-between">
+                <h3 className="font-semibold text-sm flex items-center gap-2 text-red-700">
+                  <BellRing size={14} /> Critical Findings Alert Feed
+                </h3>
+                <Badge variant="destructive" className="text-xs">{criticalData?.count} active</Badge>
+              </div>
+              <div className="divide-y divide-red-100 dark:divide-red-900/20">
+                {criticalData?.alerts?.slice(0, 5).map((alert: any) => (
+                  <div key={alert.id} className="px-5 py-3 flex items-start gap-3 text-sm">
+                    <span className={`text-xs rounded-full px-2 py-0.5 font-medium shrink-0 ${
+                      alert.severity === "stat" ? "bg-red-600 text-white" :
+                      alert.severity === "emergency" ? "bg-orange-500 text-white" :
+                      "bg-red-100 text-red-800"
+                    }`}>
+                      {alert.severity?.toUpperCase()}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{alert.findingType} — {alert.patientName}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{alert.description}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {alert.modality} · {alert.accessionNumber} · Flagged by {alert.flaggedBy}
+                        {alert.aiConfidence ? ` · AI confidence ${Math.round(Number(alert.aiConfidence) * 100)}%` : ""}
+                      </p>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      {!alert.acknowledged && (
+                        <Button size="sm" variant="outline" className="h-6 text-xs" onClick={() => ackCritical.mutate(alert.id)}>
+                          Ack
+                        </Button>
+                      )}
+                      <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => resolveCritical.mutate(alert.id)}>
+                        Resolve
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Enterprise: Queue Monitor + AI Health ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Queue depth */}
+            <div className="rounded-xl border bg-card shadow-sm">
+              <div className="px-5 py-3 border-b flex items-center justify-between">
+                <h3 className="font-semibold text-sm flex items-center gap-2">
+                  <Gauge size={14} /> RIS Queue Monitor
+                </h3>
+                <span className="text-xs text-muted-foreground">{queueData?.timestamp ? new Date(queueData.timestamp).toLocaleTimeString() : ""}</span>
+              </div>
+              <div className="p-4 space-y-3">
+                {[
+                  { label: "Worklist Pending", value: queueData?.worklistPending ?? 0, max: 20 },
+                  { label: "AI Drafts Ready", value: queueData?.worklistAiDraft ?? 0, max: 10 },
+                  { label: "Studies Scheduled", value: queueData?.studiesScheduled ?? 0, max: 30 },
+                  { label: "Studies In Progress", value: queueData?.studiesInProgress ?? 0, max: 20 },
+                  { label: "Critical Active", value: queueData?.criticalActive ?? 0, max: 5 },
+                ].map((row) => (
+                  <div key={row.label} className="flex items-center gap-3">
+                    <div className="text-xs font-medium w-36 shrink-0">{row.label}</div>
+                    <div className="flex-1 bg-muted rounded-full h-2.5 overflow-hidden">
+                      <div className={`h-2.5 rounded-full transition-all ${
+                        (row.value / row.max) > 0.8 ? "bg-red-500" :
+                        (row.value / row.max) > 0.5 ? "bg-yellow-500" :
+                        "bg-green-500"
+                      }`} style={{ width: `${Math.min((row.value / row.max) * 100, 100)}%` }} />
+                    </div>
+                    <span className="text-xs font-semibold w-8 text-right">{row.value}</span>
+                  </div>
+                ))}
+
+                {/* Priority breakdown */}
+                {queueData?.byPriority && queueData.byPriority.length > 0 && (
+                  <div className="pt-2 border-t">
+                    <p className="text-xs font-medium mb-2 text-muted-foreground">By Priority</p>
+                    <div className="flex gap-2 flex-wrap">
+                      {queueData.byPriority.map((p: any) => (
+                        <Badge key={p.priority} variant="outline" className="text-xs">
+                          {p.priority}: {p.count}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Modality breakdown */}
+                {queueData?.byModality && queueData.byModality.length > 0 && (
+                  <div className="pt-2 border-t">
+                    <p className="text-xs font-medium mb-2 text-muted-foreground">By Modality</p>
+                    <div className="flex gap-2 flex-wrap">
+                      {queueData.byModality.map((m: any) => (
+                        <Badge key={m.modality} variant="outline" className="text-xs font-mono">
+                          {m.modality}: {m.count}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* AI server health */}
+            <div className="rounded-xl border bg-card shadow-sm">
+              <div className="px-5 py-3 border-b flex items-center justify-between">
+                <h3 className="font-semibold text-sm flex items-center gap-2">
+                  <BrainCircuit size={14} /> AI Server Health
+                </h3>
+              </div>
+              <div className="p-4 space-y-3">
+                {aiHealth?.providers && Object.entries(aiHealth.providers).length > 0 ? (
+                  Object.entries(aiHealth.providers).map(([provider, data]: [string, any]) => (
+                    <div key={provider} className="rounded-lg border p-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${data.lastStatus === "healthy" ? "bg-green-500" : data.lastStatus === "degraded" ? "bg-yellow-500" : "bg-red-500"}`} />
+                          <span className="text-sm font-semibold capitalize">{provider}</span>
+                        </div>
+                        <Badge variant="outline" className="text-[10px]">{data.lastStatus}</Badge>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground">
+                        <span>Success: {data.total > 0 ? Math.round((data.success / data.total) * 100) : 0}%</span>
+                        <span>Latency: {data.avgLatency}ms</span>
+                        <span>Calls: {data.total}</span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">No AI health data yet. AI calls will populate this panel.</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Enterprise: RIS Sync + Watchdog ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* RIS sync status */}
+            <div className="rounded-xl border bg-card shadow-sm">
+              <div className="px-5 py-3 border-b flex items-center justify-between">
+                <h3 className="font-semibold text-sm flex items-center gap-2">
+                  <Activity size={14} /> RIS Sync Status
+                </h3>
+                <Badge variant={risSync?.failedTotal > 0 ? "destructive" : "outline"} className="text-xs">
+                  {risSync?.failedTotal ?? 0} failed
+                </Badge>
+              </div>
+              <div className="divide-y">
+                {risSync?.syncs?.length === 0 ? (
+                  <p className="text-sm text-muted-foreground p-5">No sync channels configured.</p>
+                ) : (
+                  risSync?.syncs?.map((sync: any) => (
+                    <div key={sync.id} className="px-4 py-3 flex items-center gap-3 text-sm">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${
+                        sync.status === "synced" ? "bg-green-500" :
+                        sync.status === "syncing" ? "bg-yellow-500 animate-pulse" :
+                        sync.status === "error" ? "bg-red-500" :
+                        "bg-gray-300"
+                      }`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium">{sync.syncType} → {sync.targetSystem}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {sync.itemsPending} pending · {sync.itemsSynced} synced · {sync.itemsFailed} failed
+                          {sync.avgSyncTimeMs ? ` · ${sync.avgSyncTimeMs}ms avg` : ""}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="text-[10px]">{sync.sourceSystem}</Badge>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Watchdog */}
+            <div className="rounded-xl border bg-card shadow-sm">
+              <div className="px-5 py-3 border-b flex items-center justify-between">
+                <h3 className="font-semibold text-sm flex items-center gap-2">
+                  <ShieldCheck size={14} /> Service Watchdog
+                </h3>
+                <Badge variant={(watchdogData?.downCount ?? 0) > 0 ? "destructive" : "outline"} className="text-xs">
+                  {(watchdogData?.downCount ?? 0) > 0 ? `${watchdogData?.downCount} down` : "All healthy"}
+                </Badge>
+              </div>
+              <div className="divide-y">
+                {watchdogData?.services?.length === 0 ? (
+                  <p className="text-sm text-muted-foreground p-5">No services registered yet.</p>
+                ) : (
+                  watchdogData?.services?.map((svc: any) => (
+                    <div key={svc.id} className="px-4 py-3 flex items-center gap-3 text-sm">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${
+                        svc.status === "healthy" ? "bg-green-500" :
+                        svc.status === "degraded" ? "bg-yellow-500" :
+                        svc.status === "down" ? "bg-red-500" :
+                        "bg-gray-300"
+                      }`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium">{svc.displayName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {svc.lastHeartbeat ? timeAgo(svc.lastHeartbeat) : "Never"}
+                          {svc.consecutiveFailures > 0 ? ` · ${svc.consecutiveFailures} failures` : ""}
+                          {svc.restartCount > 0 ? ` · ${svc.restartCount} restarts` : ""}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="text-[10px]">{svc.status}</Badge>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Enterprise: Radiologist Productivity + Archive ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Productivity */}
+            <div className="rounded-xl border bg-card shadow-sm">
+              <div className="px-5 py-3 border-b flex items-center justify-between">
+                <h3 className="font-semibold text-sm flex items-center gap-2">
+                  <BarChart3 size={14} /> Radiologist Productivity
+                </h3>
+                <span className="text-xs text-muted-foreground">{perfStats?.today}</span>
+              </div>
+              <div className="p-4">
+                {perfStats && (perfStats.stats?.length ?? 0) > 0 ? (
+                  <div className="space-y-3">
+                    {(perfStats as any).stats.map((stat: any) => (
+                      <div key={stat.id} className="rounded-lg border p-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-semibold">{stat.radiologistName}</span>
+                          <Badge variant="outline" className="text-[10px]">{stat.totalStudies} studies</Badge>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2 text-xs text-muted-foreground">
+                          <span>Reported: {stat.reportedStudies}</span>
+                          <span>Prelim: {stat.preliminaryReports}</span>
+                          <span>Final: {stat.finalReports}</span>
+                          <span>TAT: {stat.avgTatMinutes ?? "—"}m</span>
+                        </div>
+                        <div className="flex gap-1 mt-2 flex-wrap">
+                          {stat.statStudies > 0 && <Badge variant="destructive" className="text-[10px]">STAT: {stat.statStudies}</Badge>}
+                          {stat.emergencyStudies > 0 && <Badge className="text-[10px] bg-orange-100 text-orange-800">Emerg: {stat.emergencyStudies}</Badge>}
+                          {stat.aiDraftsUsed > 0 && <Badge className="text-[10px] bg-purple-100 text-purple-800">AI: {stat.aiDraftsUsed}</Badge>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">No productivity data yet. Stats are computed by background aggregation.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Archive lifecycle */}
+            <div className="rounded-xl border bg-card shadow-sm">
+              <div className="px-5 py-3 border-b flex items-center justify-between">
+                <h3 className="font-semibold text-sm flex items-center gap-2">
+                  <Archive size={14} /> Archive Lifecycle
+                </h3>
+                <span className="text-xs text-muted-foreground">{archiveData?.studies?.length ?? 0} tracked</span>
+              </div>
+              <div className="p-4">
+                {archiveData && (archiveData.tierCounts?.length ?? 0) > 0 ? (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-4 gap-2">
+                      {["hot", "warm", "cold", "archived"].map((tier) => {
+                        const count = (archiveData as any).tierCounts.find((t: any) => t.tier === tier)?.count ?? 0;
+                        const colors: Record<string, string> = {
+                          hot: "bg-red-100 text-red-800",
+                          warm: "bg-orange-100 text-orange-800",
+                          cold: "bg-blue-100 text-blue-800",
+                          archived: "bg-gray-100 text-gray-800",
+                        };
+                        return (
+                          <div key={tier} className={`rounded-lg p-2 text-center ${colors[tier]}`}>
+                            <div className="text-lg font-bold">{count}</div>
+                            <div className="text-[10px] uppercase font-medium">{tier}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {(archiveData?.studies ?? []).slice(0, 5).map((s: any) => (
+                      <div key={s.id} className="flex items-center gap-3 text-xs py-1 border-b last:border-0">
+                        <Badge variant="outline" className="text-[10px] font-mono">{s.modality ?? "?"}</Badge>
+                        <span className="flex-1 truncate">{s.accessionNumber ?? s.studyInstanceUID?.slice(0, 16)}</span>
+                        <span className={`text-[10px] rounded px-1.5 py-0.5 ${
+                          s.tier === "hot" ? "bg-red-100 text-red-700" :
+                          s.tier === "warm" ? "bg-orange-100 text-orange-700" :
+                          s.tier === "cold" ? "bg-blue-100 text-blue-700" :
+                          "bg-gray-100 text-gray-700"
+                        }`}>{s.tier}</span>
+                        {s.compressionRatio && <span className="text-muted-foreground">{s.compressionRatio}x</span>}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">No archive data yet. Studies will be tracked here once the archive engine runs.</p>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* ── Charts row ── */}

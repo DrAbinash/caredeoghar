@@ -1324,4 +1324,323 @@ router.post("/dicom-retrieve/bulk", async (req, res) => {
   res.json({ success: true, count });
 });
 
+// ─── Enterprise Monitoring & Analytics APIs ───────────────────────────────────────────
+
+import {
+  radiologistPerformanceStatsTable,
+  criticalFindingsAlertsTable,
+  aiServerHealthLogTable,
+  pacsArchiveLifecycleTable,
+  watchdogStatusTable,
+  risSyncStatusTable,
+} from "@workspace/db/schema";
+
+// GET /api/radiology/performance-stats
+// Aggregated radiologist productivity analytics
+router.get("/performance-stats", async (_req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const stats = await db
+    .select()
+    .from(radiologistPerformanceStatsTable)
+    .where(and(
+      eq(radiologistPerformanceStatsTable.periodType, "daily"),
+      eq(radiologistPerformanceStatsTable.periodDate, today),
+    ))
+    .orderBy(desc(radiologistPerformanceStatsTable.totalStudies));
+
+  const totals = {
+    totalStudies: stats.reduce((s, r) => s + (r.totalStudies || 0), 0),
+    reportedStudies: stats.reduce((s, r) => s + (r.reportedStudies || 0), 0),
+    statStudies: stats.reduce((s, r) => s + (r.statStudies || 0), 0),
+    avgTat: stats.length > 0
+      ? Math.round(stats.reduce((s, r) => s + (r.avgTatMinutes || 0), 0) / stats.length)
+      : 0,
+  };
+
+  res.json({ today, stats, totals });
+});
+
+// GET /api/radiology/critical-findings
+// Active critical findings alerts with optional status filter
+router.get("/critical-findings", async (req, res) => {
+  const status = req.query.status as string | undefined;
+  const limit = Math.min(Number(req.query.limit || 50), 100);
+
+  const conditions = [eq(criticalFindingsAlertsTable.status, status || "active")];
+  if (!status) {
+    conditions.length = 0;
+    conditions.push(
+      or(
+        eq(criticalFindingsAlertsTable.status, "active"),
+        eq(criticalFindingsAlertsTable.status, "acknowledged"),
+      ) as any,
+    );
+  }
+
+  const alerts = await db
+    .select()
+    .from(criticalFindingsAlertsTable)
+    .where(and(...conditions))
+    .orderBy(desc(criticalFindingsAlertsTable.createdAt))
+    .limit(limit);
+
+  res.json({ alerts, count: alerts.length });
+});
+
+// POST /api/radiology/critical-findings/:id/acknowledge
+router.post("/critical-findings/:id/acknowledge", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const { name: ackBy } = (req as any).user || {};
+  const [updated] = await db
+    .update(criticalFindingsAlertsTable)
+    .set({
+      acknowledged: true,
+      acknowledgedBy: ackBy || "staff",
+      acknowledgedAt: new Date(),
+      status: "acknowledged",
+    })
+    .where(eq(criticalFindingsAlertsTable.id, id))
+    .returning();
+
+  if (!updated) { res.status(404).json({ error: "Alert not found" }); return; }
+  res.json({ success: true, alert: updated });
+});
+
+// POST /api/radiology/critical-findings/:id/resolve
+router.post("/critical-findings/:id/resolve", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [updated] = await db
+    .update(criticalFindingsAlertsTable)
+    .set({ status: "resolved", resolvedAt: new Date() })
+    .where(eq(criticalFindingsAlertsTable.id, id))
+    .returning();
+
+  if (!updated) { res.status(404).json({ error: "Alert not found" }); return; }
+  res.json({ success: true, alert: updated });
+});
+
+// POST /api/radiology/critical-findings
+// Create a critical finding alert (from AI or radiologist)
+router.post("/critical-findings", async (req, res) => {
+  const body = req.body as {
+    worklistId?: number;
+    studyId?: number;
+    accessionNumber: string;
+    patientId?: number;
+    patientName: string;
+    modality?: string;
+    studyDescription?: string;
+    severity?: string;
+    findingType: string;
+    description: string;
+    flaggedBy?: string;
+    flaggedById?: number;
+    aiConfidence?: number;
+    notificationChannels?: string[];
+  };
+
+  if (!body.accessionNumber || !body.findingType || !body.description || !body.patientName) {
+    res.status(400).json({ error: "accessionNumber, findingType, description, patientName required" });
+    return;
+  }
+
+  const [alert] = await db
+    .insert(criticalFindingsAlertsTable)
+    .values({
+      worklistId: body.worklistId ?? null,
+      studyId: body.studyId ?? null,
+      accessionNumber: body.accessionNumber,
+      patientId: body.patientId ?? null,
+      patientName: body.patientName,
+      modality: body.modality ?? "OT",
+      studyDescription: body.studyDescription ?? null,
+      severity: body.severity ?? "high",
+      findingType: body.findingType,
+      description: body.description,
+      flaggedBy: body.flaggedBy ?? "system",
+      flaggedById: body.flaggedById ?? null,
+      aiConfidence: body.aiConfidence != null ? String(body.aiConfidence) : null,
+      notificationChannels: JSON.stringify(body.notificationChannels ?? ["push"]),
+    })
+    .returning();
+
+  res.status(201).json({ success: true, alert });
+});
+
+// GET /api/radiology/ai-health
+// AI provider health status + recent latency/success metrics
+router.get("/ai-health", async (_req, res) => {
+  const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const logs = await db
+    .select()
+    .from(aiServerHealthLogTable)
+    .where(gte(aiServerHealthLogTable.createdAt, last24h))
+    .orderBy(desc(aiServerHealthLogTable.createdAt))
+    .limit(200);
+
+  const byProvider: Record<string, { total: number; success: number; avgLatency: number; lastStatus: string }> = {};
+  for (const log of logs) {
+    const p = log.provider;
+    if (!byProvider[p]) byProvider[p] = { total: 0, success: 0, avgLatency: 0, lastStatus: log.status };
+    byProvider[p].total++;
+    if (log.success) byProvider[p].success++;
+    if (log.latencyMs) byProvider[p].avgLatency += log.latencyMs;
+    byProvider[p].lastStatus = log.status;
+  }
+  for (const p of Object.keys(byProvider)) {
+    if (byProvider[p].total > 0) {
+      byProvider[p].avgLatency = Math.round(byProvider[p].avgLatency / byProvider[p].total);
+    }
+  }
+
+  res.json({ providers: byProvider, recentLogs: logs.slice(0, 20) });
+});
+
+// GET /api/radiology/archive-lifecycle
+// Study archive/compression status overview
+router.get("/archive-lifecycle", async (req, res) => {
+  const tier = req.query.tier as string | undefined;
+  const limit = Math.min(Number(req.query.limit || 50), 100);
+
+  const conditions = tier ? [eq(pacsArchiveLifecycleTable.tier, tier)] : [];
+  const rows = await db
+    .select()
+    .from(pacsArchiveLifecycleTable)
+    .where(conditions.length > 0 ? and(...conditions) : undefined as any)
+    .orderBy(desc(pacsArchiveLifecycleTable.createdAt))
+    .limit(limit);
+
+  const tierCounts = await db
+    .select({ tier: pacsArchiveLifecycleTable.tier, count: sql<number>`COUNT(*)` })
+    .from(pacsArchiveLifecycleTable)
+    .groupBy(pacsArchiveLifecycleTable.tier);
+
+  res.json({ studies: rows, tierCounts });
+});
+
+// GET /api/radiology/watchdog
+// Background service health + auto-restart status
+router.get("/watchdog", async (_req, res) => {
+  const services = await db
+    .select()
+    .from(watchdogStatusTable)
+    .orderBy(watchdogStatusTable.displayName);
+
+  const down = services.filter((s) => s.status === "down" || s.consecutiveFailures > 3);
+  res.json({ services, downCount: down.length, healthyCount: services.length - down.length });
+});
+
+// POST /api/radiology/watchdog/:service/heartbeat
+// External services can POST heartbeats here
+router.post("/watchdog/:service/heartbeat", async (req, res) => {
+  const serviceName = req.params.service;
+  const { metadata } = req.body as { metadata?: Record<string, unknown> };
+
+  const [existing] = await db
+    .select()
+    .from(watchdogStatusTable)
+    .where(eq(watchdogStatusTable.serviceName, serviceName))
+    .limit(1);
+
+  if (existing) {
+    const [updated] = await db
+      .update(watchdogStatusTable)
+      .set({
+        status: "healthy",
+        lastHeartbeat: new Date(),
+        consecutiveFailures: 0,
+        metadata: JSON.stringify(metadata ?? {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(watchdogStatusTable.id, existing.id))
+      .returning();
+    res.json({ success: true, service: updated });
+  } else {
+    const [created] = await db
+      .insert(watchdogStatusTable)
+      .values({
+        serviceName,
+        displayName: serviceName,
+        status: "healthy",
+        lastHeartbeat: new Date(),
+        metadata: JSON.stringify(metadata ?? {}),
+      })
+      .returning();
+    res.json({ success: true, service: created });
+  }
+});
+
+// GET /api/radiology/ris-sync-status
+// Real-time RIS sync health across all channels
+router.get("/ris-sync-status", async (_req, res) => {
+  const syncs = await db
+    .select()
+    .from(risSyncStatusTable)
+    .orderBy(risSyncStatusTable.syncType);
+
+  const pendingTotal = syncs.reduce((s, r) => s + (r.itemsPending || 0), 0);
+  const failedTotal = syncs.reduce((s, r) => s + (r.itemsFailed || 0), 0);
+  const healthy = syncs.filter((s) => s.status === "synced" || s.status === "idle").length;
+
+  res.json({ syncs, pendingTotal, failedTotal, healthyChannels: healthy, totalChannels: syncs.length });
+});
+
+// GET /api/radiology/queue-monitor
+// Real-time queue depth and bottleneck analysis
+router.get("/queue-monitor", async (_req, res) => {
+  const [worklistPending, worklistAiDraft, studiesScheduled, studiesInProgress, criticalActive] = await Promise.all([
+    db.select({ count: sql<number>`COUNT(*)` }).from(radiologyWorklistTable)
+      .where(eq(radiologyWorklistTable.status, "STUDY_RECEIVED")),
+    db.select({ count: sql<number>`COUNT(*)` }).from(radiologyWorklistTable)
+      .where(eq(radiologyWorklistTable.status, "AI_DRAFT_READY")),
+    db.select({ count: sql<number>`COUNT(*)` }).from(radiologyStudiesTable)
+      .where(eq(radiologyStudiesTable.status, "scheduled")),
+    db.select({ count: sql<number>`COUNT(*)` }).from(radiologyStudiesTable)
+      .where(eq(radiologyStudiesTable.status, "in_progress")),
+    db.select({ count: sql<number>`COUNT(*)` }).from(criticalFindingsAlertsTable)
+      .where(eq(criticalFindingsAlertsTable.status, "active")),
+  ]);
+
+  // Studies by priority (STAT, emergency, routine) from radiology_studies
+  const byPriority = await db
+    .select({
+      priority: sql<string>`COALESCE(NULLIF(${radiologyStudiesTable.priority},''),'routine')`,
+      count: sql<number>`COUNT(*)`,
+    })
+    .from(radiologyStudiesTable)
+    .where(or(
+      eq(radiologyStudiesTable.status, "scheduled"),
+      eq(radiologyStudiesTable.status, "in_progress"),
+    ))
+    .groupBy(sql`COALESCE(NULLIF(${radiologyStudiesTable.priority},''),'routine')`);
+
+  // By modality
+  const byModality = await db
+    .select({
+      modality: radiologyStudiesTable.modality,
+      count: sql<number>`COUNT(*)`,
+    })
+    .from(radiologyStudiesTable)
+    .where(or(
+      eq(radiologyStudiesTable.status, "scheduled"),
+      eq(radiologyStudiesTable.status, "in_progress"),
+    ))
+    .groupBy(radiologyStudiesTable.modality);
+
+  res.json({
+    worklistPending: worklistPending[0]?.count ?? 0,
+    worklistAiDraft: worklistAiDraft[0]?.count ?? 0,
+    studiesScheduled: studiesScheduled[0]?.count ?? 0,
+    studiesInProgress: studiesInProgress[0]?.count ?? 0,
+    criticalActive: criticalActive[0]?.count ?? 0,
+    byPriority,
+    byModality,
+    timestamp: new Date().toISOString(),
+  });
+});
+
 export const pacsEnterpriseRouter = router;
