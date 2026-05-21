@@ -786,6 +786,148 @@ ${voucherXml}
   return;
 });
 
+// ─── Tally.ERP 9 XML Export ──────────────────────────────────────────────────
+
+router.get("/export/tally-erp9", async (req, res) => {
+  const { from, to } = req.query as Record<string, string>;
+
+  const accounts = await db.select().from(accountsTable);
+
+  const masterXml = accounts
+    .map(a => {
+      const parent = a.tallyGroup || (
+        a.type === "cash" ? "Cash-in-Hand" :
+        a.type === "bank" ? "Bank Accounts" :
+        a.type === "income" ? "Direct Income" :
+        a.type === "expense" ? "Indirect Expenses" :
+        a.type === "liability" ? "Current Liabilities" :
+        "Current Assets"
+      );
+      const openBal = Number(a.openingBalance || 0);
+      const openType = a.openingBalanceType || "Dr";
+      const openBalXml = openBal > 0
+        ? `\n    <OPENINGBALANCE>${openType === "Dr" ? openBal.toFixed(2) : (-openBal).toFixed(2)}</OPENINGBALANCE>`
+        : "";
+      const gstXml = a.gstNumber
+        ? `\n    <GSTREGISTRATIONTYPE>Regular</GSTREGISTRATIONTYPE>\n    <TAXREGISTRATIONNO>${a.gstNumber}</TAXREGISTRATIONNO>`
+        : "";
+      const panXml = a.pan ? `\n    <INCOMETAXNUMBER>${a.pan}</INCOMETAXNUMBER>` : "";
+
+      return `  <LEDGER NAME="${escapeXml(a.name)}" RESERVEDNAME="">
+    <PARENT>${escapeXml(parent)}</PARENT>
+    <ISBILLWISEON>No</ISBILLWISEON>
+    <ISACTIVE>${a.isActive ? "Yes" : "No"}</ISACTIVE>${openBalXml}${gstXml}${panXml}
+    <LEDGERCODE>${a.code || ""}</LEDGERCODE>
+  </LEDGER>`;
+    })
+    .join("\n");
+
+  const dateRange = from && to
+    ? `<!-- Date Range: ${from} to ${to} -->`
+    : `<!-- All dates -->`;
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+${dateRange}
+<ENVELOPE>
+  <HEADER>
+    <TALLYREQUEST>Import Data</TALLYREQUEST>
+  </HEADER>
+  <BODY>
+    <IMPORTDATA>
+      <REQUESTDESC>
+        <REPORTNAME>All Masters</REPORTNAME>
+        <STATICVARIABLES>
+          <SVCURRENTCOMPANY></SVCURRENTCOMPANY>
+        </STATICVARIABLES>
+      </REQUESTDESC>
+      <REQUESTDATA>
+        <TALLYMESSAGE>
+${masterXml}
+        </TALLYMESSAGE>
+      </REQUESTDATA>
+    </IMPORTDATA>
+  </BODY>
+</ENVELOPE>`;
+
+  res.setHeader("Content-Type", "application/xml");
+  res.setHeader("Content-Disposition", `attachment; filename=tally-erp9-masters${from ? `-${from}` : ""}${to ? `-to-${to}` : ""}.xml`);
+  res.send(xml);
+  return;
+});
+
+router.get("/export/tally-erp9-vouchers", async (req, res) => {
+  const { from, to } = req.query as Record<string, string>;
+
+  const accounts = await db.select().from(accountsTable);
+  let voucherQuery = db.select().from(vouchersTable).$dynamic();
+  const conditions = [];
+  if (from) conditions.push(gte(vouchersTable.date, from));
+  if (to) conditions.push(lte(vouchersTable.date, to));
+  if (conditions.length) voucherQuery = voucherQuery.where(and(...conditions));
+  const vouchers = await voucherQuery.orderBy(vouchersTable.date);
+
+  const accountMap = new Map(accounts.map(a => [a.id.toString(), a.name]));
+
+  const voucherXml = vouchers
+    .map(v => {
+      const drName = accountMap.get(v.debitAccountId) || v.debitAccountId;
+      const crName = accountMap.get(v.creditAccountId) || v.creditAccountId;
+      const amt = Number(v.amount);
+      const dateStr = v.date.replace(/-/g, "");
+      const tallyType = TALLY_VOUCHER_TYPE[v.type] || "Journal";
+      const narration = v.narration || v.particular + (v.remark ? " - " + v.remark : "");
+
+      return `  <VOUCHER VCHTYPE="${tallyType}" ACTION="Create">
+    <DATE>${dateStr}</DATE>
+    <VOUCHERNUMBER>${escapeXml(v.voucherNumber)}</VOUCHERNUMBER>
+    <NARRATION>${escapeXml(narration)}</NARRATION>
+    <ALLLEDGERENTRIES.LIST>
+      <LEDGERNAME>${escapeXml(drName)}</LEDGERNAME>
+      <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
+      <AMOUNT>-${amt.toFixed(2)}</AMOUNT>
+    </ALLLEDGERENTRIES.LIST>
+    <ALLLEDGERENTRIES.LIST>
+      <LEDGERNAME>${escapeXml(crName)}</LEDGERNAME>
+      <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+      <AMOUNT>${amt.toFixed(2)}</AMOUNT>
+    </ALLLEDGERENTRIES.LIST>
+  </VOUCHER>`;
+    })
+    .join("\n");
+
+  const dateRange = from && to
+    ? `<!-- Date Range: ${from} to ${to} -->`
+    : `<!-- All dates -->`;
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+${dateRange}
+<ENVELOPE>
+  <HEADER>
+    <TALLYREQUEST>Import Data</TALLYREQUEST>
+  </HEADER>
+  <BODY>
+    <IMPORTDATA>
+      <REQUESTDESC>
+        <REPORTNAME>Vouchers</REPORTNAME>
+        <STATICVARIABLES>
+          <SVCURRENTCOMPANY></SVCURRENTCOMPANY>
+        </STATICVARIABLES>
+      </REQUESTDESC>
+      <REQUESTDATA>
+        <TALLYMESSAGE>
+${voucherXml}
+        </TALLYMESSAGE>
+      </REQUESTDATA>
+    </IMPORTDATA>
+  </BODY>
+</ENVELOPE>`;
+
+  res.setHeader("Content-Type", "application/xml");
+  res.setHeader("Content-Disposition", `attachment; filename=tally-erp9-vouchers${from ? `-${from}` : ""}${to ? `-to-${to}` : ""}.xml`);
+  res.send(xml);
+  return;
+});
+
 // ─── Setup Default Chart of Accounts ─────────────────────────────────────────
 
 router.post("/setup-defaults", async (req, res) => {

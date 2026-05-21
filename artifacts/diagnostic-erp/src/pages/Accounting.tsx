@@ -385,6 +385,21 @@ export default function Accounting() {
     a.download = `tally-vouchers${exportDates.from ? `-${exportDates.from}` : ""}${exportDates.to ? `-to-${exportDates.to}` : ""}.xml`;
     a.click();
   };
+  const downloadTallyErp9Masters = () => {
+    const a = document.createElement("a");
+    a.href = `/api/accounting/export/tally-erp9`;
+    a.download = `tally-erp9-masters.xml`;
+    a.click();
+  };
+  const downloadTallyErp9Vouchers = () => {
+    const params = new URLSearchParams();
+    if (exportDates.from) params.set("from", exportDates.from);
+    if (exportDates.to) params.set("to", exportDates.to);
+    const a = document.createElement("a");
+    a.href = `/api/accounting/export/tally-erp9-vouchers?${params}`;
+    a.download = `tally-erp9-vouchers${exportDates.from ? `-${exportDates.from}` : ""}${exportDates.to ? `-to-${exportDates.to}` : ""}.xml`;
+    a.click();
+  };
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -1121,39 +1136,52 @@ export default function Accounting() {
                   <Download size={22} className="text-primary" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-semibold text-base">Export to TallyPrime</h3>
-                  <p className="text-sm text-muted-foreground mt-1">Downloads in TallyPrime-compatible XML format. Import in two steps: Masters first, then Vouchers.</p>
+                  <h3 className="font-semibold text-base">Export to Tally</h3>
+                  <p className="text-sm text-muted-foreground mt-1">Download XML files compatible with both TallyPrime and Tally.ERP 9. Always import Masters first, then Vouchers.</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2 max-w-sm">
+                    <div><Label className="text-[10px]">From Date</Label><Input type="date" value={exportDates.from} onChange={e => setExportDates(d => ({ ...d, from: e.target.value }))} className="mt-0.5 h-7 text-xs" /></div>
+                    <div><Label className="text-[10px]">To Date</Label><Input type="date" value={exportDates.to} onChange={e => setExportDates(d => ({ ...d, to: e.target.value }))} className="mt-0.5 h-7 text-xs" /></div>
+                  </div>
                   <div className="mt-4 space-y-3">
-                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30 border border-card-border">
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold">Step 1: Ledger Masters</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{accounts.length} account masters (groups, opening balances, GST/PAN)</p>
+                    {/* TallyPrime */}
+                    <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
+                      <p className="text-sm font-semibold text-blue-900">TallyPrime (Recommended)</p>
+                      <div className="mt-2 flex items-start gap-2">
+                        <Button size="sm" variant="outline" onClick={downloadTallyMasters}><Download size={14} className="mr-1.5" /> Masters XML</Button>
+                        <Button size="sm" variant="outline" onClick={downloadTallyVouchers}><Download size={14} className="mr-1.5" /> Vouchers XML</Button>
                       </div>
-                      <Button size="sm" variant="outline" onClick={downloadTallyMasters}><Download size={14} className="mr-1.5" /> Masters XML</Button>
                     </div>
-                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30 border border-card-border">
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold">Step 2: Vouchers</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{vouchers.length} vouchers (select date range below)</p>
-                        <div className="mt-2 grid grid-cols-2 gap-2">
-                          <div><Label className="text-[10px]">From</Label><Input type="date" value={exportDates.from} onChange={e => setExportDates(d => ({ ...d, from: e.target.value }))} className="mt-0.5 h-7 text-xs" /></div>
-                          <div><Label className="text-[10px]">To</Label><Input type="date" value={exportDates.to} onChange={e => setExportDates(d => ({ ...d, to: e.target.value }))} className="mt-0.5 h-7 text-xs" /></div>
-                        </div>
+                    {/* Tally.ERP 9 */}
+                    <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+                      <p className="text-sm font-semibold text-slate-700">Tally.ERP 9 (Legacy)</p>
+                      <div className="mt-2 flex items-start gap-2">
+                        <Button size="sm" variant="outline" onClick={downloadTallyErp9Masters}><Download size={14} className="mr-1.5" /> Masters XML</Button>
+                        <Button size="sm" variant="outline" onClick={downloadTallyErp9Vouchers}><Download size={14} className="mr-1.5" /> Vouchers XML</Button>
                       </div>
-                      <Button size="sm" variant="outline" onClick={downloadTallyVouchers}><Download size={14} className="mr-1.5" /> Vouchers XML</Button>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 max-w-xl text-sm text-amber-800">
-              <p className="font-semibold mb-2">Import Instructions (TallyPrime)</p>
+              <p className="font-semibold mb-2">How to Import — TallyPrime</p>
               <ol className="list-decimal list-inside space-y-1 text-xs">
-                <li>In TallyPrime: open the company you want to import into</li>
+                <li>Open your company in TallyPrime</li>
                 <li>Press <strong>Alt + O</strong> → <strong>Import</strong> → <strong>Data</strong></li>
-                <li>Import <strong>tally-masters.xml</strong> first (creates ledgers)</li>
-                <li>Then import <strong>tally-vouchers.xml</strong> (creates transactions)</li>
-                <li>Verify Trial Balance in Tally matches the one shown here</li>
+                <li>Choose the <strong>Masters XML</strong> file first → ledgers are created</li>
+                <li>Then choose the <strong>Vouchers XML</strong> file → transactions are imported</li>
+                <li>Go to <strong>Gateway → Reports → Trial Balance</strong> to verify totals match</li>
+              </ol>
+            </div>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 max-w-xl text-sm text-slate-700">
+              <p className="font-semibold mb-2">How to Import — Tally.ERP 9</p>
+              <ol className="list-decimal list-inside space-y-1 text-xs">
+                <li>Open your company in Tally.ERP 9</li>
+                <li>Go to <strong>Gateway of Tally → Import of Data → Vouchers / Masters</strong></li>
+                <li>For <strong>Masters</strong>: set File Path to the Masters XML → press Enter to import</li>
+                <li>For <strong>Vouchers</strong>: set File Path to the Vouchers XML → press Enter to import</li>
+                <li>If any ledger is missing, ERP 9 will prompt — press <strong>Y</strong> to create it on-the-fly</li>
+                <li>Verify in <strong>Display → Trial Balance</strong></li>
               </ol>
             </div>
           </TabsContent>
