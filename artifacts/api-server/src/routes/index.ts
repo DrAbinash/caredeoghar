@@ -73,6 +73,7 @@ import { floorsRouter, roomsRouter, modalitiesRouter } from "./locations";
 import { aiReportingRouter } from "./aiReporting";
 import { bankingRouter, bankingWebhookRouter } from "./banking";
 import { syncRouter } from "./sync";
+import { usgExtractionRouter } from "./usgExtraction";
 
 const router: IRouter = Router();
 
@@ -294,6 +295,10 @@ router.use("/dicom-agent", requireStaffAuth, requireStaffPermission("/dicom-node
 // Mounted BEFORE radiologyRouter so its handlers (e.g. echo-test upgrade) win.
 // Radiology is now open to ALL authenticated staff — no /orders permission required.
 router.use("/radiology", requireStaffAuth, pacsEnterpriseRouter);
+
+// USG auto-measurement extraction — all authenticated staff can trigger/review;
+// settings writes require admin role (enforced inside the router).
+router.use("/usg-extraction", requireStaffAuth, usgExtractionRouter);
 
 // Radiology studies — open to all authenticated staff (doctors, radiologists, etc.)
 router.use("/radiology", requireStaffAuth, radiologyRouter);

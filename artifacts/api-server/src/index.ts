@@ -1006,6 +1006,106 @@ async function runStartupMigrations(): Promise<void> {
       );
       CREATE INDEX IF NOT EXISTS ris_sync_type_idx ON ris_sync_status(sync_type);
       CREATE INDEX IF NOT EXISTS ris_sync_status_idx ON ris_sync_status(status);
+
+      -- ── USG Auto-Measurement Extraction ──
+      CREATE TABLE IF NOT EXISTS usg_measurements (
+        id SERIAL PRIMARY KEY,
+        worklist_id INTEGER,
+        study_id INTEGER,
+        study_instance_uid TEXT,
+        accession_number TEXT,
+        patient_id INTEGER,
+        extraction_run_id INTEGER,
+        source TEXT NOT NULL DEFAULT 'ocr',
+        overall_confidence TEXT NOT NULL DEFAULT 'low',
+        bpd TEXT, bpd_confidence TEXT,
+        hc TEXT, hc_confidence TEXT,
+        ac TEXT, ac_confidence TEXT,
+        fl TEXT, fl_confidence TEXT,
+        crl TEXT, crl_confidence TEXT,
+        efw TEXT, efw_confidence TEXT,
+        ga TEXT, ga_confidence TEXT,
+        edd TEXT, edd_confidence TEXT,
+        fhr TEXT, fhr_confidence TEXT,
+        placenta_position TEXT,
+        liquor_afi TEXT,
+        fetal_presentation TEXT,
+        uterus_size TEXT, uterus_size_confidence TEXT,
+        endometrium TEXT, endometrium_confidence TEXT,
+        right_ovary TEXT, right_ovary_confidence TEXT,
+        left_ovary TEXT, left_ovary_confidence TEXT,
+        follicles TEXT,
+        adnexal_lesion TEXT,
+        liver_size TEXT, liver_size_confidence TEXT,
+        spleen_size TEXT, spleen_size_confidence TEXT,
+        right_kidney TEXT, right_kidney_confidence TEXT,
+        left_kidney TEXT, left_kidney_confidence TEXT,
+        cbd TEXT, cbd_confidence TEXT,
+        gb_wall TEXT, gb_wall_confidence TEXT,
+        prostate_volume TEXT, prostate_volume_confidence TEXT,
+        extra_measurements_json TEXT NOT NULL DEFAULT '{}',
+        manufacturer TEXT,
+        manufacturer_model TEXT,
+        institution_name TEXT,
+        study_description TEXT,
+        study_date TEXT,
+        status TEXT NOT NULL DEFAULT 'pending_review',
+        reviewed_by TEXT,
+        reviewed_at TIMESTAMPTZ,
+        review_notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS usg_meas_study_uid_idx ON usg_measurements(study_instance_uid);
+      CREATE INDEX IF NOT EXISTS usg_meas_worklist_idx ON usg_measurements(worklist_id);
+      CREATE INDEX IF NOT EXISTS usg_meas_status_idx ON usg_measurements(status);
+      CREATE INDEX IF NOT EXISTS usg_meas_patient_idx ON usg_measurements(patient_id);
+
+      CREATE TABLE IF NOT EXISTS usg_extraction_logs (
+        id SERIAL PRIMARY KEY,
+        worklist_id INTEGER,
+        study_instance_uid TEXT,
+        accession_number TEXT,
+        extraction_type TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        frames_processed INTEGER NOT NULL DEFAULT 0,
+        frames_failed INTEGER NOT NULL DEFAULT 0,
+        sr_found BOOLEAN NOT NULL DEFAULT FALSE,
+        ai_normalized BOOLEAN NOT NULL DEFAULT FALSE,
+        error_message TEXT,
+        duration_ms INTEGER,
+        triggered_by TEXT NOT NULL DEFAULT 'auto',
+        triggered_by_user_id INTEGER,
+        raw_ocr_text_json TEXT,
+        raw_sr_json TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        completed_at TIMESTAMPTZ
+      );
+      CREATE INDEX IF NOT EXISTS usg_log_study_idx ON usg_extraction_logs(study_instance_uid);
+      CREATE INDEX IF NOT EXISTS usg_log_worklist_idx ON usg_extraction_logs(worklist_id);
+      CREATE INDEX IF NOT EXISTS usg_log_status_idx ON usg_extraction_logs(status);
+
+      CREATE TABLE IF NOT EXISTS usg_key_images (
+        id SERIAL PRIMARY KEY,
+        worklist_id INTEGER,
+        study_instance_uid TEXT,
+        accession_number TEXT,
+        patient_id INTEGER,
+        series_instance_uid TEXT,
+        sop_instance_uid TEXT,
+        series_number TEXT,
+        image_number TEXT,
+        frame_number INTEGER NOT NULL DEFAULT 1,
+        label TEXT NOT NULL DEFAULT '',
+        wado_url TEXT,
+        thumbnail_base64 TEXT,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        added_by TEXT,
+        added_by_user_id INTEGER,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS usg_key_img_study_idx ON usg_key_images(study_instance_uid);
+      CREATE INDEX IF NOT EXISTS usg_key_img_worklist_idx ON usg_key_images(worklist_id);
     `);
     logger.info("Startup migrations applied");
   } catch (err) {

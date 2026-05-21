@@ -14,6 +14,8 @@ export {
   generatePatientMessage,
   geminiOcrBill,
   geminiParseBankStatement,
+  geminiUsgOcr,
+  geminiNormalizeMeasurements,
   MODALITY_NAMES,
   type GeminiGenerateOptions,
   type GeminiTranscribeOptions,
@@ -25,4 +27,5 @@ export {
   type RadiologyImpressionInput,
   type BillOcrResult,
   type BankTransaction,
+  type UsgMeasurementJson,
 } from "./helpers";

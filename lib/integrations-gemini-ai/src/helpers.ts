@@ -489,3 +489,168 @@ export async function generatePatientMessage(
   const prompt = buildPatientMessagePrompt(patient, messageType);
   return geminiGenerate(prompt, { ...options, maxTokens: 200 });
 }
+
+// ---------------------------------------------------------------------------
+// USG Auto-Measurement OCR — extract burned-in ultrasound measurements
+// ---------------------------------------------------------------------------
+
+export interface UsgMeasurementJson {
+  bpd: string;
+  hc: string;
+  ac: string;
+  fl: string;
+  crl: string;
+  efw: string;
+  ga: string;
+  edd: string;
+  fhr: string;
+  uterusSize: string;
+  endometrium: string;
+  rightOvary: string;
+  leftOvary: string;
+  liverSize: string;
+  spleenSize: string;
+  rightKidney: string;
+  leftKidney: string;
+  cbd: string;
+  gbWall: string;
+  prostateVolume: string;
+  placentaPosition: string;
+  liquorAfi: string;
+  fetalPresentation: string;
+  follicles: string;
+  adnexalLesion: string;
+  extraMeasurements: Record<string, string>;
+  overallConfidence: "high" | "medium" | "low";
+  perFieldConfidence: Record<string, "high" | "medium" | "low">;
+  rawText: string;
+}
+
+const USG_OCR_PROMPT = `You are a medical ultrasound image analysis assistant specialized in reading GE ultrasound machines.
+Analyze this ultrasound image and extract ALL visible measurement values burned into the image.
+
+Return ONLY a valid JSON object — no markdown fences, no explanation, no extra text.
+
+JSON schema (use empty string "" for any field not visible):
+{
+  "bpd": "Biparietal Diameter e.g. '8.2 cm'",
+  "hc": "Head Circumference e.g. '28.5 cm'",
+  "ac": "Abdominal Circumference e.g. '25.0 cm'",
+  "fl": "Femur Length e.g. '5.8 cm'",
+  "crl": "Crown-Rump Length e.g. '3.2 cm'",
+  "efw": "Estimated Fetal Weight e.g. '1850 g'",
+  "ga": "Gestational Age e.g. '28W 3D'",
+  "edd": "Estimated Due Date e.g. '15/10/2025'",
+  "fhr": "Fetal Heart Rate e.g. '148 bpm'",
+  "uterusSize": "Uterus dimensions e.g. '8.5 x 4.2 x 3.8 cm'",
+  "endometrium": "Endometrial thickness e.g. '8 mm'",
+  "rightOvary": "Right ovary e.g. '2.8 x 1.9 cm'",
+  "leftOvary": "Left ovary e.g. '2.6 x 1.7 cm'",
+  "liverSize": "Liver span e.g. '13.5 cm'",
+  "spleenSize": "Spleen size e.g. '10.2 cm'",
+  "rightKidney": "Right kidney e.g. '10.8 x 4.5 cm'",
+  "leftKidney": "Left kidney e.g. '11.0 x 4.8 cm'",
+  "cbd": "Common Bile Duct e.g. '4 mm'",
+  "gbWall": "Gallbladder wall e.g. '3 mm'",
+  "prostateVolume": "Prostate volume e.g. '32 cc'",
+  "placentaPosition": "e.g. 'Posterior' or 'Anterior'",
+  "liquorAfi": "AFI / liquor index e.g. '12.5 cm'",
+  "fetalPresentation": "e.g. 'Cephalic' or 'Breech'",
+  "follicles": "follicle count/size or empty",
+  "adnexalLesion": "adnexal lesion description or empty",
+  "extraMeasurements": { "label": "value" for any other visible labeled measurements },
+  "overallConfidence": "high | medium | low",
+  "perFieldConfidence": { "fieldName": "high | medium | low" for each populated field },
+  "rawText": "all text visible in the image concatenated as a single string"
+}`;
+
+const EMPTY_USG_JSON: UsgMeasurementJson = {
+  bpd: "", hc: "", ac: "", fl: "", crl: "", efw: "", ga: "", edd: "", fhr: "",
+  uterusSize: "", endometrium: "", rightOvary: "", leftOvary: "",
+  liverSize: "", spleenSize: "", rightKidney: "", leftKidney: "",
+  cbd: "", gbWall: "", prostateVolume: "", placentaPosition: "",
+  liquorAfi: "", fetalPresentation: "", follicles: "", adnexalLesion: "",
+  extraMeasurements: {}, overallConfidence: "low", perFieldConfidence: {}, rawText: "",
+};
+
+/**
+ * Send an ultrasound image frame to Gemini Vision and extract all visible measurements.
+ * imageBase64 must be a base-64 encoded PNG/JPEG (not a data-URI).
+ */
+export async function geminiUsgOcr(
+  imageBase64: string,
+  mimeType: string,
+  options: GeminiGenerateOptions = {}
+): Promise<UsgMeasurementJson> {
+  const baseUrl = options.baseUrl ?? process.env.AI_INTEGRATIONS_GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com";
+  const apiKey = options.apiKey ?? process.env.AI_INTEGRATIONS_GEMINI_API_KEY ?? "";
+
+  const url = `${baseUrl}/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{
+        role: "user",
+        parts: [
+          { text: USG_OCR_PROMPT },
+          { inlineData: { mimeType, data: imageBase64 } },
+        ],
+      }],
+      generationConfig: { maxOutputTokens: 2048, temperature: 0.05 },
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Gemini USG OCR error: ${res.status} ${err}`);
+  }
+
+  const data = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  };
+  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "{}";
+
+  try {
+    const clean = raw.replace(/^```[a-z]*\n?/, "").replace(/```$/, "").trim();
+    const parsed = JSON.parse(clean) as Partial<UsgMeasurementJson>;
+    return { ...EMPTY_USG_JSON, ...parsed };
+  } catch {
+    return { ...EMPTY_USG_JSON, rawText: raw };
+  }
+}
+
+/**
+ * Normalize raw text (from DICOM tags, SR, or failed image OCR) into structured
+ * USG measurements by prompting Gemini with the text content directly.
+ */
+export async function geminiNormalizeMeasurements(
+  rawText: string,
+  options: GeminiGenerateOptions = {}
+): Promise<UsgMeasurementJson> {
+  const prompt = `You are a medical data normalization assistant.
+Below is raw text extracted from an ultrasound report or DICOM structured report.
+Parse it and fill this JSON schema (empty string if not found):
+
+Raw text:
+${rawText.slice(0, 4000)}
+
+Return ONLY valid JSON matching this schema:
+{
+  "bpd":"","hc":"","ac":"","fl":"","crl":"","efw":"","ga":"","edd":"","fhr":"",
+  "uterusSize":"","endometrium":"","rightOvary":"","leftOvary":"",
+  "liverSize":"","spleenSize":"","rightKidney":"","leftKidney":"",
+  "cbd":"","gbWall":"","prostateVolume":"","placentaPosition":"",
+  "liquorAfi":"","fetalPresentation":"","follicles":"","adnexalLesion":"",
+  "extraMeasurements":{},"overallConfidence":"medium","perFieldConfidence":{},"rawText":""
+}`;
+
+  const text = await geminiGenerate(prompt, options);
+  try {
+    const clean = text.replace(/^```[a-z]*\n?/, "").replace(/```$/, "").trim();
+    const parsed = JSON.parse(clean) as Partial<UsgMeasurementJson>;
+    return { ...EMPTY_USG_JSON, ...parsed, rawText };
+  } catch {
+    return { ...EMPTY_USG_JSON, rawText };
+  }
+}

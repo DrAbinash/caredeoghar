@@ -129,6 +129,8 @@ const navItems: NavEntry[] = [
       { path: "/radiology/archive-lifecycle",     icon: Archive,      label: "Archive Lifecycle",     ownerOnly: true },
       { path: "/radiology/watchdog",              icon: ShieldAlert,  label: "Watchdog",              ownerOnly: true },
       { path: "/radiology/hl7-settings",          icon: Network,      label: "HL7 / RIS Bridge",      ownerOnly: true },
+      { path: "/radiology/usg-measurements",      icon: ScanSearch,   label: "USG Measurements" },
+      { path: "/radiology/usg-admin-settings",    icon: Settings2,    label: "USG Extraction Settings", ownerOnly: true },
     ],
   },
   {

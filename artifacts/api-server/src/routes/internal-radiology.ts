@@ -36,6 +36,7 @@ import { todayIST } from "../lib/istDate";
 import { createOrLinkPatientFromDicom, type DicomDemographics } from "../lib/dicomPatientCreator";
 import { computeStudyPriority, applyPriorityToStudy } from "../lib/studyPriorityEngine";
 import { assignRadiologistToStudy } from "../lib/radiologistAssignment";
+import { runUsgExtraction } from "../lib/usgExtractor";
 
 const router = Router();
 
@@ -322,6 +323,22 @@ router.post("/radiology/studies", async (req, res) => {
       } catch (err) {
         logger.warn({ err, studyId: row.studyId }, "Auto-priority/assignment failed");
       }
+    }
+
+    // Auto-trigger USG measurement extraction for US modality studies.
+    // Fire-and-forget: never blocks the intake response.
+    if (modality === "US" && studyInstanceUID) {
+      runUsgExtraction({
+        worklistId: row.id,
+        studyId: row.studyId ?? undefined,
+        studyInstanceUID,
+        accessionNumber: accessionNumber ?? undefined,
+        patientId: row.patientId ?? undefined,
+        dicomMetadataJson: dicomMetadata ?? undefined,
+        triggeredBy: "auto",
+      }).catch((err: unknown) => {
+        logger.warn({ err, worklistId: row.id }, "USG auto-extraction failed silently");
+      });
     }
 
     logger.info({ worklistId: row.id, accessionNumber }, "POST /api/internal/radiology/studies success");
