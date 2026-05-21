@@ -47,6 +47,7 @@ const RadiologyReportGen = lazy(() => import("@/pages/RadiologyReportGenerator")
 const RadiologyReportingWorkspace = lazy(() => import("@/pages/RadiologyReportingWorkspace"));
 const PacsDashboard         = lazy(() => import("@/pages/PacsDashboard"));
 const MwlDashboard          = lazy(() => import("@/pages/MwlDashboard"));
+const RadiologySettings     = lazy(() => import("@/pages/RadiologySettings"));
 const DicomViewer           = lazy(() => import("@/pages/DicomViewer"));
 const AgentSetup            = lazy(() => import("@/pages/AgentSetup"));
 const PacsSettings          = lazy(() => import("@/pages/PacsSettings"));
@@ -102,6 +103,7 @@ const ERP_NAV_ORDER = [
   "/radiology/dicom-agent-dashboard", "/radiology/modality-management",
   "/radiology/mwl-dashboard", "/radiology/agent-setup", "/radiology/ai-reporting-settings",
   "/radiology/viewer", "/radiology/archive-lifecycle", "/radiology/watchdog", "/radiology/ai-inference-settings", "/teleradiology",
+  "/settings/radiology",
   "/orders", "/tests", "/packages", "/billing", "/payments", "/reports",
   "/report-generator", "/report-hub", "/inventory", "/expenses", "/staff", "/referrals",
   "/accounting", "/discounts", "/form-f", "/machines", "/hr-forms", "/website", "/whatsapp-chatbot", "/settings",
@@ -223,6 +225,7 @@ function Router() {
               <Route path="/website" component={Website} />
               <Route path="/outsourced-labs" component={OutsourcedLabs} />
               <Route path="/samples" component={Samples} />
+              <Route path="/settings/radiology" component={RadiologySettings} />
               <Route path="/settings" component={Settings} />
               <Route path="/whatsapp-chatbot" component={WhatsAppChatbot} />
               <Route path="/system-update" component={SystemUpdate} />

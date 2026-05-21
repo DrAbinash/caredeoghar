@@ -52,7 +52,7 @@ const PRESET_MODELS = [
   { label: "Abdominal USG Analyzer", value: "abdominal-usg", type: "ultrasound" },
 ];
 
-export default function AiInferenceSettings() {
+export function AiInferencePanel() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -121,16 +121,12 @@ export default function AiInferenceSettings() {
   const recentLogs = healthData?.recentLogs ?? [];
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <PageHeader
-        title="AI Inference Settings"
-        subtitle="Configure GPU/CPU inference backend for radiology AI"
-        actions={
-          <Button variant="outline" size="sm" onClick={() => void refetchHealth()}>
-            <RefreshCw className="h-4 w-4 mr-1" /> Refresh Health
-          </Button>
-        }
-      />
+    <div className="flex flex-col gap-4">
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" onClick={() => void refetchHealth()}>
+          <RefreshCw className="h-4 w-4 mr-1" /> Refresh Health
+        </Button>
+      </div>
 
       {/* Health Overview */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -291,6 +287,15 @@ export default function AiInferenceSettings() {
           If local GPU is unreachable and fallback is enabled, the system automatically routes to Gemini cloud API.
         </div>
       </div>
+    </div>
+  );
+}
+
+export default function AiInferenceSettings() {
+  return (
+    <div className="p-4 md:p-6 space-y-6">
+      <PageHeader title="AI Inference Settings" subtitle="Configure GPU/CPU inference backend for radiology AI" />
+      <AiInferencePanel />
     </div>
   );
 }

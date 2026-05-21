@@ -17,6 +17,10 @@ import {
 } from "recharts";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { WatchdogPanel } from "@/pages/PacsWatchdogDashboard";
+import { PacsLogsPanel } from "@/pages/PacsLogs";
+import { DicomAgentPanel } from "@/pages/DicomAgentDashboard";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -326,8 +330,8 @@ export default function PacsDashboard() {
   return (
     <div className="p-4 md:p-6 space-y-6">
       <PageHeader
-        title="PACS Dashboard"
-        subtitle="Live RIS/PACS status overview"
+        title="Command Center"
+        subtitle="PACS monitoring, watchdog services, logs, and agent health"
         actions={
           <Button variant="outline" size="sm" onClick={() => { void refetch(); }} disabled={isFetching}>
             <RefreshCw size={14} className={isFetching ? "animate-spin" : ""} />
@@ -336,7 +340,16 @@ export default function PacsDashboard() {
         }
       />
 
-      {/* Integration status badges */}
+      <Tabs defaultValue="overview" className="space-y-4">
+        <TabsList className="flex flex-wrap h-auto gap-1">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="watchdog">Watchdog</TabsTrigger>
+          <TabsTrigger value="logs">PACS Logs</TabsTrigger>
+          <TabsTrigger value="agent">Agent Monitor</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-6">
+          {/* Integration status badges */}
       <div className="flex flex-wrap gap-2">
         <ConquestBadge conquest={conquest} />
         <AgentStatusBar agents={agents} />
@@ -989,6 +1002,20 @@ export default function PacsDashboard() {
           </div>
         </>
       )}
+        </TabsContent>
+
+        <TabsContent value="watchdog">
+          <WatchdogPanel />
+        </TabsContent>
+
+        <TabsContent value="logs">
+          <PacsLogsPanel />
+        </TabsContent>
+
+        <TabsContent value="agent">
+          <DicomAgentPanel />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

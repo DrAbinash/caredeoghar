@@ -13,7 +13,10 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ScanSearch, RefreshCw, ExternalLink, Sparkles, FileEdit, CheckCircle2,
   Search, Filter, Clock, CheckCheck, AlertCircle, MonitorPlay, Tv2,
+  ClipboardList, CalendarDays,
 } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { MwlPanel } from "@/pages/MwlDashboard";
 
 type WorklistEntry = {
   id: number;
@@ -72,6 +75,62 @@ function fmtDate(iso: string | null): string {
   } catch {
     return iso;
   }
+}
+
+function StudyQueuePanel() {
+  const { data: studies = [], isLoading, refetch, isFetching } = useQuery<{
+    id: number; patientName: string; modality: string; status: string;
+    createdAt: string; assignedRadiologist: string | null;
+  }[]>({
+    queryKey: ["study-queue-brief"],
+    queryFn: () => api.get("/api/radiology/worklist"),
+    refetchInterval: 30_000,
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">{studies.length} studies in queue</p>
+        <Button variant="outline" size="sm" onClick={() => void refetch()} disabled={isFetching}>
+          <RefreshCw size={14} className={isFetching ? "animate-spin mr-1.5" : "mr-1.5"} /> Refresh
+        </Button>
+      </div>
+      {isLoading ? (
+        <div className="text-sm text-muted-foreground py-10 text-center">Loading…</div>
+      ) : studies.length === 0 ? (
+        <div className="text-sm text-muted-foreground py-10 text-center">No studies in queue</div>
+      ) : (
+        <div className="rounded-xl border overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-muted/50 text-muted-foreground text-xs uppercase tracking-wide">
+                <th className="px-3 py-2 text-left">Patient</th>
+                <th className="px-3 py-2 text-left">Modality</th>
+                <th className="px-3 py-2 text-left">Status</th>
+                <th className="px-3 py-2 text-left">Radiologist</th>
+                <th className="px-3 py-2 text-left">Received</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {studies.slice(0, 100).map((s) => (
+                <tr key={s.id} className="hover:bg-muted/30 transition-colors">
+                  <td className="px-3 py-2 font-medium">{s.patientName}</td>
+                  <td className="px-3 py-2">
+                    <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-xs font-medium">{s.modality}</span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className="px-1.5 py-0.5 rounded bg-muted text-xs">{s.status}</span>
+                  </td>
+                  <td className="px-3 py-2 text-muted-foreground">{s.assignedRadiologist ?? "—"}</td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">{fmtDate(s.createdAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function RadiologyWorklist() {
@@ -156,18 +215,29 @@ export default function RadiologyWorklist() {
   const filteredEmpty = entries.length > 0 && filtered.length === 0;
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <PageHeader
-        title="PACS Worklist"
-        subtitle="Studies received from Conquest PACS"
-        actions={
-          <Button variant="outline" size="sm" onClick={() => void refetch()}>
-            <RefreshCw className="h-4 w-4 mr-1" /> Refresh PACS Studies
-          </Button>
-        }
-      />
+    <div className="p-4 md:p-6 space-y-4">
+      <PageHeader title="Worklist Hub" subtitle="Study queue, PACS worklist, and modality worklist in one place" />
 
-      {/* Debug counter */}
+      <Tabs defaultValue="pacs-worklist" className="space-y-4">
+        <TabsList className="flex flex-wrap h-auto gap-1">
+          <TabsTrigger value="study-queue"><ClipboardList size={14} className="mr-1.5" />Study Queue</TabsTrigger>
+          <TabsTrigger value="pacs-worklist"><ScanSearch size={14} className="mr-1.5" />PACS Worklist</TabsTrigger>
+          <TabsTrigger value="mwl"><CalendarDays size={14} className="mr-1.5" />MWL</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="study-queue">
+          <StudyQueuePanel />
+        </TabsContent>
+
+        <TabsContent value="pacs-worklist">
+          <div className="flex flex-col gap-4">
+            <div className="flex justify-end">
+              <Button variant="outline" size="sm" onClick={() => void refetch()}>
+                <RefreshCw className="h-4 w-4 mr-1" /> Refresh PACS Studies
+              </Button>
+            </div>
+
+          {/* Debug counter */}
       <div className="flex items-center justify-between bg-slate-100 dark:bg-muted/40 border border-slate-200 dark:border-card-border rounded-lg px-4 py-2">
         <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
           Total PACS Studies: <span className="text-lg text-slate-900 dark:text-foreground tabular-nums">{entries.length}</span>
@@ -390,6 +460,13 @@ export default function RadiologyWorklist() {
           Automated email delivery is not enabled \u2014 status is set to READY_TO_SEND only.
         </div>
       </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="mwl">
+          <MwlPanel />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

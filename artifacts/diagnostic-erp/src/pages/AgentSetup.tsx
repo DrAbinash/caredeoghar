@@ -41,15 +41,11 @@ function Section({ title, icon, children }: { title: string; icon: React.ReactNo
   );
 }
 
-export default function AgentSetup() {
+export function AgentSetupPanel() {
   const { toast } = useToast();
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-4xl">
-      <PageHeader
-        title="Windows Agent Setup"
-        subtitle="DICOM Pull Agent & MWL SCP — installation and configuration guide"
-      />
+    <div className="space-y-6 max-w-4xl">
 
       {/* Overview */}
       <div className="grid sm:grid-cols-3 gap-3">
@@ -260,6 +256,15 @@ curl -X POST ${window.location.origin}/api/radiology/modalities/1/echo-test \\
           </div>
         </div>
       </Section>
+    </div>
+  );
+}
+
+export default function AgentSetup() {
+  return (
+    <div className="p-4 md:p-6 space-y-6">
+      <PageHeader title="Windows Agent Setup" subtitle="DICOM Pull Agent & MWL SCP — installation and configuration guide" />
+      <AgentSetupPanel />
     </div>
   );
 }

@@ -71,7 +71,7 @@ function fmtDate(iso: string | null): string {
   } catch { return iso; }
 }
 
-export default function PacsWatchdogDashboard() {
+export function WatchdogPanel() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -114,16 +114,12 @@ export default function PacsWatchdogDashboard() {
   });
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <PageHeader
-        title="Watchdog Dashboard"
-        subtitle="Background service health monitoring and auto-restart control"
-        actions={
-          <Button variant="outline" size="sm" onClick={() => void refetch()}>
-            <RefreshCw className="h-4 w-4 mr-1" /> Refresh
-          </Button>
-        }
-      />
+    <div className="flex flex-col gap-4">
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" onClick={() => void refetch()}>
+          <RefreshCw className="h-4 w-4 mr-1" /> Refresh
+        </Button>
+      </div>
 
       {/* Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -230,6 +226,15 @@ export default function PacsWatchdogDashboard() {
           Configure check intervals and max restarts per service.
         </div>
       </div>
+    </div>
+  );
+}
+
+export default function PacsWatchdogDashboard() {
+  return (
+    <div className="p-4 md:p-6 space-y-6">
+      <PageHeader title="Watchdog Dashboard" subtitle="Background service health monitoring and auto-restart control" />
+      <WatchdogPanel />
     </div>
   );
 }

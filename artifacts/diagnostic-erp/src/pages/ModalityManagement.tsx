@@ -526,7 +526,7 @@ function ModalityCard({
 
 // ── Main page ──────────────────────────────────────────────────────────────
 
-export default function ModalityManagement() {
+export function ModalityPanel() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -599,22 +599,16 @@ export default function ModalityManagement() {
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      <PageHeader
-        title="Modality Management"
-        subtitle="Configure imaging devices (MRI, CT, X-Ray, USG) for DICOM Q/R and Worklist"
-        actions={
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-              <RefreshCw size={14} className={isFetching ? "animate-spin" : ""} />
-            </Button>
-            <Button size="sm" onClick={() => setAddOpen(true)}>
-              <Plus size={14} className="mr-1" />
-              Add Device
-            </Button>
-          </div>
-        }
-      />
+    <div className="space-y-6">
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+          <RefreshCw size={14} className={isFetching ? "animate-spin" : ""} />
+        </Button>
+        <Button size="sm" onClick={() => setAddOpen(true)}>
+          <Plus size={14} className="mr-1" />
+          Add Device
+        </Button>
+      </div>
 
       {/* Stats strip */}
       {modalities.length > 0 && (
@@ -705,6 +699,15 @@ export default function ModalityManagement() {
           isSaving={upsertMut.isPending}
         />
       )}
+    </div>
+  );
+}
+
+export default function ModalityManagement() {
+  return (
+    <div className="p-4 md:p-6 space-y-6">
+      <PageHeader title="Modality Management" subtitle="Configure imaging devices (MRI, CT, X-Ray, USG) for DICOM Q/R and Worklist" />
+      <ModalityPanel />
     </div>
   );
 }

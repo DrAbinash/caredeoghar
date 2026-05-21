@@ -160,7 +160,7 @@ function fmtDate(iso: string | null) {
   });
 }
 
-export default function DicomNodes() {
+export function DicomNodesPanel() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"nodes" | "jobs">("nodes");
   const [editing, setEditing] = useState<DicomNode | null>(null);
@@ -304,23 +304,17 @@ export default function DicomNodes() {
   const isMutating = createMut.isPending || updateMut.isPending;
 
   return (
-    <div className="pb-8">
-      <PageHeader
-        title="DICOM Nodes"
-        subtitle="Modality registry & automatic Q/R pull scheduler"
-        actions={
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={() => refetchProvider()}>
-              <RefreshCw size={14} className="mr-1" /> Refresh
-            </Button>
-            {tab === "nodes" && (
-              <Button size="sm" onClick={openCreate}>
-                <Plus size={14} className="mr-1" /> Add Node
-              </Button>
-            )}
-          </div>
-        }
-      />
+    <div>
+      <div className="flex justify-end gap-2 pb-4">
+        <Button size="sm" variant="outline" onClick={() => refetchProvider()}>
+          <RefreshCw size={14} className="mr-1" /> Refresh
+        </Button>
+        {tab === "nodes" && (
+          <Button size="sm" onClick={openCreate}>
+            <Plus size={14} className="mr-1" /> Add Node
+          </Button>
+        )}
+      </div>
 
       <div className="px-6 space-y-5">
         <ProviderBanner provider={provider} />
@@ -885,5 +879,14 @@ function Capability({ label, enabled }: { label: string; enabled: boolean }) {
       {enabled ? <CheckCircle2 size={10} /> : <XCircle size={10} />}
       {label}
     </span>
+  );
+}
+
+export default function DicomNodes() {
+  return (
+    <div className="p-4 md:p-6 space-y-6">
+      <PageHeader title="DICOM Nodes" subtitle="Modality registry & automatic Q/R pull scheduler" />
+      <DicomNodesPanel />
+    </div>
   );
 }

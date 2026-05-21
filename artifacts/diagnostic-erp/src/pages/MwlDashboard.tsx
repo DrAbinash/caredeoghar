@@ -56,7 +56,7 @@ function formatTime(t: string | null) {
   return t;
 }
 
-export default function MwlDashboard() {
+export function MwlPanel() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [filterStatus, setFilterStatus] = useState("");
@@ -89,17 +89,13 @@ export default function MwlDashboard() {
   const byStatus = data?.byStatus ?? {};
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      <PageHeader
-        title="MWL Dashboard"
-        subtitle="Modality Worklist — scheduled imaging procedures"
-        actions={
-          <Button variant="outline" size="sm" onClick={() => void refetch()} disabled={isFetching}>
-            <RefreshCw size={14} className={isFetching ? "animate-spin" : ""} />
-            Refresh
-          </Button>
-        }
-      />
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" onClick={() => void refetch()} disabled={isFetching}>
+          <RefreshCw size={14} className={isFetching ? "animate-spin" : ""} />
+          Refresh
+        </Button>
+      </div>
 
       {/* Status summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -320,6 +316,15 @@ export default function MwlDashboard() {
           <li>Configure the <strong>Station AE Title</strong> here so the modality knows to pick up its worklist</li>
         </ol>
       </div>
+    </div>
+  );
+}
+
+export default function MwlDashboard() {
+  return (
+    <div className="p-4 md:p-6 space-y-6">
+      <PageHeader title="MWL Dashboard" subtitle="Modality Worklist — scheduled imaging procedures" />
+      <MwlPanel />
     </div>
   );
 }

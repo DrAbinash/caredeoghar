@@ -76,7 +76,7 @@ function TierBadge({ tier }: { tier: string }) {
   );
 }
 
-export default function PacsArchiveLifecycle() {
+export function ArchiveLifecyclePanel() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [tierFilter, setTierFilter] = useState<string>("all");
@@ -129,16 +129,12 @@ export default function PacsArchiveLifecycle() {
   const savingsPct = totalOriginal > 0 ? Math.round((totalSavings / totalOriginal) * 100) : 0;
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <PageHeader
-        title="Archive Lifecycle"
-        subtitle="Study compression and tiered storage management"
-        actions={
-          <Button variant="outline" size="sm" onClick={() => void refetch()}>
-            <RefreshCw className="h-4 w-4 mr-1" /> Refresh
-          </Button>
-        }
-      />
+    <div className="flex flex-col gap-4">
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" onClick={() => void refetch()}>
+          <RefreshCw className="h-4 w-4 mr-1" /> Refresh
+        </Button>
+      </div>
 
       {/* Storage summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -275,6 +271,15 @@ export default function PacsArchiveLifecycle() {
           Background cron jobs run nightly. Manual tier changes via this page bypass the scheduled policy.
         </div>
       </div>
+    </div>
+  );
+}
+
+export default function PacsArchiveLifecycle() {
+  return (
+    <div className="p-4 md:p-6 space-y-6">
+      <PageHeader title="Archive Lifecycle" subtitle="Study compression and tiered storage management" />
+      <ArchiveLifecyclePanel />
     </div>
   );
 }

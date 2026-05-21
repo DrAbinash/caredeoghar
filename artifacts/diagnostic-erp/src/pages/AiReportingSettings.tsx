@@ -207,7 +207,7 @@ function ProviderCard({
 }
 
 // ─── Main Settings Page ───────────────────────────────────────────────────────
-export default function AiReportingSettings() {
+export function AiReportingPanel() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -322,17 +322,13 @@ export default function AiReportingSettings() {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-4xl mx-auto">
-      <PageHeader
-        title="AI Reporting Integration"
-        subtitle="Configure AI providers for DICOM/radiology study analysis and report generation"
-        actions={
-          <Button onClick={handleSave} disabled={saveMutation.isPending} className="gap-2">
-            {saveMutation.isPending ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-            Save Settings
-          </Button>
-        }
-      />
+    <div className="space-y-6 max-w-4xl">
+      <div className="flex justify-end">
+        <Button onClick={handleSave} disabled={saveMutation.isPending} className="gap-2">
+          {saveMutation.isPending ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+          Save Settings
+        </Button>
+      </div>
 
       {/* AI Enabled master toggle */}
       <div className={`rounded-xl border p-5 flex items-center justify-between ${globalDraft.enabled ? "bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-800" : "bg-muted/30"}`}>
@@ -564,6 +560,15 @@ export default function AiReportingSettings() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+export default function AiReportingSettings() {
+  return (
+    <div className="p-4 md:p-6 space-y-6">
+      <PageHeader title="AI Reporting Integration" subtitle="Configure AI providers for DICOM/radiology study analysis and report generation" />
+      <AiReportingPanel />
     </div>
   );
 }

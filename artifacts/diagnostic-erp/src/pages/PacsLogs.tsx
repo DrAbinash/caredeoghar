@@ -31,7 +31,7 @@ const SEV_BADGE: Record<string, string> = {
   debug:   "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
 };
 
-export default function PacsLogs() {
+export function PacsLogsPanel() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
@@ -70,22 +70,16 @@ export default function PacsLogs() {
   });
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      <PageHeader
-        title="PACS Logs"
-        subtitle="Event log from Conquest Lua hooks, Python agent, and RIS automation"
-        actions={
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowAdd(!showAdd)}>
-              <Plus size={14} />{showAdd ? "Cancel" : "Add Entry"}
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-              <RefreshCw size={14} className={isFetching ? "animate-spin" : ""} />
-              Refresh
-            </Button>
-          </div>
-        }
-      />
+    <div className="space-y-4">
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={() => setShowAdd(!showAdd)}>
+          <Plus size={14} />{showAdd ? "Cancel" : "Add Entry"}
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+          <RefreshCw size={14} className={isFetching ? "animate-spin" : ""} />
+          Refresh
+        </Button>
+      </div>
 
       {/* Add manual log entry */}
       {showAdd && (
@@ -168,6 +162,15 @@ export default function PacsLogs() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+export default function PacsLogs() {
+  return (
+    <div className="p-4 md:p-6 space-y-6">
+      <PageHeader title="PACS Logs" subtitle="Event log from Conquest Lua hooks, Python agent, and RIS automation" />
+      <PacsLogsPanel />
     </div>
   );
 }

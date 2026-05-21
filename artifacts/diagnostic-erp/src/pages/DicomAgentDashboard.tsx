@@ -153,7 +153,7 @@ function AgentCard({ agent }: { agent: AgentStatus }) {
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
-export default function DicomAgentDashboard() {
+export function DicomAgentPanel() {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
   const [filters, setFilters] = useState({
@@ -206,17 +206,13 @@ export default function DicomAgentDashboard() {
   const totalPages = Math.ceil(total / 50);
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      <PageHeader
-        title="DICOM Agent Monitor"
-        subtitle="Live status and event log from the Windows DICOM Pull Agent"
-        actions={
-          <Button variant="outline" size="sm" onClick={() => { void refetchStatus(); void refetchLogs(); }} disabled={statusFetching || logsFetching}>
-            <RefreshCw size={14} className={(statusFetching || logsFetching) ? "animate-spin" : ""} />
-            Refresh
-          </Button>
-        }
-      />
+    <div className="space-y-6">
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" onClick={() => { void refetchStatus(); void refetchLogs(); }} disabled={statusFetching || logsFetching}>
+          <RefreshCw size={14} className={(statusFetching || logsFetching) ? "animate-spin" : ""} />
+          Refresh
+        </Button>
+      </div>
 
       {/* ── Agent Status Cards ── */}
       <section className="space-y-3">
@@ -385,6 +381,15 @@ export default function DicomAgentDashboard() {
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+export default function DicomAgentDashboard() {
+  return (
+    <div className="p-4 md:p-6 space-y-6">
+      <PageHeader title="DICOM Agent Monitor" subtitle="Live status and event log from the Windows DICOM Pull Agent" />
+      <DicomAgentPanel />
     </div>
   );
 }
