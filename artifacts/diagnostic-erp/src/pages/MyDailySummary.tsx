@@ -684,52 +684,46 @@ function PostClosureActivityBox({ data }: { data: PostClosureActivity }) {
   );
 }
 
-// ─── Control Logs Component ───────────────────────────────────────────────────
+// ─── Unified Activity Log (replaces Control Logs + Bill Activity by Me) ───────
 
-type ControlLogTab = "bill-edits" | "cancellations" | "refunds";
+type ActivityTab = "bill-edits" | "voucher-edits" | "cancellations" | "refunds";
 
-function ControlLogs({ data }: { data: MyDailySummaryData | undefined }) {
-  const [tab, setTab] = useState<ControlLogTab>("bill-edits");
+function MyActivityLog({ data }: { data: MyDailySummaryData | undefined }) {
+  const [tab, setTab] = useState<ActivityTab>("bill-edits");
   if (!data) return null;
 
   const billEdits = data.billEdits ?? [];
   const voucherEdits = data.voucherEdits ?? [];
-  const allEdits = [
-    ...billEdits.map((e) => ({ ...e, source: "Bill" as const })),
-    ...voucherEdits.map((e) => ({
-      id: e.id, billId: 0, billNumber: "—", editedBy: e.editedBy,
-      reason: e.reason, changeType: "", oldValue: null as null, newValue: null as null,
-      createdAt: e.createdAt, source: "Voucher" as const,
-    })),
-  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const cancellations = data.cancelledByMe ?? [];
   const refunds = data.refunds ?? [];
-  const totalLogs = allEdits.length + cancellations.length + refunds.length;
+  const totalActivity = billEdits.length + voucherEdits.length + cancellations.length + refunds.length;
 
-  if (totalLogs === 0) return (
+  if (totalActivity === 0) return (
     <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl p-5 text-sm text-gray-500 text-center">
-      No edits, cancellations, or refunds in this period.
+      No bill edits, cancellations, or refunds in this period.
     </div>
   );
 
-  const tabs: { id: ControlLogTab; label: string; count: number }[] = [
-    { id: "bill-edits", label: "Bill & Voucher Edits", count: allEdits.length },
+  const tabs: { id: ActivityTab; label: string; count: number }[] = [
+    { id: "bill-edits", label: "Bill Edits", count: billEdits.length },
+    { id: "voucher-edits", label: "Voucher Edits", count: voucherEdits.length },
     { id: "cancellations", label: "Cancellations", count: cancellations.length },
     { id: "refunds", label: "Refunds", count: refunds.length },
   ];
 
   return (
     <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl shadow-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-100 dark:border-card-border">
+      <div className="px-4 py-3 border-b border-gray-100 dark:border-card-border flex items-center justify-between">
         <h3 className="text-sm font-bold text-gray-900 dark:text-foreground flex items-center gap-2">
-          <FileEdit size={14} className="text-purple-600" /> Control Logs
+          <FileEdit size={14} className="text-purple-600" /> My Activity Log
           <span className="text-xs font-normal text-gray-500 ml-1">— document activity in this period</span>
         </h3>
+        <span className="text-xs font-bold text-gray-500">{totalActivity} total</span>
       </div>
-      <div className="flex border-b border-gray-100 dark:border-card-border">
+      <div className="flex border-b border-gray-100 dark:border-card-border overflow-x-auto">
         {tabs.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors ${tab === t.id ? "border-primary text-primary" : "border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-foreground"}`}>
+            className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${tab === t.id ? "border-primary text-primary" : "border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-foreground"}`}>
             {t.label}
             {t.count > 0 && (
               <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${tab === t.id ? "bg-primary/10 text-primary" : "bg-gray-100 dark:bg-muted text-gray-600"}`}>
@@ -739,57 +733,128 @@ function ControlLogs({ data }: { data: MyDailySummaryData | undefined }) {
           </button>
         ))}
       </div>
-      <div className="divide-y divide-gray-100 dark:divide-card-border max-h-72 overflow-y-auto">
-        {tab === "bill-edits" && (allEdits.length === 0
-          ? <p className="px-4 py-6 text-sm text-gray-500 text-center">No edits in this period.</p>
-          : allEdits.map((e, i) => (
-            <div key={i} className="px-4 py-2.5 flex items-start gap-3 hover:bg-gray-50 dark:hover:bg-muted/20">
-              <FileEdit size={13} className="mt-0.5 text-purple-500 flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${e.source === "Voucher" ? "bg-indigo-100 text-indigo-700" : "bg-purple-100 text-purple-700"}`}>{e.source}</span>
-                  {e.billNumber && e.billNumber !== "—" && (
-                    <Link href={`/billing/${e.billId}`} className="text-xs font-semibold text-primary hover:underline">{e.billNumber}</Link>
-                  )}
-                  <span className="text-xs text-gray-700 dark:text-gray-300 font-semibold">{e.editedBy}</span>
-                  <span className="text-[10px] text-gray-500">{fmtTime(e.createdAt)}</span>
-                </div>
-                {e.reason && <p className="text-xs text-gray-500 mt-0.5 truncate">{e.reason}</p>}
-              </div>
+      <div className="max-h-80 overflow-y-auto">
+        {/* Bill Edits — rich table */}
+        {tab === "bill-edits" && (
+          billEdits.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-gray-500 text-center">No bill edits in this period.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 dark:bg-muted/30 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Bill #</th>
+                    <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Type</th>
+                    <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300">Old → New</th>
+                    <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300">Reason</th>
+                    <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Time</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-card-border">
+                  {billEdits.map((e) => (
+                    <tr key={e.id} className="hover:bg-purple-50/50 dark:hover:bg-muted/20">
+                      <td className="px-3 py-2 font-semibold whitespace-nowrap">
+                        <Link href={`/billing/${e.billId}`} className="text-primary hover:underline">{e.billNumber}</Link>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {e.changeType ? (
+                          <span className={`px-1.5 py-0.5 rounded font-semibold text-[10px] ${
+                            e.changeType === "cancelled" ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300" :
+                            e.changeType === "reprint" ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300" :
+                            e.changeType === "refund" ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300" :
+                            e.changeType === "discount" ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300" :
+                            "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
+                          }`}>
+                            {e.changeType}
+                          </span>
+                        ) : <span className="text-gray-400">—</span>}
+                      </td>
+                      <td className="px-3 py-2 text-gray-600 dark:text-gray-400 max-w-[140px]">
+                        {(e.oldValue || e.newValue) ? (
+                          <span className="flex items-center gap-1 flex-wrap">
+                            {e.oldValue && <span className="line-through text-red-500">{e.oldValue}</span>}
+                            {e.oldValue && e.newValue && <ArrowRight size={9} className="text-gray-400 flex-shrink-0" />}
+                            {e.newValue && <span className="text-green-700 dark:text-green-400 font-semibold">{e.newValue}</span>}
+                          </span>
+                        ) : <span className="text-gray-400">—</span>}
+                      </td>
+                      <td className="px-3 py-2 text-gray-600 dark:text-gray-400 max-w-[140px] truncate">{e.reason || "—"}</td>
+                      <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
+                        <span className="flex items-center gap-1"><Clock size={10} />{fmtTime(e.createdAt)}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          ))
+          )
         )}
-        {tab === "cancellations" && (cancellations.length === 0
-          ? <p className="px-4 py-6 text-sm text-gray-500 text-center">No cancellations in this period.</p>
-          : cancellations.map((c, i) => (
-            <div key={i} className="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-muted/20">
-              <XCircle size={13} className="text-rose-500 flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-semibold text-gray-800 dark:text-foreground">{c.billNumber}</span>
-                  <span className="text-xs text-gray-500">created by {c.originalCreator}</span>
-                  <span className="text-[10px] text-gray-500">{fmtTime(c.cancelledAt)}</span>
+        {/* Voucher Edits — list */}
+        {tab === "voucher-edits" && (
+          voucherEdits.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-gray-500 text-center">No voucher edits in this period.</p>
+          ) : (
+            <div className="divide-y divide-gray-100 dark:divide-card-border">
+              {voucherEdits.map((e, i) => (
+                <div key={i} className="px-4 py-2.5 flex items-start gap-3 hover:bg-gray-50 dark:hover:bg-muted/20">
+                  <FileEdit size={13} className="mt-0.5 text-indigo-500 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-indigo-100 text-indigo-700">Voucher</span>
+                      <span className="text-xs font-semibold text-gray-800 dark:text-foreground">#{e.voucherId}</span>
+                      <span className="text-xs text-gray-700 dark:text-gray-300 font-semibold">{e.editedBy}</span>
+                      <span className="text-[10px] text-gray-500">{fmtTime(e.createdAt)}</span>
+                    </div>
+                    {e.reason && <p className="text-xs text-gray-500 mt-0.5 truncate">{e.reason}</p>}
+                  </div>
                 </div>
-                <p className="text-xs text-rose-600 font-semibold">{fmt(c.totalAmount)}</p>
-              </div>
+              ))}
             </div>
-          ))
+          )
         )}
-        {tab === "refunds" && (refunds.length === 0
-          ? <p className="px-4 py-6 text-sm text-gray-500 text-center">No refunds in this period.</p>
-          : refunds.map((r, i) => (
-            <div key={i} className="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-muted/20">
-              <RotateCcw size={13} className="text-amber-500 flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Link href={`/billing/${r.billId}`} className="text-xs font-semibold text-primary hover:underline">Bill #{r.billId}</Link>
-                  <span className="text-xs text-gray-500">by {r.recordedBy ?? "Unknown"}</span>
-                  <span className="text-[10px] text-gray-500">{fmtTime(r.createdAt)}</span>
+        {/* Cancellations — list */}
+        {tab === "cancellations" && (
+          cancellations.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-gray-500 text-center">No cancellations in this period.</p>
+          ) : (
+            <div className="divide-y divide-gray-100 dark:divide-card-border">
+              {cancellations.map((c, i) => (
+                <div key={i} className="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-muted/20">
+                  <XCircle size={13} className="text-rose-500 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-semibold text-gray-800 dark:text-foreground">{c.billNumber}</span>
+                      <span className="text-xs text-gray-500">created by {c.originalCreator}</span>
+                      <span className="text-[10px] text-gray-500">{fmtTime(c.cancelledAt)}</span>
+                    </div>
+                    <p className="text-xs text-rose-600 font-semibold">{fmt(c.totalAmount)}</p>
+                  </div>
                 </div>
-                <p className="text-xs text-amber-700 dark:text-amber-400 font-semibold">{fmt(Math.abs(r.amount))} via {r.method}</p>
-              </div>
+              ))}
             </div>
-          ))
+          )
+        )}
+        {/* Refunds — list */}
+        {tab === "refunds" && (
+          refunds.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-gray-500 text-center">No refunds in this period.</p>
+          ) : (
+            <div className="divide-y divide-gray-100 dark:divide-card-border">
+              {refunds.map((r, i) => (
+                <div key={i} className="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-muted/20">
+                  <RotateCcw size={13} className="text-amber-500 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Link href={`/billing/${r.billId}`} className="text-xs font-semibold text-primary hover:underline">Bill #{r.billId}</Link>
+                      <span className="text-xs text-gray-500">by {r.recordedBy ?? "Unknown"}</span>
+                      <span className="text-[10px] text-gray-500">{fmtTime(r.createdAt)}</span>
+                    </div>
+                    <p className="text-xs text-amber-700 dark:text-amber-400 font-semibold">{fmt(Math.abs(r.amount))} via {r.method}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
         )}
       </div>
     </div>
@@ -1131,115 +1196,8 @@ export default function MyDailySummary() {
             </div>
           )}
 
-          {/* ── Control Logs (admin/super-admin only) ── */}
-          {isOwner && <ControlLogs data={data} />}
-
-          {/* ── Bill Edits + Collection by Method ── */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl shadow-sm overflow-hidden flex flex-col">
-              <div className="px-4 py-3 border-b border-gray-100 dark:border-card-border flex items-center justify-between">
-                <h3 className="text-sm font-bold text-gray-900 dark:text-foreground flex items-center gap-2">
-                  <FileEdit size={14} className="text-purple-600" /> Bill Activity by Me
-                  {data.billEdits.length > 0 && (
-                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
-                      {data.billEdits.length}
-                    </span>
-                  )}
-                </h3>
-              </div>
-              {data.billEdits.length === 0 ? (
-                <div className="flex-1 flex items-center justify-center py-10">
-                  <div className="text-center">
-                    <FileEdit size={28} className="text-gray-200 dark:text-gray-600 mx-auto mb-2" />
-                    <p className="text-sm text-gray-500">No bill edits in this period</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="overflow-x-auto overflow-y-auto max-h-80">
-                  <table className="w-full text-xs">
-                    <thead className="bg-gray-50 dark:bg-muted/30 sticky top-0">
-                      <tr>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Bill #</th>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Type</th>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300">Old → New</th>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300">Reason</th>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">Time</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 dark:divide-card-border">
-                      {data.billEdits.map((e) => (
-                        <tr key={e.id} className="hover:bg-purple-50/50 dark:hover:bg-muted/20">
-                          <td className="px-3 py-2 font-semibold whitespace-nowrap">
-                            <Link href={`/billing/${e.billId}`} className="text-primary hover:underline">{e.billNumber}</Link>
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            {e.changeType ? (
-                              <span className={`px-1.5 py-0.5 rounded font-semibold text-[10px] ${
-                                e.changeType === "cancelled" ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300" :
-                                e.changeType === "reprint" ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300" :
-                                e.changeType === "refund" ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300" :
-                                e.changeType === "discount" ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300" :
-                                "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
-                              }`}>
-                                {e.changeType}
-                              </span>
-                            ) : <span className="text-gray-400">—</span>}
-                          </td>
-                          <td className="px-3 py-2 text-gray-600 dark:text-gray-400 max-w-[140px]">
-                            {(e.oldValue || e.newValue) ? (
-                              <span className="flex items-center gap-1 flex-wrap">
-                                {e.oldValue && <span className="line-through text-red-500">{e.oldValue}</span>}
-                                {e.oldValue && e.newValue && <ArrowRight size={9} className="text-gray-400 flex-shrink-0" />}
-                                {e.newValue && <span className="text-green-700 dark:text-green-400 font-semibold">{e.newValue}</span>}
-                              </span>
-                            ) : <span className="text-gray-400">—</span>}
-                          </td>
-                          <td className="px-3 py-2 text-gray-600 dark:text-gray-400 max-w-[140px] truncate">{e.reason || "—"}</td>
-                          <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
-                            <span className="flex items-center gap-1"><Clock size={10} />{fmtTime(e.createdAt)}</span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-100 dark:border-card-border">
-                <h3 className="text-sm font-bold text-gray-900 dark:text-foreground flex items-center gap-2">
-                  <Wallet size={14} className="text-green-600" /> Collection by Method
-                </h3>
-              </div>
-              <div className="p-4">
-                {Object.entries(data.byMethod).length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-6">No collections in this period.</p>
-                ) : (
-                  <div className="space-y-2.5">
-                    {Object.entries(data.byMethod)
-                      .sort((a, b) => b[1] - a[1])
-                      .map(([method, amount]) => (
-                        <div key={method}>
-                          <div className="flex justify-between mb-1">
-                            <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 capitalize">
-                              {methodLabels[method.toLowerCase()] ?? method}
-                            </span>
-                            <span className="text-sm font-bold text-gray-900 dark:text-foreground tabular-nums">{fmt(amount)}</span>
-                          </div>
-                          <div className="h-1.5 bg-gray-100 dark:bg-muted rounded-full overflow-hidden">
-                            <div
-                              className="h-full rounded-full bg-primary"
-                              style={{ width: `${s.totalReceived > 0 ? Math.min(100, (amount / s.totalReceived) * 100) : 0}%` }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          {/* ── My Activity Log (Bill Edits + Voucher Edits + Cancellations + Refunds) ── */}
+          <MyActivityLog data={data} />
         </>
       )}
 
