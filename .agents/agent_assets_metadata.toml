@@ -155,3 +155,9 @@ id = "tstQPgUpl8OATo3knkZ7L"
 uri = "file://windows-build/dist/CareDiagnostics-Update.zip"
 type = "unspecified"
 title = "CareDiagnostics-Update.zip (272 MB) — In-place App Update"
+
+[[outputs]]
+id = "iCxjqK01QpvXAmFLC2tOP"
+uri = "file://docker-synology.zip"
+type = "unspecified"
+title = "Care Diagnostics Docker Deployment Package"
