@@ -10,7 +10,7 @@ import {
   IndianRupee, Wallet, Banknote, Smartphone, TrendingDown, RotateCcw,
   XCircle, FileEdit, Clock, Calendar, RefreshCw, Tag, CheckCircle2,
   ArrowRight, Users, Percent, Receipt, Lock, AlertTriangle, ShieldCheck,
-  ChevronRight, Info,
+  ChevronRight, Info, AlertCircle,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -93,6 +93,17 @@ type MyDailySummaryData = {
     duesCollected: number;
     remainingDues: number;
     billStatus: string;
+  }[];
+  outstandingBills: {
+    billId: number;
+    billNumber: string;
+    patientName: string;
+    referringDoctor: string | null;
+    createdByName: string | null;
+    totalAmount: number;
+    paidAmount: number;
+    outstanding: number;
+    status: string;
   }[];
   voucherEdits: {
     id: number;
@@ -1296,6 +1307,73 @@ export default function MyDailySummary() {
                     {data.duesBills.some((b) => b.remainingDues > 0)
                       ? fmt(data.duesBills.reduce((s, b) => s + b.remainingDues, 0))
                       : <span className="text-green-600 dark:text-green-400">All cleared</span>}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Outstanding Bills ── */}
+      {data && data.outstandingBills.length > 0 && (
+        <div className="bg-white dark:bg-card border border-orange-200 dark:border-orange-800 rounded-xl shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-orange-100 dark:border-orange-800 flex items-center justify-between bg-orange-50 dark:bg-orange-900/20">
+            <h3 className="text-sm font-bold text-orange-900 dark:text-orange-200 flex items-center gap-2">
+              <AlertCircle size={14} className="text-orange-600" /> Outstanding Bills
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-orange-200 dark:bg-orange-800 text-orange-800 dark:text-orange-200">
+                {data.outstandingBills.length} bills
+              </span>
+            </h3>
+            <span className="text-xs font-bold text-orange-700 dark:text-orange-300 tabular-nums">
+              Total outstanding: {fmt(data.outstandingBills.reduce((s, b) => s + b.outstanding, 0))}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-orange-50 dark:bg-orange-900/10">
+                <tr>
+                  {["Bill #", "Patient Name", "Referral Doctor", "Created By", "Bill Total", "Paid Amount", "Outstanding"].map((h) => (
+                    <th key={h} className="px-3 py-2.5 text-left font-semibold text-orange-800 dark:text-orange-300 whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-orange-50 dark:divide-orange-900/20">
+                {data.outstandingBills.map((b) => (
+                  <tr key={b.billId} className="hover:bg-orange-50/60 dark:hover:bg-orange-900/10">
+                    <td className="px-3 py-2 font-semibold whitespace-nowrap">
+                      <Link href={`/billing/${b.billId}`} className="text-primary hover:underline">{b.billNumber}</Link>
+                    </td>
+                    <td className="px-3 py-2 font-semibold text-gray-800 dark:text-foreground">{b.patientName}</td>
+                    <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                      {b.referringDoctor ?? <span className="text-gray-400">—</span>}
+                    </td>
+                    <td className="px-3 py-2 text-gray-600 dark:text-gray-400 whitespace-nowrap text-[11px]">
+                      {b.createdByName ?? <span className="text-gray-400">—</span>}
+                    </td>
+                    <td className="px-3 py-2 tabular-nums text-gray-900 dark:text-foreground font-semibold">{fmt(b.totalAmount)}</td>
+                    <td className="px-3 py-2 tabular-nums text-green-600 dark:text-green-400">{fmt(b.paidAmount)}</td>
+                    <td className="px-3 py-2 tabular-nums font-bold text-orange-700 dark:text-orange-400">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/40 text-orange-800 dark:text-orange-300 font-semibold">
+                        {fmt(b.outstanding)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-orange-50 dark:bg-orange-900/10 border-t-2 border-orange-200 dark:border-orange-800">
+                <tr>
+                  <td className="px-3 py-2 font-bold text-orange-800 dark:text-orange-300" colSpan={4}>
+                    Total ({data.outstandingBills.length} bills)
+                  </td>
+                  <td className="px-3 py-2 font-bold tabular-nums text-gray-900 dark:text-foreground">
+                    {fmt(data.outstandingBills.reduce((s, b) => s + b.totalAmount, 0))}
+                  </td>
+                  <td className="px-3 py-2 font-bold tabular-nums text-green-600 dark:text-green-400">
+                    {fmt(data.outstandingBills.reduce((s, b) => s + b.paidAmount, 0))}
+                  </td>
+                  <td className="px-3 py-2 font-bold tabular-nums text-orange-700 dark:text-orange-300">
+                    {fmt(data.outstandingBills.reduce((s, b) => s + b.outstanding, 0))}
                   </td>
                 </tr>
               </tfoot>

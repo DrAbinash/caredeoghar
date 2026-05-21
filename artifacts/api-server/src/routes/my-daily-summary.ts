@@ -540,6 +540,23 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       })),
     // Dues collected: payments today on old bills (created before this period).
     duesBills,
+    // Outstanding bills: active bills created in this period that still have a balance.
+    outstandingBills: activeBills
+      .filter((r) => Math.max(0, Number(r.balanceAmount ?? 0)) > 0)
+      .map((r) => ({
+        billId: r.id,
+        billNumber: r.billNumber,
+        patientName: r.patientFirstName
+          ? `${r.patientFirstName} ${r.patientLastName ?? ""}`.trim()
+          : "Unknown",
+        referringDoctor: r.referringDoctor ?? null,
+        createdByName: r.createdByName ?? null,
+        totalAmount: Number(r.totalAmount),
+        paidAmount: Number(r.paidAmount ?? 0),
+        outstanding: Math.max(0, Number(r.balanceAmount ?? 0)),
+        status: r.status,
+      }))
+      .sort((a, b) => b.outstanding - a.outstanding),
     voucherEdits: voucherEditsRaw.map((r) => ({
       id: r.id,
       voucherId: r.voucherId,
