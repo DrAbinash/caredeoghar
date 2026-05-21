@@ -59,6 +59,8 @@ const AiReportingSettings   = lazy(() => import("@/pages/AiReportingSettings"));
 const PacsArchiveLifecycle  = lazy(() => import("@/pages/PacsArchiveLifecycle"));
 const PacsWatchdogDashboard = lazy(() => import("@/pages/PacsWatchdogDashboard"));
 const AiInferenceSettings   = lazy(() => import("@/pages/AiInferenceSettings"));
+const Hl7Settings           = lazy(() => import("@/pages/Hl7Settings"));
+const BackupReplication     = lazy(() => import("@/pages/BackupReplication"));
 const ReportHub       = lazy(() => import("@/pages/ReportHub"));
 const Machines        = lazy(() => import("@/pages/Machines"));
 const FormF           = lazy(() => import("@/pages/FormF"));
@@ -102,8 +104,8 @@ const ERP_NAV_ORDER = [
   "/radiology", "/radiology/worklist", "/radiology/dicom-qr", "/radiology/report-generator", "/radiology/pacs-dashboard", "/radiology/pacs-settings", "/radiology/pacs-logs",
   "/radiology/dicom-agent-dashboard", "/radiology/modality-management",
   "/radiology/mwl-dashboard", "/radiology/agent-setup", "/radiology/ai-reporting-settings",
-  "/radiology/viewer", "/radiology/archive-lifecycle", "/radiology/watchdog", "/radiology/ai-inference-settings", "/teleradiology",
-  "/settings/radiology",
+  "/radiology/viewer", "/radiology/archive-lifecycle", "/radiology/watchdog", "/radiology/ai-inference-settings", "/radiology/hl7-settings", "/teleradiology",
+  "/settings/radiology", "/backup-replication",
   "/orders", "/tests", "/packages", "/billing", "/payments", "/reports",
   "/report-generator", "/report-hub", "/inventory", "/expenses", "/staff", "/referrals",
   "/accounting", "/discounts", "/form-f", "/machines", "/hr-forms", "/website", "/whatsapp-chatbot", "/settings",
@@ -212,6 +214,8 @@ function Router() {
               <Route path="/radiology/archive-lifecycle" component={PacsArchiveLifecycle} />
               <Route path="/radiology/watchdog" component={PacsWatchdogDashboard} />
               <Route path="/radiology/ai-inference-settings" component={AiInferenceSettings} />
+              <Route path="/radiology/hl7-settings" component={Hl7Settings} />
+              <Route path="/backup-replication" component={BackupReplication} />
               <Route path="/m/viewer/:studyInstanceUID" component={MobileViewer} />
               <Route path="/packages" component={Packages} />
               <Route path="/expenses" component={Expenses} />

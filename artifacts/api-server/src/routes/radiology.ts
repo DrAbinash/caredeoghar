@@ -24,7 +24,7 @@ import {
 } from "@workspace/db/schema";
 import { and, asc, desc, eq, gte, ilike, isNull, lte, or, sql } from "drizzle-orm";
 import crypto from "node:crypto";
-import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
+import { FULL_ACCESS_ROLES, type StaffAuthRequest } from "../middleware/requireStaffAuth.js";
 import { computeStudyPriority, applyPriorityToStudy } from "../lib/studyPriorityEngine";
 import { assignRadiologistToStudy } from "../lib/radiologistAssignment";
 import { createVerificationRecord, recordPrelimReport, recordPeerReview, verifyReport, finalizeReport, getVerificationQueue } from "../lib/peerReview";
@@ -977,6 +977,11 @@ radiologyRouter.get("/pacs-settings", async (_req, res) => {
 
 // POST /api/radiology/pacs-settings  (upsert by key+category)
 radiologyRouter.post("/pacs-settings", async (req, res) => {
+  const staffReq = req as StaffAuthRequest;
+  if (!FULL_ACCESS_ROLES.has(staffReq.staffSession?.role ?? "")) {
+    res.status(403).json({ error: "Admin or super-admin access required to modify PACS settings." });
+    return;
+  }
   const b = (req.body ?? {}) as { key?: string; value?: string; category?: string; isSecret?: boolean; id?: number };
   if (!b.key?.trim()) { res.status(400).json({ error: "key is required" }); return; }
 
@@ -1004,6 +1009,11 @@ radiologyRouter.post("/pacs-settings", async (req, res) => {
 
 // DELETE /api/radiology/pacs-settings/:id
 radiologyRouter.delete("/pacs-settings/:id", async (req, res) => {
+  const staffReq = req as StaffAuthRequest;
+  if (!FULL_ACCESS_ROLES.has(staffReq.staffSession?.role ?? "")) {
+    res.status(403).json({ error: "Admin or super-admin access required to delete PACS settings." });
+    return;
+  }
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(pacsSettingsTable).where(eq(pacsSettingsTable.id, id));

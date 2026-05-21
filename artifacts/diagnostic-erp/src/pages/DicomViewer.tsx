@@ -729,25 +729,64 @@ export default function DicomViewer() {
               </div>
             )}
 
-            {/* Technical details */}
-            <div className="rounded-xl border bg-muted/20 p-4 text-xs space-y-1.5">
-              <p className="font-semibold text-muted-foreground mb-2">Study Details</p>
-              <div className="flex gap-2">
-                <span className="text-muted-foreground w-40 shrink-0">Study Instance UID</span>
-                <code className="bg-muted px-1 rounded break-all">{studyInstanceUID}</code>
+            {/* Technical details + config status */}
+            <div className="rounded-xl border bg-muted/20 p-4 text-xs space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="font-semibold text-muted-foreground">Study Details &amp; Config Status</p>
+                <a href="/erp/radiology/pacs-settings" className="text-primary underline text-[10px] inline-flex items-center gap-1 hover:opacity-80">
+                  PACS Settings <Settings size={9} />
+                </a>
               </div>
-              {ohif?.dicomWebBaseUrl && (
+              <div className="space-y-1.5">
                 <div className="flex gap-2">
-                  <span className="text-muted-foreground w-40 shrink-0">DICOMweb Base URL</span>
-                  <code className="bg-muted px-1 rounded break-all">{ohif.dicomWebBaseUrl}</code>
+                  <span className="text-muted-foreground w-40 shrink-0">Study Instance UID</span>
+                  <code className="bg-muted px-1 rounded break-all">{studyInstanceUID}</code>
                 </div>
-              )}
-              {weasis?.wadoBaseUrl && (
-                <div className="flex gap-2">
-                  <span className="text-muted-foreground w-40 shrink-0">WADO Base URL</span>
-                  <code className="bg-muted px-1 rounded break-all">{weasis.wadoBaseUrl}</code>
-                </div>
-              )}
+                {ohif?.dicomWebBaseUrl && (
+                  <div className="flex gap-2">
+                    <span className="text-muted-foreground w-40 shrink-0">DICOMweb Base URL</span>
+                    <code className="bg-muted px-1 rounded break-all">{ohif.dicomWebBaseUrl}</code>
+                  </div>
+                )}
+                {weasis?.wadoBaseUrl && (
+                  <div className="flex gap-2">
+                    <span className="text-muted-foreground w-40 shrink-0">WADO Base URL</span>
+                    <code className="bg-muted px-1 rounded break-all">{weasis.wadoBaseUrl}</code>
+                  </div>
+                )}
+              </div>
+              {/* 9-key config status grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-1 border-t">
+                {([
+                  { key: "ohif_base_url",                label: "OHIF Base URL" },
+                  { key: "ohif_study_url_template",      label: "OHIF URL Template" },
+                  { key: "dicom_web_base_url",           label: "DICOMweb URL" },
+                  { key: "wado_uri_base_url",            label: "WADO-URI URL" },
+                  { key: "weasis_manifest_url_template", label: "Weasis Template" },
+                  { key: "conquest_base_url",            label: "Conquest URL" },
+                  { key: "pacs_ae_title",                label: "PACS AE Title" },
+                  { key: "pacs_ip",                      label: "PACS IP" },
+                  { key: "pacs_port",                    label: "PACS Port" },
+                ] as const).map(({ key, label }) => {
+                  const configured = !!(settings[key]?.trim());
+                  return (
+                    <div
+                      key={key}
+                      className={`flex items-center gap-1.5 px-2 py-1 rounded border text-[10px] ${
+                        configured
+                          ? "border-green-200 bg-green-50 dark:bg-green-950/20 text-green-800 dark:text-green-300"
+                          : "border-red-200 bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400"
+                      }`}
+                    >
+                      {configured
+                        ? <CheckCircle2 size={9} className="shrink-0" />
+                        : <AlertTriangle size={9} className="shrink-0" />
+                      }
+                      <span className="truncate">{label}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             {/* AI nudge when not open and enabled */}

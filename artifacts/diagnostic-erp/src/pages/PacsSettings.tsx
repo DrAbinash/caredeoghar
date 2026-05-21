@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Save, RefreshCw, Trash2, Server, Settings2, Radio, Search, ScanLine, MonitorPlay, Network, ToggleLeft, ToggleRight, CheckCircle2, XCircle, Wifi, WifiOff } from "lucide-react";
+import { Plus, Save, RefreshCw, Trash2, Server, Settings2, Radio, Search, ScanLine, MonitorPlay, Network, ToggleLeft, ToggleRight, CheckCircle2, XCircle, Wifi, WifiOff, Copy, ExternalLink, Lock, Tv2 } from "lucide-react";
+import { readStaffSession, FULL_ACCESS_ROLES } from "@/lib/staffSession";
 
 type Setting = { id: number; key: string; value: string | null; category: string; isSecret: boolean };
 type Modality = {
@@ -511,6 +512,8 @@ export default function PacsSettings() {
   const viewerMap: Record<string, string> = {};
   for (const s of settings) if (s.category === "viewer") viewerMap[s.key] = s.value ?? "";
 
+  const isAdmin = FULL_ACCESS_ROLES.has(readStaffSession()?.user.role ?? "");
+
   return (
     <div className="p-4 md:p-6 space-y-6">
       <PageHeader
@@ -663,62 +666,129 @@ export default function PacsSettings() {
       {/* ── Viewer Settings Tab ── */}
       {activeTab === "viewer" && (
         <div className="space-y-6">
+          {/* Admin restriction notice */}
+          {!isAdmin && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3 flex items-center gap-3 text-sm">
+              <Lock size={14} className="text-amber-600 shrink-0" />
+              <span className="text-amber-800 dark:text-amber-300">
+                PACS viewer settings are <strong>read-only</strong> for your role. Ask an admin to update URL configuration.
+              </span>
+            </div>
+          )}
+
+          {/* Viewer Mode */}
           <div className="rounded-xl border bg-card p-5 space-y-5">
             <h3 className="font-semibold text-sm">Viewer Mode</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <ViewerField label="Viewer Mode" description="Which viewer buttons to show" type="select"
                 options={["WEASIS", "OHIF", "BOTH"]} value={viewerMap["viewer_mode"] ?? "BOTH"}
-                onSave={(v) => saveViewerKey("viewer_mode", v)} />
+                onSave={(v) => saveViewerKey("viewer_mode", v)} disabled={!isAdmin} />
               <ViewerField label="Default Viewer" description="Primary viewer button" type="select"
                 options={["OHIF", "WEASIS"]} value={viewerMap["default_viewer"] ?? "OHIF"}
-                onSave={(v) => saveViewerKey("default_viewer", v)} />
+                onSave={(v) => saveViewerKey("default_viewer", v)} disabled={!isAdmin} />
               <ViewerField label="OHIF Enabled" type="select" options={["true", "false"]}
-                value={viewerMap["ohif_enabled"] ?? "true"} onSave={(v) => saveViewerKey("ohif_enabled", v)} />
+                value={viewerMap["ohif_enabled"] ?? "true"} onSave={(v) => saveViewerKey("ohif_enabled", v)} disabled={!isAdmin} />
               <ViewerField label="Weasis Enabled" type="select" options={["true", "false"]}
-                value={viewerMap["weasis_enabled"] ?? "true"} onSave={(v) => saveViewerKey("weasis_enabled", v)} />
+                value={viewerMap["weasis_enabled"] ?? "true"} onSave={(v) => saveViewerKey("weasis_enabled", v)} disabled={!isAdmin} />
               <ViewerField label="Viewer Open Mode" type="select" options={["NEW_TAB", "SAME_TAB", "EMBEDDED"]}
-                value={viewerMap["viewer_open_mode"] ?? "NEW_TAB"} onSave={(v) => saveViewerKey("viewer_open_mode", v)} />
+                value={viewerMap["viewer_open_mode"] ?? "NEW_TAB"} onSave={(v) => saveViewerKey("viewer_open_mode", v)} disabled={!isAdmin} />
               <ViewerField label="Allow Public Viewer Links" description="False by default (requires login)" type="select"
                 options={["false", "true"]} value={viewerMap["allow_public_viewer_links"] ?? "false"}
-                onSave={(v) => saveViewerKey("allow_public_viewer_links", v)} />
+                onSave={(v) => saveViewerKey("allow_public_viewer_links", v)} disabled={!isAdmin} />
             </div>
           </div>
 
+          {/* PACS Server */}
           <div className="rounded-xl border bg-card p-5 space-y-5">
-            <h3 className="font-semibold text-sm">OHIF Viewer URLs</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-sm">PACS Server</h3>
+              {isAdmin && (
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => {
+                  saveViewerKey("pacs_ip", "172.16.1.139");
+                  saveViewerKey("pacs_port", "5680");
+                  saveViewerKey("pacs_ae_title", "ORTHANC2");
+                }}>Load Defaults</Button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <ViewerField label="PACS IP" description="Server IP address" type="text"
+                value={viewerMap["pacs_ip"] ?? ""} onSave={(v) => saveViewerKey("pacs_ip", v)}
+                placeholder="172.16.1.139" disabled={!isAdmin} />
+              <ViewerField label="PACS Port" description="DICOM listener port" type="text"
+                value={viewerMap["pacs_port"] ?? ""} onSave={(v) => saveViewerKey("pacs_port", v)}
+                placeholder="5680" disabled={!isAdmin} />
+              <ViewerField label="PACS AE Title" description="Application Entity Title" type="text"
+                value={viewerMap["pacs_ae_title"] ?? ""} onSave={(v) => saveViewerKey("pacs_ae_title", v)}
+                placeholder="ORTHANC2" disabled={!isAdmin} />
+            </div>
+          </div>
+
+          {/* OHIF Viewer */}
+          <div className="rounded-xl border bg-card p-5 space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-sm flex items-center gap-2"><MonitorPlay size={14} />OHIF Viewer</h3>
+              {isAdmin && (
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => {
+                  saveViewerKey("ohif_base_url", "http://172.16.1.139:3000");
+                  saveViewerKey("dicom_web_base_url", "http://172.16.1.139:8042/dicom-web");
+                  saveViewerKey("ohif_study_url_template", "{OHIF_BASE_URL}/viewer?StudyInstanceUIDs={studyInstanceUID}");
+                }}>Load Defaults</Button>
+              )}
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <ViewerField label="OHIF Base URL" description="e.g. http://192.168.1.10:3000" type="text"
+              <ViewerField label="OHIF Base URL" description="e.g. http://172.16.1.139:3000" type="text"
                 value={viewerMap["ohif_base_url"] ?? ""} onSave={(v) => saveViewerKey("ohif_base_url", v)}
-                placeholder="http://192.168.1.10:3000" />
-              <ViewerField label="DICOMweb Base URL" description="e.g. http://orthanc:8042/dicom-web" type="text"
+                placeholder="http://172.16.1.139:3000" disabled={!isAdmin} />
+              <ViewerField label="DICOMweb Base URL" description="e.g. http://172.16.1.139:8042/dicom-web" type="text"
                 value={viewerMap["dicom_web_base_url"] ?? ""} onSave={(v) => saveViewerKey("dicom_web_base_url", v)}
-                placeholder="http://192.168.1.10:8042/dicom-web" />
+                placeholder="http://172.16.1.139:8042/dicom-web" disabled={!isAdmin} />
             </div>
+            <ViewerTemplateField
+              label="OHIF Study URL Template"
+              description="Use {OHIF_BASE_URL} and {studyInstanceUID} as placeholders. Preview shows a test UID substituted in."
+              value={viewerMap["ohif_study_url_template"] ?? ""}
+              defaultValue="{OHIF_BASE_URL}/viewer?StudyInstanceUIDs={studyInstanceUID}"
+              previewFn={(tpl) =>
+                tpl
+                  .replace(/\{OHIF_BASE_URL\}/g, (viewerMap["ohif_base_url"] ?? "http://172.16.1.139:3000").replace(/\/$/, ""))
+                  .replace(/\{studyInstanceUID\}/g, "1.2.3.4.5.TEST")
+              }
+              onSave={(v) => saveViewerKey("ohif_study_url_template", v)}
+              disabled={!isAdmin}
+              openable
+            />
           </div>
 
+          {/* Weasis / WADO */}
           <div className="rounded-xl border bg-card p-5 space-y-5">
-            <h3 className="font-semibold text-sm">Weasis / WADO URLs</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <ViewerField label="WADO Base URL" description="Primary WADO-URI endpoint" type="text"
-                value={viewerMap["wado_base_url"] ?? ""} onSave={(v) => saveViewerKey("wado_base_url", v)}
-                placeholder="http://192.168.1.10:8080/wado" />
-              <ViewerField label="Orthanc Base URL" description="e.g. http://192.168.1.10:8042" type="text"
-                value={viewerMap["orthanc_base_url"] ?? ""} onSave={(v) => saveViewerKey("orthanc_base_url", v)}
-                placeholder="http://192.168.1.10:8042" />
-              <ViewerField label="Conquest WADO Base URL" type="text"
-                value={viewerMap["conquest_wado_base_url"] ?? ""} onSave={(v) => saveViewerKey("conquest_wado_base_url", v)}
-                placeholder="http://192.168.1.10:8080/wado" />
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-sm flex items-center gap-2"><Tv2 size={14} />Weasis / WADO</h3>
+              {isAdmin && (
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => {
+                  saveViewerKey("wado_uri_base_url", "http://172.16.1.139:8042/wado");
+                  saveViewerKey("conquest_base_url", "http://172.16.1.139:8086");
+                  saveViewerKey("weasis_manifest_url_template", 'weasis://$dicom:get -w "http://172.16.1.139:8042/weasis?studyUID={studyInstanceUID}"');
+                }}>Load Defaults</Button>
+              )}
             </div>
-          </div>
-
-          <div className="rounded-xl border bg-blue-50 dark:bg-blue-950/20 p-4 text-sm text-blue-800 dark:text-blue-300">
-            <p className="font-semibold mb-1">How viewer URLs are used</p>
-            <ul className="space-y-1 text-blue-700 dark:text-blue-400 text-xs list-disc list-inside">
-              <li><strong>OHIF Base URL</strong>: Used to build <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">{"<OHIF_BASE_URL>/viewer?StudyInstanceUIDs=<UID>"}</code></li>
-              <li><strong>WADO Base URL</strong>: Used by Weasis URI scheme to fetch DICOM images</li>
-              <li><strong>DICOMweb Base URL</strong>: Passed to OHIF as the DICOMweb source</li>
-              <li>Settings are saved to <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">pacs_settings</code> with category <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">viewer</code></li>
-            </ul>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <ViewerField label="WADO-URI Base URL" description="Primary WADO endpoint for Weasis" type="text"
+                value={viewerMap["wado_uri_base_url"] ?? ""} onSave={(v) => saveViewerKey("wado_uri_base_url", v)}
+                placeholder="http://172.16.1.139:8042/wado" disabled={!isAdmin} />
+              <ViewerField label="Conquest Base URL" description="Conquest DICOM server base URL" type="text"
+                value={viewerMap["conquest_base_url"] ?? ""} onSave={(v) => saveViewerKey("conquest_base_url", v)}
+                placeholder="http://172.16.1.139:8086" disabled={!isAdmin} />
+            </div>
+            <ViewerTemplateField
+              label="Weasis Manifest URL Template"
+              description="Use {studyInstanceUID} as placeholder. This is a weasis:// URI — clicking Test attempts to launch Weasis."
+              value={viewerMap["weasis_manifest_url_template"] ?? ""}
+              defaultValue={'weasis://$dicom:get -w "http://172.16.1.139:8042/weasis?studyUID={studyInstanceUID}"'}
+              previewFn={(tpl) => tpl.replace(/\{studyInstanceUID\}/g, "1.2.3.4.5.TEST")}
+              onSave={(v) => saveViewerKey("weasis_manifest_url_template", v)}
+              disabled={!isAdmin}
+              openable={false}
+            />
           </div>
         </div>
       )}
@@ -739,7 +809,7 @@ export default function PacsSettings() {
 // ─── ViewerField component ────────────────────────────────────────────────────
 
 function ViewerField({
-  label, description, type, value, onSave, options, placeholder,
+  label, description, type, value, onSave, options, placeholder, disabled,
 }: {
   label: string;
   description?: string;
@@ -748,6 +818,7 @@ function ViewerField({
   onSave: (v: string) => void;
   options?: string[];
   placeholder?: string;
+  disabled?: boolean;
 }) {
   const [val, setVal] = useState(value);
   const [saved, setSaved] = useState(false);
@@ -770,8 +841,9 @@ function ViewerField({
         {type === "select" && options ? (
           <select
             value={val}
-            onChange={(e) => setVal(e.target.value)}
-            className="flex-1 h-8 text-sm border rounded-md px-2 bg-background"
+            onChange={(e) => { if (!disabled) setVal(e.target.value); }}
+            disabled={disabled}
+            className="flex-1 h-8 text-sm border rounded-md px-2 bg-background disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {options.map((o) => <option key={o}>{o}</option>)}
           </select>
@@ -780,18 +852,96 @@ function ViewerField({
             value={val}
             onChange={(e) => setVal(e.target.value)}
             placeholder={placeholder}
+            disabled={disabled}
             className="flex-1 h-8 text-sm"
           />
         )}
-        <Button
-          size="sm"
-          className="h-8 px-2"
-          variant={saved ? "outline" : dirty ? "default" : "outline"}
-          onClick={save}
-        >
-          {saved ? "✓" : <Save size={12} />}
-        </Button>
+        {!disabled && (
+          <Button
+            size="sm"
+            className="h-8 px-2"
+            variant={saved ? "outline" : dirty ? "default" : "outline"}
+            onClick={save}
+          >
+            {saved ? "✓" : <Save size={12} />}
+          </Button>
+        )}
       </div>
+    </div>
+  );
+}
+
+// ─── ViewerTemplateField component ───────────────────────────────────────────
+
+function ViewerTemplateField({
+  label, description, value, defaultValue, previewFn, onSave, disabled, openable = false,
+}: {
+  label: string;
+  description?: string;
+  value: string;
+  defaultValue: string;
+  previewFn: (v: string) => string;
+  onSave: (v: string) => void;
+  disabled?: boolean;
+  openable?: boolean;
+}) {
+  const { toast } = useToast();
+  const effective = value || defaultValue;
+  const [val, setVal] = useState(effective);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => { setVal(value || defaultValue); }, [value, defaultValue]);
+
+  const dirty = val !== effective;
+  const preview = (() => { try { return previewFn(val); } catch { return val; } })();
+
+  function save() {
+    onSave(val);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  }
+
+  return (
+    <div className="space-y-2">
+      <label className="text-xs font-medium text-muted-foreground">{label}</label>
+      {description && <p className="text-[11px] text-muted-foreground">{description}</p>}
+      <div className="flex gap-2">
+        <Input
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          className="flex-1 h-8 text-xs font-mono"
+          disabled={disabled}
+        />
+        {!disabled && (
+          <Button size="sm" className="h-8 px-2 shrink-0"
+            variant={saved ? "outline" : dirty ? "default" : "outline"}
+            onClick={save}
+          >
+            {saved ? "✓" : <Save size={12} />}
+          </Button>
+        )}
+      </div>
+      {preview && (
+        <div className="flex items-center gap-1.5 rounded-md bg-muted/40 border px-3 py-1.5">
+          <code className="flex-1 text-[10px] font-mono text-muted-foreground truncate" title={preview}>{preview}</code>
+          <button
+            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground shrink-0"
+            title="Copy generated URL"
+            onClick={() => { void navigator.clipboard.writeText(preview); toast({ title: "Copied to clipboard" }); }}
+          >
+            <Copy size={11} />
+          </button>
+          {openable && (
+            <button
+              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground shrink-0"
+              title="Test: open in new tab"
+              onClick={() => window.open(preview, "_blank")}
+            >
+              <ExternalLink size={11} />
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -60,6 +60,8 @@ import {
   BrainCircuit,
   Landmark,
   TestTube,
+  Network,
+  DatabaseBackup,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -110,11 +112,23 @@ const navItems: NavEntry[] = [
     icon: Radio,
     label: "Radiology & Imaging",
     children: [
-      { path: "/radiology/worklist", icon: ScanSearch, label: "Worklist Hub" },
-      { path: "/radiology/reporting-workspace", icon: FilePen, label: "Reporting Workspace" },
-      { path: "/pacs", icon: Monitor, label: "PACS Viewer" },
-      { path: "/radiology/pacs-dashboard", icon: Zap, label: "Command Center" },
-      { path: "/teleradiology", icon: Globe, label: "Teleradiology" },
+      { path: "/radiology/worklist",              icon: ScanSearch,   label: "Worklist Hub" },
+      { path: "/radiology/reporting-workspace",   icon: FilePen,      label: "Reporting Workspace" },
+      { path: "/radiology/pacs-dashboard",        icon: Zap,          label: "Command Center" },
+      { path: "/pacs",                            icon: Monitor,      label: "PACS Viewer" },
+      { path: "/radiology/mwl-dashboard",         icon: ListChecks,   label: "MWL Dashboard" },
+      { path: "/radiology/dicom-qr",              icon: Search,       label: "DICOM Query/Retrieve" },
+      { path: "/radiology/ai-reporting-settings", icon: BrainCircuit, label: "AI Reporting" },
+      { path: "/teleradiology",                   icon: Globe,        label: "Teleradiology" },
+      { path: "/radiology/pacs-logs",             icon: Activity,     label: "PACS Logs",             ownerOnly: true },
+      { path: "/radiology/ai-inference-settings", icon: Cpu,          label: "AI Inference Settings", ownerOnly: true },
+      { path: "/radiology/pacs-settings",         icon: Settings2,    label: "PACS Settings",         ownerOnly: true },
+      { path: "/radiology/modality-management",   icon: Monitor,      label: "Modality Management",   ownerOnly: true },
+      { path: "/radiology/dicom-agent-dashboard", icon: Server,       label: "DICOM Agent",           ownerOnly: true },
+      { path: "/radiology/agent-setup",           icon: Wrench,       label: "Agent Setup",           ownerOnly: true },
+      { path: "/radiology/archive-lifecycle",     icon: Archive,      label: "Archive Lifecycle",     ownerOnly: true },
+      { path: "/radiology/watchdog",              icon: ShieldAlert,  label: "Watchdog",              ownerOnly: true },
+      { path: "/radiology/hl7-settings",          icon: Network,      label: "HL7 / RIS Bridge",      ownerOnly: true },
     ],
   },
   {
@@ -156,15 +170,16 @@ const navItems: NavEntry[] = [
     icon: Settings2,
     label: "Settings",
     children: [
-      { path: "/settings", icon: Settings2, label: "General Settings" },
-      { path: "/settings/radiology", icon: Radio, label: "Radiology Settings" },
-      { path: "/tests", icon: FlaskConical, label: "Test Catalog" },
-      { path: "/outsourced-labs", icon: Building2, label: "Outsourced Labs" },
-      { path: "/packages", icon: Boxes, label: "Packages" },
-      { path: "/inventory", icon: Package, label: "Inventory" },
-      { path: "/discounts", icon: Tag, label: "Discounts" },
-      { path: "/referrals", icon: Stethoscope, label: "Doctors" },
-      { path: "/system-update", icon: Download, label: "System Update" },
+      { path: "/settings",          icon: Settings2,      label: "General Settings" },
+      { path: "/settings/radiology", icon: Radio,          label: "Radiology Settings" },
+      { path: "/tests",             icon: FlaskConical,   label: "Test Catalog" },
+      { path: "/outsourced-labs",   icon: Building2,      label: "Outsourced Labs" },
+      { path: "/packages",          icon: Boxes,          label: "Packages" },
+      { path: "/inventory",         icon: Package,        label: "Inventory" },
+      { path: "/discounts",         icon: Tag,            label: "Discounts" },
+      { path: "/referrals",         icon: Stethoscope,    label: "Doctors" },
+      { path: "/backup-replication",icon: DatabaseBackup, label: "Backup & Replication", ownerOnly: true },
+      { path: "/system-update",     icon: Download,       label: "System Update" },
     ],
   },
 ];
@@ -261,9 +276,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   // Filter nav by permissions when a staff session exists. For groups, drop
   // children the user can't access; hide the group entirely if nothing left.
+  const isOwner = FULL_ACCESS_ROLES.has(session?.user.role ?? "");
   const visibleNav: NavEntry[] = navItems.flatMap<NavEntry>((n) => {
     if (isGroup(n)) {
-      const kids = n.children.filter((c) => canAccess(session, c.path));
+      const kids = n.children.filter((c) => {
+        if (c.ownerOnly && !isOwner) return false;
+        return canAccess(session, c.path);
+      });
       return kids.length ? [{ ...n, children: kids }] : [];
     }
     // Owner-only items are only visible to admin / super_admin.

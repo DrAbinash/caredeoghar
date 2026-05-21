@@ -381,13 +381,15 @@ router.get("/studies/:studyInstanceUID/weasis-launch", async (req, res) => {
   ]);
 
   const wadoUrl =
+    viewerSettings["wado_uri_base_url"] ||
     viewerSettings["wado_base_url"] ||
     conquestWado ||
     (orthancBase ? `${orthancBase}/wado` : "");
 
+  const manifestTemplate = viewerSettings["weasis_manifest_url_template"] ?? "";
   const pacsType = orthancBase ? "ORTHANC" : conquestWado ? "CONQUEST" : "UNKNOWN";
 
-  if (!wadoUrl) {
+  if (!wadoUrl && !manifestTemplate) {
     res.json({
       studyInstanceUID,
       viewerType: "WEASIS",
@@ -399,7 +401,9 @@ router.get("/studies/:studyInstanceUID/weasis-launch", async (req, res) => {
     return;
   }
 
-  const weasisUrl = `weasis://$dicom:get -w "${wadoUrl}" -r "studyUID=${studyInstanceUID}"`;
+  const weasisUrl = manifestTemplate
+    ? manifestTemplate.replace(/\{studyInstanceUID\}/g, studyInstanceUID)
+    : `weasis://$dicom:get -w "${wadoUrl}" -r "studyUID=${studyInstanceUID}"`;
 
   const [[worklist], [pulled]] = await Promise.all([
     db
@@ -445,10 +449,11 @@ router.get("/studies/:studyInstanceUID/ohif-launch", async (req, res) => {
   ]);
 
   const ohifBase = viewerSettings["ohif_base_url"] ?? "";
+  const studyTemplate = viewerSettings["ohif_study_url_template"] ?? "";
   const dicomWebUrl = viewerSettings["dicom_web_base_url"] ?? "";
   const pacsType = orthancBase ? "ORTHANC" : "CONQUEST";
 
-  if (!ohifBase) {
+  if (!ohifBase && !studyTemplate) {
     res.json({
       studyInstanceUID,
       viewerType: "OHIF",
@@ -460,7 +465,11 @@ router.get("/studies/:studyInstanceUID/ohif-launch", async (req, res) => {
     return;
   }
 
-  const ohifUrl = `${ohifBase.replace(/\/$/, "")}/viewer?StudyInstanceUIDs=${encodeURIComponent(studyInstanceUID)}`;
+  const ohifUrl = studyTemplate
+    ? studyTemplate
+        .replace(/\{OHIF_BASE_URL\}/g, ohifBase.replace(/\/$/, ""))
+        .replace(/\{studyInstanceUID\}/g, encodeURIComponent(studyInstanceUID))
+    : `${ohifBase.replace(/\/$/, "")}/viewer?StudyInstanceUIDs=${encodeURIComponent(studyInstanceUID)}`;
 
   const [[worklist], [pulled]] = await Promise.all([
     db

@@ -348,6 +348,17 @@ export default function RadiologyWorklist() {
     refetchInterval: 60_000,
   });
 
+  const { data: pacsViewerSettings = {} as Record<string, string> } = useQuery<Record<string, string>>({
+    queryKey: ["pacs-viewer-settings"],
+    queryFn: async () => {
+      const rows = await api.get<{ key: string; value: string; category: string }[]>("/api/radiology/pacs-settings");
+      const map: Record<string, string> = {};
+      for (const r of rows) if (r.category === "viewer") map[r.key] = r.value;
+      return map;
+    },
+    staleTime: 120_000,
+  });
+
   useEffect(() => {
     if (!isLoading && prevEntriesLen.current !== entries.length) {
       setLastRefresh(new Date());
@@ -413,9 +424,14 @@ export default function RadiologyWorklist() {
   ];
 
   function openWeasis(entry: WorklistEntry) {
+    const template = pacsViewerSettings["weasis_manifest_url_template"];
+    if (template && entry.studyInstanceUID) {
+      window.open(template.replace(/\{studyInstanceUID\}/g, entry.studyInstanceUID), "_blank");
+      return;
+    }
     const url = entry.weasisUrl;
     if (!url) {
-      toast({ title: "Weasis URL not available", description: "No Weasis URL recorded for this study.", variant: "destructive" });
+      toast({ title: "Weasis URL not available", description: "Configure Weasis Manifest URL Template in PACS Settings → Viewer Settings.", variant: "destructive" });
       return;
     }
     window.open(url, "_blank");
