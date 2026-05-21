@@ -10,7 +10,7 @@ import {
   IndianRupee, Wallet, Banknote, Smartphone, TrendingDown, RotateCcw,
   XCircle, FileEdit, Clock, Calendar, RefreshCw, Tag, CheckCircle2,
   ArrowRight, Users, Percent, Receipt, Lock, AlertTriangle, ShieldCheck,
-  ChevronRight, Info, AlertCircle,
+  ChevronRight, Info, AlertCircle, Calculator, Save,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -489,6 +489,129 @@ function RecRow({ label, value, type, note }: {
       }`}>
         {isDeduct ? `−\u2009${fmt(value)}` : fmt(value)}
       </span>
+    </div>
+  );
+}
+
+// ─── Daily Financial Reconciliation ─────────────────────────────────────────
+
+function DailyFinancialReconciliation({ summary: s }: { summary: MyDailySummarySummary }) {
+  // Accounting formulas per spec
+  const x = s.grossBilling;               // Total Bills Generated Today (Active)
+  const y = s.duesCollectedTotal;          // Old Dues Collected Today
+  const z = s.cancelledAmount;             // Cancelled Bills Amount
+  const a = s.outstanding;                 // Outstanding / Pending Dues
+  const b = s.cashExpenses;                // Cash Expenses
+  const c = s.digitalCollection;           // Digital Collection (UPI/Card/Net)
+
+  const grossCollection = x + y;
+  const netTotalCollection = grossCollection - (z + a + b);
+  const physicalCashInHand = netTotalCollection - c;
+  const digitalNet = c - s.digitalRefunded;
+
+  const mismatch = physicalCashInHand - s.physicalCashInHand; // delta for reconciliation
+  const hasMismatch = Math.abs(mismatch) > 0.01;
+
+  const rows = [
+    { label: "Total Bills Generated (Active)", value: x, color: "text-gray-900", bg: "bg-green-50 dark:bg-green-900/20", badge: "X" },
+    { label: "Old Dues Collected Today", value: y, color: "text-green-700", bg: "bg-emerald-50 dark:bg-emerald-900/20", badge: "Y", border: "border-l-emerald-500" },
+    { label: "Gross Collection", value: grossCollection, color: "text-emerald-700", bg: "bg-emerald-100 dark:bg-emerald-900/30", badge: "X + Y", bold: true, border: "border-l-emerald-600" },
+    { label: "\u2212 Cancelled Bills Amount", value: z, color: "text-red-600", bg: "bg-rose-50 dark:bg-rose-900/20", badge: "Z", deduct: true, border: "border-l-rose-500" },
+    { label: "\u2212 Outstanding / Pending Dues", value: a, color: "text-red-600", bg: "bg-orange-50 dark:bg-orange-900/20", badge: "A", deduct: true, border: "border-l-orange-500" },
+    { label: "\u2212 Cash Expenses", value: b, color: "text-red-600", bg: "bg-orange-50 dark:bg-orange-900/20", badge: "B", deduct: true, border: "border-l-orange-500" },
+    { label: "\u2212 Digital Collection (UPI/Card/Net)", value: c, color: "text-red-600", bg: "bg-blue-50 dark:bg-blue-900/20", badge: "C", deduct: true, border: "border-l-blue-500" },
+    { label: "Net Total Collection", value: netTotalCollection, color: "text-blue-700", bg: "bg-blue-100 dark:bg-blue-900/30", badge: "(X+Y) \u2212 (Z+A+B)", bold: true, border: "border-l-blue-600" },
+    { label: "Physical Cash In Hand", value: physicalCashInHand, color: "text-purple-700", bg: "bg-purple-100 dark:bg-purple-900/30", badge: "Net \u2212 C", final: true, border: "border-l-purple-600" },
+    { label: "Digital Net After Refunds", value: digitalNet, color: "text-violet-700", bg: "bg-violet-100 dark:bg-violet-900/30", badge: "C \u2212 Dig.Refund", border: "border-l-violet-500" },
+    { label: "Discounts Given", value: s.discountsGiven, color: "text-slate-700", bg: "bg-slate-100 dark:bg-slate-900/30", badge: "Disc", border: "border-l-slate-400" },
+  ];
+
+  return (
+    <div className="bg-white dark:bg-card border-2 border-gray-300 dark:border-card-border rounded-xl shadow-lg overflow-hidden">
+      {/* Header */}
+      <div className="px-5 py-4 bg-gradient-to-r from-slate-700 to-slate-800 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <Calculator size={18} className="text-amber-400" />
+          <div>
+            <h3 className="text-base font-extrabold text-white tracking-wide">Daily Financial Reconciliation</h3>
+            <p className="text-[11px] text-slate-300 mt-0.5">Accounting-ready daily settlement sheet</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {hasMismatch ? (
+            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/20 text-red-300 text-xs font-bold">
+              <AlertTriangle size={12} /> Mismatch \u20b9{Math.abs(mismatch).toFixed(0)}
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold">
+              <CheckCircle2 size={12} /> Balanced
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Warning Banner */}
+      {hasMismatch && (
+        <div className="px-5 py-3 bg-red-50 dark:bg-red-900/20 border-y border-red-200 dark:border-red-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={16} className="text-red-600 dark:text-red-400" />
+            <span className="text-sm font-bold text-red-700 dark:text-red-300">Reconciliation Alert: Expected Cash \u2260 Actual Cash</span>
+          </div>
+          <span className="text-sm font-extrabold text-red-700 dark:text-red-300 tabular-nums">\u20b9{Math.abs(mismatch).toFixed(0)} Needs Verification</span>
+        </div>
+      )}
+
+      {/* Bold Accounting Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-100 dark:bg-muted/40 border-b border-gray-200 dark:border-card-border">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Line Item</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Variable</th>
+              <th className="px-4 py-3 text-right text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider min-w-[140px]">Amount (\u20b9)</th>
+              <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Type</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 dark:divide-card-border">
+            {rows.map((r, i) => (
+              <tr key={i} className={`${r.bg} ${r.border ? `border-l-4 ${r.border}` : ""} ${r.bold ? "font-extrabold" : r.final ? "font-extrabold" : "font-medium"}`}>
+                <td className={`px-4 py-3 text-sm ${r.bold ? "text-base" : r.final ? "text-base" : ""} text-gray-800 dark:text-gray-200`}>
+                  {r.deduct ? <span className="text-red-500 mr-1">\u2212</span> : null}
+                  {r.label}
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${r.badge === "X+Y" || r.badge === "(X+Y) \u2212 (Z+A+B)" || r.badge === "Net \u2212 C" ? "bg-emerald-200 dark:bg-emerald-800 text-emerald-800 dark:text-emerald-200" : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300"}`}>
+                    {r.badge}
+                  </span>
+                </td>
+                <td className={`px-4 py-3 text-right tabular-nums ${r.bold ? "text-lg" : r.final ? "text-xl" : "text-sm"} ${r.color}`}>
+                  {r.deduct ? `\u2212 \u2009` : ""}{fmt(r.value)}
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                    r.final ? "bg-purple-200 dark:bg-purple-800 text-purple-800 dark:text-purple-200" :
+                    r.bold ? "bg-emerald-200 dark:bg-emerald-800 text-emerald-800 dark:text-emerald-200" :
+                    r.deduct ? "bg-rose-200 dark:bg-rose-800 text-rose-800 dark:text-rose-200" :
+                    "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                  }`}>
+                    {r.final ? "Final" : r.bold ? "Subtotal" : r.deduct ? "Deduct" : "Input"}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Formula Footer */}
+      <div className="px-5 py-3 bg-slate-50 dark:bg-slate-900/20 border-t border-gray-200 dark:border-card-border">
+        <p className="text-[11px] text-gray-600 dark:text-gray-400 font-semibold">Formulas:</p>
+        <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-gray-500 dark:text-gray-400">
+          <span className="font-mono bg-white dark:bg-card border px-2 py-0.5 rounded">Gross Collection = X + Y</span>
+          <span className="font-mono bg-white dark:bg-card border px-2 py-0.5 rounded">Net Total = (X+Y) \u2212 (Z+A+B)</span>
+          <span className="font-mono bg-white dark:bg-card border px-2 py-0.5 rounded">Physical Cash = Net Total \u2212 C</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1045,6 +1168,11 @@ export default function MyDailySummary() {
             <MiniKpi icon={Receipt} label="Dues Collected" value={fmt(s.duesCollectedTotal)} sub={`${s.duesBillsCount} old bill${s.duesBillsCount !== 1 ? "s" : ""} settled`} iconBg="bg-teal-100 text-teal-700" border="border-l-teal-500" />
             <MiniKpi icon={XCircle} label="Cancellation Count" value={String(s.cancellationCount)} sub={s.cancellationCount > 0 ? `₹${s.cancelledAmount.toFixed(0)} written off` : "None"} iconBg="bg-gray-100 text-gray-700" border="border-l-gray-400" />
           </div>
+
+          {/* ═══════════════════════════════════════════════════════════
+              DAILY FINANCIAL RECONCILIATION — Accounting Panel
+              ═══════════════════════════════════════════════════════════ */}
+          <DailyFinancialReconciliation summary={s} />
 
           {/* ── Drawer Close Status Card (near cashbox) ── */}
           {drawerQ.data && <DrawerStatusCard status={drawerQ.data} />}

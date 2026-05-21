@@ -1,0 +1,123 @@
+Create a professional “Daily Financial Reconciliation System” for my Diagnostic Center ERP.
+
+Use the following accounting logic exactly:
+
+VARIABLES:
+
+- X = Total Bills Generated Today
+- Y = Old Dues Collected Today
+- Z = Cancelled Bills Amount
+- A = Outstanding / Pending Dues
+- B = Cash Expenses
+- C = Digital Collection (UPI/Card/Net Banking)
+
+FORMULAS:
+
+1. Gross Collection = X + Y
+
+2. Net Total Collection =
+   (X + Y) - (Z + A + B)
+
+3. Physical Cash In Hand =
+   Net Total Collection - C
+
+FEATURE REQUIREMENTS:
+
+1. Dashboard Cards
+   Create professional cards for:
+
+- Total Bills Generated
+- Dues Collected
+- Gross Collection
+- Outstanding Dues
+- Cancelled Bills
+- Discounts Given
+- Cash Expenses
+- Net Collection
+- Digital Collection
+- Physical Cash In Hand
+
+2. Color Coding
+
+- Green → Positive collection
+- Red → Outstanding / cancellations
+- Blue → Digital collection
+- Orange → Expenses
+- Purple → Physical cash
+
+3. Auto Reconciliation Engine
+   System should automatically calculate:
+
+- Expected cash
+- Actual collected cash
+- Difference/mismatch
+- Over/short cash
+
+4. Shift/Day Closing
+   Add:
+
+- Day Close button
+- Cash verification popup
+- Supervisor approval
+- Remarks section
+- Auto timestamp
+- Lock editing after day close
+
+5. Audit Features
+   Track:
+
+- Edited bills
+- Deleted bills
+- Reprinted bills
+- Expense edits
+- Manual reconciliation changes
+
+6. Reconciliation Alert
+   If mismatch exists:
+   Expected Cash ≠ Actual Cash
+   show:
+
+- Red warning banner
+- Difference amount
+- “Needs Verification”
+
+7. Accounting Ready
+   Prepare structure compatible with:
+
+- Tally ERP
+- GST reports
+- Ledger accounting
+- Bank reconciliation
+
+8. UI Design
+
+- Clean modern medical ERP style
+- Responsive cards
+- Compact dashboard
+- Large bold amount values
+- Mobile-friendly
+- Staff-wise filter
+- Date-wise filter
+
+9. Advanced Features
+   Add:
+
+- Export PDF
+- Excel export
+- Print summary
+- Daily summary report
+- Cash vs Digital pie chart
+- Collection trends graph
+
+10. IMPORTANT
+    Do not mix:
+
+- Gross Billing
+- Net Collection
+- Outstanding
+- Discounts
+  Keep all values separate for proper accounting and audit safety.
+
+Use React + Tailwind + TypeScript frontend.
+Backend should use PostgreSQL + Drizzle ORM.
+Use reusable components and proper reconciliation architecture.
