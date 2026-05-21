@@ -152,176 +152,187 @@ router.get("/patients/:patientId/contact", async (req, res) => {
 // then accessionNumber.
 
 router.post("/radiology/studies", async (req, res) => {
-  const b = (req.body ?? {}) as {
-    studyId?: number;
-    // patientId from DICOM can be a text UHID ("PAT001", "CARE001") or a
-    // numeric string. Never trust it as an integer DB id directly.
-    patientId?: string | number;
-    patientName?: string;
-    age?: string;
-    sex?: string;
-    modality?: string;
-    studyDescription?: string;
-    studyDate?: string;      // DICOM format YYYYMMDD is accepted as-is (stored as text)
-    accessionNumber?: string;
-    studyInstanceUID?: string;
-    aeTitle?: string;
-    ipAddress?: string;
-    port?: number;
-    referringDoctor?: string;
-    weasisUrl?: string;
-  };
+  const rawBody = req.body ?? {};
+  logger.info({ body: rawBody }, "POST /api/internal/radiology/studies payload");
 
-  if (!b.accessionNumber?.trim()) {
-    res.status(400).json({ error: "accessionNumber is required" });
+  try {
+    const b = rawBody as Record<string, unknown>;
+
+    const studyId = typeof b.studyId === "number" ? b.studyId : undefined;
+    const patientId = b.patientId !== undefined ? String(b.patientId) : "";
+    const patientName = typeof b.patientName === "string" ? b.patientName.trim() : "";
+    const age = typeof b.age === "string" ? b.age.trim() || null : null;
+    const sex = typeof b.sex === "string" ? b.sex.trim() || null : null;
+    const modality = typeof b.modality === "string" ? b.modality.trim() || "OT" : "OT";
+    const studyDescription = typeof b.studyDescription === "string" ? b.studyDescription.trim() || null : null;
+    const studyDate = typeof b.studyDate === "string" ? b.studyDate.trim() || null : null;
+    const accessionNumber = typeof b.accessionNumber === "string" ? b.accessionNumber.trim() : "";
+    const studyInstanceUID = typeof b.studyInstanceUID === "string" ? b.studyInstanceUID.trim() || null : null;
+    const aeTitle = typeof b.aeTitle === "string" ? b.aeTitle.trim() || null : null;
+    const ipAddress = typeof b.ipAddress === "string" ? b.ipAddress.trim() || null : null;
+    const port = typeof b.port === "number" ? b.port : null;
+    const referringDoctor = typeof b.referringDoctor === "string" ? b.referringDoctor.trim() || null : null;
+    const weasisUrl = typeof b.weasisUrl === "string" ? b.weasisUrl.trim() || null : null;
+    const sourcePacs = typeof b.sourcePacs === "string" ? b.sourcePacs.trim() || null : null;
+    const sourceAeTitle = typeof b.sourceAeTitle === "string" ? b.sourceAeTitle.trim() || null : null;
+    const dicomMetadata = typeof b.dicomMetadata === "string" ? b.dicomMetadata.trim() || null : null;
+
+    if (!accessionNumber) {
+      logger.warn("Missing accessionNumber");
+      res.status(400).json({ success: false, error: "accessionNumber is required" });
+      return;
+    }
+    if (!patientName) {
+      logger.warn("Missing patientName");
+      res.status(400).json({ success: false, error: "patientName is required" });
+      return;
+    }
+
+    const rawDicomPatientId = patientId || null;
+    let resolvedPatientId: number | null = null;
+    let patientMatchStatus = "UNMATCHED";
+
+    if (rawDicomPatientId) {
+      const numericId = Number(rawDicomPatientId);
+      const matchCond = Number.isInteger(numericId) && numericId > 0
+        ? or(eq(patientsTable.id, numericId), eq(patientsTable.patientId, rawDicomPatientId))
+        : eq(patientsTable.patientId, rawDicomPatientId);
+
+      const [matched] = await db
+        .select({ id: patientsTable.id })
+        .from(patientsTable)
+        .where(matchCond!)
+        .limit(1);
+
+      if (matched) {
+        resolvedPatientId = matched.id;
+        patientMatchStatus = "MATCHED";
+        logger.info({ patientId: resolvedPatientId }, "Matched existing patient");
+      }
+    }
+
+    if (!resolvedPatientId) {
+      try {
+        const demo: DicomDemographics = {
+          patientId: rawDicomPatientId ?? undefined,
+          patientName,
+          sex: sex ?? undefined,
+          age: age ?? undefined,
+          studyDate: studyDate ?? undefined,
+          modality,
+        };
+        const result = await createOrLinkPatientFromDicom(demo);
+        resolvedPatientId = result.patient.id;
+        patientMatchStatus = result.isNew ? "AUTO_CREATED" : "MATCHED_BY_DEMOGRAPHICS";
+        logger.info({ patientId: resolvedPatientId, status: patientMatchStatus }, "Auto-linked patient from DICOM");
+      } catch (err) {
+        logger.warn({ err }, "Auto-create patient failed");
+      }
+    }
+
+    let existing: typeof radiologyWorklistTable.$inferSelect | undefined;
+    if (studyInstanceUID) {
+      const rows = await db
+        .select()
+        .from(radiologyWorklistTable)
+        .where(or(
+          eq(radiologyWorklistTable.studyInstanceUID, studyInstanceUID),
+          eq(radiologyWorklistTable.accessionNumber, accessionNumber),
+        ));
+      existing = rows[0];
+    } else {
+      const rows = await db
+        .select()
+        .from(radiologyWorklistTable)
+        .where(eq(radiologyWorklistTable.accessionNumber, accessionNumber));
+      existing = rows[0];
+    }
+
+    const values = {
+      studyId: studyId ?? null,
+      patientId: resolvedPatientId,
+      dicomPatientId: rawDicomPatientId,
+      patientMatchStatus,
+      patientName,
+      age,
+      sex,
+      modality,
+      studyDescription,
+      studyDate,
+      accessionNumber,
+      studyInstanceUID,
+      aeTitle,
+      ipAddress,
+      port,
+      referringDoctor,
+      weasisUrl,
+      sourcePacs,
+      sourceAeTitle,
+      dicomMetadata,
+    };
+
+    let row: typeof radiologyWorklistTable.$inferSelect;
+
+    if (existing) {
+      const [updated] = await db
+        .update(radiologyWorklistTable)
+        .set({ ...values, updatedAt: new Date() })
+        .where(eq(radiologyWorklistTable.id, existing.id))
+        .returning();
+      row = updated;
+      logger.info({ worklistId: row.id, event: "updated" }, "Worklist entry updated");
+      await audit({
+        worklistId: row.id,
+        accessionNumber,
+        action: "STUDY_RECEIVED",
+        actor: "pacs",
+        details: { event: "updated", modality, studyDescription, sourcePacs, sourceAeTitle },
+      });
+    } else {
+      const [inserted] = await db
+        .insert(radiologyWorklistTable)
+        .values({ ...values, status: "STUDY_RECEIVED" })
+        .returning();
+      row = inserted;
+      logger.info({ worklistId: row.id, event: "created" }, "Worklist entry created");
+      await audit({
+        worklistId: row.id,
+        accessionNumber,
+        action: "STUDY_RECEIVED",
+        actor: "pacs",
+        details: { event: "created", modality, studyDescription, sourcePacs, sourceAeTitle },
+      });
+    }
+
+    if (row.studyId) {
+      try {
+        const priorityResult = await computeStudyPriority({
+          modality,
+          bodyPart: null,
+          studyDescription,
+          referringDoctor,
+        });
+        await applyPriorityToStudy(row.studyId, priorityResult.priority, priorityResult.reason);
+        await assignRadiologistToStudy(row.studyId, {
+          modality,
+          bodyPart: null,
+          studyId: row.studyId,
+        });
+        logger.info({ studyId: row.studyId }, "Auto-priority + assignment applied");
+      } catch (err) {
+        logger.warn({ err, studyId: row.studyId }, "Auto-priority/assignment failed");
+      }
+    }
+
+    logger.info({ worklistId: row.id, accessionNumber }, "POST /api/internal/radiology/studies success");
+    res.status(201).json({ success: true, worklistId: row.id });
+    return;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ err, body: rawBody }, "POST /api/internal/radiology/studies FAILED");
+    res.status(500).json({ success: false, error: message });
     return;
   }
-  if (!b.patientName?.trim()) {
-    res.status(400).json({ error: "patientName is required" });
-    return;
-  }
-
-  const accessionNumber = b.accessionNumber.trim();
-  const studyInstanceUID = b.studyInstanceUID?.trim() || null;
-
-  // ── Patient matching ──────────────────────────────────────────────────────
-  // Conquest sends PatientID as a free-text string (UHID, care number, etc.).
-  // We store the raw value in dicom_patient_id, then try to resolve it to an
-  // internal patients.id integer. If unresolvable, the row stays UNMATCHED so
-  // radiologists can still see and report the study.
-  const rawDicomPatientId = b.patientId !== undefined ? String(b.patientId).trim() : null;
-  let resolvedPatientId: number | null = null;
-  let patientMatchStatus = "UNMATCHED";
-
-  if (rawDicomPatientId) {
-    const numericId = Number(rawDicomPatientId);
-    const matchCond = Number.isInteger(numericId) && numericId > 0
-      ? or(eq(patientsTable.id, numericId), eq(patientsTable.patientId, rawDicomPatientId))
-      : eq(patientsTable.patientId, rawDicomPatientId);
-
-    const [matched] = await db
-      .select({ id: patientsTable.id })
-      .from(patientsTable)
-      .where(matchCond!)
-      .limit(1);
-
-    if (matched) {
-      resolvedPatientId = matched.id;
-      patientMatchStatus = "MATCHED";
-    }
-  }
-
-  // ── Auto-create patient from DICOM if unmatched (Phase 1 enterprise upgrade) ──
-  if (!resolvedPatientId) {
-    try {
-      const demo: DicomDemographics = {
-        patientId: rawDicomPatientId ?? undefined,
-        patientName: b.patientName,
-        sex: b.sex,
-        age: b.age,
-        studyDate: b.studyDate,
-        modality: b.modality,
-      };
-      const result = await createOrLinkPatientFromDicom(demo);
-      resolvedPatientId = result.patient.id;
-      patientMatchStatus = result.isNew ? "AUTO_CREATED" : "MATCHED_BY_DEMOGRAPHICS";
-    } catch {
-      // Gracefully keep UNMATCHED if auto-creation fails
-    }
-  }
-
-  // ── Deduplication ─────────────────────────────────────────────────────────
-  let existing: typeof radiologyWorklistTable.$inferSelect | undefined;
-  if (studyInstanceUID) {
-    const rows = await db
-      .select()
-      .from(radiologyWorklistTable)
-      .where(or(
-        eq(radiologyWorklistTable.studyInstanceUID, studyInstanceUID),
-        eq(radiologyWorklistTable.accessionNumber, accessionNumber),
-      ));
-    existing = rows[0];
-  } else {
-    const rows = await db
-      .select()
-      .from(radiologyWorklistTable)
-      .where(eq(radiologyWorklistTable.accessionNumber, accessionNumber));
-    existing = rows[0];
-  }
-
-  const values = {
-    studyId: b.studyId ?? null,
-    patientId: resolvedPatientId,
-    dicomPatientId: rawDicomPatientId,
-    patientMatchStatus,
-    patientName: b.patientName.trim(),
-    age: b.age ?? null,
-    sex: b.sex ?? null,
-    modality: b.modality?.trim() || "OT",
-    studyDescription: b.studyDescription?.trim() || null,
-    studyDate: b.studyDate ?? null,
-    accessionNumber,
-    studyInstanceUID,
-    aeTitle: b.aeTitle?.trim() || null,
-    ipAddress: b.ipAddress?.trim() || null,
-    port: b.port ?? null,
-    referringDoctor: b.referringDoctor?.trim() || null,
-    weasisUrl: b.weasisUrl?.trim() || null,
-  };
-
-  let row: typeof radiologyWorklistTable.$inferSelect;
-
-  if (existing) {
-    const [updated] = await db
-      .update(radiologyWorklistTable)
-      .set({ ...values, updatedAt: new Date() })
-      .where(eq(radiologyWorklistTable.id, existing.id))
-      .returning();
-    row = updated;
-    await audit({
-      worklistId: row.id,
-      accessionNumber,
-      action: "STUDY_RECEIVED",
-      actor: "pacs",
-      details: { event: "updated", modality: values.modality, studyDescription: values.studyDescription },
-    });
-  } else {
-    const [inserted] = await db
-      .insert(radiologyWorklistTable)
-      .values({ ...values, status: "STUDY_RECEIVED" })
-      .returning();
-    row = inserted;
-    await audit({
-      worklistId: row.id,
-      accessionNumber,
-      action: "STUDY_RECEIVED",
-      actor: "pacs",
-      details: { event: "created", modality: values.modality, studyDescription: values.studyDescription },
-    });
-  }
-
-  // ── Auto-priority + auto-assignment on linked study (Phase 1) ──
-  if (row.studyId) {
-    try {
-      const priorityResult = await computeStudyPriority({
-        modality: values.modality,
-        bodyPart: null,
-        studyDescription: values.studyDescription,
-        referringDoctor: values.referringDoctor,
-      });
-      await applyPriorityToStudy(row.studyId, priorityResult.priority, priorityResult.reason);
-
-      await assignRadiologistToStudy(row.studyId, {
-        modality: values.modality,
-        bodyPart: null,
-        studyId: row.studyId,
-      });
-    } catch {
-      // Never block intake on priority/assignment failure
-    }
-  }
-
-  res.status(201).json(row);
 });
 
 // ── Report status update ──────────────────────────────────────────────────────

@@ -27,6 +27,10 @@ export const radiologyWorklistTable = pgTable(
     port: integer("port"),
     referringDoctor: text("referring_doctor"),
     weasisUrl: text("weasis_url"),
+    // ← PACS auto-puller metadata
+    sourcePacs: text("source_pacs"),
+    sourceAeTitle: text("source_ae_title"),
+    dicomMetadata: text("dicom_metadata"),
     // Worklist lifecycle status
     status: text("status").notNull().default("STUDY_RECEIVED"),
     assignedRadiologist: text("assigned_radiologist"),

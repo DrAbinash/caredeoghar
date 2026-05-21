@@ -221,6 +221,9 @@ async function runStartupMigrations(): Promise<void> {
       );
       ALTER TABLE radiology_worklist ADD COLUMN IF NOT EXISTS dicom_patient_id TEXT;
       ALTER TABLE radiology_worklist ADD COLUMN IF NOT EXISTS patient_match_status TEXT NOT NULL DEFAULT 'UNMATCHED';
+      ALTER TABLE radiology_worklist ADD COLUMN IF NOT EXISTS source_pacs TEXT;
+      ALTER TABLE radiology_worklist ADD COLUMN IF NOT EXISTS source_ae_title TEXT;
+      ALTER TABLE radiology_worklist ADD COLUMN IF NOT EXISTS dicom_metadata TEXT;
       CREATE TABLE IF NOT EXISTS pacs_settings (
         id SERIAL PRIMARY KEY,
         key TEXT NOT NULL,
