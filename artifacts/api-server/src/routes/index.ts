@@ -292,27 +292,25 @@ router.use("/dicom-agent", requireStaffAuth, requireStaffPermission("/dicom-node
 // Enterprise PACS features (upgraded C-ECHO, viewer launch, routing rules,
 // MWL procedures, pulled-studies stats, failed-queue retry).
 // Mounted BEFORE radiologyRouter so its handlers (e.g. echo-test upgrade) win.
-router.use("/radiology", requireStaffAuth, requireStaffPermission("/orders"), pacsEnterpriseRouter);
+// Radiology is now open to ALL authenticated staff — no /orders permission required.
+router.use("/radiology", requireStaffAuth, pacsEnterpriseRouter);
 
-// Radiology studies are tied to the orders workflow — /orders permission
-router.use("/radiology", requireStaffAuth, requireStaffPermission("/orders"), radiologyRouter);
+// Radiology studies — open to all authenticated staff (doctors, radiologists, etc.)
+router.use("/radiology", requireStaffAuth, radiologyRouter);
 
 // Radiology Report Generator — staff-accessible report builder with voice dictation,
 // key image upload, template library, draft save, and final report creation.
-// Uses /orders permission consistent with other radiology endpoints.
+// Open to all authenticated staff.
 router.use(
   "/radiology/report-generator",
   requireStaffAuth,
-  requireStaffPermission("/orders"),
   radiologyReportGeneratorRouter,
 );
 
-// Structured report templates — modality/body-part based templates with
-// picklists, macros, and placeholders. Mounted at /api/radiology/structured-report-templates
+// Structured report templates — open to all authenticated staff for reading.
 router.use(
   "/radiology/structured-report-templates",
   requireStaffAuth,
-  requireStaffPermission("/orders"),
   structuredReportTemplatesRouter,
 );
 

@@ -142,7 +142,7 @@ router.post("/patient-message", requireStaffPermission("/patients"), async (req,
 // Generate structured findings for a radiology study.
 // Body: { modality: string, testName?: string, clinicalHistory?: string, dictation?: string }
 // Returns: { findings: string }
-router.post("/radiology-findings", requireStaffPermission("/orders"), async (req, res) => {
+router.post("/radiology-findings", requireStaffAuth, async (req, res) => {
   const b = (req.body ?? {}) as Record<string, unknown>;
   const modality = String(b.modality ?? "").trim();
   const testName = String(b.testName ?? "").trim();
@@ -164,7 +164,7 @@ router.post("/radiology-findings", requireStaffPermission("/orders"), async (req
 
 // Generate a 1–4 line impression bullet list from a findings narrative.
 // Body: { findings: string, modality?: string, testName?: string }
-router.post("/radiology-impression", requireStaffPermission("/orders"), async (req, res) => {
+router.post("/radiology-impression", requireStaffAuth, async (req, res) => {
   const b = (req.body ?? {}) as Record<string, unknown>;
   const findings = String(b.findings ?? "").trim();
   const modality = String(b.modality ?? "").trim();
@@ -184,7 +184,7 @@ router.post("/radiology-impression", requireStaffPermission("/orders"), async (r
 // Browsers' built-in Web Speech API does the live transcription on the client;
 // this endpoint is the server-side fallback for browsers that lack it (Firefox,
 // Safari on some devices) or when the radiologist uploads a recorded clip.
-router.post("/transcribe", requireStaffPermission("/orders"), async (req, res) => {
+router.post("/transcribe", requireStaffAuth, async (req, res) => {
   const b = (req.body ?? {}) as Record<string, unknown>;
   const audioBase64 = typeof b.audioBase64 === "string" ? b.audioBase64 : "";
   const mimeType = typeof b.mimeType === "string" && b.mimeType ? b.mimeType : "audio/webm";
