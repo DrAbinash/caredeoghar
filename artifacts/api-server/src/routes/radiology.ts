@@ -275,6 +275,19 @@ radiologyRouter.get("/worklist", async (req, res) => {
   res.json(filtered);
 });
 
+// GET /api/radiology/pacs-worklist/count — total rows in radiology_worklist (no filters).
+// Used by the frontend debug panel to show the raw DB row count independent of filters.
+radiologyRouter.get("/pacs-worklist/count", async (req, res) => {
+  const result = await db.execute<{ n: string }>(
+    sql`SELECT COUNT(*)::text AS n FROM radiology_worklist`
+  );
+  const rows = (result as unknown as { rows?: Array<{ n: string }> }).rows
+    ?? (result as unknown as Array<{ n: string }>);
+  const totalRows = parseInt(rows[0]?.n ?? "0", 10);
+  req.log.info({ totalRows }, "[pacs-worklist/count] DB row count");
+  res.json({ totalRows });
+});
+
 // GET /api/radiology/pacs-worklist?status=&modality=&search=
 // Staff-authenticated view of radiology_worklist (PACS-pushed studies).
 // Different from /api/radiology/worklist which queries radiology_studies (RIS-driven).
