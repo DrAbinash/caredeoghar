@@ -78,7 +78,7 @@ type Patient = {
   ageUnit?: string | null;
 };
 
-type Doctor = { id: number; name: string; specialization: string };
+type Doctor = { id: number; name: string; specialization: string; billCount?: number };
 type Test   = { id: number; name: string; code: string; price: number; category: string; isActive?: boolean; testType?: string | null; outsourcedLabId?: number | null };
 // Tests embedded in a package carry their per-package discount overrides.
 type PkgTest = Test & { discountPct?: number; discountAmount?: number };
@@ -377,6 +377,12 @@ export default function BillingDesk() {
       return new Set(stored ? JSON.parse(stored) : []);
     } catch { return new Set(); }
   });
+  const [pinnedDoctorIds, setPinnedDoctorIds] = useState<Set<number>>(() => {
+    try {
+      const stored = localStorage.getItem("billingDesk:pinnedDoctors");
+      return new Set(stored ? JSON.parse(stored) : []);
+    } catch { return new Set(); }
+  });
 
   function togglePin(id: number, e: React.MouseEvent) {
     e.stopPropagation();
@@ -384,6 +390,15 @@ export default function BillingDesk() {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
       localStorage.setItem("billingDesk:pinnedTests", JSON.stringify([...next]));
+      return next;
+    });
+  }
+  function toggleDoctorPin(id: number, e: React.MouseEvent) {
+    e.stopPropagation();
+    setPinnedDoctorIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      localStorage.setItem("billingDesk:pinnedDoctors", JSON.stringify([...next]));
       return next;
     });
   }
@@ -1558,25 +1573,48 @@ export default function BillingDesk() {
                             String(d.id).includes(q) ||
                             d.name.toLowerCase().includes(q) ||
                             d.specialization.toLowerCase().includes(q)
-                          );
+                          ).sort((a, b) => {
+                            const ap = pinnedDoctorIds.has(a.id) ? 0 : 1;
+                            const bp = pinnedDoctorIds.has(b.id) ? 0 : 1;
+                            if (ap !== bp) return ap - bp; // pinned first
+                            const ac = b.billCount ?? 0;
+                            const bc = a.billCount ?? 0;
+                            return ac - bc; // most-billed first within each group
+                          });
                           return filtered.length === 0 ? (
                             <div className="px-4 py-3 text-sm text-slate-900 dark:text-slate-900 text-center">No doctors found</div>
-                          ) : filtered.map(d => (
-                            <button
-                              key={d.id}
-                              className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 transition-colors text-left"
-                              onMouseDown={(e) => e.preventDefault()}
-                              onClick={() => { setDoctorMode("doctor"); setDoctorId(d.id); setDoctorSearch(""); setDoctorSearchOpen(false); }}
-                            >
-                              <div className="w-9 h-7 rounded bg-primary/10 flex items-center justify-center flex-shrink-0 font-mono text-[11px] text-primary font-extrabold">
-                                #{d.id}
+                          ) : filtered.map(d => {
+                            const pinned = pinnedDoctorIds.has(d.id);
+                            return (
+                              <div key={d.id} className="flex items-center">
+                                <button
+                                  onClick={(e) => toggleDoctorPin(d.id, e)}
+                                  className={`pl-2 pr-1 py-2.5 flex-shrink-0 transition-colors ${pinned ? "text-amber-700 hover:text-amber-500" : "text-slate-900 dark:text-slate-900/30 hover:text-amber-700"}`}
+                                  title={pinned ? "Unpin doctor" : "Pin doctor to top"}
+                                >
+                                  <Star size={11} fill={pinned ? "currentColor" : "none"} />
+                                </button>
+                                <button
+                                  className="flex-1 flex items-center gap-3 px-2 py-2.5 hover:bg-muted/50 transition-colors text-left"
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => { setDoctorMode("doctor"); setDoctorId(d.id); setDoctorSearch(""); setDoctorSearchOpen(false); }}
+                                >
+                                  <div className="w-9 h-7 rounded bg-primary/10 flex items-center justify-center flex-shrink-0 font-mono text-[11px] text-primary font-extrabold">
+                                    #{d.id}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <div className="text-sm font-bold text-slate-900 dark:text-slate-900">Dr. {d.name}</div>
+                                      {(d.billCount ?? 0) > 0 && (
+                                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-extrabold">{d.billCount} bills</span>
+                                      )}
+                                    </div>
+                                    <div className="text-xs text-slate-900 dark:text-slate-900">{d.specialization}</div>
+                                  </div>
+                                </button>
                               </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-sm font-bold text-slate-900 dark:text-slate-900">Dr. {d.name}</div>
-                                <div className="text-xs text-slate-900 dark:text-slate-900">{d.specialization}</div>
-                              </div>
-                            </button>
-                          ));
+                            );
+                          });
                         })()}
                       </div>
                     )}

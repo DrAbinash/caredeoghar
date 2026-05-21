@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, doctorsTable } from "@workspace/db";
-import { ilike, or, desc, eq, and } from "drizzle-orm";
+import { db, doctorsTable, ordersTable, billsTable } from "@workspace/db";
+import { ilike, or, desc, eq, and, sql, count } from "drizzle-orm";
 import {
   ListDoctorsQueryParams,
   CreateDoctorBody,
@@ -19,7 +19,25 @@ doctorsRouter.get("/", async (req, res) => {
   }
   const { search } = parsed.data;
 
-  let query = db.select().from(doctorsTable);
+  let query = db
+    .select({
+      id: doctorsTable.id,
+      name: doctorsTable.name,
+      specialization: doctorsTable.specialization,
+      phone: doctorsTable.phone,
+      email: doctorsTable.email,
+      hospitalAffiliation: doctorsTable.hospitalAffiliation,
+      registrationNumber: doctorsTable.registrationNumber,
+      defaultCommissionType: doctorsTable.defaultCommissionType,
+      defaultCommission: doctorsTable.defaultCommission,
+      ledgerId: doctorsTable.ledgerId,
+      createdAt: doctorsTable.createdAt,
+      billCount: sql<number>`COALESCE(count(${billsTable.id}), 0)::int`,
+    })
+    .from(doctorsTable)
+    .leftJoin(ordersTable, eq(ordersTable.doctorId, doctorsTable.id))
+    .leftJoin(billsTable, eq(billsTable.orderId, ordersTable.id));
+
   if (search) {
     query = query.where(
       or(
@@ -30,7 +48,10 @@ doctorsRouter.get("/", async (req, res) => {
     ) as typeof query;
   }
 
-  const doctors = await query.orderBy(desc(doctorsTable.createdAt));
+  const doctors = await query
+    .groupBy(doctorsTable.id)
+    .orderBy(desc(sql`COALESCE(count(${billsTable.id}), 0)`), desc(doctorsTable.createdAt));
+
   res.json({ doctors, total: doctors.length });
 });
 
