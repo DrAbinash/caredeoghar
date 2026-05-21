@@ -370,13 +370,19 @@ export default function Accounting() {
 
   // ── Tally Export ─────────────────────────────────────────────────────────────
 
-  const downloadTallyExport = () => {
+  const downloadTallyMasters = () => {
+    const a = document.createElement("a");
+    a.href = `/api/accounting/export/tally`;
+    a.download = `tally-masters.xml`;
+    a.click();
+  };
+  const downloadTallyVouchers = () => {
     const params = new URLSearchParams();
     if (exportDates.from) params.set("from", exportDates.from);
     if (exportDates.to) params.set("to", exportDates.to);
     const a = document.createElement("a");
-    a.href = `/api/accounting/export/tally?${params}`;
-    a.download = `tally-export${exportDates.from ? `-${exportDates.from}` : ""}.xml`;
+    a.href = `/api/accounting/export/tally-vouchers?${params}`;
+    a.download = `tally-vouchers${exportDates.from ? `-${exportDates.from}` : ""}${exportDates.to ? `-to-${exportDates.to}` : ""}.xml`;
     a.click();
   };
 
@@ -1115,30 +1121,39 @@ export default function Accounting() {
                   <Download size={22} className="text-primary" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-semibold text-base">Export to Tally XML</h3>
-                  <p className="text-sm text-muted-foreground mt-1">Downloads all ledger masters and vouchers in TallyPrime-compatible XML format.</p>
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div><Label className="text-xs">From Date (optional)</Label><Input type="date" value={exportDates.from} onChange={e => setExportDates(d => ({ ...d, from: e.target.value }))} className="mt-1" /></div>
-                    <div><Label className="text-xs">To Date (optional)</Label><Input type="date" value={exportDates.to} onChange={e => setExportDates(d => ({ ...d, to: e.target.value }))} className="mt-1" /></div>
+                  <h3 className="font-semibold text-base">Export to TallyPrime</h3>
+                  <p className="text-sm text-muted-foreground mt-1">Downloads in TallyPrime-compatible XML format. Import in two steps: Masters first, then Vouchers.</p>
+                  <div className="mt-4 space-y-3">
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30 border border-card-border">
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold">Step 1: Ledger Masters</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{accounts.length} account masters (groups, opening balances, GST/PAN)</p>
+                      </div>
+                      <Button size="sm" variant="outline" onClick={downloadTallyMasters}><Download size={14} className="mr-1.5" /> Masters XML</Button>
+                    </div>
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30 border border-card-border">
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold">Step 2: Vouchers</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{vouchers.length} vouchers (select date range below)</p>
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <div><Label className="text-[10px]">From</Label><Input type="date" value={exportDates.from} onChange={e => setExportDates(d => ({ ...d, from: e.target.value }))} className="mt-0.5 h-7 text-xs" /></div>
+                          <div><Label className="text-[10px]">To</Label><Input type="date" value={exportDates.to} onChange={e => setExportDates(d => ({ ...d, to: e.target.value }))} className="mt-0.5 h-7 text-xs" /></div>
+                        </div>
+                      </div>
+                      <Button size="sm" variant="outline" onClick={downloadTallyVouchers}><Download size={14} className="mr-1.5" /> Vouchers XML</Button>
+                    </div>
                   </div>
-                  <div className="mt-4 space-y-1 text-xs text-muted-foreground">
-                    <p>• {accounts.length} account masters (with Tally group mapping)</p>
-                    <p>• {vouchers.length} vouchers (in selected range)</p>
-                    <p>• Voucher types: Payment, Receipt, Contra, Journal, Sales, Purchase</p>
-                    <p>• Opening balances and GST numbers included</p>
-                  </div>
-                  <Button className="mt-4" onClick={downloadTallyExport}><Download size={15} className="mr-2" /> Download Tally XML</Button>
                 </div>
               </div>
             </div>
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 max-w-xl text-sm text-amber-800">
               <p className="font-semibold mb-2">Import Instructions (TallyPrime)</p>
               <ol className="list-decimal list-inside space-y-1 text-xs">
-                <li>Open TallyPrime → <strong>Gateway of Tally</strong></li>
-                <li>Press <strong>Alt + O</strong> → click <strong>Import</strong></li>
-                <li>Select <strong>Data</strong> and choose the downloaded XML file</li>
-                <li>Tally imports ledger masters first, then all vouchers</li>
-                <li>Verify Trial Balance in Tally matches the one here</li>
+                <li>In TallyPrime: open the company you want to import into</li>
+                <li>Press <strong>Alt + O</strong> → <strong>Import</strong> → <strong>Data</strong></li>
+                <li>Import <strong>tally-masters.xml</strong> first (creates ledgers)</li>
+                <li>Then import <strong>tally-vouchers.xml</strong> (creates transactions)</li>
+                <li>Verify Trial Balance in Tally matches the one shown here</li>
               </ol>
             </div>
           </TabsContent>

@@ -625,9 +625,11 @@ router.get("/export/tally", async (req, res) => {
 
       return `  <LEDGER NAME="${escapeXml(a.name)}" RESERVEDNAME="">
     <PARENT>${escapeXml(parent)}</PARENT>
+    <CATEGORY>Primary</CATEGORY>
     <ISBILLWISEON>No</ISBILLWISEON>
     <ISACTIVE>${a.isActive ? "Yes" : "No"}</ISACTIVE>${openBalXml}${gstXml}${panXml}
     <LEDGERCODE>${a.code || ""}</LEDGERCODE>
+    <NAME>${escapeXml(a.name)}</NAME>
   </LEDGER>`;
     })
     .join("\n");
@@ -669,7 +671,10 @@ router.get("/export/tally", async (req, res) => {
 ${dateRange}
 <ENVELOPE>
   <HEADER>
+    <VERSION>1</VERSION>
     <TALLYREQUEST>Import Data</TALLYREQUEST>
+    <TYPE>Data</TYPE>
+    <ID>All Masters</ID>
   </HEADER>
   <BODY>
     <IMPORTDATA>
@@ -685,6 +690,80 @@ ${masterXml}
         </TALLYMESSAGE>
       </REQUESTDATA>
     </IMPORTDATA>
+  </BODY>
+</ENVELOPE>`;
+
+  res.setHeader("Content-Type", "application/xml");
+  res.setHeader("Content-Disposition", `attachment; filename=tally-masters${from ? `-${from}` : ""}${to ? `-to-${to}` : ""}.xml`);
+  res.send(xml);
+  return;
+});
+
+// ─── Tally XML Voucher Export ────────────────────────────────────────────────
+
+router.get("/export/tally-vouchers", async (req, res) => {
+  const { from, to } = req.query as Record<string, string>;
+
+  const accounts = await db.select().from(accountsTable);
+  let voucherQuery = db.select().from(vouchersTable).$dynamic();
+  const conditions = [];
+  if (from) conditions.push(gte(vouchersTable.date, from));
+  if (to) conditions.push(lte(vouchersTable.date, to));
+  if (conditions.length) voucherQuery = voucherQuery.where(and(...conditions));
+  const vouchers = await voucherQuery.orderBy(vouchersTable.date);
+
+  const accountMap = new Map(accounts.map(a => [a.id.toString(), a.name]));
+
+  const voucherXml = vouchers
+    .map(v => {
+      const drName = accountMap.get(v.debitAccountId) || v.debitAccountId;
+      const crName = accountMap.get(v.creditAccountId) || v.creditAccountId;
+      const amt = Number(v.amount);
+      const dateStr = v.date.replace(/-/g, "");
+      const tallyType = TALLY_VOUCHER_TYPE[v.type] || "Journal";
+      const narration = v.narration || v.particular + (v.remark ? " - " + v.remark : "");
+      const refXml = v.reference ? `
+    <BILLALLOCATIONS.LIST>
+      <NAME>${escapeXml(v.reference)}</NAME>
+      <BILLTYPE>On Account</BILLTYPE>
+      <AMOUNT>${amt.toFixed(2)}</AMOUNT>
+    </BILLALLOCATIONS.LIST>` : "";
+
+      return `  <VOUCHER VCHTYPE="${tallyType}" ACTION="Create">
+    <DATE>${dateStr}</DATE>
+    <EFFECTIVEDATE>${dateStr}</EFFECTIVEDATE>
+    <VOUCHERTYPENAME>${tallyType}</VOUCHERTYPENAME>
+    <PARENT>${tallyType}</PARENT>
+    <VOUCHERNUMBER>${escapeXml(v.voucherNumber)}</VOUCHERNUMBER>
+    <NARRATION>${escapeXml(narration)}</NARRATION>
+    <ALLLEDGERENTRIES.LIST>
+      <LEDGERNAME>${escapeXml(drName)}</LEDGERNAME>
+      <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
+      <AMOUNT>-${amt.toFixed(2)}</AMOUNT>${refXml}
+    </ALLLEDGERENTRIES.LIST>
+    <ALLLEDGERENTRIES.LIST>
+      <LEDGERNAME>${escapeXml(crName)}</LEDGERNAME>
+      <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+      <AMOUNT>${amt.toFixed(2)}</AMOUNT>
+    </ALLLEDGERENTRIES.LIST>
+  </VOUCHER>`;
+    })
+    .join("\n");
+
+  const dateRange = from && to
+    ? `<!-- Date Range: ${from} to ${to} -->`
+    : `<!-- All dates -->`;
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+${dateRange}
+<ENVELOPE>
+  <HEADER>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Import Data</TALLYREQUEST>
+    <TYPE>Data</TYPE>
+    <ID>Vouchers</ID>
+  </HEADER>
+  <BODY>
     <IMPORTDATA>
       <REQUESTDESC>
         <REPORTNAME>Vouchers</REPORTNAME>
@@ -702,7 +781,7 @@ ${voucherXml}
 </ENVELOPE>`;
 
   res.setHeader("Content-Type", "application/xml");
-  res.setHeader("Content-Disposition", `attachment; filename=tally-export${from ? `-${from}` : ""}${to ? `-to-${to}` : ""}.xml`);
+  res.setHeader("Content-Disposition", `attachment; filename=tally-vouchers${from ? `-${from}` : ""}${to ? `-to-${to}` : ""}.xml`);
   res.send(xml);
   return;
 });
