@@ -19,8 +19,10 @@ import {
   Mic, Star, ClipboardList, Image as ImageIcon, Plus, Trash2, Eye,
   Download, Share2, AlertCircle, Settings, Workflow, Layout,
   User, Clock, Search, Filter, ChevronRight, BarChart3, Shield,
-  X, Send, Zap, BookOpen, Stethoscope, Upload,
+  X, Send, Zap, BookOpen, Stethoscope, Upload, MonitorPlay,
 } from "lucide-react";
+
+import EmbeddedWadoViewer from "@/components/EmbeddedWadoViewer";
 
 // ════════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -248,6 +250,7 @@ export default function RadiologyReportingWorkspace({ studyId }: { studyId?: num
   // ── Layout state ───────────────────────────────────────────────────────────
   const [showPatientPanel, setShowPatientPanel] = useState(true);
   const [showAiPanel, setShowAiPanel] = useState(true);
+  const [showViewer, setShowViewer] = useState(false);
   const [guidedMode, setGuidedMode] = useState(false);
   const [guidedStep, setGuidedStep] = useState(0);
   const [previewMode, setPreviewMode] = useState(false);
@@ -1193,6 +1196,9 @@ export default function RadiologyReportingWorkspace({ studyId }: { studyId?: num
         subtitle={entry ? `${entry.patientName} • ${entry.accessionNumber}` : "Select a study from worklist"}
         actions={
           <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setShowViewer((v) => !v)}>
+              <MonitorPlay size={12} /> {showViewer ? "Hide Viewer" : "Show DICOM"}
+            </Button>
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => navigate("/radiology/worklist")}>
               <ArrowLeft size={12} /> Back to Worklist
             </Button>
@@ -1202,8 +1208,15 @@ export default function RadiologyReportingWorkspace({ studyId }: { studyId?: num
 
       <div className="flex flex-1 overflow-hidden">
         <PatientPanel />
-        <div className="flex-1 overflow-y-auto min-w-0">
-          <EditorPanel />
+        <div className="flex-1 overflow-y-auto min-w-0 flex flex-col gap-2">
+          {showViewer && entry?.studyInstanceUID && (
+            <div className="shrink-0">
+              <EmbeddedWadoViewer studyInstanceUID={entry.studyInstanceUID} accessionNumber={entry.accessionNumber} />
+            </div>
+          )}
+          <div className="flex-1 min-h-0">
+            <EditorPanel />
+          </div>
         </div>
         <AiPanel />
       </div>

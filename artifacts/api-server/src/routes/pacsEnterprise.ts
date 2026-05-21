@@ -1507,12 +1507,9 @@ router.get("/archive-lifecycle", async (req, res) => {
   const limit = Math.min(Number(req.query.limit || 50), 100);
 
   const conditions = tier ? [eq(pacsArchiveLifecycleTable.tier, tier)] : [];
-  const rows = await db
-    .select()
-    .from(pacsArchiveLifecycleTable)
-    .where(conditions.length > 0 ? and(...conditions) : undefined as any)
-    .orderBy(desc(pacsArchiveLifecycleTable.createdAt))
-    .limit(limit);
+  const rows = conditions.length > 0
+    ? await db.select().from(pacsArchiveLifecycleTable).where(and(...conditions)).orderBy(desc(pacsArchiveLifecycleTable.createdAt)).limit(limit)
+    : await db.select().from(pacsArchiveLifecycleTable).orderBy(desc(pacsArchiveLifecycleTable.createdAt)).limit(limit);
 
   const tierCounts = await db
     .select({ tier: pacsArchiveLifecycleTable.tier, count: sql<number>`COUNT(*)` })
@@ -1641,6 +1638,236 @@ router.get("/queue-monitor", async (_req, res) => {
     byModality,
     timestamp: new Date().toISOString(),
   });
+});
+
+// POST /api/radiology/archive-lifecycle/:id/compress
+// Queues a compression job for a specific study
+router.post("/archive-lifecycle/:id/compress", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [existing] = await db
+    .select()
+    .from(pacsArchiveLifecycleTable)
+    .where(eq(pacsArchiveLifecycleTable.id, id))
+    .limit(1);
+
+  if (!existing) { res.status(404).json({ error: "Study not found" }); return; }
+
+  await db
+    .update(pacsArchiveLifecycleTable)
+    .set({
+      notes: `Compression queued at ${new Date().toISOString()}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(pacsArchiveLifecycleTable.id, id));
+
+  await logPacsEvent("archive", "compression_queued", `Study ${existing.studyInstanceUID} queued for compression`, {
+    studyInstanceUID: existing.studyInstanceUID,
+    accessionNumber: existing.accessionNumber,
+    severity: "info",
+  });
+
+  res.json({ success: true, message: "Compression queued" });
+});
+
+// POST /api/radiology/archive-lifecycle/:id/move-tier
+// Manually move a study to a different storage tier
+router.post("/archive-lifecycle/:id/move-tier", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const { tier } = req.body as { tier?: string };
+  if (!tier || !["hot", "warm", "cold", "archived"].includes(tier)) {
+    res.status(400).json({ error: "tier must be hot | warm | cold | archived" });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(pacsArchiveLifecycleTable)
+    .where(eq(pacsArchiveLifecycleTable.id, id))
+    .limit(1);
+
+  if (!existing) { res.status(404).json({ error: "Study not found" }); return; }
+
+  const now = new Date();
+  const updates: any = {
+    tier,
+    movedToTierAt: now,
+    updatedAt: now,
+    notes: `Manually moved to ${tier} at ${now.toISOString()}`,
+  };
+  if (tier === "hot") {
+    updates.restoredAt = now;
+    updates.restoreCount = (existing.restoreCount || 0) + 1;
+  }
+
+  await db.update(pacsArchiveLifecycleTable).set(updates).where(eq(pacsArchiveLifecycleTable.id, id));
+
+  await logPacsEvent("archive", "tier_change", `Study moved from ${existing.tier} to ${tier}`, {
+    studyInstanceUID: existing.studyInstanceUID,
+    accessionNumber: existing.accessionNumber,
+    severity: tier === "archived" ? "info" : "info",
+  });
+
+  res.json({ success: true, newTier: tier });
+});
+
+// PATCH /api/radiology/watchdog/:id/toggle-restart
+router.patch("/watchdog/:id/toggle-restart", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const { autoRestartEnabled } = req.body as { autoRestartEnabled?: boolean };
+  if (typeof autoRestartEnabled !== "boolean") {
+    res.status(400).json({ error: "autoRestartEnabled boolean required" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(watchdogStatusTable)
+    .set({ autoRestartEnabled, updatedAt: new Date() })
+    .where(eq(watchdogStatusTable.id, id))
+    .returning();
+
+  if (!updated) { res.status(404).json({ error: "Service not found" }); return; }
+  res.json({ success: true, service: updated });
+});
+
+// POST /api/radiology/watchdog/:id/restart
+// Triggers a manual restart signal (logged, actual restart is external)
+router.post("/watchdog/:id/restart", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [existing] = await db
+    .select()
+    .from(watchdogStatusTable)
+    .where(eq(watchdogStatusTable.id, id))
+    .limit(1);
+
+  if (!existing) { res.status(404).json({ error: "Service not found" }); return; }
+
+  await db
+    .update(watchdogStatusTable)
+    .set({
+      status: "restarting",
+      restartCount: (existing.restartCount || 0) + 1,
+      updatedAt: new Date(),
+    })
+    .where(eq(watchdogStatusTable.id, id));
+
+  await logPacsEvent("watchdog", "restart_triggered", `Manual restart triggered for ${existing.displayName}`, {
+    severity: "warning",
+  });
+
+  res.json({ success: true, message: "Restart signal sent. External watchdog monitor should pick this up." });
+});
+
+// GET /api/radiology/ai-inference-config
+// Reads GPU inference configuration from pacs_settings (category="ai_inference")
+router.get("/ai-inference-config", async (_req, res) => {
+  const rows = await db
+    .select()
+    .from(pacsSettingsTable)
+    .where(eq(pacsSettingsTable.category, "ai_inference"));
+
+  const defaults: Record<string, string> = {
+    gpuEndpointUrl: "",
+    modelName: "",
+    batchSize: "1",
+    timeoutSeconds: "30",
+    concurrency: "4",
+    enabled: "true",
+    fallbackToCloud: "true",
+    useLocalGpu: "true",
+    cloudProvider: "gemini",
+    warmUpOnStartup: "true",
+    cacheResults: "true",
+    maxRetries: "2",
+    requestPriority: "normal",
+  };
+
+  const map: Record<string, string> = { ...defaults };
+  for (const r of rows) if (r.value != null) map[r.key] = r.value;
+
+  res.json({
+    gpuEndpointUrl: map.gpuEndpointUrl,
+    modelName: map.modelName,
+    batchSize: Number(map.batchSize) || 1,
+    timeoutSeconds: Number(map.timeoutSeconds) || 30,
+    concurrency: Number(map.concurrency) || 4,
+    enabled: map.enabled === "true",
+    fallbackToCloud: map.fallbackToCloud === "true",
+    useLocalGpu: map.useLocalGpu === "true",
+    cloudProvider: map.cloudProvider,
+    warmUpOnStartup: map.warmUpOnStartup === "true",
+    cacheResults: map.cacheResults === "true",
+    maxRetries: Number(map.maxRetries) || 2,
+    requestPriority: map.requestPriority,
+  });
+});
+
+// POST /api/radiology/ai-inference-config
+// Saves GPU inference configuration to pacs_settings
+router.post("/ai-inference-config", async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const keys = [
+    "gpuEndpointUrl", "modelName", "batchSize", "timeoutSeconds", "concurrency",
+    "enabled", "fallbackToCloud", "useLocalGpu", "cloudProvider",
+    "warmUpOnStartup", "cacheResults", "maxRetries", "requestPriority",
+  ];
+
+  for (const key of keys) {
+    const value = body[key];
+    if (value === undefined) continue;
+    const strValue = typeof value === "boolean" ? String(value) : String(value ?? "");
+
+    const [existing] = await db
+      .select()
+      .from(pacsSettingsTable)
+      .where(and(eq(pacsSettingsTable.key, key), eq(pacsSettingsTable.category, "ai_inference")))
+      .limit(1);
+
+    if (existing) {
+      await db
+        .update(pacsSettingsTable)
+        .set({ value: strValue, updatedAt: new Date() })
+        .where(eq(pacsSettingsTable.id, existing.id));
+    } else {
+      await db.insert(pacsSettingsTable).values({
+        key,
+        value: strValue,
+        category: "ai_inference",
+      });
+    }
+  }
+
+  res.json({ success: true });
+});
+
+// POST /api/radiology/ai-inference-test
+// Quick connectivity test to the configured GPU endpoint
+router.post("/ai-inference-test", async (req, res) => {
+  const { endpoint, model } = req.body as { endpoint?: string; model?: string };
+  if (!endpoint) { res.status(400).json({ error: "endpoint required" }); return; }
+
+  const start = Date.now();
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const response = await fetch(endpoint, {
+      method: "GET",
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const latency = Date.now() - start;
+    res.json({ ok: response.ok, status: response.status, latency });
+  } catch (err: any) {
+    const latency = Date.now() - start;
+    res.status(200).json({ ok: false, error: err.name === "AbortError" ? "Timeout" : err.message, latency });
+  }
 });
 
 export const pacsEnterpriseRouter = router;
