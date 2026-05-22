@@ -225,7 +225,7 @@ export default function DayClose() {
   });
   const clinicQ = useQuery<ClinicLite>({
     queryKey: ["clinic-settings"],
-    queryFn: () => api.get<ClinicLite>("/api/clinic-settings"),
+    queryFn: () => api.get<ClinicLite>("/api/clinic-settings/branding"),
     staleTime: 60_000,
   });
   const staffStatusQ = useQuery<StaffStatusResult>({

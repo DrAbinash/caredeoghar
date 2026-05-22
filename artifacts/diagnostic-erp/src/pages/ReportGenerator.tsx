@@ -309,7 +309,7 @@ export default function ReportGenerator() {
   // exports and printed reports match the configured branding across the app.
   const { data: clinic } = useQuery<{ name?: string }>({
     queryKey: ["clinic-settings-public"],
-    queryFn: () => api.get("/api/clinic-settings"),
+    queryFn: () => api.get("/api/clinic-settings/branding"),
     staleTime: 60_000,
   });
   const labName = clinic?.name ? `${clinic.name} Laboratory` : "Care Diagnostics Laboratory";

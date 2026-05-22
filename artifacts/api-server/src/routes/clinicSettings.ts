@@ -11,6 +11,32 @@ async function getOrCreate() {
   return created;
 }
 
+// Public branding fields (no auth required) — used by bill printing, public
+// clinic site, patient portal, and bill verification QR pages.
+clinicSettingsRouter.get("/branding", async (_req, res) => {
+  const row = await getOrCreate();
+  res.json({
+    name: row.name ?? "",
+    tagline: row.tagline ?? "",
+    address: row.address ?? "",
+    phone: row.phone ?? "",
+    email: row.email ?? "",
+    website: row.website ?? "",
+    gstin: row.gstin ?? "",
+    logoDataUrl: row.logoDataUrl ?? null,
+    footerNote: row.footerNote ?? "",
+    portalHeading: row.portalHeading ?? "",
+    portalWelcomeMessage: row.portalWelcomeMessage ?? "",
+    billPrintCopies: row.billPrintCopies ?? 1,
+    billDefaultPaperSize: row.billDefaultPaperSize ?? "A5",
+    billShowCode: row.billShowCode ?? false,
+    billShowCategory: row.billShowCategory ?? false,
+    qrOnBillEnabled: row.qrOnBillEnabled ?? true,
+    showTatOnBill: row.showTatOnBill ?? false,
+    dayCloseAutoPrint: row.dayCloseAutoPrint ?? true,
+  });
+});
+
 clinicSettingsRouter.get("/", async (_req, res) => {
   const row = await getOrCreate();
   res.json(row);

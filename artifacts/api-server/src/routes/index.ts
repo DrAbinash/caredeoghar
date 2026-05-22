@@ -66,6 +66,8 @@ import { dayCloseRouter } from "./day-close";
 import { booksSanityRouter } from "./books-sanity";
 import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
 import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
+import { db, clinicSettingsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import userPreferencesRouter from "./userPreferences";
 import { radiologyReportGeneratorRouter } from "./radiology-report-generator";
 import { structuredReportTemplatesRouter } from "./structuredReportTemplates";
@@ -242,6 +244,37 @@ router.get(
 // `billPrintCopies`) which receptionists/billing staff need to update from
 // the Billing Desk itself.
 const BILLING_OWNED_SETTINGS_KEYS = new Set(["quickTestIds", "billPrintCopies"]);
+
+// Public branding endpoint — bill print header, logo, GSTIN, footer.
+// Must be BEFORE the auth-gated /clinic-settings mount so it stays public.
+router.get("/clinic-settings/branding", async (_req, res) => {
+  const [row] = await db.select().from(clinicSettingsTable).limit(1);
+  if (!row) {
+    res.json({ name: "Care Diagnostics", tagline: "", address: "", phone: "", email: "", website: "", gstin: "", logoDataUrl: null, footerNote: "", billPrintCopies: 1, billDefaultPaperSize: "A5", billShowCode: false, billShowCategory: false, qrOnBillEnabled: true, showTatOnBill: false, dayCloseAutoPrint: true });
+    return;
+  }
+  res.json({
+    name: row.name ?? "",
+    tagline: row.tagline ?? "",
+    address: row.address ?? "",
+    phone: row.phone ?? "",
+    email: row.email ?? "",
+    website: row.website ?? "",
+    gstin: row.gstin ?? "",
+    logoDataUrl: row.logoDataUrl ?? null,
+    footerNote: row.footerNote ?? "",
+    portalHeading: row.portalHeading ?? "",
+    portalWelcomeMessage: row.portalWelcomeMessage ?? "",
+    billPrintCopies: row.billPrintCopies ?? 1,
+    billDefaultPaperSize: row.billDefaultPaperSize ?? "A5",
+    billShowCode: row.billShowCode ?? false,
+    billShowCategory: row.billShowCategory ?? false,
+    qrOnBillEnabled: row.qrOnBillEnabled ?? true,
+    showTatOnBill: row.showTatOnBill ?? false,
+    dayCloseAutoPrint: row.dayCloseAutoPrint ?? true,
+  });
+});
+
 router.use(
   "/clinic-settings",
   requireStaffAuth,

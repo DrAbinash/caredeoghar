@@ -420,7 +420,7 @@ export default function DicomQueryRetrieve() {
 
   const { data: clinicSettings } = useQuery<ClinicSettings>({
     queryKey: ["clinic-settings"],
-    queryFn:  () => api.get<ClinicSettings>("/api/clinic-settings"),
+    queryFn:  () => api.get<ClinicSettings>("/api/clinic-settings/branding"),
     staleTime: 5 * 60_000,
   });
 

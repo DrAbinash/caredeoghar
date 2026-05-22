@@ -840,7 +840,7 @@ function PrintPreviewDialog({ id, onClose }: { id: number; onClose: () => void }
   });
   const { data: clinic } = useQuery<{ name?: string; tagline?: string; address?: string; phone?: string }>({
     queryKey: ["clinic-settings-public"],
-    queryFn: () => api.get("/api/clinic-settings"),
+    queryFn: () => api.get("/api/clinic-settings/branding"),
     staleTime: 60_000,
   });
   const printAreaRef = useRef<HTMLDivElement>(null);

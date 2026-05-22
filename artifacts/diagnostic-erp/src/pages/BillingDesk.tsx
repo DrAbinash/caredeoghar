@@ -491,7 +491,7 @@ export default function BillingDesk() {
     billShowCategory?: boolean;
   }>({
     queryKey: ["clinic-settings"],
-    queryFn: () => api.get("/api/clinic-settings"),
+    queryFn: () => api.get("/api/clinic-settings/branding"),
   });
 
   // ── Form F ─────────────────────────────────────────

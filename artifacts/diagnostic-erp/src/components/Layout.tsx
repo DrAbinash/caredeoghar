@@ -265,7 +265,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // sidebar branding matches every other clinic-aware surface (BillDetail, Display, FormF).
   const { data: clinic } = useQuery<{ name?: string; tagline?: string; sidebarTheme?: string }>({
     queryKey: ["clinic-settings-public"],
-    queryFn: () => api.get("/api/clinic-settings"),
+    queryFn: () => api.get("/api/clinic-settings/branding"),
     staleTime: 60_000,
   });
 

@@ -27,7 +27,7 @@ export default function PatientDetail({ id }: { id: number }) {
   const { data: history } = useGetPatientHistory(id);
   const { data: clinicSettings } = useQuery<ClinicSettingsLite>({
     queryKey: ["clinic-settings"],
-    queryFn: () => api.get("/api/clinic-settings"),
+    queryFn: () => api.get("/api/clinic-settings/branding"),
   });
   const photoEnabled = !!clinicSettings?.patientPhotoEnabled;
   const [aiOpen, setAiOpen] = useState(false);

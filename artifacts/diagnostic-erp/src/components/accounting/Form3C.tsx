@@ -55,7 +55,7 @@ export default function Form3C() {
 
   const clinicQuery = useQuery<ClinicSettings>({
     queryKey: ["/api/clinic-settings"],
-    queryFn: () => api.get<ClinicSettings>("/api/clinic-settings"),
+    queryFn: () => api.get<ClinicSettings>("/api/clinic-settings/branding"),
     staleTime: 5 * 60_000,
   });
 

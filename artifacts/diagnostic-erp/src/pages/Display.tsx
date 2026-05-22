@@ -35,7 +35,7 @@ export default function Display() {
 
   const { data: clinic } = useQuery<Clinic>({
     queryKey: ["clinic-settings-public"],
-    queryFn: () => api.get("/api/clinic-settings"),
+    queryFn: () => api.get("/api/clinic-settings/branding"),
     staleTime: 60_000,
   });
 

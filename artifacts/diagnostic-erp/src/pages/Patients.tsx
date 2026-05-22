@@ -62,7 +62,7 @@ export default function Patients() {
 
   const { data: clinicSettings } = useQuery<ClinicSettingsLite>({
     queryKey: ["clinic-settings"],
-    queryFn: () => api.get("/api/clinic-settings"),
+    queryFn: () => api.get("/api/clinic-settings/branding"),
   });
   const photoEnabled = !!clinicSettings?.patientPhotoEnabled;
 

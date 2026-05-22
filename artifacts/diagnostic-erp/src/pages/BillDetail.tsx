@@ -148,7 +148,7 @@ export default function BillDetail({ id }: { id: number }) {
     billShowCategory?: boolean;
   }>({
     queryKey: ["clinic-settings"],
-    queryFn: () => api.get("/api/clinic-settings"),
+    queryFn: () => api.get("/api/clinic-settings/branding"),
     staleTime: 5 * 60_000,
   });
 
