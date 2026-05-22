@@ -81,6 +81,7 @@ import { usgAnalyticsRouter } from "./usgAnalytics";
 import dicomStudyManagerRouter from "./dicomStudyManager";
 import dicomWorkflowRouter from "./dicomWorkflow";
 import smartRadiologyRouter from "./smartRadiology";
+import risMonitoringRouter from "./risMonitoring";
 
 const router: IRouter = Router();
 
@@ -319,6 +320,9 @@ router.use("/usg-analytics", requireStaffAuth, usgAnalyticsRouter);
 router.use("/dicom-studies", requireStaffAuth, dicomStudyManagerRouter);
 router.use("/dicom-workflow", requireStaffAuth, dicomWorkflowRouter);
 router.use("/smart-radiology", requireStaffAuth, smartRadiologyRouter);
+
+// Phase 11: RIS/PACS Production Monitoring & Hardening
+router.use("/ris-monitor", requireStaffAuth, risMonitoringRouter);
 
 // Radiology studies — open to all authenticated staff (doctors, radiologists, etc.)
 router.use("/radiology", requireStaffAuth, radiologyRouter);

@@ -79,3 +79,4 @@ export * from "./enterpriseRadiology";
 export * from "./usgMeasurements";
 export * from "./dicomStudies";
 export * from "./smartRadiology";
+export * from "./risMonitoring";

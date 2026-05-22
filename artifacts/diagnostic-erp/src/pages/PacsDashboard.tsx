@@ -25,6 +25,9 @@ import {
   AiImpressionCard, QualityCheckerCard, FollowUpRecommendationsCard,
   TatDashboardCard, SonographerModeCard,
 } from "@/components/smartRadiology/SmartRadiologyCards";
+import {
+  RisMonitorCommandGrid,
+} from "@/components/risMonitoring/RisMonitorCards";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -348,6 +351,7 @@ export default function PacsDashboard() {
         <TabsList className="flex flex-wrap h-auto gap-1">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="smart-radiology">Smart Radiology</TabsTrigger>
+          <TabsTrigger value="production-hardening">Hardening</TabsTrigger>
           <TabsTrigger value="watchdog">Watchdog</TabsTrigger>
           <TabsTrigger value="logs">PACS Logs</TabsTrigger>
           <TabsTrigger value="agent">Agent Monitor</TabsTrigger>
@@ -1017,6 +1021,10 @@ export default function PacsDashboard() {
             <TatDashboardCard />
             <SonographerModeCard />
           </div>
+        </TabsContent>
+
+        <TabsContent value="production-hardening" className="space-y-4">
+          <RisMonitorCommandGrid />
         </TabsContent>
 
         <TabsContent value="watchdog">

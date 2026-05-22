@@ -4,7 +4,7 @@ import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Settings2, Server, Radio, Cpu, BrainCircuit, Archive, Wrench, ExternalLink, Sparkles } from "lucide-react";
+import { Settings2, Server, Radio, Cpu, BrainCircuit, Archive, Wrench, ExternalLink, Sparkles, ShieldAlert } from "lucide-react";
 import { ModalityPanel } from "@/pages/ModalityManagement";
 import { DicomNodesPanel } from "@/pages/DicomNodes";
 import { AgentSetupPanel } from "@/pages/AgentSetup";
@@ -16,6 +16,9 @@ import {
   TemplateLearningCard, MultiLanguageCard, RoutingRulesCard,
   AmendmentManagerCard, SonographerModeCard, DicomSrExportCard,
 } from "@/components/smartRadiology/SmartRadiologyCards";
+import {
+  RisMonitorCommandGrid,
+} from "@/components/risMonitoring/RisMonitorCards";
 
 type PacsSetting = { id: number; key: string; value: string; category: string; isSecret: boolean };
 
@@ -104,6 +107,9 @@ export default function RadiologySettings() {
           <TabsTrigger value="smart-platform">
             <Sparkles size={13} className="mr-1.5" />Smart Platform
           </TabsTrigger>
+          <TabsTrigger value="production-hardening">
+            <ShieldAlert size={13} className="mr-1.5" />Hardening
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="pacs-config">
@@ -146,6 +152,10 @@ export default function RadiologySettings() {
             <SonographerModeCard />
             <DicomSrExportCard />
           </div>
+        </TabsContent>
+
+        <TabsContent value="production-hardening" className="space-y-4">
+          <RisMonitorCommandGrid />
         </TabsContent>
       </Tabs>
     </div>
