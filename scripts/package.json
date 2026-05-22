@@ -9,6 +9,7 @@
     "trigger:cron": "tsx ./src/trigger-cron.ts",
     "generate:textrad-doc": "tsx ./src/generate-textrad-feature-doc.ts",
     "generate:erp-doc": "tsx ./src/generate-erp-documentation.ts",
+    "generate:erp-doc-md": "tsx ./src/generate-erp-documentation-md.ts",
     "import:referral-doctors": "tsx ./src/import-referral-doctors.ts",
     "import:test-catalog": "tsx ./src/import-test-catalog.ts",
     "test:preinstall-guard": "node ./src/test-preinstall-guard.cjs",

@@ -166,4 +166,10 @@ title = "Care Diagnostics Docker Deployment Package"
 id = "zbrlyDV3XlH5ZzlOkD8GI"
 uri = "file://exports/Care_Diagnostics_ERP_Documentation.docx"
 type = "word_document"
-title = "Care Diagnostics ERP - Comprehensive System Documentation"
+title = "Word Document (opens with MS Word / LibreOffice / Google Docs)"
+
+[[outputs]]
+id = "sDvWEECdNfHTdQo4Vdkw5"
+uri = "file://exports/Care_Diagnostics_ERP_Documentation.md"
+type = "text"
+title = "Markdown Version (opens in any browser / text editor)"
