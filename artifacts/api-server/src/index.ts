@@ -672,6 +672,33 @@ async function runStartupMigrations(): Promise<void> {
       CREATE INDEX IF NOT EXISTS rad_img_refs_draft_idx ON radiology_image_references(draft_id);
       CREATE INDEX IF NOT EXISTS rad_img_refs_study_idx ON radiology_image_references(study_id);
 
+      -- ── USG enterprise additions (Phase 5+) ───────────────────────────────
+      ALTER TABLE usg_report_drafts ADD COLUMN IF NOT EXISTS verified_by      TEXT;
+      ALTER TABLE usg_report_drafts ADD COLUMN IF NOT EXISTS verified_at      TIMESTAMPTZ;
+      ALTER TABLE usg_report_drafts ADD COLUMN IF NOT EXISTS amended_by       TEXT;
+      ALTER TABLE usg_report_drafts ADD COLUMN IF NOT EXISTS amended_at       TIMESTAMPTZ;
+      ALTER TABLE usg_report_drafts ADD COLUMN IF NOT EXISTS prior_version_id INTEGER;
+      ALTER TABLE usg_report_drafts ADD COLUMN IF NOT EXISTS critical_alert_id INTEGER;
+
+      CREATE TABLE IF NOT EXISTS usg_audit_log (
+        id                  SERIAL PRIMARY KEY,
+        entity_type         TEXT NOT NULL,
+        entity_id           INTEGER,
+        action              TEXT NOT NULL,
+        performed_by        TEXT NOT NULL,
+        performed_by_id     INTEGER,
+        performed_by_role   TEXT,
+        study_instance_uid  TEXT,
+        patient_id          INTEGER,
+        details             TEXT NOT NULL DEFAULT '{}',
+        created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS usg_audit_entity_idx  ON usg_audit_log(entity_type, entity_id);
+      CREATE INDEX IF NOT EXISTS usg_audit_study_idx   ON usg_audit_log(study_instance_uid);
+      CREATE INDEX IF NOT EXISTS usg_audit_patient_idx ON usg_audit_log(patient_id);
+      CREATE INDEX IF NOT EXISTS usg_audit_user_idx    ON usg_audit_log(performed_by_id);
+      CREATE INDEX IF NOT EXISTS usg_audit_created_idx ON usg_audit_log(created_at);
+
       CREATE TABLE IF NOT EXISTS radiology_normal_snippets (
         id SERIAL PRIMARY KEY,
         shortcut TEXT NOT NULL,

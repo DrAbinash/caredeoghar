@@ -1,109 +1,244 @@
 /**
- * USG Report Drafts Routes
+ * USG Report Drafts Routes — Enterprise edition (Phase 3 + 5)
  * Mounted at: /api/usg-reports  (staff-auth required)
  *
- * GET   /               — list all report drafts (latest first)
- * GET   /:id            — get a single draft
- * POST  /               — create a new report draft
- * PATCH /:id            — update draft content / template / status
- * POST  /:id/finalize   — mark report as finalized
- * POST  /:id/archive    — archive a report
- * DELETE /:id           — delete a draft report
+ * GET    /                       — list all report drafts (latest first)
+ * GET    /:id                    — get a single draft
+ * GET    /prior/by-patient/:pid  — list prior USG reports for a patient (for compare)
+ * POST   /suggest-template       — body: { modality?, studyDescription?, bodyPart? }
+ * POST   /                       — create a new draft (auto-fills if blank)
+ * POST   /auto-generate          — generate fresh template body from approved measurements
+ * POST   /:id/regenerate         — overwrite an existing draft from latest approved measurements
+ * PATCH  /:id                    — update draft content / template / status
+ * POST   /:id/verify             — mark verified (intermediate step before finalize) – never auto
+ * POST   /:id/finalize           — finalize — explicit user click only
+ * POST   /:id/amend              — clone finalized → new amended draft (priorVersionId set)
+ * POST   /:id/archive            — archive a report
+ * DELETE /:id                    — delete a draft (super-admin only via permissions layer)
  */
 
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { db } from "@workspace/db";
 import {
   usgReportDraftsTable,
   usgMeasurementsTable,
+  usgDopplerMeasurementsTable,
+  usgAuditLogTable,
+  radiologyWorklistTable,
 } from "@workspace/db/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, ne, isNotNull } from "drizzle-orm";
 import { logger } from "../lib/logger";
+import {
+  USG_TEMPLATES,
+  suggestTemplate,
+  autoGenerateReport,
+  type UsgTemplateId,
+} from "../lib/usgReportTemplates";
 
 const router = Router();
 
-// ── GET / ─────────────────────────────────────────────────────────────────────
+// ── Audit helper — fire-and-forget ───────────────────────────────────────────
+type ReqWithStaff = Request & { staffSession?: { subjectId?: number; subjectName?: string; role?: string } };
+function staffOf(req: Request): { subjectId?: number; subjectName?: string; role?: string } {
+  return (req as ReqWithStaff).staffSession ?? {};
+}
+function audit(req: Request, params: {
+  entityType: string; entityId?: number | null; action: string;
+  studyInstanceUID?: string | null; patientId?: number | null; details?: Record<string, unknown>;
+}) {
+  const s = staffOf(req);
+  void db.insert(usgAuditLogTable).values({
+    entityType: params.entityType,
+    entityId: params.entityId ?? null,
+    action: params.action,
+    performedBy: s.subjectName ?? "system",
+    performedById: s.subjectId ?? null,
+    performedByRole: s.role ?? null,
+    studyInstanceUID: params.studyInstanceUID ?? null,
+    patientId: params.patientId ?? null,
+    details: JSON.stringify(params.details ?? {}),
+  }).catch((err: unknown) => logger.warn({ err }, "usg audit insert failed"));
+}
+
+// ── GET / — list, with optional filters ─────────────────────────────────────
 
 router.get("/", async (req, res) => {
-  const status = req.query.status as string | undefined;
+  const status     = req.query.status     as string | undefined;
+  const patientId  = req.query.patientId  as string | undefined;
+  const studyUid   = req.query.studyUid   as string | undefined;
+  const conditions = [];
+  if (status)    conditions.push(eq(usgReportDraftsTable.status, status));
+  if (patientId) conditions.push(eq(usgReportDraftsTable.patientId, Number(patientId)));
+  if (studyUid)  conditions.push(eq(usgReportDraftsTable.studyInstanceUID, studyUid));
+
   let q = db.select().from(usgReportDraftsTable).$dynamic();
-  if (status) q = q.where(eq(usgReportDraftsTable.status, status));
+  if (conditions.length) q = q.where(and(...conditions));
   const rows = await q.orderBy(desc(usgReportDraftsTable.updatedAt)).limit(200);
   res.json(rows);
 });
 
-// ── GET /:id ──────────────────────────────────────────────────────────────────
+// ── GET /templates — list the 13 template descriptors (public to staff) ──────
+
+router.get("/templates", (_req, res) => { res.json(USG_TEMPLATES); });
+
+// ── POST /suggest-template ──────────────────────────────────────────────────
+
+router.post("/suggest-template", (req, res) => {
+  const b = (req.body ?? {}) as { modality?: string; studyDescription?: string; bodyPart?: string };
+  const templateId = suggestTemplate({
+    modality: b.modality,
+    studyDescription: b.studyDescription,
+    bodyPart: b.bodyPart,
+  });
+  res.json({ templateId, descriptor: USG_TEMPLATES.find((t) => t.id === templateId) ?? null });
+});
+
+// ── GET /prior/by-patient/:patientId — for "Compare with prior study" ───────
+
+router.get("/prior/by-patient/:patientId", async (req, res) => {
+  const patientId = Number(req.params.patientId);
+  const rows = await db.select({
+    id: usgReportDraftsTable.id,
+    studyInstanceUID: usgReportDraftsTable.studyInstanceUID,
+    accessionNumber:  usgReportDraftsTable.accessionNumber,
+    templateType:     usgReportDraftsTable.templateType,
+    status:           usgReportDraftsTable.status,
+    finalizedAt:      usgReportDraftsTable.finalizedAt,
+    createdAt:        usgReportDraftsTable.createdAt,
+  })
+    .from(usgReportDraftsTable)
+    .where(and(eq(usgReportDraftsTable.patientId, patientId), isNotNull(usgReportDraftsTable.finalizedAt)))
+    .orderBy(desc(usgReportDraftsTable.finalizedAt))
+    .limit(20);
+  res.json(rows);
+});
+
+// ── GET /:id ────────────────────────────────────────────────────────────────
 
 router.get("/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const [row] = await db
-    .select()
-    .from(usgReportDraftsTable)
-    .where(eq(usgReportDraftsTable.id, id))
-    .limit(1);
+  const [row] = await db.select().from(usgReportDraftsTable).where(eq(usgReportDraftsTable.id, id)).limit(1);
   if (!row) { res.status(404).json({ error: "Not found" }); return; }
   res.json(row);
 });
 
-// ── POST / ────────────────────────────────────────────────────────────────────
+// ── helper: build auto-gen input from a study/worklist context ──────────────
+
+async function gatherContext(opts: { studyInstanceUID?: string | null; worklistId?: number | null }) {
+  const filterMeas = opts.studyInstanceUID
+    ? eq(usgMeasurementsTable.studyInstanceUID, opts.studyInstanceUID)
+    : opts.worklistId
+      ? eq(usgMeasurementsTable.worklistId, opts.worklistId)
+      : null;
+
+  const measurement = filterMeas
+    ? (await db.select().from(usgMeasurementsTable)
+        .where(and(filterMeas, eq(usgMeasurementsTable.status, "approved")))
+        .orderBy(desc(usgMeasurementsTable.createdAt))
+        .limit(1))[0] ?? null
+    : null;
+
+  const filterDop = opts.studyInstanceUID
+    ? eq(usgDopplerMeasurementsTable.studyInstanceUID, opts.studyInstanceUID)
+    : opts.worklistId
+      ? eq(usgDopplerMeasurementsTable.worklistId, opts.worklistId)
+      : null;
+
+  const dopplerMeasurements = filterDop
+    ? await db.select().from(usgDopplerMeasurementsTable)
+        .where(and(filterDop, eq(usgDopplerMeasurementsTable.status, "approved")))
+        .orderBy(desc(usgDopplerMeasurementsTable.createdAt))
+        .limit(30)
+    : [];
+
+  // Patient / study context from worklist
+  const wlFilter = opts.studyInstanceUID
+    ? eq(radiologyWorklistTable.studyInstanceUID, opts.studyInstanceUID)
+    : opts.worklistId
+      ? eq(radiologyWorklistTable.id, opts.worklistId)
+      : null;
+
+  const worklist = wlFilter
+    ? (await db.select().from(radiologyWorklistTable).where(wlFilter).limit(1))[0] ?? null
+    : null;
+
+  return { measurement, dopplerMeasurements, worklist };
+}
+
+// ── POST /auto-generate — return body content WITHOUT saving ────────────────
+// Lets the UI preview before committing.
+
+router.post("/auto-generate", async (req, res) => {
+  const b = (req.body ?? {}) as {
+    templateId?: UsgTemplateId;
+    studyInstanceUID?: string;
+    worklistId?: number;
+    autoSuggest?: boolean;
+  };
+
+  try {
+    const ctx = await gatherContext({ studyInstanceUID: b.studyInstanceUID, worklistId: b.worklistId });
+
+    let templateId: UsgTemplateId = b.templateId ?? "WHOLE_ABDOMEN";
+    if (b.autoSuggest && ctx.worklist) {
+      templateId = suggestTemplate({
+        modality:         ctx.worklist.modality,
+        studyDescription: ctx.worklist.studyDescription,
+        bodyPart:         undefined,
+      });
+    }
+
+    const out = autoGenerateReport({
+      templateId,
+      measurement:         ctx.measurement,
+      dopplerMeasurements: ctx.dopplerMeasurements,
+      patientName:         ctx.worklist?.patientName ?? null,
+      patientAge:          null,
+      patientSex:          null,
+      referringDoctor:     ctx.worklist?.referringDoctor ?? null,
+      accessionNumber:     ctx.worklist?.accessionNumber ?? null,
+      studyDate:           ctx.worklist?.studyDate ?? null,
+    });
+
+    res.json({
+      ...out,
+      hasApprovedMeasurements: ctx.measurement !== null,
+      approvedDopplerCount:    ctx.dopplerMeasurements.length,
+      contextWorklistId:       ctx.worklist?.id ?? null,
+      contextPatientId:        ctx.worklist?.patientId ?? null,
+    });
+  } catch (err) {
+    logger.error({ err }, "POST /usg-reports/auto-generate failed");
+    res.status(500).json({ error: "Failed to auto-generate" });
+  }
+});
+
+// ── POST / — create draft (uses auto-gen if content omitted) ────────────────
 
 router.post("/", async (req, res) => {
   const b = (req.body ?? {}) as {
-    worklistId?: number;
-    studyInstanceUID?: string;
-    patientId?: number;
-    accessionNumber?: string;
-    templateType?: string;
-    draftContent?: string;
-    autoFilledFromMeasurementId?: number;
-    createdBy?: string;
+    worklistId?: number; studyInstanceUID?: string; patientId?: number;
+    accessionNumber?: string; templateType?: UsgTemplateId; draftContent?: string;
+    autoFilledFromMeasurementId?: number; createdBy?: string;
   };
 
   try {
     let draftContent = b.draftContent ?? "";
+    let autoFilledFromMeasurementId: number | null = b.autoFilledFromMeasurementId ?? null;
 
-    // Auto-fill from approved measurements if studyUID provided and content is blank
     if (!draftContent && (b.studyInstanceUID || b.worklistId)) {
-      const filter = b.studyInstanceUID
-        ? eq(usgMeasurementsTable.studyInstanceUID, b.studyInstanceUID)
-        : eq(usgMeasurementsTable.worklistId, b.worklistId!);
-
-      const [measurement] = await db
-        .select()
-        .from(usgMeasurementsTable)
-        .where(and(filter, eq(usgMeasurementsTable.status, "approved")))
-        .orderBy(desc(usgMeasurementsTable.createdAt))
-        .limit(1);
-
-      if (measurement) {
-        // Build a minimal auto-fill template
-        const lines: string[] = [
-          `ULTRASOUND REPORT — ${b.templateType ?? "WHOLE_ABDOMEN"}`,
-          `Study: ${b.studyInstanceUID ?? ""}`,
-          `Accession: ${b.accessionNumber ?? ""}`,
-          ``,
-          `AUTO-FILLED FROM APPROVED MEASUREMENTS`,
-          `----------------------------------------`,
-        ];
-        if (measurement.bpd) lines.push(`BPD: ${measurement.bpd}`);
-        if (measurement.hc)  lines.push(`HC: ${measurement.hc}`);
-        if (measurement.ac)  lines.push(`AC: ${measurement.ac}`);
-        if (measurement.fl)  lines.push(`FL: ${measurement.fl}`);
-        if (measurement.ga)  lines.push(`GA: ${measurement.ga}`);
-        if (measurement.edd) lines.push(`EDD: ${measurement.edd}`);
-        if (measurement.fhr) lines.push(`FHR: ${measurement.fhr}`);
-        if (measurement.liquorAfi) lines.push(`AFI: ${measurement.liquorAfi}`);
-        if (measurement.uterusSize) lines.push(`Uterus: ${measurement.uterusSize}`);
-        if (measurement.rightOvary) lines.push(`Right Ovary: ${measurement.rightOvary}`);
-        if (measurement.leftOvary)  lines.push(`Left Ovary: ${measurement.leftOvary}`);
-        if (measurement.liverSize)  lines.push(`Liver: ${measurement.liverSize}`);
-        if (measurement.spleenSize) lines.push(`Spleen: ${measurement.spleenSize}`);
-        if (measurement.rightKidney) lines.push(`Right Kidney: ${measurement.rightKidney}`);
-        if (measurement.leftKidney)  lines.push(`Left Kidney: ${measurement.leftKidney}`);
-        if (measurement.prostateVolume) lines.push(`Prostate: ${measurement.prostateVolume}`);
-        lines.push(``, `IMPRESSION:`, ``);
-        draftContent = lines.join("\n");
-      }
+      const ctx = await gatherContext({ studyInstanceUID: b.studyInstanceUID, worklistId: b.worklistId });
+      const out = autoGenerateReport({
+        templateId:          (b.templateType ?? "WHOLE_ABDOMEN") as UsgTemplateId,
+        measurement:         ctx.measurement,
+        dopplerMeasurements: ctx.dopplerMeasurements,
+        patientName:         ctx.worklist?.patientName ?? null,
+        referringDoctor:     ctx.worklist?.referringDoctor ?? null,
+        accessionNumber:     b.accessionNumber ?? ctx.worklist?.accessionNumber ?? null,
+        studyDate:           ctx.worklist?.studyDate ?? null,
+      });
+      draftContent = out.content;
+      autoFilledFromMeasurementId = ctx.measurement?.id ?? null;
     }
 
     const [row] = await db.insert(usgReportDraftsTable).values({
@@ -114,9 +249,13 @@ router.post("/", async (req, res) => {
       templateType:                b.templateType ?? "WHOLE_ABDOMEN",
       draftContent,
       status:                      "draft",
-      autoFilledFromMeasurementId: b.autoFilledFromMeasurementId ?? null,
-      createdBy:                   b.createdBy ?? null,
+      autoFilledFromMeasurementId,
+      createdBy:                   b.createdBy ?? staffOf(req).subjectName ?? null,
     }).returning();
+
+    audit(req, { entityType: "draft", entityId: row.id, action: "create",
+      studyInstanceUID: row.studyInstanceUID, patientId: row.patientId,
+      details: { templateType: row.templateType } });
 
     res.status(201).json(row);
   } catch (err) {
@@ -125,69 +264,191 @@ router.post("/", async (req, res) => {
   }
 });
 
-// ── PATCH /:id ────────────────────────────────────────────────────────────────
+// ── POST /:id/regenerate — overwrite draft from latest approved measurements
+
+router.post("/:id/regenerate", async (req, res) => {
+  const id = Number(req.params.id);
+  const b = (req.body ?? {}) as { templateType?: UsgTemplateId };
+
+  const [existing] = await db.select().from(usgReportDraftsTable).where(eq(usgReportDraftsTable.id, id)).limit(1);
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (existing.status === "finalized") {
+    res.status(409).json({ error: "Cannot regenerate a finalized report. Use Amend instead." });
+    return;
+  }
+
+  const ctx = await gatherContext({
+    studyInstanceUID: existing.studyInstanceUID,
+    worklistId:       existing.worklistId,
+  });
+
+  const out = autoGenerateReport({
+    templateId:          (b.templateType ?? existing.templateType) as UsgTemplateId,
+    measurement:         ctx.measurement,
+    dopplerMeasurements: ctx.dopplerMeasurements,
+    patientName:         ctx.worklist?.patientName ?? null,
+    referringDoctor:     ctx.worklist?.referringDoctor ?? null,
+    accessionNumber:     existing.accessionNumber ?? ctx.worklist?.accessionNumber ?? null,
+    studyDate:           ctx.worklist?.studyDate ?? null,
+  });
+
+  const [row] = await db.update(usgReportDraftsTable)
+    .set({
+      draftContent: out.content,
+      templateType: (b.templateType ?? existing.templateType),
+      autoFilledFromMeasurementId: ctx.measurement?.id ?? null,
+      status: "draft",
+      updatedAt: new Date(),
+    })
+    .where(eq(usgReportDraftsTable.id, id))
+    .returning();
+
+  audit(req, { entityType: "draft", entityId: id, action: "regenerate",
+    studyInstanceUID: row.studyInstanceUID, patientId: row.patientId,
+    details: { templateType: row.templateType, filled: out.filledFieldCount, skipped: out.skippedLowConfidenceCount } });
+
+  res.json(row);
+});
+
+// ── PATCH /:id ──────────────────────────────────────────────────────────────
 
 router.patch("/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const b = (req.body ?? {}) as {
-    draftContent?: string;
-    templateType?: string;
-    status?: string;
-  };
+  const b = (req.body ?? {}) as { draftContent?: string; templateType?: string; status?: string };
 
-  const [row] = await db
-    .update(usgReportDraftsTable)
+  // Safety: only allow pending_review or draft transitions here; finalize/verify
+  // must go through their dedicated endpoints which require explicit click.
+  if (b.status && !["draft", "pending_review", "archived"].includes(b.status)) {
+    res.status(400).json({ error: `Cannot set status to "${b.status}" via PATCH — use dedicated endpoint` });
+    return;
+  }
+
+  const [row] = await db.update(usgReportDraftsTable)
     .set({ ...b, updatedAt: new Date() })
     .where(eq(usgReportDraftsTable.id, id))
     .returning();
 
   if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  audit(req, { entityType: "draft", entityId: id, action: "update",
+    studyInstanceUID: row.studyInstanceUID, patientId: row.patientId,
+    details: { fields: Object.keys(b) } });
   res.json(row);
 });
 
-// ── POST /:id/finalize ────────────────────────────────────────────────────────
+// ── POST /:id/verify — intermediate step before finalize ────────────────────
+
+router.post("/:id/verify", async (req, res) => {
+  const id = Number(req.params.id);
+  const verifiedBy = staffOf(req).subjectName ?? (req.body as { verifiedBy?: string })?.verifiedBy ?? "staff";
+
+  const [row] = await db.update(usgReportDraftsTable)
+    .set({ status: "verified", verifiedBy, verifiedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(usgReportDraftsTable.id, id), ne(usgReportDraftsTable.status, "finalized")))
+    .returning();
+  if (!row) { res.status(404).json({ error: "Not found or already finalized" }); return; }
+  audit(req, { entityType: "draft", entityId: id, action: "verify",
+    studyInstanceUID: row.studyInstanceUID, patientId: row.patientId });
+  res.json(row);
+});
+
+// ── POST /:id/finalize — EXPLICIT user click only ───────────────────────────
 
 router.post("/:id/finalize", async (req, res) => {
   const id = Number(req.params.id);
-  const b = (req.body ?? {}) as { finalizedBy?: string };
+  const b = (req.body ?? {}) as { finalizedBy?: string; confirm?: boolean };
 
-  const [row] = await db
-    .update(usgReportDraftsTable)
-    .set({
-      status:      "finalized",
-      finalizedBy: b.finalizedBy ?? null,
-      finalizedAt: new Date(),
-      updatedAt:   new Date(),
-    })
-    .where(eq(usgReportDraftsTable.id, id))
+  // Safety: require explicit confirm flag from the UI's modal.
+  if (b.confirm !== true) {
+    res.status(400).json({ error: "Finalize requires explicit user confirmation (confirm:true)" });
+    return;
+  }
+
+  // Lifecycle: must pass through verify first.
+  const [existing] = await db.select({ status: usgReportDraftsTable.status })
+    .from(usgReportDraftsTable).where(eq(usgReportDraftsTable.id, id)).limit(1);
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (existing.status !== "verified") {
+    res.status(409).json({ error: "Report must be verified before it can be finalized" });
+    return;
+  }
+
+  const finalizedBy = b.finalizedBy ?? staffOf(req).subjectName ?? "staff";
+
+  const [row] = await db.update(usgReportDraftsTable)
+    .set({ status: "finalized", finalizedBy, finalizedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(usgReportDraftsTable.id, id), eq(usgReportDraftsTable.status, "verified")))
     .returning();
-
-  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  if (!row) { res.status(409).json({ error: "Finalize race — status changed" }); return; }
+  audit(req, { entityType: "draft", entityId: id, action: "finalize",
+    studyInstanceUID: row.studyInstanceUID, patientId: row.patientId,
+    details: { finalizedBy } });
   res.json(row);
 });
 
-// ── POST /:id/archive ─────────────────────────────────────────────────────────
+// ── POST /:id/amend — create new draft as amendment to a finalized report ──
+
+router.post("/:id/amend", async (req, res) => {
+  const id = Number(req.params.id);
+  const amendedBy = staffOf(req).subjectName ?? (req.body as { amendedBy?: string })?.amendedBy ?? "staff";
+
+  const [orig] = await db.select().from(usgReportDraftsTable).where(eq(usgReportDraftsTable.id, id)).limit(1);
+  if (!orig) { res.status(404).json({ error: "Not found" }); return; }
+  if (orig.status !== "finalized") {
+    res.status(400).json({ error: "Only finalized reports can be amended" });
+    return;
+  }
+
+  const [newDraft] = await db.insert(usgReportDraftsTable).values({
+    worklistId:                  orig.worklistId,
+    studyInstanceUID:            orig.studyInstanceUID,
+    patientId:                   orig.patientId,
+    accessionNumber:             orig.accessionNumber,
+    templateType:                orig.templateType,
+    draftContent:                `${orig.draftContent}\n\n──── AMENDMENT (by ${amendedBy} on ${new Date().toISOString().slice(0,10)}) ────\n`,
+    status:                      "amended",
+    autoFilledFromMeasurementId: orig.autoFilledFromMeasurementId,
+    createdBy:                   amendedBy,
+    amendedBy,
+    amendedAt:                   new Date(),
+    priorVersionId:              orig.id,
+  }).returning();
+
+  audit(req, { entityType: "draft", entityId: newDraft.id, action: "amend",
+    studyInstanceUID: newDraft.studyInstanceUID, patientId: newDraft.patientId,
+    details: { priorVersionId: orig.id } });
+  res.status(201).json(newDraft);
+});
+
+// ── POST /:id/archive ───────────────────────────────────────────────────────
 
 router.post("/:id/archive", async (req, res) => {
   const id = Number(req.params.id);
-  const [row] = await db
-    .update(usgReportDraftsTable)
+  const [row] = await db.update(usgReportDraftsTable)
     .set({ status: "archived", updatedAt: new Date() })
     .where(eq(usgReportDraftsTable.id, id))
     .returning();
   if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  audit(req, { entityType: "draft", entityId: id, action: "update",
+    studyInstanceUID: row.studyInstanceUID, patientId: row.patientId, details: { status: "archived" } });
   res.json(row);
 });
 
-// ── DELETE /:id ───────────────────────────────────────────────────────────────
+// ── DELETE /:id ─────────────────────────────────────────────────────────────
+// Destructive — gated to admin / super_admin roles only.
 
 router.delete("/:id", async (req, res) => {
+  const role = staffOf(req).role ?? "";
+  if (!["admin", "super_admin"].includes(role)) {
+    res.status(403).json({ error: "Only admin or super_admin may delete USG report drafts" });
+    return;
+  }
   const id = Number(req.params.id);
-  const [row] = await db
-    .delete(usgReportDraftsTable)
+  const [row] = await db.delete(usgReportDraftsTable)
     .where(eq(usgReportDraftsTable.id, id))
-    .returning({ id: usgReportDraftsTable.id });
+    .returning({ id: usgReportDraftsTable.id, studyInstanceUID: usgReportDraftsTable.studyInstanceUID, patientId: usgReportDraftsTable.patientId });
   if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  audit(req, { entityType: "draft", entityId: id, action: "delete",
+    studyInstanceUID: row.studyInstanceUID, patientId: row.patientId });
   res.json({ success: true });
 });
 

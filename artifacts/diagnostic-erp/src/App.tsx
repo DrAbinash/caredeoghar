@@ -68,6 +68,7 @@ const UsgWorklist           = lazy(() => import("@/pages/UsgWorklist"));
 const UsgReporting          = lazy(() => import("@/pages/UsgReporting"));
 const UsgDopplerReporting   = lazy(() => import("@/pages/UsgDopplerReporting"));
 const UsgKeyImagesGallery   = lazy(() => import("@/pages/UsgKeyImagesGallery"));
+const UsgCriticalAlerts     = lazy(() => import("@/pages/UsgCriticalAlerts"));
 const ReportHub       = lazy(() => import("@/pages/ReportHub"));
 const Machines        = lazy(() => import("@/pages/Machines"));
 const FormF           = lazy(() => import("@/pages/FormF"));
@@ -113,7 +114,7 @@ const ERP_NAV_ORDER = [
   "/radiology/mwl-dashboard", "/radiology/agent-setup", "/radiology/ai-reporting-settings",
   "/radiology/viewer", "/radiology/archive-lifecycle", "/radiology/watchdog", "/radiology/ai-inference-settings", "/radiology/hl7-settings", "/teleradiology",
   "/radiology/usg-measurements", "/radiology/usg-admin-settings",
-  "/usg", "/usg/worklist", "/usg/measurements", "/usg/reporting", "/usg/doppler", "/usg/key-images", "/usg/settings",
+  "/usg", "/usg/worklist", "/usg/measurements", "/usg/reporting", "/usg/doppler", "/usg/key-images", "/usg/settings", "/usg/critical",
   "/settings/radiology", "/backup-replication",
   "/orders", "/tests", "/packages", "/billing", "/payments", "/reports",
   "/report-generator", "/report-hub", "/inventory", "/expenses", "/staff", "/referrals",
@@ -235,6 +236,7 @@ function Router() {
               <Route path="/usg/reporting" component={UsgReporting} />
               <Route path="/usg/doppler" component={UsgDopplerReporting} />
               <Route path="/usg/key-images" component={UsgKeyImagesGallery} />
+              <Route path="/usg/critical" component={UsgCriticalAlerts} />
               <Route path="/usg/settings" component={UsgAdminSettings} />
               <Route path="/backup-replication" component={BackupReplication} />
               <Route path="/m/viewer/:studyInstanceUID" component={MobileViewer} />

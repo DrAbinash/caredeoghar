@@ -241,26 +241,73 @@ export const usgReportDraftsTable = pgTable(
     accessionNumber:  text("accession_number"),
 
     templateType: text("template_type").notNull().default("WHOLE_ABDOMEN"),
-    // OBSTETRIC | PELVIS | ABDOMEN | WHOLE_ABDOMEN | KUB | THYROID | NECK | DOPPLER | SCROTUM | CUSTOM
+    // OB_EARLY | OB_GROWTH | OB_ANOMALY | PELVIS_FEMALE | WHOLE_ABDOMEN |
+    // KUB | PROSTATE | SCROTUM | THYROID | BREAST | ARTERIAL_DOPPLER |
+    // VENOUS_DOPPLER | CAROTID_DOPPLER | CUSTOM
 
     draftContent: text("draft_content").notNull().default(""),
-    status: text("status").notNull().default("draft"), // draft | finalized | archived
+    // status lifecycle: draft → pending_review → verified → finalized
+    //                     (post-finalize: amended | addendum | archived)
+    status: text("status").notNull().default("draft"),
 
     autoFilledFromMeasurementId: integer("auto_filled_from_measurement_id"),
     autoFilledFromDopplerId:     integer("auto_filled_from_doppler_id"),
 
+    // Lifecycle actors
     createdBy:    text("created_by"),
+    verifiedBy:   text("verified_by"),
     finalizedBy:  text("finalized_by"),
+    amendedBy:    text("amended_by"),
+
+    // For amendments / addenda — points to the previous version
+    priorVersionId: integer("prior_version_id"),
+
+    // Critical-finding linkage (id of usg-flavoured critical_findings_alerts row)
+    criticalAlertId: integer("critical_alert_id"),
 
     createdAt:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt:   timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+    verifiedAt:  timestamp("verified_at", { withTimezone: true }),
     finalizedAt: timestamp("finalized_at", { withTimezone: true }),
+    amendedAt:   timestamp("amended_at", { withTimezone: true }),
   },
   (t) => ({
     byStudy:    index("usg_draft_study_idx").on(t.studyInstanceUID),
     byWorklist: index("usg_draft_worklist_idx").on(t.worklistId),
     byStatus:   index("usg_draft_status_idx").on(t.status),
     byPatient:  index("usg_draft_patient_idx").on(t.patientId),
+  }),
+);
+
+// ── usg_audit_log ─────────────────────────────────────────────────────────────
+// Single immutable audit table for every USG / Doppler action — measurement
+// edit, approval/rejection, draft generation, report finalization, viewer
+// opened, critical alert triggered. NEVER mutate or delete rows.
+export const usgAuditLogTable = pgTable(
+  "usg_audit_log",
+  {
+    id: serial("id").primaryKey(),
+    entityType: text("entity_type").notNull(),
+    // measurement | doppler | draft | key_image | viewer | critical_alert | settings
+    entityId: integer("entity_id"),
+    action: text("action").notNull(),
+    // create | update | approve | reject | finalize | verify | amend |
+    // viewer_open | critical_flag | critical_ack | regenerate | delete |
+    // settings_change
+    performedBy: text("performed_by").notNull(),
+    performedById: integer("performed_by_id"),
+    performedByRole: text("performed_by_role"),
+    studyInstanceUID: text("study_instance_uid"),
+    patientId: integer("patient_id"),
+    details: text("details").notNull().default("{}"), // JSON string
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    byEntity:  index("usg_audit_entity_idx").on(t.entityType, t.entityId),
+    byStudy:   index("usg_audit_study_idx").on(t.studyInstanceUID),
+    byPatient: index("usg_audit_patient_idx").on(t.patientId),
+    byUser:    index("usg_audit_user_idx").on(t.performedById),
+    byCreated: index("usg_audit_created_idx").on(t.createdAt),
   }),
 );
 
@@ -271,3 +318,4 @@ export type UsgDopplerMeasurement = typeof usgDopplerMeasurementsTable.$inferSel
 export type UsgExtractionSettings = typeof usgExtractionSettingsTable.$inferSelect;
 export type UsgMachineProfile     = typeof usgMachineProfilesTable.$inferSelect;
 export type UsgReportDraft        = typeof usgReportDraftsTable.$inferSelect;
+export type UsgAuditLog           = typeof usgAuditLogTable.$inferSelect;

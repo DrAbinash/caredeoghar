@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { readStaffSession } from "@/lib/staffSession";
+import VoiceDictationButton from "@/components/VoiceDictationButton";
 import {
   Activity, Plus, CheckCircle2, XCircle, Clock, ArrowLeft,
   ChevronDown, ChevronUp, Waves,
@@ -224,7 +225,13 @@ export default function UsgDopplerReporting() {
             </div>
 
             <div className="space-y-1.5">
-              <Label>Notes / Waveform Description (optional)</Label>
+              <div className="flex items-center justify-between">
+                <Label>Notes / Waveform Description (optional)</Label>
+                <VoiceDictationButton
+                  targetField="waveformDescription"
+                  onInsert={(text) => upd("waveformDescription", (form.waveformDescription ? form.waveformDescription + " " : "") + text)}
+                />
+              </div>
               <Textarea rows={2} value={form.waveformDescription} onChange={(e) => upd("waveformDescription", e.target.value)} placeholder="Describe waveform pattern, clinical impression…" />
             </div>
 

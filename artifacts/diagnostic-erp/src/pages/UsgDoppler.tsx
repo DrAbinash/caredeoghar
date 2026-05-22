@@ -100,6 +100,15 @@ const CARDS: ModuleCard[] = [
     badgeLabel: "Pending",
   },
   {
+    id: "critical",
+    title: "Critical Alerts & Productivity",
+    description: "USG critical findings, TAT & radiologist productivity dashboard plus full audit log.",
+    icon: AlertCircle,
+    path: "/usg/critical",
+    gradient: "from-red-50 via-rose-50 to-pink-50 dark:from-red-950/40 dark:via-rose-950/40 dark:to-pink-950/40",
+    iconBg: "bg-red-100 text-red-600 dark:bg-red-900/50 dark:text-red-300",
+  },
+  {
     id: "settings",
     title: "USG Extraction Settings",
     description: "Configure AI pipeline — OCR, SR priority, confidence thresholds, auto-reject, machine profiles.",
@@ -111,6 +120,12 @@ const CARDS: ModuleCard[] = [
   },
 ];
 
+interface CriticalAlert { id: number; severity: string; findingType: string; patientName: string; createdAt: string; status: string }
+interface ProductivityStats {
+  reports: { drafts: number; pending: number; verified: number; finalized: number; amended: number; total: number };
+  criticalAlerts: number;
+}
+
 export default function UsgDoppler() {
   const [, navigate] = useLocation();
   const session = readStaffSession();
@@ -121,6 +136,20 @@ export default function UsgDoppler() {
     queryFn: () => fetchApi("/api/usg-extraction/stats"),
     staleTime: 30_000,
     refetchInterval: 60_000,
+  });
+
+  const { data: alerts = [] } = useQuery<CriticalAlert[]>({
+    queryKey: ["usg-critical-alerts"],
+    queryFn: () => fetchApi("/api/usg-critical/alerts?status=active"),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+
+  const { data: productivity } = useQuery<ProductivityStats>({
+    queryKey: ["usg-productivity-7d"],
+    queryFn: () => fetchApi("/api/usg-critical/productivity?days=7"),
+    staleTime: 60_000,
+    refetchInterval: 120_000,
   });
 
   const visibleCards = CARDS.filter((c) => !c.ownerOnly || isOwner);
@@ -138,6 +167,25 @@ export default function UsgDoppler() {
         }
       />
 
+      {/* Critical alerts banner */}
+      {alerts.length > 0 && (
+        <button
+          onClick={() => navigate("/usg/critical")}
+          className="w-full text-left rounded-xl border border-red-300/70 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-4 py-3 flex items-center gap-3 hover:shadow-md transition-shadow"
+        >
+          <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-bold text-red-800 dark:text-red-200">
+              {alerts.length} active USG critical alert{alerts.length !== 1 ? "s" : ""}
+            </p>
+            <p className="text-xs text-red-700/80 dark:text-red-300/80 mt-0.5 truncate">
+              Latest: {alerts[0].patientName} · {alerts[0].findingType} ({alerts[0].severity})
+            </p>
+          </div>
+          <ChevronRight className="h-4 w-4 text-red-600" />
+        </button>
+      )}
+
       {/* Summary strip */}
       {stats && (
         <div className="flex flex-wrap gap-3">
@@ -153,6 +201,12 @@ export default function UsgDoppler() {
             <div className="flex items-center gap-1.5 rounded-full px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-xs font-semibold">
               <AlertCircle className="h-3.5 w-3.5" />
               {stats.pendingWorklist} studies in worklist
+            </div>
+          )}
+          {productivity && (
+            <div className="flex items-center gap-1.5 rounded-full px-3 py-1 bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-xs font-semibold">
+              <FileText className="h-3.5 w-3.5" />
+              {productivity.reports.finalized} finalized · {productivity.reports.pending + productivity.reports.drafts} open (7d)
             </div>
           )}
         </div>
