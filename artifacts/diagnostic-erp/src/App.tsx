@@ -63,6 +63,11 @@ const Hl7Settings           = lazy(() => import("@/pages/Hl7Settings"));
 const BackupReplication     = lazy(() => import("@/pages/BackupReplication"));
 const UsgMeasurementReview  = lazy(() => import("@/pages/UsgMeasurementReview"));
 const UsgAdminSettings      = lazy(() => import("@/pages/UsgAdminSettings"));
+const UsgDoppler            = lazy(() => import("@/pages/UsgDoppler"));
+const UsgWorklist           = lazy(() => import("@/pages/UsgWorklist"));
+const UsgReporting          = lazy(() => import("@/pages/UsgReporting"));
+const UsgDopplerReporting   = lazy(() => import("@/pages/UsgDopplerReporting"));
+const UsgKeyImagesGallery   = lazy(() => import("@/pages/UsgKeyImagesGallery"));
 const ReportHub       = lazy(() => import("@/pages/ReportHub"));
 const Machines        = lazy(() => import("@/pages/Machines"));
 const FormF           = lazy(() => import("@/pages/FormF"));
@@ -108,6 +113,7 @@ const ERP_NAV_ORDER = [
   "/radiology/mwl-dashboard", "/radiology/agent-setup", "/radiology/ai-reporting-settings",
   "/radiology/viewer", "/radiology/archive-lifecycle", "/radiology/watchdog", "/radiology/ai-inference-settings", "/radiology/hl7-settings", "/teleradiology",
   "/radiology/usg-measurements", "/radiology/usg-admin-settings",
+  "/usg", "/usg/worklist", "/usg/measurements", "/usg/reporting", "/usg/doppler", "/usg/key-images", "/usg/settings",
   "/settings/radiology", "/backup-replication",
   "/orders", "/tests", "/packages", "/billing", "/payments", "/reports",
   "/report-generator", "/report-hub", "/inventory", "/expenses", "/staff", "/referrals",
@@ -221,6 +227,15 @@ function Router() {
               <Route path="/radiology/usg-measurements/:studyInstanceUID" component={UsgMeasurementReview} />
               <Route path="/radiology/usg-measurements" component={UsgMeasurementReview} />
               <Route path="/radiology/usg-admin-settings" component={UsgAdminSettings} />
+              {/* USG / DOPPLER module */}
+              <Route path="/usg" component={UsgDoppler} />
+              <Route path="/usg/worklist" component={UsgWorklist} />
+              <Route path="/usg/measurements/:uid" component={UsgMeasurementReview} />
+              <Route path="/usg/measurements" component={UsgMeasurementReview} />
+              <Route path="/usg/reporting" component={UsgReporting} />
+              <Route path="/usg/doppler" component={UsgDopplerReporting} />
+              <Route path="/usg/key-images" component={UsgKeyImagesGallery} />
+              <Route path="/usg/settings" component={UsgAdminSettings} />
               <Route path="/backup-replication" component={BackupReplication} />
               <Route path="/m/viewer/:studyInstanceUID" component={MobileViewer} />
               <Route path="/packages" component={Packages} />

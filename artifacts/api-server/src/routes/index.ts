@@ -74,6 +74,8 @@ import { aiReportingRouter } from "./aiReporting";
 import { bankingRouter, bankingWebhookRouter } from "./banking";
 import { syncRouter } from "./sync";
 import { usgExtractionRouter } from "./usgExtraction";
+import { usgDopplerRouter } from "./usgDoppler";
+import { usgReportsRouter } from "./usgReports";
 
 const router: IRouter = Router();
 
@@ -299,6 +301,12 @@ router.use("/radiology", requireStaffAuth, pacsEnterpriseRouter);
 // USG auto-measurement extraction — all authenticated staff can trigger/review;
 // settings writes require admin role (enforced inside the router).
 router.use("/usg-extraction", requireStaffAuth, usgExtractionRouter);
+
+// USG Doppler measurements — all authenticated staff can read/write.
+router.use("/usg-doppler", requireStaffAuth, usgDopplerRouter);
+
+// USG Report Drafts — all authenticated staff can create/edit drafts.
+router.use("/usg-reports", requireStaffAuth, usgReportsRouter);
 
 // Radiology studies — open to all authenticated staff (doctors, radiologists, etc.)
 router.use("/radiology", requireStaffAuth, radiologyRouter);

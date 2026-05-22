@@ -1106,6 +1106,98 @@ async function runStartupMigrations(): Promise<void> {
       );
       CREATE INDEX IF NOT EXISTS usg_key_img_study_idx ON usg_key_images(study_instance_uid);
       CREATE INDEX IF NOT EXISTS usg_key_img_worklist_idx ON usg_key_images(worklist_id);
+
+      -- ── USG Doppler / Doppler Module ──
+      CREATE TABLE IF NOT EXISTS usg_doppler_measurements (
+        id SERIAL PRIMARY KEY,
+        worklist_id INTEGER,
+        study_instance_uid TEXT,
+        accession_number TEXT,
+        patient_id INTEGER,
+        extraction_run_id INTEGER,
+        vessel_name TEXT NOT NULL DEFAULT '',
+        side TEXT NOT NULL DEFAULT 'unknown',
+        psv TEXT,
+        edv TEXT,
+        ri TEXT,
+        pi TEXT,
+        sd_ratio TEXT,
+        waveform_label TEXT,
+        waveform_description TEXT,
+        confidence TEXT NOT NULL DEFAULT 'low',
+        source TEXT NOT NULL DEFAULT 'manual',
+        status TEXT NOT NULL DEFAULT 'pending_review',
+        reviewed_by TEXT,
+        reviewed_at TIMESTAMPTZ,
+        review_notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS usg_dop_study_idx    ON usg_doppler_measurements(study_instance_uid);
+      CREATE INDEX IF NOT EXISTS usg_dop_worklist_idx ON usg_doppler_measurements(worklist_id);
+      CREATE INDEX IF NOT EXISTS usg_dop_status_idx   ON usg_doppler_measurements(status);
+      CREATE INDEX IF NOT EXISTS usg_dop_patient_idx  ON usg_doppler_measurements(patient_id);
+
+      -- ── USG Extraction Settings (singleton, id=1) ──
+      CREATE TABLE IF NOT EXISTS usg_extraction_settings (
+        id SERIAL PRIMARY KEY,
+        ocr_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        ai_normalize_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        sr_priority_mode BOOLEAN NOT NULL DEFAULT TRUE,
+        auto_reject_low_confidence BOOLEAN NOT NULL DEFAULT TRUE,
+        human_review_required BOOLEAN NOT NULL DEFAULT TRUE,
+        auto_finalize BOOLEAN NOT NULL DEFAULT FALSE,
+        confidence_threshold REAL NOT NULL DEFAULT 0.80,
+        low_confidence_cutoff REAL NOT NULL DEFAULT 0.60,
+        max_frames_to_ocr INTEGER NOT NULL DEFAULT 20,
+        ge_ae_title TEXT NOT NULL DEFAULT 'GE_USG',
+        ge_ip TEXT NOT NULL DEFAULT '',
+        ge_port TEXT NOT NULL DEFAULT '11112',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      INSERT INTO usg_extraction_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+      -- ── USG Machine Profiles ──
+      CREATE TABLE IF NOT EXISTS usg_machine_profiles (
+        id SERIAL PRIMARY KEY,
+        machine_name TEXT NOT NULL,
+        manufacturer TEXT NOT NULL DEFAULT 'GE',
+        model_name TEXT,
+        ae_title TEXT,
+        ip_address TEXT,
+        port TEXT NOT NULL DEFAULT '11112',
+        modality TEXT NOT NULL DEFAULT 'USG',
+        active BOOLEAN NOT NULL DEFAULT TRUE,
+        capabilities TEXT NOT NULL DEFAULT '[]',
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS usg_machine_active_idx ON usg_machine_profiles(active);
+
+      -- ── USG Report Drafts ──
+      CREATE TABLE IF NOT EXISTS usg_report_drafts (
+        id SERIAL PRIMARY KEY,
+        worklist_id INTEGER,
+        study_instance_uid TEXT,
+        patient_id INTEGER,
+        accession_number TEXT,
+        template_type TEXT NOT NULL DEFAULT 'WHOLE_ABDOMEN',
+        draft_content TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'draft',
+        auto_filled_from_measurement_id INTEGER,
+        auto_filled_from_doppler_id INTEGER,
+        created_by TEXT,
+        finalized_by TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        finalized_at TIMESTAMPTZ
+      );
+      CREATE INDEX IF NOT EXISTS usg_draft_study_idx    ON usg_report_drafts(study_instance_uid);
+      CREATE INDEX IF NOT EXISTS usg_draft_worklist_idx ON usg_report_drafts(worklist_id);
+      CREATE INDEX IF NOT EXISTS usg_draft_status_idx   ON usg_report_drafts(status);
+      CREATE INDEX IF NOT EXISTS usg_draft_patient_idx  ON usg_report_drafts(patient_id);
     `);
     logger.info("Startup migrations applied");
   } catch (err) {

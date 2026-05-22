@@ -2,6 +2,7 @@
  * USG Auto-Measurement Extraction Routes
  * Mounted at: /api/usg-extraction  (staff-auth required)
  *
+ * GET   /stats                            — dashboard counts
  * POST  /extract                          — trigger extraction for a study
  * GET   /study/:studyInstanceUID          — get latest measurements for a study
  * GET   /worklist/:worklistId             — get measurements for a worklist entry
@@ -11,6 +12,7 @@
  * GET   /study/:studyInstanceUID/logs     — extraction run history
  * GET   /study/:studyInstanceUID/key-images — list key images
  * POST  /study/:studyInstanceUID/key-images — add a key image
+ * GET   /key-images/all                  — all key images across studies
  * DELETE /key-images/:id                 — remove a key image
  * GET   /settings                        — get admin settings
  * PUT   /settings                        — save admin settings (admin/super_admin only)
@@ -23,9 +25,11 @@ import {
   usgMeasurementsTable,
   usgExtractionLogsTable,
   usgKeyImagesTable,
+  usgDopplerMeasurementsTable,
+  usgReportDraftsTable,
   radiologyWorklistTable,
 } from "@workspace/db/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, count, sql } from "drizzle-orm";
 import { requireStaffPermission } from "../middleware/requireStaffAuth";
 import { FULL_ACCESS_ROLES } from "../middleware/requireStaffAuth";
 import {
@@ -38,6 +42,66 @@ import {
 import { logger } from "../lib/logger";
 
 const router = Router();
+
+// ── GET /stats ────────────────────────────────────────────────────────────────
+// Returns counts for the USG/DOPPLER dashboard cards.
+
+router.get("/stats", async (_req, res) => {
+  try {
+    const [measStats] = await db
+      .select({
+        pending:  sql<number>`count(*) filter (where status = 'pending_review')`,
+        approved: sql<number>`count(*) filter (where status = 'approved')`,
+      })
+      .from(usgMeasurementsTable);
+
+    const [dopplerStats] = await db
+      .select({
+        pending: sql<number>`count(*) filter (where status = 'pending_review')`,
+      })
+      .from(usgDopplerMeasurementsTable);
+
+    const [draftStats] = await db
+      .select({
+        draft:     sql<number>`count(*) filter (where status = 'draft')`,
+        finalized: sql<number>`count(*) filter (where status = 'finalized')`,
+      })
+      .from(usgReportDraftsTable);
+
+    const [keyImgCount] = await db
+      .select({ total: count() })
+      .from(usgKeyImagesTable);
+
+    const [worklistCount] = await db
+      .select({ total: sql<number>`count(*)` })
+      .from(radiologyWorklistTable)
+      .where(sql`modality IN ('US', 'USG') AND status IN ('pending', 'in_progress')`);
+
+    res.json({
+      pendingWorklist:      Number(worklistCount?.total   ?? 0),
+      pendingMeasurements:  Number(measStats?.pending     ?? 0),
+      approvedMeasurements: Number(measStats?.approved    ?? 0),
+      draftReports:         Number(draftStats?.draft      ?? 0),
+      finalizedReports:     Number(draftStats?.finalized  ?? 0),
+      keyImages:            Number(keyImgCount?.total     ?? 0),
+      pendingDoppler:       Number(dopplerStats?.pending  ?? 0),
+    });
+  } catch {
+    res.json({ pendingWorklist:0, pendingMeasurements:0, approvedMeasurements:0, draftReports:0, finalizedReports:0, keyImages:0, pendingDoppler:0 });
+  }
+});
+
+// ── GET /key-images/all ───────────────────────────────────────────────────────
+// All key images across all studies (for the gallery page).
+
+router.get("/key-images/all", async (_req, res) => {
+  const rows = await db
+    .select()
+    .from(usgKeyImagesTable)
+    .orderBy(desc(usgKeyImagesTable.createdAt))
+    .limit(300);
+  res.json(rows);
+});
 
 // ── POST /extract ─────────────────────────────────────────────────────────────
 // Trigger an extraction for a study. Idempotent — re-runs create a new log
@@ -322,15 +386,20 @@ router.put("/settings", requireStaffPermission("/settings"), async (req, res) =>
     res.status(403).json({ error: "Admin or super-admin role required to change USG extraction settings" });
     return;
   }
-  const b = (req.body ?? {}) as {
-    ocrEnabled?: boolean;
-    aiNormalizeEnabled?: boolean;
-    confidenceThreshold?: "high" | "medium" | "low";
-    geAeTitle?: string;
-    geIp?: string;
-    gePort?: string;
-    maxFramesToOcr?: number;
-  };
+  const b = (req.body ?? {}) as Partial<{
+    ocrEnabled: boolean;
+    aiNormalizeEnabled: boolean;
+    srPriorityMode: boolean;
+    autoRejectLowConfidence: boolean;
+    humanReviewRequired: boolean;
+    autoFinalize: boolean;
+    confidenceThreshold: number;
+    lowConfidenceCutoff: number;
+    maxFramesToOcr: number;
+    geAeTitle: string;
+    geIp: string;
+    gePort: string;
+  }>;
   await saveUsgAdminSettings(b);
   const updated = await getUsgAdminSettings();
   res.json(updated);

@@ -17,9 +17,10 @@ import { db } from "@workspace/db";
 import {
   usgMeasurementsTable,
   usgExtractionLogsTable,
+  usgExtractionSettingsTable,
   pacsSettingsTable,
 } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 import { geminiUsgOcr, geminiNormalizeMeasurements, type UsgMeasurementJson } from "@workspace/integrations-gemini-ai";
 
@@ -46,66 +47,85 @@ export interface UsgExtractionResult {
   error?: string;
 }
 
-// Admin settings keys in pacs_settings (category = 'usg_extraction')
-const SETTINGS_CATEGORY = "usg_extraction";
-const KEY_OCR_ENABLED      = "usg_ocr_enabled";
-const KEY_AI_NORM_ENABLED  = "usg_ai_normalize_enabled";
-const KEY_CONFIDENCE_THRESHOLD = "usg_confidence_threshold";
-const KEY_GE_AE_TITLE      = "usg_ge_ae_title";
-const KEY_GE_IP            = "usg_ge_ip";
-const KEY_GE_PORT          = "usg_ge_port";
-const KEY_MAX_FRAMES       = "usg_max_frames_to_ocr";
-
 // ── Admin settings helper ─────────────────────────────────────────────────────
+// Uses the usg_extraction_settings singleton table (id=1).
 
 export interface UsgAdminSettings {
   ocrEnabled: boolean;
   aiNormalizeEnabled: boolean;
-  confidenceThreshold: "high" | "medium" | "low";
+  srPriorityMode: boolean;
+  autoRejectLowConfidence: boolean;
+  humanReviewRequired: boolean;
+  autoFinalize: boolean;
+  confidenceThreshold: number;      // 0.0–1.0, default 0.80
+  lowConfidenceCutoff: number;      // 0.0–1.0, default 0.60
+  maxFramesToOcr: number;
   geAeTitle: string;
   geIp: string;
   gePort: string;
-  maxFramesToOcr: number;
 }
 
-export async function getUsgAdminSettings(): Promise<UsgAdminSettings> {
-  const rows = await db
-    .select()
-    .from(pacsSettingsTable)
-    .where(eq(pacsSettingsTable.category, SETTINGS_CATEGORY));
+const SETTINGS_DEFAULTS: UsgAdminSettings = {
+  ocrEnabled: true,
+  aiNormalizeEnabled: true,
+  srPriorityMode: true,
+  autoRejectLowConfidence: true,
+  humanReviewRequired: true,
+  autoFinalize: false,
+  confidenceThreshold: 0.80,
+  lowConfidenceCutoff: 0.60,
+  maxFramesToOcr: 20,
+  geAeTitle: "GE_USG",
+  geIp: "",
+  gePort: "11112",
+};
 
-  const map = new Map(rows.map((r) => [r.key, r.value ?? ""]));
-  return {
-    ocrEnabled:           map.get(KEY_OCR_ENABLED)          !== "false",
-    aiNormalizeEnabled:   map.get(KEY_AI_NORM_ENABLED)       !== "false",
-    confidenceThreshold:  (map.get(KEY_CONFIDENCE_THRESHOLD) as "high" | "medium" | "low") ?? "low",
-    geAeTitle:            map.get(KEY_GE_AE_TITLE)  ?? "GE_USG",
-    geIp:                 map.get(KEY_GE_IP)         ?? "",
-    gePort:               map.get(KEY_GE_PORT)       ?? "11112",
-    maxFramesToOcr:       Number(map.get(KEY_MAX_FRAMES) ?? "3"),
-  };
+export async function getUsgAdminSettings(): Promise<UsgAdminSettings> {
+  try {
+    const [row] = await db
+      .select()
+      .from(usgExtractionSettingsTable)
+      .where(eq(usgExtractionSettingsTable.id, 1))
+      .limit(1);
+
+    if (!row) return SETTINGS_DEFAULTS;
+
+    return {
+      ocrEnabled:              row.ocrEnabled,
+      aiNormalizeEnabled:      row.aiNormalizeEnabled,
+      srPriorityMode:          row.srPriorityMode,
+      autoRejectLowConfidence: row.autoRejectLowConfidence,
+      humanReviewRequired:     row.humanReviewRequired,
+      autoFinalize:            row.autoFinalize,
+      confidenceThreshold:     row.confidenceThreshold,
+      lowConfidenceCutoff:     row.lowConfidenceCutoff,
+      maxFramesToOcr:          row.maxFramesToOcr,
+      geAeTitle:               row.geAeTitle,
+      geIp:                    row.geIp,
+      gePort:                  row.gePort,
+    };
+  } catch {
+    return SETTINGS_DEFAULTS;
+  }
 }
 
 export async function saveUsgAdminSettings(settings: Partial<UsgAdminSettings>): Promise<void> {
-  const pairs: [string, string][] = [];
-  if (settings.ocrEnabled !== undefined)         pairs.push([KEY_OCR_ENABLED,          String(settings.ocrEnabled)]);
-  if (settings.aiNormalizeEnabled !== undefined)  pairs.push([KEY_AI_NORM_ENABLED,       String(settings.aiNormalizeEnabled)]);
-  if (settings.confidenceThreshold !== undefined) pairs.push([KEY_CONFIDENCE_THRESHOLD,  settings.confidenceThreshold]);
-  if (settings.geAeTitle !== undefined)            pairs.push([KEY_GE_AE_TITLE,           settings.geAeTitle]);
-  if (settings.geIp !== undefined)                 pairs.push([KEY_GE_IP,                 settings.geIp]);
-  if (settings.gePort !== undefined)               pairs.push([KEY_GE_PORT,               settings.gePort]);
-  if (settings.maxFramesToOcr !== undefined)       pairs.push([KEY_MAX_FRAMES,             String(settings.maxFramesToOcr)]);
+  // Upsert: if row 1 exists update it, otherwise insert it.
+  const [existing] = await db
+    .select({ id: usgExtractionSettingsTable.id })
+    .from(usgExtractionSettingsTable)
+    .where(eq(usgExtractionSettingsTable.id, 1))
+    .limit(1);
 
-  for (const [key, value] of pairs) {
-    const [existing] = await db
-      .select({ id: pacsSettingsTable.id })
-      .from(pacsSettingsTable)
-      .where(and(eq(pacsSettingsTable.key, key), eq(pacsSettingsTable.category, SETTINGS_CATEGORY)));
-    if (existing) {
-      await db.update(pacsSettingsTable).set({ value }).where(eq(pacsSettingsTable.id, existing.id));
-    } else {
-      await db.insert(pacsSettingsTable).values({ key, value, category: SETTINGS_CATEGORY });
-    }
+  if (existing) {
+    await db
+      .update(usgExtractionSettingsTable)
+      .set({ ...settings, updatedAt: new Date() })
+      .where(eq(usgExtractionSettingsTable.id, 1));
+  } else {
+    await db
+      .insert(usgExtractionSettingsTable)
+      .values({ id: 1, ...SETTINGS_DEFAULTS, ...settings });
   }
 }
 
