@@ -82,6 +82,7 @@ import dicomStudyManagerRouter from "./dicomStudyManager";
 import dicomWorkflowRouter from "./dicomWorkflow";
 import smartRadiologyRouter from "./smartRadiology";
 import risMonitoringRouter from "./risMonitoring";
+import radiologyWorkflowRouter from "./radiologyWorkflow";
 
 const router: IRouter = Router();
 
@@ -323,6 +324,9 @@ router.use("/smart-radiology", requireStaffAuth, smartRadiologyRouter);
 
 // Phase 11: RIS/PACS Production Monitoring & Hardening
 router.use("/ris-monitor", requireStaffAuth, risMonitoringRouter);
+
+// Phase 12: Real Radiology Workflow & DICOM Operations
+router.use("/radiology-workflow", requireStaffAuth, radiologyWorkflowRouter);
 
 // Radiology studies — open to all authenticated staff (doctors, radiologists, etc.)
 router.use("/radiology", requireStaffAuth, radiologyRouter);

@@ -141,6 +141,14 @@ const navItems: NavEntry[] = [
       { path: "/radiology/radiologist-queue",      icon: ActivitySquare,label: "Radiologist Queue" },
       { path: "/radiology/ai-extraction-review",  icon: Microscope,   label: "AI Extraction Review" },
       { path: "/radiology/hanging-protocols",      icon: ImagePlus,    label: "Hanging Protocols" },
+      // Phase 12: Real Radiology Workflow & DICOM Operations
+      { path: "/radiology/command-center",         icon: Zap,            label: "Command Center" },
+      { path: "/radiology/acquisition-gateway",   icon: HardDrive,    label: "Acquisition Gateway" },
+      { path: "/radiology/mwl-manager",           icon: ListChecks,   label: "MWL Manager" },
+      { path: "/radiology/ai-pipeline",           icon: BrainCircuit, label: "AI Pipeline" },
+      { path: "/radiology/critical-alerts",       icon: AlertTriangle,label: "Critical Alerts" },
+      { path: "/radiology/storage-lifecycle",     icon: Archive,      label: "Storage Lifecycle" },
+      { path: "/radiology/productivity-tools",    icon: Keyboard,     label: "Productivity Tools" },
     ],
   },
 

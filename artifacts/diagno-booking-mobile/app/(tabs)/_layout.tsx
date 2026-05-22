@@ -26,6 +26,10 @@ function NativeTabLayout() {
         <Icon sf={{ default: "person.2", selected: "person.2.fill" }} />
         <Label>Doctors</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="radiologist">
+        <Icon sf={{ default: "cross.case", selected: "cross.case.fill" }} />
+        <Label>Rad</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="about">
         <Icon sf={{ default: "info.circle", selected: "info.circle.fill" }} />
         <Label>About</Label>
@@ -89,6 +93,15 @@ function ClassicTabLayout() {
           title: "Doctors",
           tabBarIcon: ({ color }: { color: string }) => (
             <Feather name="users" size={22} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="radiologist"
+        options={{
+          title: "Radiologist",
+          tabBarIcon: ({ color }: { color: string }) => (
+            <Feather name="activity" size={22} color={color} />
           ),
         }}
       />

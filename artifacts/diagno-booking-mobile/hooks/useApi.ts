@@ -12,13 +12,16 @@ function getBaseUrl(): string {
   return "https://localhost";
 }
 
-export function useApi() {
+export function useApi(authToken?: string) {
   const request = useCallback(async (method: string, path: string, body?: unknown): Promise<any> => {
     const base = getBaseUrl();
     const url = `${base}${path}`;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
+    if (authToken) {
+      headers["Authorization"] = `Bearer ${authToken}`;
+    }
     const res = await fetch(url, {
       method,
       headers,
@@ -30,7 +33,7 @@ export function useApi() {
       throw new Error(data?.error || `Request failed (${res.status})`);
     }
     return data;
-  }, []);
+  }, [authToken]);
 
   const get = useCallback((path: string) => request("GET", path), [request]);
   const post = useCallback((path: string, body: unknown) => request("POST", path, body), [request]);

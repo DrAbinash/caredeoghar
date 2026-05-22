@@ -91,6 +91,13 @@ const OutsourcedLabs  = lazy(() => import("@/pages/OutsourcedLabs"));
 const Samples         = lazy(() => import("@/pages/Samples"));
 const Kiosk           = lazy(() => import("@/pages/Kiosk"));
 const NotFound        = lazy(() => import("@/pages/not-found"));
+const RadiologyCommandCenter = lazy(() => import("@/pages/RadiologyCommandCenter"));
+const AcquisitionGateway     = lazy(() => import("@/pages/AcquisitionGateway"));
+const MwlManager             = lazy(() => import("@/pages/MwlManager"));
+const AiPipelineManager      = lazy(() => import("@/pages/AiPipelineManager"));
+const CriticalAlertsManager  = lazy(() => import("@/pages/CriticalAlertsManager"));
+const StorageLifecycle       = lazy(() => import("@/pages/StorageLifecycle"));
+const RadiologistTools       = lazy(() => import("@/pages/RadiologistTools"));
 
 function PageLoader() {
   return (
@@ -231,6 +238,14 @@ function Router() {
               <Route path="/radiology/watchdog" component={PacsWatchdogDashboard} />
               <Route path="/radiology/ai-inference-settings" component={AiInferenceSettings} />
               <Route path="/radiology/hl7-settings" component={Hl7Settings} />
+              {/* Phase 12: Real Radiology Workflow & DICOM Operations */}
+              <Route path="/radiology/command-center" component={RadiologyCommandCenter} />
+              <Route path="/radiology/acquisition-gateway" component={AcquisitionGateway} />
+              <Route path="/radiology/mwl-manager" component={MwlManager} />
+              <Route path="/radiology/ai-pipeline" component={AiPipelineManager} />
+              <Route path="/radiology/critical-alerts" component={CriticalAlertsManager} />
+              <Route path="/radiology/storage-lifecycle" component={StorageLifecycle} />
+              <Route path="/radiology/productivity-tools" component={RadiologistTools} />
               <Route path="/radiology/usg-measurements/:studyInstanceUID" component={UsgMeasurementReview} />
               <Route path="/radiology/usg-measurements" component={UsgMeasurementReview} />
               <Route path="/radiology/usg-admin-settings" component={UsgAdminSettings} />

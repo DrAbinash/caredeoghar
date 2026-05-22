@@ -15,6 +15,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/context/AuthContext";
+import { StaffAuthProvider } from "@/context/StaffAuthContext";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -28,6 +29,10 @@ function RootLayoutNav() {
       <Stack.Screen name="book" options={{ headerShown: false }} />
       <Stack.Screen name="booking-detail" options={{ headerShown: false }} />
       <Stack.Screen name="login" options={{ headerShown: false }} />
+      <Stack.Screen name="staff-login" options={{ headerShown: false }} />
+      <Stack.Screen name="studies-list" options={{ headerShown: false }} />
+      <Stack.Screen name="study-detail" options={{ headerShown: false }} />
+      <Stack.Screen name="critical-alerts" options={{ headerShown: false }} />
     </Stack>
   );
 }
@@ -55,7 +60,9 @@ export default function RootLayout() {
           <AuthProvider>
             <GestureHandlerRootView>
               <KeyboardProvider>
-                <RootLayoutNav />
+                <StaffAuthProvider>
+                  <RootLayoutNav />
+                </StaffAuthProvider>
               </KeyboardProvider>
             </GestureHandlerRootView>
           </AuthProvider>
