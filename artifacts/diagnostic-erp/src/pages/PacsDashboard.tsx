@@ -21,6 +21,10 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { WatchdogPanel } from "@/pages/PacsWatchdogDashboard";
 import { PacsLogsPanel } from "@/pages/PacsLogs";
 import { DicomAgentPanel } from "@/pages/DicomAgentDashboard";
+import {
+  AiImpressionCard, QualityCheckerCard, FollowUpRecommendationsCard,
+  TatDashboardCard, SonographerModeCard,
+} from "@/components/smartRadiology/SmartRadiologyCards";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -343,6 +347,7 @@ export default function PacsDashboard() {
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList className="flex flex-wrap h-auto gap-1">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="smart-radiology">Smart Radiology</TabsTrigger>
           <TabsTrigger value="watchdog">Watchdog</TabsTrigger>
           <TabsTrigger value="logs">PACS Logs</TabsTrigger>
           <TabsTrigger value="agent">Agent Monitor</TabsTrigger>
@@ -1002,6 +1007,16 @@ export default function PacsDashboard() {
           </div>
         </>
       )}
+        </TabsContent>
+
+        <TabsContent value="smart-radiology" className="space-y-6">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <AiImpressionCard />
+            <QualityCheckerCard />
+            <FollowUpRecommendationsCard />
+            <TatDashboardCard />
+            <SonographerModeCard />
+          </div>
         </TabsContent>
 
         <TabsContent value="watchdog">

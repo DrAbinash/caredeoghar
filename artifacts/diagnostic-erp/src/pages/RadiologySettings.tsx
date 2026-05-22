@@ -4,13 +4,18 @@ import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Settings2, Server, Radio, Cpu, BrainCircuit, Archive, Wrench, ExternalLink } from "lucide-react";
+import { Settings2, Server, Radio, Cpu, BrainCircuit, Archive, Wrench, ExternalLink, Sparkles } from "lucide-react";
 import { ModalityPanel } from "@/pages/ModalityManagement";
 import { DicomNodesPanel } from "@/pages/DicomNodes";
 import { AgentSetupPanel } from "@/pages/AgentSetup";
 import { ArchiveLifecyclePanel } from "@/pages/PacsArchiveLifecycle";
 import { AiInferencePanel } from "@/pages/AiInferenceSettings";
 import { AiReportingPanel } from "@/pages/AiReportingSettings";
+import {
+  AiImpressionCard, QualityCheckerCard, FollowUpRecommendationsCard,
+  TemplateLearningCard, MultiLanguageCard, RoutingRulesCard,
+  AmendmentManagerCard, SonographerModeCard, DicomSrExportCard,
+} from "@/components/smartRadiology/SmartRadiologyCards";
 
 type PacsSetting = { id: number; key: string; value: string; category: string; isSecret: boolean };
 
@@ -96,6 +101,9 @@ export default function RadiologySettings() {
           <TabsTrigger value="ai-reporting">
             <BrainCircuit size={13} className="mr-1.5" />AI Reporting
           </TabsTrigger>
+          <TabsTrigger value="smart-platform">
+            <Sparkles size={13} className="mr-1.5" />Smart Platform
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="pacs-config">
@@ -124,6 +132,20 @@ export default function RadiologySettings() {
 
         <TabsContent value="ai-reporting">
           <AiReportingPanel />
+        </TabsContent>
+
+        <TabsContent value="smart-platform" className="space-y-4">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <AiImpressionCard />
+            <QualityCheckerCard />
+            <FollowUpRecommendationsCard />
+            <TemplateLearningCard />
+            <MultiLanguageCard />
+            <RoutingRulesCard />
+            <AmendmentManagerCard />
+            <SonographerModeCard />
+            <DicomSrExportCard />
+          </div>
         </TabsContent>
       </Tabs>
     </div>

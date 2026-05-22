@@ -80,6 +80,7 @@ import { usgCriticalAlertsRouter } from "./usgCriticalAlerts";
 import { usgAnalyticsRouter } from "./usgAnalytics";
 import dicomStudyManagerRouter from "./dicomStudyManager";
 import dicomWorkflowRouter from "./dicomWorkflow";
+import smartRadiologyRouter from "./smartRadiology";
 
 const router: IRouter = Router();
 
@@ -317,6 +318,7 @@ router.use("/usg-analytics", requireStaffAuth, usgAnalyticsRouter);
 // Phase 10: RIS/PACS Foundation — DICOM study management + smart workflow
 router.use("/dicom-studies", requireStaffAuth, dicomStudyManagerRouter);
 router.use("/dicom-workflow", requireStaffAuth, dicomWorkflowRouter);
+router.use("/smart-radiology", requireStaffAuth, smartRadiologyRouter);
 
 // Radiology studies — open to all authenticated staff (doctors, radiologists, etc.)
 router.use("/radiology", requireStaffAuth, radiologyRouter);
