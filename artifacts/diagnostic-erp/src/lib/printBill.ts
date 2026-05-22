@@ -140,17 +140,17 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
 
   /* ── Sizing tuned for A5 portrait (148 × 210 mm) ── */
   const isA5 = paperSize === "A5";
-  const bodyPx = isA5 ? 13 : 12;
+  const bodyPx = isA5 ? 15 : 13;
   const pageMargin = isA5 ? "3mm" : "6mm";
-  const clinicNameSize = isA5 ? "22px" : "22px";
-  const titleSize = isA5 ? "15px" : "14px";
-  const patientNameSize = isA5 ? "17px" : "16px";
-  const patientMetaSize = isA5 ? "13px" : "12px";
-  const tablePx = isA5 ? 13 : 11.5;
-  const payPx = isA5 ? 12 : 11;
-  const totalPx = isA5 ? 13 : 12;
-  const footerPx = isA5 ? 12 : 11;
-  const tinyPx = isA5 ? 10 : 9;
+  const clinicNameSize = isA5 ? "26px" : "24px";
+  const titleSize = isA5 ? "17px" : "15px";
+  const patientNameSize = isA5 ? "19px" : "17px";
+  const patientMetaSize = isA5 ? "15px" : "13px";
+  const tablePx = isA5 ? 15 : 13;
+  const payPx = isA5 ? 14 : 12;
+  const totalPx = isA5 ? 15 : 13;
+  const footerPx = isA5 ? 14 : 12;
+  const tinyPx = isA5 ? 12 : 10;
 
   const colCount = 3 + (showCode ? 1 : 0) + (showCategory ? 1 : 0);
 
@@ -174,7 +174,7 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
       <em>Cancelled tests: ${cancelled.map((t) => escapeHtml(t.test?.name ?? "")).join(", ")}</em>
     </div>`;
 
-  /* ── Payment rows ── */
+  /* ── Payment rows for middle column (kept compact) ── */
   const payRows = (bill.payments ?? []).map((p) => {
     const ref = p.referenceNumber ? ` (${escapeHtml(p.referenceNumber)})` : "";
     return `<tr>
@@ -183,20 +183,32 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
     </tr>`;
   }).join("");
 
+  /* ── Aggregated payment amounts by mode ── */
+  const payByMode: Record<string, number> = {};
+  for (const p of bill.payments ?? []) {
+    const m = String(p.method).toLowerCase().trim();
+    payByMode[m] = (payByMode[m] || 0) + Number(p.amount || 0);
+  }
+  const cashAmt = payByMode["cash"] || 0;
+  const upiAmt = payByMode["upi"] || 0;
+  const cardAmt = payByMode["card"] || 0;
+  const hasMultiPay = Object.keys(payByMode).length > 1 || (bill.payments ?? []).length > 1;
+
   /* ── One receipt page ── */
   const onePage = (copyIdx: number) => `
     <section class="receipt" style="${copyIdx > 0 ? "page-break-before:always;" : ""}">
       ${reprintBy || reprintReason ? `<div style="text-align:center;font-size:${tinyPx}px;color:#a16207;border:1px dashed #d97706;padding:2px 4px;margin-bottom:5px;text-transform:uppercase">DUPLICATE / RE-PRINT${reprintBy ? ` · BY ${escapeHtml(reprintBy)}` : ""}${reprintReason ? ` · ${escapeHtml(reprintReason)}` : ""}</div>` : ""}
 
-      <!-- HEADER: clinic name right, logo right-bottom -->
-      <div style="text-align:right;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:4px">
+      <!-- HEADER: clinic name + logo centered, address below -->
+      <div style="text-align:center;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:4px">
+        ${clinic?.logoDataUrl ? `<img src="${clinic.logoDataUrl}" alt="logo" style="max-height:${isA5 ? 48 : 52}px;max-width:${isA5 ? 120 : 140}px;object-fit:contain;margin-bottom:3px;display:block;margin-left:auto;margin-right:auto"/>` : ""}
         <div style="font-size:${clinicNameSize};font-weight:800;line-height:1.1">${escapeHtml(clinic?.name || "Diagnostic Centre")}</div>
-        ${clinic?.tagline ? `<div style="font-size:${Math.round(bodyPx * 0.78)}px;color:#555;margin-top:1px">${escapeHtml(clinic.tagline)}</div>` : ""}
-        <div style="font-size:${tinyPx}px;color:#444;margin-top:2px;line-height:1.3">
+        ${clinic?.tagline ? `<div style="font-size:${Math.round(bodyPx * 0.85)}px;color:#555;margin-top:2px;font-weight:600">${escapeHtml(clinic.tagline)}</div>` : ""}
+        <div style="font-size:${tinyPx}px;color:#444;margin-top:3px;line-height:1.4">
           ${clinic?.address ? `<div>${escapeHtml(clinic.address.replace(/\s*\n\s*/g, ", ").trim())}</div>` : ""}
           <div>${[clinic?.phone && `Ph: ${clinic.phone}`, clinic?.email, clinic?.website].filter(Boolean).map((s) => escapeHtml(String(s))).join("  ·  ")}</div>
+          ${clinic?.gstin ? `<div>GSTIN: ${escapeHtml(clinic.gstin)}</div>` : ""}
         </div>
-        ${clinic?.logoDataUrl ? `<img src="${clinic.logoDataUrl}" alt="logo" style="max-height:${isA5 ? 44 : 48}px;max-width:${isA5 ? 100 : 120}px;object-fit:contain;margin-top:4px"/>` : ""}
       </div>
 
       <!-- TITLE -->
@@ -264,8 +276,13 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
                 <tbody>
                   <tr><td style="padding:1px 3px">Subtotal</td><td style="padding:1px 3px;text-align:right;white-space:nowrap">₹${Number(bill.subtotal).toFixed(2)}</td></tr>
                   ${Number(bill.discount) > 0 ? `<tr><td style="padding:1px 3px">Discount</td><td style="padding:1px 3px;text-align:right;white-space:nowrap;color:green">−₹${Number(bill.discount).toFixed(2)}</td></tr>` : ""}
-                  <tr><td style="padding:2px 3px;border-top:1px solid #000;font-weight:700">Total</td><td style="padding:2px 3px;border-top:1px solid #000;text-align:right;font-weight:700;white-space:nowrap">₹${Number(bill.totalAmount).toFixed(2)}</td></tr>
-                  <tr><td style="padding:1px 3px">Paid</td><td style="padding:1px 3px;text-align:right;white-space:nowrap;color:green">₹${Number(bill.paidAmount).toFixed(2)}</td></tr>
+                  <tr><td style="padding:2px 3px;border-top:2px solid #000;font-weight:800;font-size:${totalPx + 1}px">Grand Total</td><td style="padding:2px 3px;border-top:2px solid #000;text-align:right;font-weight:800;white-space:nowrap;font-size:${totalPx + 1}px">₹${Number(bill.totalAmount).toFixed(2)}</td></tr>
+                  ${hasMultiPay ? `
+                    ${cashAmt > 0 ? `<tr><td style="padding:1px 3px;color:#555">Cash</td><td style="padding:1px 3px;text-align:right;white-space:nowrap;color:#555">₹${cashAmt.toFixed(2)}</td></tr>` : ""}
+                    ${upiAmt > 0 ? `<tr><td style="padding:1px 3px;color:#555">UPI</td><td style="padding:1px 3px;text-align:right;white-space:nowrap;color:#555">₹${upiAmt.toFixed(2)}</td></tr>` : ""}
+                    ${cardAmt > 0 ? `<tr><td style="padding:1px 3px;color:#555">Card</td><td style="padding:1px 3px;text-align:right;white-space:nowrap;color:#555">₹${cardAmt.toFixed(2)}</td></tr>` : ""}
+                  ` : ""}
+                  <tr><td style="padding:2px 3px;border-top:1px solid #000;font-weight:700">Paid</td><td style="padding:2px 3px;border-top:1px solid #000;text-align:right;font-weight:700;white-space:nowrap;color:green">₹${Number(bill.paidAmount).toFixed(2)}</td></tr>
                   <tr><td style="padding:2px 3px;border-top:1px solid #000;font-weight:700">Balance</td><td style="padding:2px 3px;border-top:1px solid #000;text-align:right;font-weight:700;white-space:nowrap;color:${Number(bill.balanceAmount) > 0 ? "#c62828" : "green"}">₹${Number(bill.balanceAmount).toFixed(2)}${Number(bill.balanceAmount) === 0 ? " (PAID)" : ""}</td></tr>
                 </tbody>
               </table>

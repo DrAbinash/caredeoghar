@@ -20,7 +20,7 @@ import {
   Tag, Building2, Image as ImageIcon, Upload, MessageCircle, Printer,
   Search, Globe, Copy, ExternalLink, Check, Network, MapPin, Database,
   RefreshCcw, FileCode, Send, QrCode, Palette, Bot, Inbox, ChevronRight,
-  ArrowLeft, Phone, Layers,
+  ArrowLeft, Phone, Layers, AlertTriangle,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -774,7 +774,7 @@ function AppearanceTab() {
 
 function ClinicInfoTab() {
   const qc = useQueryClient();
-  const { data: settings } = useQuery<ClinicSettings>({
+  const { data: settings, isLoading, error } = useQuery<ClinicSettings>({
     queryKey: ["clinic-settings"],
     queryFn: () => api.get("/api/clinic-settings"),
   });
@@ -792,6 +792,20 @@ function ClinicInfoTab() {
     },
   });
 
+  if (isLoading) {
+    return <div className="bg-card border border-card-border rounded-xl p-8 text-center text-muted-foreground">Loading clinic info…</div>;
+  }
+  if (error) {
+    return (
+      <div className="bg-card border border-red-200 dark:border-red-800 rounded-xl p-8 text-center">
+        <AlertTriangle className="mx-auto mb-2 text-red-500" size={28} />
+        <p className="text-red-700 dark:text-red-300 font-semibold">Failed to load clinic settings</p>
+        <p className="text-sm text-red-600 dark:text-red-400 mt-1">{error instanceof Error ? error.message : "Network error"}</p>
+        <Button variant="outline" className="mt-3" onClick={() => qc.invalidateQueries({ queryKey: ["clinic-settings"] })}>Retry</Button>
+      </div>
+    );
+  }
+
   const onLogoChange = (file: File | null) => {
     setUploadErr("");
     if (!file) return;
@@ -805,7 +819,7 @@ function ClinicInfoTab() {
   };
 
   if (!current) {
-    return <div className="bg-card border border-card-border rounded-xl p-8 text-center text-muted-foreground">Loading clinic info…</div>;
+    return <div className="bg-card border border-card-border rounded-xl p-8 text-center text-muted-foreground">No clinic info available. Please save settings first.</div>;
   }
 
   const update = (k: keyof ClinicSettings, v: string) => setForm({ ...current, [k]: v });
