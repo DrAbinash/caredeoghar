@@ -1084,6 +1084,53 @@ billsRouter.post("/:id/refund", async (req, res) => {
   res.json(await buildBill(updated));
 });
 
+// ── Change Referring Doctor ──────────────────────────────────────────────────
+// Updates the order's doctorId, audit-logs the change, and returns the updated
+// bill. Commission recalculation happens naturally because the commission
+// report reads the current doctorId on each run.
+billsRouter.post("/:id/change-doctor", async (req: StaffAuthRequest, res) => {
+  const paramsParsed = z.object({ id: z.coerce.number().positive() }).safeParse(req.params);
+  const bodyParsed = z.object({
+    newDoctorId: z.coerce.number().positive(),
+    reason: z.string().min(1),
+    performedBy: z.string().min(1),
+  }).safeParse(req.body);
+  if (!paramsParsed.success || !bodyParsed.success) {
+    res.status(400).json({ error: "Invalid request", details: [...(paramsParsed.error?.issues ?? []), ...(bodyParsed.error?.issues ?? [])] });
+    return;
+  }
+  const id = paramsParsed.data.id;
+  const { newDoctorId, reason, performedBy } = bodyParsed.data;
+
+  const [bill] = await db.select().from(billsTable).where(eq(billsTable.id, id));
+  if (!bill) { res.status(404).json({ error: "Bill not found" }); return; }
+
+  // Resolve old and new doctor names for the audit trail
+  const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, bill.orderId));
+  const [oldDoctor] = order?.doctorId
+    ? await db.select({ name: doctorsTable.name }).from(doctorsTable).where(eq(doctorsTable.id, order.doctorId))
+    : [undefined];
+  const [newDoctor] = await db.select({ name: doctorsTable.name }).from(doctorsTable).where(eq(doctorsTable.id, newDoctorId));
+  if (!newDoctor) { res.status(400).json({ error: "New doctor not found" }); return; }
+
+  await db.transaction(async (tx) => {
+    // Update the order (doctor lives on the order, not the bill)
+    await tx.update(ordersTable).set({ doctorId: newDoctorId }).where(eq(ordersTable.id, bill.orderId));
+
+    // Audit
+    await tx.insert(billAuditsTable).values({
+      billId: id,
+      editedBy: performedBy,
+      reason,
+      changeType: "referral",
+      oldValue: oldDoctor?.name ?? "(none)",
+      newValue: newDoctor.name,
+    });
+  });
+
+  res.json(await buildBill(bill));
+});
+
 // Helper: verify super admin session token
 async function verifySuperAdminToken(token: string): Promise<{ valid: boolean; userName: string }> {
   if (!token) return { valid: false, userName: "" };

@@ -15,7 +15,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Plus, Pencil, History, Clock, ShieldAlert, Trash2, AlertTriangle, ExternalLink, Printer, Ban, Undo2, XCircle, AlertCircle, Search, X, CheckSquare, Square, RotateCcw } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, History, Clock, ShieldAlert, Trash2, AlertTriangle, ExternalLink, Printer, Ban, Undo2, XCircle, AlertCircle, Search, X, CheckSquare, Square, RotateCcw, Stethoscope } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useSuperAdmin, getSuperAdminToken } from "@/hooks/useSuperAdmin";
 import { readStaffSession } from "@/lib/staffSession";
@@ -75,6 +75,14 @@ type CancelRefundForm = {
   refundMethod: "cash" | "card" | "upi" | "insurance" | "cheque";
 };
 
+type ChangeDoctorForm = {
+  newDoctorId: number;
+  reason: string;
+  performedBy: string;
+};
+
+type Doctor = { id: number; name: string; specialization: string };
+
 type BillAudit = {
   id: number;
   billId: number;
@@ -120,6 +128,7 @@ export default function BillDetail({ id }: { id: number }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [reprintOpen, setReprintOpen] = useState(false);
   const [refundOpen, setRefundOpen] = useState(false);
+  const [changeDoctorOpen, setChangeDoctorOpen] = useState(false);
   const [refundTab, setRefundTab] = useState<"cancel" | "refund" | "cancel-refund">("cancel");
   const [reprintBy, setReprintBy] = useState<string>(() => readStaffSession()?.user.name || localStorage.getItem("diagnosticErp:lastReprintBy") || "");
   const [reprintReason, setReprintReason] = useState<string>("");
@@ -155,6 +164,11 @@ export default function BillDetail({ id }: { id: number }) {
   const { data: printerSettings } = useQuery<{ billPrinterType?: string }>({
     queryKey: ["printer-settings"],
     queryFn: () => api.get("/api/printers/settings"),
+    staleTime: 5 * 60_000,
+  });
+  const { data: doctors = [] } = useQuery<Doctor[]>({
+    queryKey: ["doctors"],
+    queryFn: () => api.get("/api/doctors"),
     staleTime: 5 * 60_000,
   });
   const isBW = printerSettings?.billPrinterType === "bw";
@@ -357,6 +371,9 @@ export default function BillDetail({ id }: { id: number }) {
   const { register: regCR, handleSubmit: handleCR, reset: resetCR, watch: watchCR, setValue: setCRVal, formState: crState } = useForm<CancelRefundForm>({
     defaultValues: { performedBy: defaultActor, reason: "", refundAmount: 0, refundMethod: "cash" },
   });
+  const { register: regCD, handleSubmit: handleCD, reset: resetCD, watch: watchCD, setValue: setCDVal, formState: cdState } = useForm<ChangeDoctorForm>({
+    defaultValues: { newDoctorId: 0, reason: "", performedBy: defaultActor },
+  });
 
   const onSubmit = (data: PaymentForm) => {
     createPayment.mutate({ data: { billId: id, amount: Number(data.amount), method: data.method, referenceNumber: data.referenceNumber || undefined, notes: data.notes || undefined } });
@@ -408,6 +425,27 @@ export default function BillDetail({ id }: { id: number }) {
       reason: d.reason.trim(),
       amount: Number(d.amount),
       method: d.method,
+    });
+  });
+
+  const changeDoctor = useMutation({
+    mutationFn: (body: ChangeDoctorForm) =>
+      api.post(`/api/bills/${id}/change-doctor`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getGetBillQueryKey(id) });
+      queryClient.invalidateQueries({ queryKey: getListBillsQueryKey() });
+      refetchAudits();
+      setChangeDoctorOpen(false);
+      resetCD();
+    },
+  });
+
+  const onChangeDoctorSubmit = handleCD((d) => {
+    if (!d.newDoctorId || d.newDoctorId <= 0) return;
+    changeDoctor.mutate({
+      newDoctorId: Number(d.newDoctorId),
+      reason: d.reason.trim(),
+      performedBy: d.performedBy.trim(),
     });
   });
 
@@ -566,9 +604,14 @@ export default function BillDetail({ id }: { id: number }) {
                 <p className="text-sm font-medium">{bill.dueDate}</p>
               </div>
             )}
-            <div className="mt-2">
-              <p className="text-xs text-muted-foreground">Referring Doctor</p>
-              <p className="text-sm font-medium">{bill.order?.doctor?.name ?? <span className="text-muted-foreground">—</span>}</p>
+            <div className="mt-2 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Referring Doctor</p>
+                <p className="text-sm font-medium">{bill.order?.doctor?.name ?? <span className="text-muted-foreground">—</span>}</p>
+              </div>
+              <Button size="sm" variant="ghost" className="text-xs h-7 px-2 text-teal-600 hover:text-teal-700 hover:bg-teal-50 dark:text-teal-400 dark:hover:bg-teal-950/30" onClick={() => setChangeDoctorOpen(true)}>
+                <Stethoscope size={12} className="mr-1" /> Change
+              </Button>
             </div>
           </div>
 
@@ -1304,6 +1347,73 @@ export default function BillDetail({ id }: { id: number }) {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Change Referring Doctor dialog */}
+      <Dialog open={changeDoctorOpen} onOpenChange={(o) => { if (!o) setChangeDoctorOpen(false); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-teal-700">
+              <Stethoscope size={16} /> Change Referring Doctor
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={onChangeDoctorSubmit} className="space-y-4">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Current Doctor</p>
+              <p className="text-sm font-medium">{bill.order?.doctor?.name ?? "—"}</p>
+            </div>
+            <div>
+              <Label>New Doctor <span className="text-red-500">*</span></Label>
+              <Select
+                value={watchCD("newDoctorId") ? String(watchCD("newDoctorId")) : ""}
+                onValueChange={(v) => setCDVal("newDoctorId", Number(v))}
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select a doctor…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {doctors.map((d) => (
+                    <SelectItem key={d.id} value={String(d.id)}>
+                      {d.name} <span className="text-muted-foreground text-xs">({d.specialization || "N/A"})</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {cdState.errors.newDoctorId && <p className="text-xs text-red-500 mt-1">Please select a doctor.</p>}
+            </div>
+            <div>
+              <Label>Reason <span className="text-red-500">*</span></Label>
+              <Input
+                {...regCD("reason", { required: true })}
+                className="mt-1"
+                placeholder="e.g., Doctor was not available; patient requested Dr. X"
+              />
+            </div>
+            <div>
+              <Label>Changed By <span className="text-red-500">*</span></Label>
+              <Input
+                {...regCD("performedBy", { required: true })}
+                className="mt-1"
+                placeholder="Staff name"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setChangeDoctorOpen(false)}>Cancel</Button>
+              <Button
+                type="submit"
+                disabled={
+                  !watchCD("newDoctorId") ||
+                  !watchCD("reason")?.trim() ||
+                  !watchCD("performedBy")?.trim() ||
+                  changeDoctor.isPending
+                }
+              >
+                {changeDoctor.isPending ? "Saving…" : "Save Change"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
@@ -1598,7 +1708,6 @@ function TestsTable({
           </div>
         </DialogContent>
       </Dialog>
-
       {/* Single-test cancel dialog (backward compat) */}
       <Dialog open={singleCancelId !== null} onOpenChange={(o) => { if (!o) setSingleCancelId(null); }}>
         <DialogContent>

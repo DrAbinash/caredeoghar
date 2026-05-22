@@ -231,6 +231,30 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
     .orderBy(sql`${billAuditsTable.createdAt} DESC`)
     .limit(50);
 
+  // Referral name edits by this staff (changeType = "referral")
+  const referralEditsRaw = await db
+    .select({
+      id: billAuditsTable.id,
+      billId: billAuditsTable.billId,
+      editedBy: billAuditsTable.editedBy,
+      reason: billAuditsTable.reason,
+      changeType: billAuditsTable.changeType,
+      oldValue: billAuditsTable.oldValue,
+      newValue: billAuditsTable.newValue,
+      createdAt: billAuditsTable.createdAt,
+      billNumber: billsTable.billNumber,
+    })
+    .from(billAuditsTable)
+    .leftJoin(billsTable, eq(billAuditsTable.billId, billsTable.id))
+    .where(and(
+      gte(billAuditsTable.createdAt, start),
+      lt(billAuditsTable.createdAt, end),
+      eq(billAuditsTable.changeType, "referral"),
+      ...(staffName !== null ? [eq(billAuditsTable.editedBy, staffName)] : []),
+    ))
+    .orderBy(sql`${billAuditsTable.createdAt} DESC`)
+    .limit(50);
+
   // ── Voucher audits by this staff ──────────────────────────────────────
   const voucherAuditFilters = [
     gte(voucherAuditsTable.createdAt, start),
@@ -521,6 +545,18 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
         p.createdAt instanceof Date ? p.createdAt.toISOString() : String(p.createdAt),
     })),
     billEdits: billEditsRaw.map((r) => ({
+      id: r.id,
+      billId: r.billId,
+      billNumber: r.billNumber ?? `#${r.billId}`,
+      editedBy: r.editedBy,
+      reason: r.reason,
+      changeType: r.changeType,
+      oldValue: r.oldValue,
+      newValue: r.newValue,
+      createdAt:
+        r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
+    })),
+    referralEdits: referralEditsRaw.map((r) => ({
       id: r.id,
       billId: r.billId,
       billNumber: r.billNumber ?? `#${r.billId}`,
