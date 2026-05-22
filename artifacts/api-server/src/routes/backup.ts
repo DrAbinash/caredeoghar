@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import * as schema from "@workspace/db/schema";
 import { backupLogsTable } from "@workspace/db/schema";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import type { Table } from "drizzle-orm";
 
 export const backupRouter = Router();
@@ -88,4 +88,15 @@ backupRouter.post("/run", async (req, res) => {
 // GET /api/backup/info — what's included
 backupRouter.get("/info", (_req, res) => {
   res.json({ tables: BACKUP_TABLES.map(t => t.key) });
+});
+
+// DELETE /api/admin/backups/:id — remove a backup log entry
+backupRouter.delete("/:id", async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (Number.isNaN(id)) {
+    res.status(400).json({ error: "Invalid ID" });
+    return;
+  }
+  await db.delete(backupLogsTable).where(eq(backupLogsTable.id, id));
+  res.json({ success: true });
 });

@@ -81,3 +81,6 @@ export * from "./dicomStudies";
 export * from "./smartRadiology";
 export * from "./risMonitoring";
 export * from "./radiologyWorkflow";
+export * from "./auditLogs";
+export * from "./rolePermissions";
+export * from "./uploadFiles";

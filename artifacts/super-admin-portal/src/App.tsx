@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useForm } from "react-hook-form";
-import { ShieldAlert, LogOut, ExternalLink, Copy, CheckCheck, Eye, EyeOff, Lock, BookOpen, HandCoins, ListChecks, Wallet, Usb, ShieldCheck, FolderOpen, Stethoscope } from "lucide-react";
+import { ShieldAlert, LogOut, ExternalLink, Copy, CheckCheck, Eye, EyeOff, Lock, BookOpen, HandCoins, ListChecks, Wallet, Usb, ShieldCheck, FolderOpen, Stethoscope, Database, ScrollText, Shield, Heart } from "lucide-react";
 import { setSaToken, setSaUsbKey, loadSaUsbKeyFromSession, saUsbHeader } from "./lib/saApi";
 import {
   isFsAccessSupported,
@@ -22,6 +22,10 @@ const ReferralReport   = lazy(() => import("./pages/ReferralReport"));
 const DoctorLedger     = lazy(() => import("./pages/DoctorLedger"));
 const MoneyTrailAudit  = lazy(() => import("./pages/MoneyTrailAudit"));
 const DoctorManager    = lazy(() => import("./pages/DoctorManager"));
+const Backups          = lazy(() => import("./pages/Backups"));
+const AuditTrail       = lazy(() => import("./pages/AuditTrail"));
+const RolePermissions  = lazy(() => import("./pages/RolePermissions"));
+const SystemHealthPage = lazy(() => import("./pages/SystemHealth"));
 
 function PageLoader() {
   return (
@@ -328,7 +332,7 @@ function LoginScreen({ onLogin, onLockUsb }: { onLogin: (session: Session) => vo
 }
 
 function ActiveSessionScreen({
-  session, onEject, onManageBooks, onReferralReport, onCommissionRules, onDoctorLedger, onMoneyTrailAudit, onDoctorManager,
+  session, onEject, onManageBooks, onReferralReport, onCommissionRules, onDoctorLedger, onMoneyTrailAudit, onDoctorManager, onBackups, onAuditTrail, onRolePermissions, onSystemHealth,
 }: {
   session: Session;
   onEject: () => void;
@@ -338,6 +342,10 @@ function ActiveSessionScreen({
   onDoctorLedger: () => void;
   onMoneyTrailAudit: () => void;
   onDoctorManager: () => void;
+  onBackups: () => void;
+  onAuditTrail: () => void;
+  onRolePermissions: () => void;
+  onSystemHealth: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
@@ -494,12 +502,42 @@ function ActiveSessionScreen({
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
               Audit & Compliance
             </p>
-            <Button variant="outline" className="w-full justify-start" onClick={onMoneyTrailAudit}>
-              <ShieldCheck size={14} className="mr-2" />
-              Money Trail Audit
-            </Button>
+            <div className="grid grid-cols-1 gap-2">
+              <Button variant="outline" className="w-full justify-start" onClick={onMoneyTrailAudit}>
+                <ShieldCheck size={14} className="mr-2" />
+                Money Trail Audit
+              </Button>
+              <Button variant="outline" className="w-full justify-start" onClick={onAuditTrail}>
+                <ScrollText size={14} className="mr-2" />
+                Immutable Audit Trail
+              </Button>
+            </div>
             <p className="text-xs text-muted-foreground mt-2">
               Run a full money-trail audit, sign it off, and archive the snapshot. Auto-runs on the 1st of every month and emails the summary.
+            </p>
+          </div>
+
+          {/* Hospital-Grade Safety */}
+          <div className="border-t border-border pt-5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+              System & Security
+            </p>
+            <div className="grid grid-cols-1 gap-2">
+              <Button variant="outline" className="w-full justify-start" onClick={onBackups}>
+                <Database size={14} className="mr-2" />
+                Database Backups
+              </Button>
+              <Button variant="outline" className="w-full justify-start" onClick={onRolePermissions}>
+                <Shield size={14} className="mr-2" />
+                Role Permissions
+              </Button>
+              <Button variant="outline" className="w-full justify-start" onClick={onSystemHealth}>
+                <Heart size={14} className="mr-2" />
+                System Health
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Manage backups, granular role permissions, and monitor real-time system health.
             </p>
           </div>
 
@@ -523,8 +561,8 @@ function ActiveSessionScreen({
   );
 }
 
-type SaView = "home" | "books" | "referral-report" | "commission-rules" | "doctor-ledger" | "money-trail-audit" | "doctor-manager";
-const HASH_VIEWS: SaView[] = ["books", "referral-report", "commission-rules", "doctor-ledger", "money-trail-audit", "doctor-manager"];
+type SaView = "home" | "books" | "referral-report" | "commission-rules" | "doctor-ledger" | "money-trail-audit" | "doctor-manager" | "backups" | "audit-trail" | "role-permissions" | "system-health";
+const HASH_VIEWS: SaView[] = ["books", "referral-report", "commission-rules", "doctor-ledger", "money-trail-audit", "doctor-manager", "backups", "audit-trail", "role-permissions", "system-health"];
 function viewFromHash(): SaView {
   const h = (window.location.hash || "").replace(/^#/, "");
   return (HASH_VIEWS as string[]).includes(h) ? (h as SaView) : "home";
@@ -642,6 +680,14 @@ function App() {
           <MoneyTrailAudit onBack={() => setView("home")} />
         ) : view === "doctor-manager" ? (
           <DoctorManager onBack={() => setView("home")} />
+        ) : view === "backups" ? (
+          <Backups onBack={() => setView("home")} />
+        ) : view === "audit-trail" ? (
+          <AuditTrail onBack={() => setView("home")} />
+        ) : view === "role-permissions" ? (
+          <RolePermissions onBack={() => setView("home")} />
+        ) : view === "system-health" ? (
+          <SystemHealthPage onBack={() => setView("home")} />
         ) : (
           <ActiveSessionScreen
             session={session}
@@ -652,6 +698,10 @@ function App() {
             onDoctorLedger={() => setView("doctor-ledger")}
             onMoneyTrailAudit={() => setView("money-trail-audit")}
             onDoctorManager={() => setView("doctor-manager")}
+            onBackups={() => setView("backups")}
+            onAuditTrail={() => setView("audit-trail")}
+            onRolePermissions={() => setView("role-permissions")}
+            onSystemHealth={() => setView("system-health")}
           />
         )}
       </Suspense>

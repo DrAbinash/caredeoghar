@@ -65,10 +65,16 @@ import { kioskRouter } from "./kiosk";
 import { dayCloseRouter } from "./day-close";
 import { booksSanityRouter } from "./books-sanity";
 import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
+import { requireSuperAdminUsb } from "../middleware/requireSuperAdminUsb";
 import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
 import { db, clinicSettingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { auditLogsRouter } from "./audit-logs";
+import { rolePermissionsRouter } from "./role-permissions";
+import systemHealthRouter from "./system-health";
+import { backupLimiter, exportLimiter, adminMutationLimiter } from "../middleware/rateLimits";
 import userPreferencesRouter from "./userPreferences";
+import { uploadsRouter } from "./uploads";
 import { radiologyReportGeneratorRouter } from "./radiology-report-generator";
 import { structuredReportTemplatesRouter } from "./structuredReportTemplates";
 import { floorsRouter, roomsRouter, modalitiesRouter } from "./locations";
@@ -421,7 +427,17 @@ router.use("/auth/webauthn/authenticate", webauthnPublicRouter);
 router.use("/auth/webauthn", requireStaffAuth, webauthnRouter);
 
 router.use("/backup", requireSuperAdmin, backupRouter);
+
+// Apply tighter rate limits to specific super-admin endpoints
+backupRouter.use("/run", backupLimiter);
+auditLogsRouter.use("/export", exportLimiter);
+rolePermissionsRouter.use("/seed", adminMutationLimiter);
 router.use("/system", requireSuperAdmin, systemRouter);
+
+// ─── Hospital-grade admin routes (super admin only) ─────────────────────────
+router.use("/admin/audit-logs", requireSuperAdminUsb, requireSuperAdmin, auditLogsRouter);
+router.use("/admin/role-permissions", requireSuperAdminUsb, requireSuperAdmin, rolePermissionsRouter);
+router.use("/admin/system-health", requireSuperAdminUsb, requireSuperAdmin, systemHealthRouter);
 
 // ─── Super-admin-only routes ──────────────────────────────────────────────────
 // User management lives under the regular ERP "Settings" surface — admins
@@ -453,5 +469,8 @@ router.use("/banking", requireStaffAuth, requireStaffPermission("/banking"), ban
 
 // Offline sync — push/pull changes between local desktop instance and cloud.
 router.use("/sync", requireStaffAuth, syncRouter);
+
+// File uploads — validated, size-limited, metadata tracked
+router.use("/uploads", requireStaffAuth, uploadsRouter);
 
 export default router;

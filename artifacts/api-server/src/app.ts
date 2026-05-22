@@ -6,6 +6,8 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { errorHandler } from "./middleware/errorHandler";
+import { generalLimiter } from "./middleware/rateLimits";
 
 // Helmet is loaded lazily so a missing optional dependency never crashes the
 // server. Production deployments should include it; dev environments can
@@ -76,7 +78,7 @@ app.use(cors());
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 
-app.use("/api", router);
+app.use("/api", generalLimiter, router);
 
 // Serve user-uploaded site assets (favicon, photos, hero images, etc.)
 // from data/uploads. Path matches what /api/website/photos returns.
@@ -181,5 +183,10 @@ if (staticDir) {
     }
   }
 }
+
+// Global error handler — must be registered AFTER all routes.
+// Catches any unhandled errors from route handlers and prevents stack-trace
+// leakage in production.
+app.use(errorHandler);
 
 export default app;
