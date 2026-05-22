@@ -63,6 +63,13 @@ import {
   Network,
   DatabaseBackup,
   Waves,
+  ActivitySquare,
+  ClipboardCheck,
+  Microscope,
+  Eye,
+  Workflow,
+  ImagePlus,
+  Scan,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -130,6 +137,10 @@ const navItems: NavEntry[] = [
       { path: "/radiology/archive-lifecycle",     icon: Archive,      label: "Archive Lifecycle",     ownerOnly: true },
       { path: "/radiology/watchdog",              icon: ShieldAlert,  label: "Watchdog",              ownerOnly: true },
       { path: "/radiology/hl7-settings",          icon: Network,      label: "HL7 / RIS Bridge",      ownerOnly: true },
+      { path: "/radiology/dicom-study-worklist",   icon: Scan,         label: "DICOM Study Worklist" },
+      { path: "/radiology/radiologist-queue",      icon: ActivitySquare,label: "Radiologist Queue" },
+      { path: "/radiology/ai-extraction-review",  icon: Microscope,   label: "AI Extraction Review" },
+      { path: "/radiology/hanging-protocols",      icon: ImagePlus,    label: "Hanging Protocols" },
     ],
   },
 

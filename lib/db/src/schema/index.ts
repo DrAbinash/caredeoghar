@@ -77,3 +77,4 @@ export * from "./aiReporting";
 export * from "./drawerAuditLog";
 export * from "./enterpriseRadiology";
 export * from "./usgMeasurements";
+export * from "./dicomStudies";

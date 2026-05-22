@@ -78,6 +78,11 @@ const WhatsAppChatbot = lazy(() => import("@/pages/WhatsAppChatbot"));
 const Portal          = lazy(() => import("@/pages/Portal"));
 const Display         = lazy(() => import("@/pages/Display"));
 const OnlineBookings  = lazy(() => import("@/pages/OnlineBookings"));
+const DicomStudyWorklist    = lazy(() => import("@/pages/DicomStudyWorklist"));
+const RadiologistQueue      = lazy(() => import("@/pages/RadiologistQueue"));
+const TechnicianWorkflow    = lazy(() => import("@/pages/TechnicianWorkflow"));
+const AiExtractionReview    = lazy(() => import("@/pages/AiExtractionReview"));
+const HangingProtocols      = lazy(() => import("@/pages/HangingProtocols"));
 const TeleradiologyPortal = lazy(() => import("@/pages/TeleradiologyPortal"));
 const MobileViewer    = lazy(() => import("@/pages/MobileViewer"));
 const DailySummary    = lazy(() => import("@/pages/DailySummary"));
@@ -241,6 +246,17 @@ function Router() {
               <Route path="/usg/settings" component={UsgAdminSettings} />
               <Route path="/usg/analytics" component={UsgAnalytics} />
               <Route path="/backup-replication" component={BackupReplication} />
+              {/* Phase 10 RIS/PACS Foundation */}
+              <Route path="/radiology/dicom-study-worklist" component={DicomStudyWorklist} />
+              <Route path="/radiology/radiologist-queue" component={RadiologistQueue} />
+              <Route path="/radiology/technician-workflow/:studyId">
+                {(params) => <TechnicianWorkflow studyId={Number(params.studyId)} />}
+              </Route>
+              <Route path="/radiology/technician-workflow">
+                {() => <TechnicianWorkflow />}
+              </Route>
+              <Route path="/radiology/ai-extraction-review" component={AiExtractionReview} />
+              <Route path="/radiology/hanging-protocols" component={HangingProtocols} />
               <Route path="/m/viewer/:studyInstanceUID" component={MobileViewer} />
               <Route path="/packages" component={Packages} />
               <Route path="/expenses" component={Expenses} />
