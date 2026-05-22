@@ -166,7 +166,7 @@ export default function BillDetail({ id }: { id: number }) {
     queryFn: () => api.get("/api/printers/settings"),
     staleTime: 5 * 60_000,
   });
-  const { data: doctors = [] } = useQuery<Doctor[]>({
+  const { data: doctorsResp } = useQuery<{ doctors: Doctor[]; total: number }>({
     queryKey: ["doctors"],
     queryFn: () => api.get("/api/doctors"),
     staleTime: 5 * 60_000,
@@ -1371,7 +1371,7 @@ export default function BillDetail({ id }: { id: number }) {
                   <SelectValue placeholder="Select a doctor…" />
                 </SelectTrigger>
                 <SelectContent>
-                  {doctors.map((d) => (
+                  {(doctorsResp?.doctors ?? []).map((d) => (
                     <SelectItem key={d.id} value={String(d.id)}>
                       {d.name} <span className="text-muted-foreground text-xs">({d.specialization || "N/A"})</span>
                     </SelectItem>

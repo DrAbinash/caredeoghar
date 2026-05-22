@@ -112,8 +112,21 @@ const isGroup = (n: NavEntry): n is NavGroup => "children" in n;
 // unchanged; only the visual grouping is consolidated to reduce clutter.
 const navItems: NavEntry[] = [
   { path: "/", icon: Zap, label: "Billing Desk" },
-  { path: "/dashboard", icon: LayoutDashboard, label: "Owner Dashboard", ownerOnly: true },
   { path: "/my-daily-summary", icon: BarChart2, label: "My Daily Summary" },
+  {
+    id: "billing-grp",
+    icon: Receipt,
+    label: "Billing & Payments",
+    children: [
+      { path: "/billing", icon: Receipt, label: "Bills" },
+      { path: "/dues", icon: AlertCircle, label: "Due Payments" },
+      { path: "/payments", icon: CreditCard, label: "Payments" },
+      { path: "/orders", icon: ClipboardList, label: "Orders" },
+    ],
+  },
+  { path: "/day-close", icon: Lock, label: "Day Close", ownerOnly: true },
+  { path: "/my-day-close", icon: Clock, label: "My Day Close" },
+  { path: "/dashboard", icon: LayoutDashboard, label: "Owner Dashboard", ownerOnly: true },
   { path: "/patients", icon: Users, label: "Patients" },
   { path: "/appointments", icon: CalendarDays, label: "Appointments" },
   { path: "/online-bookings", icon: ShoppingCart, label: "Online Bookings" },
@@ -156,18 +169,6 @@ const navItems: NavEntry[] = [
   },
 
   { path: "/usg", icon: Waves, label: "USG / DOPPLER" },
-
-  {
-    id: "billing-grp",
-    icon: Receipt,
-    label: "Billing & Payments",
-    children: [
-      { path: "/billing", icon: Receipt, label: "Bills" },
-      { path: "/dues", icon: AlertCircle, label: "Due Payments" },
-      { path: "/payments", icon: CreditCard, label: "Payments" },
-      { path: "/orders", icon: ClipboardList, label: "Orders" },
-    ],
-  },
   { path: "/samples", icon: TestTube, label: "Samples" },
   { path: "/reports", icon: BarChart3, label: "Reports" },
   { path: "/report-generator", icon: FilePen, label: "Report Generator" },
@@ -184,8 +185,6 @@ const navItems: NavEntry[] = [
   },
   { path: "/accounting", icon: BookOpen, label: "Accounting" },
   { path: "/banking", icon: Landmark, label: "Banking" },
-  { path: "/my-day-close", icon: Clock, label: "My Day Close" },
-  { path: "/day-close", icon: Lock, label: "Day Close", ownerOnly: true },
   { path: "/books-sanity", icon: ShieldCheck, label: "Books Sanity (CA)", ownerOnly: true },
   { path: "/form-f", icon: FileText, label: "Form F (PCPNDT)" },
   { path: "/website", icon: Globe, label: "Website Builder" },
