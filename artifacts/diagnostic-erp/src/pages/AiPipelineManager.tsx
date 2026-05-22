@@ -48,7 +48,7 @@ export default function AiPipelineManager() {
     ct_brain: true, cxr: true, spine_mri: true, trauma: true, usg_ocr: false,
   });
 
-  const { data, refetch } = useQuery({
+  const { data, refetch } = useQuery<any[]>({
     queryKey: ["ai-jobs", filterStatus],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -72,7 +72,6 @@ export default function AiPipelineManager() {
           <PageHeader
             title="AI Pipeline Manager"
             subtitle="Orchestrate AI jobs: OCR, impression, critical detection, templates"
-            icon={<BrainCircuit className="w-5 h-5 text-violet-400" />}
           />
           <Button variant="outline" size="sm" onClick={() => refetch()} className="border-slate-700 text-slate-300 hover:bg-slate-800">
             <RefreshCw className="w-4 h-4 mr-2" />

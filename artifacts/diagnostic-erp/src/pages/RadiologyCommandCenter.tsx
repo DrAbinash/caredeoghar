@@ -18,7 +18,7 @@ import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 
 function useCommandCenter() {
-  return useQuery({
+  return useQuery<any>({
     queryKey: ["command-center"],
     queryFn: () => api.get("/api/radiology-workflow/command-center"),
     refetchInterval: 5000,
@@ -39,7 +39,6 @@ export default function RadiologyCommandCenter() {
           <PageHeader
             title="Radiology Command Center"
             subtitle="Real-time RIS/PACS operations overview"
-            icon={<Activity className="w-5 h-5 text-teal-400" />}
           />
           <Button variant="outline" size="sm" onClick={() => refetch()} className="border-slate-700 text-slate-300 hover:bg-slate-800">
             <RefreshCw className="w-4 h-4 mr-2" />

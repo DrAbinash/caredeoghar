@@ -31,7 +31,7 @@ export default function MwlManager() {
   const [filterModality, setFilterModality] = useState("");
   const [filterDate, setFilterDate] = useState("");
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, refetch } = useQuery<any>({
     queryKey: ["mwl-entries", filterStatus, filterModality, filterDate],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -64,7 +64,6 @@ export default function MwlManager() {
           <PageHeader
             title="Modality Worklist Manager"
             subtitle="Generate MWL entries, track status, detect duplicates"
-            icon={<ListChecks className="w-5 h-5 text-teal-400" />}
           />
           <Button variant="outline" size="sm" onClick={() => refetch()} className="border-slate-700 text-slate-300 hover:bg-slate-800">
             <RefreshCw className="w-4 h-4 mr-2" />

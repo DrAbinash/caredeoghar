@@ -35,7 +35,7 @@ export default function CriticalAlertsManager() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const { data, refetch } = useQuery({
+  const { data, refetch } = useQuery<any>({
     queryKey: ["critical-alerts"],
     queryFn: () => api.get("/api/radiology-workflow/critical-alerts"),
     refetchInterval: 5000,
@@ -56,7 +56,6 @@ export default function CriticalAlertsManager() {
           <PageHeader
             title="Critical Finding Alert Engine"
             subtitle="Escalation workflow for life-threatening radiological findings"
-            icon={<AlertOctagon className="w-5 h-5 text-rose-400" />}
           />
           <Button variant="outline" size="sm" onClick={() => refetch()} className="border-slate-700 text-slate-300 hover:bg-slate-800">
             <RefreshCw className="w-4 h-4 mr-2" />

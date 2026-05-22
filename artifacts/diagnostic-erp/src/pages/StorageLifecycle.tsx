@@ -26,7 +26,7 @@ export default function StorageLifecycle() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const { data, refetch } = useQuery({
+  const { data, refetch } = useQuery<any>({
     queryKey: ["storage-lifecycle"],
     queryFn: () => api.get("/api/radiology-workflow/storage-lifecycle"),
     refetchInterval: 10000,
@@ -48,7 +48,6 @@ export default function StorageLifecycle() {
           <PageHeader
             title="Storage Lifecycle Manager"
             subtitle="SSD, NAS, Archive tiers — auto-archive, compression, orphan cleanup"
-            icon={<Database className="w-5 h-5 text-cyan-400" />}
           />
           <Button variant="outline" size="sm" onClick={() => refetch()} className="border-slate-700 text-slate-300 hover:bg-slate-800">
             <RefreshCw className="w-4 h-4 mr-2" />

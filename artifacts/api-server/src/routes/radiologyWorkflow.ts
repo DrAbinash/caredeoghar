@@ -52,7 +52,6 @@ router.get("/mwl", async (req, res) => {
   const priority = req.query.priority as string | undefined;
   const referringDoctor = req.query.referringDoctor as string | undefined;
 
-  let q = db.select().from(mwlEntriesTable).orderBy(desc(mwlEntriesTable.createdAt));
   const conditions: any[] = [];
   if (status) conditions.push(eq(mwlEntriesTable.status, status));
   if (modality) conditions.push(eq(mwlEntriesTable.modality, modality));
@@ -60,10 +59,11 @@ router.get("/mwl", async (req, res) => {
   if (referringDoctor) conditions.push(sql`${mwlEntriesTable.referringDoctor} ILIKE ${`%${referringDoctor}%`}`);
   if (date) conditions.push(eq(mwlEntriesTable.scheduledStartDate, date));
 
-  if (conditions.length > 0) {
-    q = db.select().from(mwlEntriesTable).where(and(...conditions)).orderBy(desc(mwlEntriesTable.createdAt));
-  }
-  const rows = await q.limit(200);
+  const whereClause = conditions.length > 0 ? and(...conditions) : sql`true`;
+  const rows = await db.select().from(mwlEntriesTable)
+    .where(whereClause)
+    .orderBy(desc(mwlEntriesTable.createdAt))
+    .limit(200);
 
   // Duplicate detection: count same accession numbers
   const accessionGroups = await db.select({
@@ -418,14 +418,14 @@ router.get("/access-logs", async (req, res) => {
   const userId = req.query.userId ? Number(req.query.userId) : undefined;
   const limit = Math.min(Number(req.query.limit ?? 500), 2000);
 
-  let q = db.select().from(studyAccessLogTable).orderBy(desc(studyAccessLogTable.createdAt));
   const conditions: any[] = [];
   if (studyId) conditions.push(eq(studyAccessLogTable.studyId, studyId));
   if (userId) conditions.push(eq(studyAccessLogTable.userId, userId));
-  if (conditions.length > 0) {
-    q = db.select().from(studyAccessLogTable).where(and(...conditions)).orderBy(desc(studyAccessLogTable.createdAt));
-  }
-  const rows = await q.limit(limit);
+  const whereClause = conditions.length > 0 ? and(...conditions) : sql`true`;
+  const rows = await db.select().from(studyAccessLogTable)
+    .where(whereClause)
+    .orderBy(desc(studyAccessLogTable.createdAt))
+    .limit(limit);
   res.json(rows);
 });
 
@@ -442,7 +442,7 @@ router.post("/access-logs", async (req, res) => {
     userId: s.subjectId ?? 0,
     userName: s.subjectName ?? "unknown",
     userRole: s.role ?? "unknown",
-    sessionId: s.token ?? null,
+    sessionId: null,
   } as any).returning();
   res.status(201).json(row);
 });

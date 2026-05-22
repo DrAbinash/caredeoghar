@@ -40,7 +40,7 @@ export default function AcquisitionGateway() {
   const [filterStatus, setFilterStatus] = useState<string>("");
   const [filterModality, setFilterModality] = useState<string>("");
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, refetch } = useQuery<any>({
     queryKey: ["incoming-studies", filterStatus, filterModality],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -57,7 +57,7 @@ export default function AcquisitionGateway() {
   });
 
   const reprocessMut = useMutation({
-    mutationFn: (id: number) => api.patch(`/api/radiology-workflow/incoming/${id}/reprocess`),
+    mutationFn: (id: number) => api.patch(`/api/radiology-workflow/incoming/${id}/reprocess`, {}),
     onSuccess: () => { toast({ title: "Reprocessing started" }); qc.invalidateQueries({ queryKey: ["incoming-studies"] }); },
   });
 
@@ -71,7 +71,6 @@ export default function AcquisitionGateway() {
           <PageHeader
             title="Acquisition Gateway"
             subtitle="Track incoming DICOM studies from all modalities"
-            icon={<HardDrive className="w-5 h-5 text-cyan-400" />}
           />
           <Button variant="outline" size="sm" onClick={() => refetch()} className="border-slate-700 text-slate-300 hover:bg-slate-800">
             <RefreshCw className="w-4 h-4 mr-2" />

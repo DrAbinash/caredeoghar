@@ -23,17 +23,17 @@ export default function RadiologistTools() {
   const [macroTrigger, setMacroTrigger] = useState("");
   const [macroExpansion, setMacroExpansion] = useState("");
 
-  const { data: shortcuts, refetch: refetchShortcuts } = useQuery({
+  const { data: shortcuts, refetch: refetchShortcuts } = useQuery<any[]>({
     queryKey: ["shortcuts"],
     queryFn: () => api.get("/api/radiology-workflow/shortcuts"),
   });
 
-  const { data: macros, refetch: refetchMacros } = useQuery({
+  const { data: macros, refetch: refetchMacros } = useQuery<any[]>({
     queryKey: ["macros"],
     queryFn: () => api.get("/api/radiology-workflow/macros"),
   });
 
-  const { data: presets, refetch: refetchPresets } = useQuery({
+  const { data: presets, refetch: refetchPresets } = useQuery<any[]>({
     queryKey: ["viewer-presets"],
     queryFn: () => api.get("/api/radiology-workflow/viewer-presets"),
   });
@@ -61,7 +61,6 @@ export default function RadiologistTools() {
         <PageHeader
           title="Radiologist Productivity Tools"
           subtitle="Hotkeys, macros, window presets, reporting timer"
-          icon={<Keyboard className="w-5 h-5 text-violet-400" />}
         />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-6">
