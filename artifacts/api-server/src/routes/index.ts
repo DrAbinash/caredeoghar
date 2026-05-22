@@ -77,6 +77,7 @@ import { usgExtractionRouter } from "./usgExtraction";
 import { usgDopplerRouter } from "./usgDoppler";
 import { usgReportsRouter } from "./usgReports";
 import { usgCriticalAlertsRouter } from "./usgCriticalAlerts";
+import { usgAnalyticsRouter } from "./usgAnalytics";
 
 const router: IRouter = Router();
 
@@ -309,6 +310,7 @@ router.use("/usg-doppler", requireStaffAuth, usgDopplerRouter);
 // USG Report Drafts — all authenticated staff can create/edit drafts.
 router.use("/usg-reports", requireStaffAuth, usgReportsRouter);
 router.use("/usg-critical", requireStaffAuth, usgCriticalAlertsRouter);
+router.use("/usg-analytics", requireStaffAuth, usgAnalyticsRouter);
 
 // Radiology studies — open to all authenticated staff (doctors, radiologists, etc.)
 router.use("/radiology", requireStaffAuth, radiologyRouter);

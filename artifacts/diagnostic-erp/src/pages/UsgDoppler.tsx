@@ -16,6 +16,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
+  BarChart2,
 } from "lucide-react";
 
 interface UsgStats {
@@ -98,6 +99,24 @@ const CARDS: ModuleCard[] = [
     iconBg: "bg-rose-100 text-rose-600 dark:bg-rose-900/50 dark:text-rose-300",
     badgeKey: "pendingDoppler",
     badgeLabel: "Pending",
+  },
+  {
+    id: "prior",
+    title: "Prior Comparison",
+    description: "Compare current findings against prior finalized USG reports for the same patient.",
+    icon: Clock,
+    path: "/usg/reporting",
+    gradient: "from-cyan-50 via-sky-50 to-blue-50 dark:from-cyan-950/40 dark:via-sky-950/40 dark:to-blue-950/40",
+    iconBg: "bg-cyan-100 text-cyan-600 dark:bg-cyan-900/50 dark:text-cyan-300",
+  },
+  {
+    id: "analytics",
+    title: "USG Analytics",
+    description: "Workforce productivity dashboard with TAT, template usage, amendment rate, and quality metrics.",
+    icon: BarChart2,
+    path: "/usg/analytics",
+    gradient: "from-teal-50 via-emerald-50 to-green-50 dark:from-teal-950/40 dark:via-emerald-950/40 dark:to-green-950/40",
+    iconBg: "bg-teal-100 text-teal-600 dark:bg-teal-900/50 dark:text-teal-300",
   },
   {
     id: "critical",

@@ -1225,6 +1225,82 @@ async function runStartupMigrations(): Promise<void> {
       CREATE INDEX IF NOT EXISTS usg_draft_worklist_idx ON usg_report_drafts(worklist_id);
       CREATE INDEX IF NOT EXISTS usg_draft_status_idx   ON usg_report_drafts(status);
       CREATE INDEX IF NOT EXISTS usg_draft_patient_idx  ON usg_report_drafts(patient_id);
+
+      -- Phase 9: medico-legal safety columns
+      ALTER TABLE usg_report_drafts ADD COLUMN IF NOT EXISTS verified_by      TEXT;
+      ALTER TABLE usg_report_drafts ADD COLUMN IF NOT EXISTS verified_at      TIMESTAMPTZ;
+      ALTER TABLE usg_report_drafts ADD COLUMN IF NOT EXISTS amended_by       TEXT;
+      ALTER TABLE usg_report_drafts ADD COLUMN IF NOT EXISTS amended_at       TIMESTAMPTZ;
+      ALTER TABLE usg_report_drafts ADD COLUMN IF NOT EXISTS prior_version_id INTEGER;
+      ALTER TABLE usg_report_drafts ADD COLUMN IF NOT EXISTS critical_alert_id INTEGER;
+      ALTER TABLE usg_report_drafts ADD COLUMN IF NOT EXISTS finalized_report_hash   TEXT;
+      ALTER TABLE usg_report_drafts ADD COLUMN IF NOT EXISTS finalized_pdf_version_id TEXT;
+      ALTER TABLE usg_report_drafts ADD COLUMN IF NOT EXISTS amendment_reason       TEXT;
+      ALTER TABLE usg_report_drafts ADD COLUMN IF NOT EXISTS sync_status           TEXT NOT NULL DEFAULT 'synced';
+      ALTER TABLE usg_report_drafts ADD COLUMN IF NOT EXISTS locked_by              TEXT;
+
+      -- Structured measurement numeric fields (Phase 9)
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS right_kidney_length_mm        REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS right_kidney_width_mm         REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS right_kidney_thickness_mm    REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS left_kidney_length_mm         REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS left_kidney_width_mm          REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS left_kidney_thickness_mm     REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS right_cortical_thickness_mm  REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS left_cortical_thickness_mm   REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS prostate_length_mm            REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS prostate_width_mm             REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS prostate_height_mm            REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS thyroid_right_lobe_length_mm  REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS thyroid_right_lobe_width_mm   REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS thyroid_right_lobe_thickness_mm REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS thyroid_left_lobe_length_mm   REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS thyroid_left_lobe_width_mm    REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS thyroid_left_lobe_thickness_mm REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS thyroid_isthmus_mm            REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS thyroid_nodule_size_mm        REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS thyroid_tirads_score          TEXT;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS liver_span_mm                 REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS cbd_mm                        REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS gb_wall_mm                    REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS uterus_length_mm              REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS uterus_width_mm               REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS uterus_height_mm               REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS right_ovary_length_mm         REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS right_ovary_width_mm          REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS right_ovary_height_mm          REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS left_ovary_length_mm          REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS left_ovary_width_mm           REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS left_ovary_height_mm          REAL;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS follicle_count                INTEGER;
+      ALTER TABLE usg_measurements ADD COLUMN IF NOT EXISTS largest_follicle_mm           REAL;
+
+      CREATE TABLE IF NOT EXISTS usg_report_amendments (
+        id SERIAL PRIMARY KEY,
+        draft_id INTEGER NOT NULL,
+        prior_version_id INTEGER NOT NULL,
+        amendment_reason TEXT NOT NULL DEFAULT '',
+        amended_by TEXT NOT NULL,
+        amended_by_id INTEGER,
+        prior_content TEXT NOT NULL DEFAULT '',
+        new_content TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS usg_amend_draft_idx ON usg_report_amendments(draft_id);
+      CREATE INDEX IF NOT EXISTS usg_amend_prior_idx ON usg_report_amendments(prior_version_id);
+
+      CREATE TABLE IF NOT EXISTS usg_finding_image_links (
+        id SERIAL PRIMARY KEY,
+        draft_id INTEGER NOT NULL,
+        finding_index INTEGER NOT NULL DEFAULT 0,
+        image_id INTEGER NOT NULL,
+        frame_number INTEGER,
+        annotation_label TEXT,
+        measurement_reference TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS usg_fimg_draft_idx ON usg_finding_image_links(draft_id);
+      CREATE INDEX IF NOT EXISTS usg_fimg_image_idx ON usg_finding_image_links(image_id);
     `);
     logger.info("Startup migrations applied");
   } catch (err) {

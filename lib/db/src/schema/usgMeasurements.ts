@@ -52,6 +52,46 @@ export const usgMeasurementsTable = pgTable(
     gbWall: text("gb_wall"),                   gbWallConfidence: text("gb_wall_confidence"),
     prostateVolume: text("prostate_volume"),   prostateVolumeConfidence: text("prostate_volume_confidence"),
 
+    // ── Structured measurement fields (numeric, for auto-calculation engine) ──
+    rightKidneyLengthMm:   real("right_kidney_length_mm"),
+    rightKidneyWidthMm:    real("right_kidney_width_mm"),
+    rightKidneyThicknessMm: real("right_kidney_thickness_mm"),
+    leftKidneyLengthMm:    real("left_kidney_length_mm"),
+    leftKidneyWidthMm:     real("left_kidney_width_mm"),
+    leftKidneyThicknessMm:  real("left_kidney_thickness_mm"),
+    rightCorticalThicknessMm: real("right_cortical_thickness_mm"),
+    leftCorticalThicknessMm:  real("left_cortical_thickness_mm"),
+
+    prostateLengthMm:      real("prostate_length_mm"),
+    prostateWidthMm:       real("prostate_width_mm"),
+    prostateHeightMm:      real("prostate_height_mm"),
+
+    thyroidRightLobeLengthMm:  real("thyroid_right_lobe_length_mm"),
+    thyroidRightLobeWidthMm:   real("thyroid_right_lobe_width_mm"),
+    thyroidRightLobeThicknessMm: real("thyroid_right_lobe_thickness_mm"),
+    thyroidLeftLobeLengthMm:     real("thyroid_left_lobe_length_mm"),
+    thyroidLeftLobeWidthMm:      real("thyroid_left_lobe_width_mm"),
+    thyroidLeftLobeThicknessMm:  real("thyroid_left_lobe_thickness_mm"),
+    thyroidIsthmusMm:          real("thyroid_isthmus_mm"),
+    thyroidNoduleSizeMm:       real("thyroid_nodule_size_mm"),
+    thyroidTiradsScore:        text("thyroid_tirads_score"),
+
+    liverSpanMm:           real("liver_span_mm"),
+    cbdMm:                 real("cbd_mm"),
+    gbWallMm:              real("gb_wall_mm"),
+
+    uterusLengthMm:        real("uterus_length_mm"),
+    uterusWidthMm:         real("uterus_width_mm"),
+    uterusHeightMm:        real("uterus_height_mm"),
+    rightOvaryLengthMm:    real("right_ovary_length_mm"),
+    rightOvaryWidthMm:     real("right_ovary_width_mm"),
+    rightOvaryHeightMm:    real("right_ovary_height_mm"),
+    leftOvaryLengthMm:     real("left_ovary_length_mm"),
+    leftOvaryWidthMm:      real("left_ovary_width_mm"),
+    leftOvaryHeightMm:     real("left_ovary_height_mm"),
+    follicleCount:         integer("follicle_count"),
+    largestFollicleMm:     real("largest_follicle_mm"),
+
     extraMeasurementsJson: text("extra_measurements_json").notNull().default("{}"),
 
     manufacturer: text("manufacturer"),
@@ -265,6 +305,13 @@ export const usgReportDraftsTable = pgTable(
     // Critical-finding linkage (id of usg-flavoured critical_findings_alerts row)
     criticalAlertId: integer("critical_alert_id"),
 
+    // Medico-legal safety fields
+    finalizedReportHash:   text("finalized_report_hash"),
+    finalizedPdfVersionId: text("finalized_pdf_version_id"),
+    amendmentReason:       text("amendment_reason"),
+    syncStatus:            text("sync_status").notNull().default("synced"), // synced | pending_sync | conflict
+    lockedBy:              text("locked_by"), // user name who currently holds edit lock
+
     createdAt:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt:   timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
     verifiedAt:  timestamp("verified_at", { withTimezone: true }),
@@ -276,6 +323,48 @@ export const usgReportDraftsTable = pgTable(
     byWorklist: index("usg_draft_worklist_idx").on(t.worklistId),
     byStatus:   index("usg_draft_status_idx").on(t.status),
     byPatient:  index("usg_draft_patient_idx").on(t.patientId),
+    byHash:     index("usg_draft_hash_idx").on(t.finalizedReportHash),
+  }),
+);
+
+// ── usg_report_amendments ────────────────────────────────────────────────────
+// Full amendment history — every change after finalization creates a row here.
+export const usgReportAmendmentsTable = pgTable(
+  "usg_report_amendments",
+  {
+    id: serial("id").primaryKey(),
+    draftId: integer("draft_id").notNull(),          // the new amended draft
+    priorVersionId: integer("prior_version_id").notNull(), // the original finalized draft
+    amendmentReason: text("amendment_reason").notNull().default(""),
+    amendedBy: text("amended_by").notNull(),
+    amendedById: integer("amended_by_id"),
+    priorContent: text("prior_content").notNull().default(""),
+    newContent: text("new_content").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    byDraft: index("usg_amend_draft_idx").on(t.draftId),
+    byPrior: index("usg_amend_prior_idx").on(t.priorVersionId),
+  }),
+);
+
+// ── usg_finding_image_links ─────────────────────────────────────────────────
+// Links report findings to key images / frames.
+export const usgFindingImageLinksTable = pgTable(
+  "usg_finding_image_links",
+  {
+    id: serial("id").primaryKey(),
+    draftId: integer("draft_id").notNull(),
+    findingIndex: integer("finding_index").notNull().default(0),
+    imageId: integer("image_id").notNull(),        // FK → usg_key_images.id
+    frameNumber: integer("frame_number"),
+    annotationLabel: text("annotation_label"),
+    measurementReference: text("measurement_reference"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    byDraft: index("usg_fimg_draft_idx").on(t.draftId),
+    byImage: index("usg_fimg_image_idx").on(t.imageId),
   }),
 );
 
@@ -318,4 +407,6 @@ export type UsgDopplerMeasurement = typeof usgDopplerMeasurementsTable.$inferSel
 export type UsgExtractionSettings = typeof usgExtractionSettingsTable.$inferSelect;
 export type UsgMachineProfile     = typeof usgMachineProfilesTable.$inferSelect;
 export type UsgReportDraft        = typeof usgReportDraftsTable.$inferSelect;
+export type UsgReportAmendment    = typeof usgReportAmendmentsTable.$inferSelect;
+export type UsgFindingImageLink   = typeof usgFindingImageLinksTable.$inferSelect;
 export type UsgAuditLog           = typeof usgAuditLogTable.$inferSelect;

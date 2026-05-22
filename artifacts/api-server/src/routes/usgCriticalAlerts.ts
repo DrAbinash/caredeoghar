@@ -1,14 +1,16 @@
 /**
- * USG Critical Findings & Productivity Routes
+ * USG Critical Findings & Productivity Routes — Phase 9
  * Mounted at: /api/usg-critical  (staff-auth required)
  *
  * Reuses the existing `critical_findings_alerts` table but filters by
  * modality IN ('US','USG') for the USG / DOPPLER module surface.
  *
  * GET    /alerts                       — list active USG critical alerts
+ * GET    /alerts/overdue               — alerts past escalation timer
  * POST   /alerts                       — flag a new critical finding
  * POST   /alerts/:id/acknowledge       — acknowledge
  * POST   /alerts/:id/resolve           — mark resolved
+ * POST   /alerts/:id/escalate         — manual escalation
  *
  * GET    /productivity?period=daily&days=7 — radiologist productivity stats for USG
  * GET    /audit                        — audit-log feed (filterable)
@@ -33,7 +35,16 @@ function staffOf(req: Request): { subjectId?: number; subjectName?: string; role
   return (req as ReqWithStaff).staffSession ?? {};
 }
 
-// ── GET /alerts ─────────────────────────────────────────────────────────────
+// Escalation timer in minutes (configurable via query or env; default 30)
+const ESCALATION_MINUTES = 30;
+
+// Placeholder notification hooks — no real sending unless credentials configured.
+async function notifyEscalation(_alertId: number, _channels: string[]) {
+  // Future: integrate WhatsApp Business API, SMS gateway, email SMTP here.
+  logger.info({ alertId: _alertId, channels: _channels }, "Escalation notification placeholder");
+}
+
+// ── GET /alerts ────────────────────────────────────────────────────
 
 router.get("/alerts", async (req, res) => {
   const status = (req.query.status as string | undefined) ?? "active";
@@ -48,7 +59,25 @@ router.get("/alerts", async (req, res) => {
   res.json(rows);
 });
 
-// ── POST /alerts ────────────────────────────────────────────────────────────
+// ── GET /alerts/overdue ────────────────────────────────────────────────────
+
+router.get("/alerts/overdue", async (_req, res) => {
+  const cutoff = new Date(Date.now() - ESCALATION_MINUTES * 60 * 1000);
+  const rows = await db.select()
+    .from(criticalFindingsAlertsTable)
+    .where(and(
+      inArray(criticalFindingsAlertsTable.modality, ["US", "USG"]),
+      eq(criticalFindingsAlertsTable.status, "active"),
+      gte(criticalFindingsAlertsTable.createdAt, new Date(0)),
+    ))
+    .orderBy(desc(criticalFindingsAlertsTable.createdAt))
+    .limit(100);
+
+  const overdue = rows.filter((r) => new Date(r.createdAt) < cutoff);
+  res.json({ overdue, escalationMinutes: ESCALATION_MINUTES });
+});
+
+// ── POST /alerts ────────────────────────────────────────────────────
 
 router.post("/alerts", async (req, res) => {
   const b = (req.body ?? {}) as {
@@ -97,7 +126,7 @@ router.post("/alerts", async (req, res) => {
   }
 });
 
-// ── POST /alerts/:id/acknowledge ────────────────────────────────────────────
+// ── POST /alerts/:id/acknowledge ───────────────────────────────────────────────────
 
 router.post("/alerts/:id/acknowledge", async (req, res) => {
   const id = Number(req.params.id);
@@ -119,7 +148,7 @@ router.post("/alerts/:id/acknowledge", async (req, res) => {
   res.json(row);
 });
 
-// ── POST /alerts/:id/resolve ────────────────────────────────────────────────
+// ── POST /alerts/:id/resolve ───────────────────────────────────────────────────
 
 router.post("/alerts/:id/resolve", async (req, res) => {
   const id = Number(req.params.id);
@@ -141,15 +170,42 @@ router.post("/alerts/:id/resolve", async (req, res) => {
   res.json(row);
 });
 
-// ── GET /productivity ───────────────────────────────────────────────────────
-// Aggregated USG productivity (radiologist / sonologist breakdown + TAT).
+// ── POST /alerts/:id/escalate ───────────────────────────────────────────────────
+
+router.post("/alerts/:id/escalate", async (req, res) => {
+  const id = Number(req.params.id);
+  const b = (req.body ?? {}) as { escalatedTo?: string; channels?: string[] };
+  const [row] = await db.update(criticalFindingsAlertsTable)
+    .set({
+      status: "escalated",
+      escalatedTo: b.escalatedTo ?? staffOf(req).subjectName ?? "staff",
+      escalationSent: true,
+    })
+    .where(and(
+      eq(criticalFindingsAlertsTable.id, id),
+      inArray(criticalFindingsAlertsTable.modality, ["US", "USG"]),
+    ))
+    .returning();
+  if (!row) { res.status(404).json({ error: "Not found or not a USG alert" }); return; }
+
+  void notifyEscalation(id, b.channels ?? ["push"]);
+
+  void db.insert(usgAuditLogTable).values({
+    entityType: "critical_alert", entityId: id, action: "critical_escalate",
+    performedBy: staffOf(req).subjectName ?? "staff", performedById: staffOf(req).subjectId ?? null,
+    details: JSON.stringify({ escalatedTo: b.escalatedTo }),
+  }).catch(() => { /* noop */ });
+
+  res.json(row);
+});
+
+// ── GET /productivity ────────────────────────────────────────────────────
 
 router.get("/productivity", async (req, res) => {
   const days = Math.min(Math.max(Number(req.query.days ?? 7), 1), 90);
   const since = new Date(Date.now() - days * 86400 * 1000);
 
   try {
-    // Per-user finalized count + average TAT (in minutes) over the window.
     const perUser = await db.execute(sql`
       SELECT
         COALESCE(finalized_by, 'Unknown') AS finalized_by,
@@ -164,7 +220,6 @@ router.get("/productivity", async (req, res) => {
       LIMIT 50
     `);
 
-    // Overall counters
     const [overall] = await db.select({
       drafts:    sql<number>`count(*) filter (where status = 'draft')`,
       pending:   sql<number>`count(*) filter (where status = 'pending_review')`,
@@ -233,7 +288,7 @@ router.get("/productivity", async (req, res) => {
   }
 });
 
-// ── GET /audit ──────────────────────────────────────────────────────────────
+// ── GET /audit ────────────────────────────────────────────────────
 
 router.get("/audit", async (req, res) => {
   const entityType = req.query.entityType as string | undefined;

@@ -10,11 +10,12 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { readStaffSession } from "@/lib/staffSession";
+import { readStaffSession, FULL_ACCESS_ROLES } from "@/lib/staffSession";
 import VoiceDictationButton from "@/components/VoiceDictationButton";
 import {
   FileText, Plus, CheckCircle2, Clock, Archive, ArrowLeft,
   ChevronDown, ChevronUp, Sparkles, RefreshCw, ShieldCheck, History, AlertTriangle,
+  Lock, FileWarning, ShieldBan, Loader2,
 } from "lucide-react";
 
 interface ReportDraft {
@@ -34,6 +35,8 @@ interface ReportDraft {
   amendedBy: string | null;
   amendedAt: string | null;
   priorVersionId: number | null;
+  finalizedReportHash: string | null;
+  amendmentReason: string | null;
   createdAt: string;
   updatedAt: string;
   finalizedAt: string | null;
@@ -44,6 +47,12 @@ interface TemplateDescriptor {
   label: string;
   category: string;
   bodyPart?: string;
+}
+
+interface QualityCheckResult {
+  passed: boolean;
+  errors: string[];
+  warnings: string[];
 }
 
 const STATUS_STYLE: Record<string, string> = {
@@ -60,11 +69,16 @@ export default function UsgReporting() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const session = readStaffSession();
+  const isAdmin = FULL_ACCESS_ROLES.has(session?.user.role ?? "");
 
   const [showCreate, setShowCreate] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [confirmFinalizeId, setConfirmFinalizeId] = useState<number | null>(null);
   const [showPriorFor, setShowPriorFor] = useState<{ id: number; patientId: number } | null>(null);
+  const [showQualityCheck, setShowQualityCheck] = useState<{ draftId: number; result: QualityCheckResult } | null>(null);
+  const [showAmendReason, setShowAmendReason] = useState<number | null>(null);
+  const [amendReason, setAmendReason] = useState("");
+  const [showForceFinalize, setShowForceFinalize] = useState<{ id: number; reason: string } | null>(null);
   const [newForm, setNewForm] = useState({
     studyInstanceUID: "",
     accessionNumber: "",
@@ -74,7 +88,6 @@ export default function UsgReporting() {
     draftContent: "",
   });
 
-  // Pull templates from server so the 13 stay in sync.
   const { data: templates = [] } = useQuery<TemplateDescriptor[]>({
     queryKey: ["usg-templates"],
     queryFn: () => fetchApi("/api/usg-reports/templates"),
@@ -87,7 +100,6 @@ export default function UsgReporting() {
     staleTime: 30_000,
   });
 
-  // Pre-fill from autoGenerate before create — gives the user a preview.
   const previewMutation = useMutation({
     mutationFn: (body: { templateId: string; studyInstanceUID?: string; worklistId?: number; autoSuggest?: boolean }) =>
       fetchApi("/api/usg-reports/auto-generate", { method: "POST", body: JSON.stringify(body) }) as Promise<{
@@ -98,7 +110,7 @@ export default function UsgReporting() {
       setNewForm((f) => ({ ...f, draftContent: out.content, templateType: out.templateId }));
       toast({
         title: out.hasApprovedMeasurements ? "Template auto-filled" : "Template loaded (no approved measurements yet)",
-        description: `${out.filledFieldCount} fields filled · ${out.skippedLowConfidenceCount} low-confidence skipped`,
+        description: `${out.filledFieldCount} fields filled \u00b7 ${out.skippedLowConfidenceCount} low-confidence skipped`,
       });
     },
     onError: () => toast({ title: "Failed to auto-generate", variant: "destructive" }),
@@ -146,7 +158,7 @@ export default function UsgReporting() {
     },
     onError: (err: unknown) => toast({
       title: "Cannot regenerate",
-      description: err instanceof Error ? err.message : "Already finalized — use Amend instead.",
+      description: err instanceof Error ? err.message : "Already finalized \u2014 use Amend instead.",
       variant: "destructive",
     }),
   });
@@ -155,9 +167,18 @@ export default function UsgReporting() {
     mutationFn: (id: number) =>
       fetchApi(`/api/usg-reports/${id}/verify`, { method: "POST", body: "{}" }),
     onSuccess: () => {
-      toast({ title: "Report verified — ready for finalize" });
+      toast({ title: "Report verified \u2014 ready for finalize" });
       void qc.invalidateQueries({ queryKey: ["usg-report-drafts"] });
     },
+  });
+
+  const qualityCheckMutation = useMutation({
+    mutationFn: (id: number) =>
+      fetchApi(`/api/usg-reports/${id}/quality-check`, { method: "POST", body: "{}" }) as Promise<QualityCheckResult & { draftId: number }>,
+    onSuccess: (result) => {
+      setShowQualityCheck({ draftId: result.draftId, result: { passed: result.passed, errors: result.errors, warnings: result.warnings } });
+    },
+    onError: () => toast({ title: "Quality check failed", variant: "destructive" }),
   });
 
   const finalizeMutation = useMutation({
@@ -170,13 +191,39 @@ export default function UsgReporting() {
       void qc.invalidateQueries({ queryKey: ["usg-report-drafts"] });
       void qc.invalidateQueries({ queryKey: ["usg-stats"] });
     },
-    onError: () => toast({ title: "Finalize failed", variant: "destructive" }),
+    onError: (err: unknown) => toast({
+      title: "Finalize failed",
+      description: err instanceof Error ? err.message : "Quality check may have failed or report not verified.",
+      variant: "destructive",
+    }),
+  });
+
+  const forceFinalizeMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: number; reason: string }) =>
+      fetchApi(`/api/usg-reports/${id}/finalize-force`, { method: "POST",
+        body: JSON.stringify({ confirm: true, finalizedBy: session?.user.name ?? "staff", reason }) }),
+    onSuccess: () => {
+      setShowForceFinalize(null);
+      setConfirmFinalizeId(null);
+      toast({ title: "Report force-finalized (logged)" });
+      void qc.invalidateQueries({ queryKey: ["usg-report-drafts"] });
+      void qc.invalidateQueries({ queryKey: ["usg-stats"] });
+    },
+    onError: (err: unknown) => toast({
+      title: "Force finalize failed",
+      description: err instanceof Error ? err.message : "Not authorized or server error.",
+      variant: "destructive",
+    }),
   });
 
   const amendMutation = useMutation({
-    mutationFn: (id: number) =>
-      fetchApi(`/api/usg-reports/${id}/amend`, { method: "POST", body: "{}" }),
+    mutationFn: ({ id, reason }: { id: number; reason?: string }) =>
+      fetchApi(`/api/usg-reports/${id}/amend`, { method: "POST", body: JSON.stringify({
+        amendedBy: session?.user.name ?? "staff", amendmentReason: reason || undefined,
+      }) }),
     onSuccess: () => {
+      setShowAmendReason(null);
+      setAmendReason("");
       toast({ title: "Amendment draft created" });
       void qc.invalidateQueries({ queryKey: ["usg-report-drafts"] });
     },
@@ -196,7 +243,7 @@ export default function UsgReporting() {
     <div className="p-4 md:p-6 space-y-6">
       <PageHeader
         title="USG Reporting"
-        subtitle="Draft, auto-generate, verify and finalize ultrasound reports — 13 templates · voice dictation · audit trail"
+        subtitle="Draft, auto-generate, verify and finalize ultrasound reports \u2014 13 templates \u00b7 voice dictation \u00b7 quality gate \u00b7 audit trail"
         actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate("/usg")}>
@@ -220,7 +267,7 @@ export default function UsgReporting() {
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div className="space-y-1.5">
                 <Label>Study UID</Label>
-                <Input placeholder="1.2.840…" value={newForm.studyInstanceUID}
+                <Input placeholder="1.2.840\u2026" value={newForm.studyInstanceUID}
                   onChange={(e) => setNewForm((f) => ({ ...f, studyInstanceUID: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
@@ -235,7 +282,7 @@ export default function UsgReporting() {
               </div>
               <div className="space-y-1.5">
                 <Label>Accession #</Label>
-                <Input placeholder="ACC-2026-…" value={newForm.accessionNumber}
+                <Input placeholder="ACC-2026-\u2026" value={newForm.accessionNumber}
                   onChange={(e) => setNewForm((f) => ({ ...f, accessionNumber: e.target.value }))} />
               </div>
             </div>
@@ -274,11 +321,10 @@ export default function UsgReporting() {
                 disabled={previewMutation.isPending}
               >
                 <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-                {previewMutation.isPending ? "Generating…" : "Auto-Generate from Measurements"}
+                {previewMutation.isPending ? "Generating\u2026" : "Auto-Generate from Measurements"}
               </Button>
               {newForm.studyInstanceUID || newForm.worklistId ? (
-                <Button
-                  variant="ghost" size="sm"
+                <Button variant="ghost" size="sm"
                   onClick={() => previewMutation.mutate({
                     templateId:       newForm.templateType,
                     studyInstanceUID: newForm.studyInstanceUID || undefined,
@@ -311,7 +357,7 @@ export default function UsgReporting() {
             <div className="flex gap-2 justify-end">
               <Button variant="outline" size="sm" onClick={() => setShowCreate(false)}>Cancel</Button>
               <Button size="sm" onClick={() => createMutation.mutate(newForm)} disabled={createMutation.isPending}>
-                {createMutation.isPending ? "Creating…" : "Create Draft"}
+                {createMutation.isPending ? "Creating\u2026" : "Create Draft"}
               </Button>
             </div>
           </CardContent>
@@ -341,7 +387,7 @@ export default function UsgReporting() {
           const content = dirtyContentFor(draft.id, draft.draftContent);
 
           return (
-            <Card key={draft.id} className={isFinalized ? "opacity-90" : ""}>
+            <Card key={draft.id} className={isFinalized ? "opacity-95" : ""}>
               <CardContent className="p-0">
                 <button
                   className="w-full flex items-center gap-3 p-4 text-left hover:bg-muted/30 transition-colors rounded-xl"
@@ -360,13 +406,24 @@ export default function UsgReporting() {
                       <span className={`text-xs px-2 py-0.5 rounded-full border font-semibold ${STATUS_STYLE[draft.status] ?? STATUS_STYLE.draft}`}>
                         {draft.status.toUpperCase()}
                       </span>
+                      {isFinalized && (
+                        <Badge variant="outline" className="text-[10px] flex items-center gap-1">
+                          <Lock className="h-3 w-3" />
+                          HASH {draft.finalizedReportHash?.slice(0, 8)}
+                        </Badge>
+                      )}
+                      {draft.amendmentReason && (
+                        <Badge variant="outline" className="text-[10px]">
+                          Reason: {draft.amendmentReason}
+                        </Badge>
+                      )}
                       {draft.priorVersionId && (
                         <Badge variant="outline" className="text-[10px]">amends #{draft.priorVersionId}</Badge>
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {draft.accessionNumber ?? draft.studyInstanceUID?.slice(0, 30) ?? "No study ID"}
-                      {" · "}
+                      {" \u00b7 "}
                       {new Date(draft.updatedAt).toLocaleDateString()}
                     </p>
                   </div>
@@ -404,6 +461,13 @@ export default function UsgReporting() {
                             <History className="h-3.5 w-3.5 mr-1.5" /> Prior Studies
                           </Button>
                         )}
+                        <Button variant="outline" size="sm"
+                          onClick={() => qualityCheckMutation.mutate(draft.id)}
+                          disabled={qualityCheckMutation.isPending}
+                        >
+                          <FileWarning className="h-3.5 w-3.5 mr-1.5" />
+                          {qualityCheckMutation.isPending ? "Checking\u2026" : "Quality Check"}
+                        </Button>
                         <div className="ml-auto flex gap-2">
                           <Button variant="outline" size="sm"
                             onClick={() => saveMutation.mutate({ id: draft.id, draftContent: content })}
@@ -423,7 +487,7 @@ export default function UsgReporting() {
                             onClick={() => setConfirmFinalizeId(draft.id)}
                             className="bg-emerald-600 hover:bg-emerald-700"
                           >
-                            <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Finalize…
+                            <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Finalize\u2026
                           </Button>
                         </div>
                       </div>
@@ -431,7 +495,9 @@ export default function UsgReporting() {
 
                     {isFinalized && (
                       <div className="flex gap-2 justify-end">
-                        <Button variant="outline" size="sm" onClick={() => amendMutation.mutate(draft.id)}>
+                        <Button variant="outline" size="sm" onClick={() => {
+                          setShowAmendReason(draft.id);
+                        }}>
                           <History className="h-3.5 w-3.5 mr-1.5" /> Amend
                         </Button>
                       </div>
@@ -445,6 +511,7 @@ export default function UsgReporting() {
                     {draft.finalizedAt && (
                       <p className="text-xs text-muted-foreground text-right">
                         Finalized by {draft.finalizedBy} on {new Date(draft.finalizedAt).toLocaleString()}
+                        {draft.finalizedReportHash ? ` \u00b7 hash ${draft.finalizedReportHash}` : ""}
                       </p>
                     )}
 
@@ -463,7 +530,7 @@ export default function UsgReporting() {
         })}
       </div>
 
-      {/* Finalize confirm modal — Phase 7 safety guard */}
+      {/* Finalize confirm modal */}
       {confirmFinalizeId !== null && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setConfirmFinalizeId(null)}>
           <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
@@ -472,7 +539,7 @@ export default function UsgReporting() {
                 <AlertTriangle className="h-5 w-5 text-amber-500" /> Confirm Finalize
               </CardTitle>
               <CardDescription>
-                Finalizing locks this report. Subsequent changes require an Amendment. Reports are NEVER auto-finalized — your explicit click is required.
+                Finalizing locks this report. Subsequent changes require an Amendment. Reports are NEVER auto-finalized \u2014 your explicit click is required.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex gap-2 justify-end">
@@ -481,8 +548,124 @@ export default function UsgReporting() {
                 onClick={() => finalizeMutation.mutate(confirmFinalizeId)}
                 disabled={finalizeMutation.isPending}
               >
-                {finalizeMutation.isPending ? "Finalizing…" : "Yes, Finalize Report"}
+                {finalizeMutation.isPending ? "Finalizing\u2026" : "Yes, Finalize Report"}
               </Button>
+              {isAdmin && (
+                <Button variant="destructive" size="sm"
+                  onClick={() => setShowForceFinalize({ id: confirmFinalizeId, reason: "" })}
+                  disabled={finalizeMutation.isPending}
+                >
+                  <ShieldBan className="h-3.5 w-3.5 mr-1.5" /> Force
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Force finalize modal */}
+      {showForceFinalize && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowForceFinalize(null)}>
+          <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base text-red-600">
+                <ShieldBan className="h-5 w-5" /> Force Finalize (Admin/Super-Admin)
+              </CardTitle>
+              <CardDescription>
+                Bypasses quality check and verification requirements. This action is logged with a mandatory reason. Use only in exceptional circumstances.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-red-600">Reason *</Label>
+                <Textarea rows={2} placeholder="Enter documented reason for force finalization"
+                  value={showForceFinalize.reason}
+                  onChange={(e) => setShowForceFinalize((prev) => prev ? { ...prev, reason: e.target.value } : null)}
+                />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" size="sm" onClick={() => setShowForceFinalize(null)}>Cancel</Button>
+                <Button variant="destructive" size="sm"
+                  onClick={() => forceFinalizeMutation.mutate({ id: showForceFinalize.id, reason: showForceFinalize.reason })}
+                  disabled={!showForceFinalize.reason.trim() || forceFinalizeMutation.isPending}
+                >
+                  {forceFinalizeMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <ShieldBan className="h-3.5 w-3.5 mr-1.5" />}
+                  Force Finalize
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Quality check result modal */}
+      {showQualityCheck && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowQualityCheck(null)}>
+          <Card className="w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                {showQualityCheck.result.passed ? (
+                  <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                ) : (
+                  <AlertTriangle className="h-5 w-5 text-amber-500" />
+                )}
+                Quality Check: {showQualityCheck.result.passed ? "PASSED" : "FAILED"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {showQualityCheck.result.errors.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-red-600">Errors (blocks finalize):</p>
+                  <ul className="text-xs space-y-0.5 text-red-700">
+                    {showQualityCheck.result.errors.map((e, i) => (
+                      <li key={i} className="flex items-start gap-1"><AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" /> {e}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {showQualityCheck.result.warnings.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-amber-600">Warnings (informational):</p>
+                  <ul className="text-xs space-y-0.5 text-amber-700">
+                    {showQualityCheck.result.warnings.map((w, i) => (
+                      <li key={i} className="flex items-start gap-1"><AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" /> {w}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {showQualityCheck.result.errors.length === 0 && showQualityCheck.result.warnings.length === 0 && (
+                <p className="text-xs text-emerald-600">All checks passed cleanly.</p>
+              )}
+              <div className="flex justify-end">
+                <Button variant="outline" size="sm" onClick={() => setShowQualityCheck(null)}>Close</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Amendment reason modal */}
+      {showAmendReason !== null && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowAmendReason(null)}>
+          <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <CardHeader>
+              <CardTitle className="text-base">Amendment Reason</CardTitle>
+              <CardDescription>A documented reason helps the audit trail. Optional but strongly recommended.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Textarea rows={2} placeholder="e.g. \u2018Added left kidney size after re-scan\u2019"
+                value={amendReason}
+                onChange={(e) => setAmendReason(e.target.value)}
+              />
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" size="sm" onClick={() => setShowAmendReason(null)}>Cancel</Button>
+                <Button size="sm"
+                  onClick={() => amendMutation.mutate({ id: showAmendReason, reason: amendReason })}
+                  disabled={amendMutation.isPending}
+                >
+                  {amendMutation.isPending ? "Creating\u2026" : "Amend Report"}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -515,18 +698,18 @@ function PriorStudiesPanel({ patientId, currentDraftId, onClose }: {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-1 text-xs">
-        {isLoading && <p className="text-muted-foreground">Loading…</p>}
+        {isLoading && <p className="text-muted-foreground">Loading\u2026</p>}
         {!isLoading && others.length === 0 && (
           <p className="text-muted-foreground">No prior finalized USG reports for this patient.</p>
         )}
         {others.map((p) => (
           <div key={p.id} className="flex items-center justify-between border-b border-border/40 py-1.5 last:border-0">
             <div>
-              <span className="font-semibold">#{p.id}</span> · {p.templateType}
-              {p.accessionNumber ? ` · ${p.accessionNumber}` : ""}
+              <span className="font-semibold">#{p.id}</span> \u00b7 {p.templateType}
+              {p.accessionNumber ? ` \u00b7 ${p.accessionNumber}` : ""}
             </div>
             <span className="text-muted-foreground">
-              {p.finalizedAt ? new Date(p.finalizedAt).toLocaleDateString() : "—"}
+              {p.finalizedAt ? new Date(p.finalizedAt).toLocaleDateString() : "\u2014"}
             </span>
           </div>
         ))}
