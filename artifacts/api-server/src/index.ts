@@ -1355,3 +1355,25 @@ server.on("error", (err) => {
   logger.error({ err }, "Server failed to bind — exiting");
   process.exit(1);
 });
+
+// ─── Graceful shutdown ─────────────────────────────────────────────
+// SIGINT  = Ctrl+C from terminal
+// SIGTERM = Docker stop / platform shutdown signal
+
+function gracefulShutdown(signal: string) {
+  logger.info({ signal }, "Shutting down gracefully...");
+
+  server.close(() => {
+    logger.info("HTTP server closed");
+    process.exit(0);
+  });
+
+  // Force exit after 10 seconds if connections are stuck
+  setTimeout(() => {
+    logger.error("Forced shutdown after timeout");
+    process.exit(1);
+  }, 10000);
+}
+
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));

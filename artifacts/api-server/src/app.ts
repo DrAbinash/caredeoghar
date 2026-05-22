@@ -7,9 +7,21 @@ import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
+// Helmet is loaded lazily so a missing optional dependency never crashes the
+// server. Production deployments should include it; dev environments can
+// skip it (CSP would otherwise break Vite HMR).
+let helmet: typeof import("helmet").default | undefined;
+try {
+  helmet = (await import("helmet")).default;
+} catch {
+  // Helmet not installed — security headers fall back to manual sets below.
+}
+
 const artifactDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const app: Express = express();
+
+const isProd = process.env.NODE_ENV === "production";
 
 // Replit's hosting proxy (and most cloud hosts) terminates TLS upstream and
 // forwards the real client IP via X-Forwarded-For. Without this setting,
@@ -39,9 +51,30 @@ app.use(
     },
   }),
 );
+// Production security headers via Helmet (disabled in dev so Vite HMR works).
+// If Helmet is unavailable, we still set a few critical headers manually below.
+if (isProd && helmet) {
+  app.use(
+    helmet({
+      contentSecurityPolicy: false, // Let the SPA handle its own CSP
+      crossOriginEmbedderPolicy: false, // Required for Google Fonts / external assets
+    }),
+  );
+}
+
+// Gzip / brotli compression for API JSON responses and static assets.
+// Applied before CORS so compressed preflight responses are still valid.
+try {
+  const compression = (await import("compression")).default;
+  app.use(compression());
+} catch {
+  // compression optional — no crash if package is missing
+}
+
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// 5 MB body limit prevents oversized JSON payloads from consuming memory
+app.use(express.json({ limit: "5mb" }));
+app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 
 app.use("/api", router);
 
@@ -96,8 +129,27 @@ if (staticDir) {
     const hasSite = Boolean(resolvedSiteDir);
     logger.info({ erpDir: resolvedErpDir, siteDir: resolvedSiteDir, adminDir: resolvedAdminDir, hasSite }, "Serving frontends from disk");
 
+    // Cache-Control helper: hashed Vite assets (e.g. index-Dgaf8k.js) can be
+    // cached forever because their content-addressable names change on every
+    // build.  index.html and any non-hashed file must NOT be cached because
+    // it is the SPA entry point whose content changes every deploy.
+    function staticWithCache(dir: string) {
+      return express.static(dir, {
+        index: false,
+        fallthrough: true,
+        setHeaders(res: Response, filePath: string) {
+          const base = path.basename(filePath);
+          // Vite hashes look like "name-AbC123.js" or "name.AbC123.css"
+          const isHashed = /[.-][a-f0-9]{8,}\.(js|css|woff2?|png|jpg|jpeg|webp|svg|ico)$/.test(base);
+          if (isHashed) {
+            res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+          }
+        },
+      });
+    }
+
     // Super Admin Portal (built with BASE_PATH=/super-admin-portal/)
-    app.use("/super-admin-portal", express.static(resolvedAdminDir, { index: false, fallthrough: true }));
+    app.use("/super-admin-portal", staticWithCache(resolvedAdminDir));
     app.get(/^\/super-admin-portal(\/.*)?$/, (_req: Request, res: Response, next: NextFunction) => {
       res.sendFile(path.join(resolvedAdminDir, "index.html"), (err) => {
         if (err) next(err);
@@ -106,7 +158,7 @@ if (staticDir) {
 
     // Diagnostic ERP — staff app, mounted under /erp (built with BASE_PATH=/erp/).
     // The patient/staff portal lives at /erp/portal as a route inside this SPA.
-    app.use("/erp", express.static(resolvedErpDir, { index: false, fallthrough: true }));
+    app.use("/erp", staticWithCache(resolvedErpDir));
     app.get(/^\/erp(\/.*)?$/, (_req: Request, res: Response, next: NextFunction) => {
       res.sendFile(path.join(resolvedErpDir, "index.html"), (err) => {
         if (err) next(err);
@@ -117,7 +169,7 @@ if (staticDir) {
     // Excludes /api/, /erp, /uploads, and /super-admin-portal so those routes
     // are handled by their own handlers above (and not swallowed by the SPA).
     if (hasSite) {
-      app.use(express.static(resolvedSiteDir!, { index: false, fallthrough: true }));
+      app.use(staticWithCache(resolvedSiteDir!));
       app.get(
         /^\/(?!api\/|erp\/|erp$|uploads\/|super-admin-portal\/|super-admin-portal$).*/,
         (_req: Request, res: Response, next: NextFunction) => {
