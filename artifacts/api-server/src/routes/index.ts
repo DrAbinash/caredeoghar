@@ -72,7 +72,7 @@ import { eq } from "drizzle-orm";
 import { auditLogsRouter } from "./audit-logs";
 import { rolePermissionsRouter } from "./role-permissions";
 import systemHealthRouter from "./system-health";
-import { backupLimiter, exportLimiter, adminMutationLimiter } from "../middleware/rateLimits";
+import { backupLimiter, exportLimiter, adminMutationLimiter, standardUploadLimiter } from "../middleware/rateLimits";
 import userPreferencesRouter from "./userPreferences";
 import { uploadsRouter } from "./uploads";
 import { radiologyReportGeneratorRouter } from "./radiology-report-generator";
@@ -470,7 +470,7 @@ router.use("/banking", requireStaffAuth, requireStaffPermission("/banking"), ban
 // Offline sync — push/pull changes between local desktop instance and cloud.
 router.use("/sync", requireStaffAuth, syncRouter);
 
-// File uploads — validated, size-limited, metadata tracked
-router.use("/uploads", requireStaffAuth, uploadsRouter);
+// Standard uploads — JSON base64, validated, size-limited, metadata tracked
+router.use("/uploads", requireStaffAuth, standardUploadLimiter, uploadsRouter);
 
 export default router;

@@ -65,3 +65,21 @@ export const generalLimiter = rateLimit({
   legacyHeaders,
   message: { error: "Too many requests. Please slow down." },
 });
+
+/** Standard document/image upload routes (JSON base64, up to 25 MB). */
+export const standardUploadLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 20,
+  standardHeaders,
+  legacyHeaders,
+  message: { error: "Too many upload requests. Please slow down." },
+});
+
+/** DICOM / imaging upload routes — streaming multipart, very expensive. */
+export const dicomUploadLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 10,
+  standardHeaders,
+  legacyHeaders,
+  message: { error: "Too many imaging upload requests. Please slow down." },
+});

@@ -34,7 +34,7 @@ export const insertUploadFileSchema = createInsertSchema(uploadFilesTable).omit(
 export type UploadFile = typeof uploadFilesTable.$inferSelect;
 export type InsertUploadFile = z.infer<typeof insertUploadFileSchema>;
 
-// Safe MIME whitelist for general uploads (not DICOM)
+// Safe MIME whitelist for general uploads (NOT DICOM)
 export const SAFE_MIME_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -49,11 +49,25 @@ export const SAFE_MIME_TYPES = new Set([
   "application/vnd.ms-excel",
 ]);
 
-// DICOM-specific MIME types (future PACS integration)
+// DICOM / imaging MIME whitelist — supports DICOM Part 10 files and common
+// imaging formats that modalities or PACS viewers emit.  We intentionally do
+// NOT include generic types like application/octet-stream to prevent abuse.
 export const DICOM_MIME_TYPES = new Set([
-  "application/dicom",
-  "application/octet-stream", // some DICOM servers send this
+  "application/dicom",                 // DICOM Part 10 (.dcm)
+  "application/dicom+json",            // DICOMweb JSON
+  "application/dicom+xml",             // DICOMweb XML
+  "image/dicom-rle",                 // DICOM RLE-compressed
+  "image/jpeg",                        // JPEG baseline (8-bit)
+  "image/jphc",                      // JPEG-LS
+  "image/jp2",                       // JPEG 2000 Part 1
+  "image/jpx",                       // JPEG 2000 Part 2
+  "image/x-jls",                     // JPEG-LS (legacy tag)
+  "image/x-dicom-rle",               // RLE (legacy tag)
 ]);
 
-export const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;      // 10 MB for normal uploads
-export const MAX_DICOM_UPLOAD_SIZE_BYTES = 200 * 1024 * 1024; // 200 MB for DICOM
+/** 25 MB for standard document / image uploads (JSON base64 path). */
+export const MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024;
+
+/** 512 MB for DICOM / imaging uploads (streaming multipart path).
+ *  Override via DICOM_UPLOAD_MAX_BYTES env var. */
+export const MAX_DICOM_UPLOAD_SIZE_BYTES = Number(process.env.DICOM_UPLOAD_MAX_BYTES) || 512 * 1024 * 1024;

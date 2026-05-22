@@ -6,9 +6,7 @@ import { requireStaffAuth, type StaffAuthRequest } from "../middleware/requireSt
 import { logger } from "../lib/logger";
 import {
   SAFE_MIME_TYPES,
-  DICOM_MIME_TYPES,
   MAX_UPLOAD_SIZE_BYTES,
-  MAX_DICOM_UPLOAD_SIZE_BYTES,
 } from "@workspace/db/schema";
 import { mkdirSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
@@ -17,16 +15,8 @@ import type { Response } from "express";
 
 export const uploadsRouter = Router();
 
-// Upload directory - relative to api-server root (same as existing /uploads static mount)
+/** Standard uploads directory — relative to api-server root. */
 const UPLOAD_BASE_DIR = join(process.cwd(), "data", "uploads");
-
-/**
- * Returns true if the MIME type is in the safe whitelist or DICOM whitelist.
- */
-function isAllowedMime(mime: string, isDicom: boolean): boolean {
-  if (isDicom) return DICOM_MIME_TYPES.has(mime);
-  return SAFE_MIME_TYPES.has(mime);
-}
 
 /**
  * Sanitise a filename: remove path traversal, keep extension, safe chars only.
@@ -56,26 +46,26 @@ function ensureDir(dir: string): void {
 }
 
 /**
- * POST /api/uploads - upload a file with MIME and size validation.
+ * POST /api/uploads — upload a standard file via JSON base64.
  *
- * Body (multipart/form-data is NOT used here; the ERP frontends send
- * base64 data URIs inside JSON. This route accepts that shape.)
- *
+ * Body shape (sent as application/json):
  * {
- *   module: "reports" | "patient_documents" | "billing" | "site_assets" | "dicom",
+ *   module: "reports" | "patient_documents" | "billing" | "site_assets",
  *   fileName: "report.pdf",
  *   mimeType: "application/pdf",
  *   base64Data: "base64encoded...",
  *   patientId?: 42,
  * }
+ *
+ * Limit: 25 MB decoded.  DICOM / large imaging must use /api/dicom-uploads
+ * (streaming multipart) instead — this route is NOT suitable for imaging data.
  */
 const UploadBody = z.object({
   module: z.string().min(1).max(50),
   fileName: z.string().min(1).max(255),
   mimeType: z.string().min(1).max(120),
-  base64Data: z.string().min(1).max(300 * 1024 * 1024), // generous max for large base64
+  base64Data: z.string().min(1).max(35 * 1024 * 1024), // generous base64 ceiling (~25 MB decoded)
   patientId: z.number().int().positive().optional(),
-  isDicom: z.boolean().default(false),
 });
 
 uploadsRouter.post("/", requireStaffAuth, async (req: StaffAuthRequest, res: Response) => {
@@ -85,11 +75,11 @@ uploadsRouter.post("/", requireStaffAuth, async (req: StaffAuthRequest, res: Res
     return;
   }
 
-  const { module, fileName, mimeType, base64Data, patientId, isDicom } = parsed.data;
+  const { module, fileName, mimeType, base64Data, patientId } = parsed.data;
 
-  // MIME whitelist
-  if (!isAllowedMime(mimeType, isDicom)) {
-    res.status(400).json({ error: `MIME type "${mimeType}" is not allowed for this upload module.` });
+  // MIME whitelist (standard uploads only — NO DICOM types)
+  if (!SAFE_MIME_TYPES.has(mimeType)) {
+    res.status(400).json({ error: `MIME type "${mimeType}" is not allowed for standard uploads. Use /api/dicom-uploads for imaging data.` });
     return;
   }
 
@@ -102,11 +92,8 @@ uploadsRouter.post("/", requireStaffAuth, async (req: StaffAuthRequest, res: Res
     return;
   }
 
-  const maxSize = isDicom ? MAX_DICOM_UPLOAD_SIZE_BYTES : MAX_UPLOAD_SIZE_BYTES;
-  if (buffer.byteLength > maxSize) {
-    res.status(413).json({
-      error: `File too large. Max allowed is ${isDicom ? "200 MB" : "10 MB"}.`,
-    });
+  if (buffer.byteLength > MAX_UPLOAD_SIZE_BYTES) {
+    res.status(413).json({ error: `File too large. Max allowed is 25 MB for standard uploads.` });
     return;
   }
 
@@ -133,7 +120,7 @@ uploadsRouter.post("/", requireStaffAuth, async (req: StaffAuthRequest, res: Res
     return;
   }
 
-  // Record in DB
+  // Record in DB — only METADATA, never binary data
   try {
     const [record] = await db
       .insert(uploadFilesTable)
@@ -167,7 +154,7 @@ uploadsRouter.post("/", requireStaffAuth, async (req: StaffAuthRequest, res: Res
 });
 
 /**
- * GET /api/uploads - list uploads with optional filters.
+ * GET /api/uploads — list uploads with optional filters.
  */
 const ListQuery = z.object({
   page: z.coerce.number().min(1).default(1),
@@ -221,7 +208,7 @@ uploadsRouter.get("/", requireStaffAuth, async (req, res) => {
 });
 
 /**
- * DELETE /api/uploads/:id - soft-delete an upload record.
+ * DELETE /api/uploads/:id — soft-delete an upload record.
  */
 uploadsRouter.delete("/:id", requireStaffAuth, async (req, res) => {
   const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;

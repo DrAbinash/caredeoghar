@@ -7,7 +7,8 @@ import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { errorHandler } from "./middleware/errorHandler";
-import { generalLimiter } from "./middleware/rateLimits";
+import { generalLimiter, dicomUploadLimiter } from "./middleware/rateLimits";
+import { dicomUploadsRouter } from "./routes/dicom-uploads";
 
 // Helmet is loaded lazily so a missing optional dependency never crashes the
 // server. Production deployments should include it; dev environments can
@@ -74,7 +75,17 @@ try {
 }
 
 app.use(cors());
-// 5 MB body limit prevents oversized JSON payloads from consuming memory
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DICOM / imaging upload route — mounted BEFORE any JSON body parser.
+// Multer handles multipart/form-data streaming directly to disk.
+// This prevents large DICOM files from being buffered into RAM by express.json().
+// ─────────────────────────────────────────────────────────────────────────────
+app.use("/api/dicom-uploads", dicomUploadLimiter, dicomUploadsRouter);
+
+// Standard JSON body parser — 5 MB for all API routes except uploads.
+// The uploads route (/api/uploads) handles JSON base64 up to 25 MB
+// via a separate router-level limit check.
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 
