@@ -1357,6 +1357,9 @@ importers:
       '@workspace/db':
         specifier: workspace:*
         version: link:../lib/db
+      docx:
+        specifier: ^9.6.1
+        version: 9.6.1
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1

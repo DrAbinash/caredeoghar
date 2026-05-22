@@ -161,3 +161,9 @@ id = "iCxjqK01QpvXAmFLC2tOP"
 uri = "file://docker-synology.zip"
 type = "unspecified"
 title = "Care Diagnostics Docker Deployment Package"
+
+[[outputs]]
+id = "zbrlyDV3XlH5ZzlOkD8GI"
+uri = "file://exports/Care_Diagnostics_ERP_Documentation.docx"
+type = "word_document"
+title = "Care Diagnostics ERP - Comprehensive System Documentation"
