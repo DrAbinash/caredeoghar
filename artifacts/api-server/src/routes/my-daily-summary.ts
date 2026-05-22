@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { billsTable, paymentsTable, billAuditsTable, patientsTable, ordersTable, doctorsTable, voucherAuditsTable } from "@workspace/db/schema";
+import { billsTable, paymentsTable, billAuditsTable, patientsTable, ordersTable, doctorsTable, voucherAuditsTable, expensesTable } from "@workspace/db/schema";
 import { sql, and, eq, gte, lt } from "drizzle-orm";
 import { FULL_ACCESS_ROLES } from "../middleware/requireStaffAuth";
 import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
@@ -245,9 +245,14 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
     .limit(200);
 
   // ── Refunds recorded by this staff ─────────────────────────────────────
-  // ── Cash expenses approved_by this staff ───────────────────────────────
-  const cashExpRaw = await db.execute<{ cash_expenses: string }>(sql`
-    SELECT COALESCE(SUM(amount::numeric) FILTER (WHERE LOWER(payment_mode) = 'cash'), 0)::text AS cash_expenses
+  // ── Expenses approved_by this staff (cash + digital) ─────────────────
+  const expRaw = await db.execute<{
+    cash_expenses: string;
+    digital_expenses: string;
+  }>(sql`
+    SELECT
+      COALESCE(SUM(amount::numeric) FILTER (WHERE LOWER(payment_mode) = 'cash'), 0)::text AS cash_expenses,
+      COALESCE(SUM(amount::numeric) FILTER (WHERE LOWER(payment_mode) <> 'cash'), 0)::text AS digital_expenses
     FROM expenses
     WHERE expense_date >= ${from} AND expense_date <= ${to}
     ${staffName !== null ? sql`AND approved_by = ${staffName}` : sql``}
@@ -325,7 +330,9 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
     (s, p) => s + (isDigital(p.method) ? Math.abs(Number(p.amount)) : 0),
     0,
   );
-  const cashExpenses = Number(cashExpRaw.rows[0]?.cash_expenses ?? 0);
+  const cashExpenses = Number(expRaw.rows[0]?.cash_expenses ?? 0);
+  const digitalExpenses = Number(expRaw.rows[0]?.digital_expenses ?? 0);
+  const totalExpenses = cashExpenses + digitalExpenses;
   const totalReceived = paymentItems.reduce((s, p) => s + Number(p.amount), 0);
   const refundAmount = refundItems.reduce((s, p) => s + Math.abs(Number(p.amount)), 0);
   // Bills CANCELLED BY this staff (informational — accountability of canceller)
@@ -363,6 +370,8 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
     netDigital: number;
     totalReceived: number;
     cashExpenses: number;
+    digitalExpenses: number;
+    totalExpenses: number;
     physicalCashInHand: number;
     duesCollected: number;
     discountsGiven: number;
@@ -377,17 +386,23 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
     for (const r of cancelledByMeRows) if (r.createdByName) staffSet.add(r.createdByName);
     const names = Array.from(staffSet).sort();
 
-    // Cash expenses per person (only needed for all-staff mode)
+    // Expenses per person (cash + digital, only needed for all-staff mode)
+    type ExpRow = { approved_by: string; cash: string; digital: string };
     const cashExpPerPerson: Record<string, number> = {};
-    const cashExpRows = await db.execute<{ approved_by: string; amount: string }>(sql`
-      SELECT approved_by, COALESCE(SUM(amount::numeric), 0)::text AS amount
+    const digitalExpPerPerson: Record<string, number> = {};
+    const expRows = await db.execute<ExpRow>(sql`
+      SELECT
+        approved_by,
+        COALESCE(SUM(amount::numeric) FILTER (WHERE LOWER(payment_mode) = 'cash'), 0)::text AS cash,
+        COALESCE(SUM(amount::numeric) FILTER (WHERE LOWER(payment_mode) <> 'cash'), 0)::text AS digital
       FROM expenses
       WHERE expense_date >= ${from} AND expense_date <= ${to}
         AND approved_by IS NOT NULL
       GROUP BY approved_by
     `);
-    for (const r of cashExpRows.rows) {
-      cashExpPerPerson[r.approved_by] = Number(r.amount);
+    for (const r of expRows.rows) {
+      cashExpPerPerson[r.approved_by] = Number(r.cash);
+      digitalExpPerPerson[r.approved_by] = Number(r.digital);
     }
 
     byStaff = names.map((name) => {
@@ -411,6 +426,8 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       const sNetDigital = sDigitalIn - sDigitalRef;
       const sTotalRec = spayPos.reduce((s, p) => s + Number(p.amount), 0);
       const sCashExp = cashExpPerPerson[name] ?? 0;
+      const sDigitalExp = digitalExpPerPerson[name] ?? 0;
+      const sTotalExp = sCashExp + sDigitalExp;
       const sPhysCash = sNetCash - sCashExp;
       const sDues = duesBills.filter((d) => d.createdByName === name).reduce((s, d) => s + d.duesCollected, 0);
       const sDiscounts = sactive.reduce((s, r) => s + Number(r.discount ?? 0), 0);
@@ -431,6 +448,8 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
         netDigital: sNetDigital,
         totalReceived: sTotalRec,
         cashExpenses: sCashExp,
+        digitalExpenses: sDigitalExp,
+        totalExpenses: sTotalExp,
         physicalCashInHand: sPhysCash,
         duesCollected: sDues,
         discountsGiven: sDiscounts,
@@ -455,6 +474,8 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       refundAmount,
       cancelledAmount,
       cashExpenses,
+      digitalExpenses,
+      totalExpenses,
       totalReceived,
       digitalCollection,
       cashIn,

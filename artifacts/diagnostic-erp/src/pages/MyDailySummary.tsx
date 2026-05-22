@@ -27,6 +27,8 @@ type MyDailySummarySummary = {
   refundAmount: number;
   cancelledAmount: number;
   cashExpenses: number;
+  digitalExpenses: number;
+  totalExpenses: number;
   totalReceived: number;
   digitalCollection: number;
   cashIn: number;
@@ -158,6 +160,8 @@ type MyDailySummaryData = {
     netDigital: number;
     totalReceived: number;
     cashExpenses: number;
+    digitalExpenses: number;
+    totalExpenses: number;
     physicalCashInHand: number;
     duesCollected: number;
     discountsGiven: number;
@@ -464,6 +468,35 @@ function MiniKpi({ icon: Icon, label, value, sub, iconBg, border }: {
   );
 }
 
+// ─── Compact paired row: Cash / Digital side-by-side ────────────────────
+
+function CompactRow({ label, cash, digital, isDeduct }: {
+  label: string; cash: number; digital: number; isDeduct?: boolean;
+}) {
+  const sign = isDeduct ? "−" : "";
+  return (
+    <div className="flex items-center justify-between py-1.5">
+      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+        {label}
+        <span className="block text-[11px] font-normal text-gray-400 dark:text-gray-500 mt-0.5 leading-none">
+          Cash / Digital
+        </span>
+      </span>
+      <div className="flex items-center gap-4 text-sm font-semibold tabular-nums">
+        <span className={isDeduct ? "text-red-600 dark:text-red-400" : "text-gray-800 dark:text-gray-200"}>
+          {sign}${fmt(cash)}
+        </span>
+        <span className="text-gray-300 dark:text-gray-600">/</span>
+        <span className={isDeduct ? "text-red-600 dark:text-red-400" : "text-gray-800 dark:text-gray-200"}>
+          {sign}${fmt(digital)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Single-value accounting row ──────────────────────────────────────────
+
 function RecRow({ label, value, type, note }: {
   label: string; value: number; type: "start" | "deduct" | "result" | "final"; note?: string;
 }) {
@@ -471,19 +504,19 @@ function RecRow({ label, value, type, note }: {
   const isFinal = type === "final";
   const isResult = type === "result";
   return (
-    <div className={`flex items-center justify-between ${isFinal ? "py-3" : isResult ? "py-2.5" : "py-2"}`}>
+    <div className={`flex items-center justify-between ${isFinal ? "py-2.5" : isResult ? "py-2" : "py-1.5"}`}>
       <span className={
-        isFinal ? "text-base font-extrabold text-gray-900 dark:text-foreground" :
+        isFinal ? "text-sm font-extrabold text-gray-900 dark:text-foreground" :
         isResult ? "text-sm font-bold text-gray-900 dark:text-foreground" :
-        isDeduct ? "text-sm font-medium text-red-600 dark:text-red-400 pl-5" :
+        isDeduct ? "text-sm font-medium text-red-600 dark:text-red-400 pl-4" :
         "text-sm font-medium text-gray-700 dark:text-gray-300"
       }>
         {label}
-        {note && <span className="text-[11px] font-normal text-gray-400 ml-1.5">({note})</span>}
+        {note && <span className="text-[11px] font-normal text-gray-400 dark:text-gray-500 ml-1.5">({note})</span>}
       </span>
       <span className={`tabular-nums font-bold ${
-        isFinal ? "text-2xl text-blue-700 dark:text-blue-300" :
-        isResult ? "text-lg text-green-700 dark:text-green-400" :
+        isFinal ? "text-xl text-blue-800 dark:text-blue-300" :
+        isResult ? "text-base text-green-700 dark:text-green-400" :
         isDeduct ? "text-sm text-red-600 dark:text-red-400" :
         "text-sm text-gray-800 dark:text-gray-200"
       }`}>
@@ -493,15 +526,45 @@ function RecRow({ label, value, type, note }: {
   );
 }
 
-// ─── Daily Financial Reconciliation ─────────────────────────────────────────
+// ─── Major section divider ────────────────────────────────────────────────
+
+function MajorDivider({ color }: { color: "emerald" | "blue" | "purple" | "violet" | "slate" }) {
+  const map = {
+    emerald: "border-t-[1.5px] border-emerald-400 dark:border-emerald-700 shadow-[0_1px_2px_rgba(16,185,129,0.12)]",
+    blue:    "border-t-[1.5px] border-blue-500 dark:border-blue-700 shadow-[0_1px_2px_rgba(59,130,246,0.12)]",
+    purple:  "border-t-[1.5px] border-purple-500 dark:border-purple-700 shadow-[0_1px_2px_rgba(168,85,247,0.12)]",
+    violet:  "border-t-[1.5px] border-violet-400 dark:border-violet-700 shadow-[0_1px_2px_rgba(139,92,246,0.12)]",
+    slate:   "border-t-[1.5px] border-slate-400 dark:border-slate-700 shadow-[0_1px_2px_rgba(100,116,139,0.12)]",
+  };
+  return <div className={`my-2 ${map[color]}`} />;
+}
+
+function MinorDivider() {
+  return <div className="my-1 border-t border-dashed border-gray-300 dark:border-gray-600" />;
+}
+
+// ─── Formula helper ─────────────────────────────────────────────────────────
+
+function FormulaHint({ text }: { text: string }) {
+  return (
+    <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 leading-tight tabular-nums">
+      = {text}
+    </p>
+  );
+}
+
+// ─── Daily Financial Reconciliation ───────────────────────────────────────
 
 function DailyFinancialReconciliation({ summary: s }: { summary: MyDailySummarySummary }) {
+  // ── Correct accounting flow ──
   const grossCollection = s.grossBilling + s.duesCollectedTotal;
-  const netTotalCollection = grossCollection - (s.cancelledAmount + s.outstanding + s.cashExpenses);
-  const physicalCashInHand = netTotalCollection - s.digitalCollection;
-  const digitalNet = s.digitalCollection - s.digitalRefunded;
+  const totalRefunds = s.cashRefunded + s.digitalRefunded;
+  const netTotalCollection = grossCollection - (s.cancelledAmount + s.outstanding + s.totalExpenses + totalRefunds);
+  const netDigitalCollection = s.digitalCollection - s.digitalRefunded;
+  const expectedPhysicalCash = netTotalCollection - netDigitalCollection;
 
-  const mismatch = physicalCashInHand - s.physicalCashInHand;
+  // Check against backend's physicalCashInHand for mismatch
+  const mismatch = expectedPhysicalCash - s.physicalCashInHand;
   const hasMismatch = Math.abs(mismatch) > 0.01;
 
   return (
@@ -514,7 +577,7 @@ function DailyFinancialReconciliation({ summary: s }: { summary: MyDailySummaryS
         </div>
         {hasMismatch ? (
           <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/20 text-red-300 text-xs font-bold">
-            <AlertTriangle size={12} /> Mismatch \u20b9{Math.abs(mismatch).toFixed(0)}
+            <AlertTriangle size={12} /> Mismatch ₹{Math.abs(mismatch).toFixed(0)}
           </span>
         ) : (
           <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold">
@@ -528,43 +591,54 @@ function DailyFinancialReconciliation({ summary: s }: { summary: MyDailySummaryS
         <div className="px-5 py-2.5 bg-red-50 dark:bg-red-900/20 border-y border-red-200 dark:border-red-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AlertTriangle size={14} className="text-red-600 dark:text-red-400" />
-            <span className="text-sm font-bold text-red-700 dark:text-red-300">Reconciliation Alert: Expected Cash \u2260 Actual Cash</span>
+            <span className="text-sm font-bold text-red-700 dark:text-red-300">Reconciliation Alert: Expected Cash ≠ Actual Cash</span>
           </div>
-          <span className="text-sm font-extrabold text-red-700 dark:text-red-300 tabular-nums">\u20b9{Math.abs(mismatch).toFixed(0)} Needs Verification</span>
+          <span className="text-sm font-extrabold text-red-700 dark:text-red-300 tabular-nums">₹{Math.abs(mismatch).toFixed(0)} Needs Verification</span>
         </div>
       )}
 
-      {/* Clean vertical flow */}
+      {/* ── Accounting body ── */}
       <div className="px-5 py-2">
-        {/* Income sources */}
+
+        {/* ─── GROSS COLLECTION ─── */}
         <RecRow label="Total Bills Generated (Active)" value={s.grossBilling} type="start" />
         <RecRow label="Old Dues Collected Today" value={s.duesCollectedTotal} type="start" />
-        <div className="my-1.5 border-t-2 border-dashed border-emerald-300 dark:border-emerald-700" />
-        <RecRow label="Gross Collection" value={grossCollection} type="result" />
+        <MajorDivider color="emerald" />
+        <div>
+          <RecRow label="Gross Collection" value={grossCollection} type="result" />
+          <FormulaHint text="Active Bills + Old Dues" />
+        </div>
 
-        {/* Deductions */}
+        {/* ─── DEDUCTIONS ─── */}
         <div className="mt-3" />
         <RecRow label="Cancelled Bills" value={s.cancelledAmount} type="deduct" />
         <RecRow label="Outstanding / Pending Dues" value={s.outstanding} type="deduct" />
-        <RecRow label="Cash Expenses" value={s.cashExpenses} type="deduct" />
-        <div className="my-1.5 border-t-2 border-dashed border-blue-300 dark:border-blue-700" />
-        <RecRow label="Net Total Collection" value={netTotalCollection} type="result" />
-
-        {/* Split into cash vs digital */}
-        <div className="mt-3" />
-        <RecRow label="Digital Collection (UPI/Card/Net)" value={s.digitalCollection} type="deduct" />
-        <div className="my-1.5 border-t-4 border-purple-300 dark:border-purple-700" />
-        <RecRow label="Physical Cash In Hand" value={physicalCashInHand} type="final" />
-
-        {/* Digital summary */}
-        <div className="mt-3 border-t border-dashed border-gray-300 dark:border-gray-600 pt-2">
-          <RecRow label="Digital In" value={s.digitalIn} type="start" />
-          <RecRow label="Digital Refunded" value={s.digitalRefunded} type="deduct" />
-          <div className="my-1.5 border-t-2 border-dashed border-violet-300 dark:border-violet-700" />
-          <RecRow label="Net Digital Collection" value={digitalNet} type="result" />
+        <CompactRow label="Cash/Digital Expense" cash={s.cashExpenses} digital={s.digitalExpenses} isDeduct />
+        <CompactRow label="Cash/Digital Refund" cash={s.cashRefunded} digital={s.digitalRefunded} isDeduct />
+        <MajorDivider color="blue" />
+        <div>
+          <RecRow label="Net Total Collection" value={netTotalCollection} type="result" />
+          <FormulaHint text="Gross − Cancelled − Pending − Expenses − Refunds" />
         </div>
 
-        {/* Discounts */}
+        {/* ─── NET DIGITAL COLLECTION ─── */}
+        <div className="mt-3" />
+        <RecRow label="Digital Collection (UPI/Card/Net)" value={s.digitalCollection} type="start" />
+        <RecRow label="− Digital Refunded" value={s.digitalRefunded} type="deduct" />
+        <MinorDivider />
+        <div>
+          <RecRow label="Net Digital Collection" value={netDigitalCollection} type="result" />
+          <FormulaHint text="Digital In − Digital Refund" />
+        </div>
+
+        {/* ─── EXPECTED PHYSICAL CASH ─── */}
+        <MajorDivider color="purple" />
+        <div>
+          <RecRow label="Expected Physical Cash in Counter" value={expectedPhysicalCash} type="final" />
+          <FormulaHint text="Net Collection − Net Digital Collection" />
+        </div>
+
+        {/* ─── DISCOUNTS ─── */}
         <div className="mt-3 border-t border-dashed border-gray-300 dark:border-gray-600 pt-2">
           <RecRow label="Discounts Given" value={s.discountsGiven} type="start" />
         </div>
@@ -573,14 +647,15 @@ function DailyFinancialReconciliation({ summary: s }: { summary: MyDailySummaryS
       {/* Formula Footer */}
       <div className="px-5 py-2.5 bg-slate-50 dark:bg-slate-900/20 border-t border-gray-200 dark:border-card-border">
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400">
-          <span>Gross Collection = Bills + Dues</span>
-          <span>Net Total = Gross \u2212 (Cancelled + Outstanding + Expenses)</span>
-          <span>Cash In Hand = Net Total \u2212 Digital</span>
+          <span>Gross = Active Bills + Dues Collected</span>
+          <span>Net Total = Gross − (Cancelled + Pending + Expenses + Refunds)</span>
+          <span>Expected Cash = Net Total − Net Digital</span>
         </div>
       </div>
     </div>
   );
 }
+
 
 // ─── Warning Chips ────────────────────────────────────────────────────────────
 
@@ -1126,10 +1201,10 @@ export default function MyDailySummary() {
             <MiniKpi icon={IndianRupee} label="Gross Billing" value={fmt(s.grossBilling)} sub={`${s.billCount} bills`} iconBg="bg-emerald-100 text-emerald-700" border="border-l-emerald-500" />
             <MiniKpi icon={Wallet} label="Outstanding / Dues" value={fmt(s.outstanding)} sub="Unpaid balance" iconBg="bg-amber-100 text-amber-700" border="border-l-amber-500" />
             <MiniKpi icon={RotateCcw} label="Cancellations" value={fmt(s.cancelledAmount)} sub={`${s.cancellationCount} bill${s.cancellationCount !== 1 ? "s" : ""} cancelled${s.refundAmount > 0 ? ` · ₹${s.refundAmount.toFixed(0)} refunded` : ""}`} iconBg="bg-rose-100 text-rose-700" border="border-l-rose-500" />
-            <MiniKpi icon={TrendingDown} label="Cash Expenses" value={fmt(s.cashExpenses)} sub="Approved by you" iconBg="bg-orange-100 text-orange-700" border="border-l-orange-500" />
+            <MiniKpi icon={TrendingDown} label="Total Expenses" value={fmt(s.totalExpenses)} sub={`Cash ${fmt(s.cashExpenses)} / Digital ${fmt(s.digitalExpenses)}`} iconBg="bg-orange-100 text-orange-700" border="border-l-orange-500" />
             <MiniKpi icon={CheckCircle2} label="Total Received" value={fmt(s.totalReceived)} sub="All payments collected" iconBg="bg-green-100 text-green-700" border="border-l-green-500" />
             <MiniKpi icon={Smartphone} label="Digital Collection" value={fmt(s.digitalCollection)} sub="UPI / Card / Net Banking" iconBg="bg-violet-100 text-violet-700" border="border-l-violet-500" />
-            <MiniKpi icon={Banknote} label="Physical Cash in Hand" value={fmt(s.physicalCashInHand)} sub={`Cash ${fmt(s.cashCollection)} − Exp ${fmt(s.cashExpenses)}`} iconBg="bg-blue-100 text-blue-700" border="border-l-blue-500" />
+            <MiniKpi icon={Banknote} label="Expected Physical Cash in Counter" value={fmt(s.physicalCashInHand)} sub={`Cash ${fmt(s.cashCollection)} − Cash Exp ${fmt(s.cashExpenses)}`} iconBg="bg-blue-100 text-blue-700" border="border-l-blue-500" />
             <MiniKpi icon={Tag} label="Discounts Given" value={fmt(s.discountsGiven)} sub={s.grossBilling > 0 ? `${((s.discountsGiven / s.grossBilling) * 100).toFixed(1)}% of billing` : ""} iconBg="bg-slate-100 text-slate-700" border="border-l-slate-400" />
             <MiniKpi icon={Receipt} label="Dues Collected" value={fmt(s.duesCollectedTotal)} sub={`${s.duesBillsCount} old bill${s.duesBillsCount !== 1 ? "s" : ""} settled`} iconBg="bg-teal-100 text-teal-700" border="border-l-teal-500" />
             <MiniKpi icon={XCircle} label="Cancellation Count" value={String(s.cancellationCount)} sub={s.cancellationCount > 0 ? `₹${s.cancelledAmount.toFixed(0)} written off` : "None"} iconBg="bg-gray-100 text-gray-700" border="border-l-gray-400" />
@@ -1199,7 +1274,7 @@ export default function MyDailySummary() {
                 <RecRow label="= Net Cash Collected" value={s.cashCollection} type="result" />
                 <RecRow label="− Cash Expenses" value={s.cashExpenses} type="deduct" note="approved by you" />
                 <div className="my-3 border-t-4 border-blue-300 dark:border-blue-700" />
-                <RecRow label="= Physical Cash in Hand" value={s.physicalCashInHand} type="final" />
+                <RecRow label="= Expected Physical Cash in Counter" value={s.physicalCashInHand} type="final" />
                 <div className="my-3 border-t-2 border-violet-200 dark:border-violet-800" />
                 <RecRow label="Digital In" value={s.digitalIn} type="start" note="UPI / card / bank" />
                 <RecRow label="− Digital Refunded" value={s.digitalRefunded} type="deduct" />
