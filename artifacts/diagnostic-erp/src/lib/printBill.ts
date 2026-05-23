@@ -184,7 +184,7 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
       <table style="width:100%;border-collapse:collapse;margin-bottom:6px">
         <tr>
           <td style="vertical-align:top;padding:0;width:45%">
-            ${clinic?.logoDataUrl ? `<img src="${clinic.logoDataUrl}" alt="logo" style="max-height:48px;max-width:120px;object-fit:contain;display:block;margin-bottom:3px"/>` : ""}
+            ${clinic?.logoDataUrl ? `<img src="${clinic.logoDataUrl}" alt="logo" style="max-height:78px;max-width:160px;object-fit:contain;display:block;margin-bottom:3px"/>` : ""}
             <div style="font-size:${clinicNameSize};font-weight:800;line-height:1.05;letter-spacing:-0.2px">${esc(clinic?.name || "CARE DIAGNOSTICS")}</div>
             <div style="font-size:${Math.round(Number(bodyPx) * 0.85)}px;color:#333;margin-top:2px;font-weight:600">${esc(clinic?.tagline || "DIAGNOSTIC & PATHOLOGY SERVICES")}</div>
           </td>
@@ -208,14 +208,13 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
         <tr>
           <td style="vertical-align:top;padding:0">
             <div style="font-size:${patientNameSize};font-weight:900;line-height:1.15">${esc(`${bill.patient?.firstName ?? ""} ${bill.patient?.lastName ?? ""}`.trim().toUpperCase())} ${esc(ageGender)}</div>
-            <div style="font-size:${bodyPx};font-weight:700;margin-top:2px;color:#000">
+            <div style="font-size:${patientNameSize};font-weight:700;margin-top:2px;color:#000">
               REF: <strong>${rawDoctor ? esc(rawDoctor.match(/^\s*DR\.?\s*/i) ? rawDoctor.trim().toUpperCase() : "DR. " + rawDoctor.trim().toUpperCase()) : "SELF / WALK-IN"}</strong>
             </div>
-            ${billedByName ? `<div style="font-size:${tinyPx};color:#555;margin-top:1px">Billed by: ${esc(billedByName)}</div>` : ""}
           </td>
           <td style="vertical-align:top;text-align:right;padding:0;font-size:${bodyPx};line-height:1.4;white-space:nowrap;color:#000">
             <div style="font-size:${patientNameSize};font-weight:800">${created.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase()}</div>
-            <div style="font-size:${tinyPx};font-weight:600">${created.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }).toUpperCase()}</div>
+            <div style="font-size:${patientNameSize};font-weight:600">${created.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }).toUpperCase()}</div>
             <div>PH ${esc(bill.patient?.phone ?? "")} · ID ${esc(bill.patient?.patientId ?? "")}</div>
             <div>BILL NO: ${esc(billDigits)}</div>
           </td>
@@ -242,20 +241,15 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
       </table>
       ${cancelledRow}
 
-      <!-- BOTTOM: QR left, Totals right -->
+      <!-- BOTTOM: Payment details left, Totals right -->
       <table style="width:100%;border-collapse:separate;border-spacing:0;margin-top:8px;table-layout:fixed">
         <colgroup>
-          <col style="width:${qrEnabled && qrDataUrl ? "90px" : "0"}"/>
           <col/>
           <col style="width:${isA5 ? "170px" : "200px"}"/>
         </colgroup>
         <tbody>
           <tr>
-            <!-- QR -->
-            <td style="vertical-align:top;padding:0">
-              ${qrEnabled && qrDataUrl ? `<img src="${qrDataUrl}" alt="QR" style="width:70px;height:70px;display:block"/><div style="font-size:${tinyPx};color:#666;margin-top:1px">Scan to verify</div>` : ""}
-            </td>
-            <!-- Payment details (middle, if present) -->
+            <!-- Payment details (left, if present) -->
             <td style="vertical-align:top;padding:0 8px 0 0;font-size:${tinyPx}">
               ${hasPayDetail ? `<div style="font-weight:800;border-bottom:1px solid #999;padding-bottom:1px;margin-bottom:2px;font-size:${Math.round(Number(tinyPx) * 1.1)}px">PAYMENT DETAILS</div>
                 <table style="width:100%;border-collapse:collapse"><tbody>${payRows}</tbody></table>` : ""}
@@ -286,6 +280,9 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
           </tr>
         </tbody>
       </table>
+
+      <!-- QR CODE just above footer -->
+      ${qrEnabled && qrDataUrl ? `<div style="margin-top:6px;text-align:left"><img src="${qrDataUrl}" alt="QR" style="width:70px;height:70px;display:block"/><div style="font-size:${tinyPx};color:#666;margin-top:1px">Scan to verify</div></div>` : ""}
 
       <!-- FOOTER -->
       <div style="margin-top:10px;border-top:1px solid #000;padding-top:6px;text-align:center;page-break-inside:avoid">
