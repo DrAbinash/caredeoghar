@@ -5,10 +5,70 @@ import { eq } from "drizzle-orm";
 const clinicSettingsRouter = Router();
 
 async function getOrCreate() {
-  const rows = await db.select().from(clinicSettingsTable).limit(1);
-  if (rows[0]) return rows[0];
-  const [created] = await db.insert(clinicSettingsTable).values({}).returning();
-  return created;
+  try {
+    const rows = await db.select().from(clinicSettingsTable).limit(1);
+    if (rows[0]) return rows[0];
+    const [created] = await db.insert(clinicSettingsTable).values({}).returning();
+    return created;
+  } catch (e: any) {
+    // If Drizzle schema is ahead of the DB (missing columns), return a safe default
+    // so the UI can still load while startup migrations catch up on next restart.
+    const msg = String(e?.message ?? "");
+    if (msg.includes("column") || msg.includes("does not exist") || msg.includes("relation")) {
+      return {
+        id: 1,
+        name: "Care Diagnostics",
+        tagline: "Diagnostic & Pathology Services",
+        address: "",
+        email: "",
+        phone: "",
+        website: "",
+        gstin: "",
+        logoDataUrl: null,
+        footerNote: "Thank you for choosing our diagnostic services.",
+        formFTestIds: "[]",
+        quickTestIds: "[null,null,null,null,null,null]",
+        patientPhotoEnabled: false,
+        showTatOnBill: false,
+        billPrintCopies: 1,
+        qrOnBillEnabled: true,
+        portalEnabled: false,
+        portalHeading: "Care Diagnostics",
+        portalWelcomeMessage: "",
+        portalAllowAppointmentBooking: true,
+        portalAllowProfileEdit: true,
+        onlineBookingEnabled: false,
+        razorpayKeyId: "",
+        onlineBookingLedgerId: 1,
+        vipQueueEnabled: false,
+        payuEnabled: false,
+        payuMerchantKey: "",
+        phonepeEnabled: false,
+        phonepeMerchantId: "",
+        bharatpeEnabled: false,
+        bharatpeMerchantId: "",
+        cashfreeEnabled: false,
+        cashfreeAppId: "",
+        kioskEnabled: false,
+        kioskUpiVpa: "",
+        kioskUpiName: "",
+        kioskWelcomeMessage: "",
+        kioskAllowedTestIds: "[]",
+        onlineBookingAllowedTestIds: "[]",
+        sidebarTheme: "navy",
+        billDefaultPaperSize: "A5",
+        billShowCode: true,
+        billShowCategory: true,
+        dayCloseAutoPrint: true,
+        commissionDiscountMode: "none",
+        lanOnlyLogin: false,
+        lanAllowedIps: "[]",
+        fido2Enabled: false,
+        updatedAt: new Date(),
+      } as any;
+    }
+    throw e;
+  }
 }
 
 // Public branding fields (no auth required) — used by bill printing, public

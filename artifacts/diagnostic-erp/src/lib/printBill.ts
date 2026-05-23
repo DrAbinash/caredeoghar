@@ -215,6 +215,7 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
           </td>
           <td style="vertical-align:top;text-align:right;padding:0;font-size:${bodyPx};line-height:1.4;white-space:nowrap;color:#000">
             <div style="font-size:${patientNameSize};font-weight:800">${created.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase()}</div>
+            <div style="font-size:${tinyPx};font-weight:600">${created.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }).toUpperCase()}</div>
             <div>PH ${esc(bill.patient?.phone ?? "")} · ID ${esc(bill.patient?.patientId ?? "")}</div>
             <div>BILL NO: ${esc(billDigits)}</div>
           </td>
