@@ -213,8 +213,7 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
             </div>
           </td>
           <td style="vertical-align:top;text-align:right;padding:0;font-size:${bodyPx};line-height:1.4;white-space:nowrap;color:#000">
-            <div style="font-size:${patientNameSize};font-weight:800">${created.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase()}</div>
-            <div style="font-size:${patientNameSize};font-weight:600">${created.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }).toUpperCase()}</div>
+            <div style="font-size:${patientNameSize};font-weight:800">${created.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase()} &nbsp;${created.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }).toUpperCase()}</div>
             <div>PH ${esc(bill.patient?.phone ?? "")} · ID ${esc(bill.patient?.patientId ?? "")}</div>
             <div>BILL NO: ${esc(billDigits)}</div>
           </td>
@@ -241,15 +240,20 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
       </table>
       ${cancelledRow}
 
-      <!-- BOTTOM: Payment details left, Totals right -->
+      <!-- BOTTOM: QR + Payment details left, Totals right -->
       <table style="width:100%;border-collapse:separate;border-spacing:0;margin-top:8px;table-layout:fixed">
         <colgroup>
+          <col style="width:${qrEnabled && qrDataUrl ? "90px" : "0"}"/>
           <col/>
           <col style="width:${isA5 ? "170px" : "200px"}"/>
         </colgroup>
         <tbody>
           <tr>
-            <!-- Payment details (left, if present) -->
+            <!-- QR (left) -->
+            <td style="vertical-align:bottom;padding:0">
+              ${qrEnabled && qrDataUrl ? `<img src="${qrDataUrl}" alt="QR" style="width:70px;height:70px;display:block"/><div style="font-size:${tinyPx};color:#666;margin-top:1px">Scan to verify</div>` : ""}
+            </td>
+            <!-- Payment details (middle, if present) -->
             <td style="vertical-align:top;padding:0 8px 0 0;font-size:${tinyPx}">
               ${hasPayDetail ? `<div style="font-weight:800;border-bottom:1px solid #999;padding-bottom:1px;margin-bottom:2px;font-size:${Math.round(Number(tinyPx) * 1.1)}px">PAYMENT DETAILS</div>
                 <table style="width:100%;border-collapse:collapse"><tbody>${payRows}</tbody></table>` : ""}
@@ -280,9 +284,6 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
           </tr>
         </tbody>
       </table>
-
-      <!-- QR CODE just above footer -->
-      ${qrEnabled && qrDataUrl ? `<div style="margin-top:6px;text-align:left"><img src="${qrDataUrl}" alt="QR" style="width:70px;height:70px;display:block"/><div style="font-size:${tinyPx};color:#666;margin-top:1px">Scan to verify</div></div>` : ""}
 
       <!-- FOOTER -->
       <div style="margin-top:10px;border-top:1px solid #000;padding-top:6px;text-align:center;page-break-inside:avoid">
