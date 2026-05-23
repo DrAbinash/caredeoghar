@@ -10,10 +10,9 @@ async function getOrCreate() {
     if (rows[0]) return rows[0];
     const [created] = await db.insert(clinicSettingsTable).values({}).returning();
     return created;
-  } catch (e: any) {
+  } catch (_e: any) {
     // Drizzle schema may be ahead of the production DB (missing columns).
     // Return safe defaults so the UI can still load while migrations catch up.
-    req.log?.warn?.({ err: e }, "clinic_settings DB mismatch — serving safe defaults");
     return {
       id: 1,
       name: "Care Diagnostics",
