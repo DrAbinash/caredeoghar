@@ -178,6 +178,11 @@ async function runStartupMigrations(): Promise<void> {
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS fido2_enabled BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE printer_settings ADD COLUMN IF NOT EXISTS barcode_enabled TEXT NOT NULL DEFAULT 'true';
       ALTER TABLE printer_settings ADD COLUMN IF NOT EXISTS token_enabled TEXT NOT NULL DEFAULT 'true';
+      -- ── Ensure clinic_settings always has exactly one default row ────
+      -- The settings UI relies on this row existing so PUT updates succeed.
+      INSERT INTO clinic_settings (id, name, tagline, address, email, phone, website, gstin, logo_data_url, footer_note, form_f_test_ids, quick_test_ids, patient_photo_enabled, show_tat_on_bill, bill_print_copies, qr_on_bill_enabled, portal_enabled, portal_heading, portal_welcome_message, portal_allow_appointment_booking, portal_allow_profile_edit, online_booking_enabled, razorpay_key_id, online_booking_ledger_id, vip_queue_enabled, payu_enabled, payu_merchant_key, phonepe_enabled, phonepe_merchant_id, bharatpe_enabled, bharatpe_merchant_id, cashfree_enabled, cashfree_app_id, kiosk_enabled, kiosk_upi_vpa, kiosk_upi_name, kiosk_welcome_message, kiosk_allowed_test_ids, online_booking_allowed_test_ids, sidebar_theme, bill_default_paper_size, bill_show_code, bill_show_category, day_close_auto_print, commission_discount_mode, lan_only_login, lan_allowed_ips, fido2_enabled, updated_at)
+      SELECT 1, 'Care Diagnostics', 'Diagnostic & Pathology Services', '', '', '', '', '', null, 'Thank you for choosing our diagnostic services.', '[]', '[null,null,null,null,null,null]', false, false, 1, true, false, '', '', true, true, false, '', 1, false, false, '', false, '', false, '', false, '', false, '', '', '', '[]', '[]', 'navy', 'A5', true, true, true, 'none', false, '[]', false, NOW()
+      WHERE NOT EXISTS (SELECT 1 FROM clinic_settings LIMIT 1);
       CREATE TABLE IF NOT EXISTS day_closures (
         id SERIAL PRIMARY KEY,
         closure_date TEXT NOT NULL,

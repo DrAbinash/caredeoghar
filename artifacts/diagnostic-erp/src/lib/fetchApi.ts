@@ -41,10 +41,20 @@ export async function fetchApi<T = unknown>(path: string, init?: RequestInit): P
     if (res.status === 401) {
       handleSessionExpiry();
     }
-    const err = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(err?.error || err?.message || res.statusText);
+    const text = await res.text();
+    let parsed: { error?: string; message?: string } = {};
+    try { parsed = JSON.parse(text); } catch { /* empty body or non-JSON error */ }
+    throw new Error(parsed.error || parsed.message || text || res.statusText);
   }
-  return res.json() as Promise<T>;
+  // Some successful responses (e.g. legacy empty JSON bodies) may not contain
+  // valid JSON. Gracefully fall back so the UI doesn't crash.
+  const text = await res.text();
+  if (!text.trim()) return {} as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return text as unknown as T;
+  }
 }
 
 export const api = {

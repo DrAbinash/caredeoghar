@@ -260,12 +260,29 @@ clinicSettingsRouter.put("/", async (req, res) => {
       return;
     }
   }
-  const [updated] = await db
+  const updateResult = await db
     .update(clinicSettingsTable)
     .set(update)
     .where(eq(clinicSettingsTable.id, current.id))
     .returning();
-  res.json(updated);
+  if (updateResult.length > 0) {
+    res.json(updateResult[0]);
+    return;
+  }
+  // Row was missing (e.g. getOrCreate returned a fallback object with no DB row).
+  // Insert a new row with current defaults merged with the update.
+  try {
+    const insertValues = { ...current, ...update };
+    delete (insertValues as any).id; // let DB auto-generate the PK
+    const [inserted] = await db
+      .insert(clinicSettingsTable)
+      .values(insertValues)
+      .returning();
+    res.json(inserted);
+  } catch (insertErr) {
+    const msg = insertErr instanceof Error ? insertErr.message : String(insertErr);
+    res.status(500).json({ error: "Settings save failed: " + msg });
+  }
 });
 
 export default clinicSettingsRouter;
