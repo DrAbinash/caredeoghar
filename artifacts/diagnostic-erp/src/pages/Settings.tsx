@@ -784,11 +784,16 @@ function ClinicInfoTab() {
 
   const current = form ?? settings ?? null;
 
+  const { toast } = useToast();
   const save = useMutation({
     mutationFn: (body: ClinicSettings) => api.put("/api/clinic-settings", body),
     onSuccess: (saved) => {
       qc.invalidateQueries({ queryKey: ["clinic-settings"] });
       setForm(saved as ClinicSettings);
+      toast({ title: "Saved", description: "Clinic settings updated successfully." });
+    },
+    onError: (err: unknown) => {
+      toast({ title: "Save failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
     },
   });
 
