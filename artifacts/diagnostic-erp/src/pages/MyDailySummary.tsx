@@ -153,6 +153,7 @@ type MyDailySummaryData = {
     discountGiven: number;
     balanceAmount: number;
     discountReason: string | null;
+    discountReasonNote: string | null;
     status: string;
   }[];
   byStaff?: {
@@ -1606,8 +1607,15 @@ export default function MyDailySummary() {
                           {fmt(b.discountGiven)}
                           <span className="ml-1 text-[10px] font-normal text-amber-500 dark:text-amber-400">({pct}%)</span>
                         </td>
-                        <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                          {b.discountReason ?? <span className="text-gray-400">—</span>}
+                        <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap max-w-[200px]">
+                          <div className="flex flex-col gap-0.5">
+                            <span>{b.discountReason ?? <span className="text-gray-400">—</span>}</span>
+                            {b.discountReasonNote && (
+                              <span className="text-[10px] text-amber-600 dark:text-amber-400 italic truncate" title={b.discountReasonNote}>
+                                Note: {b.discountReasonNote}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-3 py-2 tabular-nums">
                           {b.balanceAmount > 0 ? (
