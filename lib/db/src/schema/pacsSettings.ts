@@ -31,9 +31,15 @@ export const dicomModalitiesTable = pgTable("dicom_modalities", {
   retrieveEnabled: boolean("retrieve_enabled").notNull().default(true),
   pollingEnabled: boolean("polling_enabled").notNull().default(false),
   pollingIntervalSeconds: integer("polling_interval_seconds").notNull().default(300),
-  retrieveMethod: text("retrieve_method").notNull().default("C_MOVE"),          // C_MOVE | C_GET
+  retrieveMethod: text("retrieve_method").notNull().default("C_MOVE"),          // C_MOVE | C_GET | C_STORE | WATCH_FOLDER | C_STORE_OR_WATCH_FOLDER | USB_DICOMDIR | NON_DICOM_JPG_PNG
   preferredTransferSyntax: text("preferred_transfer_syntax"),
   destinationPacs: text("destination_pacs").notNull().default("CONQUEST"),      // CONQUEST | ORTHANC
+
+  // USG / Voluson-specific import methods
+  watchFolderPath: text("watch_folder_path"),                                    // filesystem path to watch for DICOM files
+  cStorePort: integer("c_store_port"),                                          // local port to listen for C-STORE SCP (e.g. 11112)
+  usbAutoImportEnabled: boolean("usb_auto_import_enabled").notNull().default(false),  // auto-import from USB / DICOMDIR
+  nonDicomImportEnabled: boolean("non_dicom_import_enabled").notNull().default(false),  // accept JPG/PNG fallback for non-DICOM images
   autoPushToConquest: boolean("auto_push_to_conquest").notNull().default(true),
   autoCreateWorklist: boolean("auto_create_worklist").notNull().default(true),
   autoNotifyRadiologist: boolean("auto_notify_radiologist").notNull().default(false),

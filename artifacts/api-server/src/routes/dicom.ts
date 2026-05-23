@@ -81,6 +81,10 @@ const createOrUpdateBody = insertDicomNodeSchema.extend({
   conquestAeTitle: z.string().max(16).optional(),
   conquestHost: z.string().max(253).optional(),
   conquestPort: z.number().int().min(1).max(65535).optional(),
+  preferredRetrieveMethod: z.enum([
+    "C_MOVE", "C_GET", "C_STORE", "WATCH_FOLDER",
+    "C_STORE_OR_WATCH_FOLDER", "USB_DICOMDIR", "NON_DICOM_JPG_PNG",
+  ]).optional(),
 });
 
 router.post("/nodes", async (req, res) => {
@@ -125,12 +129,14 @@ router.put("/nodes/:id", async (req, res) => {
     return;
   }
   try {
-    const [updated] = await db.update(dicomNodesTable).set({
+    const updatePayload: Record<string, unknown> = {
       ...data,
       modality: data.modality.toUpperCase(),
       aeTitle: data.aeTitle.trim(),
       host: data.host.trim(),
-    }).where(eq(dicomNodesTable.id, id)).returning();
+    };
+    if (data.preferredRetrieveMethod) updatePayload.preferredRetrieveMethod = data.preferredRetrieveMethod;
+    const [updated] = await db.update(dicomNodesTable).set(updatePayload).where(eq(dicomNodesTable.id, id)).returning();
     res.json(updated);
   } catch (err) {
     if (isUniqueViolation(err)) {

@@ -35,7 +35,7 @@ import {
 import { Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Mic, MicOff, Sparkles } from "lucide-react";
+import { Mic, MicOff, Sparkles, Image as ImageIcon } from "lucide-react";
 import {
   Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from "@/components/ui/command";
@@ -791,6 +791,24 @@ export default function ReportGenerator() {
                   </div>
                 )}
               </div>
+
+              {/* USG / Imaging Image Status */}
+              {order && order.tests?.some((t) => (t.test?.code ?? "").startsWith("USG") || (t.test?.name ?? "").toLowerCase().includes("ultrasound")) && (
+                <div className="bg-card border border-card-border rounded-xl p-4 shadow-sm space-y-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">USG Image Status</h3>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                    <span className="text-muted-foreground">Waiting for DICOM images from USG machine</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Images auto-import from Voluson (172.16.1.46) via C-STORE, watch folder, USB DICOMDIR, or JPG/PNG fallback. Once received, click to open PACS viewer.
+                  </p>
+                  <Button size="sm" variant="outline" className="w-full text-xs" disabled>
+                    <ImageIcon size={13} className="mr-1.5" />
+                    Open PACS Viewer
+                  </Button>
+                </div>
+              )}
 
               {/* Lab Director */}
               <div className="bg-card border border-card-border rounded-xl p-4 shadow-sm space-y-3">

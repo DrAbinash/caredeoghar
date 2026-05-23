@@ -228,6 +228,23 @@ async function runStartupMigrations(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 minutes'
       );
+      -- Voluson USG / expanded DICOM import columns
+      ALTER TABLE dicom_modalities ADD COLUMN IF NOT EXISTS watch_folder_path TEXT;
+      ALTER TABLE dicom_modalities ADD COLUMN IF NOT EXISTS c_store_port INTEGER;
+      ALTER TABLE dicom_modalities ADD COLUMN IF NOT EXISTS usb_auto_import_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE dicom_modalities ADD COLUMN IF NOT EXISTS non_dicom_import_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE dicom_nodes ADD COLUMN IF NOT EXISTS preferred_retrieve_method TEXT NOT NULL DEFAULT 'C_MOVE';
+
+      -- Default Voluson USG entry (idempotent)
+      INSERT INTO dicom_modalities (machine_name, modality, ae_title, ip_address, port, location, manufacturer, auto_send_enabled, is_active, query_enabled, retrieve_enabled, retrieve_method, destination_pacs, watch_folder_path, c_store_port, usb_auto_import_enabled, non_dicom_import_enabled, notes)
+      SELECT 'Voluson USG', 'US', 'Voluson', '172.16.1.46', 104, 'Radiology Wing - USG', 'GE Healthcare Voluson', true, true, true, true, 'C_STORE_OR_WATCH_FOLDER', 'CONQUEST', '/var/dicom/incoming/voluson', 11112, true, true, 'GE Voluson ultrasound machine with C-STORE receive, watch folder, USB/DICOMDIR and non-DICOM JPG/PNG fallback support'
+      WHERE NOT EXISTS (SELECT 1 FROM dicom_modalities WHERE ae_title = 'Voluson');
+
+      -- Default Voluson node for pull agent (idempotent)
+      INSERT INTO dicom_nodes (ae_title, host, port, modality, description, location, is_active, auto_pull, pull_interval_minutes, pull_query_days, conquest_ae_title, conquest_host, conquest_port, preferred_retrieve_method)
+      SELECT 'Voluson', '172.16.1.46', 104, 'US', 'GE Voluson USG machine', 'Radiology Wing - USG', true, true, 15, 1, '', '', 5678, 'C_STORE_OR_WATCH_FOLDER'
+      WHERE NOT EXISTS (SELECT 1 FROM dicom_nodes WHERE ae_title = 'Voluson');
+
       ALTER TABLE radiology_worklist ADD COLUMN IF NOT EXISTS dicom_patient_id TEXT;
       ALTER TABLE radiology_worklist ADD COLUMN IF NOT EXISTS patient_match_status TEXT NOT NULL DEFAULT 'UNMATCHED';
       ALTER TABLE radiology_worklist ADD COLUMN IF NOT EXISTS source_pacs TEXT;

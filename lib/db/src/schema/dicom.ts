@@ -34,6 +34,10 @@ export const dicomNodesTable = pgTable("dicom_nodes", {
   conquestHost: text("conquest_host").notNull().default(""),
   conquestPort: integer("conquest_port").notNull().default(5678),
 
+  // Preferred retrieve method for this node — overrides the per-modality default.
+  // C_MOVE | C_GET | C_STORE | WATCH_FOLDER | C_STORE_OR_WATCH_FOLDER | USB_DICOMDIR | NON_DICOM_JPG_PNG
+  preferredRetrieveMethod: text("preferred_retrieve_method").notNull().default("C_MOVE"),
+
   // ── Auto-Pull status ────────────────────────────────────────────────────────
   lastPullAt: timestamp("last_pull_at", { withTimezone: true }),
   lastPullStatus: text("last_pull_status"),   // 'success' | 'failed' | 'partial'

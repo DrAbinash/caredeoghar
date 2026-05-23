@@ -40,6 +40,7 @@ type DicomNode = {
   lastPullAt: string | null;
   lastPullStatus: "success" | "failed" | "partial" | null;
   lastPullMessage: string | null;
+  preferredRetrieveMethod: string;
 };
 
 type PullJob = {
@@ -127,7 +128,18 @@ type NodeForm = {
   conquestAeTitle: string;
   conquestHost: string;
   conquestPort: number;
+  preferredRetrieveMethod: string;
 };
+
+const RETRIEVE_METHOD_OPTIONS = [
+  { value: "C_MOVE", label: "C-MOVE" },
+  { value: "C_GET", label: "C-GET" },
+  { value: "C_STORE", label: "C-STORE SCP" },
+  { value: "WATCH_FOLDER", label: "Watch Folder" },
+  { value: "C_STORE_OR_WATCH_FOLDER", label: "C-STORE + Watch Folder" },
+  { value: "USB_DICOMDIR", label: "USB / DICOMDIR" },
+  { value: "NON_DICOM_JPG_PNG", label: "Non-DICOM JPG/PNG" },
+];
 
 function emptyForm(): NodeForm {
   return {
@@ -135,6 +147,7 @@ function emptyForm(): NodeForm {
     description: "", location: "", isActive: true,
     autoPull: false, pullIntervalMinutes: 15, pullQueryDays: 1,
     conquestAeTitle: "", conquestHost: "", conquestPort: 5678,
+    preferredRetrieveMethod: "C_MOVE",
   };
 }
 
@@ -230,6 +243,7 @@ export function DicomNodesPanel() {
       conquestAeTitle: node.conquestAeTitle ?? "",
       conquestHost: node.conquestHost ?? "",
       conquestPort: node.conquestPort ?? 5678,
+      preferredRetrieveMethod: (node as any).preferredRetrieveMethod ?? "C_MOVE",
     });
     setFormError(null);
     setFormTest(null);
@@ -354,6 +368,7 @@ export function DicomNodesPanel() {
                       <th className="px-4 py-3 font-medium">Location</th>
                       <th className="px-4 py-3 font-medium">Connectivity</th>
                       <th className="px-4 py-3 font-medium">Auto-Pull</th>
+                      <th className="px-4 py-3 font-medium">Retrieve</th>
                       <th className="px-4 py-3 font-medium">Last Pull</th>
                       <th className="px-4 py-3 font-medium text-right">Actions</th>
                     </tr>
@@ -435,6 +450,11 @@ export function DicomNodesPanel() {
                               ) : (
                                 <span className="text-xs text-muted-foreground">Off</span>
                               )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="text-[11px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
+                                {RETRIEVE_METHOD_OPTIONS.find(o => o.value === (n.preferredRetrieveMethod ?? "C_MOVE"))?.label ?? (n.preferredRetrieveMethod ?? "C-MOVE")}
+                              </span>
                             </td>
                             <td className="px-4 py-3 text-xs">
                               {n.lastPullAt ? (
@@ -758,6 +778,22 @@ export function DicomNodesPanel() {
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+
+                  <div>
+                    <Label className="text-xs">Preferred Retrieve Method</Label>
+                    <Select
+                      value={form.preferredRetrieveMethod}
+                      onValueChange={(v) => setForm({ ...form, preferredRetrieveMethod: v })}
+                    >
+                      <SelectTrigger className="mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {RETRIEVE_METHOD_OPTIONS.map((m) => (
+                          <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[11px] text-muted-foreground mt-1">How the pull agent fetches images. USG machines may use C-STORE, Watch Folder, or hybrid mode.</p>
                   </div>
 
                   <p className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide">Conquest PACS destination (optional overrides)</p>

@@ -1038,6 +1038,8 @@ radiologyRouter.post("/modalities", async (req, res) => {
     pollingEnabled?: boolean; pollingIntervalSeconds?: number;
     retrieveMethod?: string; preferredTransferSyntax?: string;
     destinationPacs?: string;
+    watchFolderPath?: string; cStorePort?: number;
+    usbAutoImportEnabled?: boolean; nonDicomImportEnabled?: boolean;
     autoPushToConquest?: boolean; autoCreateWorklist?: boolean; autoNotifyRadiologist?: boolean;
     notes?: string;
   };
@@ -1060,6 +1062,10 @@ radiologyRouter.post("/modalities", async (req, res) => {
     if (b.retrieveMethod       !== undefined) updates.retrieveMethod       = b.retrieveMethod;
     if (b.preferredTransferSyntax !== undefined) updates.preferredTransferSyntax = b.preferredTransferSyntax;
     if (b.destinationPacs      !== undefined) updates.destinationPacs      = b.destinationPacs;
+    if (b.watchFolderPath      !== undefined) updates.watchFolderPath      = b.watchFolderPath;
+    if (b.cStorePort           !== undefined) updates.cStorePort           = b.cStorePort;
+    if (b.usbAutoImportEnabled  !== undefined) updates.usbAutoImportEnabled  = b.usbAutoImportEnabled;
+    if (b.nonDicomImportEnabled !== undefined) updates.nonDicomImportEnabled = b.nonDicomImportEnabled;
     if (b.autoPushToConquest   !== undefined) updates.autoPushToConquest   = b.autoPushToConquest;
     if (b.autoCreateWorklist   !== undefined) updates.autoCreateWorklist   = b.autoCreateWorklist;
     if (b.autoNotifyRadiologist !== undefined) updates.autoNotifyRadiologist = b.autoNotifyRadiologist;
@@ -1085,6 +1091,10 @@ radiologyRouter.post("/modalities", async (req, res) => {
       retrieveMethod:         b.retrieveMethod ?? "C_MOVE",
       preferredTransferSyntax: b.preferredTransferSyntax ?? null,
       destinationPacs:        b.destinationPacs ?? "CONQUEST",
+      watchFolderPath:        b.watchFolderPath ?? null,
+      cStorePort:             b.cStorePort ?? null,
+      usbAutoImportEnabled:   b.usbAutoImportEnabled ?? false,
+      nonDicomImportEnabled:  b.nonDicomImportEnabled ?? false,
       autoPushToConquest:     b.autoPushToConquest ?? true,
       autoCreateWorklist:     b.autoCreateWorklist ?? true,
       autoNotifyRadiologist:  b.autoNotifyRadiologist ?? false,

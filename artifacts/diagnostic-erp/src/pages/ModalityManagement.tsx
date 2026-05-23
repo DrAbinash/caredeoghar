@@ -31,6 +31,10 @@ type DicomModality = {
   retrieveMethod: string;
   preferredTransferSyntax: string | null;
   destinationPacs: string;
+  watchFolderPath: string | null;
+  cStorePort: number | null;
+  usbAutoImportEnabled: boolean;
+  nonDicomImportEnabled: boolean;
   autoPushToConquest: boolean;
   autoCreateWorklist: boolean;
   autoNotifyRadiologist: boolean;
@@ -59,6 +63,10 @@ type FormState = {
   retrieveMethod: string;
   preferredTransferSyntax: string | null;
   destinationPacs: string;
+  watchFolderPath: string | null;
+  cStorePort: number | null;
+  usbAutoImportEnabled: boolean;
+  nonDicomImportEnabled: boolean;
   autoPushToConquest: boolean;
   autoCreateWorklist: boolean;
   autoNotifyRadiologist: boolean;
@@ -68,7 +76,19 @@ type FormState = {
 // ── Constants ──────────────────────────────────────────────────────────────
 
 const MODALITY_TYPES = ["MR", "CT", "CR", "DX", "US", "XA", "MG", "PT", "NM", "OT"] as const;
-const RETRIEVE_METHODS = ["C_MOVE", "C_GET"] as const;
+const RETRIEVE_METHODS = [
+  "C_MOVE", "C_GET", "C_STORE", "WATCH_FOLDER",
+  "C_STORE_OR_WATCH_FOLDER", "USB_DICOMDIR", "NON_DICOM_JPG_PNG",
+] as const;
+const RETRIEVE_METHOD_LABELS: Record<string, string> = {
+  C_MOVE: "C-MOVE (classic retrieve)",
+  C_GET: "C-GET (direct receive)",
+  C_STORE: "C-STORE SCP (push receive)",
+  WATCH_FOLDER: "Watch Folder (filesystem scan)",
+  C_STORE_OR_WATCH_FOLDER: "C-STORE + Watch Folder (hybrid)",
+  USB_DICOMDIR: "USB / DICOMDIR Import",
+  NON_DICOM_JPG_PNG: "Non-DICOM JPG/PNG Fallback",
+};
 const DESTINATION_PACS_OPTIONS = ["CONQUEST", "ORTHANC"] as const;
 
 const MODALITY_COLORS: Record<string, string> = {
@@ -114,6 +134,10 @@ const BLANK_FORM: FormState = {
   retrieveMethod: "C_MOVE",
   preferredTransferSyntax: "",
   destinationPacs: "CONQUEST",
+  watchFolderPath: "",
+  cStorePort: null,
+  usbAutoImportEnabled: false,
+  nonDicomImportEnabled: false,
   autoPushToConquest: true,
   autoCreateWorklist: true,
   autoNotifyRadiologist: false,
@@ -138,6 +162,10 @@ function modalityToForm(m: DicomModality): FormState {
     retrieveMethod: m.retrieveMethod,
     preferredTransferSyntax: m.preferredTransferSyntax,
     destinationPacs: m.destinationPacs,
+    watchFolderPath: m.watchFolderPath,
+    cStorePort: m.cStorePort,
+    usbAutoImportEnabled: m.usbAutoImportEnabled,
+    nonDicomImportEnabled: m.nonDicomImportEnabled,
     autoPushToConquest: m.autoPushToConquest,
     autoCreateWorklist: m.autoCreateWorklist,
     autoNotifyRadiologist: m.autoNotifyRadiologist,
@@ -273,7 +301,7 @@ function ModalityForm({
                   onChange={(e) => set("retrieveMethod", e.target.value)}
                   className="w-full h-8 text-sm border rounded-md px-2 bg-background"
                 >
-                  {RETRIEVE_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+                  {RETRIEVE_METHODS.map((m) => <option key={m} value={m}>{RETRIEVE_METHOD_LABELS[m]}</option>)}
                 </select>
               </div>
               <div className="space-y-1">
@@ -307,6 +335,32 @@ function ModalityForm({
                 />
               </div>
             </div>
+
+            {/* USG / Voluson-specific import settings — shown when retrieveMethod supports file-based import */}
+            {(form.retrieveMethod === "WATCH_FOLDER" || form.retrieveMethod === "C_STORE_OR_WATCH_FOLDER" ||
+              form.retrieveMethod === "USB_DICOMDIR" || form.retrieveMethod === "NON_DICOM_JPG_PNG") && (
+              <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium">Watch Folder Path</label>
+                  <Input
+                    value={form.watchFolderPath ?? ""}
+                    onChange={(e) => set("watchFolderPath", e.target.value)}
+                    placeholder="e.g. /var/dicom/incoming/voluson"
+                    className="h-8 text-sm font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium">C-STORE SCP Port</label>
+                  <Input
+                    type="number"
+                    value={form.cStorePort ?? ""}
+                    onChange={(e) => set("cStorePort", e.target.value ? Number(e.target.value) : null)}
+                    placeholder="e.g. 11112"
+                    className="h-8 text-sm font-mono"
+                  />
+                </div>
+              </div>
+            )}
           </section>
 
           {/* Toggles */}
@@ -321,6 +375,8 @@ function ModalityForm({
               <ToggleRow label="Auto Push to Conquest" checked={form.autoPushToConquest} onChange={(v) => set("autoPushToConquest", v)} />
               <ToggleRow label="Auto Create Worklist" checked={form.autoCreateWorklist} onChange={(v) => set("autoCreateWorklist", v)} />
               <ToggleRow label="Auto Notify Radiologist" checked={form.autoNotifyRadiologist} onChange={(v) => set("autoNotifyRadiologist", v)} />
+              <ToggleRow label="USB / DICOMDIR Auto-Import" checked={form.usbAutoImportEnabled} onChange={(v) => set("usbAutoImportEnabled", v)} />
+              <ToggleRow label="Non-DICOM JPG/PNG Fallback" checked={form.nonDicomImportEnabled} onChange={(v) => set("nonDicomImportEnabled", v)} />
             </div>
           </section>
 
@@ -485,8 +541,14 @@ function ModalityCard({
         )}
         {m.retrieveEnabled && (
           <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
-            {m.retrieveMethod}
+            {RETRIEVE_METHOD_LABELS[m.retrieveMethod] ?? m.retrieveMethod}
           </span>
+        )}
+        {m.usbAutoImportEnabled && (
+          <span className="text-[10px] bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 px-1.5 py-0.5 rounded-full">USB</span>
+        )}
+        {m.nonDicomImportEnabled && (
+          <span className="text-[10px] bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 px-1.5 py-0.5 rounded-full">JPG/PNG</span>
         )}
         <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
           → {m.destinationPacs}
@@ -577,6 +639,10 @@ export function ModalityPanel() {
       retrieveMethod: data.retrieveMethod,
       preferredTransferSyntax: data.preferredTransferSyntax?.trim() || null,
       destinationPacs: data.destinationPacs,
+      watchFolderPath: data.watchFolderPath?.trim() || null,
+      cStorePort: data.cStorePort,
+      usbAutoImportEnabled: data.usbAutoImportEnabled,
+      nonDicomImportEnabled: data.nonDicomImportEnabled,
       autoPushToConquest: data.autoPushToConquest,
       autoCreateWorklist: data.autoCreateWorklist,
       autoNotifyRadiologist: data.autoNotifyRadiologist,
