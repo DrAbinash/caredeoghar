@@ -29,8 +29,8 @@ type DicomNode = {
   location: string;
   isActive: boolean;
   autoPull: boolean;
-  pullIntervalMinutes: number;
-  pullQueryDays: number;
+  pullIntervalSeconds: number;
+  queryLookbackHours: number;
   conquestAeTitle: string;
   conquestHost: string;
   conquestPort: number;
@@ -107,12 +107,12 @@ const MODALITY_COLOR: Record<string, string> = {
 };
 
 const PULL_INTERVALS = [
-  { value: 5,   label: "Every 5 min" },
-  { value: 10,  label: "Every 10 min" },
-  { value: 15,  label: "Every 15 min" },
-  { value: 30,  label: "Every 30 min" },
-  { value: 60,  label: "Every hour" },
-  { value: 120, label: "Every 2 hours" },
+  { value: 60,    label: "Every 1 min" },
+  { value: 300,   label: "Every 5 min" },
+  { value: 600,   label: "Every 10 min" },
+  { value: 900,   label: "Every 15 min" },
+  { value: 1800,  label: "Every 30 min" },
+  { value: 3600,  label: "Every hour" },
 ];
 
 type NodeForm = {
@@ -124,12 +124,13 @@ type NodeForm = {
   location: string;
   isActive: boolean;
   autoPull: boolean;
-  pullIntervalMinutes: number;
-  pullQueryDays: number;
+  pullIntervalSeconds: number;
+  queryLookbackHours: number;
   conquestAeTitle: string;
   conquestHost: string;
   conquestPort: number;
   preferredRetrieveMethod: string;
+  watchFolderPath: string;
 };
 
 const RETRIEVE_METHOD_OPTIONS = [
@@ -146,9 +147,10 @@ function emptyForm(): NodeForm {
   return {
     aeTitle: "", host: "", port: 104, modality: "CT",
     description: "", location: "", isActive: true,
-    autoPull: false, pullIntervalMinutes: 15, pullQueryDays: 1,
-    conquestAeTitle: "", conquestHost: "", conquestPort: 5678,
+    autoPull: false, pullIntervalSeconds: 300, queryLookbackHours: 24,
+    conquestAeTitle: "", conquestHost: "", conquestPort: 5680,
     preferredRetrieveMethod: "C_MOVE",
+    watchFolderPath: "",
   };
 }
 
@@ -246,9 +248,10 @@ export function DicomNodesPanel() {
       preset: {
         aeTitle: "UIH", host: "172.16.1.103", port: 3333, modality: "MR",
         description: "MRI scanner", location: "Room 1", isActive: true,
-        autoPull: true, pullIntervalMinutes: 10, pullQueryDays: 2,
-        conquestAeTitle: "ORTHANC", conquestHost: "172.16.1.139", conquestPort: 5680,
+        autoPull: true, pullIntervalSeconds: 300, queryLookbackHours: 24,
+        conquestAeTitle: "ORTHANC2", conquestHost: "172.16.1.139", conquestPort: 5680,
         preferredRetrieveMethod: "C_MOVE",
+        watchFolderPath: "",
       },
     },
     {
@@ -256,9 +259,10 @@ export function DicomNodesPanel() {
       preset: {
         aeTitle: "ct99", host: "172.16.1.99", port: 4006, modality: "CT",
         description: "CT scanner", location: "Room 2", isActive: true,
-        autoPull: true, pullIntervalMinutes: 10, pullQueryDays: 2,
-        conquestAeTitle: "ORTHANC", conquestHost: "172.16.1.139", conquestPort: 5680,
+        autoPull: true, pullIntervalSeconds: 300, queryLookbackHours: 24,
+        conquestAeTitle: "ORTHANC2", conquestHost: "172.16.1.139", conquestPort: 5680,
         preferredRetrieveMethod: "C_MOVE",
+        watchFolderPath: "",
       },
     },
     {
@@ -266,9 +270,10 @@ export function DicomNodesPanel() {
       preset: {
         aeTitle: "Voluson", host: "172.16.1.46", port: 104, modality: "US",
         description: "Ultrasound", location: "Room 3", isActive: true,
-        autoPull: true, pullIntervalMinutes: 10, pullQueryDays: 2,
-        conquestAeTitle: "ORTHANC", conquestHost: "172.16.1.139", conquestPort: 5680,
-        preferredRetrieveMethod: "C_MOVE",
+        autoPull: true, pullIntervalSeconds: 300, queryLookbackHours: 24,
+        conquestAeTitle: "ORTHANC2", conquestHost: "172.16.1.139", conquestPort: 5680,
+        preferredRetrieveMethod: "C_STORE_OR_WATCH_FOLDER",
+        watchFolderPath: "D:/HopeDicomFresh/*",
       },
     },
     {
@@ -276,9 +281,10 @@ export function DicomNodesPanel() {
       preset: {
         aeTitle: "ORTHANC2", host: "172.16.1.139", port: 5680, modality: "OT",
         description: "Conquest PACS", location: "Server", isActive: true,
-        autoPull: false, pullIntervalMinutes: 15, pullQueryDays: 1,
-        conquestAeTitle: "", conquestHost: "", conquestPort: 5678,
+        autoPull: false, pullIntervalSeconds: 300, queryLookbackHours: 24,
+        conquestAeTitle: "", conquestHost: "", conquestPort: 5680,
         preferredRetrieveMethod: "C_MOVE",
+        watchFolderPath: "",
       },
     },
   ];
@@ -290,12 +296,13 @@ export function DicomNodesPanel() {
       modality: node.modality, description: node.description,
       location: node.location, isActive: node.isActive,
       autoPull: node.autoPull,
-      pullIntervalMinutes: node.pullIntervalMinutes ?? 15,
-      pullQueryDays: node.pullQueryDays ?? 1,
+      pullIntervalSeconds: (node as any).pullIntervalSeconds ?? 300,
+      queryLookbackHours: (node as any).queryLookbackHours ?? 24,
       conquestAeTitle: node.conquestAeTitle ?? "",
       conquestHost: node.conquestHost ?? "",
-      conquestPort: node.conquestPort ?? 5678,
+      conquestPort: node.conquestPort ?? 5680,
       preferredRetrieveMethod: (node as any).preferredRetrieveMethod ?? "C_MOVE",
+      watchFolderPath: (node as any).watchFolderPath ?? "",
     });
     setFormError(null);
     setFormTest(null);
@@ -526,7 +533,7 @@ export function DicomNodesPanel() {
                               {n.autoPull ? (
                                 <div>
                                   <span className="inline-flex items-center gap-1 text-xs text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/30 px-2 py-0.5 rounded">
-                                    <Clock size={10} /> {PULL_INTERVALS.find(i => i.value === n.pullIntervalMinutes)?.label ?? `${n.pullIntervalMinutes}m`}
+                                    <Clock size={10} /> {PULL_INTERVALS.find(i => i.value === (n as any).pullIntervalSeconds)?.label ?? `${(n as any).pullIntervalSeconds}s`}
                                   </span>
                                 </div>
                               ) : (
@@ -835,8 +842,8 @@ export function DicomNodesPanel() {
                     <div>
                       <Label className="text-xs">Pull frequency</Label>
                       <Select
-                        value={String(form.pullIntervalMinutes)}
-                        onValueChange={(v) => setForm({ ...form, pullIntervalMinutes: Number(v) })}
+                        value={String(form.pullIntervalSeconds)}
+                        onValueChange={(v) => setForm({ ...form, pullIntervalSeconds: Number(v) })}
                       >
                         <SelectTrigger className="mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
@@ -847,15 +854,15 @@ export function DicomNodesPanel() {
                       </Select>
                     </div>
                     <div>
-                      <Label className="text-xs">Query days back</Label>
+                      <Label className="text-xs">Query lookback (hours)</Label>
                       <Select
-                        value={String(form.pullQueryDays)}
-                        onValueChange={(v) => setForm({ ...form, pullQueryDays: Number(v) })}
+                        value={String(form.queryLookbackHours)}
+                        onValueChange={(v) => setForm({ ...form, queryLookbackHours: Number(v) })}
                       >
                         <SelectTrigger className="mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {[1, 2, 3, 5, 7].map((d) => (
-                            <SelectItem key={d} value={String(d)}>{d === 1 ? "Today only" : `Last ${d} days`}</SelectItem>
+                          {[1, 6, 12, 24, 48, 72, 168].map((h) => (
+                            <SelectItem key={h} value={String(h)}>{h === 24 ? "Last 24 hours" : `Last ${h} hours`}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>

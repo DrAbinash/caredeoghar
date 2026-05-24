@@ -76,8 +76,8 @@ const createOrUpdateBody = insertDicomNodeSchema.extend({
   }),
   // Auto-pull fields — all optional so old clients don't break
   autoPull: z.boolean().optional(),
-  pullIntervalMinutes: z.number().int().min(1).max(1440).optional(),
-  pullQueryDays: z.number().int().min(1).max(30).optional(),
+  pullIntervalSeconds: z.number().int().min(30).max(86400).optional(),
+  queryLookbackHours: z.number().int().min(1).max(720).optional(),
   conquestAeTitle: z.string().max(16).optional(),
   conquestHost: z.string().max(253).optional(),
   conquestPort: z.number().int().min(1).max(65535).optional(),
@@ -85,6 +85,17 @@ const createOrUpdateBody = insertDicomNodeSchema.extend({
     "C_MOVE", "C_GET", "C_STORE", "WATCH_FOLDER",
     "C_STORE_OR_WATCH_FOLDER", "USB_DICOMDIR", "NON_DICOM_JPG_PNG",
   ]).optional(),
+  // USG / file-system paths
+  watchFolderPath: z.string().max(500).optional(),
+  processedFolderPath: z.string().max(500).optional(),
+  failedFolderPath: z.string().max(500).optional(),
+  // Acquisition & matching flags
+  allowNonDicomImages: z.boolean().optional(),
+  maxUploadSizeMB: z.number().int().min(1).max(2048).optional(),
+  thumbnailPreview: z.boolean().optional(),
+  multiFrameSupport: z.boolean().optional(),
+  acquisitionModesJson: z.string().max(2000).optional(),
+  matchingRulesJson: z.string().max(2000).optional(),
 });
 
 router.post("/nodes", async (req, res) => {
@@ -252,9 +263,11 @@ router.post("/nodes/:id/pull", async (req, res) => {
   }
 
   const today = new Date().toISOString().split("T")[0];
-  const daysBack = (node.pullQueryDays ?? 1) - 1;
+  const hoursBack = node.queryLookbackHours ?? 24;
+  const daysBack = Math.max(1, Math.ceil(hoursBack / 24));
   const fromDate = new Date();
-  fromDate.setDate(fromDate.getDate() - daysBack);
+  fromDate.setDate(fromDate.getDate() - (daysBack - 1));
+  fromDate.setHours(0, 0, 0, 0);
   const fromStr = fromDate.toISOString().split("T")[0];
 
   const [job] = await db.insert(dicomPullJobsTable).values({

@@ -261,10 +261,11 @@ async function pullFromModality(mod, cfg) {
   // ── C-FIND ──
   let studies;
   try {
-    const queryDays = mod.pullQueryDays ?? 1;
+    const lookbackHours = mod.queryLookbackHours ?? 24;
     const today = new Date();
     const dates = [];
-    for (let d = 0; d < queryDays; d++) {
+    const daysBack = Math.ceil(lookbackHours / 24);
+    for (let d = 0; d < daysBack; d++) {
       const dt = new Date(today);
       dt.setDate(dt.getDate() - d);
       dates.push(dt.toISOString().slice(0, 10).replace(/-/g, ""));

@@ -1443,12 +1443,20 @@ router.get("/dicom-agent/config", requireInternalApiKey, async (_req, res) => {
     description: n.description,
     isActive: n.isActive,
     autoPull: n.autoPull,
-    pullIntervalMinutes: n.pullIntervalMinutes,
-    pullQueryDays: n.pullQueryDays,
+    pullIntervalSeconds: n.pullIntervalSeconds,
+    queryLookbackHours: n.queryLookbackHours,
     conquestAeTitle: n.conquestAeTitle,
     conquestHost: n.conquestHost,
     conquestPort: n.conquestPort,
     preferredRetrieveMethod: n.preferredRetrieveMethod,
+    watchFolderPath: n.watchFolderPath ?? "",
+    processedFolderPath: n.processedFolderPath ?? "",
+    failedFolderPath: n.failedFolderPath ?? "",
+    name: n.name ?? n.aeTitle,
+    allowNonDicomImages: n.allowNonDicomImages ?? false,
+    maxUploadSizeMB: n.maxUploadSizeMB ?? 512,
+    thumbnailPreview: n.thumbnailPreview ?? true,
+    multiFrameSupport: n.multiFrameSupport ?? true,
   }));
 
   res.json({

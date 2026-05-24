@@ -17,6 +17,8 @@ export const dicomNodesTable = pgTable("dicom_nodes", {
   port: integer("port").notNull().default(104),
   // Modality short code per DICOM PS3.3 C.7.3.1.1.1
   modality: text("modality").notNull().default("OT"),
+  // Friendly display name (e.g. "UIH MRI", "CT Machine", "Voluson USG")
+  name: text("name").notNull().default(""),
   description: text("description").notNull().default(""),
   location: text("location").notNull().default(""),
   isActive: boolean("is_active").notNull().default(true),
@@ -24,19 +26,33 @@ export const dicomNodesTable = pgTable("dicom_nodes", {
   // ── Auto-Pull (Q/R) configuration ──────────────────────────────────────────
   // When enabled the cron scheduler creates pull jobs on the configured interval.
   autoPull: boolean("auto_pull").notNull().default(false),
-  // How often to pull in minutes (5, 10, 15, 30, 60, 120).
-  pullIntervalMinutes: integer("pull_interval_minutes").notNull().default(15),
-  // How many days back the C-FIND query should cover (1 = today only).
-  pullQueryDays: integer("pull_query_days").notNull().default(1),
+  // How often to pull in seconds (300 = 5 min).
+  pullIntervalSeconds: integer("pull_interval_seconds").notNull().default(300),
+  // How many hours back the C-FIND query should cover (24 = 1 day).
+  queryLookbackHours: integer("query_lookback_hours").notNull().default(24),
   // Conquest PACS destination — the AE Title, host, and port that movescu will
   // move studies INTO. Defaults to the global CONQUEST_AE_TITLE env var when blank.
   conquestAeTitle: text("conquest_ae_title").notNull().default(""),
   conquestHost: text("conquest_host").notNull().default(""),
   conquestPort: integer("conquest_port").notNull().default(5678),
 
-  // Preferred retrieve method for this node — overrides the per-modality default.
+  // Preferred retrieve method for this node.
   // C_MOVE | C_GET | C_STORE | WATCH_FOLDER | C_STORE_OR_WATCH_FOLDER | USB_DICOMDIR | NON_DICOM_JPG_PNG
   preferredRetrieveMethod: text("preferred_retrieve_method").notNull().default("C_MOVE"),
+
+  // ── USG / Voluson-specific file-system import paths ─────────────────────────
+  watchFolderPath: text("watch_folder_path").notNull().default(""),
+  processedFolderPath: text("processed_folder_path").notNull().default(""),
+  failedFolderPath: text("failed_folder_path").notNull().default(""),
+
+  // ── Acquisition & matching flags (USG / non-DICOM) ─────────────────────────
+  allowNonDicomImages: boolean("allow_non_dicom_images").notNull().default(false),
+  maxUploadSizeMB: integer("max_upload_size_mb").notNull().default(512),
+  thumbnailPreview: boolean("thumbnail_preview").notNull().default(true),
+  multiFrameSupport: boolean("multi_frame_support").notNull().default(true),
+  // JSON objects stored as text for acquisitionModes and matchingRules
+  acquisitionModesJson: text("acquisition_modes_json").notNull().default("{}"),
+  matchingRulesJson: text("matching_rules_json").notNull().default("{}"),
 
   // ── Auto-Pull status ────────────────────────────────────────────────────────
   lastPullAt: timestamp("last_pull_at", { withTimezone: true }),

@@ -436,7 +436,7 @@ async function fireDicomAutoPull() {
   if (nodes.length === 0) return;
 
   for (const node of nodes) {
-    const intervalMs = (node.pullIntervalMinutes ?? 15) * 60 * 1000;
+    const intervalMs = (node.pullIntervalSeconds ?? 300) * 1000;
     const lastPull   = node.lastPullAt ? new Date(node.lastPullAt).getTime() : 0;
     const dueAt      = lastPull + intervalMs;
 
@@ -460,9 +460,11 @@ async function fireDicomAutoPull() {
 
     // Calculate date range
     const todayStr = now.toISOString().split("T")[0];
-    const daysBack = (node.pullQueryDays ?? 1) - 1;
+    const hoursBack = node.queryLookbackHours ?? 24;
+    const daysBack = Math.max(1, Math.ceil(hoursBack / 24));
     const fromDate = new Date(now);
-    fromDate.setDate(fromDate.getDate() - daysBack);
+    fromDate.setDate(fromDate.getDate() - (daysBack - 1));
+    fromDate.setHours(0, 0, 0, 0);
     const fromStr = fromDate.toISOString().split("T")[0];
 
     await db.insert(dicomPullJobsTable).values({

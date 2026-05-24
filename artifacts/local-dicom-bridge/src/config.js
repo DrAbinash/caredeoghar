@@ -67,7 +67,7 @@ function getDefaultConfig() {
     },
     modalities: [],
     pullSettings: {
-      pollIntervalMs:     Number(process.env.POLL_INTERVAL_MS     ?? 600_000),
+      pollIntervalMs:     Number(process.env.POLL_INTERVAL_MS     ?? 300_000),
       agentAeTitle:       process.env.AGENT_AE_TITLE              ?? "DIAGNO_AGENT",
       maxConcurrentJobs:  Number(process.env.MAX_CONCURRENT_JOBS  ?? 3),
       dimseTimeoutMs:     Number(process.env.DIMSE_TIMEOUT_MS     ?? 60_000),
