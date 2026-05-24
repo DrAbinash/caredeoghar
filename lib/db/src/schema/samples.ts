@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, boolean, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, boolean, timestamp, uniqueIndex, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { ordersTable } from "./orders";
@@ -42,6 +42,16 @@ export const samplesTable = pgTable("samples", {
   outsourceExpectedAt: text("outsource_expected_at"),  // YYYY-MM-DD
   outsourceReceivedAt: timestamp("outsource_received_at", { withTimezone: true }),
   outsourceTrackingId: text("outsource_tracking_id"),
+
+  // ── Cost tracking ────────────────────────────────────────────────────────
+  // Computed cost to lab (either from lab default rate or test override).
+  outsourceCostAmount: numeric("outsource_cost_amount", { precision: 10, scale: 2 }),
+  // Manual override entered by staff (null = use computed value).
+  outsourceCostOverride: numeric("outsource_cost_override", { precision: 10, scale: 2 }),
+  // Total amount billed to patient for outsourced tests in this sample.
+  outsourcePatientBill: numeric("outsource_patient_bill", { precision: 10, scale: 2 }),
+  // Margin = outsourcePatientBill - effectiveCost.
+  outsourceMargin: numeric("outsource_margin", { precision: 10, scale: 2 }),
 
   notes: text("notes").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

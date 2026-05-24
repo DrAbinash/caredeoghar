@@ -45,6 +45,7 @@ type TestForm = {
   modalityId?: number | null;
   testType?: string;
   outsourcedLabId?: number | null;
+  outsourceCost?: string | number | null;
 };
 
 type RoomOption = { id: number; name: string; floorName: string | null; isActive: boolean };
@@ -249,6 +250,7 @@ export default function Tests() {
       outsourcedLabId,
       roomId: data.roomId ?? null,
       modalityId: data.modalityId ?? null,
+      outsourceCost: data.outsourceCost ? Number(data.outsourceCost) : null,
     } as unknown as Parameters<typeof createTest.mutate>[0]["data"];
     if (editTest) {
       updateTest.mutate({ id: editTest.id, data: payload as unknown as Parameters<typeof updateTest.mutate>[0]["data"] });
@@ -257,9 +259,9 @@ export default function Tests() {
     }
   };
 
-  const openEdit = (t: { id: number; code: string; name: string; category: string; price: number; duration: string; description?: string | null; isActive: boolean; department?: string; roomNumber?: string; roomId?: number | null; modalityId?: number | null; testType?: string | null; outsourcedLabId?: number | null }) => {
-    const tx = t as typeof t & { department?: string; roomNumber?: string; roomId?: number | null; modalityId?: number | null; testType?: string | null; outsourcedLabId?: number | null };
-    setEditTest({ id: t.id, code: t.code, name: t.name, category: t.category, price: t.price, duration: t.duration, description: t.description ?? "", isActive: t.isActive, department: tx.department, roomNumber: tx.roomNumber, roomId: tx.roomId ?? null, modalityId: tx.modalityId ?? null, testType: tx.testType ?? "inhouse", outsourcedLabId: tx.outsourcedLabId ?? null });
+  const openEdit = (t: { id: number; code: string; name: string; category: string; price: number; duration: string; description?: string | null; isActive: boolean; department?: string; roomNumber?: string; roomId?: number | null; modalityId?: number | null; testType?: string | null; outsourcedLabId?: number | null; outsourceCost?: string | number | null }) => {
+    const tx = t as typeof t & { department?: string; roomNumber?: string; roomId?: number | null; modalityId?: number | null; testType?: string | null; outsourcedLabId?: number | null; outsourceCost?: string | number | null };
+    setEditTest({ id: t.id, code: t.code, name: t.name, category: t.category, price: t.price, duration: t.duration, description: t.description ?? "", isActive: t.isActive, department: tx.department, roomNumber: tx.roomNumber, roomId: tx.roomId ?? null, modalityId: tx.modalityId ?? null, testType: tx.testType ?? "inhouse", outsourcedLabId: tx.outsourcedLabId ?? null, outsourceCost: tx.outsourceCost ?? null });
     setValue("code", t.code);
     setValue("name", t.name);
     setValue("category", t.category);
@@ -272,6 +274,7 @@ export default function Tests() {
     setValue("modalityId", tx.modalityId ?? null);
     setValue("testType", tx.testType ?? "inhouse");
     setValue("outsourcedLabId", tx.outsourcedLabId ?? null);
+    setValue("outsourceCost", t.outsourceCost != null ? Number(t.outsourceCost) : null);
     setOpen(true);
   };
 
@@ -340,6 +343,7 @@ export default function Tests() {
                   <th className="px-4 py-3 font-medium">Type</th>
                   <th className="px-4 py-3 font-medium text-right">Price</th>
                   <th className="px-4 py-3 font-medium">Duration</th>
+                  <th className="px-4 py-3 font-medium text-right">Outsource Cost</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium"></th>
                 </tr>
@@ -377,6 +381,13 @@ export default function Tests() {
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-foreground">₹{Number(t.price).toFixed(2)}</td>
                       <td className="px-4 py-3 text-muted-foreground">{t.duration}</td>
+                      <td className="px-4 py-3 text-right">
+                        {(t as any).outsourceCost != null ? (
+                          <span className="font-mono text-xs text-orange-700 dark:text-orange-300">₹{Number((t as any).outsourceCost).toFixed(2)}</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-0.5 rounded text-xs font-medium ${t.isActive ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}`}>
                           {t.isActive ? "Active" : "Inactive"}
@@ -533,6 +544,15 @@ export default function Tests() {
                 </div>
               )}
             </div>
+            {watch("testType") === "outsourced" && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Outsource Cost (₹)</Label>
+                  <Input type="number" step="0.01" min={0} {...register("outsourceCost")} className="mt-1" placeholder="Leave blank to use lab default" />
+                  <p className="text-[11px] text-muted-foreground mt-1">Overrides the lab’s default rate for this specific test.</p>
+                </div>
+              </div>
+            )}
             <div>
               <Label>Description</Label>
               <Input {...register("description")} className="mt-1" />

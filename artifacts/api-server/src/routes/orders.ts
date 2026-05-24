@@ -204,12 +204,23 @@ ordersRouter.post("/", async (req, res) => {
   }).returning();
 
   if (lineItems.length > 0) {
+    // Resolve outsource cost for each test to store in order_tests.
+    const testIds = lineItems.map((t) => t.testId);
+    const testRows = testIds.length > 0
+      ? await db.select().from(testsTable).where(inArray(testsTable.id, testIds))
+      : [];
+    const testMap = new Map(testRows.map((t) => [t.id, t]));
     await db.insert(orderTestsTable).values(
-      lineItems.map((t) => ({
-        orderId: order.id,
-        testId: t.testId,
-        price: t.price,
-      }))
+      lineItems.map((t) => {
+        const test = testMap.get(t.testId);
+        const oc = test?.outsourceCost != null ? String(test.outsourceCost) : null;
+        return {
+          orderId: order.id,
+          testId: t.testId,
+          price: t.price,
+          outsourceCost: oc,
+        };
+      })
     );
   }
 

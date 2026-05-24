@@ -15,6 +15,9 @@ const createLabSchema = z.object({
   gstin: z.string().optional(),
   notes: z.string().optional(),
   isActive: z.boolean().optional(),
+  costType: z.enum(["percent_of_patient_bill", "fixed_per_test", "custom_per_test"]).optional(),
+  costPercent: z.number().min(0).max(100).optional(),
+  costFixed: z.number().min(0).optional(),
 });
 
 const updateLabSchema = createLabSchema.partial();
@@ -35,7 +38,12 @@ outsourcedLabsRouter.post("/", async (req, res) => {
   }
   const [lab] = await db
     .insert(outsourcedLabsTable)
-    .values({ ...parsed.data, isActive: parsed.data.isActive ?? true })
+    .values({
+      ...parsed.data,
+      isActive: parsed.data.isActive ?? true,
+      costPercent: parsed.data.costPercent != null ? String(parsed.data.costPercent) : undefined,
+      costFixed: parsed.data.costFixed != null ? String(parsed.data.costFixed) : undefined,
+    })
     .returning();
   res.status(201).json(lab);
 });
@@ -67,7 +75,11 @@ outsourcedLabsRouter.put("/:id", async (req, res) => {
   }
   const [updated] = await db
     .update(outsourcedLabsTable)
-    .set(parsed.data)
+    .set({
+      ...parsed.data,
+      costPercent: parsed.data.costPercent != null ? String(parsed.data.costPercent) : undefined,
+      costFixed: parsed.data.costFixed != null ? String(parsed.data.costFixed) : undefined,
+    })
     .where(eq(outsourcedLabsTable.id, id))
     .returning();
   if (!updated) {

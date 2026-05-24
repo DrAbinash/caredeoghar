@@ -26,6 +26,9 @@ type Lab = {
   notes?: string | null;
   isActive: boolean;
   createdAt: string;
+  costType?: string | null;
+  costPercent?: number | string | null;
+  costFixed?: number | string | null;
 };
 
 type LabForm = {
@@ -37,6 +40,9 @@ type LabForm = {
   gstin?: string;
   notes?: string;
   isActive: boolean;
+  costType?: string;
+  costPercent?: string;
+  costFixed?: string;
 };
 
 const LABS_KEY = ["outsourced-labs"] as const;
@@ -57,8 +63,8 @@ export default function OutsourcedLabs() {
   const [editLab, setEditLab] = useState<Lab | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<Lab | null>(null);
 
-  const { register, handleSubmit, reset, formState } = useForm<LabForm>({
-    defaultValues: { isActive: true },
+  const { register, handleSubmit, reset, formState, watch } = useForm<LabForm>({
+    defaultValues: { isActive: true, costType: "percent_of_patient_bill", costPercent: "50", costFixed: "" },
   });
 
   const createLab = useMutation({
@@ -99,7 +105,7 @@ export default function OutsourcedLabs() {
 
   const openCreate = () => {
     setEditLab(null);
-    reset({ isActive: true });
+    reset({ isActive: true, costType: "percent_of_patient_bill", costPercent: "50", costFixed: "" });
     setOpen(true);
   };
 
@@ -114,6 +120,9 @@ export default function OutsourcedLabs() {
       gstin: lab.gstin ?? "",
       notes: lab.notes ?? "",
       isActive: lab.isActive,
+      costType: (lab.costType as string) || "percent_of_patient_bill",
+      costPercent: lab.costPercent != null ? String(lab.costPercent) : "50",
+      costFixed: lab.costFixed != null ? String(lab.costFixed) : "",
     });
     setOpen(true);
   };
@@ -127,6 +136,9 @@ export default function OutsourcedLabs() {
       address: data.address || undefined,
       gstin: data.gstin || undefined,
       notes: data.notes || undefined,
+      costType: data.costType || undefined,
+      costPercent: data.costPercent ? String(data.costPercent) : undefined,
+      costFixed: data.costFixed ? String(data.costFixed) : undefined,
     };
     if (editLab) {
       updateLab.mutate({ id: editLab.id, data: payload });
@@ -223,6 +235,40 @@ export default function OutsourcedLabs() {
               <Label>Notes</Label>
               <Input {...register("notes")} className="mt-1" placeholder="Turnaround time, pickup schedule, etc." />
             </div>
+            <div className="border-t border-border pt-3">
+              <Label className="text-xs uppercase text-muted-foreground tracking-wide">Default Cost Calculation</Label>
+              <div className="grid grid-cols-2 gap-3 mt-2">
+                <div>
+                  <Label className="text-xs">Cost Mode</Label>
+                  <select {...register("costType")} className="mt-1 w-full text-sm border rounded px-2 py-1.5 bg-background">
+                    <option value="percent_of_patient_bill">% of Patient Bill</option>
+                    <option value="fixed_per_test">Fixed per Test</option>
+                    <option value="custom_per_test">Custom per Test</option>
+                  </select>
+                </div>
+                {(watch("costType") ?? "percent_of_patient_bill") === "percent_of_patient_bill" ? (
+                  <div>
+                    <Label className="text-xs">Percent (%)</Label>
+                    <div className="relative mt-1">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">%</span>
+                      <Input type="number" min={0} max={100} step={0.01} {...register("costPercent")} className="pl-6" placeholder="50" />
+                    </div>
+                  </div>
+                ) : (watch("costType") ?? "percent_of_patient_bill") === "fixed_per_test" ? (
+                  <div>
+                    <Label className="text-xs">Fixed Amount</Label>
+                    <div className="relative mt-1">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">₹</span>
+                      <Input type="number" min={0} step={0.01} {...register("costFixed")} className="pl-6" placeholder="0.00" />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground self-center">
+                    Cost set per test in Test Catalog.
+                  </div>
+                )}
+              </div>
+            </div>
             <div className="flex items-center gap-2">
               <input type="checkbox" id="labActive" {...register("isActive")} className="rounded" />
               <Label htmlFor="labActive">Active</Label>
@@ -306,6 +352,14 @@ function LabCard({ lab, onEdit, onDelete }: { lab: Lab; onEdit: (l: Lab) => void
             <span className="font-mono">{lab.gstin}</span>
           </div>
         )}
+        <div className="flex items-center gap-1.5">
+          <span className="font-medium">Default cost:</span>
+          <span className="font-mono">
+            {lab.costType === "fixed_per_test" ? `₹${Number(lab.costFixed ?? 0).toFixed(2)} per test`
+              : lab.costType === "custom_per_test" ? "Custom per test"
+                : `${lab.costPercent ?? 50}% of patient bill`}
+          </span>
+        </div>
         {lab.notes && (
           <p className="text-xs text-muted-foreground mt-1 border-t border-border/50 pt-1">{lab.notes}</p>
         )}

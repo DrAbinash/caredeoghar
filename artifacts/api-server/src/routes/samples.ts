@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import {
   db, samplesTable, sampleTestAssignmentsTable, insertSampleSchema,
   ordersTable, patientsTable, orderTestsTable, testsTable,
+  outsourcedLabsTable,
 } from "@workspace/db";
 import { and, eq, gte, lte, sql, inArray, desc, like, type SQL } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -326,6 +327,7 @@ const outsourceBody = z.object({
   outsourceLab: z.string().min(1, "Lab name is required"),
   outsourceExpectedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal("")),
   outsourceTrackingId: z.string().optional(),
+  outsourceCostOverride: z.number().min(0).optional(),
 });
 
 router.post("/:id/outsource", async (req, res) => {
@@ -342,12 +344,69 @@ router.post("/:id/outsource", async (req, res) => {
     return;
   }
 
+  // Compute cost: look up tests in this sample, resolve lab rates, sum costs.
+  const tests = await db
+    .select({
+      orderTestId: orderTestsTable.id,
+      testId: testsTable.id,
+      outsourceCost: testsTable.outsourceCost,
+      outsourcedLabId: testsTable.outsourcedLabId,
+      patientPrice: orderTestsTable.price,
+    })
+    .from(sampleTestAssignmentsTable)
+    .innerJoin(orderTestsTable, eq(orderTestsTable.id, sampleTestAssignmentsTable.orderTestId))
+    .innerJoin(testsTable, eq(testsTable.id, orderTestsTable.testId))
+    .where(eq(sampleTestAssignmentsTable.sampleId, id));
+
+  // Build a map of lab rates.
+  const labIds = [...new Set(tests.map((t) => t.outsourcedLabId).filter((id): id is number => id != null))];
+  const labs = labIds.length > 0
+    ? await db.select().from(outsourcedLabsTable).where(inArray(outsourcedLabsTable.id, labIds))
+    : [];
+  const labMap = new Map(labs.map((l) => [l.id, l]));
+
+  let totalCost = 0;
+  let totalPatientBill = 0;
+  for (const t of tests) {
+    const pPrice = Number(t.patientPrice ?? 0);
+    totalPatientBill += pPrice;
+    // If test has explicit outsourceCost, use it.
+    if (t.outsourceCost != null) {
+      totalCost += Number(t.outsourceCost);
+      continue;
+    }
+    // Otherwise fall back to lab default rate.
+    if (t.outsourcedLabId) {
+      const lab = labMap.get(t.outsourcedLabId);
+      if (lab) {
+        if (lab.costType === "fixed_per_test") {
+          totalCost += Number(lab.costFixed ?? 0);
+        } else {
+          // percent_of_patient_bill (default)
+          totalCost += pPrice * (Number(lab.costPercent ?? 50) / 100);
+        }
+      }
+    }
+  }
+
+  totalCost = Math.round(totalCost * 100) / 100;
+
+  // Staff may override the computed cost.
+  const effectiveCost = body.data.outsourceCostOverride != null && Number.isFinite(body.data.outsourceCostOverride)
+    ? body.data.outsourceCostOverride
+    : totalCost;
+  const margin = Math.round((totalPatientBill - effectiveCost) * 100) / 100;
+
   const [updated] = await db.update(samplesTable).set({
     isOutsourced: true,
     outsourceLab: body.data.outsourceLab.trim(),
     outsourceExpectedAt: body.data.outsourceExpectedAt || null,
     outsourceTrackingId: body.data.outsourceTrackingId?.trim() || null,
     outsourceSentAt: new Date(),
+    outsourceCostAmount: String(totalCost),
+    outsourceCostOverride: (body.data.outsourceCostOverride != null && Number.isFinite(body.data.outsourceCostOverride)) ? String(effectiveCost) : null,
+    outsourcePatientBill: String(totalPatientBill),
+    outsourceMargin: String(margin),
   }).where(eq(samplesTable.id, id)).returning();
   res.json(await expandSample(updated));
 });
@@ -380,6 +439,10 @@ router.delete("/:id/outsource", async (req, res) => {
     outsourceTrackingId: null,
     outsourceSentAt: null,
     outsourceReceivedAt: null,
+    outsourceCostAmount: null,
+    outsourceCostOverride: null,
+    outsourcePatientBill: null,
+    outsourceMargin: null,
   }).where(eq(samplesTable.id, id)).returning();
   res.json(await expandSample(updated));
 });

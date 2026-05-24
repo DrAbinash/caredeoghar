@@ -22,6 +22,8 @@ export const testsTable = pgTable("diagnostic_tests", {
   testType: text("test_type").notNull().default("inhouse"),
   // FK to outsourced_labs.id — only set when testType = 'outsourced'
   outsourcedLabId: integer("outsourced_lab_id"),
+  // Override cost to outsourced lab for this specific test (null = use lab default rate).
+  outsourceCost: numeric("outsource_cost", { precision: 10, scale: 2 }),
   // FK to rooms master — null if not assigned
   roomId: integer("room_id"),
   // FK to modalities master — null if not assigned

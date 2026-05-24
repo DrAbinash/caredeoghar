@@ -70,15 +70,20 @@ testsRouter.get("/", async (req, res) => {
 function extractDeptRoom(body: unknown): {
   department?: string; roomNumber?: string;
   roomId?: number | null; modalityId?: number | null; floorLabel?: string;
+  outsourceCost?: string | null;
 } {
   if (!body || typeof body !== "object") return {};
   const b = body as Record<string, unknown>;
-  const out: { department?: string; roomNumber?: string; roomId?: number | null; modalityId?: number | null; floorLabel?: string } = {};
+  const out: { department?: string; roomNumber?: string; roomId?: number | null; modalityId?: number | null; floorLabel?: string; outsourceCost?: string | null } = {};
   if (typeof b.department === "string" && b.department.trim()) out.department = b.department.trim();
   if (typeof b.roomNumber === "string") out.roomNumber = b.roomNumber.trim();
   if (b.roomId !== undefined) out.roomId = b.roomId == null ? null : Number(b.roomId) || null;
   if (b.modalityId !== undefined) out.modalityId = b.modalityId == null ? null : Number(b.modalityId) || null;
   if (typeof b.floorLabel === "string") out.floorLabel = b.floorLabel.trim();
+  if (b.outsourceCost !== undefined) {
+    const oc = b.outsourceCost == null ? null : Number(b.outsourceCost);
+    out.outsourceCost = oc != null && Number.isFinite(oc) && oc >= 0 ? String(oc) : null;
+  }
   return out;
 }
 
@@ -239,6 +244,7 @@ testsRouter.put("/:id", async (req, res) => {
   if (extra.department !== undefined) updateData.department = extra.department;
   if (extra.roomId !== undefined) updateData.roomId = extra.roomId;
   if (extra.modalityId !== undefined) updateData.modalityId = extra.modalityId;
+  if (extra.outsourceCost !== undefined) updateData.outsourceCost = extra.outsourceCost;
   // When roomId changes, sync the denormalized roomNumber + floorLabel fields
   if (extra.roomId !== undefined) {
     const resolved = await resolveRoomFields(extra.roomId);

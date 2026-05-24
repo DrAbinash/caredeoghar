@@ -32,6 +32,10 @@ type Sample = {
   isOutsourced: boolean; outsourceLab: string | null;
   outsourceSentAt: string | null; outsourceExpectedAt: string | null;
   outsourceReceivedAt: string | null; outsourceTrackingId: string | null;
+  outsourceCostAmount?: string | number | null;
+  outsourceCostOverride?: string | number | null;
+  outsourcePatientBill?: string | number | null;
+  outsourceMargin?: string | number | null;
   notes: string;
   patient: Patient | null;
   order: { id: number; orderNumber: string } | null;
@@ -83,8 +87,9 @@ export default function Samples() {
   const [rejectingId, setRejectingId] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [outsourcingSample, setOutsourcingSample] = useState<Sample | null>(null);
-  const [outsourceForm, setOutsourceForm] = useState({ lab: "", expected: "", tracking: "" });
+  const [outsourceForm, setOutsourceForm] = useState({ lab: "", expected: "", tracking: "", costOverride: "" });
   const [outsourceCustom, setOutsourceCustom] = useState(false);
+  const [computedCost, setComputedCost] = useState<number | null>(null);
 
   const session = readStaffSession();
   const staffName = session?.user?.name ?? "";
@@ -129,12 +134,14 @@ export default function Samples() {
       outsourceLab: outsourceForm.lab.trim(),
       outsourceExpectedAt: outsourceForm.expected,
       outsourceTrackingId: outsourceForm.tracking.trim(),
+      outsourceCostOverride: outsourceForm.costOverride ? Number(outsourceForm.costOverride) : undefined,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["samples"] });
       setOutsourcingSample(null);
-      setOutsourceForm({ lab: "", expected: "", tracking: "" });
+      setOutsourceForm({ lab: "", expected: "", tracking: "", costOverride: "" });
       setOutsourceCustom(false);
+      setComputedCost(null);
     },
     onError: (err) => alert((err as Error).message),
   });
@@ -352,7 +359,7 @@ export default function Samples() {
                               </Button>
                             ))}
                             {!s.isOutsourced && s.status !== "rejected" && s.status !== "reported" && (
-                              <Button size="sm" variant="ghost" title="Send to external lab" onClick={() => { setOutsourcingSample(s); setOutsourceForm({ lab: "", expected: "", tracking: "" }); setOutsourceCustom(false); }}>
+                              <Button size="sm" variant="ghost" title="Send to external lab" onClick={() => { setOutsourcingSample(s); setOutsourceForm({ lab: "", expected: "", tracking: "", costOverride: "" }); setOutsourceCustom(false); }}>
                                 <Truck size={14} />
                               </Button>
                             )}
@@ -470,6 +477,15 @@ export default function Samples() {
                   <Input value={outsourceForm.tracking} onChange={(e) => setOutsourceForm({ ...outsourceForm, tracking: e.target.value })} placeholder="Optional" className="mt-1" />
                 </div>
               </div>
+              <div className="border-t border-border pt-2 mt-1">
+                <Label className="text-xs">Cost Override (₹)</Label>
+                <Input type="number" step="0.01" min={0} value={outsourceForm.costOverride} onChange={(e) => setOutsourceForm({ ...outsourceForm, costOverride: e.target.value })} placeholder="Leave blank to auto-compute from lab rates" className="mt-1" />
+                {outsourcingSample && (
+                  <div className="text-[11px] text-muted-foreground mt-1">
+                    Estimated patient bill: <span className="font-mono font-medium">₹{outsourcingSample.tests.length > 0 ? "will compute on server" : "0"}</span>
+                  </div>
+                )}
+              </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setOutsourcingSample(null)}>Cancel</Button>
                 <Button onClick={() => outsourceMut.mutate(outsourcingSample)} disabled={!outsourceForm.lab.trim() || outsourceForm.lab === "__custom__" || outsourceMut.isPending}>
@@ -530,6 +546,28 @@ function SampleDetail({ s, onReceiveOutsource, onCancelOutsource }: {
               <div><strong>Lab:</strong> {s.outsourceLab}</div>
               {s.outsourceExpectedAt && <div><strong>Expected:</strong> {s.outsourceExpectedAt}</div>}
               {s.outsourceTrackingId && <div><strong>Tracking:</strong> {s.outsourceTrackingId}</div>}
+              {(s.outsourceCostAmount != null || s.outsourceCostOverride != null) && (
+                <div className="border-t border-orange-200 dark:border-orange-900 pt-1 mt-1">
+                  <div className="flex justify-between">
+                    <span>Computed cost:</span>
+                    <span className="font-mono">₹{Number(s.outsourceCostAmount ?? 0).toFixed(2)}</span>
+                  </div>
+                  {s.outsourceCostOverride != null && (
+                    <div className="flex justify-between">
+                      <span>Override cost:</span>
+                      <span className="font-mono">₹{Number(s.outsourceCostOverride).toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span>Patient bill:</span>
+                    <span className="font-mono">₹{Number(s.outsourcePatientBill ?? 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between font-medium text-green-700 dark:text-green-400">
+                    <span>Margin:</span>
+                    <span className="font-mono">₹{Number(s.outsourceMargin ?? 0).toFixed(2)}</span>
+                  </div>
+                </div>
+              )}
               {s.outsourceReceivedAt
                 ? <div className="text-green-700 dark:text-green-400">✓ Result received {new Date(s.outsourceReceivedAt).toLocaleString("en-IN")}</div>
                 : (

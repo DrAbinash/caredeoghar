@@ -87,8 +87,9 @@ const TeleradiologyPortal = lazy(() => import("@/pages/TeleradiologyPortal"));
 const MobileViewer    = lazy(() => import("@/pages/MobileViewer"));
 const DailySummary    = lazy(() => import("@/pages/DailySummary"));
 const MyDailySummary  = lazy(() => import("@/pages/MyDailySummary"));
-const OutsourcedLabs  = lazy(() => import("@/pages/OutsourcedLabs"));
-const Samples         = lazy(() => import("@/pages/Samples"));
+const OutsourcedLabs       = lazy(() => import("@/pages/OutsourcedLabs"));
+const OutsourcedCostReport = lazy(() => import("@/pages/OutsourcedCostReport"));
+const Samples              = lazy(() => import("@/pages/Samples"));
 const ScanStation     = lazy(() => import("@/pages/ScanStation"));
 const ReportDelivery  = lazy(() => import("@/pages/ReportDelivery"));
 const Kiosk           = lazy(() => import("@/pages/Kiosk"));
@@ -286,6 +287,7 @@ function Router() {
               <Route path="/machines" component={Machines} />
               <Route path="/website" component={Website} />
               <Route path="/outsourced-labs" component={OutsourcedLabs} />
+              <Route path="/outsourced-cost-report" component={OutsourcedCostReport} />
               <Route path="/samples" component={Samples} />
               <Route path="/scan-station" component={ScanStation} />
               <Route path="/report-delivery" component={ReportDelivery} />

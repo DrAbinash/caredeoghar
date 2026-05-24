@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { db, ordersTable, patientsTable, billsTable, paymentsTable, orderTestsTable, testsTable, samplesTable } from "@workspace/db";
+import { db, ordersTable, patientsTable, billsTable, paymentsTable, orderTestsTable, testsTable, samplesTable, sampleTestAssignmentsTable } from "@workspace/db";
 import { accountsTable, vouchersTable } from "@workspace/db/schema";
-import { eq, sql, gte, lte, and, desc, isNotNull } from "drizzle-orm";
+import { eq, sql, gte, lte, and, desc, isNotNull, isNull, inArray, type SQL } from "drizzle-orm";
 import { z } from "zod/v4";
 import { GetRevenueReportQueryParams } from "@workspace/api-zod";
 
@@ -633,6 +633,75 @@ reportsRouter.get("/daily-summary/pdf", async (req, res) => {
     ],
     "Prepared By Accounts / Admin",
   ));
+});
+
+reportsRouter.get("/outsourced-cost", async (req, res) => {
+  const q = DateRangeQuery.safeParse(req.query);
+  if (!q.success) { res.status(400).json({ error: "Invalid request", details: q.error.issues }); return; }
+  const range = resolveDateRange(q.data.from, q.data.to);
+  if (!range) { res.status(400).json({ error: "Invalid range: 'from' must be on or before 'to'" }); return; }
+  const { fromDate, toDate } = range;
+  const labFilter = req.query.lab ? String(req.query.lab).trim() : undefined;
+  const statusFilter = req.query.status ? String(req.query.status).trim() : undefined;
+
+  const conds: SQL[] = [isNotNull(samplesTable.outsourceSentAt)];
+  if (fromDate) conds.push(gte(samplesTable.outsourceSentAt, fromDate));
+  if (toDate) conds.push(lte(samplesTable.outsourceSentAt, toDate));
+  if (labFilter) conds.push(eq(samplesTable.outsourceLab, labFilter));
+  if (statusFilter === "sent") conds.push(isNull(samplesTable.outsourceReceivedAt));
+  if (statusFilter === "received") conds.push(isNotNull(samplesTable.outsourceReceivedAt));
+
+  const rows = await db
+    .select()
+    .from(samplesTable)
+    .where(and(...conds))
+    .orderBy(desc(samplesTable.outsourceSentAt));
+
+  const sampleIds = rows.map((r) => r.id);
+  const assignRows = sampleIds.length > 0
+    ? await db.select().from(sampleTestAssignmentsTable).where(inArray(sampleTestAssignmentsTable.sampleId, sampleIds))
+    : [];
+  const orderTestIds = [...new Set(assignRows.map((a) => a.orderTestId))];
+  const orderTestRows = orderTestIds.length > 0
+    ? await db.select({ id: orderTestsTable.id, testId: orderTestsTable.testId }).from(orderTestsTable).where(inArray(orderTestsTable.id, orderTestIds))
+    : [];
+  const testIds = [...new Set(orderTestRows.map((r) => r.testId))];
+  const testRows = testIds.length > 0
+    ? await db.select({ id: testsTable.id, name: testsTable.name, code: testsTable.code }).from(testsTable).where(inArray(testsTable.id, testIds))
+    : [];
+
+  const testMap = new Map(testRows.map((t) => [t.id, t]));
+  const otTestMap = new Map(orderTestRows.map((r) => [r.id, r.testId]));
+  const assignsBySample = new Map<number, number[]>();
+  for (const a of assignRows) {
+    const list = assignsBySample.get(a.sampleId) ?? [];
+    list.push(a.orderTestId);
+    assignsBySample.set(a.sampleId, list);
+  }
+
+  const mappedRows = rows.map((r) => {
+    const otIds = assignsBySample.get(r.id) ?? [];
+    const tests = otIds.map((otId) => {
+      const testId = otTestMap.get(otId);
+      const test = testId ? testMap.get(testId) : undefined;
+      return { name: test?.name ?? "Unknown", code: test?.code ?? "" };
+    });
+    return {
+      sampleId: r.id,
+      barcode: r.barcode,
+      status: r.status,
+      outsourceLab: r.outsourceLab,
+      outsourceSentAt: r.outsourceSentAt,
+      outsourceReceivedAt: r.outsourceReceivedAt,
+      outsourceCostAmount: r.outsourceCostAmount,
+      outsourceCostOverride: r.outsourceCostOverride,
+      outsourcePatientBill: r.outsourcePatientBill,
+      outsourceMargin: r.outsourceMargin,
+      tests,
+    };
+  });
+
+  res.json({ rows: mappedRows });
 });
 
 reportsRouter.get("/outsourced", async (req, res) => {
