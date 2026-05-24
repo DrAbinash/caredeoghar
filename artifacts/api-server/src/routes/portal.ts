@@ -370,14 +370,44 @@ portalRouter.post("/staff-login", staffLoginLimiter, async (req, res) => {
     }
   } catch { /* ignore — empty permissions */ }
 
+  // ── Concurrent session limit enforcement ────────────────────────────────
+  // If the user has maxConcurrentSessions > 0, use that. Otherwise fall
+  // back to the clinic-wide default. Super-admins are exempt.
+  if (user.role !== "admin" && user.role !== "super_admin") {
+    const limit = user.maxConcurrentSessions > 0
+      ? user.maxConcurrentSessions
+      : ((await db.select({ v: clinicSettingsTable.defaultMaxConcurrentSessions }).from(clinicSettingsTable).limit(1))[0]?.v ?? 3);
+    const activeSessions = await db
+      .select({ id: portalSessionsTable.id })
+      .from(portalSessionsTable)
+      .where(and(
+        eq(portalSessionsTable.scope, "staff"),
+        eq(portalSessionsTable.subjectId, user.id),
+        gt(portalSessionsTable.expiresAt, new Date()),
+      ));
+    if (activeSessions.length >= (limit ?? 3)) {
+      // Invalidate oldest sessions until we're under the limit
+      const toRemove = activeSessions.slice(0, activeSessions.length - (limit ?? 3) + 1);
+      for (const s of toRemove) {
+        await db.delete(portalSessionsTable).where(eq(portalSessionsTable.id, s.id));
+      }
+    }
+  }
+
   await pruneExpiredSessions();
   const token = crypto.randomBytes(24).toString("hex");
+  const now = new Date();
+  const ipAddress = resolveClientIp(req);
+  const userAgent = String(req.headers["user-agent"] ?? "").substring(0, 255);
   await db.insert(portalSessionsTable).values({
     token,
     scope: "staff",
     subjectId: user.id,
     subjectName: user.name,
-    expiresAt: new Date(Date.now() + SESSION_TTL_MS),
+    expiresAt: new Date(now.getTime() + SESSION_TTL_MS),
+    ipAddress,
+    userAgent,
+    lastActivityAt: now,
   });
 
   res.json({

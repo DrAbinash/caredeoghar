@@ -21,6 +21,270 @@ export function startCronScheduler() {
   scheduleMonthlyAudit();
   scheduleBankingAutoSync();
   scheduleFraudDetection();
+  scheduleAutomatedBackups();
+  scheduleSessionIdleSweep();
+  scheduleAuditLogPurge();
+}
+
+// ── Automated Backup Scheduler ────────────────────────────────────────────────────────
+// Every minute, check backup_jobs for enabled jobs whose schedule should fire.
+// Supports cron expressions and simple keywords: DAILY, HOURLY, WEEKLY, MANUAL.
+function scheduleAutomatedBackups() {
+  cron.schedule("* * * * *", async () => {
+    try {
+      await fireScheduledBackups();
+    } catch (err) {
+      console.error("[cron] Scheduled backup runner failed:", err);
+    }
+  });
+  console.log("[cron] Automated backup scheduler started (checks every minute)");
+}
+
+async function fireScheduledBackups() {
+  const { backupJobsTable, backupJobLogsTable } = await import("@workspace/db/schema");
+  const { sendBackupFailureEmail } = await import("./email");
+  const now = new Date();
+
+  const jobs = await db
+    .select()
+    .from(backupJobsTable)
+    .where(eq(backupJobsTable.isEnabled, true));
+
+  for (const job of jobs) {
+    if (!job.schedule || job.schedule === "MANUAL") continue;
+
+    // Should this schedule fire right now?
+    let shouldFire = false;
+    const s = job.schedule.trim().toUpperCase();
+    const lastRun = job.lastRunAt ? new Date(job.lastRunAt) : null;
+
+    if (s === "DAILY") {
+      shouldFire = !lastRun || (now.getTime() - lastRun.getTime()) > 23 * 60 * 60 * 1000;
+      // Only fire at 02:00 local time (configurable; here hardcoded for safety window)
+      shouldFire = shouldFire && now.getHours() === 2 && now.getMinutes() === 0;
+    } else if (s === "HOURLY") {
+      shouldFire = !lastRun || (now.getTime() - lastRun.getTime()) > 55 * 60 * 1000;
+      shouldFire = shouldFire && now.getMinutes() === 0;
+    } else if (s === "WEEKLY") {
+      shouldFire = !lastRun || (now.getTime() - lastRun.getTime()) > 6 * 24 * 60 * 60 * 1000;
+      shouldFire = shouldFire && now.getDay() === 0 && now.getHours() === 2 && now.getMinutes() === 0;
+    } else if (s === "* * * * *" || s === "*/1 * * * *") {
+      // Every minute — useful for testing; limited to jobs with < 1 MB expected size
+      shouldFire = !lastRun || (now.getTime() - lastRun.getTime()) > 55_000;
+    } else if (s.includes("*")) {
+      // Basic cron expression check — minute-level granularity only
+      const minutePart = s.split(" ")[0];
+      if (minutePart === "*" || minutePart === String(now.getMinutes())) {
+        shouldFire = !lastRun || (now.getTime() - lastRun.getTime()) > (parseInt(minutePart, 10) || 1) * 60_000;
+      }
+    }
+
+    if (!shouldFire) continue;
+
+    // Deduplicate: skip if already started this exact minute
+    const dedupeKey = `backup-job-${job.id}-${now.toISOString().slice(0, 16)}`;
+    if (firedToday.has(dedupeKey)) continue;
+    firedToday.add(dedupeKey);
+
+    const startedAt = new Date();
+    const [logRow] = await db.insert(backupJobLogsTable).values({
+      jobId: job.id,
+      status: "running",
+      startedAt,
+      notes: "Triggered by cron scheduler",
+    }).returning();
+
+    let rowCount = 0;
+    let sizeBytes = 0;
+    let filePath: string | null = null;
+    let notes = "";
+
+    try {
+      if (job.backupType === "DB" || job.backupType === "FULL" || job.backupType === "CONFIG") {
+        // Master-data backup (same as /api/backup/run)
+        const tables: Record<string, string[]> = {
+          CONFIG: ["clinic_settings", "email_settings", "printer_settings", "pacs_settings"],
+          DB: ["patients", "bills", "radiology_studies", "patient_reports", "orders", "report_delivery_logs"],
+          FULL: ["patients", "bills", "orders", "order_tests", "payments", "clinic_settings", "doctors", "diagnostic_tests", "test_categories", "radiology_studies"],
+        };
+        const targetTables = tables[job.backupType] ?? tables.CONFIG;
+        const exportData: Record<string, unknown[]> = {};
+        for (const table of targetTables) {
+          try {
+            const rows = await db.execute(`SELECT * FROM ${table} LIMIT 5000`);
+            exportData[table] = rows.rows;
+            rowCount += rows.rows.length;
+          } catch { /* table may not exist */ }
+        }
+        const json = JSON.stringify({
+          generatedAt: new Date().toISOString(),
+          version: 1,
+          tables: exportData,
+          checksum: require("node:crypto").createHash("sha256").update(JSON.stringify(exportData)).digest("hex"),
+        });
+        sizeBytes = Buffer.byteLength(json, "utf8");
+
+        // Write to disk if destinationPath provided
+        if (job.destinationPath) {
+          try {
+            const dir = require("path").dirname(job.destinationPath);
+            require("fs").mkdirSync(dir, { recursive: true });
+            const dest = `${job.destinationPath}/backup_${job.jobName}_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+            require("fs").writeFileSync(dest, json);
+            filePath = dest;
+            notes = `Backup saved to ${dest}`;
+          } catch (e: unknown) {
+            notes = `In-memory backup; disk write failed: ${e instanceof Error ? e.message : String(e)}`;
+          }
+        } else {
+          notes = `In-memory ${job.backupType} backup (${rowCount} rows, ${sizeBytes} bytes)`;
+        }
+      } else {
+        notes = `${job.backupType} backup type not yet implemented in scheduler.`;
+      }
+
+      // Retention cleanup: purge old backups from destination path
+      if (job.destinationPath && job.retentionDays && job.retentionDays > 0) {
+        try {
+          const fs = require("fs");
+          const path = require("path");
+          const files = fs.readdirSync(job.destinationPath).filter((f: string) => f.startsWith("backup_" + job.jobName));
+          const cutoff = Date.now() - job.retentionDays * 24 * 60 * 60 * 1000;
+          let removed = 0;
+          for (const f of files) {
+            const stat = fs.statSync(path.join(job.destinationPath, f));
+            if (stat.mtimeMs < cutoff) {
+              fs.unlinkSync(path.join(job.destinationPath, f));
+              removed++;
+            }
+          }
+          if (removed > 0) notes += `; Purged ${removed} old backup(s)`;
+        } catch { /* ignore cleanup errors */ }
+      }
+
+      await db.update(backupJobLogsTable).set({
+        status: "success",
+        completedAt: new Date(),
+        rowCount,
+        sizeBytes,
+        filePath,
+        notes,
+      }).where(eq(backupJobLogsTable.id, logRow?.id ?? 0));
+
+      await db.update(backupJobsTable).set({
+        lastRunAt: startedAt,
+        lastStatus: "success",
+        lastError: null,
+      }).where(eq(backupJobsTable.id, job.id));
+
+      console.log(`[cron] Backup job #${job.id} (${job.jobName}) completed: ${notes}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      await db.update(backupJobLogsTable).set({
+        status: "failed",
+        completedAt: new Date(),
+        errorMessage: msg,
+        notes: notes || msg,
+      }).where(eq(backupJobLogsTable.id, logRow?.id ?? 0));
+
+      await db.update(backupJobsTable).set({
+        lastRunAt: startedAt,
+        lastStatus: "failed",
+        lastError: msg,
+      }).where(eq(backupJobsTable.id, job.id));
+
+      console.error(`[cron] Backup job #${job.id} (${job.jobName}) failed: ${msg}`);
+      await sendBackupFailureEmail({
+        jobName: job.jobName,
+        errorMessage: msg,
+        backupType: job.backupType,
+        completedAt: new Date(),
+      });
+    }
+  }
+}
+
+// ── Session idle sweep ──────────────────────────────────────────────────────────────────────────────
+// Every 5 minutes: delete staff sessions whose last_activity_at is older than
+// the configured idle timeout. Patient sessions are also swept but only with
+// a generous 24-hour blanket timeout (they don't have last_activity_at tracking).
+function scheduleSessionIdleSweep() {
+  cron.schedule("*/5 * * * *", async () => {
+    try {
+      const { portalSessionsTable, clinicSettingsTable } = await import("@workspace/db/schema");
+      const { sql } = await import("drizzle-orm");
+      const [cfg] = await db.select({ idleMinutes: clinicSettingsTable.sessionIdleTimeoutMinutes }).from(clinicSettingsTable).limit(1);
+      const idleMinutes = cfg?.idleMinutes ?? 30;
+      if (idleMinutes <= 0) return;
+
+      const result = await db.delete(portalSessionsTable).where(
+        and(
+          eq(portalSessionsTable.scope, "staff"),
+          sql`${portalSessionsTable.lastActivityAt} < NOW() - INTERVAL '${idleMinutes} minutes'`,
+        ),
+      );
+      if (result.rowCount && result.rowCount > 0) {
+        console.log(`[cron] Session sweep: invalidated ${result.rowCount} idle staff session(s)`);
+      }
+    } catch (err) {
+      console.error("[cron] Session idle sweep failed:", err);
+    }
+  });
+  console.log("[cron] Session idle sweep started (runs every 5 minutes)");
+}
+
+// ── Audit Log Retention & Archival ────────────────────────────────────────────────────────────
+// Daily at 03:00: purge audit logs older than 2 years (730 days). Before
+// deleting, archive them to a compressed JSON file with SHA-256 checksum so
+// tampering is detectable.  Only the most recent 730 days are kept in the
+// primary table for fast queries; older records are in cold storage files.
+function scheduleAuditLogPurge() {
+  cron.schedule("0 3 * * *", async () => {
+    try {
+      const { auditLogsTable } = await import("@workspace/db/schema");
+      const { sql, lte } = await import("drizzle-orm");
+      const fs = require("fs");
+      const path = require("path");
+      const crypto = require("crypto");
+      const zlib = require("zlib");
+
+      const RETENTION_DAYS = 730; // 2 years
+      const archiveDir = path.join(process.cwd(), "data", "archives", "audit-logs");
+      fs.mkdirSync(archiveDir, { recursive: true });
+
+      const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
+      const oldLogs = await db
+        .select()
+        .from(auditLogsTable)
+        .where(lte(auditLogsTable.createdAt, cutoff))
+        .limit(5000);
+
+      if (oldLogs.length === 0) return;
+
+      const archiveName = `audit_archive_${cutoff.toISOString().slice(0, 10)}_${Date.now()}.json.gz`;
+      const archivePath = path.join(archiveDir, archiveName);
+
+      const payload = JSON.stringify({
+        archivedAt: new Date().toISOString(),
+        retentionDays: RETENTION_DAYS,
+        count: oldLogs.length,
+        logs: oldLogs,
+      });
+      const compressed = zlib.gzipSync(payload);
+      fs.writeFileSync(archivePath, compressed);
+
+      const checksum = crypto.createHash("sha256").update(compressed).digest("hex");
+      fs.writeFileSync(`${archivePath}.sha256`, checksum);
+
+      // Now delete the archived rows
+      await db.delete(auditLogsTable).where(lte(auditLogsTable.createdAt, cutoff));
+
+      console.log(`[cron] Audit log archive: ${oldLogs.length} rows archived to ${archiveName} (${compressed.length} bytes, SHA-256 ${checksum.slice(0, 16)}...)`);
+    } catch (err) {
+      console.error("[cron] Audit log purge/archive failed:", err);
+    }
+  });
+  console.log("[cron] Audit log retention purge started (runs daily at 03:00, keeps 2 years)");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

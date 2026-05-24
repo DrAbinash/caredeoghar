@@ -67,5 +67,11 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   // FIDO2 / WebAuthn / YubiKey optional toggle — when enabled the login UI
   // offers security-key authentication alongside PIN login.
   fido2Enabled: boolean("fido2_enabled").notNull().default(false),
+  // Session idle timeout in minutes. Staff sessions are invalidated after this
+  // period of inactivity. 0 = disabled (no timeout).
+  sessionIdleTimeoutMinutes: integer("session_idle_timeout_minutes").notNull().default(30),
+  // Default maximum concurrent sessions per user (when user.maxConcurrentSessions = 0).
+  // Super-admins are exempt.
+  defaultMaxConcurrentSessions: integer("default_max_concurrent_sessions").notNull().default(3),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

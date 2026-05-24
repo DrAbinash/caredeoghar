@@ -354,6 +354,14 @@ async function runStartupMigrations(): Promise<void> {
       -- ── FIDO2 / WebAuthn optional toggle ───────────────────────────────
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS fido2_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 
+      -- ── Hospital-Grade Safety Phase 1 (May 2026) ─────────────────────
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS max_concurrent_sessions INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS session_idle_timeout_minutes INTEGER NOT NULL DEFAULT 30;
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS default_max_concurrent_sessions INTEGER NOT NULL DEFAULT 3;
+      ALTER TABLE portal_sessions ADD COLUMN IF NOT EXISTS ip_address TEXT;
+      ALTER TABLE portal_sessions ADD COLUMN IF NOT EXISTS user_agent TEXT;
+      ALTER TABLE portal_sessions ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
       -- ── Remote super-admin login bypass ────────────────────────────────
       ALTER TABLE users ADD COLUMN IF NOT EXISTS remote_login_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 

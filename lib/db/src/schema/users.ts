@@ -32,6 +32,9 @@ export const usersTable = pgTable("users", {
   // SUPER_ADMIN_USB_KEY gate is enforced. Intended for owners who need remote
   // access. Audited with a warning log on every login/middleware bypass.
   remoteLoginEnabled: boolean("remote_login_enabled").notNull().default(false),
+  // Maximum concurrent active sessions for this user (0 = system default).
+  // Enforced on login. Super-admins are exempt.
+  maxConcurrentSessions: integer("max_concurrent_sessions").notNull().default(0),
   isActive: boolean("is_active").notNull().default(true),
   maxDiscount: numeric("max_discount", { precision: 5, scale: 2 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

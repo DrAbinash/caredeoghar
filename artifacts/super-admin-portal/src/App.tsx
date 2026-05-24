@@ -26,6 +26,7 @@ const Backups          = lazy(() => import("./pages/Backups"));
 const AuditTrail       = lazy(() => import("./pages/AuditTrail"));
 const RolePermissions  = lazy(() => import("./pages/RolePermissions"));
 const SystemHealthPage = lazy(() => import("./pages/SystemHealth"));
+const SecurityDashboard = lazy(() => import("./pages/SecurityDashboard"));
 
 function PageLoader() {
   return (
@@ -332,7 +333,7 @@ function LoginScreen({ onLogin, onLockUsb }: { onLogin: (session: Session) => vo
 }
 
 function ActiveSessionScreen({
-  session, onEject, onManageBooks, onReferralReport, onCommissionRules, onDoctorLedger, onMoneyTrailAudit, onDoctorManager, onBackups, onAuditTrail, onRolePermissions, onSystemHealth,
+  session, onEject, onManageBooks, onReferralReport, onCommissionRules, onDoctorLedger, onMoneyTrailAudit, onDoctorManager, onBackups, onAuditTrail, onRolePermissions, onSystemHealth, onSecurityDashboard,
 }: {
   session: Session;
   onEject: () => void;
@@ -346,6 +347,7 @@ function ActiveSessionScreen({
   onAuditTrail: () => void;
   onRolePermissions: () => void;
   onSystemHealth: () => void;
+  onSecurityDashboard: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
@@ -535,9 +537,13 @@ function ActiveSessionScreen({
                 <Heart size={14} className="mr-2" />
                 System Health
               </Button>
+              <Button variant="outline" className="w-full justify-start" onClick={onSecurityDashboard}>
+                <Shield size={14} className="mr-2" />
+                Security Dashboard
+              </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              Manage backups, granular role permissions, and monitor real-time system health.
+              Manage backups, granular role permissions, monitor real-time system health, and review security posture.
             </p>
           </div>
 
@@ -561,8 +567,8 @@ function ActiveSessionScreen({
   );
 }
 
-type SaView = "home" | "books" | "referral-report" | "commission-rules" | "doctor-ledger" | "money-trail-audit" | "doctor-manager" | "backups" | "audit-trail" | "role-permissions" | "system-health";
-const HASH_VIEWS: SaView[] = ["books", "referral-report", "commission-rules", "doctor-ledger", "money-trail-audit", "doctor-manager", "backups", "audit-trail", "role-permissions", "system-health"];
+type SaView = "home" | "books" | "referral-report" | "commission-rules" | "doctor-ledger" | "money-trail-audit" | "doctor-manager" | "backups" | "audit-trail" | "role-permissions" | "system-health" | "security-dashboard";
+const HASH_VIEWS: SaView[] = ["books", "referral-report", "commission-rules", "doctor-ledger", "money-trail-audit", "doctor-manager", "backups", "audit-trail", "role-permissions", "system-health", "security-dashboard"];
 function viewFromHash(): SaView {
   const h = (window.location.hash || "").replace(/^#/, "");
   return (HASH_VIEWS as string[]).includes(h) ? (h as SaView) : "home";
@@ -688,6 +694,8 @@ function App() {
           <RolePermissions onBack={() => setView("home")} />
         ) : view === "system-health" ? (
           <SystemHealthPage onBack={() => setView("home")} />
+        ) : view === "security-dashboard" ? (
+          <SecurityDashboard onBack={() => setView("home")} />
         ) : (
           <ActiveSessionScreen
             session={session}
@@ -702,6 +710,7 @@ function App() {
             onAuditTrail={() => setView("audit-trail")}
             onRolePermissions={() => setView("role-permissions")}
             onSystemHealth={() => setView("system-health")}
+            onSecurityDashboard={() => setView("security-dashboard")}
           />
         )}
       </Suspense>

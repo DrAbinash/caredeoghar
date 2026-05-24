@@ -41,8 +41,12 @@ import {
   dicomPulledStudiesTable,
   dicomPullAgentLogsTable,
   pacsLogsTable,
+  portalSessionsTable,
+  auditLogsTable,
+  backupJobsTable,
+  backupJobLogsTable,
 } from "@workspace/db/schema";
-import { eq, and, asc, desc, isNull, or, sql, inArray } from "drizzle-orm";
+import { eq, and, asc, desc, isNull, or, sql, inArray, gt, count } from "drizzle-orm";
 import { runBooksSanity } from "./books-sanity";
 import { verifySuperAdmin } from "./ledgers";
 import {
@@ -856,4 +860,62 @@ superAdminRouter.post("/doctors/purge", requireSuperAdminUsb, requireSuperAdmin,
       appointments: appointmentIds.length,
     },
   });
+});
+
+// ── Security Dashboard endpoints (hospital-grade safety) ─────────────────────
+
+// GET /api/super-admin/security/sessions — active staff + patient sessions
+superAdminRouter.get("/security/sessions", requireSuperAdminUsb, requireSuperAdmin, async (_req, res): Promise<void> => {
+  const now = new Date();
+  const rows = await db
+    .select()
+    .from(portalSessionsTable)
+    .where(gt(portalSessionsTable.expiresAt, now))
+    .orderBy(desc(portalSessionsTable.createdAt))
+    .limit(200);
+  res.json({ sessions: rows, total: rows.length });
+});
+
+// DELETE /api/super-admin/security/sessions/:id — kill a session
+superAdminRouter.delete("/security/sessions/:id", requireSuperAdminUsb, requireSuperAdmin, async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (Number.isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
+  await db.delete(portalSessionsTable).where(eq(portalSessionsTable.id, id));
+  res.json({ ok: true });
+});
+
+// GET /api/super-admin/security/failed-logins — last 24h login failures from audit_logs
+superAdminRouter.get("/security/failed-logins", requireSuperAdminUsb, requireSuperAdmin, async (_req, res): Promise<void> => {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const rows = await db
+    .select()
+    .from(auditLogsTable)
+    .where(
+      and(
+        eq(auditLogsTable.action, "login"),
+        eq(auditLogsTable.module, "portal"),
+        gt(auditLogsTable.createdAt, since),
+      ),
+    )
+    .orderBy(desc(auditLogsTable.createdAt))
+    .limit(100);
+  res.json({ events: rows, total: rows.length });
+});
+
+// GET /api/super-admin/security/backup-status — overview of all backup jobs + latest logs
+superAdminRouter.get("/security/backup-status", requireSuperAdminUsb, requireSuperAdmin, async (_req, res): Promise<void> => {
+  const jobs = await db.select().from(backupJobsTable).orderBy(desc(backupJobsTable.updatedAt));
+  const logs = await db.select().from(backupJobLogsTable).orderBy(desc(backupJobLogsTable.createdAt)).limit(20);
+  res.json({ jobs, recentLogs: logs });
+});
+
+// GET /api/super-admin/security/audit-summary — last 7 days audit counts by action
+superAdminRouter.get("/security/audit-summary", requireSuperAdminUsb, requireSuperAdmin, async (_req, res): Promise<void> => {
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const rows = await db
+    .select({ action: auditLogsTable.action, count: count() })
+    .from(auditLogsTable)
+    .where(gt(auditLogsTable.createdAt, since))
+    .groupBy(auditLogsTable.action);
+  res.json({ since: since.toISOString(), summary: rows });
 });

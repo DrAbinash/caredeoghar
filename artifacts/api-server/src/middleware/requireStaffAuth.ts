@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { db } from "@workspace/db";
-import { portalSessionsTable, usersTable } from "@workspace/db/schema";
+import { portalSessionsTable, usersTable, clinicSettingsTable } from "@workspace/db/schema";
 import { and, eq, gt } from "drizzle-orm";
 
 export interface StaffAuthRequest extends Request {
@@ -56,6 +56,24 @@ export async function requireStaffAuth(
     return;
   }
 
+  // ── Idle timeout enforcement ──────────────────────────────────────────────
+  // If clinic_settings.session_idle_timeout_minutes > 0, invalidate the
+  // session when it has been idle longer than the configured window.
+  const [cfg] = await db
+    .select({ idleMinutes: clinicSettingsTable.sessionIdleTimeoutMinutes })
+    .from(clinicSettingsTable)
+    .limit(1);
+
+  const idleMinutes = cfg?.idleMinutes ?? 0;
+  if (idleMinutes > 0 && session.lastActivityAt) {
+    const idleMs = Date.now() - new Date(session.lastActivityAt).getTime();
+    if (idleMs > idleMinutes * 60 * 1000) {
+      await db.delete(portalSessionsTable).where(eq(portalSessionsTable.id, session.id));
+      res.status(401).json({ error: "Session expired due to inactivity. Please log in again." });
+      return;
+    }
+  }
+
   const [user] = await db
     .select({
       id: usersTable.id,
@@ -84,6 +102,11 @@ export async function requireStaffAuth(
   } catch {
     /* leave permissions empty */
   }
+
+  // Touch last_activity_at so idle timeout resets on every authenticated request
+  await db.update(portalSessionsTable)
+    .set({ lastActivityAt: new Date() })
+    .where(eq(portalSessionsTable.id, session.id));
 
   req.staffSession = {
     id: session.id,
