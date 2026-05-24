@@ -3,7 +3,7 @@ previewPath = "/mobile/"
 title = "Care Diagnostics Booking"
 version = "1.0.0"
 id = "artifacts/diagno-booking-mobile"
-router = "expo-domain"
+router = "path"
 
 [[integratedSkills]]
 name = "expo"

@@ -191,5 +191,10 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(port, "0.0.0.0", () => {
-  console.log(`Serving static Expo build on port ${port}`);
+  // Match Vite log format for workflow port detection
+  console.log(`  ➜  Local:   http://localhost:${port}/`);
+  console.log(`  ➜  Network: http://0.0.0.0:${port}/`);
+  if (process.stdout && typeof process.stdout.flush === "function") {
+    process.stdout.flush();
+  }
 });
