@@ -81,6 +81,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useVersionCheck } from "@/hooks/useVersionCheck";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { useGlobalScanner } from "@/hooks/useGlobalScanner";
 import { api } from "@/lib/fetchApi";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -288,6 +289,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const { updateAvailable, dismiss: dismissUpdate } = useVersionCheck();
   const isOnline = useOnlineStatus();
+  const { isActive: scannerActive } = useGlobalScanner();
 
   // Mini sidebar theme picker state
   const [themePickerOpen, setThemePickerOpen] = useState(false);
@@ -851,6 +853,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 )}
               </div>
             )}
+            {scannerActive && (
+              <div title="Scanner active" className="flex items-center gap-1.5 rounded-md bg-emerald-500/20 text-emerald-200 px-2 py-1 text-[10px] font-medium">
+                <ScanLine size={10} />
+                <span className="hidden xl:inline">Scanner</span>
+              </div>
+            )}
             <FullscreenToggle />
             <ThemeToggle />
           </div>
@@ -977,6 +985,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <button onClick={onLogout} title="Sign out" className="p-2 rounded-md text-foreground hover:bg-muted transition-colors">
                 <LogOut size={16} />
               </button>
+            )}
+            {scannerActive && (
+              <div title="Scanner active" className="flex items-center gap-1 rounded-md bg-emerald-100 text-emerald-700 px-1.5 py-0.5 text-[10px] font-medium">
+                <ScanLine size={10} />
+              </div>
             )}
             <FullscreenToggle />
             <ThemeToggle />
