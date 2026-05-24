@@ -893,6 +893,12 @@ importers:
         specifier: 'catalog:'
         version: 3.25.76
 
+  artifacts/local-dicom-bridge:
+    dependencies:
+      dcmjs-dimse:
+        specifier: ^0.3.3
+        version: 0.3.3
+
   artifacts/mockup-sandbox:
     devDependencies:
       '@hookform/resolvers':
