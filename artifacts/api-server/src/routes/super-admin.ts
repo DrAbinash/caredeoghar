@@ -46,7 +46,7 @@ import {
   backupJobsTable,
   backupJobLogsTable,
 } from "@workspace/db/schema";
-import { eq, and, asc, desc, isNull, or, sql, inArray, gt, count } from "drizzle-orm";
+import { eq, and, asc, desc, isNull, or, sql, inArray, gt, gte, count } from "drizzle-orm";
 import { runBooksSanity } from "./books-sanity";
 import { verifySuperAdmin } from "./ledgers";
 import {
@@ -955,4 +955,16 @@ superAdminRouter.post("/security/unlock-account/:id", requireSuperAdminUsb, requ
     .set({ failedLoginAttempts: 0, lockedUntil: null })
     .where(eq(usersTable.id, id));
   res.json({ ok: true });
+});
+
+// GET /api/super-admin/security/data-exports — recent data export audit events
+superAdminRouter.get("/security/data-exports", requireSuperAdminUsb, requireSuperAdmin, async (_req, res): Promise<void> => {
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const rows = await db
+    .select()
+    .from(auditLogsTable)
+    .where(and(eq(auditLogsTable.action, "export"), gte(auditLogsTable.createdAt, since)))
+    .orderBy(desc(auditLogsTable.createdAt))
+    .limit(200);
+  res.json({ since: since.toISOString(), exports: rows });
 });

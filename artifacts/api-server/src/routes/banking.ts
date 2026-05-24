@@ -12,6 +12,7 @@ import { z } from "zod/v4";
 import { apiError, apiErrorFromZod } from "../lib/api-error";
 import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
 import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
+import { auditFromRequest } from "../lib/audit";
 import {
   getBalance, fetchTransactions, importTransactions, getTransactionStatus,
   initiatePayment, getPaymentStatusFromProvider, handleWebhook,
@@ -638,7 +639,7 @@ router.patch("/shift-closures/:id", requireStaffAuth, async (req: StaffAuthReque
   res.json(updated);
 });
 
-router.get("/export", async (req, res) => {
+router.get("/export", async (req: StaffAuthRequest, res) => {
   const format = String(req.query.format || "csv");
   const accountId = req.query.accountId ? Number(req.query.accountId) : undefined;
   const fromDate = req.query.fromDate ? new Date(String(req.query.fromDate)) : undefined;
@@ -661,6 +662,17 @@ router.get("/export", async (req, res) => {
     Account: String(t.bankAccountId),
   }));
   res.json({ format, count: rows.length, headers, rows: data });
+
+  void auditFromRequest(req, {
+    userId: req.staffSession?.subjectId ?? null,
+    userName: req.staffSession?.subjectName ?? "staff",
+    role: req.staffSession?.role ?? "staff",
+    action: "export",
+    module: "banking",
+    entityType: "bank_transactions",
+    entityId: accountId ? String(accountId) : "all",
+    reason: `Banking export: ${rows.length} transactions, accountId=${accountId ?? "all"}, from=${req.query.fromDate ?? "all"} to=${req.query.toDate ?? "all"}`,
+  });
 });
 
 export const bankingRouter = router;

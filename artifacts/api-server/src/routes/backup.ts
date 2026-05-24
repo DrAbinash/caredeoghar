@@ -8,7 +8,7 @@ import crypto from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
 import { type StaffAuthRequest } from "../middleware/requireStaffAuth";
-import { auditLog } from "../lib/audit";
+import { auditLog, auditFromRequest } from "../lib/audit";
 
 export const backupRouter = Router();
 
@@ -276,6 +276,17 @@ backupRouter.post("/run", async (req, res) => {
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.send(json);
+
+    void auditFromRequest(req, {
+      userId: null,
+      userName: performedBy,
+      role: "admin",
+      action: "export",
+      module: "backups",
+      entityType: "backup",
+      entityId: filename,
+      reason: `Manual JSON backup export: ${totalRows} rows, ${sizeBytes} bytes`,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Backup failed";
     await db.insert(backupLogsTable).values({

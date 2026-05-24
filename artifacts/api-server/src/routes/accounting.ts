@@ -6,6 +6,7 @@ import { z } from "zod/v4";
 import { apiError, apiErrorFromZod } from "../lib/api-error";
 import { geminiParseBankStatement, type BankTransaction } from "@workspace/integrations-gemini-ai";
 import { todayIST } from "../lib/istDate";
+import { auditFromRequest } from "../lib/audit";
 
 const router = Router();
 
@@ -694,8 +695,20 @@ ${masterXml}
 </ENVELOPE>`;
 
   res.setHeader("Content-Type", "application/xml");
-  res.setHeader("Content-Disposition", `attachment; filename=tally-masters${from ? `-${from}` : ""}${to ? `-to-${to}` : ""}.xml`);
+  const filename = `tally-masters${from ? `-${from}` : ""}${to ? `-to-${to}` : ""}.xml`;
+  res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
   res.send(xml);
+
+  void auditFromRequest(req, {
+    userId: null,
+    userName: "staff",
+    role: "staff",
+    action: "export",
+    module: "accounting",
+    entityType: "tally_masters",
+    entityId: filename,
+    reason: `Tally XML masters export: ${accounts.length} accounts, ${vouchers.length} vouchers, range=${from ?? "all"} to ${to ?? "all"}`,
+  });
   return;
 });
 
@@ -781,8 +794,20 @@ ${voucherXml}
 </ENVELOPE>`;
 
   res.setHeader("Content-Type", "application/xml");
-  res.setHeader("Content-Disposition", `attachment; filename=tally-vouchers${from ? `-${from}` : ""}${to ? `-to-${to}` : ""}.xml`);
+  const filename2 = `tally-vouchers${from ? `-${from}` : ""}${to ? `-to-${to}` : ""}.xml`;
+  res.setHeader("Content-Disposition", `attachment; filename=${filename2}`);
   res.send(xml);
+
+  void auditFromRequest(req, {
+    userId: null,
+    userName: "staff",
+    role: "staff",
+    action: "export",
+    module: "accounting",
+    entityType: "tally_vouchers",
+    entityId: filename2,
+    reason: `Tally XML vouchers export: ${vouchers.length} vouchers, range=${from ?? "all"} to ${to ?? "all"}`,
+  });
   return;
 });
 
@@ -850,8 +875,20 @@ ${masterXml}
 </ENVELOPE>`;
 
   res.setHeader("Content-Type", "application/xml");
-  res.setHeader("Content-Disposition", `attachment; filename=tally-erp9-masters${from ? `-${from}` : ""}${to ? `-to-${to}` : ""}.xml`);
+  const filename3 = `tally-erp9-masters${from ? `-${from}` : ""}${to ? `-to-${to}` : ""}.xml`;
+  res.setHeader("Content-Disposition", `attachment; filename=${filename3}`);
   res.send(xml);
+
+  void auditFromRequest(req, {
+    userId: null,
+    userName: "staff",
+    role: "staff",
+    action: "export",
+    module: "accounting",
+    entityType: "tally_erp9_masters",
+    entityId: filename3,
+    reason: `Tally.ERP9 masters export: ${accounts.length} accounts, range=${from ?? "all"} to ${to ?? "all"}`,
+  });
   return;
 });
 
@@ -923,8 +960,20 @@ ${voucherXml}
 </ENVELOPE>`;
 
   res.setHeader("Content-Type", "application/xml");
-  res.setHeader("Content-Disposition", `attachment; filename=tally-erp9-vouchers${from ? `-${from}` : ""}${to ? `-to-${to}` : ""}.xml`);
+  const filename4 = `tally-erp9-vouchers${from ? `-${from}` : ""}${to ? `-to-${to}` : ""}.xml`;
+  res.setHeader("Content-Disposition", `attachment; filename=${filename4}`);
   res.send(xml);
+
+  void auditFromRequest(req, {
+    userId: null,
+    userName: "staff",
+    role: "staff",
+    action: "export",
+    module: "accounting",
+    entityType: "tally_erp9_vouchers",
+    entityId: filename4,
+    reason: `Tally.ERP9 vouchers export: ${vouchers.length} vouchers, range=${from ?? "all"} to ${to ?? "all"}`,
+  });
   return;
 });
 

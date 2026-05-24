@@ -5,6 +5,14 @@ import { and, eq } from "drizzle-orm";
 import { isValidUsbKey, isUsbGateEnforced, getUsbKeyHeader } from "./requireSuperAdminUsb";
 import { logger } from "../lib/logger";
 
+export interface SuperAdminAuthRequest extends Request {
+  superAdminSession?: {
+    userId: number;
+    userName: string;
+    role: string;
+  };
+}
+
 /**
  * Express middleware that requires a valid, active, non-expired super-admin
  * session token in the `X-SA-Token` request header. Used to gate sensitive
@@ -12,7 +20,7 @@ import { logger } from "../lib/logger";
  * only accessible from the Super Admin Portal — not from the regular ERP UI.
  */
 export async function requireSuperAdmin(
-  req: Request,
+  req: SuperAdminAuthRequest,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
@@ -86,5 +94,6 @@ export async function requireSuperAdmin(
     res.status(401).json({ error: "Super admin session is no longer valid" });
     return;
   }
+  req.superAdminSession = { userId: session.userId, userName: session.userName, role: user.role };
   next();
 }

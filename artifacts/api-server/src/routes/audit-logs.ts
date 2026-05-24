@@ -2,9 +2,10 @@ import { Router } from "express";
 import { z } from "zod/v4";
 import { db, auditLogsTable } from "@workspace/db";
 import { desc, and, gte, lte, eq, like, sql, count } from "drizzle-orm";
-import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
+import { requireSuperAdmin, type SuperAdminAuthRequest } from "../middleware/requireSuperAdmin";
 import { requireSuperAdminUsb } from "../middleware/requireSuperAdminUsb";
 import { logger } from "../lib/logger";
+import { auditFromRequest } from "../lib/audit";
 
 const router = Router();
 
@@ -115,9 +116,24 @@ router.get("/export", async (req, res) => {
       )
       .join("\n");
 
+    const totalRows = rows.length;
+    const filename = `audit-export-${new Date().toISOString().slice(0, 10)}.csv`;
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="audit-export-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.send(header + csv);
+
+    // Log the export asynchronously (fire-and-forget)
+    const sa = (req as unknown as SuperAdminAuthRequest).superAdminSession;
+    void auditFromRequest(req, {
+      userId: sa?.userId ?? null,
+      userName: sa?.userName ?? "unknown",
+      role: sa?.role ?? "super_admin",
+      action: "export",
+      module: "audit",
+      entityType: "audit",
+      entityId: filename,
+      reason: `Audit logs CSV export: ${totalRows} rows, filters=${JSON.stringify(q)}`,
+    });
   } catch (err) {
     logger.error({ err }, "Audit export failed");
     res.status(500).json({ error: "Failed to export audit logs" });

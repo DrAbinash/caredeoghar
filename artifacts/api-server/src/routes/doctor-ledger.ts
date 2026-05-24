@@ -19,6 +19,7 @@ import {
   UpdateDoctorPayoutBody,
   UpdateDoctorPayoutParams,
 } from "@workspace/api-zod";
+import { auditFromRequest } from "../lib/audit";
 
 export const doctorLedgerRouter = Router();
 
@@ -532,9 +533,21 @@ doctorLedgerRouter.get("/:doctorId/export", async (req, res) => {
     lines.push([esc(""), esc("BALANCE DUE"), esc(""), "", "", (totalEarned - totalPaid).toFixed(2), ""].join(","));
 
     const safeName = doctor.name.replace(/[^a-z0-9]+/gi, "_");
+    const filename = `doctor_ledger_${safeName}_${from ?? "all"}_${to ?? "all"}.csv`;
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="doctor_ledger_${safeName}_${from ?? "all"}_${to ?? "all"}.csv"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.send(lines.join("\n"));
+
+    void auditFromRequest(req, {
+      userId: null,
+      userName: "super_admin",
+      role: "super_admin",
+      action: "export",
+      module: "commission",
+      entityType: "doctor_ledger",
+      entityId: String(doctorId),
+      reason: `Doctor ledger CSV export: doctor=${doctor.name}, rows=${entries.length}, range=${from ?? "all"} to ${to ?? "all"}`,
+    });
   } catch (err) {
     req.log?.error({ err }, "doctor-ledger export failed");
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });

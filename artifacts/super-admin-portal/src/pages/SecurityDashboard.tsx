@@ -7,6 +7,7 @@ import {
   ArrowLeft, Shield, Activity, Users, Lock, AlertTriangle,
   CheckCircle2, XCircle, Clock, HardDrive, Database, Search,
   Trash2, RefreshCw, ChevronLeft, ChevronRight, Unlock,
+  Download,
 } from "lucide-react";
 import { saAuthHeaders } from "@/lib/saApi";
 import {
@@ -66,12 +67,26 @@ interface LockedAccount {
   lockedUntil: string | null;
 }
 
+interface ExportAuditEvent {
+  id: number;
+  userName: string;
+  role: string;
+  action: string;
+  module: string;
+  entityType: string;
+  entityId: string | null;
+  reason: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+}
+
 interface SecurityData {
   sessions: { sessions: PortalSession[]; total: number };
   failedLogins: { events: { id: number; userName: string; ipAddress: string | null; createdAt: string; reason: string | null }[]; total: number };
   backupStatus: { jobs: BackupJob[]; recentLogs: BackupLog[] };
   auditSummary: { since: string; summary: AuditSummaryRow[] };
   lockedAccounts: { accounts: LockedAccount[] };
+  dataExports: { since: string; exports: ExportAuditEvent[] };
 }
 
 function formatDate(iso: string): string {
@@ -90,19 +105,20 @@ export default function SecurityDashboard({ onBack }: { onBack: () => void }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [killSession, setKillSession] = useState<PortalSession | null>(null);
-  const [activeTab, setActiveTab] = useState<"sessions" | "backups" | "logins" | "locked">("sessions");
+  const [activeTab, setActiveTab] = useState<"sessions" | "backups" | "logins" | "locked" | "exports">("sessions");
 
   const { data, isLoading } = useQuery<SecurityData>({
     queryKey: ["security-dashboard"],
     queryFn: async () => {
-      const [sessions, failedLogins, backupStatus, auditSummary, lockedAccounts] = await Promise.all([
+      const [sessions, failedLogins, backupStatus, auditSummary, lockedAccounts, dataExports] = await Promise.all([
         fetch("/api/super-admin/security/sessions", { headers: saAuthHeaders() }).then(r => r.json()),
         fetch("/api/super-admin/security/failed-logins", { headers: saAuthHeaders() }).then(r => r.json()),
         fetch("/api/super-admin/security/backup-status", { headers: saAuthHeaders() }).then(r => r.json()),
         fetch("/api/super-admin/security/audit-summary", { headers: saAuthHeaders() }).then(r => r.json()),
         fetch("/api/super-admin/security/locked-accounts", { headers: saAuthHeaders() }).then(r => r.json()),
+        fetch("/api/super-admin/security/data-exports", { headers: saAuthHeaders() }).then(r => r.json()),
       ]);
-      return { sessions, failedLogins, backupStatus, auditSummary, lockedAccounts };
+      return { sessions, failedLogins, backupStatus, auditSummary, lockedAccounts, dataExports };
     },
     refetchInterval: 30_000,
   });
@@ -156,7 +172,7 @@ export default function SecurityDashboard({ onBack }: { onBack: () => void }) {
           <Button variant="outline" size="sm" onClick={onBack}><ArrowLeft size={14} /></Button>
           <div>
             <h1 className="text-xl font-bold tracking-tight">Security Dashboard</h1>
-            <p className="text-sm text-muted-foreground">Active sessions, failed logins, backup health, and audit summary.</p>
+            <p className="text-sm text-muted-foreground">Sessions, backups, audit trail, failed logins, locked accounts, and data exports.</p>
           </div>
         </div>
 
@@ -187,6 +203,13 @@ export default function SecurityDashboard({ onBack }: { onBack: () => void }) {
           </div>
           <div className="bg-card border border-border rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2 text-muted-foreground text-xs uppercase tracking-wide">
+              <Download size={13} /> Data Exports (30d)
+            </div>
+            <p className="text-2xl font-bold">{data?.dataExports.exports.length ?? 0}</p>
+            <p className="text-xs text-muted-foreground mt-1">CSV / XML / JSON</p>
+          </div>
+          <div className="bg-card border border-border rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2 text-muted-foreground text-xs uppercase tracking-wide">
               <Shield size={13} /> Audit Events (7d)
             </div>
             <p className="text-2xl font-bold">
@@ -194,22 +217,11 @@ export default function SecurityDashboard({ onBack }: { onBack: () => void }) {
             </p>
             <p className="text-xs text-muted-foreground mt-1">Actions tracked</p>
           </div>
-          <div className="bg-card border border-border rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-2 text-muted-foreground text-xs uppercase tracking-wide">
-              <Lock size={13} /> Locked Accounts
-            </div>
-            <p className="text-2xl font-bold">
-              {data?.lockedAccounts.accounts.filter(a => a.lockedUntil && new Date(a.lockedUntil) > new Date()).length ?? 0}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {data?.lockedAccounts.accounts.length ?? 0} with failed attempts
-            </p>
-          </div>
         </div>
 
         {/* Tabs */}
         <div className="flex gap-2 border-b border-border pb-1">
-          {(["sessions", "backups", "logins", "locked"] as const).map((t) => (
+          {(["sessions", "backups", "logins", "locked", "exports"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setActiveTab(t)}
@@ -223,6 +235,7 @@ export default function SecurityDashboard({ onBack }: { onBack: () => void }) {
               {t === "backups" && <span className="flex items-center gap-1.5"><HardDrive size={13} /> Backups</span>}
               {t === "logins" && <span className="flex items-center gap-1.5"><AlertTriangle size={13} /> Failed Logins</span>}
               {t === "locked" && <span className="flex items-center gap-1.5"><Lock size={13} /> Locked Accounts</span>}
+              {t === "exports" && <span className="flex items-center gap-1.5"><Download size={13} /> Data Exports</span>}
             </button>
           ))}
         </div>
@@ -460,6 +473,56 @@ export default function SecurityDashboard({ onBack }: { onBack: () => void }) {
                             </Button>
                           ) : null}
                         </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Data Exports tab */}
+        {activeTab === "exports" && (
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Download size={14} className="text-primary" />
+                Data Exports (Last 30 Days)
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => queryClient.invalidateQueries({ queryKey: ["security-dashboard"] })}>
+                <RefreshCw size={13} className="mr-1" /> Refresh
+              </Button>
+            </div>
+            {isLoading ? (
+              <div className="p-8 text-center text-muted-foreground">Loading…</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Timestamp</TableHead>
+                      <TableHead>User</TableHead>
+                      <TableHead>Module</TableHead>
+                      <TableHead>Entity</TableHead>
+                      <TableHead>Reason</TableHead>
+                      <TableHead>IP</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(!data?.dataExports.exports || data.dataExports.exports.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No data exports recorded in the last 30 days.</TableCell>
+                      </TableRow>
+                    )}
+                    {data?.dataExports.exports.map((e) => (
+                      <TableRow key={e.id}>
+                        <TableCell className="text-xs">{formatDate(e.createdAt)}</TableCell>
+                        <TableCell className="font-medium">{e.userName}<br/><span className="text-xs text-muted-foreground capitalize">{e.role}</span></TableCell>
+                        <TableCell><Badge variant="outline">{e.module}</Badge></TableCell>
+                        <TableCell className="text-xs">{e.entityType}{e.entityId ? `: ${e.entityId}` : ""}</TableCell>
+                        <TableCell className="text-xs max-w-xs truncate" title={e.reason ?? ""}>{e.reason ?? <span className="text-muted-foreground">-</span>}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{e.ipAddress ?? "-"}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

@@ -30,6 +30,7 @@ import {
 import { eq, and, desc, sql, asc, gte, lte, isNull, isNotNull } from "drizzle-orm";
 import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
 import { geminiGenerate } from "@workspace/integrations-gemini-ai";
+import { auditFromRequest } from "../lib/audit";
 
 const router = Router();
 
@@ -248,9 +249,21 @@ router.get("/audit-export", async (req, res) => {
     const csv = header + rows.map(r =>
       `"${r.createdAt.toISOString()}","${r.action}","${r.actorName ?? ""}","${r.actorRole ?? ""}","${r.studyId ?? ""}","${(r.details ?? "").replace(/"/g, "'")}"`
     ).join("\n");
+    const s = staffOf(req);
     res.setHeader("Content-Type", "text/csv");
     res.setHeader("Content-Disposition", "attachment; filename=audit-export.csv");
     res.send(csv);
+
+    void auditFromRequest(req, {
+      userId: s.subjectId,
+      userName: s.subjectName,
+      role: s.role,
+      action: "export",
+      module: "radiology",
+      entityType: "dicom_audit",
+      entityId: studyId ?? "all",
+      reason: `RIS audit export: ${rows.length} rows, user=${user ?? "all"}, studyId=${studyId ?? "all"}`,
+    });
     return;
   }
 
