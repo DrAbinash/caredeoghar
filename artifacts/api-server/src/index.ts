@@ -1431,6 +1431,21 @@ const server = app.listen({ port, exclusive: true }, () => {
     logger.info("Cron schedulers disabled (set ENABLE_SCHEDULERS=1 to enable)");
   }
 
+  // In-process DICOM pull agent can also start independently of schedulers
+  const enableDimse =
+    process.env["ENABLE_DICOM_PULL_AGENT"] === "1" ||
+    process.env["ENABLE_DICOM_PULL_AGENT"] === "true";
+  if (enableDimse) {
+    import("./services/dicom-pull-agent/dimse-agent").then((mod) => {
+      if (!mod.isDimsePullAgentRunning()) {
+        mod.startDimsePullAgent();
+        logger.info("In-process DIMSE pull agent started (ENABLE_DICOM_PULL_AGENT set)");
+      }
+    }).catch((err) => {
+      logger.error({ err }, "Failed to load DIMSE pull agent module");
+    });
+  }
+
   runStartupMigrations().catch((e) => logger.error({ err: e }, "Failed to run startup migrations"));
   ensureDefaultLedger().catch((e) => logger.error({ err: e }, "Failed to seed default ledger"));
   backfillExpirePublicTokens().catch((e) => logger.error({ err: e }, "Failed to backfill public token expiry"));

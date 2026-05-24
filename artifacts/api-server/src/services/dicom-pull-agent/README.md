@@ -1,31 +1,50 @@
-# DICOM Pull Agent (Reference Implementation)
+# DICOM Pull Agent
 
-This is a Node.js reference implementation for the DICOM auto-pull agent.
-It runs on the Conquest/PACS server machine and:
+## Two Modes of Operation
 
-1. Fetches configuration from the ERP (`GET /api/internal/dicom-agent/config`)
-2. Polls for pull jobs (`GET /api/internal/dicom/pull-jobs/pending`)
-3. Executes `findscu` / `movescu` against imaging modalities
-4. Reports results back via heartbeat and log endpoints
+### 1. In-Process DIMSE Agent (Recommended — No External PC)
 
-## Startup Verification Logging
+Runs **inside the API server** using `dcmjs-dimse` (pure Node.js DICOM DIMSE library).
 
-On every startup, the agent writes to `logs/puller-startup.log`:
-- Timestamp
-- Machine name
-- IP address
-- AE title
-- Listening port
-- Status (starting / ready / failed)
+**Enable it:**
+```bash
+ENABLE_DICOM_PULL_AGENT=1
+# or, it also auto-starts when ENABLE_SCHEDULERS=1
+```
 
-Heartbeats are logged every 5 minutes. All modality connections,
-failed polling attempts, and DICOM transfer errors are also written
-to the log file with rotation after 30 days.
+**What it does:**
+- Polls the database every 30s for `dicom_pull_jobs` with `status='pending'`
+- Executes **C-ECHO** connectivity probe against each modality
+- Executes **C-FIND** (Study Root) to discover studies by date range
+- Executes **C-MOVE** to transfer studies into your Conquest PACS
+- Writes results directly back to `dicom_pull_jobs`, `dicom_pull_agent_logs`, and `dicom_pull_agent_status`
 
-## Environment Variables
+**Benefits:**
+- No Windows PC or external service needed
+- Debug via server logs — search for `[dimse-agent]`
+- Runs in the cloud / Replit VM natively
+- Auto-claims jobs so multiple server instances don't double-process
 
-- `ERP_BASE_URL` — ERP API base URL (e.g. `https://your-app.replit.app`)
-- `INTERNAL_API_KEY` — Bearer token for internal endpoints
-- `AGENT_NAME` — Unique agent identifier (default: hostname)
-- `AGENT_AE_TITLE` — DICOM AE title for this agent (default: `DIAGNO_AGENT`)
-- `LOG_DIR` — Directory for local log files (default: `./logs`)
+**Environment variables:**
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AGENT_NAME` | `hostname()` | Unique agent identifier |
+| `AGENT_AE_TITLE` | `DIAGNO_AGENT` | DICOM AE title for this agent |
+| `DIMSE_POLL_INTERVAL_MS` | `30000` | How often to check for jobs |
+| `DIMSE_MAX_CONCURRENT_JOBS` | `3` | Parallel job limit |
+| `DIMSE_TIMEOUT_MS` | `60000` | Per-DIMSE-operation timeout |
+| `CONQUEST_AE_TITLE` | `CONQUEST` | Fallback destination AE |
+| `CONQUEST_HOST` | `127.0.0.1` | Fallback destination host |
+| `CONQUEST_PORT` | `5678` | Fallback destination port |
+
+### 2. External Reference Agent (Legacy — Windows/Linux PC)
+
+A standalone Node.js service that runs on the Conquest/PACS server machine.
+It polls the ERP REST API and spawns `findscu` / `movescu` via child process.
+
+Use this if you:
+- Need DCMTK-specific features not in `dcmjs-dimse`
+- Want the agent on a separate machine near the modalities
+- Have firewall rules that require the agent to be on-prem
+
+See `puller.ts` (reference implementation) for the external agent code.

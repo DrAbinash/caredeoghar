@@ -24,6 +24,7 @@
     "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2",
+    "dcmjs-dimse": "^0.3.3",
     "dicom-parser": "^1.8.21",
     "dotenv": "^16.4.7",
     "drizzle-orm": "catalog:",

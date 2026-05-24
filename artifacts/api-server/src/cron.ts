@@ -10,6 +10,11 @@ import { runBooksSanity } from "./routes/books-sanity";
 import { auditRunsTable } from "@workspace/db/schema";
 import { gte, and, lte, eq, inArray, isNull, or, lt } from "drizzle-orm";
 import { encryptBackup } from "@workspace/crypto";
+import {
+  startDimsePullAgent,
+  stopDimsePullAgent,
+  isDimsePullAgentRunning,
+} from "./services/dicom-pull-agent/dimse-agent";
 
 let currentTask: ReturnType<typeof cron.schedule> | null = null;
 // Track already-fired events per day to avoid double-firing
@@ -25,6 +30,17 @@ export function startCronScheduler() {
   scheduleAutomatedBackups();
   scheduleSessionIdleSweep();
   scheduleAuditLogPurge();
+
+  // Start the in-process DIMSE pull agent if enabled.
+  // When ENABLE_DICOM_PULL_AGENT is set, the agent polls for pull jobs and
+  // executes C-FIND / C-MOVE natively via dcmjs-dimse (no external PC needed).
+  const enableDimse =
+    process.env["ENABLE_DICOM_PULL_AGENT"] === "1" ||
+    process.env["ENABLE_DICOM_PULL_AGENT"] === "true";
+  if (enableDimse && !isDimsePullAgentRunning()) {
+    startDimsePullAgent();
+    console.log("[cron] In-process DIMSE pull agent started");
+  }
 }
 
 // ── Automated Backup Scheduler ────────────────────────────────────────────────────────
