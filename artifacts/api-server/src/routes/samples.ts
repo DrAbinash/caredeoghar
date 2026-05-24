@@ -166,6 +166,16 @@ router.get("/", async (req, res) => {
   res.json({ samples: expanded, counters });
 });
 
+router.get("/scan/:barcode", async (req, res) => {
+  const barcode = req.params.barcode.trim();
+  if (!barcode) { res.status(400).json({ error: "Barcode is required" }); return; }
+
+  const [row] = await db.select().from(samplesTable).where(eq(samplesTable.barcode, barcode));
+  if (!row) { res.status(404).json({ error: "Sample not found" }); return; }
+
+  res.json(await expandSample(row));
+});
+
 router.get("/options", (_req, res) => {
   res.json({
     sampleTypes: SAMPLE_TYPES,

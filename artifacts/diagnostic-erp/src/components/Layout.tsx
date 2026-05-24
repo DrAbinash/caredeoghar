@@ -67,6 +67,7 @@ import {
   ClipboardCheck,
   Microscope,
   Eye,
+  ScanLine,
   Workflow,
   ImagePlus,
   Scan,
@@ -170,6 +171,7 @@ const navItems: NavEntry[] = [
 
   { path: "/usg", icon: Waves, label: "USG / DOPPLER" },
   { path: "/samples", icon: TestTube, label: "Samples" },
+  { path: "/scan-station", icon: ScanLine, label: "Scan Station" },
   { path: "/reports", icon: BarChart3, label: "Reports" },
   { path: "/report-generator", icon: FilePen, label: "Report Generator" },
   { path: "/report-hub", icon: FileText, label: "Report Hub" },
