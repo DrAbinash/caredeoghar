@@ -744,7 +744,7 @@ export function DicomNodesPanel() {
                 <Label className="text-xs">AE Title *</Label>
                 <Input
                   value={form.aeTitle}
-                  onChange={(e) => setForm({ ...form, aeTitle: e.target.value.toUpperCase() })}
+                  onChange={(e) => setForm({ ...form, aeTitle: e.target.value })}
                   maxLength={16}
                   placeholder="CT_SCANNER_01"
                   className="mt-1 font-mono"
