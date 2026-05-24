@@ -496,11 +496,11 @@ function CompactRow({ label, cash, digital, isDeduct }: {
       </span>
       <div className="flex items-center gap-4 text-sm font-semibold tabular-nums">
         <span className={isDeduct ? "text-red-600 dark:text-red-400" : "text-gray-800 dark:text-gray-200"}>
-          {sign}${fmt(cash)}
+          {sign}{fmt(cash)}
         </span>
         <span className="text-gray-300 dark:text-gray-600">/</span>
         <span className={isDeduct ? "text-red-600 dark:text-red-400" : "text-gray-800 dark:text-gray-200"}>
-          {sign}${fmt(digital)}
+          {sign}{fmt(digital)}
         </span>
       </div>
     </div>

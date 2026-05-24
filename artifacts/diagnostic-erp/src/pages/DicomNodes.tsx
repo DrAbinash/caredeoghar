@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -231,6 +232,57 @@ export function DicomNodesPanel() {
     setOpen(true);
   };
 
+  const loadPreset = (preset: NodeForm) => {
+    setEditing(null);
+    setForm(preset);
+    setFormError(null);
+    setFormTest(null);
+    setOpen(true);
+  };
+
+  const CLINIC_PRESETS: { label: string; preset: NodeForm }[] = [
+    {
+      label: "MRI UH",
+      preset: {
+        aeTitle: "UIH", host: "172.16.1.103", port: 3333, modality: "MR",
+        description: "MRI scanner", location: "Room 1", isActive: true,
+        autoPull: true, pullIntervalMinutes: 10, pullQueryDays: 2,
+        conquestAeTitle: "ORTHANC", conquestHost: "172.16.1.139", conquestPort: 5680,
+        preferredRetrieveMethod: "C_MOVE",
+      },
+    },
+    {
+      label: "CT Scan",
+      preset: {
+        aeTitle: "CT99", host: "172.16.1.99", port: 4006, modality: "CT",
+        description: "CT scanner", location: "Room 2", isActive: true,
+        autoPull: true, pullIntervalMinutes: 10, pullQueryDays: 2,
+        conquestAeTitle: "ORTHANC", conquestHost: "172.16.1.139", conquestPort: 5680,
+        preferredRetrieveMethod: "C_MOVE",
+      },
+    },
+    {
+      label: "USG Voluson",
+      preset: {
+        aeTitle: "VOLUSON", host: "172.16.1.46", port: 104, modality: "US",
+        description: "Ultrasound", location: "Room 3", isActive: true,
+        autoPull: true, pullIntervalMinutes: 10, pullQueryDays: 2,
+        conquestAeTitle: "ORTHANC", conquestHost: "172.16.1.139", conquestPort: 5680,
+        preferredRetrieveMethod: "C_MOVE",
+      },
+    },
+    {
+      label: "Conquest PACS",
+      preset: {
+        aeTitle: "ORTHANC2", host: "172.16.1.139", port: 5680, modality: "OT",
+        description: "Conquest PACS", location: "Server", isActive: true,
+        autoPull: false, pullIntervalMinutes: 15, pullQueryDays: 1,
+        conquestAeTitle: "", conquestHost: "", conquestPort: 5678,
+        preferredRetrieveMethod: "C_MOVE",
+      },
+    },
+  ];
+
   const openEdit = (node: DicomNode) => {
     setEditing(node);
     setForm({
@@ -332,6 +384,36 @@ export function DicomNodesPanel() {
 
       <div className="px-6 space-y-5">
         <ProviderBanner provider={provider} />
+
+        {/* Quick Setup Presets */}
+        {tab === "nodes" && nodes.length === 0 && (
+          <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <PlugZap size={16} className="text-blue-600 dark:text-blue-400" />
+              <h3 className="text-sm font-bold text-blue-800 dark:text-blue-300">Quick Setup — Your Clinic Modality Presets</h3>
+            </div>
+            <p className="text-xs text-blue-700 dark:text-blue-400 mb-3">
+              Auto-Pull ON · 10 min interval · 2 days query · Conquest PACS at 172.16.1.139:5680
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {CLINIC_PRESETS.map((p) => (
+                <Button
+                  key={p.label}
+                  size="sm"
+                  variant="outline"
+                  className="bg-white dark:bg-card border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40"
+                  onClick={() => loadPreset(p.preset)}
+                >
+                  <Plus size={13} className="mr-1" />
+                  {p.label}
+                </Button>
+              ))}
+              <Button size="sm" variant="ghost" onClick={openCreate}>
+                <Settings2 size={13} className="mr-1" /> Custom
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex gap-1 border-b border-border">
