@@ -2,7 +2,7 @@
 
 ## Two Modes of Operation
 
-### 1. In-Process DIMSE Agent (Recommended — No External PC)
+### 1. In-Process DIMSE Agent (Cloud / Replit VM)
 
 Runs **inside the API server** using `dcmjs-dimse` (pure Node.js DICOM DIMSE library).
 
@@ -19,11 +19,7 @@ ENABLE_DICOM_PULL_AGENT=1
 - Executes **C-MOVE** to transfer studies into your Conquest PACS
 - Writes results directly back to `dicom_pull_jobs`, `dicom_pull_agent_logs`, and `dicom_pull_agent_status`
 
-**Benefits:**
-- No Windows PC or external service needed
-- Debug via server logs — search for `[dimse-agent]`
-- Runs in the cloud / Replit VM natively
-- Auto-claims jobs so multiple server instances don't double-process
+**Best for:** Cloud deployments where modalities have public IPs or VPN access.
 
 **Environment variables:**
 | Variable | Default | Description |
@@ -37,14 +33,40 @@ ENABLE_DICOM_PULL_AGENT=1
 | `CONQUEST_HOST` | `127.0.0.1` | Fallback destination host |
 | `CONQUEST_PORT` | `5678` | Fallback destination port |
 
-### 2. External Reference Agent (Legacy — Windows/Linux PC)
+### 2. Local DICOM Bridge (Clinic LAN PC — Recommended for Private Networks)
+
+A standalone Node.js service that runs **on a PC inside your clinic LAN**.
+It uses `dcmjs-dimse` (pure Node.js, no DCMTK installation) to reach private-network modalities (`172.16.1.x`)
+and reports everything back to the cloud ERP via REST API.
+
+**Best for:** Clinics where modalities are on a private network unreachable from the cloud.
+
+**Location:** `artifacts/local-dicom-bridge/`
+
+**Setup:**
+```bash
+cd artifacts/local-dicom-bridge
+npm install
+# Copy .env.example to .env, fill ERP_BASE_URL + INTERNAL_API_KEY
+node src/index.js
+```
+
+**Features:**
+- Pure Node.js — no DCMTK, no Windows-specific dependencies
+- Auto-fetches config from ERP every 5 minutes (or uses `.env` overrides)
+- Last-known-good config saved to disk (survives ERP downtime)
+- Rolling file logs with 30-day cleanup
+- Heartbeat + status reporting visible in ERP → Radiology → Agent Status
+- Graceful shutdown on SIGTERM/SIGINT
+
+### 3. External Reference Agent (Legacy — DCMTK-based)
 
 A standalone Node.js service that runs on the Conquest/PACS server machine.
 It polls the ERP REST API and spawns `findscu` / `movescu` via child process.
 
 Use this if you:
 - Need DCMTK-specific features not in `dcmjs-dimse`
+- Already have DCMTK installed and prefer it
 - Want the agent on a separate machine near the modalities
-- Have firewall rules that require the agent to be on-prem
 
-See `puller.ts` (reference implementation) for the external agent code.
+See `artifacts/windows-pull-agent/` for the DCMTK-based implementation.

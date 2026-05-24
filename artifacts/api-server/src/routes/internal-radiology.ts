@@ -26,7 +26,6 @@ import {
   pacsLogsTable,
   dicomPullAgentLogsTable,
   dicomPullAgentStatusTable,
-  dicomModalitiesTable,
   pacsSettingsTable,
   radiologyScheduledProceduresTable,
 } from "@workspace/db/schema";
@@ -1414,20 +1413,43 @@ router.post("/dicom-agent/log", async (req, res) => {
 });
 
 // ── GET /api/internal/dicom-agent/config ─────────────────────────────────────
-// Returns the full pull-agent configuration so the Windows agent can
+// Returns the full pull-agent configuration so the Windows/local agent can
 // auto-fetch it every 5 minutes without manual config.json editing.
+// Reads from dicomNodesTable (the new unified schema) and maps fields to the
+// shape expected by both the legacy Windows agent and the new local bridge.
 router.get("/dicom-agent/config", requireInternalApiKey, async (_req, res) => {
-  const [settingsRows, modalities] = await Promise.all([
+  const [settingsRows, nodes] = await Promise.all([
     db.select().from(pacsSettingsTable).where(eq(pacsSettingsTable.category, "conquest")),
-    db.select().from(dicomModalitiesTable)
-      .where(eq(dicomModalitiesTable.isActive, true))
-      .orderBy(dicomModalitiesTable.machineName),
+    db.select().from(dicomNodesTable)
+      .where(eq(dicomNodesTable.isActive, true))
+      .orderBy(dicomNodesTable.aeTitle),
   ]);
 
   const sm: Record<string, string> = {};
   for (const row of settingsRows) {
     if (row.key && row.value != null) sm[row.key] = row.value;
   }
+
+  // Map dicomNodesTable fields to the modality shape the agent expects
+  const modalities = nodes.map((n) => ({
+    id: n.id,
+    machineName: n.aeTitle,
+    aeTitle: n.aeTitle,
+    ipAddress: n.host,
+    host: n.host,
+    port: n.port,
+    modality: n.modality,
+    location: n.location,
+    description: n.description,
+    isActive: n.isActive,
+    autoPull: n.autoPull,
+    pullIntervalMinutes: n.pullIntervalMinutes,
+    pullQueryDays: n.pullQueryDays,
+    conquestAeTitle: n.conquestAeTitle,
+    conquestHost: n.conquestHost,
+    conquestPort: n.conquestPort,
+    preferredRetrieveMethod: n.preferredRetrieveMethod,
+  }));
 
   res.json({
     conquest: {
@@ -1437,7 +1459,7 @@ router.get("/dicom-agent/config", requireInternalApiKey, async (_req, res) => {
     },
     modalities,
     pullSettings: {
-      pollIntervalMs:     Number(sm["pull_interval_ms"]     ?? 30_000),
+      pollIntervalMs:     Number(sm["pull_interval_ms"]     ?? 300_000),
       agentAeTitle:       sm["agent_ae_title"]              ?? "DIAGNO_AGENT",
       maxConcurrentJobs:  Number(sm["max_concurrent_jobs"]  ?? 3),
     },
