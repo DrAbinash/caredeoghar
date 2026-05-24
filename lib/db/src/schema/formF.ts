@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, boolean } from "drizzle-orm/pg-core";
 import { patientsTable } from "./patients";
 import { billsTable } from "./bills";
 
@@ -37,6 +37,10 @@ export const formFRecordsTable = pgTable("form_f_records", {
   mtpDate: text("mtp_date").notNull().default(""),
   date: text("date").notNull().default(""),
   place: text("place").notNull().default(""),
+  idCardImageUrl: text("id_card_image_url"),
+  idCardExtractedName: text("id_card_extracted_name"),
+  idCardExtractedAddress: text("id_card_extracted_address"),
+  idCardVerified: boolean("id_card_verified").default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

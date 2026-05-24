@@ -77,5 +77,8 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   maxFailedLoginAttempts: integer("max_failed_login_attempts").notNull().default(5),
   // How long (in minutes) an account stays locked after reaching the threshold.
   accountLockoutDurationMinutes: integer("account_lockout_duration_minutes").notNull().default(30),
+  // When true, the billing desk prompts for address + husband/father name when a
+  // bill contains any Form F required test (configured in the Form F tests tab).
+  formFBillingPrompt: boolean("form_f_billing_prompt").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

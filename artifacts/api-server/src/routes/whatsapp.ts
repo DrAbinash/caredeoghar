@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import { whatsappSettingsTable, whatsappConversationsTable, clinicSettingsTable } from "@workspace/db/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, ilike } from "drizzle-orm";
 import { requireStaffPermission } from "../middleware/requireStaffAuth";
 import { geminiGenerate } from "@workspace/integrations-gemini-ai";
 
@@ -150,12 +150,25 @@ whatsappWebhookRouter.post("/", async (req: Request, res: Response): Promise<voi
         const value = change.value;
 
         for (const msg of value.messages ?? []) {
-          if (msg.type !== "text" || !msg.text?.body) continue;
-
           const phone = msg.from;
-          const text  = msg.text.body;
           const waId  = msg.id;
           const name  = value.contacts?.find((c) => c.wa_id === phone)?.profile?.name ?? "";
+
+          // ─── Incoming IMAGE ─── attempt ID card OCR + Form F auto-fill ───
+          if (msg.type === "image" && msg.image?.id) {
+            void handleIncomingImage({
+              phone, waId, name,
+              mediaId: msg.image.id,
+              caption: msg.image.caption ?? "",
+              mimeType: msg.image.mime_type ?? "image/jpeg",
+              s,
+            }).catch(() => {});
+            continue;
+          }
+
+          if (msg.type !== "text" || !msg.text?.body) continue;
+
+          const text = msg.text.body;
 
           // Save incoming message
           await db.insert(whatsappConversationsTable).values({
@@ -179,6 +192,113 @@ whatsappWebhookRouter.post("/", async (req: Request, res: Response): Promise<voi
     // Errors are swallowed — 200 already sent to Meta
   }
 });
+
+// ─── Incoming image handler (ID card OCR → Form F) ──────────────────────────────────────
+import { geminiOcrIdCard } from "@workspace/integrations-gemini-ai";
+import { formFRecordsTable, patientsTable } from "@workspace/db/schema";
+
+async function handleIncomingImage(params: {
+  phone: string;
+  waId: string;
+  name: string;
+  mediaId: string;
+  caption: string;
+  mimeType: string;
+  s: typeof whatsappSettingsTable.$inferSelect;
+}): Promise<void> {
+  const { phone, waId, name, mediaId, caption, mimeType, s } = params;
+
+  // 1. Download image via Meta media API
+  let imageBuf: Buffer | null = null;
+  try {
+    const metaUrl = `https://graph.facebook.com/v20.0/${encodeURIComponent(mediaId)}?access_token=${encodeURIComponent(s.accessToken ?? "")}`;
+    const metaResp = await fetch(metaUrl);
+    if (!metaResp.ok) throw new Error(`Meta media info failed: ${metaResp.status}`);
+    const metaData = await metaResp.json() as { url?: string };
+    if (!metaData.url) throw new Error("No media URL from Meta");
+    const imgResp = await fetch(metaData.url, { headers: { Authorization: `Bearer ${s.accessToken ?? ""}` } });
+    if (!imgResp.ok) throw new Error(`Image download failed: ${imgResp.status}`);
+    imageBuf = Buffer.from(await imgResp.arrayBuffer());
+  } catch (err) {
+    console.warn("[whatsapp] Incoming image download failed:", err);
+    return;
+  }
+
+  if (!imageBuf || imageBuf.length === 0) return;
+
+  // 2. Run Gemini OCR on ID card
+  let ocrResult: { guardianName: string; address: string; documentType: string; confidence: string } | null = null;
+  try {
+    const base64 = imageBuf.toString("base64");
+    ocrResult = await geminiOcrIdCard(base64, mimeType);
+  } catch (err) {
+    console.warn("[whatsapp] ID card OCR failed:", err);
+  }
+
+  // 3. Find patient by phone
+  const phoneDigits = (phone || "").replace(/\D/g, "");
+  const patientRows = await db
+    .select()
+    .from(patientsTable)
+    .where(ilike(patientsTable.phone, `%${phoneDigits}%`))
+    .limit(5);
+  const patient = patientRows[0] ?? null;
+
+  // 4. Save incoming image message to conversation log
+  await db.insert(whatsappConversationsTable).values({
+    phone,
+    customerName: name,
+    direction: "incoming",
+    messageBody: caption || `[Image: ${ocrResult?.documentType ?? "ID Card"}]`,
+    waMessageId: waId,
+    aiHandled: !!ocrResult,
+    status: "received",
+  });
+
+  // 5. If patient found and data extracted, upsert Form F record
+  if (patient && ocrResult && (ocrResult.guardianName || ocrResult.address)) {
+    // Look for an existing Form F record for this patient (most recent)
+    const existing = await db
+      .select()
+      .from(formFRecordsTable)
+      .where(eq(formFRecordsTable.patientId, patient.id))
+      .orderBy(desc(formFRecordsTable.createdAt))
+      .limit(1);
+
+    if (existing[0]) {
+      // Update existing record with extracted data (not verified yet)
+      const updates: Record<string, unknown> = {};
+      if (ocrResult.guardianName) updates.idCardExtractedName = ocrResult.guardianName;
+      if (ocrResult.address) updates.idCardExtractedAddress = ocrResult.address;
+      updates.idCardVerified = false;
+      await db.update(formFRecordsTable).set(updates).where(eq(formFRecordsTable.id, existing[0].id));
+    } else {
+      // Create a new draft Form F record
+      await db.insert(formFRecordsTable).values({
+        patientId: patient.id,
+        billNumber: null,
+        patientName: `${patient.firstName} ${patient.lastName}`.trim(),
+        address: ocrResult.address || patient.address || "",
+        mobile: patient.phone ?? "",
+        husbandFatherName: ocrResult.guardianName ?? "",
+        idCardExtractedName: ocrResult.guardianName || null,
+        idCardExtractedAddress: ocrResult.address || null,
+        idCardVerified: false,
+      });
+    }
+
+    // 6. Send confirmation reply
+    if (s.accessToken && s.phoneNumberId) {
+      const replyBody = ocrResult.guardianName || ocrResult.address
+        ? `Thank you! We received your ID card image and extracted the following details for your Form F record:\n• Guardian/Husband/Father: ${ocrResult.guardianName || "(not found)"}\n• Address: ${ocrResult.address || "(not found)"}\n\nOur staff will verify and confirm these details shortly.`
+        : "Thank you for sharing your ID card image. We couldn't clearly read the details. Our staff will assist you at the center.";
+      void sendTextMessage(phone, replyBody, s).catch(() => {});
+    }
+  } else if (s.accessToken && s.phoneNumberId) {
+    // Reply even when no patient found or no data extracted
+    void sendTextMessage(phone, "Thank you for your image. Please visit the center so our staff can verify and update your records.", s).catch(() => {});
+  }
+}
 
 // ─── AI Reply Handler ──────────────────────────────────────────────────────────
 
@@ -456,6 +576,7 @@ interface WhatsappWebhookBody {
           from: string;
           type: string;
           text?: { body?: string };
+          image?: { id: string; mime_type?: string; caption?: string };
           timestamp: string;
         }[];
       };

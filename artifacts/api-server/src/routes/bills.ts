@@ -53,7 +53,7 @@ import {
   RefundBillParams,
   RefundBillBody,
 } from "@workspace/api-zod";
-import { orderTestsTable, testsTable, doctorsTable } from "@workspace/db";
+import { orderTestsTable, testsTable, doctorsTable, clinicSettingsTable } from "@workspace/db";
 import { sanitizePatient } from "./patients";
 import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
 import { FULL_ACCESS_ROLES } from "../middleware/requireStaffAuth";
@@ -564,8 +564,21 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
     }).catch((err) => console.warn("WhatsApp send failed:", err));
   }
 
+  // Determine if this bill contains any Form-F-required tests so the billing
+  // desk can prompt for address + guardian name when the clinic setting is on.
+  let needsFormFData = false;
+  try {
+    const [clinic] = await db.select({ formFTestIds: clinicSettingsTable.formFTestIds, formFBillingPrompt: clinicSettingsTable.formFBillingPrompt }).from(clinicSettingsTable).limit(1);
+    if (clinic?.formFBillingPrompt) {
+      const formFTestIds: number[] = JSON.parse(clinic.formFTestIds ?? "[]");
+      needsFormFData = formFTestIds.length > 0 && orderLineTests.some((t) => formFTestIds.includes(t.testId));
+    }
+  } catch (e) {
+    req.log?.warn?.({ err: e }, "Form-F billing prompt check failed");
+  }
+
   const built = await buildBill(bill);
-  res.status(201).json({ ...built, token: tokenInfo, testTokens, studies });
+  res.status(201).json({ ...built, token: tokenInfo, testTokens, studies, needsFormFData });
 });
 
 billsRouter.get("/:id", async (req, res) => {

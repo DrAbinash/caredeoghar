@@ -654,3 +654,82 @@ Return ONLY valid JSON matching this schema:
     return { ...EMPTY_USG_JSON, rawText };
   }
 }
+
+// ---------------------------------------------------------------------------
+// ID Card OCR — extract guardian name and address from Aadhaar / identity card
+// ---------------------------------------------------------------------------
+
+export interface IdCardOcrResult {
+  guardianName: string;
+  address: string;
+  documentType: string;
+  confidence: "high" | "medium" | "low";
+}
+
+/**
+ * Send an Aadhaar / identity card image to Gemini Vision and extract
+ * the guardian/husband/father name and full address. Returns a structured
+ * result with confidence level.
+ */
+export async function geminiOcrIdCard(
+  imageBase64: string,
+  mimeType: string,
+  options: GeminiGenerateOptions = {}
+): Promise<IdCardOcrResult> {
+  const baseUrl =
+    options.baseUrl ?? process.env.AI_INTEGRATIONS_GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com";
+  const apiKey = options.apiKey ?? process.env.AI_INTEGRATIONS_GEMINI_API_KEY ?? "";
+
+  const prompt = `You are an Indian government ID document reading assistant. Examine this Aadhaar / voter ID / passport / ration card image and extract ONLY the following fields.
+
+Return ONLY valid JSON — no markdown fences, no explanation, no extra text.
+
+JSON schema:
+{
+  "guardianName": "string — the husband's or father's full name as shown on the card. If neither is shown, use the guardian / head of family name. Empty string if not found.",
+  "address": "string — the complete residential address as shown on the card, comma-separated, in one line. Empty string if not found.",
+  "documentType": "string — one of: Aadhaar, VoterID, Passport, RationCard, PAN, DrivingLicense, Other",
+  "confidence": "string — one of: high, medium, low — your confidence in the extracted data"
+}
+
+Return ONLY the JSON object.`;
+
+  const url = `${baseUrl}/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{
+        role: "user",
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType, data: imageBase64 } },
+        ],
+      }],
+      generationConfig: { maxOutputTokens: 1024, temperature: 0.1 },
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Gemini ID Card OCR error: ${res.status} ${err}`);
+  }
+
+  const data = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  };
+  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "{}";
+
+  let parsed: Partial<IdCardOcrResult> = {};
+  try {
+    const clean = raw.replace(/^```[a-z]*\n?/, "").replace(/```$/, "").trim();
+    parsed = JSON.parse(clean) as Partial<IdCardOcrResult>;
+  } catch { /* fall through to defaults */ }
+
+  return {
+    guardianName: parsed.guardianName ?? "",
+    address: parsed.address ?? "",
+    documentType: parsed.documentType ?? "Other",
+    confidence: (parsed.confidence as IdCardOcrResult["confidence"]) ?? "low",
+  };
+}

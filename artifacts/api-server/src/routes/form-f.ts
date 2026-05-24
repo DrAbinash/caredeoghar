@@ -2,7 +2,10 @@ import { Router } from "express";
 import { db, billsTable, patientsTable, formFRecordsTable, clinicSettingsTable } from "@workspace/db";
 import { eq, or, ilike, inArray, isNotNull, desc, and } from "drizzle-orm";
 import { ordersTable, orderTestsTable, testsTable, doctorsTable } from "@workspace/db";
+import { whatsappConversationsTable } from "@workspace/db/schema";
 import { dateToISTString } from "../lib/istDate";
+import { geminiOcrIdCard } from "@workspace/integrations-gemini-ai";
+import { requireStaffPermission } from "../middleware/requireStaffAuth";
 
 const formFRouter = Router();
 
@@ -169,6 +172,10 @@ formFRouter.post("/save", async (req, res) => {
       mtpDate: body.mtpDate ?? "",
       date: body.date ?? "",
       place: body.place ?? "",
+      idCardImageUrl: body.idCardImageUrl ?? null,
+      idCardExtractedName: body.idCardExtractedName ?? null,
+      idCardExtractedAddress: body.idCardExtractedAddress ?? null,
+      idCardVerified: body.idCardVerified ?? false,
     };
 
     const [saved] = await db.insert(formFRecordsTable).values(record).returning();
@@ -344,6 +351,176 @@ formFRouter.get("/list", async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error("[form-f] list error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Update patient address + guardian via bill number (from billing desk popup)
+formFRouter.patch("/update-patient-data", requireStaffPermission("/form-f"), async (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const billNumber = String(body.billNumber ?? "").trim();
+    const address = String(body.address ?? "").trim();
+    const husbandFatherName = String(body.husbandFatherName ?? "").trim();
+
+    if (!billNumber) {
+      res.status(400).json({ error: "billNumber is required" });
+      return;
+    }
+
+    const [bill] = await db
+      .select()
+      .from(billsTable)
+      .where(eq(billsTable.billNumber, billNumber))
+      .limit(1);
+
+    if (!bill) {
+      res.status(404).json({ error: "Bill not found" });
+      return;
+    }
+
+    if (bill.patientId) {
+      const updates: Record<string, unknown> = {};
+      if (address) updates.address = address;
+      if (husbandFatherName) {
+        // Also update the first Form-F record for this patient if any
+        await db.update(formFRecordsTable)
+          .set({ husbandFatherName })
+          .where(eq(formFRecordsTable.patientId, bill.patientId));
+      }
+      if (Object.keys(updates).length > 0) {
+        await db.update(patientsTable)
+          .set(updates)
+          .where(eq(patientsTable.id, bill.patientId));
+      }
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[form-f] update-patient-data error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Upload ID card image + run AI OCR ────────────────────────────────────
+formFRouter.post("/upload-id", requireStaffPermission("/form-f"), async (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const formFId = Number(body.formFId ?? 0);
+    const imageBase64 = String(body.imageBase64 ?? "").trim();
+    const mimeType = String(body.mimeType ?? "image/jpeg").trim();
+    const imageUrl = String(body.imageUrl ?? "").trim();
+
+    if (!formFId || (!imageBase64 && !imageUrl)) {
+      res.status(400).json({ error: "formFId and imageBase64 or imageUrl required" });
+      return;
+    }
+
+    // Verify the form F record exists
+    const [record] = await db.select().from(formFRecordsTable).where(eq(formFRecordsTable.id, formFId)).limit(1);
+    if (!record) {
+      res.status(404).json({ error: "Form F record not found" });
+      return;
+    }
+
+    let base64 = imageBase64;
+    // If imageUrl is provided instead, download it
+    if (!base64 && imageUrl) {
+      try {
+        const resp = await fetch(imageUrl);
+        if (!resp.ok) throw new Error(`Download failed: ${resp.status}`);
+        const buf = Buffer.from(await resp.arrayBuffer());
+        base64 = buf.toString("base64");
+      } catch (e) {
+        req.log?.warn?.({ err: e }, "Failed to download ID card image from URL");
+        res.status(502).json({ error: "Failed to download image" });
+        return;
+      }
+    }
+
+    // Run Gemini OCR
+    let ocrResult: { guardianName: string; address: string; documentType: string; confidence: string } | null = null;
+    try {
+      ocrResult = await geminiOcrIdCard(base64, mimeType);
+    } catch (e) {
+      console.warn("[form-f] Gemini ID card OCR failed:", e);
+    }
+
+    // Update the record with extracted data and image reference
+    const updateData: Record<string, unknown> = { idCardVerified: false };
+    if (imageUrl) updateData.idCardImageUrl = imageUrl;
+    if (ocrResult?.guardianName) updateData.idCardExtractedName = ocrResult.guardianName;
+    if (ocrResult?.address) updateData.idCardExtractedAddress = ocrResult.address;
+
+    const [updated] = await db.update(formFRecordsTable)
+      .set(updateData)
+      .where(eq(formFRecordsTable.id, formFId))
+      .returning();
+
+    res.json({
+      ok: true,
+      formF: updated,
+      ocr: ocrResult
+        ? {
+            guardianName: ocrResult.guardianName,
+            address: ocrResult.address,
+            documentType: ocrResult.documentType,
+            confidence: ocrResult.confidence,
+          }
+        : null,
+    });
+  } catch (err) {
+    console.error("[form-f] upload-id error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Verify / accept AI-extracted ID data ──────────────────────────────────
+formFRouter.patch("/verify-id-data/:id", requireStaffPermission("/form-f"), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const body = req.body ?? {};
+
+    const [record] = await db.select().from(formFRecordsTable).where(eq(formFRecordsTable.id, id)).limit(1);
+    if (!record) {
+      res.status(404).json({ error: "Form F record not found" });
+      return;
+    }
+
+    const updates: Record<string, unknown> = { idCardVerified: true };
+
+    // If staff accepts extracted name, copy it into the husbandFatherName field
+    if (body.acceptGuardianName === true && record.idCardExtractedName) {
+      updates.husbandFatherName = record.idCardExtractedName;
+    }
+    // If staff accepts extracted address, copy it into the address field
+    if (body.acceptAddress === true && record.idCardExtractedAddress) {
+      updates.address = record.idCardExtractedAddress;
+    }
+    // Manual overrides
+    if (typeof body.guardianName === "string") updates.husbandFatherName = body.guardianName.trim();
+    if (typeof body.address === "string") updates.address = body.address.trim();
+
+    const [updated] = await db.update(formFRecordsTable).set(updates).where(eq(formFRecordsTable.id, id)).returning();
+    res.json({ ok: true, formF: updated });
+  } catch (err) {
+    console.error("[form-f] verify-id-data error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Get single Form F record with all fields (including ID card) ──────────
+formFRouter.get("/:id", requireStaffPermission("/form-f"), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const [record] = await db.select().from(formFRecordsTable).where(eq(formFRecordsTable.id, id)).limit(1);
+    if (!record) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    res.json(record);
+  } catch (err) {
+    console.error("[form-f] get error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });

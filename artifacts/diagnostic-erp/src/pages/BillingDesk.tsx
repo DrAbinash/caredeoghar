@@ -482,6 +482,7 @@ export default function BillingDesk() {
     name: string; tagline: string; address: string; email: string; phone: string;
     website: string; gstin: string; logoDataUrl: string | null; footerNote?: string;
     formFTestIds?: string;
+    formFBillingPrompt?: boolean;
     dicomMwlTestIds?: string;
     dicomMwlTestDefaults?: string;
     quickTestIds?: string;
@@ -502,6 +503,13 @@ export default function BillingDesk() {
   const needsFormF = selectedTests.some((t) => formFTestIdSet.has(t.testId));
   const [husbandName, setHusbandName] = useState("");
   const [patientAddress, setPatientAddress] = useState("");
+
+  // ── Form F billing popup (Feature 1) ──
+  const [formFPopupOpen, setFormFPopupOpen] = useState(false);
+  const [formFPopupBillNumber, setFormFPopupBillNumber] = useState("");
+  const [formFPopupHusband, setFormFPopupHusband] = useState("");
+  const [formFPopupAddress, setFormFPopupAddress] = useState("");
+  const formFPopupPendingPrintRef = useRef(false);
 
   // ── DICOM MWL fields (triggered by configured tests) ───────────────
   const dicomMwlTestIdSet: Set<number> = (() => {
@@ -694,6 +702,7 @@ export default function BillingDesk() {
         billNumber: string;
         token?: { tokenNo: number; tokenDate: string } | null;
         testTokens?: Array<{ orderTestId: number; testName: string; department: string; roomNumber: string; floorLabel: string; tokenNo: number }>;
+        needsFormFData?: boolean;
       }>("/api/bills", {
         orderId: order.id,
         discount: discountAmt,
@@ -820,6 +829,18 @@ export default function BillingDesk() {
       }
       // Auto-reset the desk after a short delay so staff can immediately start
       // the next bill — prevents accidental double entry of the same patient.
+      // Feature 1: if clinic has form-f billing popup enabled and the bill
+      // contains Form-F-required tests, show a popup for address + guardian
+      // instead of auto-resetting immediately.
+      if (bill.needsFormFData && clinic?.formFBillingPrompt) {
+        setFormFPopupBillNumber(bill.billNumber);
+        setFormFPopupHusband("");
+        setFormFPopupAddress(selectedPatient?.address ?? "");
+        formFPopupPendingPrintRef.current = printAfterSaveRef.current;
+        setFormFPopupOpen(true);
+        return; // skip auto-reset — popup save handler will call resetAll()
+      }
+
       window.setTimeout(() => {
         resetAll();
       }, 3000);
@@ -2022,9 +2043,9 @@ export default function BillingDesk() {
                       printAfterSaveRef.current = true;
                       generateMut.mutate();
                     }}
-                    disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || !!lastBill || (discountAmt > 0 && !discountReason) || (needsFormF && (!husbandName.trim() || !patientAddress.trim())) || (needsDicom && !dicomFieldsComplete)}
+                    disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || !!lastBill || (discountAmt > 0 && !discountReason) || (needsFormF && !clinic?.formFBillingPrompt && (!husbandName.trim() || !patientAddress.trim())) || (needsDicom && !dicomFieldsComplete)}
                     className={`w-full h-12 text-lg font-bold border-0 shadow-lg disabled:shadow-none ${lastBill ? "bg-green-600 text-white disabled:bg-green-600 disabled:text-white disabled:opacity-80" : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white disabled:from-muted disabled:to-muted disabled:text-slate-900 dark:text-slate-900"}`}
-                    title={lastBill ? `Bill ${lastBill.billNumber} already saved — click Reset to start a new bill` : discountAmt > 0 && !discountReason ? "Select a discount reason before generating bill" : needsFormF && (!husbandName.trim() || !patientAddress.trim()) ? "Fill Husband Name & Address for PCPNDT Form F" : needsDicom && !dicomFieldsComplete ? "Fill all 4 DICOM Worklist fields before generating bill" : undefined}
+                    title={lastBill ? `Bill ${lastBill.billNumber} already saved — click Reset to start a new bill` : discountAmt > 0 && !discountReason ? "Select a discount reason before generating bill" : needsFormF && !clinic?.formFBillingPrompt && (!husbandName.trim() || !patientAddress.trim()) ? "Fill Husband Name & Address for PCPNDT Form F" : needsDicom && !dicomFieldsComplete ? "Fill all 4 DICOM Worklist fields before generating bill" : undefined}
                   >
                     {lastBill ? <><CheckCircle2 size={18} className="mr-2" />Bill Saved ✓</> : generateMut.isPending ? <><Printer size={18} className="mr-2 animate-spin" />Saving…</> : <><Printer size={18} className="mr-2" />Save &amp; Print</>}
                   </Button>
@@ -2209,6 +2230,109 @@ export default function BillingDesk() {
                 </button>
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Form F Billing Popup (Feature 1) ── */}
+      <Dialog open={formFPopupOpen} onOpenChange={setFormFPopupOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle size={16} className="text-orange-600" />
+              PCPNDT Form F — Additional Details Required
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-slate-900 dark:text-slate-900">
+              This bill contains a PCPNDT-required test. Please collect the following details to auto-fill Form F.
+            </p>
+            <div className="space-y-1">
+              <Label className="text-xs font-extrabold">Husband's / Father's Name <span className="text-red-500">*</span></Label>
+              <Input
+                autoFocus
+                value={formFPopupHusband}
+                onChange={(e) => setFormFPopupHusband(e.target.value)}
+                placeholder="Required for PCPNDT compliance"
+                className="h-9 text-sm border-orange-300 focus:border-orange-500"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-extrabold">Full Address <span className="text-red-500">*</span></Label>
+              <Input
+                value={formFPopupAddress}
+                onChange={(e) => setFormFPopupAddress(e.target.value)}
+                placeholder="Patient's full residential address"
+                className="h-9 text-sm border-orange-300 focus:border-orange-500"
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button
+                size="sm"
+                className="flex-1 h-9"
+                disabled={!formFPopupHusband.trim() || !formFPopupAddress.trim()}
+                onClick={async () => {
+                  try {
+                    await api.patch("/api/form-f/update-patient-data", {
+                      billNumber: formFPopupBillNumber,
+                      husbandFatherName: formFPopupHusband.trim(),
+                      address: formFPopupAddress.trim(),
+                    });
+                    toast({ title: "Form F data saved" });
+                    setFormFPopupOpen(false);
+                    // If the bill was created with "Save & Print", trigger the print now
+                    if (formFPopupPendingPrintRef.current) {
+                      printAfterSaveRef.current = true;
+                      const cachedClinic = queryClient.getQueryData<PrintClinic>(["clinic-settings"]);
+                      const cachedPrinter = printerCfgCached ?? queryClient.getQueryData<PrinterCfg>(["printer-settings"]);
+                      void QRCode.toDataURL(buildBillVerifyUrl(formFPopupBillNumber), {
+                        errorCorrectionLevel: "M", margin: 1, width: 256,
+                        color: { dark: "#000000", light: "#ffffff" },
+                      }).catch(() => "").then((qrUrl) => {
+                        const lb = lastBill ?? lastBillRef.current;
+                        if (!lb) return;
+                        const clinicForPrint = cachedClinic ?? (clinic as PrintClinic);
+                        const isBW = (cachedPrinter as { billPrinterType?: string } | undefined)?.billPrinterType === "bw";
+                        const paid = lb.payments.reduce((s, p) => s + Number(p.amount || 0), 0);
+                        const billForPrint: PrintBillData = {
+                          billNumber: lb.billNumber, subtotal: lb.subtotal,
+                          discount: lb.discount, taxAmount: 0, totalAmount: lb.total,
+                          paidAmount: paid, balanceAmount: Math.max(0, lb.total - paid),
+                          createdAt: new Date().toISOString(),
+                          patient: { firstName: lb.patient.firstName, lastName: lb.patient.lastName, patientId: lb.patient.patientId, phone: lb.patient.phone ?? null, ageValue: lb.patient.ageValue ?? null, ageUnit: lb.patient.ageUnit ?? null },
+                          order: {
+                            doctor: lb.doctorName ? { name: lb.doctorName } : null,
+                            tests: lb.tests.map((t) => ({ price: t.price, status: "active", test: { name: t.name, code: t.code ?? "", category: t.category } })),
+                          },
+                          payments: lb.payments.map((p) => ({ method: p.mode, amount: Number(p.amount || 0) })),
+                          tokenNo: lb.tokenNo ?? null, testTokens: lb.testTokens ?? null,
+                        };
+                        const paperSize = getAutoBillPaperSize(lb.tests.length, getBillPaperSize());
+                        const html = buildBillPrintHtml({ bill: billForPrint, clinic: clinicForPrint, paperSize, isBW, qrDataUrl: qrUrl as string });
+                        printViaIframe(html);
+                      });
+                    }
+                    // Reset after a short delay so staff can continue
+                    window.setTimeout(() => resetAll(), 1500);
+                  } catch (err) {
+                    toast({ title: "Failed to save Form F data", variant: "destructive" });
+                  }
+                }}
+              >
+                Save & Continue
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9"
+                onClick={() => {
+                  setFormFPopupOpen(false);
+                  window.setTimeout(() => resetAll(), 1500);
+                }}
+              >
+                Skip
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

@@ -62,6 +62,7 @@ async function getOrCreate() {
       lanOnlyLogin: false,
       lanAllowedIps: "[]",
       fido2Enabled: false,
+      formFBillingPrompt: false,
       updatedAt: new Date(),
     } as any;
   }
@@ -92,6 +93,7 @@ clinicSettingsRouter.get("/branding", async (_req, res) => {
     dayCloseAutoPrint: row.dayCloseAutoPrint ?? true,
     quickTestIds: row.quickTestIds ?? "[null,null,null,null,null,null]",
     formFTestIds: row.formFTestIds ?? "[]",
+    formFBillingPrompt: row.formFBillingPrompt ?? false,
   });
 });
 
@@ -117,7 +119,7 @@ clinicSettingsRouter.put("/", async (req, res) => {
     }
     update.sidebarTheme = body.sidebarTheme;
   }
-  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "payuEnabled", "phonepeEnabled", "bharatpeEnabled", "cashfreeEnabled", "billShowCode", "billShowCategory", "dayCloseAutoPrint", "lanOnlyLogin", "fido2Enabled", "kioskEnabled"] as const;
+  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "payuEnabled", "phonepeEnabled", "bharatpeEnabled", "cashfreeEnabled", "billShowCode", "billShowCategory", "dayCloseAutoPrint", "lanOnlyLogin", "fido2Enabled", "kioskEnabled", "formFBillingPrompt"] as const;
   const textFields = ["kioskUpiVpa", "kioskUpiName", "kioskWelcomeMessage", "kioskAllowedTestIds", "onlineBookingAllowedTestIds", "razorpayKeyId", "payuMerchantKey", "phonepeMerchantId", "bharatpeMerchantId", "cashfreeAppId", "formFTestIds", "quickTestIds", "footerNote", "commissionDiscountMode", "lanAllowedIps", "billDefaultPaperSize", "name", "tagline", "address", "email", "phone", "website", "gstin", "logoDataUrl", "portalHeading", "portalWelcomeMessage", "sidebarTheme"] as const;
   // NOTE: quickTestIds and formFTestIds are intentionally NOT in boolFields
   // because they store JSON-as-text (e.g. "[null,null,null,null,null,null]").

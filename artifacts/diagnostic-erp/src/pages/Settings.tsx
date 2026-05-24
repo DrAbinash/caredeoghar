@@ -2766,12 +2766,16 @@ function FormFTestsTab() {
     queryFn: () => api.get<{ tests: DiagnosticTest[] }>("/api/tests?limit=500").then((d) => d.tests ?? []),
   });
 
-  const { data: settings, isLoading: settingsLoading } = useQuery<{ formFTestIds?: string }>({
+  const { data: settings, isLoading: settingsLoading } = useQuery<{
+    formFTestIds?: string;
+    formFBillingPrompt?: boolean;
+  }>({
     queryKey: ["clinic-settings"],
     queryFn: () => api.get("/api/clinic-settings"),
   });
 
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [billingPrompt, setBillingPrompt] = useState(false);
 
   useEffect(() => {
     if (!settingsLoading && settings !== undefined) {
@@ -2779,12 +2783,16 @@ function FormFTestsTab() {
         const ids: number[] = JSON.parse(settings?.formFTestIds ?? "[]");
         setSelectedIds(new Set(ids));
       } catch { /* ignore */ }
+      setBillingPrompt(!!settings?.formFBillingPrompt);
     }
   }, [settings, settingsLoading]);
 
   const saveMut = useMutation({
     mutationFn: () =>
-      api.put("/api/clinic-settings", { formFTestIds: JSON.stringify([...selectedIds]) }),
+      api.put("/api/clinic-settings", {
+        formFTestIds: JSON.stringify([...selectedIds]),
+        formFBillingPrompt: billingPrompt,
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clinic-settings"] });
     },
@@ -2825,8 +2833,21 @@ function FormFTestsTab() {
             </h2>
             <p className="text-sm text-muted-foreground mt-0.5">
               Mark which tests require PCPNDT Form F. When these tests are added in Billing Desk,
-              Husband's Name and Address will become mandatory before generating the bill.
+              Husband's Name and Address will be collected for Form F compliance.
             </p>
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                id="formFBillingPrompt"
+                type="checkbox"
+                checked={billingPrompt}
+                onChange={(e) => setBillingPrompt(e.target.checked)}
+                className="w-4 h-4 accent-primary"
+              />
+              <label htmlFor="formFBillingPrompt" className="text-xs text-muted-foreground cursor-pointer">
+                <span className="font-semibold text-foreground">Show popup after bill creation</span>
+                — Instead of blocking the bill, show a modal to collect address + guardian name <em>after</em> the bill is saved. This speeds up the billing desk while still ensuring Form F data is captured.
+              </label>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-primary">{selectedIds.size} test(s) selected</span>
