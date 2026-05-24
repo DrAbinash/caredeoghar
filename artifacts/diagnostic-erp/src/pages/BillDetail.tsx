@@ -76,7 +76,7 @@ type CancelRefundForm = {
 };
 
 type ChangeDoctorForm = {
-  newDoctorId: number;
+  newDoctorId: number | 0;
   reason: string;
   performedBy: string;
 };
@@ -443,9 +443,8 @@ export default function BillDetail({ id }: { id: number }) {
   });
 
   const onChangeDoctorSubmit = handleCD((d) => {
-    if (!d.newDoctorId || d.newDoctorId <= 0) return;
     changeDoctor.mutate({
-      newDoctorId: Number(d.newDoctorId),
+      newDoctorId: d.newDoctorId === 0 ? 0 : Number(d.newDoctorId),
       reason: d.reason.trim(),
       performedBy: d.performedBy.trim(),
     });
@@ -1384,23 +1383,38 @@ export default function BillDetail({ id }: { id: number }) {
                         d.name.toLowerCase().includes(q) ||
                         (d.specialization || "").toLowerCase().includes(q)
                       );
-                      return filtered.length === 0 ? (
-                        <div className="px-4 py-3 text-sm text-center text-muted-foreground">No doctors found</div>
-                      ) : filtered.map(d => (
-                        <button
-                          key={d.id}
-                          type="button"
-                          className="w-full text-left px-3 py-2.5 hover:bg-muted/50 flex items-center gap-2"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => { setCDVal("newDoctorId", d.id); setCdDoctorSearch(d.name); setCdDoctorSearchOpen(false); }}
-                        >
-                          <div className="w-7 h-7 rounded bg-primary/10 flex items-center justify-center flex-shrink-0 font-mono text-[11px] text-primary font-extrabold">#{d.id}</div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-bold">Dr. {d.name}</div>
-                            <div className="text-xs text-muted-foreground">{d.specialization || "N/A"}</div>
-                          </div>
-                        </button>
-                      ));
+                      return (
+                        <>
+                          <button
+                            type="button"
+                            className="w-full text-left px-3 py-2.5 hover:bg-muted/50 italic border-b border-border flex items-center gap-2"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => { setCDVal("newDoctorId", 0); setCdDoctorSearch("Walk-in / Self"); setCdDoctorSearchOpen(false); }}
+                          >
+                            <div className="w-7 h-7 rounded bg-amber-100 flex items-center justify-center flex-shrink-0">
+                              <Stethoscope size={12} className="text-amber-700" />
+                            </div>
+                            <div className="text-sm font-bold text-amber-700">Walk-in / Self (no referral)</div>
+                          </button>
+                          {filtered.length === 0 ? (
+                            <div className="px-4 py-3 text-sm text-center text-muted-foreground">No doctors found</div>
+                          ) : filtered.map(d => (
+                            <button
+                              key={d.id}
+                              type="button"
+                              className="w-full text-left px-3 py-2.5 hover:bg-muted/50 flex items-center gap-2"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => { setCDVal("newDoctorId", d.id); setCdDoctorSearch(d.name); setCdDoctorSearchOpen(false); }}
+                            >
+                              <div className="w-7 h-7 rounded bg-primary/10 flex items-center justify-center flex-shrink-0 font-mono text-[11px] text-primary font-extrabold">#{d.id}</div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-bold">Dr. {d.name}</div>
+                                <div className="text-xs text-muted-foreground">{d.specialization || "N/A"}</div>
+                              </div>
+                            </button>
+                          ))}
+                        </>
+                      );
                     })()}
                   </div>
                 )}

@@ -1091,7 +1091,7 @@ billsRouter.post("/:id/refund", async (req, res) => {
 billsRouter.post("/:id/change-doctor", async (req: StaffAuthRequest, res) => {
   const paramsParsed = z.object({ id: z.coerce.number().positive() }).safeParse(req.params);
   const bodyParsed = z.object({
-    newDoctorId: z.coerce.number().positive(),
+    newDoctorId: z.union([z.coerce.number().positive(), z.literal(0), z.null()]),
     reason: z.string().min(1),
     performedBy: z.string().min(1),
   }).safeParse(req.body);
@@ -1110,12 +1110,16 @@ billsRouter.post("/:id/change-doctor", async (req: StaffAuthRequest, res) => {
   const [oldDoctor] = order?.doctorId
     ? await db.select({ name: doctorsTable.name }).from(doctorsTable).where(eq(doctorsTable.id, order.doctorId))
     : [undefined];
-  const [newDoctor] = await db.select({ name: doctorsTable.name }).from(doctorsTable).where(eq(doctorsTable.id, newDoctorId));
-  if (!newDoctor) { res.status(400).json({ error: "New doctor not found" }); return; }
+
+  const isSelf = newDoctorId === 0 || newDoctorId === null;
+  const [newDoctor] = isSelf
+    ? [{ name: "Walk-in / Self" }]
+    : await db.select({ name: doctorsTable.name }).from(doctorsTable).where(eq(doctorsTable.id, newDoctorId as number));
+  if (!isSelf && !newDoctor) { res.status(400).json({ error: "New doctor not found" }); return; }
 
   await db.transaction(async (tx) => {
     // Update the order (doctor lives on the order, not the bill)
-    await tx.update(ordersTable).set({ doctorId: newDoctorId }).where(eq(ordersTable.id, bill.orderId));
+    await tx.update(ordersTable).set({ doctorId: isSelf ? null : newDoctorId }).where(eq(ordersTable.id, bill.orderId));
 
     // Audit
     await tx.insert(billAuditsTable).values({
@@ -1124,7 +1128,7 @@ billsRouter.post("/:id/change-doctor", async (req: StaffAuthRequest, res) => {
       reason,
       changeType: "referral",
       oldValue: oldDoctor?.name ?? "(none)",
-      newValue: newDoctor.name,
+      newValue: newDoctor?.name ?? "(none)",
     });
   });
 
