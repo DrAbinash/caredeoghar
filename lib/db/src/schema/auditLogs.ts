@@ -5,6 +5,13 @@ import { z } from "zod/v4";
 /**
  * Immutable audit trail for all sensitive operations across the ERP.
  * Logs are append-only. No edit or delete endpoints exist.
+ *
+ * Chain of hashes:
+ *   previousHash = chainHash of the preceding audit log (empty string for first).
+ *   chainHash    = SHA256(JSON(canonical fields + previousHash))
+ *
+ * Tampering with any row or inserting a row out of order breaks the chain
+ * and is detectable by the verification endpoint.
  */
 export const auditLogsTable = pgTable(
   "audit_logs",
@@ -22,6 +29,8 @@ export const auditLogsTable = pgTable(
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
     reason: text("reason"),                   // e.g. "Bill cancelled at patient request"
+    previousHash: text("previous_hash").notNull().default(""),
+    chainHash: text("chain_hash").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -30,6 +39,7 @@ export const auditLogsTable = pgTable(
     index("audit_module_idx").on(table.module),
     index("audit_entity_idx").on(table.entityType, table.entityId),
     index("audit_created_idx").on(table.createdAt),
+    index("audit_chain_hash_idx").on(table.chainHash),
   ],
 );
 

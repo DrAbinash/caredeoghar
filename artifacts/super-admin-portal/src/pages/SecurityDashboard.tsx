@@ -557,6 +557,17 @@ export default function SecurityDashboard({ onBack }: { onBack: () => void }) {
       </div>
 
       {/* Kill session confirmation */}
+      {/* Chain Integrity Check widget */}
+      <div className="bg-card border border-border rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-3 text-sm font-medium">
+          <Shield size={14} className="text-primary" />
+          Audit Chain Integrity
+        </div>
+        <div className="flex items-center gap-3">
+          <ChainVerifyButton />
+        </div>
+      </div>
+
       <Dialog open={!!killSession} onOpenChange={(o) => !o && setKillSession(null)}>
         <DialogContent>
           <DialogHeader>
@@ -574,5 +585,42 @@ export default function SecurityDashboard({ onBack }: { onBack: () => void }) {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function ChainVerifyButton() {
+  const { toast } = useToast();
+  const [result, setResult] = useState<{ integrity: string; checked: number; brokenAt: number | null } | null>(null);
+  const [pending, setPending] = useState(false);
+  const run = async () => {
+    setPending(true);
+    try {
+      const res = await fetch("/api/super-admin/security/verify-audit-chain", { method: "POST", headers: saAuthHeaders() });
+      const data = await res.json();
+      setResult(data);
+      if (data.integrity === "ok") {
+        toast({ title: "Audit chain verified", description: `${data.checked} entries checked — no tampering detected.` });
+      } else {
+        toast({ variant: "destructive", title: "Chain integrity broken!", description: `First mismatch at ID ${data.brokenAt}.` });
+      }
+    } catch (e) {
+      toast({ variant: "destructive", title: "Verification failed", description: String(e) });
+    } finally {
+      setPending(false);
+    }
+  };
+  return (
+    <>
+      <Button variant="outline" size="sm" onClick={run} disabled={pending}>
+        {pending ? <RefreshCw size={13} className="animate-spin mr-1" /> : <Shield size={13} className="mr-1" />}
+        {pending ? "Verifying…" : "Verify Chain"}
+      </Button>
+      {result && (
+        <Badge variant={result.integrity === "ok" ? "default" : "destructive"}>
+          {result.integrity === "ok" ? <CheckCircle2 size={12} className="mr-1" /> : <XCircle size={12} className="mr-1" />}
+          {result.integrity === "ok" ? `${result.checked} rows OK` : `Broken at #${result.brokenAt}`}
+        </Badge>
+      )}
+    </>
   );
 }

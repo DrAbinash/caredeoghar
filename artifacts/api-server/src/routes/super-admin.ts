@@ -56,6 +56,7 @@ import {
   getUsbKeyHeader,
 } from "../middleware/requireSuperAdminUsb";
 import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
+import { computeChainHash } from "../lib/audit";
 import {
   CreateLedgerBody,
   UpdateLedgerParams,
@@ -967,4 +968,61 @@ superAdminRouter.get("/security/data-exports", requireSuperAdminUsb, requireSupe
     .orderBy(desc(auditLogsTable.createdAt))
     .limit(200);
   res.json({ since: since.toISOString(), exports: rows });
+});
+
+// POST /api/super-admin/security/verify-audit-chain — cryptographic chain integrity check
+superAdminRouter.post("/security/verify-audit-chain", requireSuperAdminUsb, requireSuperAdmin, async (req, res): Promise<void> => {
+  const parsed = z.object({
+    fromId: z.coerce.number().int().positive().optional(),
+    limit: z.coerce.number().int().min(1).max(50000).default(10000),
+  }).safeParse(req.query);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid query" }); return; }
+
+  const { fromId, limit } = parsed.data;
+  const rows = await db
+    .select()
+    .from(auditLogsTable)
+    .where(fromId ? gte(auditLogsTable.id, fromId) : undefined)
+    .orderBy(asc(auditLogsTable.id))
+    .limit(limit);
+
+  let brokenAt: number | null = null;
+  let prevHash = "";
+  for (const row of rows) {
+    const expectedPrev = prevHash;
+    if (row.previousHash !== expectedPrev && !(expectedPrev === "" && row.previousHash === "")) {
+      brokenAt = row.id;
+      break;
+    }
+    const canonical = JSON.stringify({
+      userId: row.userId,
+      userName: row.userName,
+      role: row.role,
+      action: row.action,
+      module: row.module,
+      entityType: row.entityType,
+      entityId: row.entityId,
+      oldValue: row.oldValue,
+      newValue: row.newValue,
+      reason: row.reason,
+      ipAddress: row.ipAddress,
+      userAgent: row.userAgent,
+      createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : null,
+      previousHash: row.previousHash,
+    });
+    const recomputed = computeChainHash(canonical);
+    if (recomputed !== row.chainHash) {
+      brokenAt = row.id;
+      break;
+    }
+    prevHash = row.chainHash;
+  }
+
+  res.json({
+    checked: rows.length,
+    firstId: rows[0]?.id ?? null,
+    lastId: rows[rows.length - 1]?.id ?? null,
+    integrity: brokenAt === null ? "ok" : "broken",
+    brokenAt,
+  });
 });

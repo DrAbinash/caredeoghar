@@ -368,6 +368,52 @@ async function runStartupMigrations(): Promise<void> {
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS max_failed_login_attempts INTEGER NOT NULL DEFAULT 5;
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS account_lockout_duration_minutes INTEGER NOT NULL DEFAULT 30;
 
+      -- ── Hospital-Grade Safety Phase 3: Tamper-evident audit chain (May 2026) ─
+      ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS previous_hash TEXT NOT NULL DEFAULT '';
+      ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS chain_hash TEXT NOT NULL DEFAULT '';
+
+      -- Backfill legacy rows: compute chain hashes chronologically so the
+      -- chain is consistent.  We process in batches of 1000 to avoid memory
+      -- pressure on large tables.
+      DO $$
+      DECLARE
+        r RECORD;
+        prev_hash TEXT := '';
+        payload TEXT;
+        h TEXT;
+      BEGIN
+        FOR r IN SELECT id, user_id, user_name, role, action, module,
+                        entity_type, entity_id, old_value, new_value,
+                        reason, ip_address, user_agent, created_at
+                   FROM audit_logs
+                  WHERE chain_hash = ''
+                  ORDER BY id ASC
+        LOOP
+          payload := jsonb_build_object(
+            'userId',       r.user_id,
+            'userName',     r.user_name,
+            'role',         r.role,
+            'action',       r.action,
+            'module',       r.module,
+            'entityType',   r.entity_type,
+            'entityId',     r.entity_id,
+            'oldValue',     r.old_value,
+            'newValue',     r.new_value,
+            'reason',       r.reason,
+            'ipAddress',    r.ip_address,
+            'userAgent',    r.user_agent,
+            'createdAt',    r.created_at,
+            'previousHash', prev_hash
+          )::text;
+          h := encode(digest(payload, 'sha256'), 'hex');
+          UPDATE audit_logs
+             SET previous_hash = prev_hash,
+                 chain_hash = h
+           WHERE id = r.id;
+          prev_hash := h;
+        END LOOP;
+      END $$;
+
       -- ── Remote super-admin login bypass ────────────────────────────────
       ALTER TABLE users ADD COLUMN IF NOT EXISTS remote_login_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 
