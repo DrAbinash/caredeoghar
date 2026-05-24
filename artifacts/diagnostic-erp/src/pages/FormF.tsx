@@ -1112,270 +1112,306 @@ export default function FormF() {
       {activeTab === "form" && <div className="flex-1 overflow-y-auto p-4">
         <div className="flex gap-4 max-w-7xl mx-auto">
 
-          {/* ── LEFT: Edit Form ── */}
-          <div className="flex-1 bg-white border border-gray-200 rounded-xl p-4 space-y-3 shadow-sm">
-            <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
-              <span className="text-sm font-bold text-gray-800">Edit Form Fields</span>
-              <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">All fields editable</span>
-            </div>
+          {/* ── LEFT: Edit Form (two sections) ── */}
+          <div className="flex-1 space-y-3">
+            {/* Section A: MUST-FILL fields — large, prominent */}
+            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+              <div className="flex items-center gap-2 pb-2 border-b border-gray-100 mb-3">
+                <span className="text-sm font-bold text-gray-800">Details to Fill</span>
+                <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">Type these fields</span>
+              </div>
+              <div className="space-y-3">
+                <LabelRow label="Patient Name *">
+                  <Input {...inp("patientName")} placeholder="Full name of patient" className="text-sm h-9" />
+                </LabelRow>
+                <div className="flex gap-3">
+                  <LabelRow label="Age *">
+                    <Input {...inp("age")} placeholder="Years" className="text-sm h-9" />
+                  </LabelRow>
+                  <LabelRow label="Tel. No.">
+                    <Input {...inp("mobile")} placeholder="Mobile" className="text-sm h-9" />
+                  </LabelRow>
+                </div>
+                <LabelRow label="Husband / Father Name *">
+                  <div className="flex gap-2">
+                    <Input {...inp("husbandFatherName")} placeholder="Required for PCPNDT" className="flex-1 text-sm h-9" />
+                    <label className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-dashed border-orange-300 bg-orange-50 cursor-pointer text-xs transition-colors ${idCardUploading ? "opacity-60 cursor-wait" : "hover:bg-orange-100 text-orange-700"}`}>
+                      <Camera size={12} className={idCardUploading ? "animate-pulse" : ""} />
+                      <span>{idCardUploading ? "Scanning…" : "Scan ID"}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setIdCardUploading(true);
+                          try {
+                            const reader = new FileReader();
+                            reader.onload = async () => {
+                              const dataUrl = String(reader.result ?? "");
+                              const base64 = dataUrl.split(",")[1];
+                              if (!base64) { toast({ title: "Failed to read image", variant: "destructive" }); setIdCardUploading(false); return; }
+                              setIdCardImageUrl(dataUrl); // keep for print preview
+                              const resp = await api.post<{
+                                ocr?: { guardianName?: string; address?: string; documentType?: string; confidence?: string; } | null;
+                                recordId?: number;
+                              }>("/api/form-f/upload-id", {
+                                formFId: 0,
+                                imageBase64: base64,
+                                mimeType: file.type,
+                              });
+                              setIdCardOcrResult(resp.ocr ?? null);
+                              if (resp.ocr?.guardianName) setIdCardExtractedName(resp.ocr.guardianName);
+                              if (resp.ocr?.address) setIdCardExtractedAddress(resp.ocr.address);
+                              toast({ title: resp.ocr ? `ID scanned: ${resp.ocr.documentType}` : "ID scanned (OCR unavailable)" });
+                              setIdCardUploading(false);
+                            };
+                            reader.readAsDataURL(file);
+                          } catch { toast({ title: "Upload failed", variant: "destructive" }); setIdCardUploading(false); }
+                        }}
+                      />
+                    </label>
+                  </div>
+                </LabelRow>
 
-            <LabelRow label="Bill No. (auto)">
-              <Input {...inp("billNumber")} placeholder="Auto-filled on Fetch" />
-            </LabelRow>
-            <LabelRow label="Patient Name *">
-              <Input {...inp("patientName")} placeholder="Full name of patient" />
-            </LabelRow>
-            <div className="flex gap-3">
-              <LabelRow label="Age *">
-                <Input {...inp("age")} placeholder="Years" />
-              </LabelRow>
-              <LabelRow label="Tel. No.">
-                <Input {...inp("mobile")} placeholder="Mobile" />
-              </LabelRow>
-            </div>
-            <LabelRow label="Husband/Father Name *">
-              <div className="flex gap-2">
-                <Input {...inp("husbandFatherName")} placeholder="Required for PCPNDT" className="flex-1" />
-                <label className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-dashed border-orange-300 bg-orange-50 cursor-pointer text-xs transition-colors ${idCardUploading ? "opacity-60 cursor-wait" : "hover:bg-orange-100 text-orange-700"}`}>
-                  <Camera size={12} className={idCardUploading ? "animate-pulse" : ""} />
-                  <span>{idCardUploading ? "Scanning…" : "Scan ID"}</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      setIdCardUploading(true);
-                      try {
-                        const reader = new FileReader();
-                        reader.onload = async () => {
-                          const dataUrl = String(reader.result ?? "");
-                          const base64 = dataUrl.split(",")[1];
-                          if (!base64) { toast({ title: "Failed to read image", variant: "destructive" }); setIdCardUploading(false); return; }
-                          setIdCardImageUrl(dataUrl); // keep for print preview
-                          const resp = await api.post<{
-                            ocr?: { guardianName?: string; address?: string; documentType?: string; confidence?: string; } | null;
-                            recordId?: number;
-                          }>("/api/form-f/upload-id", {
-                            formFId: 0,
-                            imageBase64: base64,
-                            mimeType: file.type,
-                          });
-                          setIdCardOcrResult(resp.ocr ?? null);
-                          if (resp.ocr?.guardianName) setIdCardExtractedName(resp.ocr.guardianName);
-                          if (resp.ocr?.address) setIdCardExtractedAddress(resp.ocr.address);
-                          toast({ title: resp.ocr ? `ID scanned: ${resp.ocr.documentType}` : "ID scanned (OCR unavailable)" });
-                          setIdCardUploading(false);
-                        };
-                        reader.readAsDataURL(file);
-                      } catch { toast({ title: "Upload failed", variant: "destructive" }); setIdCardUploading(false); }
+                {/* ── AI-extracted ID card data review ── */}
+                {(idCardOcrResult || idCardExtractedName || idCardExtractedAddress) && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5 space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <AlertTriangle size={12} className="text-blue-600" />
+                      <span className="text-[11px] font-semibold text-blue-800">AI-extracted ID card data — please verify</span>
+                      {idCardOcrResult && (
+                        <Badge variant="outline" className="text-[10px] h-5 ml-auto">
+                          {idCardOcrResult.confidence} confidence
+                        </Badge>
+                      )}
+                    </div>
+                    {idCardExtractedName && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-blue-700 flex-1 truncate">
+                          <span className="font-semibold">Guardian:</span> {idCardExtractedName}
+                        </span>
+                        <Button
+                          size="sm" variant="ghost" className="h-6 text-[10px] px-2 py-0"
+                          onClick={() => { set("husbandFatherName", idCardExtractedName); setIdCardVerified(true); toast({ title: "Guardian name accepted" }); }}
+                        >
+                          <CheckCircle2 size={10} className="mr-1" /> Use this
+                        </Button>
+                      </div>
+                    )}
+                    {idCardExtractedAddress && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-blue-700 flex-1 truncate">
+                          <span className="font-semibold">Address:</span> {idCardExtractedAddress}
+                        </span>
+                        <Button
+                          size="sm" variant="ghost" className="h-6 text-[10px] px-2 py-0"
+                          onClick={() => { set("address", idCardExtractedAddress); setIdCardVerified(true); toast({ title: "Address accepted" }); }}
+                        >
+                          <CheckCircle2 size={10} className="mr-1" /> Use this
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <LabelRow label="Full Address *">
+                  <Input {...inp("address")} placeholder="Patient's full address" className="text-sm h-9" />
+                </LabelRow>
+                <LabelRow label="No. of children">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1">Boy</span>
+                      <Input type="number" min={0} max={20} value={form.boyCount} onChange={(e) => set("boyCount", e.target.value)} className="h-9 text-sm w-16 text-center" placeholder="0" />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-medium text-pink-700 bg-pink-50 border border-pink-200 rounded px-2 py-1">Girl</span>
+                      <Input type="number" min={0} max={20} value={form.girlCount} onChange={(e) => set("girlCount", e.target.value)} className="h-9 text-sm w-16 text-center" placeholder="0" />
+                    </div>
+                    <span className="text-xs text-muted-foreground">(enter count per gender)</span>
+                  </div>
+                </LabelRow>
+                <LabelRow label="Referred by">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Radio name="referredBy" val="Self" label="Self" />
+                    <Radio name="referredBy" val="Doctor" label="Doctor" />
+                    {form.referredBy === "Doctor" && (
+                      <Input {...inp("referredByName")} placeholder="Doctor name" className="h-9 text-sm w-48" />
+                    )}
+                  </div>
+                </LabelRow>
+                <LabelRow label="LMP / weeks">
+                  <Input {...inp("lmpWeeks")} placeholder="e.g. 12 weeks / 15-01-2026" className="text-sm h-9" />
+                </LabelRow>
+                <LabelRow label="Doctor name">
+                  <Input
+                    value={form.doctorName}
+                    list="formf-doctor-options"
+                    onChange={(e) => {
+                      const name = e.target.value;
+                      const match = doctorsForPick.find((d) => d.name === name);
+                      setForm((prev) => ({
+                        ...prev,
+                        doctorName: name,
+                        doctorRegNo: match?.registrationNumber ?? prev.doctorRegNo,
+                      }));
                     }}
+                    placeholder="Type or pick a doctor"
+                    className="text-sm h-9"
                   />
-                </label>
-              </div>
-            </LabelRow>
-
-            {/* ── AI-extracted ID card data review ── */}
-            {(idCardOcrResult || idCardExtractedName || idCardExtractedAddress) && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5 space-y-1.5">
-                <div className="flex items-center gap-1.5">
-                  <AlertTriangle size={12} className="text-blue-600" />
-                  <span className="text-[11px] font-semibold text-blue-800">AI-extracted ID card data — please verify</span>
-                  {idCardOcrResult && (
-                    <Badge variant="outline" className="text-[10px] h-5 ml-auto">
-                      {idCardOcrResult.confidence} confidence
-                    </Badge>
-                  )}
-                </div>
-                {idCardExtractedName && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-blue-700 flex-1 truncate">
-                      <span className="font-semibold">Guardian:</span> {idCardExtractedName}
-                    </span>
-                    <Button
-                      size="sm" variant="ghost" className="h-6 text-[10px] px-2 py-0"
-                      onClick={() => { set("husbandFatherName", idCardExtractedName); setIdCardVerified(true); toast({ title: "Guardian name accepted" }); }}
-                    >
-                      <CheckCircle2 size={10} className="mr-1" /> Use this
-                    </Button>
+                  <datalist id="formf-doctor-options">
+                    {doctorsForPick.map((d) => (
+                      <option key={d.id} value={d.name}>
+                        {d.registrationNumber ? `Reg. ${d.registrationNumber}` : "No reg. no on file"}
+                      </option>
+                    ))}
+                  </datalist>
+                </LabelRow>
+                <LabelRow label="Doctor Reg. No.">
+                  <Input {...inp("doctorRegNo")} placeholder="Auto-filled from selected doctor; editable" className="text-sm h-9" />
+                </LabelRow>
+                <LabelRow label="Indication">
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-1">
+                      <Radio name="indicationType" val="routine" label="Routine antenatal" />
+                      <Radio name="indicationType" val="age" label="Adv. maternal age" />
+                      <Radio name="indicationType" val="genetic" label="Genetic disease" />
+                      <Radio name="indicationType" val="previous" label="Prev. child issue" />
+                      <Radio name="indicationType" val="other" label="Other" />
+                    </div>
+                    {(form.indicationType === "previous" || form.indicationType === "other") && (
+                      <Input {...inp("indicationDetail")} placeholder="Specify details" className="h-9 text-sm" />
+                    )}
+                    {form.indicationType === "previous" && (
+                      <Input {...inp("previousChildIssue")} placeholder="Previous child details" className="h-9 text-sm" />
+                    )}
                   </div>
-                )}
-                {idCardExtractedAddress && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-blue-700 flex-1 truncate">
-                      <span className="font-semibold">Address:</span> {idCardExtractedAddress}
-                    </span>
-                    <Button
-                      size="sm" variant="ghost" className="h-6 text-[10px] px-2 py-0"
-                      onClick={() => { set("address", idCardExtractedAddress); setIdCardVerified(true); toast({ title: "Address accepted" }); }}
-                    >
-                      <CheckCircle2 size={10} className="mr-1" /> Use this
-                    </Button>
+                </LabelRow>
+                <LabelRow label="Invasive procedure">
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <Radio name="invasiveProcedure" val="notdone" label="Not done" />
+                      <Radio name="invasiveProcedure" val="done" label="Done:" />
+                    </div>
+                    {form.invasiveProcedure === "done" && (
+                      <Input {...inp("invasiveProcedureDetail")} placeholder="Specify" className="h-9 text-sm" />
+                    )}
                   </div>
-                )}
+                </LabelRow>
+                <LabelRow label="Complication">
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <Radio name="complication" val="nil" label="Nil" />
+                      <Radio name="complication" val="specify" label="Specify:" />
+                    </div>
+                    {form.complication === "specify" && (
+                      <Input {...inp("complicationDetail")} placeholder="Details" className="h-9 text-sm" />
+                    )}
+                  </div>
+                </LabelRow>
+                <LabelRow label="Lab tests">
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <Radio name="labTests" val="notadvised" label="Not advised" />
+                      <Radio name="labTests" val="advised" label="Advised:" />
+                    </div>
+                    {form.labTests === "advised" && (
+                      <Input {...inp("labTestsDetail")} placeholder="Tests advised" className="h-9 text-sm" />
+                    )}
+                  </div>
+                </LabelRow>
+                <LabelRow label="USG result">
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <Radio name="ultrasoundResult" val="normal" label="Normal" />
+                      <Radio name="ultrasoundResult" val="abnormal" label="Abnormal:" />
+                    </div>
+                    {form.ultrasoundResult === "abnormal" && (
+                      <Input {...inp("abnormality")} placeholder="Abnormality details" className="h-9 text-sm" />
+                    )}
+                  </div>
+                </LabelRow>
+                <LabelRow label="Procedure date">
+                  <Input type="date" {...inp("procedureDate")} className="text-sm h-9" />
+                </LabelRow>
+                <LabelRow label="Result conveyed">
+                  <Input {...inp("resultConveyed")} className="text-sm h-9" />
+                </LabelRow>
+                <LabelRow label="MTP advised">
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <Radio name="mtpAdvised" val="no" label="No" />
+                      <Radio name="mtpAdvised" val="yes" label="Yes" />
+                    </div>
+                    {form.mtpAdvised === "yes" && (
+                      <Input type="date" {...inp("mtpDate")} className="h-9 text-sm w-48" />
+                    )}
+                  </div>
+                </LabelRow>
               </div>
-            )}
+            </div>
 
-            <LabelRow label="Full Address *">
-              <Input {...inp("address")} placeholder="Patient's full address" />
-            </LabelRow>
-            <LabelRow label="No. of children">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1">Boy</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={20}
-                    value={form.boyCount}
-                    onChange={(e) => set("boyCount", e.target.value)}
-                    className="h-8 text-sm w-16 text-center"
-                    placeholder="0"
+            {/* Section B: AUTO-FILLED from Billing / Defaults — compact, muted */}
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 shadow-sm">
+              <div className="flex items-center gap-2 pb-1 border-b border-gray-200 mb-2">
+                <span className="text-xs font-bold text-gray-600">Auto-filled from Billing</span>
+                <span className="text-[10px] bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">Pre-filled</span>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-start gap-2">
+                  <span className="text-[11px] font-semibold text-gray-500 w-24 flex-shrink-0 pt-1">Bill No.</span>
+                  <Input {...inp("billNumber")} placeholder="Auto-filled on Fetch" className="h-7 text-xs flex-1 bg-white" />
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-[11px] font-semibold text-gray-500 w-24 flex-shrink-0 pt-1">Centre Name</span>
+                  <textarea
+                    value={form.centreName}
+                    onChange={(e) => set("centreName", e.target.value)}
+                    rows={2}
+                    className="flex-1 text-xs border rounded-md px-2 py-1 bg-white resize-none focus:ring-1 focus:ring-primary focus:border-primary"
                   />
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-medium text-pink-700 bg-pink-50 border border-pink-200 rounded px-2 py-1">Girl</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={20}
-                    value={form.girlCount}
-                    onChange={(e) => set("girlCount", e.target.value)}
-                    className="h-8 text-sm w-16 text-center"
-                    placeholder="0"
-                  />
+                <div className="flex items-start gap-2">
+                  <span className="text-[11px] font-semibold text-gray-500 w-24 flex-shrink-0 pt-1">Reg. No.</span>
+                  <Input {...inp("registrationNo")} className="h-7 text-xs w-40 bg-white" />
                 </div>
-                <span className="text-xs text-muted-foreground">(enter count per gender)</span>
-              </div>
-            </LabelRow>
-            <LabelRow label="Referred by">
-              <div className="flex items-center gap-2 flex-wrap">
-                <Radio name="referredBy" val="Self" label="Self" />
-                <Radio name="referredBy" val="Doctor" label="Doctor" />
-                {form.referredBy === "Doctor" && (
-                  <Input {...inp("referredByName")} placeholder="Doctor name" className="h-7 text-xs w-40" />
-                )}
-              </div>
-            </LabelRow>
-            <LabelRow label="LMP / weeks">
-              <Input {...inp("lmpWeeks")} placeholder="e.g. 12 weeks / 15-01-2026" />
-            </LabelRow>
-            <LabelRow label="Genetic history">
-              <div className="space-y-1">
-                <div>
-                  <Radio name="geneticHistory" val="none" label="No significant history" />
-                  <Radio name="geneticHistory" val="specify" label="Specify:" />
-                  {form.geneticHistory === "specify" && (
-                    <Input {...inp("geneticHistoryDetail")} placeholder="Details" className="h-7 text-xs mt-1" />
-                  )}
+                <div className="flex items-start gap-2">
+                  <span className="text-[11px] font-semibold text-gray-500 w-24 flex-shrink-0 pt-1">Procedure</span>
+                  <Input {...inp("procedure")} placeholder="e.g. Ultrasound - ULTRASONOGRAPHY" className="h-7 text-xs flex-1 bg-white" />
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">Basis:</span>
-                  <Check field="basisDiagnosisClinical" label="Clinical" />
-                  <Check field="basisDiagnosisUsg" label="USG" />
-                  <span className="text-xs">Other:</span>
-                  <Input {...inp("basisDiagnosisOther")} placeholder="" className="h-7 text-xs w-28" />
+                <div className="flex items-start gap-2">
+                  <span className="text-[11px] font-semibold text-gray-500 w-24 flex-shrink-0 pt-1">Purpose</span>
+                  <Input {...inp("procedurePurpose")} placeholder="e.g. Obstetric ultrasonography" className="h-7 text-xs flex-1 bg-white" />
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-[11px] font-semibold text-gray-500 w-24 flex-shrink-0 pt-1">Genetic Hx</span>
+                  <div className="flex-1 space-y-1">
+                    <div className="flex gap-1">
+                      <Radio name="geneticHistory" val="none" label="None" />
+                      <Radio name="geneticHistory" val="specify" label="Specify:" />
+                    </div>
+                    {form.geneticHistory === "specify" && (
+                      <Input {...inp("geneticHistoryDetail")} placeholder="Details" className="h-7 text-xs" />
+                    )}
+                    <div className="flex items-center gap-1 text-[11px] text-gray-500">
+                      <span>Basis:</span>
+                      <Check field="basisDiagnosisClinical" label="Clinical" />
+                      <Check field="basisDiagnosisUsg" label="USG" />
+                      <span>Other:</span>
+                      <Input {...inp("basisDiagnosisOther")} placeholder="" className="h-7 text-xs w-24" />
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-[11px] font-semibold text-gray-500 w-24 flex-shrink-0 pt-1">Date / Place</span>
+                  <div className="flex gap-2 flex-1">
+                    <Input type="date" {...inp("date")} className="h-7 text-xs flex-1 bg-white" />
+                    <Input {...inp("place")} className="h-7 text-xs flex-1 bg-white" placeholder="Place" />
+                  </div>
                 </div>
               </div>
-            </LabelRow>
-            <LabelRow label="10. Indication">
-              <div className="space-y-1">
-                <div className="flex flex-wrap gap-1">
-                  <Radio name="indicationType" val="routine" label="Routine antenatal" />
-                  <Radio name="indicationType" val="age" label="Adv. maternal age" />
-                  <Radio name="indicationType" val="genetic" label="Genetic disease" />
-                  <Radio name="indicationType" val="previous" label="Prev. child issue" />
-                  <Radio name="indicationType" val="other" label="Other" />
-                </div>
-                {(form.indicationType === "previous" || form.indicationType === "other") && (
-                  <Input {...inp("indicationDetail")} placeholder="Specify details" className="h-7 text-xs" />
-                )}
-                {form.indicationType === "previous" && (
-                  <Input {...inp("previousChildIssue")} placeholder="Previous child details" className="h-7 text-xs" />
-                )}
-              </div>
-            </LabelRow>
-            <LabelRow label="11. Procedure">
-              <Input {...inp("procedure")} placeholder="e.g. Ultrasound - ULTRASONOGRAPHY" />
-            </LabelRow>
-            <LabelRow label="Purpose">
-              <Input {...inp("procedurePurpose")} placeholder="e.g. Obstetric ultrasonography" />
-            </LabelRow>
-            <LabelRow label="Doctor name">
-              <Input
-                value={form.doctorName}
-                list="formf-doctor-options"
-                onChange={(e) => {
-                  const name = e.target.value;
-                  const match = doctorsForPick.find((d) => d.name === name);
-                  setForm((prev) => ({
-                    ...prev,
-                    doctorName: name,
-                    // Auto-fill reg no whenever the typed name exactly matches a saved doctor.
-                    doctorRegNo: match?.registrationNumber ?? prev.doctorRegNo,
-                  }));
-                }}
-                placeholder="Type or pick a doctor"
-              />
-              <datalist id="formf-doctor-options">
-                {doctorsForPick.map((d) => (
-                  <option key={d.id} value={d.name}>
-                    {d.registrationNumber ? `Reg. ${d.registrationNumber}` : "No reg. no on file"}
-                  </option>
-                ))}
-              </datalist>
-            </LabelRow>
-            <LabelRow label="Doctor Reg. No.">
-              <Input {...inp("doctorRegNo")} placeholder="Auto-filled from selected doctor; editable" />
-            </LabelRow>
-            <LabelRow label="Invasive procedure">
-              <Radio name="invasiveProcedure" val="notdone" label="Not done" />
-              <Radio name="invasiveProcedure" val="done" label="Done:" />
-              {form.invasiveProcedure === "done" && (
-                <Input {...inp("invasiveProcedureDetail")} placeholder="Specify" className="h-7 text-xs mt-1" />
-              )}
-            </LabelRow>
-            <LabelRow label="12. Complication">
-              <Radio name="complication" val="nil" label="Nil" />
-              <Radio name="complication" val="specify" label="Specify:" />
-              {form.complication === "specify" && (
-                <Input {...inp("complicationDetail")} placeholder="Details" className="h-7 text-xs mt-1" />
-              )}
-            </LabelRow>
-            <LabelRow label="13. Lab tests">
-              <Radio name="labTests" val="notadvised" label="Not advised" />
-              <Radio name="labTests" val="advised" label="Advised:" />
-              {form.labTests === "advised" && (
-                <Input {...inp("labTestsDetail")} placeholder="Tests advised" className="h-7 text-xs mt-1" />
-              )}
-            </LabelRow>
-            <LabelRow label="14(b). USG result">
-              <Radio name="ultrasoundResult" val="normal" label="Normal" />
-              <Radio name="ultrasoundResult" val="abnormal" label="Abnormal:" />
-              {form.ultrasoundResult === "abnormal" && (
-                <Input {...inp("abnormality")} placeholder="Abnormality details" className="h-7 text-xs mt-1" />
-              )}
-            </LabelRow>
-            <LabelRow label="15. Procedure date">
-              <Input type="date" {...inp("procedureDate")} />
-            </LabelRow>
-            <LabelRow label="17. Result conveyed">
-              <Input {...inp("resultConveyed")} />
-            </LabelRow>
-            <LabelRow label="18. MTP advised">
-              <Radio name="mtpAdvised" val="no" label="No" />
-              <Radio name="mtpAdvised" val="yes" label="Yes" />
-              {form.mtpAdvised === "yes" && (
-                <Input type="date" {...inp("mtpDate")} className="h-7 text-xs mt-1 w-40" />
-              )}
-            </LabelRow>
-            <LabelRow label="Date / Place">
-              <div className="flex gap-2">
-                <Input type="date" {...inp("date")} className="flex-1 h-7 text-xs" />
-                <Input {...inp("place")} className="flex-1 h-7 text-xs" placeholder="Place" />
-              </div>
-            </LabelRow>
+            </div>
           </div>
 
           {/* ── RIGHT: A4 Preview ── */}
