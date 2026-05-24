@@ -10,6 +10,7 @@ import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import { db } from "@workspace/db";
 import { tcpProbe } from "../lib/pacs/providers.js";
+import { testNodeConnection } from "../services/dicom-pull-agent/dimse-agent";
 import {
   dicomRoutingRulesTable,
   dicomPulledStudiesTable,
@@ -17,6 +18,7 @@ import {
   radiologyScheduledProceduresTable,
   pacsSettingsTable,
   dicomModalitiesTable,
+  dicomNodesTable,
   pacsLogsTable,
   radiologyWorklistTable,
   radiologyStudiesTable,
@@ -1876,6 +1878,83 @@ router.post("/ai-inference-test", async (req, res) => {
   } catch (err: any) {
     const latency = Date.now() - start;
     res.status(200).json({ ok: false, error: err.name === "AbortError" ? "Timeout" : err.message, latency });
+  }
+});
+
+// ─── DICOM Node C-ECHO test (in-process DIMSE) ───────────────────────────────
+//
+// POST /api/radiology/nodes/:id/echo-test
+// Tests connectivity to a dicom_nodes row using the in-process dcmjs-dimse
+// agent — no external DCMTK tools needed.  Returns real C-ECHO latency.
+
+router.post("/nodes/:id/echo-test", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  const [node] = await db
+    .select()
+    .from(dicomNodesTable)
+    .where(eq(dicomNodesTable.id, id));
+
+  if (!node) {
+    res.status(404).json({ error: "DICOM node not found" });
+    return;
+  }
+
+  if (!node.isActive) {
+    res.status(400).json({ error: "Node is inactive" });
+    return;
+  }
+
+  if (!node.host || !node.port) {
+    res.status(400).json({ error: "Node has no host/port configured" });
+    return;
+  }
+
+  try {
+    const result = await testNodeConnection({
+      host: node.host,
+      port: node.port,
+      aeTitle: node.aeTitle,
+      modality: node.modality,
+    });
+
+    // Persist telemetry back into the node row
+    await db
+      .update(dicomNodesTable)
+      .set({
+        lastTestAt: new Date(),
+        lastTestStatus: result.ok ? "success" : "failed",
+        lastTestMessage: result.error ?? "C-ECHO OK",
+        lastTestLatencyMs: result.latencyMs,
+      })
+      .where(eq(dicomNodesTable.id, id));
+
+    res.json({
+      ok: result.ok,
+      latencyMs: result.latencyMs,
+      source: "DIMSE_NATIVE",
+      node: {
+        id: node.id,
+        aeTitle: node.aeTitle,
+        host: node.host,
+        port: node.port,
+        modality: node.modality,
+      },
+      error: result.error ?? null,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(502).json({
+      ok: false,
+      latencyMs: null,
+      source: "DIMSE_NATIVE",
+      error: msg,
+      hint: "Make sure dcmjs-dimse is installed and the agent module loaded successfully.",
+    });
   }
 });
 
