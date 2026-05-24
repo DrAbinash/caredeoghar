@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { db } from "@workspace/db";
-import { whatsappSettingsTable, whatsappConversationsTable, clinicSettingsTable } from "@workspace/db/schema";
+import { whatsappSettingsTable, whatsappNumbersTable, whatsappConversationsTable, clinicSettingsTable } from "@workspace/db/schema";
 import { eq, desc, sql, ilike } from "drizzle-orm";
 import { requireStaffPermission } from "../middleware/requireStaffAuth";
 import { geminiGenerate } from "@workspace/integrations-gemini-ai";
@@ -13,6 +13,33 @@ async function getOrCreateSettings() {
   if (row) return row;
   const [created] = await db.insert(whatsappSettingsTable).values({}).returning();
   return created;
+}
+
+// ── Number config helper ──
+interface NumberConfig {
+  phoneNumberId: string;
+  accessToken: string;
+}
+
+/** Resolve the number that should be used for a given role.
+ *  If numbers table has entries, pick the first enabled number matching the role.
+ *  Falls back to the legacy global settings if no numbers exist. */
+async function resolveNumber(role: string): Promise<NumberConfig | null> {
+  const numbers = await db.select().from(whatsappNumbersTable).where(eq(whatsappNumbersTable.enabled, true));
+  const match = numbers.find((n) => n.role === role) ?? numbers.find((n) => n.isDefault);
+  if (match && match.phoneNumberId && match.accessToken) {
+    return { phoneNumberId: match.phoneNumberId, accessToken: match.accessToken };
+  }
+  // Legacy fallback
+  const s = await getOrCreateSettings();
+  if (s.phoneNumberId && s.accessToken) {
+    return { phoneNumberId: s.phoneNumberId, accessToken: s.accessToken };
+  }
+  return null;
+}
+
+async function resolveDefaultNumber(): Promise<NumberConfig | null> {
+  return resolveNumber("general");
 }
 
 // ─── Existing Settings & Send Routes ──────────────────────────────────────────
@@ -48,12 +75,96 @@ whatsappRouter.put("/settings", requireStaffPermission("/settings"), async (req,
 });
 
 whatsappRouter.post("/test", requireStaffPermission("/settings"), async (req, res): Promise<void> => {
-  const { phone } = req.body as { phone?: string };
+  const { phone, numberId } = req.body as { phone?: string; numberId?: number };
   if (!phone) {
     res.status(400).json({ error: "phone required" });
     return;
   }
-  const result = await sendBillWhatsapp({ phone, patientName: "Test User", billNumber: "TEST-0001", totalAmount: 0, tokenNo: 1 });
+  const result = await sendBillWhatsapp({ phone, patientName: "Test User", billNumber: "TEST-0001", totalAmount: 0, tokenNo: 1, numberId });
+  res.json(result);
+});
+
+// ── WhatsApp Numbers CRUD ──
+
+whatsappRouter.get("/numbers", requireStaffPermission("/settings"), async (_req, res): Promise<void> => {
+  const rows = await db.select().from(whatsappNumbersTable).orderBy(desc(whatsappNumbersTable.isDefault), desc(whatsappNumbersTable.createdAt));
+  res.json(rows.map((r) => ({ ...r, accessToken: r.accessToken ? "••••••••" : "" })));
+});
+
+whatsappRouter.post("/numbers", requireStaffPermission("/settings"), async (req, res): Promise<void> => {
+  const body = req.body ?? {};
+  if (!body.name?.trim() || !body.phoneNumberId?.trim()) {
+    res.status(400).json({ error: "name and phoneNumberId required" });
+    return;
+  }
+  const role = (body.role === "form_f" || body.role === "reports") ? body.role : "general";
+  const values = {
+    name: String(body.name).trim(),
+    phoneNumberId: String(body.phoneNumberId).trim(),
+    displayNumber: String(body.displayNumber ?? "").trim(),
+    accessToken: String(body.accessToken ?? "").trim(),
+    role,
+    enabled: !!body.enabled,
+    isDefault: !!body.isDefault,
+  };
+  // If marking as default, clear other defaults
+  if (values.isDefault) {
+    await db.update(whatsappNumbersTable).set({ isDefault: false }).where(eq(whatsappNumbersTable.isDefault, true));
+  }
+  const [row] = await db.insert(whatsappNumbersTable).values(values).returning();
+  res.json({ ...row, accessToken: "" });
+});
+
+whatsappRouter.put("/numbers/:id", requireStaffPermission("/settings"), async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  const body = req.body ?? {};
+  const updates: Record<string, unknown> = { updatedAt: new Date() };
+  if (typeof body.name === "string") updates.name = body.name.trim();
+  if (typeof body.phoneNumberId === "string") updates.phoneNumberId = body.phoneNumberId.trim();
+  if (typeof body.displayNumber === "string") updates.displayNumber = body.displayNumber.trim();
+  if (typeof body.accessToken === "string" && body.accessToken && body.accessToken !== "••••••••") {
+    updates.accessToken = body.accessToken.trim();
+  }
+  if (body.role === "general" || body.role === "form_f" || body.role === "reports") updates.role = body.role;
+  if (body.enabled !== undefined) updates.enabled = !!body.enabled;
+  if (body.isDefault !== undefined) updates.isDefault = !!body.isDefault;
+
+  if (updates.isDefault) {
+    await db.update(whatsappNumbersTable).set({ isDefault: false }).where(eq(whatsappNumbersTable.isDefault, true));
+  }
+
+  const [row] = await db.update(whatsappNumbersTable).set(updates).where(eq(whatsappNumbersTable.id, id)).returning();
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  res.json({ ...row, accessToken: "" });
+});
+
+whatsappRouter.delete("/numbers/:id", requireStaffPermission("/settings"), async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  const [existing] = await db.select().from(whatsappNumbersTable).where(eq(whatsappNumbersTable.id, id)).limit(1);
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (existing.isDefault) {
+    res.status(400).json({ error: "Cannot delete the default number. Set another as default first." });
+    return;
+  }
+  await db.delete(whatsappNumbersTable).where(eq(whatsappNumbersTable.id, id));
+  res.json({ ok: true });
+});
+
+whatsappRouter.post("/numbers/:id/test", requireStaffPermission("/settings"), async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  const { phone } = req.body as { phone?: string };
+  if (!phone) { res.status(400).json({ error: "phone required" }); return; }
+
+  const [num] = await db.select().from(whatsappNumbersTable).where(eq(whatsappNumbersTable.id, id)).limit(1);
+  if (!num) { res.status(404).json({ error: "Number not found" }); return; }
+  const cfg: NumberConfig = { phoneNumberId: num.phoneNumberId, accessToken: num.accessToken };
+  if (!cfg.phoneNumberId || !cfg.accessToken) { res.status(400).json({ error: "Number missing credentials" }); return; }
+
+  const s = await getOrCreateSettings();
+  const to = normalizePhone(phone, s.defaultCountryCode);
+  if (!to) { res.status(400).json({ error: "Invalid phone" }); return; }
+
+  const result = await sendTextMessageRaw(to, `Test message from Care Diagnostics via number: ${num.name || num.displayNumber || num.phoneNumberId}`, cfg);
   res.json(result);
 });
 
@@ -91,14 +202,14 @@ whatsappRouter.get("/conversations/:phone", requireStaffPermission("/settings"),
 
 whatsappRouter.post("/conversations/:phone/reply", requireStaffPermission("/settings"), async (req, res): Promise<void> => {
   const phone = String(req.params.phone ?? "");
-  const { message } = req.body as { message?: string };
+  const { message, numberId } = req.body as { message?: string; numberId?: number };
   if (!message?.trim()) {
     res.status(400).json({ error: "message required" });
     return;
   }
 
   const s = await getOrCreateSettings();
-  const result = await sendTextMessage(phone, message.trim(), s);
+  const result = await sendTextMessage(phone, message.trim(), s, numberId);
   if (!result.ok) {
     res.status(502).json({ error: result.error ?? "Send failed" });
     return;
@@ -148,6 +259,24 @@ whatsappWebhookRouter.post("/", async (req: Request, res: Response): Promise<voi
       for (const change of entry.changes ?? []) {
         if (change.field !== "messages") continue;
         const value = change.value;
+        // Meta includes the receiving phone number ID in metadata
+        const receivingPhoneNumberId = (value.metadata as { phone_number_id?: string } | undefined)?.phone_number_id ?? "";
+
+        // Resolve the number config for routing
+        let numCfg: NumberConfig | null = null;
+        let numRole = "general";
+        if (receivingPhoneNumberId) {
+          const numbers = await db.select().from(whatsappNumbersTable).where(eq(whatsappNumbersTable.enabled, true));
+          const matched = numbers.find((n) => n.phoneNumberId === receivingPhoneNumberId);
+          if (matched) {
+            numCfg = { phoneNumberId: matched.phoneNumberId, accessToken: matched.accessToken };
+            numRole = matched.role;
+          }
+        }
+        // Fallback to legacy settings
+        if (!numCfg && s.phoneNumberId && s.accessToken) {
+          numCfg = { phoneNumberId: s.phoneNumberId, accessToken: s.accessToken };
+        }
 
         for (const msg of value.messages ?? []) {
           const phone = msg.from;
@@ -161,7 +290,8 @@ whatsappWebhookRouter.post("/", async (req: Request, res: Response): Promise<voi
               mediaId: msg.image.id,
               caption: msg.image.caption ?? "",
               mimeType: msg.image.mime_type ?? "image/jpeg",
-              s,
+              numCfg,
+              numRole,
             }).catch(() => {});
             continue;
           }
@@ -181,9 +311,9 @@ whatsappWebhookRouter.post("/", async (req: Request, res: Response): Promise<voi
             status: "received",
           });
 
-          // AI assistant auto-reply
-          if (s.aiAssistantEnabled && s.accessToken && s.phoneNumberId) {
-            void handleAiReply({ phone, text, name, s }).catch(() => {});
+          // AI assistant auto-reply (only on general/form_f numbers)
+          if (numRole !== "reports" && s.aiAssistantEnabled && numCfg) {
+            void handleAiReply({ phone, text, name, numCfg, s }).catch(() => {});
           }
         }
       }
@@ -204,19 +334,22 @@ async function handleIncomingImage(params: {
   mediaId: string;
   caption: string;
   mimeType: string;
-  s: typeof whatsappSettingsTable.$inferSelect;
+  numCfg: NumberConfig | null;
+  numRole: string;
 }): Promise<void> {
-  const { phone, waId, name, mediaId, caption, mimeType, s } = params;
+  const { phone, waId, name, mediaId, caption, mimeType, numCfg, numRole } = params;
+
+  if (!numCfg) return; // Can't download without credentials
 
   // 1. Download image via Meta media API
   let imageBuf: Buffer | null = null;
   try {
-    const metaUrl = `https://graph.facebook.com/v20.0/${encodeURIComponent(mediaId)}?access_token=${encodeURIComponent(s.accessToken ?? "")}`;
+    const metaUrl = `https://graph.facebook.com/v20.0/${encodeURIComponent(mediaId)}?access_token=${encodeURIComponent(numCfg.accessToken)}`;
     const metaResp = await fetch(metaUrl);
     if (!metaResp.ok) throw new Error(`Meta media info failed: ${metaResp.status}`);
     const metaData = await metaResp.json() as { url?: string };
     if (!metaData.url) throw new Error("No media URL from Meta");
-    const imgResp = await fetch(metaData.url, { headers: { Authorization: `Bearer ${s.accessToken ?? ""}` } });
+    const imgResp = await fetch(metaData.url, { headers: { Authorization: `Bearer ${numCfg.accessToken}` } });
     if (!imgResp.ok) throw new Error(`Image download failed: ${imgResp.status}`);
     imageBuf = Buffer.from(await imgResp.arrayBuffer());
   } catch (err) {
@@ -255,6 +388,15 @@ async function handleIncomingImage(params: {
     status: "received",
   });
 
+  // Only process ID card / Form F logic if this number is a Form F number
+  if (numRole !== "form_f") {
+    // Non-Form-F numbers: just log the image, no Form F processing
+    if (numCfg) {
+      void sendTextMessageRaw(phone, "Thank you for your message. For ID card uploads related to Form F, please use our dedicated Form F number.", numCfg).catch(() => {});
+    }
+    return;
+  }
+
   // 5. If patient found and data extracted, upsert Form F record
   if (patient && ocrResult && (ocrResult.guardianName || ocrResult.address)) {
     // Look for an existing Form F record for this patient (most recent)
@@ -288,15 +430,16 @@ async function handleIncomingImage(params: {
     }
 
     // 6. Send confirmation reply
-    if (s.accessToken && s.phoneNumberId) {
-      const replyBody = ocrResult.guardianName || ocrResult.address
-        ? `Thank you! We received your ID card image and extracted the following details for your Form F record:\n• Guardian/Husband/Father: ${ocrResult.guardianName || "(not found)"}\n• Address: ${ocrResult.address || "(not found)"}\n\nOur staff will verify and confirm these details shortly.`
-        : "Thank you for sharing your ID card image. We couldn't clearly read the details. Our staff will assist you at the center.";
-      void sendTextMessage(phone, replyBody, s).catch(() => {});
-    }
-  } else if (s.accessToken && s.phoneNumberId) {
+    const replyBody = ocrResult.guardianName || ocrResult.address
+      ? `Thank you! We received your ID card image and extracted the following details for your Form F record:\n• Guardian/Husband/Father: ${ocrResult.guardianName || "(not found)"}\n• Address: ${ocrResult.address || "(not found)"}\n\nOur staff will verify and confirm these details shortly.`
+      : "Thank you for sharing your ID card image. We couldn't clearly read the details. Our staff will assist you at the center.";
+    void sendTextMessageRaw(phone, replyBody, numCfg).catch(() => {});
+  } else {
     // Reply even when no patient found or no data extracted
-    void sendTextMessage(phone, "Thank you for your image. Please visit the center so our staff can verify and update your records.", s).catch(() => {});
+    const replyBody = patient
+      ? "Thank you for your ID card image. We couldn't extract the required details automatically. Our staff will assist you at the center."
+      : "Thank you for your ID card image. We couldn't find a matching patient record. Please visit the center so our staff can verify and update your records.";
+    void sendTextMessageRaw(phone, replyBody, numCfg).catch(() => {});
   }
 }
 
@@ -306,9 +449,10 @@ async function handleAiReply(params: {
   phone: string;
   text: string;
   name: string;
+  numCfg: NumberConfig;
   s: typeof whatsappSettingsTable.$inferSelect;
 }): Promise<void> {
-  const { phone, text, name, s } = params;
+  const { phone, text, name, numCfg, s } = params;
 
   // Load clinic info for AI context
   const [clinic] = await db.select({
@@ -356,7 +500,7 @@ Reply in a helpful, friendly manner. Be concise.`;
     const reply = await geminiGenerate(prompt, { maxTokens: 300 });
     if (!reply) return;
 
-    const result = await sendTextMessage(phone, reply, s);
+    const result = await sendTextMessageRaw(phone, reply, numCfg);
     if (!result.ok) return;
 
     // Log outgoing AI reply
@@ -376,17 +520,17 @@ Reply in a helpful, friendly manner. Be concise.`;
 
 // ─── Low-level send helpers ────────────────────────────────────────────────────
 
-async function sendTextMessage(
+async function sendTextMessageRaw(
   to: string,
   body: string,
-  s: typeof whatsappSettingsTable.$inferSelect,
+  cfg: NumberConfig,
 ): Promise<{ ok: boolean; messageId?: string; error?: string }> {
-  if (!s.accessToken || !s.phoneNumberId) return { ok: false, error: "WhatsApp not configured" };
-  const url = `https://graph.facebook.com/v20.0/${encodeURIComponent(s.phoneNumberId)}/messages`;
+  if (!cfg.accessToken || !cfg.phoneNumberId) return { ok: false, error: "WhatsApp not configured" };
+  const url = `https://graph.facebook.com/v20.0/${encodeURIComponent(cfg.phoneNumberId)}/messages`;
   try {
     const resp = await fetch(url, {
       method: "POST",
-      headers: { Authorization: `Bearer ${s.accessToken}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${cfg.accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body } }),
     });
     const data = (await resp.json().catch(() => ({}))) as { messages?: { id: string }[]; error?: { message?: string } };
@@ -395,6 +539,27 @@ async function sendTextMessage(
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Send failed" };
   }
+}
+
+async function sendTextMessage(
+  to: string,
+  body: string,
+  s: typeof whatsappSettingsTable.$inferSelect,
+  numberId?: number,
+): Promise<{ ok: boolean; messageId?: string; error?: string }> {
+  if (numberId) {
+    const [num] = await db.select().from(whatsappNumbersTable).where(eq(whatsappNumbersTable.id, numberId)).limit(1);
+    if (num && num.phoneNumberId && num.accessToken) {
+      return sendTextMessageRaw(to, body, { phoneNumberId: num.phoneNumberId, accessToken: num.accessToken });
+    }
+  }
+  if (s.accessToken && s.phoneNumberId) {
+    return sendTextMessageRaw(to, body, { phoneNumberId: s.phoneNumberId, accessToken: s.accessToken });
+  }
+  // Try default number
+  const def = await resolveDefaultNumber();
+  if (def) return sendTextMessageRaw(to, body, def);
+  return { ok: false, error: "WhatsApp not configured" };
 }
 
 export function normalizePhone(raw: string, countryCode: string): string | null {
@@ -410,16 +575,24 @@ export async function sendBillWhatsapp(params: {
   billNumber: string;
   totalAmount: number;
   tokenNo: number;
+  numberId?: number;
 }): Promise<{ ok: boolean; skipped?: boolean; error?: string; messageId?: string }> {
   const s = await getOrCreateSettings();
   if (!s.enabled) return { ok: false, skipped: true };
-  if (!s.accessToken || !s.phoneNumberId || !s.templateName) {
+
+  let cfg: NumberConfig | null = null;
+  if (params.numberId) {
+    const [num] = await db.select().from(whatsappNumbersTable).where(eq(whatsappNumbersTable.id, params.numberId)).limit(1);
+    if (num && num.phoneNumberId && num.accessToken) cfg = { phoneNumberId: num.phoneNumberId, accessToken: num.accessToken };
+  }
+  if (!cfg) cfg = await resolveDefaultNumber();
+  if (!cfg) {
     return { ok: false, error: "WhatsApp settings incomplete" };
   }
   const to = normalizePhone(params.phone, s.defaultCountryCode);
   if (!to) return { ok: false, error: "Invalid phone" };
 
-  const url = `https://graph.facebook.com/v20.0/${encodeURIComponent(s.phoneNumberId)}/messages`;
+  const url = `https://graph.facebook.com/v20.0/${encodeURIComponent(cfg.phoneNumberId)}/messages`;
   const payload = {
     messaging_product: "whatsapp",
     to,
@@ -445,7 +618,7 @@ export async function sendBillWhatsapp(params: {
     const resp = await fetch(url, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${s.accessToken}`,
+        "Authorization": `Bearer ${cfg.accessToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
@@ -466,16 +639,24 @@ export async function sendReportWhatsapp(params: {
   reportNumber: string;
   testName: string;
   reportUrl: string;
+  numberId?: number;
 }): Promise<{ ok: boolean; skipped?: boolean; error?: string; messageId?: string }> {
   const s = await getOrCreateSettings();
   if (!s.enabled) return { ok: false, skipped: true };
-  if (!s.accessToken || !s.phoneNumberId) {
+
+  let cfg: NumberConfig | null = null;
+  if (params.numberId) {
+    const [num] = await db.select().from(whatsappNumbersTable).where(eq(whatsappNumbersTable.id, params.numberId)).limit(1);
+    if (num && num.phoneNumberId && num.accessToken) cfg = { phoneNumberId: num.phoneNumberId, accessToken: num.accessToken };
+  }
+  if (!cfg) cfg = await resolveDefaultNumber();
+  if (!cfg) {
     return { ok: false, error: "WhatsApp settings incomplete" };
   }
   const to = normalizePhone(params.phone, s.defaultCountryCode);
   if (!to) return { ok: false, error: "Invalid phone" };
 
-  const url = `https://graph.facebook.com/v20.0/${encodeURIComponent(s.phoneNumberId)}/messages`;
+  const url = `https://graph.facebook.com/v20.0/${encodeURIComponent(cfg.phoneNumberId)}/messages`;
 
   if (s.templateName) {
     const tplPayload = {
@@ -501,7 +682,7 @@ export async function sendReportWhatsapp(params: {
     try {
       const resp = await fetch(url, {
         method: "POST",
-        headers: { Authorization: `Bearer ${s.accessToken}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${cfg.accessToken}`, "Content-Type": "application/json" },
         body: JSON.stringify(tplPayload),
       });
       const data = (await resp.json().catch(() => ({}))) as { messages?: { id: string }[]; error?: { message?: string } };
@@ -518,7 +699,7 @@ export async function sendReportWhatsapp(params: {
   try {
     const resp = await fetch(url, {
       method: "POST",
-      headers: { Authorization: `Bearer ${s.accessToken}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${cfg.accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify(textPayload),
     });
     const data = (await resp.json().catch(() => ({}))) as { messages?: { id: string }[]; error?: { message?: string } };
@@ -536,10 +717,19 @@ export async function sendReportDelivery(params: {
   testName: string;
   reportUrl: string;
   viewerUrl?: string | null;
+  numberId?: number;
 }): Promise<{ ok: boolean; skipped?: boolean; error?: string; messageId?: string }> {
   const s = await getOrCreateSettings();
   if (!s.enabled) return { ok: false, skipped: true };
-  if (!s.accessToken || !s.phoneNumberId) return { ok: false, error: "WhatsApp settings incomplete" };
+
+  let cfg: NumberConfig | null = null;
+  if (params.numberId) {
+    const [num] = await db.select().from(whatsappNumbersTable).where(eq(whatsappNumbersTable.id, params.numberId)).limit(1);
+    if (num && num.phoneNumberId && num.accessToken) cfg = { phoneNumberId: num.phoneNumberId, accessToken: num.accessToken };
+  }
+  if (!cfg) cfg = await resolveDefaultNumber();
+  if (!cfg) return { ok: false, error: "WhatsApp settings incomplete" };
+
   const to = normalizePhone(params.phone, s.defaultCountryCode);
   if (!to) return { ok: false, error: "Invalid phone" };
 
@@ -557,7 +747,7 @@ export async function sendReportDelivery(params: {
         .replace(/\{\{viewerUrl\}\}/g, params.viewerUrl ?? "")
     : defaultBody;
 
-  const result = await sendTextMessage(to, body, s);
+  const result = await sendTextMessageRaw(to, body, cfg);
   return result;
 }
 
@@ -570,6 +760,7 @@ interface WhatsappWebhookBody {
     changes?: {
       field: string;
       value: {
+        metadata?: { phone_number_id?: string };
         contacts?: { wa_id: string; profile?: { name?: string } }[];
         messages?: {
           id: string;

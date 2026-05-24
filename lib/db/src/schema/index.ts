@@ -19,6 +19,7 @@ export * from "./clinicSettings";
 export * from "./ledgers";
 export * from "./tokens";
 export * from "./whatsappSettings";
+export * from "./whatsappNumbers";
 export * from "./printerSettings";
 export * from "./staff";
 export * from "./reportTemplates";

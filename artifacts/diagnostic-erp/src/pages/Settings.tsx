@@ -1876,6 +1876,17 @@ type WhatsappCfg = {
   aiAssistantName?: string;
   aiSystemPrompt?: string;
 };
+type WhatsappNumber = {
+  id: number;
+  name: string;
+  phoneNumberId: string;
+  displayNumber: string;
+  accessToken: string;
+  role: "general" | "form_f" | "reports";
+  enabled: boolean;
+  isDefault: boolean;
+  createdAt: string;
+};
 type WaConversation = {
   id: number; phone: string; customerName: string;
   direction: string; messageBody: string; waMessageId: string;
@@ -2180,6 +2191,242 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
   );
 }
 
+function WhatsappNumbersTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: numbers = [], isLoading } = useQuery<WhatsappNumber[]>({ queryKey: ["whatsapp-numbers"], queryFn: () => api.get("/api/whatsapp/numbers") });
+  const [open, setOpen] = useState(false);
+  const [editNum, setEditNum] = useState<WhatsappNumber | null>(null);
+  const [formErr, setFormErr] = useState("");
+  const [showToken, setShowToken] = useState(false);
+  const [testPhone, setTestPhone] = useState("");
+  const [testingId, setTestingId] = useState<number | null>(null);
+  const [testResult, setTestResult] = useState<{ok:boolean;error?:string;messageId?:string}|null>(null);
+
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<{
+    name: string; phoneNumberId: string; displayNumber: string; accessToken: string;
+    role: "general" | "form_f" | "reports";
+    enabled: boolean; isDefault: boolean;
+  }>();
+
+  const save = useMutation({
+    mutationFn: (body: Record<string, unknown>) => {
+      if (editNum) return api.put(`/api/whatsapp/numbers/${editNum.id}`, body);
+      return api.post("/api/whatsapp/numbers", body);
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["whatsapp-numbers"] }); setOpen(false); setEditNum(null); setFormErr(""); },
+    onError: (e: Error) => setFormErr(e.message || "Save failed"),
+  });
+  const deleteNum = useMutation({
+    mutationFn: (id: number) => api.delete(`/api/whatsapp/numbers/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["whatsapp-numbers"] }),
+  });
+  const test = useMutation({
+    mutationFn: ({ id, phone }: { id: number; phone: string }) => api.post<{ ok: boolean; error?: string; messageId?: string }>(`/api/whatsapp/numbers/${id}/test`, { phone }),
+    onSuccess: (data) => { setTestResult(data); setTestingId(null); },
+    onError: (e: Error) => { setTestResult({ ok: false, error: e.message || "Test failed" }); setTestingId(null); },
+  });
+
+  const openAdd = () => {
+    setEditNum(null); setFormErr(""); setShowToken(false); setTestResult(null);
+    reset({ name: "", phoneNumberId: "", displayNumber: "", accessToken: "", role: "general", enabled: true, isDefault: false });
+    setOpen(true);
+  };
+  const openEdit = (n: WhatsappNumber) => {
+    setEditNum(n); setFormErr(""); setShowToken(false); setTestResult(null);
+    reset({
+      name: n.name, phoneNumberId: n.phoneNumberId, displayNumber: n.displayNumber,
+      accessToken: n.accessToken === "••••••••" ? "" : n.accessToken,
+      role: n.role as "general" | "form_f" | "reports",
+      enabled: n.enabled, isDefault: n.isDefault,
+    });
+    setOpen(true);
+  };
+
+  const onSubmit = handleSubmit((d) => {
+    setFormErr("");
+    if (!d.name.trim() || !d.phoneNumberId.trim()) { setFormErr("Name and Phone Number ID are required."); return; }
+    save.mutate({
+      name: d.name.trim(),
+      phoneNumberId: d.phoneNumberId.trim(),
+      displayNumber: d.displayNumber.trim(),
+      accessToken: d.accessToken.trim(),
+      role: d.role,
+      enabled: d.enabled,
+      isDefault: d.isDefault,
+    });
+  });
+
+  const roleBadge = (role: string) => {
+    const colors: Record<string, string> = {
+      general: "bg-blue-100 text-blue-700",
+      form_f: "bg-purple-100 text-purple-700",
+      reports: "bg-amber-100 text-amber-700",
+    };
+    const labels: Record<string, string> = { general: "General", form_f: "Form F", reports: "Reports" };
+    return <Badge className={`${colors[role] ?? "bg-gray-100 text-gray-700"} text-xs`}>{labels[role] ?? role}</Badge>;
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="font-bold text-lg flex items-center gap-2"><Phone size={16} /> WhatsApp Numbers</h2>
+            <p className="text-sm text-muted-foreground mt-1">Add multiple Meta Cloud API numbers with different roles. The default number handles all general billing, report delivery, and AI chatbot. Form F and Reports numbers can be dedicated to those workflows.</p>
+          </div>
+          <Button size="sm" onClick={openAdd}><Plus size={14} className="mr-1" /> Add Number</Button>
+        </div>
+
+        {isLoading ? (
+          <div className="space-y-3">{[...Array(2)].map((_, i) => <div key={i} className="h-16 bg-muted rounded-xl animate-pulse" />)}</div>
+        ) : numbers.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">
+            <MessageCircle size={36} className="mx-auto mb-3 opacity-30" />
+            <p>No WhatsApp numbers configured yet.</p>
+            <p className="text-xs mt-1">Add a number to start using Meta Cloud API messaging.</p>
+          </div>
+        ) : (
+          <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 border-b border-card-border">
+                <tr>
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Name</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Role</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Display</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Phone Number ID</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">Status</th>
+                  <th className="px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {numbers.map((n) => (
+                  <tr key={n.id} className="border-b border-card-border last:border-0 hover:bg-muted/20">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{n.name}</span>
+                        {n.isDefault && <Badge className="bg-emerald-100 text-emerald-700 text-[10px] px-1.5">Default</Badge>}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">{roleBadge(n.role)}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{n.displayNumber || "—"}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{n.phoneNumberId}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${n.enabled ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>{n.enabled ? "Active" : "Inactive"}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1 justify-end">
+                        <Button size="sm" variant="ghost" className="h-7" onClick={() => openEdit(n)}><Pencil size={13} /></Button>
+                        <Button size="sm" variant="ghost" className="h-7 text-destructive hover:text-destructive" onClick={() => { if (confirm(`Delete "${n.name}"? This cannot be undone.`)) deleteNum.mutate(n.id); }}><Trash2 size={13} /></Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Test all numbers block */}
+      {numbers.length > 0 && (
+        <div className="bg-card border border-card-border rounded-xl p-5 space-y-3">
+          <h3 className="font-semibold flex items-center gap-2"><Send size={14} /> Quick Test</h3>
+          <p className="text-xs text-muted-foreground">Send a test message from any configured number to verify credentials and Meta approval.</p>
+          <div className="flex gap-2">
+            <Select value={testingId != null ? String(testingId) : ""} onValueChange={(v) => setTestingId(Number(v))}>
+              <SelectTrigger className="w-[260px]">
+                <SelectValue placeholder="Pick a number to test" />
+              </SelectTrigger>
+              <SelectContent>
+                {numbers.map((n) => (
+                  <SelectItem key={n.id} value={String(n.id)}>
+                    <span className="flex items-center gap-2">
+                      <span className="text-xs">{n.name}</span>
+                      <span className="text-[10px] text-muted-foreground">({n.role})</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input value={testPhone} onChange={(e) => setTestPhone(e.target.value)} placeholder="Phone number with country code" className="flex-1" />
+            <Button type="button" disabled={!testPhone || !testingId || test.isPending} onClick={() => { setTestResult(null); test.mutate({ id: testingId!, phone: testPhone }); }}>
+              {test.isPending ? "Sending…" : "Test"}
+            </Button>
+          </div>
+          {testResult && (
+            <p className={`text-xs ${testResult.ok ? "text-green-600" : "text-destructive"}`}>
+              {testResult.ok ? `Sent ✓ (msg id: ${testResult.messageId ?? "—"})` : `Failed: ${testResult.error}`}
+            </p>
+          )}
+        </div>
+      )}
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>{editNum ? "Edit Number" : "Add WhatsApp Number"}</DialogTitle></DialogHeader>
+          <form onSubmit={onSubmit} className="space-y-4">
+            {formErr && <p className="text-xs text-destructive">{formErr}</p>}
+            <div>
+              <Label>Display Name *</Label>
+              <Input {...register("name", { required: "Name is required" })} className="mt-1" placeholder="e.g. Main Clinic" />
+              {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Phone Number ID *</Label>
+                <Input {...register("phoneNumberId", { required: "Phone Number ID is required" })} className="mt-1" placeholder="e.g. 105296888774421" />
+                <p className="text-[11px] text-muted-foreground mt-1">From Meta Business → WhatsApp Manager → API Setup.</p>
+              </div>
+              <div>
+                <Label>Display Number (optional)</Label>
+                <Input {...register("displayNumber")} className="mt-1" placeholder="+91 98765 43210" />
+                <p className="text-[11px] text-muted-foreground mt-1">Shown in UI only. Patients still message the registered number.</p>
+              </div>
+            </div>
+            <div>
+              <Label>Permanent Access Token {editNum && "(leave blank to keep current)"}</Label>
+              <div className="relative">
+                <Input type={showToken ? "text" : "password"} {...register("accessToken")} className="mt-1 pr-10" placeholder="EAAJk..." />
+                <button type="button" onClick={() => setShowToken((s) => !s)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground" aria-label="Show/hide token">
+                  {showToken ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">Meta Business Account → System Users → Generate Token with whatsapp_messaging permission.</p>
+            </div>
+            <div>
+              <Label>Role</Label>
+              <Select value={watch("role")} onValueChange={(v) => setValue("role", v as "general" | "form_f" | "reports")}>
+                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="general">General — billing, reports, AI chatbot</SelectItem>
+                  <SelectItem value="form_f">Form F — ID card uploads, Form F messages</SelectItem>
+                  <SelectItem value="reports">Reports — report delivery only</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground mt-1">Incoming messages on a Form F number auto-process ID cards. General numbers get the AI chatbot.</p>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Toggle checked={!!watch("enabled")} onChange={(v) => setValue("enabled", v)} label="Enable" />
+                <span className="text-sm">Enabled</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Toggle checked={!!watch("isDefault")} onChange={(v) => setValue("isDefault", v)} label="Default" />
+                <span className="text-sm">Default number</span>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-card-border">
+              <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={save.isPending}>{save.isPending ? "Saving…" : (editNum ? "Update" : "Add Number")}</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 function WhatsappTab() {
   const qc = useQueryClient();
   const { data: cfg } = useQuery<WhatsappCfg>({ queryKey: ["whatsapp-settings"], queryFn: () => api.get("/api/whatsapp/settings") });
@@ -2188,7 +2435,7 @@ function WhatsappTab() {
   const [bookingPhone, setBookingPhone] = useState("");
   const [showToken, setShowToken] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [waSubTab, setWaSubTab] = useState<"config" | "webhook" | "ai" | "inbox">("config");
+  const [waSubTab, setWaSubTab] = useState<"numbers" | "config" | "webhook" | "ai" | "inbox">("numbers");
   const cur = form ?? cfg ?? null;
 
   const save = useMutation({
@@ -2209,6 +2456,7 @@ function WhatsappTab() {
   };
 
   const WA_SUB_TABS = [
+    { id: "numbers", label: "Numbers",        icon: Phone },
     { id: "config",  label: "Cloud API",      icon: MessageCircle },
     { id: "webhook", label: "Webhook Setup",   icon: Globe },
     { id: "ai",      label: "AI Assistant",    icon: Bot },
@@ -2228,6 +2476,9 @@ function WhatsappTab() {
           );
         })}
       </div>
+
+      {/* ── WhatsApp Numbers ── */}
+      {waSubTab === "numbers" && <WhatsappNumbersTab />}
 
       {/* ── Cloud API Config ── */}
       {waSubTab === "config" && (
