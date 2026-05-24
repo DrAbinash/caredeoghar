@@ -73,5 +73,9 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   // Default maximum concurrent sessions per user (when user.maxConcurrentSessions = 0).
   // Super-admins are exempt.
   defaultMaxConcurrentSessions: integer("default_max_concurrent_sessions").notNull().default(3),
+  // Account lockout after N consecutive failed PIN attempts. 0 = disabled.
+  maxFailedLoginAttempts: integer("max_failed_login_attempts").notNull().default(5),
+  // How long (in minutes) an account stays locked after reaching the threshold.
+  accountLockoutDurationMinutes: integer("account_lockout_duration_minutes").notNull().default(30),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

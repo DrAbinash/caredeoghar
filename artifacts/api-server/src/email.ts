@@ -391,6 +391,44 @@ export async function sendBackupFailureEmail(params: {
   }
 }
 
+export async function sendAccountLockedEmail(params: {
+  userName: string;
+  userEmail: string;
+  attempts: number;
+  lockedUntil: Date;
+  ipAddress: string;
+}) {
+  const s = await getEmailSettings();
+  if (!s || !s.adminEmail) return;
+  const transport = await getTransporter();
+  if (!transport) return;
+
+  const html = `
+    <div style="font-family:sans-serif;max-width:560px;margin:0 auto;background:#fef2f2;padding:24px;border-radius:12px">
+      <div style="background:#b45309;color:white;padding:16px 20px;border-radius:8px 8px 0 0">
+        <h2 style="margin:0;font-size:18px">Account Locked - ${params.userName}</h2>
+      </div>
+      <div style="background:white;padding:20px;border-radius:0 0 8px 8px;border:1px solid #e2e8f0">
+        <p style="margin:0 0 12px"><strong>User:</strong> ${params.userName} (${params.userEmail})</p>
+        <p style="margin:0 0 12px"><strong>Failed attempts:</strong> ${params.attempts}</p>
+        <p style="margin:0 0 12px"><strong>IP Address:</strong> ${params.ipAddress}</p>
+        <p style="margin:0 0 12px"><strong>Locked until:</strong> ${params.lockedUntil.toLocaleString("en-IN")}</p>
+        <p style="margin:12px 0 0;font-size:11px;color:#94a3b8">Care Diagnostics ERP - Security Alert</p>
+      </div>
+    </div>`;
+
+  try {
+    await transport.sendMail({
+      from: `"${s.fromName}" <${s.fromAddress}>`,
+      to: s.adminEmail,
+      subject: `[SECURITY] Account Locked - ${params.userName}`,
+      html,
+    });
+  } catch (err) {
+    console.error("[email] account lockout email failed:", err instanceof Error ? err.message : err);
+  }
+}
+
 // Send a finalized patient report by email. Returns ok/error so the caller
 // can persist a report_share row with the right status.
 export async function sendReportEmail(params: {

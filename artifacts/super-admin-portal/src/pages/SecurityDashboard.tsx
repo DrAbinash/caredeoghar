@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Shield, Activity, Users, Lock, AlertTriangle,
   CheckCircle2, XCircle, Clock, HardDrive, Database, Search,
-  Trash2, RefreshCw, ChevronLeft, ChevronRight,
+  Trash2, RefreshCw, ChevronLeft, ChevronRight, Unlock,
 } from "lucide-react";
 import { saAuthHeaders } from "@/lib/saApi";
 import {
@@ -56,11 +56,22 @@ interface AuditSummaryRow {
   count: number;
 }
 
+interface LockedAccount {
+  id: number;
+  name: string;
+  email: string;
+  username: string | null;
+  role: string;
+  failedLoginAttempts: number;
+  lockedUntil: string | null;
+}
+
 interface SecurityData {
   sessions: { sessions: PortalSession[]; total: number };
   failedLogins: { events: { id: number; userName: string; ipAddress: string | null; createdAt: string; reason: string | null }[]; total: number };
   backupStatus: { jobs: BackupJob[]; recentLogs: BackupLog[] };
   auditSummary: { since: string; summary: AuditSummaryRow[] };
+  lockedAccounts: { accounts: LockedAccount[] };
 }
 
 function formatDate(iso: string): string {
@@ -79,18 +90,19 @@ export default function SecurityDashboard({ onBack }: { onBack: () => void }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [killSession, setKillSession] = useState<PortalSession | null>(null);
-  const [activeTab, setActiveTab] = useState<"sessions" | "backups" | "logins">("sessions");
+  const [activeTab, setActiveTab] = useState<"sessions" | "backups" | "logins" | "locked">("sessions");
 
   const { data, isLoading } = useQuery<SecurityData>({
     queryKey: ["security-dashboard"],
     queryFn: async () => {
-      const [sessions, failedLogins, backupStatus, auditSummary] = await Promise.all([
+      const [sessions, failedLogins, backupStatus, auditSummary, lockedAccounts] = await Promise.all([
         fetch("/api/super-admin/security/sessions", { headers: saAuthHeaders() }).then(r => r.json()),
         fetch("/api/super-admin/security/failed-logins", { headers: saAuthHeaders() }).then(r => r.json()),
         fetch("/api/super-admin/security/backup-status", { headers: saAuthHeaders() }).then(r => r.json()),
         fetch("/api/super-admin/security/audit-summary", { headers: saAuthHeaders() }).then(r => r.json()),
+        fetch("/api/super-admin/security/locked-accounts", { headers: saAuthHeaders() }).then(r => r.json()),
       ]);
-      return { sessions, failedLogins, backupStatus, auditSummary };
+      return { sessions, failedLogins, backupStatus, auditSummary, lockedAccounts };
     },
     refetchInterval: 30_000,
   });
@@ -106,6 +118,23 @@ export default function SecurityDashboard({ onBack }: { onBack: () => void }) {
     onSuccess: () => {
       toast({ title: "Session terminated" });
       setKillSession(null);
+      void queryClient.invalidateQueries({ queryKey: ["security-dashboard"] });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Failed", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const unlockMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/super-admin/security/unlock-account/${id}`, {
+        method: "POST",
+        headers: saAuthHeaders(),
+      });
+      if (!res.ok) throw new Error("Failed to unlock account");
+    },
+    onSuccess: () => {
+      toast({ title: "Account unlocked" });
       void queryClient.invalidateQueries({ queryKey: ["security-dashboard"] });
     },
     onError: (e: Error) => {
@@ -132,7 +161,7 @@ export default function SecurityDashboard({ onBack }: { onBack: () => void }) {
         </div>
 
         {/* KPI cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="bg-card border border-border rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2 text-muted-foreground text-xs uppercase tracking-wide">
               <Users size={13} /> Active Sessions
@@ -165,11 +194,22 @@ export default function SecurityDashboard({ onBack }: { onBack: () => void }) {
             </p>
             <p className="text-xs text-muted-foreground mt-1">Actions tracked</p>
           </div>
+          <div className="bg-card border border-border rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2 text-muted-foreground text-xs uppercase tracking-wide">
+              <Lock size={13} /> Locked Accounts
+            </div>
+            <p className="text-2xl font-bold">
+              {data?.lockedAccounts.accounts.filter(a => a.lockedUntil && new Date(a.lockedUntil) > new Date()).length ?? 0}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {data?.lockedAccounts.accounts.length ?? 0} with failed attempts
+            </p>
+          </div>
         </div>
 
         {/* Tabs */}
         <div className="flex gap-2 border-b border-border pb-1">
-          {(["sessions", "backups", "logins"] as const).map((t) => (
+          {(["sessions", "backups", "logins", "locked"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setActiveTab(t)}
@@ -182,6 +222,7 @@ export default function SecurityDashboard({ onBack }: { onBack: () => void }) {
               {t === "sessions" && <span className="flex items-center gap-1.5"><Users size={13} /> Active Sessions</span>}
               {t === "backups" && <span className="flex items-center gap-1.5"><HardDrive size={13} /> Backups</span>}
               {t === "logins" && <span className="flex items-center gap-1.5"><AlertTriangle size={13} /> Failed Logins</span>}
+              {t === "locked" && <span className="flex items-center gap-1.5"><Lock size={13} /> Locked Accounts</span>}
             </button>
           ))}
         </div>
@@ -350,6 +391,75 @@ export default function SecurityDashboard({ onBack }: { onBack: () => void }) {
                         <TableCell className="font-mono text-xs">{e.ipAddress ?? "—"}</TableCell>
                         <TableCell className="text-xs">{e.reason ?? "—"}</TableCell>
                         <TableCell className="text-xs">{formatDate(e.createdAt)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Locked Accounts tab */}
+        {activeTab === "locked" && (
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Lock size={14} className="text-primary" />
+                Locked &amp; Suspicious Accounts
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => queryClient.invalidateQueries({ queryKey: ["security-dashboard"] })}>
+                <RefreshCw size={13} className="mr-1" /> Refresh
+              </Button>
+            </div>
+            {isLoading ? (
+              <div className="p-8 text-center text-muted-foreground">Loading…</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Failed Attempts</TableHead>
+                      <TableHead>Locked Until</TableHead>
+                      <TableHead className="w-[120px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(!data?.lockedAccounts.accounts || data.lockedAccounts.accounts.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No locked accounts.</TableCell>
+                      </TableRow>
+                    )}
+                    {data?.lockedAccounts.accounts.map((a) => (
+                      <TableRow key={a.id}>
+                        <TableCell className="font-medium">
+                          {a.name}
+                          <div className="text-xs text-muted-foreground">{a.email}{a.username ? ` / ${a.username}` : ""}</div>
+                        </TableCell>
+                        <TableCell><Badge variant="outline" className="capitalize">{a.role}</Badge></TableCell>
+                        <TableCell>{a.failedLoginAttempts}</TableCell>
+                        <TableCell className="text-xs">
+                          {a.lockedUntil && new Date(a.lockedUntil) > new Date() ? (
+                            <span className="text-destructive font-semibold">{formatDate(a.lockedUntil)}</span>
+                          ) : (
+                            <span className="text-muted-foreground">Not locked</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {(a.lockedUntil && new Date(a.lockedUntil) > new Date()) || a.failedLoginAttempts > 0 ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-green-600 h-8 w-8 p-0"
+                              onClick={() => unlockMutation.mutate(a.id)}
+                              disabled={unlockMutation.isPending}
+                            >
+                              <Unlock size={13} />
+                            </Button>
+                          ) : null}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

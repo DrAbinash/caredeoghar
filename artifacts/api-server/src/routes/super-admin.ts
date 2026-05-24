@@ -919,3 +919,40 @@ superAdminRouter.get("/security/audit-summary", requireSuperAdminUsb, requireSup
     .groupBy(auditLogsTable.action);
   res.json({ since: since.toISOString(), summary: rows });
 });
+
+// GET /api/super-admin/security/locked-accounts — users with active lockout
+superAdminRouter.get("/security/locked-accounts", requireSuperAdminUsb, requireSuperAdmin, async (_req, res): Promise<void> => {
+  const now = new Date();
+  const rows = await db
+    .select({
+      id: usersTable.id,
+      name: usersTable.name,
+      email: usersTable.email,
+      username: usersTable.username,
+      role: usersTable.role,
+      failedLoginAttempts: usersTable.failedLoginAttempts,
+      lockedUntil: usersTable.lockedUntil,
+    })
+    .from(usersTable)
+    .where(
+      and(
+        eq(usersTable.isActive, true),
+        or(
+          gt(usersTable.lockedUntil, now),
+          gt(usersTable.failedLoginAttempts, 0),
+        ),
+      ),
+    )
+    .orderBy(desc(usersTable.lockedUntil));
+  res.json({ accounts: rows });
+});
+
+// POST /api/super-admin/security/unlock-account/:id — manually unlock a user
+superAdminRouter.post("/security/unlock-account/:id", requireSuperAdminUsb, requireSuperAdmin, async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (Number.isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
+  await db.update(usersTable)
+    .set({ failedLoginAttempts: 0, lockedUntil: null })
+    .where(eq(usersTable.id, id));
+  res.json({ ok: true });
+});

@@ -35,6 +35,11 @@ export const usersTable = pgTable("users", {
   // Maximum concurrent active sessions for this user (0 = system default).
   // Enforced on login. Super-admins are exempt.
   maxConcurrentSessions: integer("max_concurrent_sessions").notNull().default(0),
+  // Failed PIN attempts counter. Reset to 0 on successful login.
+  // When it reaches the clinic-wide maxFailedLoginAttempts threshold the
+  // account is locked until lockedUntil.  Super-admins are exempt.
+  failedLoginAttempts: integer("failed_login_attempts").notNull().default(0),
+  lockedUntil: timestamp("locked_until", { withTimezone: true }),
   isActive: boolean("is_active").notNull().default(true),
   maxDiscount: numeric("max_discount", { precision: 5, scale: 2 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

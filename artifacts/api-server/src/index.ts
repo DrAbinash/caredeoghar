@@ -362,6 +362,12 @@ async function runStartupMigrations(): Promise<void> {
       ALTER TABLE portal_sessions ADD COLUMN IF NOT EXISTS user_agent TEXT;
       ALTER TABLE portal_sessions ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
+      -- ── Hospital-Grade Safety Phase 2: Account Lockout (May 2026) ───────────
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ;
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS max_failed_login_attempts INTEGER NOT NULL DEFAULT 5;
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS account_lockout_duration_minutes INTEGER NOT NULL DEFAULT 30;
+
       -- ── Remote super-admin login bypass ────────────────────────────────
       ALTER TABLE users ADD COLUMN IF NOT EXISTS remote_login_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 

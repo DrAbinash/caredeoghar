@@ -329,10 +329,59 @@ portalRouter.post("/staff-login", staffLoginLimiter, async (req, res) => {
     return;
   }
 
+  // ── Account lockout check ────────────────────────────────────────────────
+  // Super-admins are exempt.  If lockedUntil is in the future, reject login
+  // with a clear message so the UI can show lockout status.
+  if (user.role !== "super_admin") {
+    if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
+      const remaining = Math.ceil((new Date(user.lockedUntil).getTime() - Date.now()) / 60000);
+      res.status(403).json({ error: `Account locked. Try again in ${remaining} minute(s).` });
+      return;
+    }
+  }
+
   const pinMatches = await verifyPin(pin, user.pin);
   if (!pinMatches) {
-    res.status(401).json({ error: "Invalid email or PIN" });
+    // ── Failed-login bookkeeping (non-super-admin only) ───────────────────
+    if (user.role !== "super_admin") {
+      const [cfg] = await db
+        .select({ maxFailed: clinicSettingsTable.maxFailedLoginAttempts, lockoutMinutes: clinicSettingsTable.accountLockoutDurationMinutes })
+        .from(clinicSettingsTable)
+        .limit(1);
+      const maxFailed = cfg?.maxFailed ?? 5;
+      const lockoutMinutes = cfg?.lockoutMinutes ?? 30;
+      const newAttempts = (user.failedLoginAttempts ?? 0) + 1;
+      let lockedUntil: Date | null = user.lockedUntil ?? null;
+      if (newAttempts >= maxFailed && maxFailed > 0) {
+        lockedUntil = new Date(Date.now() + lockoutMinutes * 60_000);
+      }
+      await db.update(usersTable)
+        .set({ failedLoginAttempts: newAttempts, lockedUntil: lockedUntil ? new Date(lockedUntil) : null })
+        .where(eq(usersTable.id, user.id));
+
+      // Alert admin on lockout
+      if (lockedUntil && lockedUntil > new Date()) {
+        const ipAddress = resolveClientIp(req);
+        void import("../email").then(({ sendAccountLockedEmail }) =>
+          sendAccountLockedEmail({
+            userName: user.name,
+            userEmail: user.email,
+            attempts: newAttempts,
+            lockedUntil,
+            ipAddress,
+          }),
+        );
+      }
+    }
+    res.status(401).json({ error: "Invalid username or PIN" });
     return;
+  }
+
+  // Reset failed attempts on successful login
+  if ((user.failedLoginAttempts ?? 0) > 0 || user.lockedUntil) {
+    await db.update(usersTable)
+      .set({ failedLoginAttempts: 0, lockedUntil: null })
+      .where(eq(usersTable.id, user.id));
   }
 
   // Transparently upgrade plaintext legacy PINs to bcrypt on first successful login
