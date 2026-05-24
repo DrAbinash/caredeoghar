@@ -92,8 +92,6 @@ clinicSettingsRouter.get("/branding", async (_req, res) => {
     dayCloseAutoPrint: row.dayCloseAutoPrint ?? true,
     quickTestIds: row.quickTestIds ?? "[null,null,null,null,null,null]",
     formFTestIds: row.formFTestIds ?? "[]",
-    dicomMwlTestIds: row.dicomMwlTestIds ?? "[]",
-    dicomMwlTestDefaults: row.dicomMwlTestDefaults ?? "[]",
   });
 });
 
