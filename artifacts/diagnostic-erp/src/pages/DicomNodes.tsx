@@ -254,7 +254,7 @@ export function DicomNodesPanel() {
     {
       label: "CT Scan",
       preset: {
-        aeTitle: "CT99", host: "172.16.1.99", port: 4006, modality: "CT",
+        aeTitle: "ct99", host: "172.16.1.99", port: 4006, modality: "CT",
         description: "CT scanner", location: "Room 2", isActive: true,
         autoPull: true, pullIntervalMinutes: 10, pullQueryDays: 2,
         conquestAeTitle: "ORTHANC", conquestHost: "172.16.1.139", conquestPort: 5680,
@@ -264,7 +264,7 @@ export function DicomNodesPanel() {
     {
       label: "USG Voluson",
       preset: {
-        aeTitle: "VOLUSON", host: "172.16.1.46", port: 104, modality: "US",
+        aeTitle: "Voluson", host: "172.16.1.46", port: 104, modality: "US",
         description: "Ultrasound", location: "Room 3", isActive: true,
         autoPull: true, pullIntervalMinutes: 10, pullQueryDays: 2,
         conquestAeTitle: "ORTHANC", conquestHost: "172.16.1.139", conquestPort: 5680,
