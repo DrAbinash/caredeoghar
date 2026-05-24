@@ -9,6 +9,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { type StaffAuthRequest } from "../middleware/requireStaffAuth";
 import { auditLog } from "../lib/audit";
+import { encryptBackup, decryptBackup } from "@workspace/crypto";
 
 export const backupRouter = Router();
 
@@ -89,13 +90,32 @@ backupRouter.post("/restore", async (req: StaffAuthRequest, res) => {
     return;
   }
 
-  // Accept raw JSON body (caller can send JSON directly)
-  const backup = req.body as {
-    version?: number;
-    generatedAt?: string;
-    tables?: Record<string, unknown[]>;
-    checksum?: string;
-  } | null;
+  // Accept raw JSON body or an encrypted base64 envelope string
+  let rawBody: string;
+  if (typeof req.body === "string") {
+    rawBody = req.body;
+  } else if (req.body && typeof req.body.encrypted === "string") {
+    rawBody = req.body.encrypted;
+  } else {
+    res.status(400).json({ error: "Invalid backup payload. Send encrypted base64 string directly, or { encrypted: string }" });
+    return;
+  }
+
+  let decrypted: string;
+  try {
+    decrypted = decryptBackup(rawBody);
+  } catch {
+    // Fallback: treat as legacy plaintext JSON for backwards compatibility
+    decrypted = rawBody;
+  }
+
+  let backup: { version?: number; generatedAt?: string; tables?: Record<string, unknown[]>; checksum?: string } | null;
+  try {
+    backup = JSON.parse(decrypted);
+  } catch {
+    res.status(400).json({ error: "Backup payload is not valid JSON (decrypted or plaintext)" });
+    return;
+  }
 
   if (!backup || !backup.tables || typeof backup.tables !== "object") {
     res.status(400).json({ error: "Invalid backup payload. Expected { version, generatedAt, tables, checksum? }" });
@@ -270,12 +290,14 @@ backupRouter.post("/run", async (req, res) => {
       rowCount: totalRows,
       sizeBytes,
       performedBy,
+      encrypted: true,
     });
 
-    const filename = `care_diagnostics_backup_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
-    res.setHeader("Content-Type", "application/json");
+    const encrypted = encryptBackup(json);
+    const filename = `care_diagnostics_backup_${new Date().toISOString().replace(/[:.]/g, "-")}.json.enc`;
+    res.setHeader("Content-Type", "text/plain");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    res.send(json);
+    res.send(encrypted);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Backup failed";
     await db.insert(backupLogsTable).values({
@@ -284,6 +306,7 @@ backupRouter.post("/run", async (req, res) => {
       format: "json",
       errorMessage: msg,
       performedBy,
+      encrypted: true,
     });
     res.status(500).json({ error: msg });
   }

@@ -3,21 +3,6 @@ packages:
   - lib/*
   - lib/integrations/*
   - scripts
-  # NOTE: desktop/build (legacy windows-build/) and its electron-app are intentionally NOT
-  # listed here. They pull in Electron (~200 MB) + electron-builder (~150 MB)
-  # which would push the cloud deploy image past the 8 GiB Cloud Run limit.
-  # The Windows Build workflow installs deps directly inside windows-build/
-  # via its own package.json (run `pnpm install` inside windows-build first).
-
-# WARNING: Never run `pnpm install --prod` inside the workspace.
-# It prunes devDependencies from the shared virtual store, breaking
-# symlinks (e.g. vite) that other workspace packages depend on.
-# For production-only node_modules, use `pnpm deploy --prod <target-dir>`
-# which creates an isolated copy without corrupting the workspace.
-# When running `pnpm deploy` from scripts (build-payload.mjs, Dockerfile),
-# always pass --ignore-scripts so the root preinstall guard does not block
-# the deploy. `pnpm deploy` is safe to run alongside dev workflows: it only
-# reads from the content-addressable store and writes to an isolated target.
 
 autoInstallPeers: false
 
@@ -27,7 +12,7 @@ catalog:
   '@replit/vite-plugin-runtime-error-modal': ^0.0.6
   '@tailwindcss/vite': ^4.1.14
   '@tanstack/react-query': ^5.90.21
-  '@types/node': ^25.3.3
+  '@types/node': 25.3.5
   '@types/react': ^19.2.0
   '@types/react-dom': ^19.2.0
   '@vitejs/plugin-react': ^5.0.4
@@ -82,6 +67,9 @@ overrides:
   '@tailwindcss/oxide>@tailwindcss/oxide-linux-x64-musl': '-'
   '@tailwindcss/oxide>@tailwindcss/oxide-win32-arm64-msvc': '-'
   '@tailwindcss/oxide>@tailwindcss/oxide-win32-x64-msvc': '-'
+  '@tootallnate/once': ^3.0.1
+  brace-expansion: ^2.0.3
+  dompurify: ^3.4.2
   esbuild: 0.27.3
   esbuild>@esbuild/aix-ppc64: '-'
   esbuild>@esbuild/android-arm: '-'
@@ -118,17 +106,11 @@ overrides:
   lightningcss>lightningcss-linux-x64-musl: '-'
   lightningcss>lightningcss-win32-arm64-msvc: '-'
   lightningcss>lightningcss-win32-x64-msvc: '-'
-  '@tootallnate/once': ^3.0.1
-  brace-expansion: ^2.0.3
-  dompurify: ^3.4.2
   lodash: ^4.18.0
   path-to-regexp: ^8.4.0
   picomatch: ^4.0.4
   postcss: ^8.5.13
   protobufjs: ^7.5.5
-  tar: ^7.5.13
-  uuid: ^14.0.0
-  yaml: ^2.8.4
   rollup>@rollup/rollup-android-arm-eabi: '-'
   rollup>@rollup/rollup-android-arm64: '-'
   rollup>@rollup/rollup-darwin-arm64: '-'
@@ -153,3 +135,6 @@ overrides:
   rollup>@rollup/rollup-win32-ia32-msvc: '-'
   rollup>@rollup/rollup-win32-x64-gnu: '-'
   rollup>@rollup/rollup-win32-x64-msvc: '-'
+  tar: ^7.5.13
+  uuid: ^14.0.0
+  yaml: ^2.8.4

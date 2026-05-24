@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, bigint } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, bigint, boolean } from "drizzle-orm/pg-core";
 
 export const backupLogsTable = pgTable("backup_logs", {
   id: serial("id").primaryKey(),
@@ -10,6 +10,7 @@ export const backupLogsTable = pgTable("backup_logs", {
   errorMessage: text("error_message"),
   performedBy: text("performed_by"),
   notes: text("notes"),
+  encrypted: boolean("encrypted").default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

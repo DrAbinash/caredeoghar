@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { backupJobsTable, backupJobLogsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
+import crypto from "node:crypto";
 import { type StaffAuthRequest, FULL_ACCESS_ROLES } from "../middleware/requireStaffAuth";
 
 export const backupReplicationRouter = Router();
@@ -93,7 +94,7 @@ backupReplicationRouter.post("/jobs/:id/run", requireAdmin as any, async (req, r
       let notes = "";
 
       if (job.backupType === "DB" || job.backupType === "FULL") {
-        // Use the existing backup endpoint logic by calling the internal backup function
+        const { encryptBackup } = await import("@workspace/crypto");
         const tables = ["patients", "bills", "radiology_studies", "patient_reports",
           "ai_reporting_drafts", "orders", "report_delivery_logs"];
         const exportData: Record<string, unknown[]> = {};
@@ -104,9 +105,27 @@ backupReplicationRouter.post("/jobs/:id/run", requireAdmin as any, async (req, r
             rowCount += rows.rows.length;
           } catch { /* table may not exist */ }
         }
-        const json = JSON.stringify(exportData);
-        sizeBytes = Buffer.byteLength(json, "utf8");
-        notes = `Exported ${tables.length} tables in-memory. Configure destinationPath to write to disk.`;
+        const payload = JSON.stringify({
+          generatedAt: new Date().toISOString(),
+          version: 1,
+          tables: exportData,
+          checksum: crypto.createHash("sha256").update(JSON.stringify(exportData)).digest("hex"),
+        });
+        const encrypted = encryptBackup(payload);
+        sizeBytes = Buffer.byteLength(encrypted, "utf8");
+        notes = `Exported ${tables.length} tables (${rowCount} rows) — encrypted.`;
+
+        if (job.destinationPath) {
+          try {
+            const dir = require("path").dirname(job.destinationPath);
+            require("fs").mkdirSync(dir, { recursive: true });
+            const dest = `${job.destinationPath}/backup_${job.jobName}_${new Date().toISOString().replace(/[:.]/g, "-")}.json.enc`;
+            require("fs").writeFileSync(dest, encrypted);
+            notes += ` Saved to ${dest}`;
+          } catch (e: unknown) {
+            notes += ` Disk write failed: ${e instanceof Error ? e.message : String(e)}`;
+          }
+        }
       } else if (job.backupType === "CONFIG") {
         notes = "Config backup: clinic_settings, email_settings, pacs_settings exported.";
         rowCount = 10;
@@ -120,6 +139,7 @@ backupReplicationRouter.post("/jobs/:id/run", requireAdmin as any, async (req, r
         rowCount,
         sizeBytes,
         notes,
+        encrypted: true,
       }).where(eq(backupJobLogsTable.id, logRow?.id ?? 0));
 
       await db.update(backupJobsTable).set({
@@ -134,6 +154,7 @@ backupReplicationRouter.post("/jobs/:id/run", requireAdmin as any, async (req, r
         status: "failed",
         completedAt: new Date(),
         errorMessage: msg,
+        encrypted: true,
       }).where(eq(backupJobLogsTable.id, logRow?.id ?? 0));
 
       await db.update(backupJobsTable).set({

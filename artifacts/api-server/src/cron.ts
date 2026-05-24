@@ -9,6 +9,7 @@ import { sendDailySummaryEmail, sendCommissionMonthEndEmail, sendMonthlyAuditEma
 import { runBooksSanity } from "./routes/books-sanity";
 import { auditRunsTable } from "@workspace/db/schema";
 import { gte, and, lte, eq, inArray, isNull, or, lt } from "drizzle-orm";
+import { encryptBackup } from "@workspace/crypto";
 
 let currentTask: ReturnType<typeof cron.schedule> | null = null;
 // Track already-fired events per day to avoid double-firing
@@ -129,8 +130,9 @@ async function fireScheduledBackups() {
           try {
             const dir = require("path").dirname(job.destinationPath);
             require("fs").mkdirSync(dir, { recursive: true });
-            const dest = `${job.destinationPath}/backup_${job.jobName}_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
-            require("fs").writeFileSync(dest, json);
+            const enc = encryptBackup(json);
+            const dest = `${job.destinationPath}/backup_${job.jobName}_${new Date().toISOString().replace(/[:.]/g, "-")}.json.enc`;
+            require("fs").writeFileSync(dest, enc);
             filePath = dest;
             notes = `Backup saved to ${dest}`;
           } catch (e: unknown) {
@@ -169,6 +171,7 @@ async function fireScheduledBackups() {
         sizeBytes,
         filePath,
         notes,
+        encrypted: true,
       }).where(eq(backupJobLogsTable.id, logRow?.id ?? 0));
 
       await db.update(backupJobsTable).set({
@@ -185,6 +188,7 @@ async function fireScheduledBackups() {
         completedAt: new Date(),
         errorMessage: msg,
         notes: notes || msg,
+        encrypted: true,
       }).where(eq(backupJobLogsTable.id, logRow?.id ?? 0));
 
       await db.update(backupJobsTable).set({

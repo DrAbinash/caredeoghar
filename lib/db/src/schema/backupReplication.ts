@@ -39,6 +39,7 @@ export const backupJobLogsTable = pgTable(
     filePath: text("file_path"),
     errorMessage: text("error_message"),
     notes: text("notes"),
+    encrypted: boolean("encrypted").default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({

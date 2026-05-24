@@ -7,7 +7,7 @@ import {
   ArrowLeft, Shield, Activity, Users, Lock, AlertTriangle,
   CheckCircle2, XCircle, Clock, HardDrive, Database, Search,
   Trash2, RefreshCw, ChevronLeft, ChevronRight, Unlock,
-  Download,
+  Download, ShieldCheck,
 } from "lucide-react";
 import { saAuthHeaders } from "@/lib/saApi";
 import {
@@ -50,6 +50,7 @@ interface BackupLog {
   sizeBytes: number | null;
   errorMessage: string | null;
   notes: string | null;
+  encrypted: boolean | null;
 }
 
 interface AuditSummaryRow {
@@ -346,6 +347,7 @@ export default function SecurityDashboard({ onBack }: { onBack: () => void }) {
                       <TableHead>Status</TableHead>
                       <TableHead>Rows</TableHead>
                       <TableHead>Size</TableHead>
+                      <TableHead>Encrypted</TableHead>
                       <TableHead>Notes</TableHead>
                       <TableHead>Time</TableHead>
                     </TableRow>
@@ -353,7 +355,7 @@ export default function SecurityDashboard({ onBack }: { onBack: () => void }) {
                   <TableBody>
                     {(!data?.backupStatus.recentLogs || data.backupStatus.recentLogs.length === 0) && (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No recent backup logs.</TableCell>
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No recent backup logs.</TableCell>
                       </TableRow>
                     )}
                     {data?.backupStatus.recentLogs.map((l) => (
@@ -361,6 +363,7 @@ export default function SecurityDashboard({ onBack }: { onBack: () => void }) {
                         <TableCell>{statusBadge(l.status)}</TableCell>
                         <TableCell>{l.rowCount?.toLocaleString() ?? "—"}</TableCell>
                         <TableCell>{l.sizeBytes ? formatBytes(l.sizeBytes) : "—"}</TableCell>
+                        <TableCell>{l.encrypted ? <ShieldCheck size={14} className="text-green-500" /> : <span className="text-muted-foreground">—</span>}</TableCell>
                         <TableCell className="text-xs max-w-[300px] truncate">{l.notes ?? l.errorMessage ?? "—"}</TableCell>
                         <TableCell className="text-xs">{l.completedAt ? formatDate(l.completedAt) : "—"}</TableCell>
                       </TableRow>

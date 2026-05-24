@@ -24,6 +24,7 @@ interface BackupLog {
   sizeBytes: number;
   performedBy: string;
   errorMessage: string | null;
+  encrypted: boolean | null;
   createdAt: string;
 }
 
