@@ -37,6 +37,7 @@ PUBLIC_OBJECT_SEARCH_PATHS = "data/uploads"
 PRIVATE_OBJECT_DIR = "data/private-objects"
 
 [userenv.shared]
+ENABLE_DICOM_PULL_AGENT = "1"
 
 [[ports]]
 localPort = 8080
