@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useListPatients, useListOrders, useGetOrder } from "@workspace/api-client-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
+import { useLocation } from "wouter";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +32,7 @@ import {
   Library,
   CheckCircle2,
   XCircle,
+  ScanLine,
 } from "lucide-react";
 import { Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -357,6 +359,75 @@ export default function ReportGenerator() {
     if (r.ok) setFindingsLib(await r.json());
   };
   useEffect(() => { loadTemplates(); loadFindingsLib(); }, []);
+
+  // ── Barcode scanner auto-populate ──
+  const qc = useQueryClient();
+  const [location] = useLocation();
+  const [scanBuffer, setScanBuffer] = useState("");
+  const scannerRef = useRef<HTMLInputElement>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+
+  // Auto-focus scanner input always
+  useEffect(() => {
+    const focus = () => scannerRef.current?.focus();
+    focus();
+    window.addEventListener("click", focus);
+    window.addEventListener("touchstart", focus);
+    return () => {
+      window.removeEventListener("click", focus);
+      window.removeEventListener("touchstart", focus);
+    };
+  }, []);
+
+  // Prevent Enter from navigating away
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Enter" && document.activeElement === scannerRef.current) e.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const resolveBarcode = useCallback(async (code: string) => {
+    if (!code.trim()) return;
+    setScanError(null);
+    try {
+      const result = await api.get<{ type: string; patient?: { id: number } | null; order?: { id: number } | null }>(`/api/resolve-barcode/${encodeURIComponent(code.trim())}`);
+      if (result.patient?.id) {
+        setPatientId(result.patient.id);
+        setOrderId(null);
+        setFindings([]);
+      }
+      if (result.order?.id) {
+        setOrderId(result.order.id);
+      }
+      // Refresh patient list and orders so Select dropdowns have data
+      qc.invalidateQueries({ queryKey: ["listPatients"] });
+      if (result.patient?.id) {
+        qc.invalidateQueries({ queryKey: ["listOrders", String(result.patient.id)] });
+      }
+      if (result.patient?.id || result.order?.id) {
+        toast({ title: "Barcode scanned", description: `Loaded ${result.type} data.` });
+      } else {
+        setScanError("Scanned code matched no patient, order, bill, or report.");
+      }
+    } catch (err: any) {
+      setScanError(err?.message || "Lookup failed.");
+    } finally {
+      setScanBuffer("");
+      if (scannerRef.current) scannerRef.current.value = "";
+      setTimeout(() => scannerRef.current?.focus(), 50);
+    }
+  }, [qc, toast]);
+
+  // URL param auto-load (for ReportDelivery "View" links)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const orderIdParam = params.get("orderId");
+    if (orderIdParam) {
+      setOrderId(Number(orderIdParam));
+    }
+  }, [location]);
 
   const { data: patients } = useListPatients({ limit: 200 });
   const { data: orders } = useListOrders({ patientId: patientId ?? undefined, limit: 50 });
@@ -758,6 +829,34 @@ export default function ReportGenerator() {
 
             {/* ── Left Panel: Controls ── */}
             <div className="no-print lg:col-span-1 space-y-4">
+
+              {/* Barcode scanner input (invisible, keyboard-capturing) */}
+              <input
+                ref={scannerRef}
+                type="text"
+                autoFocus
+                autoComplete="off"
+                aria-hidden="true"
+                className="fixed top-0 left-0 w-1 h-1 opacity-0 pointer-events-none"
+                onChange={(e) => setScanBuffer(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); resolveBarcode(e.currentTarget.value); } }}
+              />
+
+              {/* Scanner status */}
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <ScanLine size={16} className="text-primary" />
+                  <div>
+                    <p className="text-xs font-medium">Scanner ready</p>
+                    <p className="text-[11px] text-muted-foreground">{scanBuffer ? `Buffer: ${scanBuffer}` : "Scan any barcode to auto-load patient & order"}</p>
+                  </div>
+                </div>
+                {scanError && (
+                  <span className="text-[11px] text-red-600 flex items-center gap-1">
+                    <AlertTriangle size={11} /> {scanError}
+                  </span>
+                )}
+              </div>
 
               {/* Patient & Order */}
               <div className="bg-card border border-card-border rounded-xl p-4 shadow-sm space-y-3">

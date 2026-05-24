@@ -74,6 +74,7 @@ import { rolePermissionsRouter } from "./role-permissions";
 import systemHealthRouter from "./system-health";
 import { backupLimiter, exportLimiter, adminMutationLimiter, standardUploadLimiter } from "../middleware/rateLimits";
 import userPreferencesRouter from "./userPreferences";
+import barcodeResolverRouter from "./barcode-resolver";
 import { uploadsRouter } from "./uploads";
 import { radiologyReportGeneratorRouter } from "./radiology-report-generator";
 import { structuredReportTemplatesRouter } from "./structuredReportTemplates";
@@ -409,6 +410,7 @@ router.use("/ai", requireStaffAuth, aiRouter);
 // These routes serve operational functions genuinely shared across all staff
 // roles and do not expose sensitive module-specific data on their own.
 router.use("/samples", requireStaffAuth, samplesRouter);
+router.use("/resolve-barcode", requireStaffAuth, barcodeResolverRouter);
 router.use("/appointments", requireStaffAuth, appointmentsRouter);
 router.use("/online-bookings", requireStaffAuth, onlineBookingsRouter);
 router.use("/daily-summary", requireStaffAuth, dailySummaryRouter);

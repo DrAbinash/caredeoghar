@@ -90,6 +90,7 @@ const MyDailySummary  = lazy(() => import("@/pages/MyDailySummary"));
 const OutsourcedLabs  = lazy(() => import("@/pages/OutsourcedLabs"));
 const Samples         = lazy(() => import("@/pages/Samples"));
 const ScanStation     = lazy(() => import("@/pages/ScanStation"));
+const ReportDelivery  = lazy(() => import("@/pages/ReportDelivery"));
 const Kiosk           = lazy(() => import("@/pages/Kiosk"));
 const NotFound        = lazy(() => import("@/pages/not-found"));
 const RadiologyCommandCenter = lazy(() => import("@/pages/RadiologyCommandCenter"));
@@ -287,6 +288,7 @@ function Router() {
               <Route path="/outsourced-labs" component={OutsourcedLabs} />
               <Route path="/samples" component={Samples} />
               <Route path="/scan-station" component={ScanStation} />
+              <Route path="/report-delivery" component={ReportDelivery} />
               <Route path="/settings/radiology" component={RadiologySettings} />
               <Route path="/settings" component={Settings} />
               <Route path="/whatsapp-chatbot" component={WhatsAppChatbot} />

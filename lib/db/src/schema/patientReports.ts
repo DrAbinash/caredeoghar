@@ -41,6 +41,7 @@ export const patientReportsTable = pgTable(
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
     verifierNotes: text("verifier_notes"),
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    deliveredBy: text("delivered_by"),                // staff name who handed report to patient
     templateId: integer("template_id"),             // last template used (for audit)
     // Tokenized public download. Rotated on every explicit public-link request.
     // Lets us send WhatsApp/SMS PDF links to patients without requiring them
@@ -57,6 +58,7 @@ export const patientReportsTable = pgTable(
     publicTokenUq: uniqueIndex("patient_reports_public_token_uq").on(t.publicToken),
     byPatient: index("patient_reports_patient_idx").on(t.patientId),
     byStatus: index("patient_reports_status_idx").on(t.status),
+    byDelivered: index("patient_reports_delivered_idx").on(t.deliveredAt),
     byCritical: index("patient_reports_critical_idx").on(t.isCritical),
   }),
 );

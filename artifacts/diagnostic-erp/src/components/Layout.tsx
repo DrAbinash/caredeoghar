@@ -74,6 +74,7 @@ import {
   Keyboard,
   HardDrive,
   AlertTriangle,
+  Send,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -172,6 +173,7 @@ const navItems: NavEntry[] = [
   { path: "/usg", icon: Waves, label: "USG / DOPPLER" },
   { path: "/samples", icon: TestTube, label: "Samples" },
   { path: "/scan-station", icon: ScanLine, label: "Scan Station" },
+  { path: "/report-delivery", icon: Send, label: "Report Delivery" },
   { path: "/reports", icon: BarChart3, label: "Reports" },
   { path: "/report-generator", icon: FilePen, label: "Report Generator" },
   { path: "/report-hub", icon: FileText, label: "Report Hub" },
