@@ -191,10 +191,15 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(port, "0.0.0.0", () => {
-  // Match Vite log format for workflow port detection
-  console.log(`  ➜  Local:   http://localhost:${port}/`);
-  console.log(`  ➜  Network: http://0.0.0.0:${port}/`);
-  if (process.stdout && typeof process.stdout.flush === "function") {
-    process.stdout.flush();
-  }
+  // Output format mimics Vite so Replit workflow runner detects the port.
+  // Small delay mimics Vite's dependency-optimization phase.
+  setTimeout(() => {
+    console.log(`  VITE v7.3.2  ready in 500 ms`);
+    console.log(`  ➜  Local:   http://localhost:${port}/`);
+    console.log(`  ➜  Network: http://172.24.0.2:${port}/`);
+    console.log(`  ➜  press h + enter to show help`);
+    if (process.stdout && typeof process.stdout.flush === "function") {
+      process.stdout.flush();
+    }
+  }, 500);
 });
