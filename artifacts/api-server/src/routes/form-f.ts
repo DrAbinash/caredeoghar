@@ -2,10 +2,11 @@ import { Router } from "express";
 import { db, billsTable, patientsTable, formFRecordsTable, clinicSettingsTable } from "@workspace/db";
 import { eq, or, ilike, inArray, isNotNull, desc, and } from "drizzle-orm";
 import { ordersTable, orderTestsTable, testsTable, doctorsTable } from "@workspace/db";
-import { whatsappConversationsTable } from "@workspace/db/schema";
+import { whatsappConversationsTable, whatsappSettingsTable } from "@workspace/db/schema";
 import { dateToISTString } from "../lib/istDate";
 import { geminiOcrIdCard } from "@workspace/integrations-gemini-ai";
 import { requireStaffPermission } from "../middleware/requireStaffAuth";
+import { sendTextMessageRaw, resolveNumber, normalizePhone } from "./whatsapp";
 
 const formFRouter = Router();
 
@@ -411,15 +412,8 @@ formFRouter.post("/upload-id", requireStaffPermission("/form-f"), async (req, re
     const mimeType = String(body.mimeType ?? "image/jpeg").trim();
     const imageUrl = String(body.imageUrl ?? "").trim();
 
-    if (!formFId || (!imageBase64 && !imageUrl)) {
-      res.status(400).json({ error: "formFId and imageBase64 or imageUrl required" });
-      return;
-    }
-
-    // Verify the form F record exists
-    const [record] = await db.select().from(formFRecordsTable).where(eq(formFRecordsTable.id, formFId)).limit(1);
-    if (!record) {
-      res.status(404).json({ error: "Form F record not found" });
+    if (!imageBase64 && !imageUrl) {
+      res.status(400).json({ error: "imageBase64 or imageUrl required" });
       return;
     }
 
@@ -446,20 +440,38 @@ formFRouter.post("/upload-id", requireStaffPermission("/form-f"), async (req, re
       console.warn("[form-f] Gemini ID card OCR failed:", e);
     }
 
-    // Update the record with extracted data and image reference
-    const updateData: Record<string, unknown> = { idCardVerified: false };
-    if (imageUrl) updateData.idCardImageUrl = imageUrl;
-    if (ocrResult?.guardianName) updateData.idCardExtractedName = ocrResult.guardianName;
-    if (ocrResult?.address) updateData.idCardExtractedAddress = ocrResult.address;
+    // If formFId is valid, update the record with extracted data and image reference
+    if (formFId) {
+      const [record] = await db.select().from(formFRecordsTable).where(eq(formFRecordsTable.id, formFId)).limit(1);
+      if (record) {
+        const updateData: Record<string, unknown> = { idCardVerified: false };
+        if (imageUrl) updateData.idCardImageUrl = imageUrl;
+        if (ocrResult?.guardianName) updateData.idCardExtractedName = ocrResult.guardianName;
+        if (ocrResult?.address) updateData.idCardExtractedAddress = ocrResult.address;
 
-    const [updated] = await db.update(formFRecordsTable)
-      .set(updateData)
-      .where(eq(formFRecordsTable.id, formFId))
-      .returning();
+        const [updated] = await db.update(formFRecordsTable)
+          .set(updateData)
+          .where(eq(formFRecordsTable.id, formFId))
+          .returning();
+        res.json({
+          ok: true,
+          formF: updated,
+          ocr: ocrResult
+            ? {
+                guardianName: ocrResult.guardianName,
+                address: ocrResult.address,
+                documentType: ocrResult.documentType,
+                confidence: ocrResult.confidence,
+              }
+            : null,
+        });
+        return;
+      }
+    }
 
+    // No record yet — just return OCR result (frontend will show it and staff can accept)
     res.json({
       ok: true,
-      formF: updated,
       ocr: ocrResult
         ? {
             guardianName: ocrResult.guardianName,
@@ -521,6 +533,58 @@ formFRouter.get("/:id", requireStaffPermission("/form-f"), async (req, res) => {
     res.json(record);
   } catch (err) {
     console.error("[form-f] get error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Send WhatsApp message to patient requesting ID card upload ────────────
+formFRouter.post("/send-whatsapp", requireStaffPermission("/form-f"), async (req, res): Promise<void> => {
+  try {
+    const body = req.body ?? {};
+    const mobile = String(body.mobile ?? "").trim();
+    const patientName = String(body.patientName ?? "").trim();
+
+    if (!mobile) {
+      res.status(400).json({ error: "Mobile number required" });
+      return;
+    }
+
+    // Get WhatsApp settings for default country code
+    const [s] = await db.select().from(whatsappSettingsTable).limit(1);
+    const to = normalizePhone(mobile, s?.defaultCountryCode ?? "91");
+    if (!to) {
+      res.status(400).json({ error: "Invalid mobile number" });
+      return;
+    }
+
+    // Try Form F number first, then fall back to any default
+    let cfg = await resolveNumber("form_f");
+    if (!cfg) cfg = await resolveNumber("general");
+    if (!cfg) {
+      res.status(400).json({ error: "WhatsApp not configured" });
+      return;
+    }
+
+    const greeting = patientName ? `Hi ${patientName},` : "Hi,";
+    const message = `${greeting} this is Care Diagnostics.
+
+For your PCPNDT Form F record, we need a clear photo of your ID card (Aadhaar / Voter ID / Passport) showing:
+- Guardian/Husband/Father's name
+- Full address
+
+Please reply to this message with a photo of your ID card. Our system will read it automatically and fill your Form F record.
+
+Thank you!`;
+
+    const result = await sendTextMessageRaw(to, message, cfg);
+    if (!result.ok) {
+      res.status(500).json({ error: result.error ?? "Send failed" });
+      return;
+    }
+
+    res.json({ ok: true, messageId: result.messageId });
+  } catch (err) {
+    console.error("[form-f] send-whatsapp error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });

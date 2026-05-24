@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Printer, RefreshCcw, FileText, List, User, Phone, Users, BookOpen, Upload, Camera, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Search, Printer, RefreshCcw, FileText, List, User, Phone, Users, BookOpen, Upload, Camera, CheckCircle2, AlertTriangle, MessageCircle } from "lucide-react";
 
 type DoctorOption = { id: number; name: string; registrationNumber: string | null };
 
@@ -468,6 +468,9 @@ export default function FormF() {
     guardianName?: string; address?: string; documentType?: string; confidence?: string;
   } | null>(null);
 
+  // ── Feature 5: Send WhatsApp to patient requesting ID card ──
+  const [waSending, setWaSending] = useState(false);
+
   // Module B: PCPNDT Form F now auto-fills the conducting doctor's medical-council
   // registration number. We fetch the small doctor list once and expose it via a
   // <datalist> so staff can pick a saved doctor and have the reg no fill itself.
@@ -832,6 +835,34 @@ export default function FormF() {
                 ✓ Auto-saved {lastSaved}
               </span>
             )}
+            {activeTab === "form" && form.mobile && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs border-green-300 bg-green-50 hover:bg-green-100 text-green-700"
+                disabled={waSending}
+                onClick={async () => {
+                  setWaSending(true);
+                  try {
+                    const resp = await api.post<{ ok: boolean; messageId?: string }>("/api/form-f/send-whatsapp", {
+                      mobile: form.mobile,
+                      patientName: form.patientName,
+                    });
+                    if (resp.ok) {
+                      toast({ title: "WhatsApp sent", description: `Message sent to ${form.mobile}. Patient can reply with ID card photo.` });
+                    } else {
+                      toast({ title: "Send failed", description: "Could not send WhatsApp message.", variant: "destructive" });
+                    }
+                  } catch {
+                    toast({ title: "Send failed", description: "Could not send WhatsApp message.", variant: "destructive" });
+                  } finally {
+                    setWaSending(false);
+                  }
+                }}
+              >
+                <MessageCircle size={12} className="mr-1" />{waSending ? "Sending…" : "Request ID Card"}
+              </Button>
+            )}
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => { setForm(defaultForm()); setLastSaved(null); setIdCardImageUrl(""); setIdCardExtractedName(""); setIdCardExtractedAddress(""); setIdCardVerified(false); setIdCardOcrResult(null); }}>
               <RefreshCcw size={12} className="mr-1" /> Reset
             </Button>
@@ -1119,8 +1150,10 @@ export default function FormF() {
                       try {
                         const reader = new FileReader();
                         reader.onload = async () => {
-                          const base64 = String(reader.result ?? "").split(",")[1];
+                          const dataUrl = String(reader.result ?? "");
+                          const base64 = dataUrl.split(",")[1];
                           if (!base64) { toast({ title: "Failed to read image", variant: "destructive" }); setIdCardUploading(false); return; }
+                          setIdCardImageUrl(dataUrl); // keep for print preview
                           const resp = await api.post<{
                             ocr?: { guardianName?: string; address?: string; documentType?: string; confidence?: string; } | null;
                             recordId?: number;

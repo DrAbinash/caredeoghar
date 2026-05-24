@@ -24,7 +24,7 @@ interface NumberConfig {
 /** Resolve the number that should be used for a given role.
  *  If numbers table has entries, pick the first enabled number matching the role.
  *  Falls back to the legacy global settings if no numbers exist. */
-async function resolveNumber(role: string): Promise<NumberConfig | null> {
+export async function resolveNumber(role: string): Promise<NumberConfig | null> {
   const numbers = await db.select().from(whatsappNumbersTable).where(eq(whatsappNumbersTable.enabled, true));
   const match = numbers.find((n) => n.role === role) ?? numbers.find((n) => n.isDefault);
   if (match && match.phoneNumberId && match.accessToken) {
@@ -520,7 +520,7 @@ Reply in a helpful, friendly manner. Be concise.`;
 
 // ─── Low-level send helpers ────────────────────────────────────────────────────
 
-async function sendTextMessageRaw(
+export async function sendTextMessageRaw(
   to: string,
   body: string,
   cfg: NumberConfig,

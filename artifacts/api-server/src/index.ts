@@ -233,6 +233,25 @@ async function runStartupMigrations(): Promise<void> {
       ALTER TABLE dicom_modalities ADD COLUMN IF NOT EXISTS c_store_port INTEGER;
       ALTER TABLE dicom_modalities ADD COLUMN IF NOT EXISTS usb_auto_import_enabled BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE dicom_modalities ADD COLUMN IF NOT EXISTS non_dicom_import_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+      CREATE TABLE IF NOT EXISTS dicom_nodes (
+        id SERIAL PRIMARY KEY,
+        ae_title TEXT NOT NULL UNIQUE,
+        host TEXT NOT NULL,
+        port INTEGER NOT NULL DEFAULT 104,
+        modality TEXT NOT NULL DEFAULT 'OT',
+        name TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        location TEXT NOT NULL DEFAULT '',
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        auto_pull BOOLEAN NOT NULL DEFAULT FALSE,
+        pull_interval_seconds INTEGER NOT NULL DEFAULT 300,
+        query_lookback_hours INTEGER NOT NULL DEFAULT 24,
+        conquest_ae_title TEXT NOT NULL DEFAULT '',
+        conquest_host TEXT NOT NULL DEFAULT '',
+        conquest_port INTEGER NOT NULL DEFAULT 5678,
+        preferred_retrieve_method TEXT NOT NULL DEFAULT 'C_MOVE',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
       ALTER TABLE dicom_nodes ADD COLUMN IF NOT EXISTS preferred_retrieve_method TEXT NOT NULL DEFAULT 'C_MOVE';
 
       -- Default Voluson USG entry (idempotent)
@@ -241,8 +260,8 @@ async function runStartupMigrations(): Promise<void> {
       WHERE NOT EXISTS (SELECT 1 FROM dicom_modalities WHERE ae_title = 'Voluson');
 
       -- Default Voluson node for pull agent (idempotent)
-      INSERT INTO dicom_nodes (ae_title, host, port, modality, description, location, is_active, auto_pull, pull_interval_minutes, pull_query_days, conquest_ae_title, conquest_host, conquest_port, preferred_retrieve_method)
-      SELECT 'Voluson', '172.16.1.46', 104, 'US', 'GE Voluson USG machine', 'Radiology Wing - USG', true, true, 15, 1, '', '', 5678, 'C_STORE_OR_WATCH_FOLDER'
+      INSERT INTO dicom_nodes (ae_title, host, port, modality, description, location, is_active, auto_pull, pull_interval_seconds, query_lookback_hours, conquest_ae_title, conquest_host, conquest_port, preferred_retrieve_method)
+      SELECT 'Voluson', '172.16.1.46', 104, 'US', 'GE Voluson USG machine', 'Radiology Wing - USG', true, true, 900, 24, '', '', 5678, 'C_STORE_OR_WATCH_FOLDER'
       WHERE NOT EXISTS (SELECT 1 FROM dicom_nodes WHERE ae_title = 'Voluson');
 
       ALTER TABLE radiology_worklist ADD COLUMN IF NOT EXISTS dicom_patient_id TEXT;
@@ -369,6 +388,24 @@ async function runStartupMigrations(): Promise<void> {
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS account_lockout_duration_minutes INTEGER NOT NULL DEFAULT 30;
 
       -- ── Hospital-Grade Safety Phase 3: Tamper-evident audit chain (May 2026) ─
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER,
+        user_name TEXT NOT NULL DEFAULT 'system',
+        role TEXT NOT NULL DEFAULT 'system',
+        action TEXT NOT NULL,
+        module TEXT NOT NULL,
+        entity_type TEXT,
+        entity_id TEXT,
+        old_value TEXT,
+        new_value TEXT,
+        ip_address TEXT,
+        user_agent TEXT,
+        reason TEXT,
+        previous_hash TEXT NOT NULL DEFAULT '',
+        chain_hash TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
       ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS previous_hash TEXT NOT NULL DEFAULT '';
       ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS chain_hash TEXT NOT NULL DEFAULT '';
 
