@@ -744,6 +744,13 @@ export default function FormF() {
     </div>
   );
 
+  const BigLabelRow = ({ label, children }: { label: string; children: React.ReactNode }) => (
+    <div className="flex items-start gap-3">
+      <span className="text-sm font-semibold w-44 flex-shrink-0 text-gray-700 pt-2">{label}</span>
+      <div className="flex-1">{children}</div>
+    </div>
+  );
+
   const Radio = ({ name, val, label }: { name: keyof FormFData; val: string; label: string }) => (
     <label className="inline-flex items-center gap-1 cursor-pointer mr-3">
       <input
@@ -1181,18 +1188,18 @@ export default function FormF() {
               </div>
             </div>
 
-            {/* Section 2: DETAILS TO FILL — staff-typed fields */}
-            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-              <div className="flex items-center gap-2 pb-2 border-b border-gray-100 mb-3">
-                <span className="text-sm font-bold text-gray-800">Details to Fill</span>
-                <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">Type these fields</span>
+            {/* Section 2: DETAILS TO FILL — BIG BOX, BIG FONTS */}
+            <div className="bg-white border-2 border-orange-200 rounded-xl p-6 shadow-md">
+              <div className="flex items-center gap-2 pb-3 border-b-2 border-orange-100 mb-4">
+                <span className="text-base font-extrabold text-gray-900">Details to Fill</span>
+                <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-semibold">Type these fields</span>
               </div>
-              <div className="space-y-3">
-                <LabelRow label="Husband / Father Name *">
+              <div className="space-y-5">
+                <BigLabelRow label="Husband / Father Name *">
                   <div className="flex gap-2">
-                    <Input {...inp("husbandFatherName")} placeholder="Required for PCPNDT" className="flex-1 text-sm h-9" />
-                    <label className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-dashed border-orange-300 bg-orange-50 cursor-pointer text-xs transition-colors ${idCardUploading ? "opacity-60 cursor-wait" : "hover:bg-orange-100 text-orange-700"}`}>
-                      <Camera size={12} className={idCardUploading ? "animate-pulse" : ""} />
+                    <Input {...inp("husbandFatherName")} placeholder="Required for PCPNDT" className="flex-1 text-base h-11" />
+                    <label className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed border-orange-300 bg-orange-50 cursor-pointer text-sm font-medium transition-colors ${idCardUploading ? "opacity-60 cursor-wait" : "hover:bg-orange-100 text-orange-700"}`}>
+                      <Camera size={14} className={idCardUploading ? "animate-pulse" : ""} />
                       <span>{idCardUploading ? "Scanning…" : "Scan ID"}</span>
                       <input
                         type="file"
@@ -1229,80 +1236,80 @@ export default function FormF() {
                       />
                     </label>
                   </div>
-                </LabelRow>
+                </BigLabelRow>
 
                 {/* ── AI-extracted ID card data review ── */}
                 {(idCardOcrResult || idCardExtractedName || idCardExtractedAddress) && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5 space-y-1.5">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 space-y-2">
                     <div className="flex items-center gap-1.5">
-                      <AlertTriangle size={12} className="text-blue-600" />
-                      <span className="text-[11px] font-semibold text-blue-800">AI-extracted ID card data — please verify</span>
+                      <AlertTriangle size={14} className="text-blue-600" />
+                      <span className="text-sm font-semibold text-blue-800">AI-extracted ID card data — please verify</span>
                       {idCardOcrResult && (
-                        <Badge variant="outline" className="text-[10px] h-5 ml-auto">
+                        <Badge variant="outline" className="text-xs h-5 ml-auto">
                           {idCardOcrResult.confidence} confidence
                         </Badge>
                       )}
                     </div>
                     {idCardExtractedName && (
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-blue-700 flex-1 truncate">
+                        <span className="text-sm text-blue-700 flex-1 truncate">
                           <span className="font-semibold">Guardian:</span> {idCardExtractedName}
                         </span>
                         <Button
-                          size="sm" variant="ghost" className="h-6 text-[10px] px-2 py-0"
+                          size="sm" variant="ghost" className="h-7 text-xs px-3 py-0"
                           onClick={() => { set("husbandFatherName", idCardExtractedName); setIdCardVerified(true); toast({ title: "Guardian name accepted" }); }}
                         >
-                          <CheckCircle2 size={10} className="mr-1" /> Use this
+                          <CheckCircle2 size={12} className="mr-1" /> Use this
                         </Button>
                       </div>
                     )}
                     {idCardExtractedAddress && (
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-blue-700 flex-1 truncate">
+                        <span className="text-sm text-blue-700 flex-1 truncate">
                           <span className="font-semibold">Address:</span> {idCardExtractedAddress}
                         </span>
                         <Button
-                          size="sm" variant="ghost" className="h-6 text-[10px] px-2 py-0"
+                          size="sm" variant="ghost" className="h-7 text-xs px-3 py-0"
                           onClick={() => { set("address", idCardExtractedAddress); setIdCardVerified(true); toast({ title: "Address accepted" }); }}
                         >
-                          <CheckCircle2 size={10} className="mr-1" /> Use this
+                          <CheckCircle2 size={12} className="mr-1" /> Use this
                         </Button>
                       </div>
                     )}
                   </div>
                 )}
 
-                <LabelRow label="Full Address *">
-                  <Input {...inp("address")} placeholder="Patient's full address" className="text-sm h-9" />
-                </LabelRow>
-                <LabelRow label="No. of children">
-                  <div className="flex items-center gap-3">
+                <BigLabelRow label="Full Address *">
+                  <Input {...inp("address")} placeholder="Patient's full address" className="text-base h-11" />
+                </BigLabelRow>
+                <BigLabelRow label="No. of children">
+                  <div className="flex items-center gap-4">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1">Boy</span>
-                      <Input type="number" min={0} max={20} value={form.boyCount} onChange={(e) => set("boyCount", e.target.value)} className="h-9 text-sm w-16 text-center" placeholder="0" />
+                      <span className="text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-1.5">Boy</span>
+                      <Input type="number" min={0} max={20} value={form.boyCount} onChange={(e) => set("boyCount", e.target.value)} className="h-11 text-base w-20 text-center" placeholder="0" />
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-medium text-pink-700 bg-pink-50 border border-pink-200 rounded px-2 py-1">Girl</span>
-                      <Input type="number" min={0} max={20} value={form.girlCount} onChange={(e) => set("girlCount", e.target.value)} className="h-9 text-sm w-16 text-center" placeholder="0" />
+                      <span className="text-sm font-medium text-pink-700 bg-pink-50 border border-pink-200 rounded px-3 py-1.5">Girl</span>
+                      <Input type="number" min={0} max={20} value={form.girlCount} onChange={(e) => set("girlCount", e.target.value)} className="h-11 text-base w-20 text-center" placeholder="0" />
                     </div>
-                    <span className="text-xs text-muted-foreground">(enter count per gender)</span>
+                    <span className="text-sm text-muted-foreground">(enter count per gender)</span>
                   </div>
-                </LabelRow>
-                <LabelRow label="Referred by">
-                  <div className="flex items-center gap-2 flex-wrap">
+                </BigLabelRow>
+                <BigLabelRow label="Referred by">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <Radio name="referredBy" val="Self" label="Self" />
                     <Radio name="referredBy" val="Doctor" label="Doctor" />
                     {form.referredBy === "Doctor" && (
-                      <Input {...inp("referredByName")} placeholder="Doctor name" className="h-9 text-sm w-48" />
+                      <Input {...inp("referredByName")} placeholder="Doctor name" className="h-11 text-base w-56" />
                     )}
                   </div>
-                </LabelRow>
-                <LabelRow label="LMP / weeks">
-                  <Input {...inp("lmpWeeks")} placeholder="e.g. 12 weeks / 15-01-2026" className="text-sm h-9" />
-                </LabelRow>
-                <LabelRow label="Indication">
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap gap-1">
+                </BigLabelRow>
+                <BigLabelRow label="LMP / weeks">
+                  <Input {...inp("lmpWeeks")} placeholder="e.g. 12 weeks / 15-01-2026" className="text-base h-11" />
+                </BigLabelRow>
+                <BigLabelRow label="Indication">
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-2">
                       <Radio name="indicationType" val="routine" label="Routine antenatal" />
                       <Radio name="indicationType" val="age" label="Adv. maternal age" />
                       <Radio name="indicationType" val="genetic" label="Genetic disease" />
@@ -1310,74 +1317,74 @@ export default function FormF() {
                       <Radio name="indicationType" val="other" label="Other" />
                     </div>
                     {(form.indicationType === "previous" || form.indicationType === "other") && (
-                      <Input {...inp("indicationDetail")} placeholder="Specify details" className="h-9 text-sm" />
+                      <Input {...inp("indicationDetail")} placeholder="Specify details" className="h-11 text-base" />
                     )}
                     {form.indicationType === "previous" && (
-                      <Input {...inp("previousChildIssue")} placeholder="Previous child details" className="h-9 text-sm" />
+                      <Input {...inp("previousChildIssue")} placeholder="Previous child details" className="h-11 text-base" />
                     )}
                   </div>
-                </LabelRow>
-                <LabelRow label="Invasive procedure">
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
+                </BigLabelRow>
+                <BigLabelRow label="Invasive procedure">
+                  <div className="space-y-3">
+                    <div className="flex gap-3">
                       <Radio name="invasiveProcedure" val="notdone" label="Not done" />
                       <Radio name="invasiveProcedure" val="done" label="Done:" />
                     </div>
                     {form.invasiveProcedure === "done" && (
-                      <Input {...inp("invasiveProcedureDetail")} placeholder="Specify" className="h-9 text-sm" />
+                      <Input {...inp("invasiveProcedureDetail")} placeholder="Specify" className="h-11 text-base" />
                     )}
                   </div>
-                </LabelRow>
-                <LabelRow label="Complication">
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
+                </BigLabelRow>
+                <BigLabelRow label="Complication">
+                  <div className="space-y-3">
+                    <div className="flex gap-3">
                       <Radio name="complication" val="nil" label="Nil" />
                       <Radio name="complication" val="specify" label="Specify:" />
                     </div>
                     {form.complication === "specify" && (
-                      <Input {...inp("complicationDetail")} placeholder="Details" className="h-9 text-sm" />
+                      <Input {...inp("complicationDetail")} placeholder="Details" className="h-11 text-base" />
                     )}
                   </div>
-                </LabelRow>
-                <LabelRow label="Lab tests">
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
+                </BigLabelRow>
+                <BigLabelRow label="Lab tests">
+                  <div className="space-y-3">
+                    <div className="flex gap-3">
                       <Radio name="labTests" val="notadvised" label="Not advised" />
                       <Radio name="labTests" val="advised" label="Advised:" />
                     </div>
                     {form.labTests === "advised" && (
-                      <Input {...inp("labTestsDetail")} placeholder="Tests advised" className="h-9 text-sm" />
+                      <Input {...inp("labTestsDetail")} placeholder="Tests advised" className="h-11 text-base" />
                     )}
                   </div>
-                </LabelRow>
-                <LabelRow label="USG result">
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
+                </BigLabelRow>
+                <BigLabelRow label="USG result">
+                  <div className="space-y-3">
+                    <div className="flex gap-3">
                       <Radio name="ultrasoundResult" val="normal" label="Normal" />
                       <Radio name="ultrasoundResult" val="abnormal" label="Abnormal:" />
                     </div>
                     {form.ultrasoundResult === "abnormal" && (
-                      <Input {...inp("abnormality")} placeholder="Abnormality details" className="h-9 text-sm" />
+                      <Input {...inp("abnormality")} placeholder="Abnormality details" className="h-11 text-base" />
                     )}
                   </div>
-                </LabelRow>
-                <LabelRow label="Procedure date">
-                  <Input type="date" {...inp("procedureDate")} className="text-sm h-9" />
-                </LabelRow>
-                <LabelRow label="Result conveyed">
-                  <Input {...inp("resultConveyed")} className="text-sm h-9" />
-                </LabelRow>
-                <LabelRow label="MTP advised">
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
+                </BigLabelRow>
+                <BigLabelRow label="Procedure date">
+                  <Input type="date" {...inp("procedureDate")} className="text-base h-11" />
+                </BigLabelRow>
+                <BigLabelRow label="Result conveyed">
+                  <Input {...inp("resultConveyed")} className="text-base h-11" />
+                </BigLabelRow>
+                <BigLabelRow label="MTP advised">
+                  <div className="space-y-3">
+                    <div className="flex gap-3">
                       <Radio name="mtpAdvised" val="no" label="No" />
                       <Radio name="mtpAdvised" val="yes" label="Yes" />
                     </div>
                     {form.mtpAdvised === "yes" && (
-                      <Input type="date" {...inp("mtpDate")} className="h-9 text-sm w-48" />
+                      <Input type="date" {...inp("mtpDate")} className="h-11 text-base w-56" />
                     )}
                   </div>
-                </LabelRow>
+                </BigLabelRow>
               </div>
             </div>
 
