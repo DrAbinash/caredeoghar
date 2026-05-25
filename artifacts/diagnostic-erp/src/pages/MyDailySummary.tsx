@@ -568,12 +568,18 @@ function FormulaHint({ text }: { text: string }) {
 // ─── Daily Financial Reconciliation ───────────────────────────────────────
 
 function DailyFinancialReconciliation({ summary: s }: { summary: MyDailySummarySummary }) {
-  // ── Correct accounting flow ──
-  const grossCollection = s.grossBilling + s.duesCollectedTotal;
+  // ── Three-step accounting flow (no "active bill" concept) ──
   const totalRefunds = s.cashRefunded + s.digitalRefunded;
-  const netTotalCollection = grossCollection - (s.cancelledAmount + s.outstanding + s.totalExpenses + totalRefunds);
+
+  // Step 1: Effective Billing Value
+  const effectiveBilling = s.grossBilling + s.duesCollectedTotal - s.cancelledAmount;
+
+  // Step 2: Expected Collection
+  const expectedCollection = effectiveBilling - s.outstanding - totalRefunds - s.totalExpenses;
+
+  // Step 3: Expected Cash in Counter
   const netDigitalCollection = s.digitalCollection - s.digitalRefunded;
-  const expectedPhysicalCash = netTotalCollection - netDigitalCollection;
+  const expectedPhysicalCash = expectedCollection - netDigitalCollection;
 
   // Check against backend's physicalCashInHand for mismatch
   const mismatch = expectedPhysicalCash - s.physicalCashInHand;
@@ -612,45 +618,42 @@ function DailyFinancialReconciliation({ summary: s }: { summary: MyDailySummaryS
       {/* ── Accounting body ── */}
       <div className="px-5 py-2">
 
-        {/* ─── GROSS COLLECTION ─── */}
-        <RecRow label="Total Bills Generated" value={s.grossBilling} type="start" />
-        <RecRow label="Old Dues Collected Today" value={s.duesCollectedTotal} type="start" />
+        {/* ─── STEP 1: EFFECTIVE BILLING VALUE ─── */}
+        <RecRow label="New Billing" value={s.grossBilling} type="start" />
+        <RecRow label="Old Dues Collected" value={s.duesCollectedTotal} type="start" />
+        <RecRow label="Cancelled Bills" value={s.cancelledAmount} type="deduct" />
         <MajorDivider color="emerald" />
         <div>
-          <RecRow label="Gross Collection" value={grossCollection} type="result" />
-          <FormulaHint text="Active Bills + Old Dues" />
+          <RecRow label="Effective Billing Value" value={effectiveBilling} type="result" />
+          <FormulaHint text="New Billing + Old Dues − Cancelled" />
         </div>
 
-        {/* ─── DEDUCTIONS ─── */}
+        {/* ─── STEP 2: EXPECTED COLLECTION ─── */}
         <div className="mt-3" />
-        <RecRow label="Cancelled Bills" value={s.cancelledAmount} type="deduct" />
-        <RecRow label="Outstanding / Pending Dues" value={s.outstanding} type="deduct" />
-        <CompactRow label="Cash/Digital Expense" cash={s.cashExpenses} digital={s.digitalExpenses} isDeduct />
-        <CompactRow label="Cash/Digital Refund" cash={s.cashRefunded} digital={s.digitalRefunded} isDeduct />
+        <RecRow label="Pending Dues" value={s.outstanding} type="deduct" />
+        <CompactRow label="Refunds (Cash / Digital)" cash={s.cashRefunded} digital={s.digitalRefunded} isDeduct />
+        <CompactRow label="Expenses (Cash / Digital)" cash={s.cashExpenses} digital={s.digitalExpenses} isDeduct />
         <MajorDivider color="blue" />
         <div>
-          <RecRow label="Net Total Collection" value={netTotalCollection} type="result" />
-          <FormulaHint text="Gross − Cancelled − Pending − Expenses − Refunds" />
+          <RecRow label="Expected Collection" value={expectedCollection} type="result" />
+          <FormulaHint text="Effective − Pending − Refunds − Expenses" />
         </div>
 
-        {/* ─── NET DIGITAL COLLECTION ─── */}
+        {/* ─── STEP 3: EXPECTED CASH IN COUNTER ─── */}
         <div className="mt-3" />
         <RecRow label="Digital Collection (UPI/Card/Net)" value={s.digitalCollection} type="start" />
-        <RecRow label="− Digital Refunded" value={s.digitalRefunded} type="deduct" />
+        <RecRow label="Digital Refunded" value={s.digitalRefunded} type="deduct" />
         <MinorDivider />
         <div>
           <RecRow label="Net Digital Collection" value={netDigitalCollection} type="result" />
-          <FormulaHint text="Digital In − Digital Refund" />
         </div>
-
-        {/* ─── EXPECTED PHYSICAL CASH ─── */}
         <MajorDivider color="purple" />
         <div>
-          <RecRow label="Expected Physical Cash in Counter" value={expectedPhysicalCash} type="final" />
-          <FormulaHint text="Net Collection − Net Digital Collection" />
+          <RecRow label="Expected Cash in Counter" value={expectedPhysicalCash} type="final" />
+          <FormulaHint text="Expected Collection − Net Digital" />
         </div>
 
-        {/* ─── DISCOUNTS ─── */}
+        {/* ─── DISCOUNTS (informational) ─── */}
         <div className="mt-3 border-t border-dashed border-gray-300 dark:border-gray-600 pt-2">
           <RecRow label="Discounts Given" value={s.discountsGiven} type="start" />
         </div>
@@ -659,9 +662,9 @@ function DailyFinancialReconciliation({ summary: s }: { summary: MyDailySummaryS
       {/* Formula Footer */}
       <div className="px-5 py-2.5 bg-slate-50 dark:bg-slate-900/20 border-t border-gray-200 dark:border-card-border">
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400">
-          <span>Gross = Active Bills + Dues Collected</span>
-          <span>Net Total = Gross − (Cancelled + Pending + Expenses + Refunds)</span>
-          <span>Expected Cash = Net Total − Net Digital</span>
+          <span>Effective = New Billing + Old Dues − Cancelled</span>
+          <span>Expected Collection = Effective − Pending − Refunds − Expenses</span>
+          <span>Expected Cash = Expected Collection − Net Digital</span>
         </div>
       </div>
     </div>
