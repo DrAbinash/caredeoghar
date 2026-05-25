@@ -5,17 +5,42 @@
 # Designed for Synology Container Manager (Docker Compose / Project import).
 #
 # Architecture:
-#   - PostgreSQL 16 (database, port 5432 internal)
-#   - Backend (Express API + bundled frontend SPAs, port 8080→8081)
+#   - PostgreSQL 16 (database, port 5432 internal — NOT exposed to network)
+#   - Backend Node.js (Express API + 3 bundled frontend SPAs, port 8080→8081)
 #
 # The backend serves EVERYTHING from one process:
-#   - REST API at /api/*
-#   - Public clinic website at /
-#   - Staff ERP at /erp/
-#   - Super Admin at /super-admin-portal/
+#   - REST API             → http://NAS-IP:8081/api/*
+#   - Public clinic website  → http://NAS-IP:8081/
+#   - Staff ERP            → http://NAS-IP:8081/erp/
+#   - Super Admin          → http://NAS-IP:8081/super-admin-portal/
 #
-# Persistent data is stored on NAS folders (not Docker volumes) for easy
-# backup and access from DSM File Station.
+# PERSISTENT DATA (survives container removal / NAS reboot):
+#   NAS folder paths (not Docker volumes) for easy File Station access:
+#     /volume1/docker/diagnostic-erp/postgres/        ← database files
+#     /volume1/docker/diagnostic-erp/uploads/         ← patient photos, reports
+#     /volume1/docker/diagnostic-erp/backups/        ← .sql backup dumps
+#     /volume1/docker/diagnostic-erp/logs/            ← application logs
+#     /volume1/docker/diagnostic-erp/dicom-storage/  ← future PACS imaging
+#
+# MEMORY LIMITS:
+#   - Backend:  4GB max
+#   - Postgres: 2GB max
+# Minimum total NAS RAM recommended: 6GB free
+#
+# UPLOAD SIZE NOTES:
+#   - Normal JSON API body:      5 MB
+#   - Normal document uploads:   25 MB
+#   - Future DICOM uploads:      use streaming/multipart; limit 512 MB+
+#   - DICOM files must NEVER be stored inside PostgreSQL — always use file system
+#
+# SECURITY:
+#   - PostgreSQL port 5432 is bound to 127.0.0.1 ONLY
+#   - Do NOT expose port 5432 to the LAN or internet
+#   - Only port 8081 (ERP web) should be accessible
+#   - Use Synology Firewall to restrict access if needed
+#
+# HEALTHCHECKS: Both services auto-restart if unhealthy 5 times in a row.
+# RESTART POLICY: unless-stopped → auto-restarts after NAS reboot.
 # =============================================================================
 
 version: "3.8"
@@ -31,17 +56,27 @@ services:
     image: postgres:16-alpine
     container_name: care-diagnostics-db
     restart: unless-stopped
+    # Memory limit — prevents postgres from consuming all NAS RAM
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-CHANGE_ME_PASSWORD}
       POSTGRES_DB: ${DB_NAME:-HospERP}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.UTF-8"
     volumes:
       # NAS folder for database files — survives container removal
       - /volume1/docker/diagnostic-erp/postgres:/var/lib/postgresql/data
       # NAS folder for backups (accessible via File Station)
       - /volume1/docker/diagnostic-erp/backups:/backups
+      # Future: initialization scripts, custom extensions, seed data
+      - /volume1/docker/diagnostic-erp/init-scripts:/docker-entrypoint-initdb.d:ro
     ports:
-      # Bound to localhost only for security
+      # Bound to loopback ONLY — not accessible from other devices on the LAN
       - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-HospERP}"]
@@ -60,6 +95,10 @@ services:
   #   - Staff ERP:       http://NAS-IP:8081/erp/
   #   - Super Admin:     http://NAS-IP:8081/super-admin-portal/
   #   - API:             http://NAS-IP:8081/api/
+  #   - Health:          http://NAS-IP:8081/api/healthz
+  #
+  # Migrations run automatically on startup.
+  # Cron schedulers enabled for always-on Docker host.
   # ---------------------------------------------------------------------------
   backend:
     build:
@@ -67,14 +106,25 @@ services:
       dockerfile: docker-deployment/synology-nas/Dockerfile.backend
     container_name: care-diagnostics-backend
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
     environment:
+      # ── Database ──────────────────────────────────────────────────────────────────────────────────────
       DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-CHANGE_ME_PASSWORD}@postgres:5432/${DB_NAME:-HospERP}
+      # ── Server ─────────────────────────────────────────────────────────────────────────────────────────
       PORT: "8080"
       NODE_ENV: production
+      # ── Features ───────────────────────────────────────────────────────────────────────────────────────────────
       ENABLE_SCHEDULERS: "1"
       ENABLE_DICOM_PULL_AGENT: "1"
       SERVE_STATIC_DIR: artifacts/api-server/dist/web
+      # ── Security ───────────────────────────────────────────────────────────────────────────────────────────────
       SESSION_SECRET: ${SESSION_SECRET:-change-me-to-a-random-long-string}
+      # Optional AI / Email / Storage / PACS — uncomment and set in .env
       # AI_INTEGRATIONS_GEMINI_API_KEY: ${AI_INTEGRATIONS_GEMINI_API_KEY:-}
       # AI_INTEGRATIONS_GEMINI_BASE_URL: ${AI_INTEGRATIONS_GEMINI_BASE_URL:-}
       # SMTP_HOST: ${SMTP_HOST:-}
@@ -88,12 +138,17 @@ services:
       # CONQUEST_HOST: ${CONQUEST_HOST:-}
       # CONQUEST_PORT: ${CONQUEST_PORT:-5678}
     ports:
+      # ERP web port — accessible from LAN devices
       - "8081:8080"
     volumes:
       # NAS folder for uploads (reports, patient photos, website media)
       - /volume1/docker/diagnostic-erp/uploads:/home/runner/workspace/data/uploads
       # NAS folder for backups
       - /volume1/docker/diagnostic-erp/backups:/home/runner/workspace/backups
+      # NAS folder for logs (accessible via File Station)
+      - /volume1/docker/diagnostic-erp/logs:/home/runner/workspace/logs
+      # Future DICOM/PACS storage — large imaging files, NOT inside PostgreSQL
+      - /volume1/docker/diagnostic-erp/dicom-storage:/home/runner/workspace/dicom-storage
     depends_on:
       postgres:
         condition: service_healthy

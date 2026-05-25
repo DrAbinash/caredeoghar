@@ -252,6 +252,18 @@ async function runStartupMigrations(): Promise<void> {
         preferred_retrieve_method TEXT NOT NULL DEFAULT 'C_MOVE',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      -- Rename old dicom_nodes columns for databases created before May 2026
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'dicom_nodes' AND column_name = 'pull_interval_minutes') THEN
+          ALTER TABLE dicom_nodes RENAME COLUMN pull_interval_minutes TO pull_interval_seconds;
+          UPDATE dicom_nodes SET pull_interval_seconds = COALESCE(pull_interval_seconds * 60, 300) WHERE pull_interval_seconds IS NOT NULL;
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'dicom_nodes' AND column_name = 'pull_query_days') THEN
+          ALTER TABLE dicom_nodes RENAME COLUMN pull_query_days TO query_lookback_hours;
+          UPDATE dicom_nodes SET query_lookback_hours = COALESCE(query_lookback_hours * 24, 24) WHERE query_lookback_hours IS NOT NULL;
+        END IF;
+      END $$;
       ALTER TABLE dicom_nodes ADD COLUMN IF NOT EXISTS preferred_retrieve_method TEXT NOT NULL DEFAULT 'C_MOVE';
 
       -- Default Voluson USG entry (idempotent)
@@ -379,6 +391,7 @@ async function runStartupMigrations(): Promise<void> {
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS default_max_concurrent_sessions INTEGER NOT NULL DEFAULT 3;
 
       -- ── Form F required field toggles (May 2026) ────────────────────
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS form_f_billing_prompt BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS form_f_address_required BOOLEAN NOT NULL DEFAULT TRUE;
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS form_f_guardian_required BOOLEAN NOT NULL DEFAULT TRUE;
       ALTER TABLE portal_sessions ADD COLUMN IF NOT EXISTS ip_address TEXT;
