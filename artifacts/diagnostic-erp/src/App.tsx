@@ -255,7 +255,7 @@ function Router() {
               {/* USG / DOPPLER module */}
               <Route path="/usg" component={UsgDoppler} />
               <Route path="/usg/worklist" component={UsgWorklist} />
-              <Route path="/usg/measurements/:uid" component={UsgMeasurementReview} />
+              <Route path="/usg/measurements/:studyInstanceUID" component={UsgMeasurementReview} />
               <Route path="/usg/measurements" component={UsgMeasurementReview} />
               <Route path="/usg/reporting" component={UsgReporting} />
               <Route path="/usg/doppler" component={UsgDopplerReporting} />
