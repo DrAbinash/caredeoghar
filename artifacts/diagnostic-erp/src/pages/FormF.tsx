@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Printer, RefreshCcw, FileText, List, User, Phone, Users, BookOpen, Upload, Camera, CheckCircle2, AlertTriangle, MessageCircle, Stethoscope } from "lucide-react";
+import { Search, Printer, RefreshCcw, FileText, List, User, Phone, Users, BookOpen, Upload, Camera, CheckCircle2, AlertTriangle, MessageCircle, Stethoscope, X, ChevronDown } from "lucide-react";
 
 type DoctorOption = { id: number; name: string; registrationNumber: string | null };
 
@@ -458,7 +458,7 @@ export default function FormF() {
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [form, setForm] = useState<FormFData>(defaultForm());
 
-  // ── Feature 2: ID Card Upload + AI OCR ──
+  // ── Feature 2: ID Card Upload + AI OCR + Camera Scanner ──
   const [idCardImageUrl, setIdCardImageUrl] = useState("");
   const [idCardExtractedName, setIdCardExtractedName] = useState("");
   const [idCardExtractedAddress, setIdCardExtractedAddress] = useState("");
@@ -467,6 +467,10 @@ export default function FormF() {
   const [idCardOcrResult, setIdCardOcrResult] = useState<{
     guardianName?: string; address?: string; documentType?: string; confidence?: string;
   } | null>(null);
+  // Camera / scanner capture state
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // ── Feature 5: Send WhatsApp to patient requesting ID card ──
   const [waSending, setWaSending] = useState(false);
@@ -541,6 +545,70 @@ export default function FormF() {
     };
   }
 
+  // ── ID card image processing (shared by upload + camera) ──
+  async function processIdImage(file: File) {
+    setIdCardUploading(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUrl = String(reader.result ?? "");
+        const base64 = dataUrl.split(",")[1];
+        if (!base64) { toast({ title: "Failed to read image", variant: "destructive" }); setIdCardUploading(false); return; }
+        setIdCardImageUrl(dataUrl);
+        const resp = await api.post<{
+          ocr?: { guardianName?: string; address?: string; documentType?: string; confidence?: string; } | null;
+          recordId?: number;
+        }>("/api/form-f/upload-id", {
+          formFId: 0,
+          imageBase64: base64,
+          mimeType: file.type,
+        });
+        setIdCardOcrResult(resp.ocr ?? null);
+        if (resp.ocr?.guardianName) setIdCardExtractedName(resp.ocr.guardianName);
+        if (resp.ocr?.address) setIdCardExtractedAddress(resp.ocr.address);
+        toast({ title: resp.ocr ? `ID scanned: ${resp.ocr.documentType}` : "ID scanned (OCR unavailable)" });
+        setIdCardUploading(false);
+      };
+      reader.readAsDataURL(file);
+    } catch { toast({ title: "Upload failed", variant: "destructive" }); setIdCardUploading(false); }
+  }
+
+  // ── Camera / scanner capture helpers ──
+  async function startCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+    } catch {
+      toast({ title: "Camera not available", description: "Check permissions or use Upload instead", variant: "destructive" });
+      setCameraOpen(false);
+    }
+  }
+  function stopCamera() {
+    const stream = videoRef.current?.srcObject as MediaStream | null;
+    stream?.getTracks().forEach((t) => t.stop());
+    if (videoRef.current) videoRef.current.srcObject = null;
+  }
+  function captureFromCamera() {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || video.videoWidth === 0) return;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0);
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      stopCamera();
+      setCameraOpen(false);
+      const file = new File([blob], "scan.jpg", { type: "image/jpeg" });
+      await processIdImage(file);
+    }, "image/jpeg", 0.92);
+  }
+
   const fetchPending = useCallback(async () => {
     setPendingLoading(true);
     try {
@@ -594,6 +662,15 @@ export default function FormF() {
   useEffect(() => {
     if (activeTab === "pending") fetchPendingTests(pendingTestSearch);
   }, [activeTab, pendingTestSearch, fetchPendingTests]);
+
+  // ── Start camera when scanner modal opens ──
+  useEffect(() => {
+    if (cameraOpen) {
+      startCamera();
+    }
+    return () => { stopCamera(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cameraOpen]);
 
   function openFromQueue(item: PendingItem) {
     setForm({
@@ -1198,9 +1275,10 @@ export default function FormF() {
                 <BigLabelRow label="Husband / Father Name *">
                   <div className="flex gap-2">
                     <Input {...inp("husbandFatherName")} placeholder="Required for PCPNDT" className="flex-1 text-base h-11" />
+                    {/* ── File upload (scanner / file picker) ── */}
                     <label className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed border-orange-300 bg-orange-50 cursor-pointer text-sm font-medium transition-colors ${idCardUploading ? "opacity-60 cursor-wait" : "hover:bg-orange-100 text-orange-700"}`}>
-                      <Camera size={14} className={idCardUploading ? "animate-pulse" : ""} />
-                      <span>{idCardUploading ? "Scanning…" : "Scan ID"}</span>
+                      <Upload size={14} className={idCardUploading ? "animate-pulse" : ""} />
+                      <span>{idCardUploading ? "Scanning…" : "Upload ID"}</span>
                       <input
                         type="file"
                         accept="image/*"
@@ -1208,33 +1286,19 @@ export default function FormF() {
                         onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (!file) return;
-                          setIdCardUploading(true);
-                          try {
-                            const reader = new FileReader();
-                            reader.onload = async () => {
-                              const dataUrl = String(reader.result ?? "");
-                              const base64 = dataUrl.split(",")[1];
-                              if (!base64) { toast({ title: "Failed to read image", variant: "destructive" }); setIdCardUploading(false); return; }
-                              setIdCardImageUrl(dataUrl); // keep for print preview
-                              const resp = await api.post<{
-                                ocr?: { guardianName?: string; address?: string; documentType?: string; confidence?: string; } | null;
-                                recordId?: number;
-                              }>("/api/form-f/upload-id", {
-                                formFId: 0,
-                                imageBase64: base64,
-                                mimeType: file.type,
-                              });
-                              setIdCardOcrResult(resp.ocr ?? null);
-                              if (resp.ocr?.guardianName) setIdCardExtractedName(resp.ocr.guardianName);
-                              if (resp.ocr?.address) setIdCardExtractedAddress(resp.ocr.address);
-                              toast({ title: resp.ocr ? `ID scanned: ${resp.ocr.documentType}` : "ID scanned (OCR unavailable)" });
-                              setIdCardUploading(false);
-                            };
-                            reader.readAsDataURL(file);
-                          } catch { toast({ title: "Upload failed", variant: "destructive" }); setIdCardUploading(false); }
+                          await processIdImage(file);
                         }}
                       />
                     </label>
+                    {/* ── Camera / scanner capture (PC webcam / document scanner) ── */}
+                    <button
+                      type="button"
+                      onClick={() => setCameraOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm font-medium transition-colors"
+                      title="Use scanner / webcam attached to this PC"
+                    >
+                      <Camera size={14} /> Scan
+                    </button>
                   </div>
                 </BigLabelRow>
 
@@ -1297,10 +1361,51 @@ export default function FormF() {
                 </BigLabelRow>
                 <BigLabelRow label="Referred by">
                   <div className="flex items-center gap-3 flex-wrap">
-                    <Radio name="referredBy" val="Self" label="Self" />
-                    <Radio name="referredBy" val="Doctor" label="Doctor" />
+                    <label className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-md border text-sm font-medium cursor-pointer transition-colors ${form.referredBy === "Self" ? "border-teal-300 bg-teal-50 text-teal-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}>
+                      <input
+                        type="radio"
+                        name="referredBy"
+                        value="Self"
+                        checked={form.referredBy === "Self"}
+                        onChange={() => setForm((prev) => ({ ...prev, referredBy: "Self", referredByName: "" }))}
+                        className="accent-teal-600"
+                      />
+                      <span>Self / Walk-in</span>
+                    </label>
+                    <label className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-md border text-sm font-medium cursor-pointer transition-colors ${form.referredBy === "Doctor" ? "border-teal-300 bg-teal-50 text-teal-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}>
+                      <input
+                        type="radio"
+                        name="referredBy"
+                        value="Doctor"
+                        checked={form.referredBy === "Doctor"}
+                        onChange={() => setForm((prev) => ({ ...prev, referredBy: "Doctor", referredByName: prev.referredByName || "" }))}
+                        className="accent-teal-600"
+                      />
+                      <span>Doctor</span>
+                    </label>
                     {form.referredBy === "Doctor" && (
-                      <Input {...inp("referredByName")} placeholder="Doctor name" className="h-11 text-base w-56" />
+                      <div className="relative">
+                        <Input
+                          value={form.referredByName}
+                          onChange={(e) => {
+                            setForm((prev) => ({
+                              ...prev,
+                              referredByName: e.target.value,
+                            }));
+                          }}
+                          list="formf-referredby-doctor-options"
+                          placeholder="Search doctor name..."
+                          className="h-11 text-base w-72 pr-8"
+                        />
+                        <datalist id="formf-referredby-doctor-options">
+                          {doctorsForPick.map((d) => (
+                            <option key={d.id} value={d.name}>
+                              {d.registrationNumber ? `Reg. ${d.registrationNumber}` : "No reg. no on file"}
+                            </option>
+                          ))}
+                        </datalist>
+                        <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                      </div>
                     )}
                   </div>
                 </BigLabelRow>
@@ -1475,6 +1580,30 @@ export default function FormF() {
 
         </div>
       </div>}
+
+      {/* ── Camera / Scanner Modal ── */}
+      {cameraOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => { stopCamera(); setCameraOpen(false); }}>
+          <div className="bg-white rounded-xl shadow-2xl p-4 max-w-lg w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-bold text-gray-900">Scan ID Card — Camera / Scanner</h3>
+              <button type="button" onClick={() => { stopCamera(); setCameraOpen(false); }} className="text-gray-400 hover:text-gray-700">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
+              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+              <canvas ref={canvasRef} className="hidden" />
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2">
+                <Button size="sm" onClick={captureFromCamera} className="bg-white text-black hover:bg-gray-100 font-semibold">
+                  <Camera size={14} className="mr-1" /> Capture
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2 text-center">Position the ID card in front of the camera and click Capture</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
