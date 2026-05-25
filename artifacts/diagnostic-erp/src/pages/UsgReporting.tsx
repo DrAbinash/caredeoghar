@@ -65,13 +65,19 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 export default function UsgReporting() {
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const { toast } = useToast();
   const qc = useQueryClient();
   const session = readStaffSession();
   const isAdmin = FULL_ACCESS_ROLES.has(session?.user.role ?? "");
 
-  const [showCreate, setShowCreate] = useState(false);
+  // Read studyUID from query string (e.g. /usg/reporting?studyUID=xxx)
+  const searchParams = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search)
+    : new URLSearchParams();
+  const initialStudyUID = searchParams.get("studyUID") || "";
+
+  const [showCreate, setShowCreate] = useState(!!initialStudyUID);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [confirmFinalizeId, setConfirmFinalizeId] = useState<number | null>(null);
   const [showPriorFor, setShowPriorFor] = useState<{ id: number; patientId: number } | null>(null);
@@ -80,7 +86,7 @@ export default function UsgReporting() {
   const [amendReason, setAmendReason] = useState("");
   const [showForceFinalize, setShowForceFinalize] = useState<{ id: number; reason: string } | null>(null);
   const [newForm, setNewForm] = useState({
-    studyInstanceUID: "",
+    studyInstanceUID: initialStudyUID,
     accessionNumber: "",
     worklistId: "",
     patientId: "",

@@ -206,8 +206,9 @@ export default function UsgWorklist() {
                         <Monitor className="h-3.5 w-3.5 mr-1.5" /> Weasis
                         <ExternalLink className="h-3 w-3 ml-1 opacity-60" />
                       </Button>
-                      <Button size="sm" variant="ghost"
-                        onClick={() => navigate("/usg/reporting")}
+                      <Button size="sm" variant="outline"
+                        disabled={!uid}
+                        onClick={() => uid && navigate(`/usg/reporting?studyUID=${encodeURIComponent(uid)}`)}
                       >
                         <FileText className="h-3.5 w-3.5 mr-1.5" /> Draft Report
                       </Button>
