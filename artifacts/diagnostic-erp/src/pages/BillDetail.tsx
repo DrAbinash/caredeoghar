@@ -81,6 +81,20 @@ type ChangeDoctorForm = {
   performedBy: string;
 };
 
+type BillSearchResult = {
+  id: number;
+  billNumber: string;
+  totalAmount: number;
+  paidAmount: number;
+  balanceAmount: number;
+  status: string;
+  createdAt: string;
+  patientName: string;
+  patientId: string;
+  phone: string;
+  doctorName?: string | null;
+};
+
 type Doctor = { id: number; name: string; specialization: string };
 
 type BillAudit = {
@@ -132,6 +146,21 @@ export default function BillDetail({ id }: { id: number }) {
   const [cdDoctorSearch, setCdDoctorSearch] = useState("");
   const [cdDoctorSearchOpen, setCdDoctorSearchOpen] = useState(false);
   const [refundTab, setRefundTab] = useState<"cancel" | "refund" | "cancel-refund">("cancel");
+  // ── Bill search (same as Billing page) ──────────────────────────────────
+  const [billSearchQuery, setBillSearchQuery] = useState("");
+  const [billDebouncedSearch, setBillDebouncedSearch] = useState("");
+  const [billSearchOpen, setBillSearchOpen] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setBillDebouncedSearch(billSearchQuery.trim()), 350);
+    return () => clearTimeout(t);
+  }, [billSearchQuery]);
+  const isBillSearching = billDebouncedSearch.length >= 2;
+  const { data: billSearchResults, isFetching: billSearchFetching } = useQuery<BillSearchResult[]>({
+    queryKey: ["bills-search", billDebouncedSearch],
+    queryFn: () => api.get(`/api/bills/search?q=${encodeURIComponent(billDebouncedSearch)}`),
+    enabled: isBillSearching,
+    staleTime: 10_000,
+  });
   const [reprintBy, setReprintBy] = useState<string>(() => readStaffSession()?.user.name || localStorage.getItem("diagnosticErp:lastReprintBy") || "");
   const [reprintReason, setReprintReason] = useState<string>("");
   const [paperSize, setPaperSize] = useState<"A4" | "A5">(() => getBillPaperSize());
@@ -526,6 +555,55 @@ export default function BillDetail({ id }: { id: number }) {
         subtitle={`Generated ${new Date(bill.createdAt).toLocaleString()}`}
         actions={
           <div className="flex gap-2 flex-wrap items-center">
+            {/* ── Compact bill search (same API as Billing page) ────────────── */}
+            <div className="relative w-56 sm:w-64">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Input
+                value={billSearchQuery}
+                onChange={(e) => { setBillSearchQuery(e.target.value); setBillSearchOpen(true); }}
+                onFocus={() => setBillSearchOpen(true)}
+                placeholder="Search bills…"
+                className="pl-8 pr-8 h-8 text-sm"
+              />
+              {billSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => { setBillSearchQuery(""); setBillSearchOpen(false); }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X size={13} />
+                </button>
+              )}
+              {/* Search results dropdown */}
+              {billSearchOpen && isBillSearching && (
+                <div className="absolute z-50 mt-1 w-full border border-card-border rounded-lg bg-popover shadow-lg max-h-72 overflow-y-auto">
+                  {billSearchFetching ? (
+                    <div className="px-4 py-3 text-sm text-muted-foreground animate-pulse">Searching…</div>
+                  ) : !billSearchResults?.length ? (
+                    <div className="px-4 py-3 text-sm text-muted-foreground">No bills found</div>
+                  ) : (
+                    billSearchResults.map((b) => (
+                      <button
+                        key={b.id}
+                        type="button"
+                        className="w-full text-left px-3 py-2 hover:bg-muted/50 border-b last:border-0 border-border/50 flex items-center gap-2"
+                        onClick={() => {
+                          navigate(`/billing/${b.id}`);
+                          setBillSearchQuery("");
+                          setBillSearchOpen(false);
+                        }}
+                      >
+                        <div className="w-7 h-7 rounded bg-primary/10 flex items-center justify-center flex-shrink-0 font-mono text-[10px] text-primary font-extrabold">#{b.id}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-bold truncate">{b.billNumber}</div>
+                          <div className="text-xs text-muted-foreground truncate">{b.patientName} · {formatCurrency(b.totalAmount)} · <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${b.status === "paid" ? "bg-green-100 text-green-700" : b.status === "cancelled" ? "bg-red-100 text-red-700" : b.status === "partial" ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-700"}`}>{b.status}</span></div>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
             <div className="flex items-center gap-1 border border-border rounded-md px-1 py-0.5 text-xs">
               <span className="text-muted-foreground px-1">Paper:</span>
               <button
