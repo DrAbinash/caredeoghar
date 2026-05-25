@@ -32,6 +32,7 @@ type FormFData = {
   mobile: string;
   referredBy: string;   // "Self" | "Doctor" | other
   referredByName: string;
+  lmpType: string;        // "weeks" | "date" | "other"
   lmpWeeks: string;
   geneticHistory: string;   // "none" | "specify"
   geneticHistoryDetail: string;
@@ -78,6 +79,7 @@ function defaultForm(): FormFData {
     mobile: "",
     referredBy: "Self",
     referredByName: "",
+    lmpType: "weeks",
     lmpWeeks: "",
     geneticHistory: "none",
     geneticHistoryDetail: "",
@@ -136,6 +138,42 @@ function BlankLine({ val, width = 120 }: { val: string; width?: number }) {
   );
 }
 
+function LabelRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-2">
+      <span className="text-[11px] font-semibold w-40 flex-shrink-0 text-gray-600 pt-1">{label}</span>
+      <div className="flex-1">{children}</div>
+    </div>
+  );
+}
+
+function BigLabelRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-3">
+      <span className="text-sm font-semibold w-44 flex-shrink-0 text-gray-700 pt-2">{label}</span>
+      <div className="flex-1">{children}</div>
+    </div>
+  );
+}
+
+function FormRadio({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
+  return (
+    <label className="inline-flex items-center gap-1 cursor-pointer mr-3">
+      <input type="radio" checked={checked} onChange={onChange} className="w-3 h-3" />
+      <span className="text-xs">{label}</span>
+    </label>
+  );
+}
+
+function FormCheck({ checked, onChange, label }: { checked: boolean; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; label: string }) {
+  return (
+    <label className="inline-flex items-center gap-1 cursor-pointer mr-3">
+      <input type="checkbox" checked={checked} onChange={onChange} className="w-3 h-3" />
+      <span className="text-xs">{label}</span>
+    </label>
+  );
+}
+
 interface FormFPrintProps {
   form: FormFData;
   idCardImageUrl?: string;
@@ -147,70 +185,71 @@ function FormFPrint({ form, idCardImageUrl }: FormFPrintProps) {
       id="formf-print"
       style={{
         width: "210mm",
-        minHeight: "297mm",
-        padding: "8mm 10mm 6mm 10mm",
+        minHeight: "280mm",
+        padding: "10mm 12mm 10mm 12mm",
         boxSizing: "border-box",
         fontFamily: "Arial, sans-serif",
-        fontSize: 8,
+        fontSize: 10,
         color: "#000",
         backgroundColor: "#fff",
+        lineHeight: 1.5,
       }}
     >
       {/* ── HEADER ── */}
-      <div style={{ textAlign: "center", borderBottom: "1.5px solid #000", paddingBottom: 4, marginBottom: 4 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, textDecoration: "underline", letterSpacing: 1 }}>FORM F</div>
-        <div style={{ fontSize: 7, color: "#444" }}>[See Proviso to Section 4(3), Rule 9(4) and Rule 10(1A)]</div>
-        <div style={{ fontSize: 8, fontWeight: 600, marginTop: 1 }}>
+      <div style={{ textAlign: "center", borderBottom: "2px solid #000", paddingBottom: 6, marginBottom: 8 }}>
+        <div style={{ fontSize: 18, fontWeight: 700, textDecoration: "underline", letterSpacing: 1 }}>FORM F</div>
+        <div style={{ fontSize: 9, color: "#444", marginTop: 2 }}>[See Proviso to Section 4(3), Rule 9(4) and Rule 10(1A)]</div>
+        <div style={{ fontSize: 11, fontWeight: 600, marginTop: 3 }}>
           FORM FOR MAINTENANCE OF RECORD IN RESPECT OF PREGNANT WOMAN<br />
           BY GENETIC CLINIC / ULTRASOUND CLINIC / IMAGING CENTRE
         </div>
       </div>
 
       {/* ── COLUMNS A + B ── */}
-      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 3 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 8 }}>
         <tbody>
           {/* Row 1: Centre + Reg No */}
           <tr style={{ borderBottom: "1px solid #ccc" }}>
-            <td style={{ width: "55%", padding: "2px 4px", verticalAlign: "top", fontSize: 8 }}>
+            <td style={{ width: "55%", padding: "4px 6px", verticalAlign: "top", fontSize: 10 }}>
               <span style={{ fontWeight: 600 }}>1. Name &amp; address of Centre:&nbsp;</span>
-              <span style={{ fontSize: 9, fontWeight: 700 }}>{form.centreName.replace(/\n/g, ", ")}</span>
+              <span style={{ fontSize: 11, fontWeight: 700 }}>{form.centreName.replace(/\n/g, ", ")}</span>
             </td>
-            <td style={{ padding: "2px 4px", verticalAlign: "top", fontSize: 8 }}>
+            <td style={{ padding: "4px 6px", verticalAlign: "top", fontSize: 10 }}>
               <span style={{ fontWeight: 600 }}>2. Reg. No.:&nbsp;</span>
-              <BlankLine val={form.registrationNo} width={80} />
+              <BlankLine val={form.registrationNo} width={120} />
             </td>
           </tr>
 
           {/* Row 2: Patient + Age */}
           <tr style={{ borderBottom: "1px solid #ccc" }}>
-            <td style={{ padding: "2px 4px", fontSize: 8 }}>
+            <td style={{ padding: "4px 6px", fontSize: 10 }}>
               <span style={{ fontWeight: 600 }}>3. Patient Name: </span>
-              <BlankLine val={form.patientName} width={140} />
+              <BlankLine val={form.patientName} width={200} />
             </td>
-            <td style={{ padding: "2px 4px", fontSize: 8 }}>
+            <td style={{ padding: "4px 6px", fontSize: 10 }}>
               <span style={{ fontWeight: 600 }}>Age: </span>
-              <BlankLine val={form.age} width={50} />
+              <BlankLine val={form.age} width={70} />
               <span style={{ fontWeight: 600 }}> Yrs</span>
             </td>
           </tr>
 
           {/* Row 3: Husband/Father + Children */}
           <tr style={{ borderBottom: "1px solid #ccc" }}>
-            <td style={{ padding: "2px 4px", fontSize: 8 }}>
+            <td style={{ padding: "4px 6px", fontSize: 10 }}>
               <span style={{ fontWeight: 600 }}>5. Husband's/Father's name: </span>
-              <BlankLine val={form.husbandFatherName} width={120} />
+              <BlankLine val={form.husbandFatherName} width={180} />
             </td>
-            <td style={{ padding: "2px 4px", fontSize: 8 }}>
+            <td style={{ padding: "4px 6px", fontSize: 10 }}>
               <span style={{ fontWeight: 600 }}>4. Children:&nbsp;</span>
-              <span style={{ marginRight: 6 }}>
+              <span style={{ marginRight: 10 }}>
                 Boy:&nbsp;
-                <span style={{ display: "inline-block", border: "1px solid #333", width: 20, height: 12, textAlign: "center", fontSize: 9, lineHeight: "12px", verticalAlign: "middle" }}>
+                <span style={{ display: "inline-block", border: "1px solid #333", width: 26, height: 18, textAlign: "center", fontSize: 11, lineHeight: "18px", verticalAlign: "middle" }}>
                   {form.boyCount || ""}
                 </span>
               </span>
               <span>
                 Girl:&nbsp;
-                <span style={{ display: "inline-block", border: "1px solid #333", width: 20, height: 12, textAlign: "center", fontSize: 9, lineHeight: "12px", verticalAlign: "middle" }}>
+                <span style={{ display: "inline-block", border: "1px solid #333", width: 26, height: 18, textAlign: "center", fontSize: 11, lineHeight: "18px", verticalAlign: "middle" }}>
                   {form.girlCount || ""}
                 </span>
               </span>
@@ -219,183 +258,187 @@ function FormFPrint({ form, idCardImageUrl }: FormFPrintProps) {
 
           {/* Row 4: Address + Phone */}
           <tr style={{ borderBottom: "1px solid #ccc" }}>
-            <td style={{ padding: "2px 4px", fontSize: 8 }}>
+            <td style={{ padding: "4px 6px", fontSize: 10 }}>
               <span style={{ fontWeight: 600 }}>6. Address: </span>
-              <BlankLine val={form.address} width={160} />
+              <BlankLine val={form.address} width={240} />
             </td>
-            <td style={{ padding: "2px 4px", fontSize: 8 }}>
+            <td style={{ padding: "4px 6px", fontSize: 10 }}>
               <span style={{ fontWeight: 600 }}>Tel: </span>
-              <BlankLine val={form.mobile} width={80} />
+              <BlankLine val={form.mobile} width={120} />
             </td>
           </tr>
 
           {/* Row 5: Referred by + LMP */}
           <tr style={{ borderBottom: "1px solid #ccc" }}>
-            <td style={{ padding: "2px 4px", fontSize: 8 }}>
+            <td style={{ padding: "4px 6px", fontSize: 10 }}>
               <span style={{ fontWeight: 600 }}>7. Referred by:&nbsp;</span>
               <Tick checked={form.referredBy === "Self"} /> Self&nbsp;&nbsp;
-              <Tick checked={form.referredBy === "Doctor"} /> Doctor: <BlankLine val={form.referredByName} width={80} />
+              <Tick checked={form.referredBy === "Doctor"} /> Doctor: <BlankLine val={form.referredByName} width={100} />
             </td>
-            <td style={{ padding: "2px 4px", fontSize: 8 }}>
+            <td style={{ padding: "4px 6px", fontSize: 10 }}>
               <span style={{ fontWeight: 600 }}>8. LMP/weeks: </span>
-              <BlankLine val={form.lmpWeeks} width={80} />
+              <BlankLine val={form.lmpWeeks} width={120} />
             </td>
           </tr>
 
           {/* Row 6: Genetic history */}
           <tr style={{ borderBottom: "1px solid #ccc" }}>
-            <td colSpan={2} style={{ padding: "2px 4px", fontSize: 8 }}>
+            <td colSpan={2} style={{ padding: "4px 6px", fontSize: 10 }}>
               <span style={{ fontWeight: 600 }}>9. Genetic/medical history:&nbsp;</span>
               <Tick checked={form.geneticHistory === "none"} /> No significant history&nbsp;&nbsp;
-              <Tick checked={form.geneticHistory === "specify"} /> Specify: <BlankLine val={form.geneticHistoryDetail} width={120} />
+              <Tick checked={form.geneticHistory === "specify"} /> Specify: <BlankLine val={form.geneticHistoryDetail} width={160} />
               &nbsp;&nbsp;<span style={{ fontWeight: 600 }}>Basis:&nbsp;</span>
               <Tick checked={form.basisDiagnosisClinical} /> Clinical&nbsp;
               <Tick checked={form.basisDiagnosisUsg} /> USG&nbsp;
-              <Tick checked={!!form.basisDiagnosisOther} /> Other: <BlankLine val={form.basisDiagnosisOther} width={60} />
+              <Tick checked={!!form.basisDiagnosisOther} /> Other: <BlankLine val={form.basisDiagnosisOther} width={80} />
             </td>
           </tr>
         </tbody>
       </table>
 
       {/* ── SECTION 10 ── */}
-      <div style={{ fontWeight: 700, fontSize: 8, textDecoration: "underline", marginBottom: 2 }}>
+      <div style={{ fontWeight: 700, fontSize: 10, textDecoration: "underline", marginBottom: 4 }}>
         10. Indication for pre-natal diagnosis
       </div>
-      <div style={{ fontSize: 8, marginBottom: 3 }}>
+      <div style={{ fontSize: 10, marginBottom: 6 }}>
         <Tick checked={form.indicationType === "routine"} /> Routine antenatal / clinical indication&nbsp;&nbsp;
         <Tick checked={form.indicationType === "age"} /> Advanced maternal age&nbsp;&nbsp;
         <Tick checked={form.indicationType === "genetic"} /> Genetic disease&nbsp;&nbsp;
-        <Tick checked={form.indicationType === "previous"} /> Previous child issue: <BlankLine val={form.previousChildIssue} width={80} />
-        &nbsp;&nbsp;<Tick checked={form.indicationType === "other"} /> Other: <BlankLine val={form.indicationDetail} width={80} />
+        <Tick checked={form.indicationType === "previous"} /> Previous child issue: <BlankLine val={form.previousChildIssue} width={100} />
+        &nbsp;&nbsp;<Tick checked={form.indicationType === "other"} /> Other: <BlankLine val={form.indicationDetail} width={100} />
       </div>
 
       {/* ── SECTION 11 ── */}
-      <div style={{ fontWeight: 700, fontSize: 8, textDecoration: "underline", marginBottom: 2 }}>
+      <div style={{ fontWeight: 700, fontSize: 10, textDecoration: "underline", marginBottom: 4 }}>
         11. Procedures carried out
       </div>
-      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 3 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 6 }}>
         <tbody>
           <tr style={{ borderBottom: "1px solid #ccc" }}>
-            <td style={{ padding: "2px 4px", fontSize: 8, width: "50%" }}>
+            <td style={{ padding: "4px 6px", fontSize: 10, width: "50%" }}>
               <span style={{ fontWeight: 600 }}>Doctor/Radiologist: </span>
-              <BlankLine val={form.doctorName} width={130} />
+              <BlankLine val={form.doctorName} width={180} />
             </td>
-            <td style={{ padding: "2px 4px", fontSize: 8 }}>
+            <td style={{ padding: "4px 6px", fontSize: 10 }}>
               <span style={{ fontWeight: 600 }}>Non-invasive procedure: </span>
-              <BlankLine val={form.procedure} width={100} />
+              <BlankLine val={form.procedure} width={140} />
             </td>
           </tr>
           <tr style={{ borderBottom: "1px solid #ccc" }}>
-            <td style={{ padding: "2px 4px", fontSize: 8 }}>
+            <td style={{ padding: "4px 6px", fontSize: 10 }}>
               <span style={{ fontWeight: 600 }}>Purpose: </span>
-              <BlankLine val={form.procedurePurpose} width={150} />
+              <BlankLine val={form.procedurePurpose} width={200} />
             </td>
-            <td style={{ padding: "2px 4px", fontSize: 8 }}>
+            <td style={{ padding: "4px 6px", fontSize: 10 }}>
               <span style={{ fontWeight: 600 }}>Invasive procedure:&nbsp;</span>
               <Tick checked={form.invasiveProcedure === "notdone"} /> Not done&nbsp;
-              <Tick checked={form.invasiveProcedure === "done"} /> Done: <BlankLine val={form.invasiveProcedureDetail} width={60} />
+              <Tick checked={form.invasiveProcedure === "done"} /> Done: <BlankLine val={form.invasiveProcedureDetail} width={80} />
             </td>
           </tr>
         </tbody>
       </table>
 
       {/* ── SECTIONS 12-19 ── */}
-      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 3 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 6 }}>
         <tbody>
           <Row label="12. Complication">
             <Tick checked={form.complication === "nil"} /> Nil&nbsp;&nbsp;
-            <Tick checked={form.complication === "specify"} /> Specify: <BlankLine val={form.complicationDetail} width={100} />
+            <Tick checked={form.complication === "specify"} /> Specify: <BlankLine val={form.complicationDetail} width={140} />
           </Row>
           <Row label="13. Lab tests recommended">
             <Tick checked={form.labTests === "notadvised"} /> Not advised&nbsp;&nbsp;
-            <Tick checked={form.labTests === "advised"} /> Advised: <BlankLine val={form.labTestsDetail} width={100} />
+            <Tick checked={form.labTests === "advised"} /> Advised: <BlankLine val={form.labTestsDetail} width={140} />
           </Row>
-                  <Row label="14(a). Gestational Age">
-            <span style={{ fontSize: 9 }}>{form.gestationalAgeWeeks || "___"} weeks,&nbsp;{form.gestationalAgeDays || "___"} days</span>
+          <Row label="14(a). Gestational Age">
+            <span style={{ fontSize: 11 }}>{form.gestationalAgeWeeks || "___"} weeks,&nbsp;{form.gestationalAgeDays || "___"} days</span>
           </Row>
           <Row label="14(b). USG result">
             <Tick checked={form.ultrasoundResult === "normal"} /> Normal&nbsp;&nbsp;
-            <Tick checked={form.ultrasoundResult === "abnormal"} /> Abnormal: <BlankLine val={form.abnormality} width={120} />
+            <Tick checked={form.ultrasoundResult === "abnormal"} /> Abnormal: <BlankLine val={form.abnormality} width={160} />
           </Row>
           <Row label="15. Date of procedure">
-            <BlankLine val={formatDate(form.procedureDate)} width={80} />
+            <BlankLine val={formatDate(form.procedureDate)} width={100} />
           </Row>
           <Row label="16. Consent date (invasive)">
-            <BlankLine val={form.consentDate ? formatDate(form.consentDate) : "N/A"} width={80} />
+            <BlankLine val={form.consentDate ? formatDate(form.consentDate) : "N/A"} width={100} />
           </Row>
           <Row label="17. Result conveyed to/date">
-            <BlankLine val={form.resultConveyed} width={180} />
+            <BlankLine val={form.resultConveyed} width={240} />
           </Row>
           <Row label="18. MTP advised/conducted">
             <Tick checked={form.mtpAdvised === "no"} /> No&nbsp;&nbsp;
             <Tick checked={form.mtpAdvised === "yes"} /> Yes
           </Row>
           <Row label="19. Date MTP carried out">
-            <BlankLine val={form.mtpDate ? formatDate(form.mtpDate) : "N/A"} width={80} />
+            <BlankLine val={form.mtpDate ? formatDate(form.mtpDate) : "N/A"} width={100} />
           </Row>
         </tbody>
       </table>
 
       {/* Date / Place / Signature */}
-      <div style={{ display: "flex", gap: 16, marginBottom: 4, fontSize: 8 }}>
-        <div><span style={{ fontWeight: 600 }}>Date: </span><BlankLine val={formatDate(form.date)} width={70} /></div>
-        <div><span style={{ fontWeight: 600 }}>Place: </span><BlankLine val={form.place} width={80} /></div>
+      <div style={{ display: "flex", gap: 20, marginBottom: 6, fontSize: 10 }}>
+        <div><span style={{ fontWeight: 600 }}>Date: </span><BlankLine val={formatDate(form.date)} width={90} /></div>
+        <div><span style={{ fontWeight: 600 }}>Place: </span><BlankLine val={form.place} width={100} /></div>
         <div style={{ flex: 1, textAlign: "right" }}>
           <span style={{ fontWeight: 600 }}>Signature &amp; Reg. No. of Doctor: </span>
           <BlankLine
             val={form.doctorRegNo ? `${form.doctorName} (Reg. ${form.doctorRegNo})` : form.doctorName}
-            width={140}
+            width={180}
           />
         </div>
       </div>
 
       {/* ── DECLARATION SECTION ── 2 columns side by side */}
-      <div style={{ display: "flex", gap: 8, borderTop: "1px solid #666", paddingTop: 4 }}>
+      <div style={{ display: "flex", gap: 12, borderTop: "1.5px solid #666", paddingTop: 8 }}>
         {/* Declaration of pregnant woman */}
-        <div style={{ flex: 1, border: "0.5px solid #aaa", padding: "3px 5px", borderRadius: 2 }}>
-          <div style={{ fontWeight: 700, fontSize: 8, textAlign: "center", textDecoration: "underline", marginBottom: 3 }}>
+        <div style={{ flex: 1, border: "1px solid #aaa", padding: "6px 8px", borderRadius: 3 }}>
+          <div style={{ fontWeight: 700, fontSize: 10, textAlign: "center", textDecoration: "underline", marginBottom: 5 }}>
             DECLARATION OF PREGNANT WOMAN
           </div>
-          <p style={{ fontSize: 7.5, lineHeight: 1.4, margin: 0 }}>
-            I, Ms. <BlankLine val={form.patientName} width={90} /> declare that by undergoing
+          <p style={{ fontSize: 9, lineHeight: 1.5, margin: 0 }}>
+            I, Ms. <BlankLine val={form.patientName} width={120} /> declare that by undergoing
             ultrasonography/image scanning etc. I do not want to know the sex of my foetus.
           </p>
-          <div style={{ marginTop: 10, fontSize: 7.5 }}>
+          <div style={{ marginTop: 14, fontSize: 9 }}>
             Signature / Thumb impression: ______________________
           </div>
         </div>
 
         {/* Declaration of doctor */}
-        <div style={{ flex: 1, border: "0.5px solid #aaa", padding: "3px 5px", borderRadius: 2 }}>
-          <div style={{ fontWeight: 700, fontSize: 8, textAlign: "center", textDecoration: "underline", marginBottom: 3 }}>
+        <div style={{ flex: 1, border: "1px solid #aaa", padding: "6px 8px", borderRadius: 3 }}>
+          <div style={{ fontWeight: 700, fontSize: 10, textAlign: "center", textDecoration: "underline", marginBottom: 5 }}>
             DECLARATION OF DOCTOR / PERSON CONDUCTING USG
           </div>
-          <p style={{ fontSize: 7.5, lineHeight: 1.4, margin: 0 }}>
-            I, <BlankLine val={form.doctorName} width={80} /> declare that while conducting
-            ultrasonography on Ms. <BlankLine val={form.patientName} width={80} />, I have neither
+          <p style={{ fontSize: 9, lineHeight: 1.5, margin: 0 }}>
+            I, <BlankLine val={form.doctorName} width={110} /> declare that while conducting
+            ultrasonography on Ms. <BlankLine val={form.patientName} width={110} />, I have neither
             detected nor disclosed the sex of her foetus to anybody in any manner.
           </p>
-          <div style={{ marginTop: 4, fontSize: 7.5, fontWeight: 700, textAlign: "center" }}>
+          <div style={{ marginTop: 6, fontSize: 9, fontWeight: 700, textAlign: "center" }}>
             {form.doctorName}
           </div>
         </div>
       </div>
 
       {/* Footer note */}
-      <div style={{ fontSize: 6.5, color: "#666", textAlign: "center", marginTop: 4 }}>
+      <div style={{ fontSize: 8, color: "#666", textAlign: "center", marginTop: 6 }}>
         *Strike out whichever is not applicable or not necessary* &nbsp;|&nbsp; Reg. No. {form.registrationNo}
         {form.billNumber ? ` | Bill No. ${form.billNumber}` : ""}
       </div>
 
-      {/* ── ID Card Attachment (reduced) ── */}
+      {/* ── ID Card Attachment ── */}
       {idCardImageUrl && (
-        <div style={{ marginTop: 6, borderTop: "1px dashed #ccc", paddingTop: 4 }}>
-          <div style={{ fontSize: 7, fontWeight: 600, marginBottom: 2 }}>Attached ID Card:</div>
-          <img
-            src={idCardImageUrl}
-            alt="Patient ID Card"
-            style={{ maxHeight: "35mm", maxWidth: "55mm", border: "1px solid #ddd", borderRadius: 2 }}
-          />
+        <div style={{ marginTop: 10, borderTop: "1.5px dashed #666", paddingTop: 8, pageBreakInside: "avoid" }}>
+          <div style={{ fontSize: 10, fontWeight: 700, marginBottom: 6, textAlign: "center" }}>
+            ATTACHED ID CARD / AADHAAR COPY
+          </div>
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <img
+              src={idCardImageUrl}
+              alt="Patient ID Card"
+              style={{ maxHeight: "80mm", maxWidth: "160mm", border: "1.5px solid #333", borderRadius: 3 }}
+            />
+          </div>
         </div>
       )}
     </div>
@@ -715,7 +758,13 @@ export default function FormF() {
       mobile: r.mobile ?? "",
       referredBy: isDoctor ? "Doctor" : "Self",
       referredByName: doctorName,
-      lmpWeeks: r.lmpWeeks ?? "",
+      ...(() => {
+        const lmp = r.lmpWeeks ?? "";
+        if (/^\d{4}-\d{2}-\d{2}$/.test(lmp)) return { lmpType: "date" as const, lmpWeeks: lmp };
+        if (/ weeks?$/.test(lmp)) return { lmpType: "weeks" as const, lmpWeeks: lmp.replace(/ weeks?$/, "") };
+        if (lmp) return { lmpType: "other" as const, lmpWeeks: lmp };
+        return { lmpType: "weeks" as const, lmpWeeks: "" };
+      })(),
       previousChildIssue: r.previousChildIssue ?? "",
       doctorName: r.doctorName ?? "",
       procedure: r.procedure ?? "",
@@ -756,7 +805,7 @@ export default function FormF() {
         address: form.address,
         mobile: form.mobile,
         referredBy: form.referredBy === "Doctor" ? `Doctor: ${form.referredByName}` : "Self",
-        lmpWeeks: form.lmpWeeks,
+        lmpWeeks: form.lmpType === "weeks" ? `${form.lmpWeeks} weeks` : form.lmpType === "date" ? form.lmpWeeks : form.lmpWeeks,
         geneticHistory: form.geneticHistory === "none" ? "No significant history" : form.geneticHistoryDetail,
         basisDiagnosis: [form.basisDiagnosisClinical && "Clinical", form.basisDiagnosisUsg && "USG", form.basisDiagnosisOther].filter(Boolean).join(", "),
         previousChildIssue: form.previousChildIssue || "Not applicable",
@@ -818,44 +867,6 @@ export default function FormF() {
       </body></html>`);
     w.document.close();
   }
-
-  const LabelRow = ({ label, children }: { label: string; children: React.ReactNode }) => (
-    <div className="flex items-start gap-2">
-      <span className="text-[11px] font-semibold w-40 flex-shrink-0 text-gray-600 pt-1">{label}</span>
-      <div className="flex-1">{children}</div>
-    </div>
-  );
-
-  const BigLabelRow = ({ label, children }: { label: string; children: React.ReactNode }) => (
-    <div className="flex items-start gap-3">
-      <span className="text-sm font-semibold w-44 flex-shrink-0 text-gray-700 pt-2">{label}</span>
-      <div className="flex-1">{children}</div>
-    </div>
-  );
-
-  const Radio = ({ name, val, label }: { name: keyof FormFData; val: string; label: string }) => (
-    <label className="inline-flex items-center gap-1 cursor-pointer mr-3">
-      <input
-        type="radio"
-        checked={form[name] === val}
-        onChange={() => set(name, val as FormFData[typeof name])}
-        className="w-3 h-3"
-      />
-      <span className="text-xs">{label}</span>
-    </label>
-  );
-
-  const Check = ({ field, label }: { field: keyof FormFData; label: string }) => (
-    <label className="inline-flex items-center gap-1 cursor-pointer mr-3">
-      <input
-        type="checkbox"
-        checked={!!form[field]}
-        onChange={(e) => set(field, e.target.checked as FormFData[typeof field])}
-        className="w-3 h-3"
-      />
-      <span className="text-xs">{label}</span>
-    </label>
-  );
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-gray-50">
@@ -1232,45 +1243,7 @@ export default function FormF() {
               </div>
             </div>
 
-            {/* Section 1: CONDUCTING DOCTOR — separate card */}
-            <div className="bg-teal-50/60 border border-teal-100 rounded-xl p-4 shadow-sm">
-              <div className="flex items-center gap-2 pb-2 border-b border-teal-100 mb-3">
-                <Stethoscope size={14} className="text-teal-600" />
-                <span className="text-sm font-bold text-teal-800">Conducting Doctor</span>
-                <span className="text-[10px] bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full">Auto-filled from bill · Editable</span>
-              </div>
-              <div className="space-y-3">
-                <LabelRow label="Doctor Name">
-                  <Input
-                    value={form.doctorName}
-                    list="formf-doctor-options"
-                    onChange={(e) => {
-                      const name = e.target.value;
-                      const match = doctorsForPick.find((d) => d.name === name);
-                      setForm((prev) => ({
-                        ...prev,
-                        doctorName: name,
-                        doctorRegNo: match?.registrationNumber ?? prev.doctorRegNo,
-                      }));
-                    }}
-                    placeholder="Type or pick a doctor"
-                    className="text-sm h-9"
-                  />
-                  <datalist id="formf-doctor-options">
-                    {doctorsForPick.map((d) => (
-                      <option key={d.id} value={d.name}>
-                        {d.registrationNumber ? `Reg. ${d.registrationNumber}` : "No reg. no on file"}
-                      </option>
-                    ))}
-                  </datalist>
-                </LabelRow>
-                <LabelRow label="Doctor Reg. No.">
-                  <Input {...inp("doctorRegNo")} placeholder="Auto-filled from selected doctor; editable" className="text-sm h-9" />
-                </LabelRow>
-              </div>
-            </div>
-
-            {/* Section 2: DETAILS TO FILL — BIG BOX, BIG FONTS */}
+            {/* Section 1: DETAILS TO FILL — BIG BOX, BIG FONTS */}
             <div className="bg-white border-2 border-orange-200 rounded-xl p-6 shadow-md">
               <div className="flex items-center gap-2 pb-3 border-b-2 border-orange-100 mb-4">
                 <span className="text-base font-extrabold text-gray-900">Details to Fill</span>
@@ -1415,16 +1388,29 @@ export default function FormF() {
                   </div>
                 </BigLabelRow>
                 <BigLabelRow label="LMP / weeks">
-                  <Input {...inp("lmpWeeks")} placeholder="e.g. 12 weeks / 15-01-2026" className="text-base h-11" />
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <FormRadio checked={form.lmpType === "weeks"} onChange={() => set("lmpType", "weeks")} label="Weeks:" />
+                    {form.lmpType === "weeks" && (
+                      <Input {...inp("lmpWeeks")} placeholder="e.g. 32" className="text-base h-11 w-24 text-center" />
+                    )}
+                    <FormRadio checked={form.lmpType === "date"} onChange={() => set("lmpType", "date")} label="Date:" />
+                    {form.lmpType === "date" && (
+                      <Input type="date" {...inp("lmpWeeks")} className="text-base h-11 w-48" />
+                    )}
+                    <FormRadio checked={form.lmpType === "other"} onChange={() => set("lmpType", "other")} label="Other:" />
+                    {form.lmpType === "other" && (
+                      <Input {...inp("lmpWeeks")} placeholder="e.g. 8 months" className="text-base h-11 w-56" />
+                    )}
+                  </div>
                 </BigLabelRow>
                 <BigLabelRow label="Indication">
                   <div className="space-y-3">
                     <div className="flex flex-wrap gap-2">
-                      <Radio name="indicationType" val="routine" label="Routine antenatal" />
-                      <Radio name="indicationType" val="age" label="Adv. maternal age" />
-                      <Radio name="indicationType" val="genetic" label="Genetic disease" />
-                      <Radio name="indicationType" val="previous" label="Prev. child issue" />
-                      <Radio name="indicationType" val="other" label="Other" />
+                      <FormRadio checked={form.indicationType === "routine"} onChange={() => set("indicationType", "routine")} label="Routine antenatal" />
+                      <FormRadio checked={form.indicationType === "age"} onChange={() => set("indicationType", "age")} label="Adv. maternal age" />
+                      <FormRadio checked={form.indicationType === "genetic"} onChange={() => set("indicationType", "genetic")} label="Genetic disease" />
+                      <FormRadio checked={form.indicationType === "previous"} onChange={() => set("indicationType", "previous")} label="Prev. child issue" />
+                      <FormRadio checked={form.indicationType === "other"} onChange={() => set("indicationType", "other")} label="Other" />
                     </div>
                     {(form.indicationType === "previous" || form.indicationType === "other") && (
                       <Input {...inp("indicationDetail")} placeholder="Specify details" className="h-11 text-base" />
@@ -1437,8 +1423,8 @@ export default function FormF() {
                 <BigLabelRow label="Invasive procedure">
                   <div className="space-y-3">
                     <div className="flex gap-3">
-                      <Radio name="invasiveProcedure" val="notdone" label="Not done" />
-                      <Radio name="invasiveProcedure" val="done" label="Done:" />
+                      <FormRadio checked={form.invasiveProcedure === "notdone"} onChange={() => set("invasiveProcedure", "notdone")} label="Not done" />
+                      <FormRadio checked={form.invasiveProcedure === "done"} onChange={() => set("invasiveProcedure", "done")} label="Done:" />
                     </div>
                     {form.invasiveProcedure === "done" && (
                       <Input {...inp("invasiveProcedureDetail")} placeholder="Specify" className="h-11 text-base" />
@@ -1448,8 +1434,8 @@ export default function FormF() {
                 <BigLabelRow label="Complication">
                   <div className="space-y-3">
                     <div className="flex gap-3">
-                      <Radio name="complication" val="nil" label="Nil" />
-                      <Radio name="complication" val="specify" label="Specify:" />
+                      <FormRadio checked={form.complication === "nil"} onChange={() => set("complication", "nil")} label="Nil" />
+                      <FormRadio checked={form.complication === "specify"} onChange={() => set("complication", "specify")} label="Specify:" />
                     </div>
                     {form.complication === "specify" && (
                       <Input {...inp("complicationDetail")} placeholder="Details" className="h-11 text-base" />
@@ -1459,8 +1445,8 @@ export default function FormF() {
                 <BigLabelRow label="Lab tests">
                   <div className="space-y-3">
                     <div className="flex gap-3">
-                      <Radio name="labTests" val="notadvised" label="Not advised" />
-                      <Radio name="labTests" val="advised" label="Advised:" />
+                      <FormRadio checked={form.labTests === "notadvised"} onChange={() => set("labTests", "notadvised")} label="Not advised" />
+                      <FormRadio checked={form.labTests === "advised"} onChange={() => set("labTests", "advised")} label="Advised:" />
                     </div>
                     {form.labTests === "advised" && (
                       <Input {...inp("labTestsDetail")} placeholder="Tests advised" className="h-11 text-base" />
@@ -1498,8 +1484,8 @@ export default function FormF() {
                 <BigLabelRow label="USG result">
                   <div className="space-y-3">
                     <div className="flex gap-3">
-                      <Radio name="ultrasoundResult" val="normal" label="Normal" />
-                      <Radio name="ultrasoundResult" val="abnormal" label="Abnormal:" />
+                      <FormRadio checked={form.ultrasoundResult === "normal"} onChange={() => set("ultrasoundResult", "normal")} label="Normal" />
+                      <FormRadio checked={form.ultrasoundResult === "abnormal"} onChange={() => set("ultrasoundResult", "abnormal")} label="Abnormal:" />
                     </div>
                     {form.ultrasoundResult === "abnormal" && (
                       <Input {...inp("abnormality")} placeholder="Abnormality details" className="h-11 text-base" />
@@ -1515,14 +1501,52 @@ export default function FormF() {
                 <BigLabelRow label="MTP advised">
                   <div className="space-y-3">
                     <div className="flex gap-3">
-                      <Radio name="mtpAdvised" val="no" label="No" />
-                      <Radio name="mtpAdvised" val="yes" label="Yes" />
+                      <FormRadio checked={form.mtpAdvised === "no"} onChange={() => set("mtpAdvised", "no")} label="No" />
+                      <FormRadio checked={form.mtpAdvised === "yes"} onChange={() => set("mtpAdvised", "yes")} label="Yes" />
                     </div>
                     {form.mtpAdvised === "yes" && (
                       <Input type="date" {...inp("mtpDate")} className="h-11 text-base w-56" />
                     )}
                   </div>
                 </BigLabelRow>
+              </div>
+            </div>
+
+            {/* Section 2: CONDUCTING DOCTOR — separate card */}
+            <div className="bg-teal-50/60 border border-teal-100 rounded-xl p-4 shadow-sm">
+              <div className="flex items-center gap-2 pb-2 border-b border-teal-100 mb-3">
+                <Stethoscope size={14} className="text-teal-600" />
+                <span className="text-sm font-bold text-teal-800">Conducting Doctor</span>
+                <span className="text-[10px] bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full">Auto-filled from bill · Editable</span>
+              </div>
+              <div className="space-y-3">
+                <LabelRow label="Doctor Name">
+                  <Input
+                    value={form.doctorName}
+                    list="formf-doctor-options"
+                    onChange={(e) => {
+                      const name = e.target.value;
+                      const match = doctorsForPick.find((d) => d.name === name);
+                      setForm((prev) => ({
+                        ...prev,
+                        doctorName: name,
+                        doctorRegNo: match?.registrationNumber ?? prev.doctorRegNo,
+                      }));
+                    }}
+                    placeholder="Type or pick a doctor"
+                    className="text-sm h-9"
+                  />
+                  <datalist id="formf-doctor-options">
+                    {doctorsForPick.map((d) => (
+                      <option key={d.id} value={d.name}>
+                        {d.registrationNumber ? `Reg. ${d.registrationNumber}` : "No reg. no on file"}
+                      </option>
+                    ))}
+                  </datalist>
+                </LabelRow>
+                <LabelRow label="Doctor Reg. No.">
+                  <Input {...inp("doctorRegNo")} placeholder="Auto-filled from selected doctor; editable" className="text-sm h-9" />
+                </LabelRow>
               </div>
             </div>
 
@@ -1562,16 +1586,16 @@ export default function FormF() {
                   <span className="text-[11px] font-semibold text-gray-500 w-24 flex-shrink-0 pt-1">Genetic Hx</span>
                   <div className="flex-1 space-y-1">
                     <div className="flex gap-1">
-                      <Radio name="geneticHistory" val="none" label="None" />
-                      <Radio name="geneticHistory" val="specify" label="Specify:" />
+                      <FormRadio checked={form.geneticHistory === "none"} onChange={() => set("geneticHistory", "none")} label="None" />
+                      <FormRadio checked={form.geneticHistory === "specify"} onChange={() => set("geneticHistory", "specify")} label="Specify:" />
                     </div>
                     {form.geneticHistory === "specify" && (
                       <Input {...inp("geneticHistoryDetail")} placeholder="Details" className="h-7 text-xs" />
                     )}
                     <div className="flex items-center gap-1 text-[11px] text-gray-500">
                       <span>Basis:</span>
-                      <Check field="basisDiagnosisClinical" label="Clinical" />
-                      <Check field="basisDiagnosisUsg" label="USG" />
+                      <FormCheck checked={!!form.basisDiagnosisClinical} onChange={(e) => set("basisDiagnosisClinical", e.target.checked)} label="Clinical" />
+                      <FormCheck checked={!!form.basisDiagnosisUsg} onChange={(e) => set("basisDiagnosisUsg", e.target.checked)} label="USG" />
                       <span>Other:</span>
                       <Input {...inp("basisDiagnosisOther")} placeholder="" className="h-7 text-xs w-24" />
                     </div>
