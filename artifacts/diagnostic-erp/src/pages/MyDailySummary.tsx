@@ -569,9 +569,9 @@ function FormulaHint({ text }: { text: string }) {
 
 function DailyFinancialReconciliation({ summary: s }: { summary: MyDailySummarySummary }) {
   // ── Correct accounting flow ──
-  const grossCollection = s.grossBilledIncludingCancelled + s.duesCollectedTotal;
+  const grossCollection = s.grossBilling + s.duesCollectedTotal;
   const totalRefunds = s.cashRefunded + s.digitalRefunded;
-  const netTotalCollection = grossCollection - (s.cancelledOnMyBills + s.outstanding + s.totalExpenses + totalRefunds);
+  const netTotalCollection = grossCollection - (s.cancelledAmount + s.outstanding + s.totalExpenses + totalRefunds);
   const netDigitalCollection = s.digitalCollection - s.digitalRefunded;
   const expectedPhysicalCash = netTotalCollection - netDigitalCollection;
 
@@ -613,12 +613,12 @@ function DailyFinancialReconciliation({ summary: s }: { summary: MyDailySummaryS
       <div className="px-5 py-2">
 
         {/* ─── GROSS COLLECTION ─── */}
-        <RecRow label="Total Bills Generated" value={s.grossBilledIncludingCancelled} type="start" />
+        <RecRow label="Total Bills Generated" value={s.grossBilling} type="start" />
         <RecRow label="Old Dues Collected Today" value={s.duesCollectedTotal} type="start" />
         <MajorDivider color="emerald" />
         <div>
           <RecRow label="Gross Collection" value={grossCollection} type="result" />
-          <FormulaHint text="Total Bills Generated + Old Dues" />
+          <FormulaHint text="Active Bills + Old Dues" />
         </div>
 
         {/* ─── DEDUCTIONS ─── */}
@@ -659,7 +659,7 @@ function DailyFinancialReconciliation({ summary: s }: { summary: MyDailySummaryS
       {/* Formula Footer */}
       <div className="px-5 py-2.5 bg-slate-50 dark:bg-slate-900/20 border-t border-gray-200 dark:border-card-border">
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400">
-          <span>Gross = Total Bills Generated + Dues Collected</span>
+          <span>Gross = Active Bills + Dues Collected</span>
           <span>Net Total = Gross − (Cancelled + Pending + Expenses + Refunds)</span>
           <span>Expected Cash = Net Total − Net Digital</span>
         </div>
@@ -1251,7 +1251,7 @@ export default function MyDailySummary() {
       {s && (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-            <MiniKpi icon={IndianRupee} label="Total Bills Generated" value={fmt(s.grossBilledIncludingCancelled)} sub={`${s.billCount + (s.cancelledByOthersCount ?? 0) + (s.cancelledBySelfCount ?? 0)} bills`} iconBg="bg-emerald-100 text-emerald-700" border="border-l-emerald-500" />
+            <MiniKpi icon={IndianRupee} label="Total Bills Generated" value={fmt(s.grossBilling)} sub={`${s.billCount} bills`} iconBg="bg-emerald-100 text-emerald-700" border="border-l-emerald-500" />
             <MiniKpi icon={Wallet} label="Outstanding / Dues" value={fmt(s.outstanding)} sub="Unpaid balance" iconBg="bg-amber-100 text-amber-700" border="border-l-amber-500" />
             <MiniKpi icon={RotateCcw} label="Cancellations" value={fmt(s.cancelledAmount)} sub={`${s.cancellationCount} bill${s.cancellationCount !== 1 ? "s" : ""} cancelled${s.refundAmount > 0 ? ` · ₹${s.refundAmount.toFixed(0)} refunded` : ""}`} iconBg="bg-rose-100 text-rose-700" border="border-l-rose-500" />
             <MiniKpi icon={TrendingDown} label="Total Expenses" value={fmt(s.totalExpenses)} sub={`Cash ${fmt(s.cashExpenses)} / Digital ${fmt(s.digitalExpenses)}`} iconBg="bg-orange-100 text-orange-700" border="border-l-orange-500" />
