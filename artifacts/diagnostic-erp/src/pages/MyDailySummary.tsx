@@ -572,7 +572,7 @@ function DailyFinancialReconciliation({ summary: s }: { summary: MyDailySummaryS
   const totalRefunds = s.cashRefunded + s.digitalRefunded;
 
   // Step 1: Effective Billing Value
-  const effectiveBilling = s.grossBilling + s.duesCollectedTotal - s.cancelledAmount;
+  const effectiveBilling = s.grossBilledIncludingCancelled + s.duesCollectedTotal - s.cancelledAmount;
 
   // Step 2: Expected Collection
   const expectedCollection = effectiveBilling - s.outstanding - totalRefunds - s.totalExpenses;
@@ -619,7 +619,7 @@ function DailyFinancialReconciliation({ summary: s }: { summary: MyDailySummaryS
       <div className="px-5 py-2">
 
         {/* ─── STEP 1: EFFECTIVE BILLING VALUE ─── */}
-        <RecRow label="New Billing" value={s.grossBilling} type="start" />
+        <RecRow label="New Billing" value={s.grossBilledIncludingCancelled} type="start" />
         <RecRow label="Old Dues Collected" value={s.duesCollectedTotal} type="start" />
         <RecRow label="Cancelled Bills" value={s.cancelledAmount} type="deduct" />
         <MajorDivider color="emerald" />
@@ -1254,7 +1254,7 @@ export default function MyDailySummary() {
       {s && (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-            <MiniKpi icon={IndianRupee} label="Total Bills Generated" value={fmt(s.grossBilling)} sub={`${s.billCount} bills`} iconBg="bg-emerald-100 text-emerald-700" border="border-l-emerald-500" />
+            <MiniKpi icon={IndianRupee} label="Total Bills Generated" value={fmt(s.grossBilledIncludingCancelled)} sub={`${(s.billCount ?? 0) + (s.cancelledByOthersCount ?? 0) + (s.cancelledBySelfCount ?? 0)} bills`} iconBg="bg-emerald-100 text-emerald-700" border="border-l-emerald-500" />
             <MiniKpi icon={Wallet} label="Outstanding / Dues" value={fmt(s.outstanding)} sub="Unpaid balance" iconBg="bg-amber-100 text-amber-700" border="border-l-amber-500" />
             <MiniKpi icon={RotateCcw} label="Cancellations" value={fmt(s.cancelledAmount)} sub={`${s.cancellationCount} bill${s.cancellationCount !== 1 ? "s" : ""} cancelled${s.refundAmount > 0 ? ` · ₹${s.refundAmount.toFixed(0)} refunded` : ""}`} iconBg="bg-rose-100 text-rose-700" border="border-l-rose-500" />
             <MiniKpi icon={TrendingDown} label="Total Expenses" value={fmt(s.totalExpenses)} sub={`Cash ${fmt(s.cashExpenses)} / Digital ${fmt(s.digitalExpenses)}`} iconBg="bg-orange-100 text-orange-700" border="border-l-orange-500" />
