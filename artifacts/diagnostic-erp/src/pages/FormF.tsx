@@ -86,8 +86,8 @@ function defaultForm(): FormFData {
     indicationType: "routine",
     indicationDetail: "",
     previousChildIssue: "",
-    doctorName: "",
-    doctorRegNo: "",
+    doctorName: "Dr. Sugandha Priyadarshini",
+    doctorRegNo: "MCI/27962",
     procedure: "Ultrasound - ULTRASONOGRAPHY",
     procedurePurpose: "Obstetric ultrasonography",
     invasiveProcedure: "notdone",
@@ -446,8 +446,6 @@ type PendingItem = {
   age: string;
   referredBy: string;
   referredByName: string;
-  doctorName: string;
-  doctorRegNo: string;
   formFTests: string[];
 };
 
@@ -607,8 +605,6 @@ export default function FormF() {
       mobile: item.mobile,
       referredBy: item.referredBy,
       referredByName: item.referredByName,
-      doctorName: item.doctorName || defaultForm().doctorName,
-      doctorRegNo: item.doctorRegNo || "",
       procedurePurpose: item.formFTests.join(", ") || "Obstetric ultrasonography",
       procedureDate: item.billDate,
       date: item.billDate,
@@ -1123,15 +1119,15 @@ export default function FormF() {
               <div className="flex items-center gap-2 pb-2 border-b border-indigo-100 mb-3">
                 <User size={14} className="text-indigo-600" />
                 <span className="text-sm font-bold text-indigo-800">Patient from Bill</span>
-                <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">Auto-filled · Mobile editable</span>
+                <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">Auto-filled from bill · Editable</span>
               </div>
               <div className="space-y-3">
                 <div className="flex gap-3">
-                  <LabelRow label="Patient Name">
-                    <Input value={form.patientName} readOnly className="text-sm h-9 bg-white/80 border-indigo-200 cursor-default" tabIndex={-1} />
+                  <LabelRow label="Patient Name *">
+                    <Input {...inp("patientName")} placeholder="Auto-filled from bill — editable for spelling correction" className="text-sm h-9" />
                   </LabelRow>
-                  <LabelRow label="Age">
-                    <Input value={form.age} readOnly className="text-sm h-9 w-24 bg-white/80 border-indigo-200 cursor-default" tabIndex={-1} />
+                  <LabelRow label="Age *">
+                    <Input {...inp("age")} placeholder="Auto-filled — editable if wrong" className="text-sm h-9 w-28" />
                   </LabelRow>
                 </div>
                 <LabelRow label="Mobile *">
