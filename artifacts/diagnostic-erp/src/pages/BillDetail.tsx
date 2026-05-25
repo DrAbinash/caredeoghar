@@ -1442,7 +1442,7 @@ export default function BillDetail({ id }: { id: number }) {
               <Button
                 type="submit"
                 disabled={
-                  !watchCD("newDoctorId") ||
+                  (watchCD("newDoctorId") === undefined || watchCD("newDoctorId") === null) ||
                   !watchCD("reason")?.trim() ||
                   !watchCD("performedBy")?.trim() ||
                   changeDoctor.isPending
