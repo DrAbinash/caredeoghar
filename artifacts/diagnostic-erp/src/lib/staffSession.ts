@@ -74,12 +74,8 @@ export const PERMISSIONED_PATHS: ReadonlySet<string> = new Set([
   "/settings",
   "/dicom-nodes",
   "/website",
-  // Clinical report & compliance paths — gated behind /reports permission.
-  // Matches the server-side requireStaffPermission("/reports") added to the
-  // /api/form-f, /api/patient-reports, and /api/signatures routes so that
-  // a low-privilege staff member cannot reach these frontend pages or call
-  // the corresponding API endpoints without the /reports module grant.
   "/form-f",
+  "/queue",
   "/patient-reports",
   "/signatures",
   "/banking",
@@ -98,7 +94,6 @@ export const PERMISSIONED_PATHS: ReadonlySet<string> = new Set([
 // should be available to any role that has already been granted /reports.
 const PERMISSION_ALIASES: Readonly<Record<string, string>> = {
   "/hr-forms": "/settings",
-  "/form-f": "/reports",
   "/patient-reports": "/reports",
   "/signatures": "/reports",
 };

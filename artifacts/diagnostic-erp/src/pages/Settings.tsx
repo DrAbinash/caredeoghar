@@ -70,7 +70,7 @@ const ROLE_COLORS: Record<string, string> = {
   receptionist: "bg-amber-100 text-amber-700",
 };
 const ALL_MODULES = [
-  { path: "/", label: "Dashboard" },
+  { path: "/", label: "Billing Desk" },
   { path: "/patients", label: "Patients" },
   { path: "/register", label: "Quick Register" },
   { path: "/orders", label: "Orders" },
@@ -85,6 +85,8 @@ const ALL_MODULES = [
   { path: "/accounting", label: "Accounting" },
   { path: "/discounts", label: "Discounts" },
   { path: "/settings", label: "Settings" },
+  { path: "/form-f", label: "Form F (PCPNDT)" },
+  { path: "/queue", label: "Queue Tokens" },
 ];
 const DEFAULT_PERMISSIONS: Record<string, string[]> = {
   super_admin: ALL_MODULES.map(m => m.path),

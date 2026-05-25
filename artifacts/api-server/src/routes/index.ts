@@ -396,7 +396,7 @@ router.use(
 // These expose patient PHI (names, codes, phone, email, test details),
 // clinician signature records, and compliance Form-F data. Restricting them
 // to the /reports permission matches every other sensitive clinical module.
-router.use("/form-f", requireStaffAuth, requireStaffPermission("/reports"), formFRouter);
+router.use("/form-f", requireStaffAuth, requireStaffPermission("/form-f"), formFRouter);
 router.use("/patient-reports", requireStaffAuth, requireStaffPermission("/reports"), patientReportsRouter);
 router.use("/signatures", requireStaffAuth, requireStaffPermission("/reports"), signaturesRouter);
 
@@ -421,8 +421,8 @@ router.use("/dashboard/advanced-summary", requireStaffAuth, advancedDashboardRou
 router.use("/dashboard/my-daily-summary", requireStaffAuth, myDailySummaryRouter);
 router.use("/packages", requireStaffAuth, packagesRouter);
 router.use("/whatsapp", requireStaffAuth, whatsappRouter);
-router.use("/tokens", requireStaffAuth, tokensRouter);
-router.use("/test-tokens", requireStaffAuth, testTokensRouter);
+router.use("/tokens", requireStaffAuth, requireStaffPermission("/queue"), tokensRouter);
+router.use("/test-tokens", requireStaffAuth, requireStaffPermission("/queue"), testTokensRouter);
 
 // ─── Super-admin-only sensitive operational routes ────────────────────────────
 // FIDO2 / WebAuthn authentication routes:
