@@ -202,6 +202,10 @@ export interface Doctor {
   phone?: string | null;
   email?: string | null;
   hospitalAffiliation?: string | null;
+  /** Full clinic/hospital address of the referring doctor. */
+  address?: string | null;
+  /** Locality or area for marketing segmentation and area-based search. */
+  area?: string | null;
   /** State medical council registration number — printed on PCPNDT Form F. */
   registrationNumber?: string | null;
   defaultCommission?: number | string | null;
@@ -418,6 +422,8 @@ export interface CreateDoctorBody {
   phone?: string | null;
   email?: string | null;
   hospitalAffiliation?: string | null;
+  address?: string | null;
+  area?: string | null;
   registrationNumber?: string | null;
 }
 
@@ -948,6 +954,8 @@ export interface UpdateDoctorBody {
   phone?: string | null;
   email?: string | null;
   hospitalAffiliation?: string | null;
+  address?: string | null;
+  area?: string | null;
   registrationNumber?: string | null;
   defaultCommission?: number | string;
   defaultCommissionType?: string;

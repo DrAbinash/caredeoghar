@@ -1428,6 +1428,10 @@ async function runStartupMigrations(): Promise<void> {
       -- ── Form F: Gestational Age (weeks + days) replaces old 14(a) prenatal result ──
       ALTER TABLE form_f_records ADD COLUMN IF NOT EXISTS gestational_age_weeks TEXT NOT NULL DEFAULT '';
       ALTER TABLE form_f_records ADD COLUMN IF NOT EXISTS gestational_age_days TEXT NOT NULL DEFAULT '';
+
+      -- ── Doctor address + area for marketing / area-based search ──
+      ALTER TABLE doctors ADD COLUMN IF NOT EXISTS address TEXT;
+      ALTER TABLE doctors ADD COLUMN IF NOT EXISTS area TEXT;
     `);
     logger.info("Startup migrations applied");
   } catch (err) {

@@ -2795,6 +2795,14 @@ components:
         hospitalAffiliation:
           type: string
           nullable: true
+        address:
+          type: string
+          nullable: true
+          description: Full clinic/hospital address of the referring doctor.
+        area:
+          type: string
+          nullable: true
+          description: Locality or area for marketing segmentation and area-based search.
         registrationNumber:
           type: string
           nullable: true
@@ -2839,6 +2847,12 @@ components:
           type: string
           nullable: true
         hospitalAffiliation:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        area:
           type: string
           nullable: true
         registrationNumber:
@@ -3728,6 +3742,12 @@ components:
           type: string
           nullable: true
         hospitalAffiliation:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        area:
           type: string
           nullable: true
         registrationNumber:

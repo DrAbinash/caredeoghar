@@ -9,6 +9,8 @@ export const doctorsTable = pgTable("doctors", {
   phone: text("phone"),
   email: text("email"),
   hospitalAffiliation: text("hospital_affiliation"),
+  address: text("address"),
+  area: text("area"),
   // Module B: doctor registration / council number — required on PCPNDT Form F prints
   // and on referral receipts to satisfy state medical council audits.
   registrationNumber: text("registration_number"),

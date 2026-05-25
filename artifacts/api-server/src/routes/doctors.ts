@@ -27,6 +27,8 @@ doctorsRouter.get("/", async (req, res) => {
       phone: doctorsTable.phone,
       email: doctorsTable.email,
       hospitalAffiliation: doctorsTable.hospitalAffiliation,
+      address: doctorsTable.address,
+      area: doctorsTable.area,
       registrationNumber: doctorsTable.registrationNumber,
       defaultCommissionType: doctorsTable.defaultCommissionType,
       defaultCommission: doctorsTable.defaultCommission,
@@ -43,7 +45,9 @@ doctorsRouter.get("/", async (req, res) => {
       or(
         ilike(doctorsTable.name, `%${search}%`),
         ilike(doctorsTable.specialization, `%${search}%`),
-        ilike(doctorsTable.hospitalAffiliation, `%${search}%`)
+        ilike(doctorsTable.hospitalAffiliation, `%${search}%`),
+        ilike(doctorsTable.address, `%${search}%`),
+        ilike(doctorsTable.area, `%${search}%`)
       )
     ) as typeof query;
   }

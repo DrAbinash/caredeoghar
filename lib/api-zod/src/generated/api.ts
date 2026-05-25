@@ -161,6 +161,16 @@ export const GetPatientHistoryResponse = zod.object({
           phone: zod.string().nullish(),
           email: zod.string().nullish(),
           hospitalAffiliation: zod.string().nullish(),
+          address: zod
+            .string()
+            .nullish()
+            .describe("Full clinic\/hospital address of the referring doctor."),
+          area: zod
+            .string()
+            .nullish()
+            .describe(
+              "Locality or area for marketing segmentation and area-based search.",
+            ),
           registrationNumber: zod
             .string()
             .nullish()
@@ -490,6 +500,16 @@ export const ListOrdersResponse = zod.object({
           phone: zod.string().nullish(),
           email: zod.string().nullish(),
           hospitalAffiliation: zod.string().nullish(),
+          address: zod
+            .string()
+            .nullish()
+            .describe("Full clinic\/hospital address of the referring doctor."),
+          area: zod
+            .string()
+            .nullish()
+            .describe(
+              "Locality or area for marketing segmentation and area-based search.",
+            ),
           registrationNumber: zod
             .string()
             .nullish()
@@ -618,6 +638,16 @@ export const GetOrderResponse = zod.object({
       phone: zod.string().nullish(),
       email: zod.string().nullish(),
       hospitalAffiliation: zod.string().nullish(),
+      address: zod
+        .string()
+        .nullish()
+        .describe("Full clinic\/hospital address of the referring doctor."),
+      area: zod
+        .string()
+        .nullish()
+        .describe(
+          "Locality or area for marketing segmentation and area-based search.",
+        ),
       registrationNumber: zod
         .string()
         .nullish()
@@ -716,6 +746,16 @@ export const UpdateOrderResponse = zod.object({
       phone: zod.string().nullish(),
       email: zod.string().nullish(),
       hospitalAffiliation: zod.string().nullish(),
+      address: zod
+        .string()
+        .nullish()
+        .describe("Full clinic\/hospital address of the referring doctor."),
+      area: zod
+        .string()
+        .nullish()
+        .describe(
+          "Locality or area for marketing segmentation and area-based search.",
+        ),
       registrationNumber: zod
         .string()
         .nullish()
@@ -829,6 +869,18 @@ export const ListBillsResponse = zod.object({
             phone: zod.string().nullish(),
             email: zod.string().nullish(),
             hospitalAffiliation: zod.string().nullish(),
+            address: zod
+              .string()
+              .nullish()
+              .describe(
+                "Full clinic\/hospital address of the referring doctor.",
+              ),
+            area: zod
+              .string()
+              .nullish()
+              .describe(
+                "Locality or area for marketing segmentation and area-based search.",
+              ),
             registrationNumber: zod
               .string()
               .nullish()
@@ -976,6 +1028,16 @@ export const GetBillResponse = zod.object({
         phone: zod.string().nullish(),
         email: zod.string().nullish(),
         hospitalAffiliation: zod.string().nullish(),
+        address: zod
+          .string()
+          .nullish()
+          .describe("Full clinic\/hospital address of the referring doctor."),
+        area: zod
+          .string()
+          .nullish()
+          .describe(
+            "Locality or area for marketing segmentation and area-based search.",
+          ),
         registrationNumber: zod
           .string()
           .nullish()
@@ -1115,6 +1177,16 @@ export const UpdateBillResponse = zod.object({
         phone: zod.string().nullish(),
         email: zod.string().nullish(),
         hospitalAffiliation: zod.string().nullish(),
+        address: zod
+          .string()
+          .nullish()
+          .describe("Full clinic\/hospital address of the referring doctor."),
+        area: zod
+          .string()
+          .nullish()
+          .describe(
+            "Locality or area for marketing segmentation and area-based search.",
+          ),
         registrationNumber: zod
           .string()
           .nullish()
@@ -1304,6 +1376,16 @@ export const CancelBillResponse = zod.object({
         phone: zod.string().nullish(),
         email: zod.string().nullish(),
         hospitalAffiliation: zod.string().nullish(),
+        address: zod
+          .string()
+          .nullish()
+          .describe("Full clinic\/hospital address of the referring doctor."),
+        area: zod
+          .string()
+          .nullish()
+          .describe(
+            "Locality or area for marketing segmentation and area-based search.",
+          ),
         registrationNumber: zod
           .string()
           .nullish()
@@ -1439,6 +1521,16 @@ export const CancelBillTestResponse = zod.object({
         phone: zod.string().nullish(),
         email: zod.string().nullish(),
         hospitalAffiliation: zod.string().nullish(),
+        address: zod
+          .string()
+          .nullish()
+          .describe("Full clinic\/hospital address of the referring doctor."),
+        area: zod
+          .string()
+          .nullish()
+          .describe(
+            "Locality or area for marketing segmentation and area-based search.",
+          ),
         registrationNumber: zod
           .string()
           .nullish()
@@ -1575,6 +1667,16 @@ export const CancelRefundTestsResponse = zod.object({
         phone: zod.string().nullish(),
         email: zod.string().nullish(),
         hospitalAffiliation: zod.string().nullish(),
+        address: zod
+          .string()
+          .nullish()
+          .describe("Full clinic\/hospital address of the referring doctor."),
+        area: zod
+          .string()
+          .nullish()
+          .describe(
+            "Locality or area for marketing segmentation and area-based search.",
+          ),
         registrationNumber: zod
           .string()
           .nullish()
@@ -1719,6 +1821,16 @@ export const RefundBillResponse = zod.object({
         phone: zod.string().nullish(),
         email: zod.string().nullish(),
         hospitalAffiliation: zod.string().nullish(),
+        address: zod
+          .string()
+          .nullish()
+          .describe("Full clinic\/hospital address of the referring doctor."),
+        area: zod
+          .string()
+          .nullish()
+          .describe(
+            "Locality or area for marketing segmentation and area-based search.",
+          ),
         registrationNumber: zod
           .string()
           .nullish()
@@ -1856,6 +1968,16 @@ export const SuperEditBillResponse = zod.object({
         phone: zod.string().nullish(),
         email: zod.string().nullish(),
         hospitalAffiliation: zod.string().nullish(),
+        address: zod
+          .string()
+          .nullish()
+          .describe("Full clinic\/hospital address of the referring doctor."),
+        area: zod
+          .string()
+          .nullish()
+          .describe(
+            "Locality or area for marketing segmentation and area-based search.",
+          ),
         registrationNumber: zod
           .string()
           .nullish()
@@ -2005,6 +2127,16 @@ export const ListDoctorsResponse = zod.object({
       phone: zod.string().nullish(),
       email: zod.string().nullish(),
       hospitalAffiliation: zod.string().nullish(),
+      address: zod
+        .string()
+        .nullish()
+        .describe("Full clinic\/hospital address of the referring doctor."),
+      area: zod
+        .string()
+        .nullish()
+        .describe(
+          "Locality or area for marketing segmentation and area-based search.",
+        ),
       registrationNumber: zod
         .string()
         .nullish()
@@ -2029,6 +2161,8 @@ export const CreateDoctorBody = zod.object({
   phone: zod.string().nullish(),
   email: zod.string().nullish(),
   hospitalAffiliation: zod.string().nullish(),
+  address: zod.string().nullish(),
+  area: zod.string().nullish(),
   registrationNumber: zod.string().nullish(),
 });
 
@@ -2045,6 +2179,8 @@ export const UpdateDoctorBody = zod.object({
   phone: zod.string().nullish(),
   email: zod.string().nullish(),
   hospitalAffiliation: zod.string().nullish(),
+  address: zod.string().nullish(),
+  area: zod.string().nullish(),
   registrationNumber: zod.string().nullish(),
   defaultCommission: zod.union([zod.number(), zod.string()]).optional(),
   defaultCommissionType: zod.string().optional(),
@@ -2058,6 +2194,16 @@ export const UpdateDoctorResponse = zod.object({
   phone: zod.string().nullish(),
   email: zod.string().nullish(),
   hospitalAffiliation: zod.string().nullish(),
+  address: zod
+    .string()
+    .nullish()
+    .describe("Full clinic\/hospital address of the referring doctor."),
+  area: zod
+    .string()
+    .nullish()
+    .describe(
+      "Locality or area for marketing segmentation and area-based search.",
+    ),
   registrationNumber: zod
     .string()
     .nullish()
