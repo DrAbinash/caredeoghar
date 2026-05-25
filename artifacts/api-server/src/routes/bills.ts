@@ -162,6 +162,15 @@ async function buildBill(bill: typeof billsTable.$inferSelect) {
   };
 }
 
+billsRouter.get("/creators", async (_req, res) => {
+  const rows = await db
+    .selectDistinct({ createdByName: billsTable.createdByName })
+    .from(billsTable)
+    .where(sql`${billsTable.createdByName} IS NOT NULL AND ${billsTable.createdByName} != ''`)
+    .orderBy(billsTable.createdByName);
+  return res.json(rows.map((r) => r.createdByName));
+});
+
 billsRouter.get("/search", async (req, res) => {
   const q = String(req.query.q ?? "").trim();
   const dueOnly = req.query.dueOnly === "1" || req.query.dueOnly === "true";

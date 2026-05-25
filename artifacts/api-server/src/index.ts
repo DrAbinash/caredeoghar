@@ -377,6 +377,10 @@ async function runStartupMigrations(): Promise<void> {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS max_concurrent_sessions INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS session_idle_timeout_minutes INTEGER NOT NULL DEFAULT 30;
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS default_max_concurrent_sessions INTEGER NOT NULL DEFAULT 3;
+
+      -- ── Form F required field toggles (May 2026) ────────────────────
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS form_f_address_required BOOLEAN NOT NULL DEFAULT TRUE;
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS form_f_guardian_required BOOLEAN NOT NULL DEFAULT TRUE;
       ALTER TABLE portal_sessions ADD COLUMN IF NOT EXISTS ip_address TEXT;
       ALTER TABLE portal_sessions ADD COLUMN IF NOT EXISTS user_agent TEXT;
       ALTER TABLE portal_sessions ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ NOT NULL DEFAULT NOW();

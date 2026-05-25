@@ -3020,6 +3020,8 @@ function FormFTestsTab() {
   const { data: settings, isLoading: settingsLoading } = useQuery<{
     formFTestIds?: string;
     formFBillingPrompt?: boolean;
+    formFAddressRequired?: boolean;
+    formFGuardianRequired?: boolean;
   }>({
     queryKey: ["clinic-settings"],
     queryFn: () => api.get("/api/clinic-settings"),
@@ -3027,6 +3029,8 @@ function FormFTestsTab() {
 
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [billingPrompt, setBillingPrompt] = useState(false);
+  const [addressRequired, setAddressRequired] = useState(true);
+  const [guardianRequired, setGuardianRequired] = useState(true);
 
   useEffect(() => {
     if (!settingsLoading && settings !== undefined) {
@@ -3035,6 +3039,8 @@ function FormFTestsTab() {
         setSelectedIds(new Set(ids));
       } catch { /* ignore */ }
       setBillingPrompt(!!settings?.formFBillingPrompt);
+      setAddressRequired(settings?.formFAddressRequired !== false);
+      setGuardianRequired(settings?.formFGuardianRequired !== false);
     }
   }, [settings, settingsLoading]);
 
@@ -3043,6 +3049,8 @@ function FormFTestsTab() {
       api.put("/api/clinic-settings", {
         formFTestIds: JSON.stringify([...selectedIds]),
         formFBillingPrompt: billingPrompt,
+        formFAddressRequired: addressRequired,
+        formFGuardianRequired: guardianRequired,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clinic-settings"] });
@@ -3086,18 +3094,44 @@ function FormFTestsTab() {
               Mark which tests require PCPNDT Form F. When these tests are added in Billing Desk,
               Husband's Name and Address will be collected for Form F compliance.
             </p>
-            <div className="mt-2 flex items-center gap-2">
-              <input
-                id="formFBillingPrompt"
-                type="checkbox"
-                checked={billingPrompt}
-                onChange={(e) => setBillingPrompt(e.target.checked)}
-                className="w-4 h-4 accent-primary"
-              />
-              <label htmlFor="formFBillingPrompt" className="text-xs text-muted-foreground cursor-pointer">
-                <span className="font-semibold text-foreground">Show popup after bill creation</span>
-                — Instead of blocking the bill, show a modal to collect address + guardian name <em>after</em> the bill is saved. This speeds up the billing desk while still ensuring Form F data is captured.
-              </label>
+            <div className="mt-2 space-y-1.5">
+              <div className="flex items-center gap-2">
+                <input
+                  id="formFBillingPrompt"
+                  type="checkbox"
+                  checked={billingPrompt}
+                  onChange={(e) => setBillingPrompt(e.target.checked)}
+                  className="w-4 h-4 accent-primary"
+                />
+                <label htmlFor="formFBillingPrompt" className="text-xs text-muted-foreground cursor-pointer">
+                  <span className="font-semibold text-foreground">Show popup after bill creation</span>
+                  — Instead of blocking the bill, show a modal to collect address + guardian name <em>after</em> the bill is saved.
+                </label>
+              </div>
+              <div className="flex items-center gap-2 pl-6">
+                <input
+                  id="formFGuardianRequired"
+                  type="checkbox"
+                  checked={guardianRequired}
+                  onChange={(e) => setGuardianRequired(e.target.checked)}
+                  className="w-4 h-4 accent-primary"
+                />
+                <label htmlFor="formFGuardianRequired" className="text-xs text-muted-foreground cursor-pointer">
+                  <span className="font-semibold text-foreground">Husband/Father name required</span> in popup and Form F
+                </label>
+              </div>
+              <div className="flex items-center gap-2 pl-6">
+                <input
+                  id="formFAddressRequired"
+                  type="checkbox"
+                  checked={addressRequired}
+                  onChange={(e) => setAddressRequired(e.target.checked)}
+                  className="w-4 h-4 accent-primary"
+                />
+                <label htmlFor="formFAddressRequired" className="text-xs text-muted-foreground cursor-pointer">
+                  <span className="font-semibold text-foreground">Full address required</span> in popup and Form F
+                </label>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2">

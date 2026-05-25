@@ -66,9 +66,9 @@ export default function Billing() {
   const [createdBy, setCreatedBy] = useState("");
   const queryClient = useQueryClient();
 
-  const { data: staffList = [] } = useQuery<{ id: number; firstName: string; lastName: string; staffId: string }[]>({
-    queryKey: ["staff-list-active"],
-    queryFn: () => api.get("/api/staff?active=1"),
+  const { data: billCreators = [] } = useQuery<string[]>({
+    queryKey: ["bills-creators"],
+    queryFn: () => api.get("/api/bills/creators"),
     staleTime: 60_000,
   });
 
@@ -236,9 +236,9 @@ export default function Billing() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Users</SelectItem>
-                        {staffList.map((s) => (
-                          <SelectItem key={s.id} value={`${s.firstName} ${s.lastName}`}>
-                            {s.firstName} {s.lastName}
+                        {billCreators.map((name) => (
+                          <SelectItem key={name} value={name}>
+                            {name}
                           </SelectItem>
                         ))}
                       </SelectContent>

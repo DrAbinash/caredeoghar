@@ -80,5 +80,9 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   // When true, the billing desk prompts for address + husband/father name when a
   // bill contains any Form F required test (configured in the Form F tests tab).
   formFBillingPrompt: boolean("form_f_billing_prompt").notNull().default(false),
+  // When true, address is required in the Form F billing desk popup and form.
+  formFAddressRequired: boolean("form_f_address_required").notNull().default(true),
+  // When true, husband/father name is required in the Form F billing desk popup and form.
+  formFGuardianRequired: boolean("form_f_guardian_required").notNull().default(true),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

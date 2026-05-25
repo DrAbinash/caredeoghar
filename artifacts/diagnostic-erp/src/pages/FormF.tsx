@@ -529,6 +529,18 @@ export default function FormF() {
     queryFn: () => api.get("/api/doctors?limit=200"),
     staleTime: 60_000,
   });
+
+  // Clinic settings for Form F required-field toggles
+  const { data: fSettings } = useQuery<{
+    formFAddressRequired?: boolean;
+    formFGuardianRequired?: boolean;
+  }>({
+    queryKey: ["clinic-settings-formf"],
+    queryFn: () => api.get("/api/clinic-settings"),
+    staleTime: 60_000,
+  });
+  const guardianRequired = fSettings?.formFGuardianRequired !== false;
+  const addressRequired = fSettings?.formFAddressRequired !== false;
   const doctorsForPick = doctorList?.doctors ?? [];
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -1250,9 +1262,9 @@ export default function FormF() {
                 <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-semibold">Type these fields</span>
               </div>
               <div className="space-y-5">
-                <BigLabelRow label="Husband / Father Name *">
+                <BigLabelRow label={`Husband / Father Name ${guardianRequired ? "*" : ""}`}>
                   <div className="flex gap-2">
-                    <Input {...inp("husbandFatherName")} placeholder="Required for PCPNDT" className="flex-1 text-base h-11" />
+                    <Input {...inp("husbandFatherName")} placeholder={guardianRequired ? "Required for PCPNDT" : "Optional — enter if available"} className="flex-1 text-base h-11" />
                     {/* ── File upload (scanner / file picker) ── */}
                     <label className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed border-orange-300 bg-orange-50 cursor-pointer text-sm font-medium transition-colors ${idCardUploading ? "opacity-60 cursor-wait" : "hover:bg-orange-100 text-orange-700"}`}>
                       <Upload size={14} className={idCardUploading ? "animate-pulse" : ""} />
@@ -1321,8 +1333,8 @@ export default function FormF() {
                   </div>
                 )}
 
-                <BigLabelRow label="Full Address *">
-                  <Input {...inp("address")} placeholder="Patient's full address" className="text-base h-11" />
+                <BigLabelRow label={`Full Address ${addressRequired ? "*" : ""}`}>
+                  <Input {...inp("address")} placeholder={addressRequired ? "Patient's full address" : "Optional — enter if available"} className="text-base h-11" />
                 </BigLabelRow>
                 <BigLabelRow label="No. of children">
                   <div className="flex items-center gap-4">

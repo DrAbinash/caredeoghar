@@ -483,6 +483,8 @@ export default function BillingDesk() {
     website: string; gstin: string; logoDataUrl: string | null; footerNote?: string;
     formFTestIds?: string;
     formFBillingPrompt?: boolean;
+    formFAddressRequired?: boolean;
+    formFGuardianRequired?: boolean;
     dicomMwlTestIds?: string;
     dicomMwlTestDefaults?: string;
     quickTestIds?: string;
@@ -2043,9 +2045,9 @@ export default function BillingDesk() {
                       printAfterSaveRef.current = true;
                       generateMut.mutate();
                     }}
-                    disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || !!lastBill || (discountAmt > 0 && !discountReason) || (needsFormF && !clinic?.formFBillingPrompt && (!husbandName.trim() || !patientAddress.trim())) || (needsDicom && !dicomFieldsComplete)}
+                    disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || !!lastBill || (discountAmt > 0 && !discountReason) || (needsFormF && !clinic?.formFBillingPrompt && ((clinic?.formFGuardianRequired !== false && !husbandName.trim()) || (clinic?.formFAddressRequired !== false && !patientAddress.trim()))) || (needsDicom && !dicomFieldsComplete)}
                     className={`w-full h-12 text-lg font-bold border-0 shadow-lg disabled:shadow-none ${lastBill ? "bg-green-600 text-white disabled:bg-green-600 disabled:text-white disabled:opacity-80" : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white disabled:from-muted disabled:to-muted disabled:text-slate-900 dark:text-slate-900"}`}
-                    title={lastBill ? `Bill ${lastBill.billNumber} already saved — click Reset to start a new bill` : discountAmt > 0 && !discountReason ? "Select a discount reason before generating bill" : needsFormF && !clinic?.formFBillingPrompt && (!husbandName.trim() || !patientAddress.trim()) ? "Fill Husband Name & Address for PCPNDT Form F" : needsDicom && !dicomFieldsComplete ? "Fill all 4 DICOM Worklist fields before generating bill" : undefined}
+                    title={lastBill ? `Bill ${lastBill.billNumber} already saved — click Reset to start a new bill` : discountAmt > 0 && !discountReason ? "Select a discount reason before generating bill" : needsFormF && !clinic?.formFBillingPrompt && ((clinic?.formFGuardianRequired !== false && !husbandName.trim()) || (clinic?.formFAddressRequired !== false && !patientAddress.trim())) ? "Fill required Form F fields (Husband Name & Address)" : needsDicom && !dicomFieldsComplete ? "Fill all 4 DICOM Worklist fields before generating bill" : undefined}
                   >
                     {lastBill ? <><CheckCircle2 size={18} className="mr-2" />Bill Saved ✓</> : generateMut.isPending ? <><Printer size={18} className="mr-2 animate-spin" />Saving…</> : <><Printer size={18} className="mr-2" />Save &amp; Print</>}
                   </Button>
@@ -2248,21 +2250,25 @@ export default function BillingDesk() {
               This bill contains a PCPNDT-required test. Please collect the following details to auto-fill Form F.
             </p>
             <div className="space-y-1">
-              <Label className="text-xs font-extrabold">Husband's / Father's Name <span className="text-red-500">*</span></Label>
+              <Label className="text-xs font-extrabold">
+                Husband's / Father's Name {clinic?.formFGuardianRequired !== false && <span className="text-red-500">*</span>}
+              </Label>
               <Input
                 autoFocus
                 value={formFPopupHusband}
                 onChange={(e) => setFormFPopupHusband(e.target.value)}
-                placeholder="Required for PCPNDT compliance"
+                placeholder={clinic?.formFGuardianRequired !== false ? "Required for PCPNDT compliance" : "Optional — enter if available"}
                 className="h-9 text-sm border-orange-300 focus:border-orange-500"
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs font-extrabold">Full Address <span className="text-red-500">*</span></Label>
+              <Label className="text-xs font-extrabold">
+                Full Address {clinic?.formFAddressRequired !== false && <span className="text-red-500">*</span>}
+              </Label>
               <Input
                 value={formFPopupAddress}
                 onChange={(e) => setFormFPopupAddress(e.target.value)}
-                placeholder="Patient's full residential address"
+                placeholder={clinic?.formFAddressRequired !== false ? "Patient's full residential address" : "Optional — enter if available"}
                 className="h-9 text-sm border-orange-300 focus:border-orange-500"
               />
             </div>
@@ -2270,7 +2276,10 @@ export default function BillingDesk() {
               <Button
                 size="sm"
                 className="flex-1 h-9"
-                disabled={!formFPopupHusband.trim() || !formFPopupAddress.trim()}
+                disabled={
+                  (clinic?.formFGuardianRequired !== false && !formFPopupHusband.trim()) ||
+                  (clinic?.formFAddressRequired !== false && !formFPopupAddress.trim())
+                }
                 onClick={async () => {
                   try {
                     await api.patch("/api/form-f/update-patient-data", {
