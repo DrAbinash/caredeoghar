@@ -1,0 +1,120 @@
+Create a complete Docker deployment folder for this ERP project.
+
+Make a new root folder named:
+
+docker-deployment/
+
+Inside it create two separate deployment options:
+
+1. docker-deployment/windows-desktop/
+2. docker-deployment/synology-nas/
+
+For each option, generate all required files:
+
+- docker-compose.yml
+- Dockerfile.frontend
+- Dockerfile.backend
+- .env.example
+- README.md
+- start.bat for Windows
+- stop.bat for Windows
+- backup-db.bat for Windows
+- restore-db.bat for Windows
+- synology-readme.md for NAS deployment
+
+Important requirements:
+
+1. Detect the actual project structure automatically.
+2. Support PNPM workspace/monorepo if this project uses it.
+3. Use Node 20 Alpine images.
+4. Use PostgreSQL 16 container.
+5. Use persistent Docker volumes for PostgreSQL data.
+6. Frontend should run on external port 3000.
+7. Backend should run on external port 8081.
+8. PostgreSQL should run internally on port 5432.
+9. Use DATABASE_URL like:
+   postgresql://postgres:CHANGE_ME_PASSWORD@postgres:5432/HospERP
+
+10. Do not hardcode secrets. Use .env file.
+11. Add restart policy:
+    restart: unless-stopped
+
+12. For Windows Desktop deployment:
+    - docker compose up -d --build
+    - docker compose down
+    - automatic restart after reboot
+    - clear README steps for novice user
+
+13. For Synology NAS deployment:
+    - compatible with Synology Container Manager
+    - support project import using docker-compose.yml
+    - use NAS folders for persistent volumes:
+      /volume1/docker/diagnostic-erp/postgres
+      /volume1/docker/diagnostic-erp/uploads
+      /volume1/docker/diagnostic-erp/backups
+
+14. Add backup system:
+    - daily PostgreSQL backup command
+    - manual backup command
+    - restore command
+    - backup folder mounted to container
+
+15. Add uploads volume:
+    - reports/uploads/documents should persist outside container
+    - prepare for future DICOM/PACS large file storage
+    - do not store DICOM files inside PostgreSQL
+
+16. Add healthchecks for:
+    - PostgreSQL
+    - backend API
+    - frontend
+
+17. Add comments in docker-compose.yml explaining every service.
+
+18. Add optional nginx reverse proxy example for future domain/HTTPS but keep it disabled by default.
+
+19. Create README in very simple step-by-step language:
+    - Install Docker Desktop
+    - Open project folder
+    - copy .env.example to .env
+    - set password
+    - run start.bat
+    - open http://localhost:3000
+    - stop using stop.bat
+
+20. For Synology README include:
+    - Open Container Manager
+    - Project → Create
+    - Choose docker-compose.yml
+    - Set environment variables
+    - Start project
+    - Access ERP using:
+      http://NAS-IP:3000
+
+21. Make sure Vite frontend uses:
+    host 0.0.0.0
+    port 5173 inside container
+
+22. Backend should listen on:
+    0.0.0.0
+    port 8080 inside container
+
+23. External mapping should be:
+    frontend 3000:5173
+    backend 8081:8080
+
+24. Add a final file:
+    docker-deployment/DOCKER_DEPLOYMENT_SUMMARY.md
+
+This summary should clearly explain:
+- which files were created
+- how Windows deployment works
+- how Synology NAS deployment works
+- which ports are used
+- where data is stored
+- how to backup and restore database
+
+Do not change existing app logic unless required for Docker compatibility.
+If app currently binds only to localhost, modify only the server start config to bind to 0.0.0.0.
+If Vite config does not support Docker, update it safely.
+Keep everything production-friendly but simple enough for a novice doctor user.

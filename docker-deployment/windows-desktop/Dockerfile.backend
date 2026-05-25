@@ -1,0 +1,59 @@
+# =============================================================================
+# Care Diagnostics ERP — Backend Dockerfile
+# =============================================================================
+# Builds the entire monorepo (API server + all 3 frontend SPAs) into a
+# single production bundle served by Express on port 8080.
+#
+# Stages:
+#   1. builder  — installs deps, builds everything
+#   2. runner   — minimal runtime image with just the built output
+# =============================================================================
+
+# ── Stage 1: Builder ────────────────────────────────────────────────────────
+FROM node:20-alpine AS builder
+
+# Install pnpm (same version the project uses)
+RUN npm install -g pnpm@9
+
+WORKDIR /app
+
+# Copy workspace definition and package files first for layer caching
+COPY pnpm-workspace.yaml package.json ./
+COPY artifacts/api-server/package.json ./artifacts/api-server/
+COPY artifacts/clinic-site/package.json ./artifacts/clinic-site/
+COPY artifacts/diagnostic-erp/package.json ./artifacts/diagnostic-erp/
+COPY artifacts/super-admin-portal/package.json ./artifacts/super-admin-portal/
+COPY lib/db/package.json ./lib/db/
+COPY lib/api-zod/package.json ./lib/api-zod/
+COPY lib/crypto/package.json ./lib/crypto/
+COPY lib/integrations/package.json ./lib/integrations/
+COPY lib/integrations/gemini-ai/package.json ./lib/integrations/gemini-ai/
+COPY scripts/package.json ./scripts/
+
+# Install all workspace dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy full source code
+COPY . .
+
+# Build the deploy bundle: API server + all 3 frontend SPAs
+# Output goes to artifacts/api-server/dist/ (index.mjs + dist/web/)
+RUN pnpm --filter @workspace/api-server run build:deploy
+
+# ── Stage 2: Runner ───────────────────────────────────────────────────────
+FROM node:20-alpine AS runner
+
+# Install wget for healthchecks
+RUN apk add --no-cache wget
+
+WORKDIR /app
+
+# Copy only the built backend bundle + static web assets
+COPY --from=builder /app/artifacts/api-server/dist ./dist
+COPY --from=builder /app/artifacts/api-server/package.json ./
+
+# The dist/index.mjs bundle includes all API code + bundled dependencies.
+# The dist/web/ folder contains the 3 built SPAs.
+EXPOSE 8080
+
+CMD ["node", "--enable-source-maps", "./dist/index.mjs"]

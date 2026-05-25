@@ -1,0 +1,111 @@
+# =============================================================================
+# Care Diagnostics ERP — Synology NAS Docker Deployment
+# =============================================================================
+#
+# Designed for Synology Container Manager (Docker Compose / Project import).
+#
+# Architecture:
+#   - PostgreSQL 16 (database, port 5432 internal)
+#   - Backend (Express API + bundled frontend SPAs, port 8080→8081)
+#
+# The backend serves EVERYTHING from one process:
+#   - REST API at /api/*
+#   - Public clinic website at /
+#   - Staff ERP at /erp/
+#   - Super Admin at /super-admin-portal/
+#
+# Persistent data is stored on NAS folders (not Docker volumes) for easy
+# backup and access from DSM File Station.
+# =============================================================================
+
+version: "3.8"
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 — persistent database
+  # ---------------------------------------------------------------------------
+  # Data stored on NAS at: /volume1/docker/diagnostic-erp/postgres/
+  # Backups stored on NAS at: /volume1/docker/diagnostic-erp/backups/
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: care-diagnostics-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-CHANGE_ME_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-HospERP}
+    volumes:
+      # NAS folder for database files — survives container removal
+      - /volume1/docker/diagnostic-erp/postgres:/var/lib/postgresql/data
+      # NAS folder for backups (accessible via File Station)
+      - /volume1/docker/diagnostic-erp/backups:/backups
+    ports:
+      # Bound to localhost only for security
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-HospERP}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - care-diagnostics
+
+  # ---------------------------------------------------------------------------
+  # Backend — Express 5 API + all 3 frontend SPAs bundled
+  # ---------------------------------------------------------------------------
+  # Access points after deployment:
+  #   - Clinic website:  http://NAS-IP:8081/
+  #   - Staff ERP:       http://NAS-IP:8081/erp/
+  #   - Super Admin:     http://NAS-IP:8081/super-admin-portal/
+  #   - API:             http://NAS-IP:8081/api/
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ../..
+      dockerfile: docker-deployment/synology-nas/Dockerfile.backend
+    container_name: care-diagnostics-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-CHANGE_ME_PASSWORD}@postgres:5432/${DB_NAME:-HospERP}
+      PORT: "8080"
+      NODE_ENV: production
+      ENABLE_SCHEDULERS: "1"
+      ENABLE_DICOM_PULL_AGENT: "1"
+      SERVE_STATIC_DIR: artifacts/api-server/dist/web
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-to-a-random-long-string}
+      # AI_INTEGRATIONS_GEMINI_API_KEY: ${AI_INTEGRATIONS_GEMINI_API_KEY:-}
+      # AI_INTEGRATIONS_GEMINI_BASE_URL: ${AI_INTEGRATIONS_GEMINI_BASE_URL:-}
+      # SMTP_HOST: ${SMTP_HOST:-}
+      # SMTP_PORT: ${SMTP_PORT:-587}
+      # SMTP_USER: ${SMTP_USER:-}
+      # SMTP_PASS: ${SMTP_PASS:-}
+      # DEFAULT_OBJECT_STORAGE_BUCKET_ID: ${DEFAULT_OBJECT_STORAGE_BUCKET_ID:-}
+      # PRIVATE_OBJECT_DIR: ${PRIVATE_OBJECT_DIR:-}
+      # PUBLIC_OBJECT_SEARCH_PATHS: ${PUBLIC_OBJECT_SEARCH_PATHS:-}
+      # SUPER_ADMIN_USB_KEY: ${SUPER_ADMIN_USB_KEY:-}
+      # CONQUEST_HOST: ${CONQUEST_HOST:-}
+      # CONQUEST_PORT: ${CONQUEST_PORT:-5678}
+    ports:
+      - "8081:8080"
+    volumes:
+      # NAS folder for uploads (reports, patient photos, website media)
+      - /volume1/docker/diagnostic-erp/uploads:/home/runner/workspace/data/uploads
+      # NAS folder for backups
+      - /volume1/docker/diagnostic-erp/backups:/home/runner/workspace/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - care-diagnostics
+
+networks:
+  care-diagnostics:
+    driver: bridge

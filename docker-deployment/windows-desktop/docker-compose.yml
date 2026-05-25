@@ -1,0 +1,139 @@
+# =============================================================================
+# Care Diagnostics ERP — Windows Desktop Docker Deployment
+# =============================================================================
+#
+# Architecture:
+#   - PostgreSQL 16 (database, port 5432 internal)
+#   - Backend (Express API + bundled frontend SPAs, port 8080→8081)
+#
+# The backend serves EVERYTHING from one process:
+#   - REST API at /api/*
+#   - Public clinic website at /
+#   - Staff ERP at /erp/
+#   - Super Admin at /super-admin-portal/
+#
+# Single port = simple firewall rule for doctors' offices.
+# =============================================================================
+
+version: "3.8"
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 — persistent database for all ERP data
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: care-diagnostics-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-CHANGE_ME_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-HospERP}
+    volumes:
+      # Persistent database files — survives container restarts and reboots
+      - postgres_data:/var/lib/postgresql/data
+      # Backup scripts and scheduled backup storage
+      - ./backups:/backups
+    ports:
+      # Exposed only for manual backup/restore via pg_dump from host
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-HospERP}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - care-diagnostics
+
+  # ---------------------------------------------------------------------------
+  # Backend — Express 5 API server with all 3 frontend SPAs bundled
+  # ---------------------------------------------------------------------------
+  # This single container serves:
+  #   - API endpoints   → http://localhost:8081/api/...
+  #   - Clinic website  → http://localhost:8081/
+  #   - Staff ERP       → http://localhost:8081/erp/
+  #   - Super Admin     → http://localhost:8081/super-admin-portal/
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ../..
+      dockerfile: docker-deployment/windows-desktop/Dockerfile.backend
+    container_name: care-diagnostics-backend
+    restart: unless-stopped
+    environment:
+      # Database connection — uses internal Docker network hostname "postgres"
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-CHANGE_ME_PASSWORD}@postgres:5432/${DB_NAME:-HospERP}
+
+      # Server port (internal — mapped to 8081 externally)
+      PORT: "8080"
+
+      # Node environment
+      NODE_ENV: production
+
+      # Enable in-process cron schedulers (daily backups, reminders, etc.)
+      # Required for always-on Docker host.
+      ENABLE_SCHEDULERS: "1"
+
+      # Enable DICOM pull agent (if PACS is configured via Settings UI)
+      ENABLE_DICOM_PULL_AGENT: "1"
+
+      # Serve the 3 built SPAs from dist/web/
+      SERVE_STATIC_DIR: artifacts/api-server/dist/web
+
+      # Session cookie signing
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-to-a-random-long-string}
+
+      # Optional: AI integrations (Gemini) — set in .env if you use AI features
+      # AI_INTEGRATIONS_GEMINI_API_KEY: ${AI_INTEGRATIONS_GEMINI_API_KEY:-}
+      # AI_INTEGRATIONS_GEMINI_BASE_URL: ${AI_INTEGRATIONS_GEMINI_BASE_URL:-}
+
+      # Optional: email notifications
+      # SMTP_HOST: ${SMTP_HOST:-}
+      # SMTP_PORT: ${SMTP_PORT:-587}
+      # SMTP_USER: ${SMTP_USER:-}
+      # SMTP_PASS: ${SMTP_PASS:-}
+
+      # Optional: object storage for uploads/reports
+      # DEFAULT_OBJECT_STORAGE_BUCKET_ID: ${DEFAULT_OBJECT_STORAGE_BUCKET_ID:-}
+      # PRIVATE_OBJECT_DIR: ${PRIVATE_OBJECT_DIR:-}
+      # PUBLIC_OBJECT_SEARCH_PATHS: ${PUBLIC_OBJECT_SEARCH_PATHS:-}
+
+      # Optional: super-admin USB key (for compliance access)
+      # SUPER_ADMIN_USB_KEY: ${SUPER_ADMIN_USB_KEY:-}
+
+      # Optional: PACS/DICOM server
+      # CONQUEST_HOST: ${CONQUEST_HOST:-}
+      # CONQUEST_PORT: ${CONQUEST_PORT:-5678}
+
+    ports:
+      - "8081:8080"
+    volumes:
+      # Persistent uploads (reports, patient photos, website media)
+      - uploads:/home/runner/workspace/data/uploads
+      # Backups accessible from host
+      - ./backups:/home/runner/workspace/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - care-diagnostics
+
+# =============================================================================
+# Persistent volumes (Docker-managed, survives container removal)
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  uploads:
+    driver: local
+
+networks:
+  care-diagnostics:
+    driver: bridge
