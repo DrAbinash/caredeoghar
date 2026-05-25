@@ -208,6 +208,7 @@ export default function MyDayClose() {
       qc.invalidateQueries({ queryKey: ["my-day-close-list"] });
       qc.invalidateQueries({ queryKey: ["day-close-staff-status"] });
       qc.invalidateQueries({ queryKey: ["my-drawer-status"] });
+      window.location.reload();
     },
     onError: (e: Error) => toast({ title: "Close failed", description: e.message, variant: "destructive" }),
   });
