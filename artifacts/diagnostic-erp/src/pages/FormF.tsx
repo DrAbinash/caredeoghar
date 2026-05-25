@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Printer, RefreshCcw, FileText, List, User, Phone, Users, BookOpen, Upload, Camera, CheckCircle2, AlertTriangle, MessageCircle, Stethoscope, X, ChevronDown } from "lucide-react";
+import { Search, Printer, RefreshCcw, FileText, List, User, Phone, Users, BookOpen, Upload, Camera, CheckCircle2, AlertTriangle, MessageCircle, Stethoscope, X, ChevronDown, Scan } from "lucide-react";
 
 type DoctorOption = { id: number; name: string; registrationNumber: string | null };
 
@@ -513,10 +513,56 @@ export default function FormF() {
   const [idCardOcrResult, setIdCardOcrResult] = useState<{
     guardianName?: string; address?: string; documentType?: string; confidence?: string;
   } | null>(null);
-  // Camera / scanner capture state
+  // Camera capture state (webcam only)
   const [cameraOpen, setCameraOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // ── Document scanner bridge state (physical flatbed/ADF scanner) ──
+  const SCAN_BRIDGE_URL = "http://127.0.0.1:8766";
+  const [scanBridgeOk, setScanBridgeOk] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  async function triggerScanBridge() {
+    setScanning(true);
+    try {
+      const r = await fetch(`${SCAN_BRIDGE_URL}/scan`, { method: "POST", mode: "cors" });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || "Scan failed");
+      const dataUrl = `data:${j.mimeType ?? "image/jpeg"};base64,${j.imageBase64}`;
+      setIdCardImageUrl(dataUrl);
+      // Send to OCR endpoint same as upload
+      const resp = await api.post<{
+        ocr?: { guardianName?: string; address?: string; documentType?: string; confidence?: string; } | null;
+        recordId?: number;
+      }>("/api/form-f/upload-id", {
+        formFId: 0,
+        imageBase64: j.imageBase64,
+        mimeType: j.mimeType ?? "image/jpeg",
+      });
+      setIdCardOcrResult(resp.ocr ?? null);
+      if (resp.ocr?.guardianName) setIdCardExtractedName(resp.ocr.guardianName);
+      if (resp.ocr?.address) setIdCardExtractedAddress(resp.ocr.address);
+      toast({ title: resp.ocr ? `Scanner ID: ${resp.ocr.documentType}` : "Scanned (OCR unavailable)" });
+    } catch (e) {
+      toast({ title: "Scanner error", description: e instanceof Error ? e.message : "Could not scan", variant: "destructive" });
+    } finally {
+      setScanning(false);
+    }
+  }
+  async function pingScanBridge() {
+    try {
+      const r = await fetch(`${SCAN_BRIDGE_URL}/health`, { method: "GET", mode: "cors" });
+      const j = await r.json().catch(() => ({}));
+      setScanBridgeOk(r.ok && j.ok === true);
+    } catch {
+      setScanBridgeOk(false);
+    }
+  }
+  useEffect(() => {
+    pingScanBridge();
+    const t = setInterval(pingScanBridge, 5000);
+    return () => clearInterval(t);
+  }, []);
 
   // ── Feature 5: Send WhatsApp to patient requesting ID card ──
   const [waSending, setWaSending] = useState(false);
@@ -1280,14 +1326,26 @@ export default function FormF() {
                         }}
                       />
                     </label>
-                    {/* ── Camera / scanner capture (PC webcam / document scanner) ── */}
+                    {/* ── Physical scanner via bridge (WIA/SANE/folder-watch) ── */}
+                    {scanBridgeOk && (
+                      <button
+                        type="button"
+                        onClick={triggerScanBridge}
+                        disabled={scanning || idCardUploading}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed border-green-300 bg-green-50 hover:bg-green-100 text-green-700 text-sm font-medium transition-colors disabled:opacity-50"
+                        title="Use flatbed/ADF document scanner attached to this PC"
+                      >
+                        <Scan size={14} /> {scanning ? "Scanning…" : "Scanner"}
+                      </button>
+                    )}
+                    {/* ── Camera / webcam capture (phone or PC webcam) ── */}
                     <button
                       type="button"
                       onClick={() => setCameraOpen(true)}
                       className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm font-medium transition-colors"
-                      title="Use scanner / webcam attached to this PC"
+                      title="Use webcam or phone camera"
                     >
-                      <Camera size={14} /> Scan
+                      <Camera size={14} /> Camera
                     </button>
                   </div>
                 </BigLabelRow>
@@ -1655,7 +1713,7 @@ export default function FormF() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => { stopCamera(); setCameraOpen(false); }}>
           <div className="bg-white rounded-xl shadow-2xl p-4 max-w-lg w-full mx-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-base font-bold text-gray-900">Scan ID Card — Camera / Scanner</h3>
+              <h3 className="text-base font-bold text-gray-900">Camera — Capture ID Card</h3>
               <button type="button" onClick={() => { stopCamera(); setCameraOpen(false); }} className="text-gray-400 hover:text-gray-700">
                 <X size={18} />
               </button>
@@ -1669,7 +1727,7 @@ export default function FormF() {
                 </Button>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground mt-2 text-center">Position the ID card in front of the camera and click Capture</p>
+            <p className="text-xs text-muted-foreground mt-2 text-center">Position the ID card in front of the camera and click Capture. For physical scanners, use the Scanner button above.</p>
           </div>
         </div>
       )}
