@@ -124,10 +124,10 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
 
   // ── Sizing tuned for A5 thermal receipt ──
   const pageMargin = isA5 ? "3mm" : "8mm";
-  const clinicNameSize = isA5 ? "22px" : "24px";
   const titleSize = isA5 ? "15px" : "16px";
   const patientNameSize = isA5 ? "17px" : "18px";
   const bodyPx = isA5 ? "13px" : "13px";
+  const headerPx = isA5 ? "13px" : "14px";       // clinic info right column
   const tablePx = isA5 ? "12px" : "12px";
   const totalPx = isA5 ? "13px" : "13px";
   const footerPx = isA5 ? "11px" : "11px";
@@ -180,30 +180,38 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
 
       ${reprintBy || reprintReason ? `<div style="text-align:center;font-size:${tinyPx};color:#a16207;border:1px dashed #d97706;padding:2px 4px;margin-bottom:4px;text-transform:uppercase;font-weight:700">DUPLICATE / RE-PRINT${reprintBy ? ` · BY ${esc(reprintBy)}` : ""}${reprintReason ? ` · ${esc(reprintReason)}` : ""}</div>` : ""}
 
-      <!-- HEADER: logo left, clinic info right -->
-      <table style="width:100%;border-collapse:collapse;margin-bottom:6px">
+      <!-- HEADER: logo + tagline left, clinic info right (bold, bigger) -->
+      <table style="width:100%;border-collapse:collapse;margin-bottom:4px">
         <tr>
           <td style="vertical-align:top;padding:0;width:45%">
             ${clinic?.logoDataUrl ? `<img src="${clinic.logoDataUrl}" alt="logo" style="max-height:78px;max-width:160px;object-fit:contain;display:block;margin-bottom:3px"/>` : ""}
-            <div style="font-size:${clinicNameSize};font-weight:800;line-height:1.05;letter-spacing:-0.2px">${esc(clinic?.name || "CARE DIAGNOSTICS")}</div>
-            <div style="font-size:${Math.round(Number(bodyPx) * 0.85)}px;color:#333;margin-top:2px;font-weight:600">${esc(clinic?.tagline || "DIAGNOSTIC & PATHOLOGY SERVICES")}</div>
+            <div style="font-size:${bodyPx};color:#333;font-weight:700;line-height:1.2">${esc(clinic?.tagline || "DIAGNOSTIC & PATHOLOGY SERVICES")}</div>
           </td>
-          <td style="vertical-align:top;text-align:right;padding:0;font-size:${tinyPx};line-height:1.5;color:#333">
+          <td style="vertical-align:top;text-align:right;padding:0;font-size:${headerPx};line-height:1.45;color:#000;font-weight:700">
             ${clinic?.address ? `<div>${esc(clinic.address.replace(/\s*\n\s*/g, ", ").trim())}</div>` : ""}
             <div>PH: ${esc(clinic?.phone ?? "")}</div>
             <div>EMAIL: ${esc(clinic?.email ?? "")}</div>
-            <div>${esc(clinic?.website ?? "")}</div>
-            ${clinic?.gstin ? `<div style="margin-top:1px;font-weight:600">GSTIN: ${esc(clinic.gstin)}</div>` : ""}
+            ${clinic?.website ? `<div>${esc(clinic.website)}</div>` : ""}
+            ${clinic?.gstin ? `<div style="margin-top:1px;font-weight:800">GSTIN: ${esc(clinic.gstin)}</div>` : ""}
           </td>
         </tr>
       </table>
 
-      <!-- TITLE LINE -->
-      <div style="border-top:2px solid #000;border-bottom:2px solid #000;padding:4px 0;margin-bottom:6px;text-align:center">
-        <div style="font-size:${titleSize};font-weight:800;letter-spacing:1.5px;text-transform:uppercase">INVOICE / RECEIPT${isCancelled ? " — CANCELLED" : ""}</div>
+      <!-- TITLE LINE with bill number on the right -->
+      <div style="border-top:2px solid #000;border-bottom:2px solid #000;padding:4px 0;margin-bottom:6px">
+        <table style="width:100%;border-collapse:collapse">
+          <tr>
+            <td style="padding:0;vertical-align:middle">
+              <div style="font-size:${titleSize};font-weight:800;letter-spacing:1.2px;text-transform:uppercase">INVOICE / RECEIPT${isCancelled ? " — CANCELLED" : ""}</div>
+            </td>
+            <td style="padding:0;vertical-align:middle;text-align:right;white-space:nowrap">
+              <div style="font-size:${titleSize};font-weight:800">BILL NO: ${esc(billDigits)}</div>
+            </td>
+          </tr>
+        </table>
       </div>
 
-      <!-- PATIENT + DATE -->
+      <!-- PATIENT + DATE (uniform font size) -->
       <table style="width:100%;border-collapse:collapse;margin-bottom:4px">
         <tr>
           <td style="vertical-align:top;padding:0">
@@ -212,10 +220,9 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
               REF: <strong>${rawDoctor ? esc(rawDoctor.match(/^\s*DR\.?\s*/i) ? rawDoctor.trim().toUpperCase() : "DR. " + rawDoctor.trim().toUpperCase()) : "SELF / WALK-IN"}</strong>
             </div>
           </td>
-          <td style="vertical-align:top;text-align:right;padding:0;font-size:${bodyPx};line-height:1.4;white-space:nowrap;color:#000">
-            <div style="font-size:${patientNameSize};font-weight:800">${created.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase()} &nbsp;${created.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }).toUpperCase()}</div>
+          <td style="vertical-align:top;text-align:right;padding:0;font-size:${patientNameSize};line-height:1.35;white-space:nowrap;color:#000">
+            <div style="font-weight:800">${created.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase()} &nbsp;${created.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }).toUpperCase()}</div>
             <div>PH ${esc(bill.patient?.phone ?? "")} · ID ${esc(bill.patient?.patientId ?? "")}</div>
-            <div>BILL NO: ${esc(billDigits)}</div>
           </td>
         </tr>
       </table>
@@ -286,15 +293,15 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
       </table>
 
       <!-- FOOTER -->
-      <div style="margin-top:10px;border-top:1px solid #000;padding-top:6px;text-align:center;page-break-inside:avoid">
-        <div style="font-size:${footerPx};font-weight:700;color:#000;margin-bottom:2px;text-transform:uppercase">${esc(clinic?.footerNote || bill.reportCollectionNote || "Thank you for choosing our diagnostic services. Please collect your report within 7 days.")}</div>
-        <div style="font-size:${tinyPx};color:#555;margin-bottom:6px">THIS IS A COMPUTER-GENERATED INVOICE. NO SIGNATURE REQUIRED.</div>
+      <div style="margin-top:4px;border-top:1px solid #000;padding-top:4px;text-align:center;page-break-inside:avoid">
+        <div style="font-size:${footerPx};font-weight:700;color:#000;margin-bottom:1px;text-transform:uppercase">${esc(clinic?.footerNote || bill.reportCollectionNote || "Thank you for choosing our diagnostic services. Please collect your report within 7 days.")}</div>
+        <div style="font-size:${tinyPx};color:#555;margin-bottom:3px">THIS IS A COMPUTER-GENERATED INVOICE. NO SIGNATURE REQUIRED.</div>
 
         <!-- Signature line -->
         <table style="width:100%;border-collapse:collapse">
           <tr>
             <td style="text-align:left;padding:0;vertical-align:bottom">
-              <div style="border-bottom:1px solid #000;width:130px;margin-bottom:2px"></div>
+              <div style="border-bottom:1px solid #000;width:130px;margin-bottom:1px"></div>
               <div style="font-size:${tinyPx};color:#555">Authorised Signature</div>
             </td>
             <td style="text-align:right;padding:0;vertical-align:bottom;font-size:${tinyPx};color:#555">
