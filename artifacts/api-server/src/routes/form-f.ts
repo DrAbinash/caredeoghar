@@ -277,6 +277,8 @@ formFRouter.get("/pending", async (req, res) => {
           : "",
         referredBy: doctor ? "Doctor" : "Self",
         referredByName: doctor?.name ?? "",
+        doctorName: doctor?.name ?? "",
+        doctorRegNo: doctor?.registrationNumber ?? "",
         formFTests: orderFormFTestsMap.get(b.orderId) ?? [],
       };
     });

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Printer, RefreshCcw, FileText, List, User, Phone, Users, BookOpen, Upload, Camera, CheckCircle2, AlertTriangle, MessageCircle } from "lucide-react";
+import { Search, Printer, RefreshCcw, FileText, List, User, Phone, Users, BookOpen, Upload, Camera, CheckCircle2, AlertTriangle, MessageCircle, Stethoscope } from "lucide-react";
 
 type DoctorOption = { id: number; name: string; registrationNumber: string | null };
 
@@ -86,7 +86,7 @@ function defaultForm(): FormFData {
     indicationType: "routine",
     indicationDetail: "",
     previousChildIssue: "",
-    doctorName: "Dr. Sugandha Priyadarshini",
+    doctorName: "",
     doctorRegNo: "",
     procedure: "Ultrasound - ULTRASONOGRAPHY",
     procedurePurpose: "Obstetric ultrasonography",
@@ -446,6 +446,8 @@ type PendingItem = {
   age: string;
   referredBy: string;
   referredByName: string;
+  doctorName: string;
+  doctorRegNo: string;
   formFTests: string[];
 };
 
@@ -605,6 +607,8 @@ export default function FormF() {
       mobile: item.mobile,
       referredBy: item.referredBy,
       referredByName: item.referredByName,
+      doctorName: item.doctorName || defaultForm().doctorName,
+      doctorRegNo: item.doctorRegNo || "",
       procedurePurpose: item.formFTests.join(", ") || "Obstetric ultrasonography",
       procedureDate: item.billDate,
       date: item.billDate,
@@ -1114,24 +1118,80 @@ export default function FormF() {
 
           {/* ── LEFT: Edit Form (two sections) ── */}
           <div className="flex-1 space-y-3">
-            {/* Section A: MUST-FILL fields — large, prominent */}
+            {/* Section 0: PATIENT FROM BILL — auto-filled, mobile editable */}
+            <div className="bg-indigo-50/60 border border-indigo-100 rounded-xl p-4 shadow-sm">
+              <div className="flex items-center gap-2 pb-2 border-b border-indigo-100 mb-3">
+                <User size={14} className="text-indigo-600" />
+                <span className="text-sm font-bold text-indigo-800">Patient from Bill</span>
+                <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">Auto-filled · Mobile editable</span>
+              </div>
+              <div className="space-y-3">
+                <div className="flex gap-3">
+                  <LabelRow label="Patient Name">
+                    <Input value={form.patientName} readOnly className="text-sm h-9 bg-white/80 border-indigo-200 cursor-default" tabIndex={-1} />
+                  </LabelRow>
+                  <LabelRow label="Age">
+                    <Input value={form.age} readOnly className="text-sm h-9 w-24 bg-white/80 border-indigo-200 cursor-default" tabIndex={-1} />
+                  </LabelRow>
+                </div>
+                <LabelRow label="Mobile *">
+                  <div className="flex gap-2">
+                    <Input {...inp("mobile")} placeholder="Mobile (editable — staff may enter dummy numbers)" className="text-sm h-9 flex-1" />
+                    {form.mobile && !/^\d{10}$/.test(form.mobile.replace(/\D/g, "")) && (
+                      <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-1 self-center whitespace-nowrap">
+                        Looks like dummy — verify
+                      </span>
+                    )}
+                  </div>
+                </LabelRow>
+              </div>
+            </div>
+
+            {/* Section 1: CONDUCTING DOCTOR — separate card */}
+            <div className="bg-teal-50/60 border border-teal-100 rounded-xl p-4 shadow-sm">
+              <div className="flex items-center gap-2 pb-2 border-b border-teal-100 mb-3">
+                <Stethoscope size={14} className="text-teal-600" />
+                <span className="text-sm font-bold text-teal-800">Conducting Doctor</span>
+                <span className="text-[10px] bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full">Auto-filled from bill · Editable</span>
+              </div>
+              <div className="space-y-3">
+                <LabelRow label="Doctor Name">
+                  <Input
+                    value={form.doctorName}
+                    list="formf-doctor-options"
+                    onChange={(e) => {
+                      const name = e.target.value;
+                      const match = doctorsForPick.find((d) => d.name === name);
+                      setForm((prev) => ({
+                        ...prev,
+                        doctorName: name,
+                        doctorRegNo: match?.registrationNumber ?? prev.doctorRegNo,
+                      }));
+                    }}
+                    placeholder="Type or pick a doctor"
+                    className="text-sm h-9"
+                  />
+                  <datalist id="formf-doctor-options">
+                    {doctorsForPick.map((d) => (
+                      <option key={d.id} value={d.name}>
+                        {d.registrationNumber ? `Reg. ${d.registrationNumber}` : "No reg. no on file"}
+                      </option>
+                    ))}
+                  </datalist>
+                </LabelRow>
+                <LabelRow label="Doctor Reg. No.">
+                  <Input {...inp("doctorRegNo")} placeholder="Auto-filled from selected doctor; editable" className="text-sm h-9" />
+                </LabelRow>
+              </div>
+            </div>
+
+            {/* Section 2: DETAILS TO FILL — staff-typed fields */}
             <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
               <div className="flex items-center gap-2 pb-2 border-b border-gray-100 mb-3">
                 <span className="text-sm font-bold text-gray-800">Details to Fill</span>
                 <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">Type these fields</span>
               </div>
               <div className="space-y-3">
-                <LabelRow label="Patient Name *">
-                  <Input {...inp("patientName")} placeholder="Full name of patient" className="text-sm h-9" />
-                </LabelRow>
-                <div className="flex gap-3">
-                  <LabelRow label="Age *">
-                    <Input {...inp("age")} placeholder="Years" className="text-sm h-9" />
-                  </LabelRow>
-                  <LabelRow label="Tel. No.">
-                    <Input {...inp("mobile")} placeholder="Mobile" className="text-sm h-9" />
-                  </LabelRow>
-                </div>
                 <LabelRow label="Husband / Father Name *">
                   <div className="flex gap-2">
                     <Input {...inp("husbandFatherName")} placeholder="Required for PCPNDT" className="flex-1 text-sm h-9" />
@@ -1243,33 +1303,6 @@ export default function FormF() {
                 </LabelRow>
                 <LabelRow label="LMP / weeks">
                   <Input {...inp("lmpWeeks")} placeholder="e.g. 12 weeks / 15-01-2026" className="text-sm h-9" />
-                </LabelRow>
-                <LabelRow label="Doctor name">
-                  <Input
-                    value={form.doctorName}
-                    list="formf-doctor-options"
-                    onChange={(e) => {
-                      const name = e.target.value;
-                      const match = doctorsForPick.find((d) => d.name === name);
-                      setForm((prev) => ({
-                        ...prev,
-                        doctorName: name,
-                        doctorRegNo: match?.registrationNumber ?? prev.doctorRegNo,
-                      }));
-                    }}
-                    placeholder="Type or pick a doctor"
-                    className="text-sm h-9"
-                  />
-                  <datalist id="formf-doctor-options">
-                    {doctorsForPick.map((d) => (
-                      <option key={d.id} value={d.name}>
-                        {d.registrationNumber ? `Reg. ${d.registrationNumber}` : "No reg. no on file"}
-                      </option>
-                    ))}
-                  </datalist>
-                </LabelRow>
-                <LabelRow label="Doctor Reg. No.">
-                  <Input {...inp("doctorRegNo")} placeholder="Auto-filled from selected doctor; editable" className="text-sm h-9" />
                 </LabelRow>
                 <LabelRow label="Indication">
                   <div className="space-y-2">
