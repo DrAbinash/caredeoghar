@@ -164,6 +164,8 @@ formFRouter.post("/save", async (req, res) => {
       complication: body.complication ?? "",
       labTests: body.labTests ?? "",
       prenatalResult: body.prenatalResult ?? "",
+      gestationalAgeWeeks: body.gestationalAgeWeeks ?? "",
+      gestationalAgeDays: body.gestationalAgeDays ?? "",
       ultrasoundResult: body.ultrasoundResult ?? "",
       abnormality: body.abnormality ?? "",
       procedureDate: body.procedureDate ?? "",

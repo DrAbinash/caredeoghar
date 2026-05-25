@@ -1424,6 +1424,10 @@ async function runStartupMigrations(): Promise<void> {
       );
       CREATE INDEX IF NOT EXISTS usg_fimg_draft_idx ON usg_finding_image_links(draft_id);
       CREATE INDEX IF NOT EXISTS usg_fimg_image_idx ON usg_finding_image_links(image_id);
+
+      -- ── Form F: Gestational Age (weeks + days) replaces old 14(a) prenatal result ──
+      ALTER TABLE form_f_records ADD COLUMN IF NOT EXISTS gestational_age_weeks TEXT NOT NULL DEFAULT '';
+      ALTER TABLE form_f_records ADD COLUMN IF NOT EXISTS gestational_age_days TEXT NOT NULL DEFAULT '';
     `);
     logger.info("Startup migrations applied");
   } catch (err) {

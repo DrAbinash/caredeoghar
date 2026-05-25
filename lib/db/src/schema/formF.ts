@@ -28,6 +28,8 @@ export const formFRecordsTable = pgTable("form_f_records", {
   complication: text("complication").notNull().default(""),
   labTests: text("lab_tests").notNull().default(""),
   prenatalResult: text("prenatal_result").notNull().default(""),
+  gestationalAgeWeeks: text("gestational_age_weeks").notNull().default(""),
+  gestationalAgeDays: text("gestational_age_days").notNull().default(""),
   ultrasoundResult: text("ultrasound_result").notNull().default(""),
   abnormality: text("abnormality").notNull().default(""),
   procedureDate: text("procedure_date").notNull().default(""),

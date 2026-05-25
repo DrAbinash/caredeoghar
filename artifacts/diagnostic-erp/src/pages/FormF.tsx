@@ -51,7 +51,8 @@ type FormFData = {
   complicationDetail: string;
   labTests: string;           // "notadvised" | "advised"
   labTestsDetail: string;
-  prenatalResult: string;
+  gestationalAgeWeeks: string;
+  gestationalAgeDays: string;
   ultrasoundResult: string;   // "normal" | "abnormal"
   abnormality: string;
   procedureDate: string;
@@ -96,7 +97,8 @@ function defaultForm(): FormFData {
     complicationDetail: "",
     labTests: "notadvised",
     labTestsDetail: "",
-    prenatalResult: "Not applicable",
+    gestationalAgeWeeks: "",
+    gestationalAgeDays: "",
     ultrasoundResult: "normal",
     abnormality: "",
     procedureDate: today(),
@@ -308,8 +310,8 @@ function FormFPrint({ form, idCardImageUrl }: FormFPrintProps) {
             <Tick checked={form.labTests === "notadvised"} /> Not advised&nbsp;&nbsp;
             <Tick checked={form.labTests === "advised"} /> Advised: <BlankLine val={form.labTestsDetail} width={100} />
           </Row>
-          <Row label="14(a). Pre-natal result">
-            <BlankLine val={form.prenatalResult} width={180} />
+                  <Row label="14(a). Gestational Age">
+            <span style={{ fontSize: 9 }}>{form.gestationalAgeWeeks || "___"} weeks,&nbsp;{form.gestationalAgeDays || "___"} days</span>
           </Row>
           <Row label="14(b). USG result">
             <Tick checked={form.ultrasoundResult === "normal"} /> Normal&nbsp;&nbsp;
@@ -423,7 +425,8 @@ type RecordRow = {
   invasiveProcedure?: string;
   complication?: string;
   labTests?: string;
-  prenatalResult?: string;
+  gestationalAgeWeeks?: string;
+  gestationalAgeDays?: string;
   abnormality?: string;
   consentDate?: string;
   resultConveyed?: string;
@@ -723,7 +726,8 @@ export default function FormF() {
       complicationDetail: r.complication !== "Nil" ? (r.complication ?? "") : "",
       labTests: r.labTests === "Not advised" ? "notadvised" : "advised",
       labTestsDetail: r.labTests !== "Not advised" ? (r.labTests ?? "") : "",
-      prenatalResult: r.prenatalResult ?? "",
+      gestationalAgeWeeks: r.gestationalAgeWeeks ?? "",
+      gestationalAgeDays: r.gestationalAgeDays ?? "",
       ultrasoundResult: r.ultrasoundResult?.startsWith("Abnormal") ? "abnormal" : "normal",
       abnormality: r.abnormality ?? "",
       procedureDate: r.procedureDate ?? "",
@@ -763,7 +767,8 @@ export default function FormF() {
         invasiveProcedure: form.invasiveProcedure === "notdone" ? "Not done" : form.invasiveProcedureDetail,
         complication: form.complication === "nil" ? "Nil" : form.complicationDetail,
         labTests: form.labTests === "notadvised" ? "Not advised" : form.labTestsDetail,
-        prenatalResult: form.prenatalResult,
+        gestationalAgeWeeks: form.gestationalAgeWeeks,
+        gestationalAgeDays: form.gestationalAgeDays,
         ultrasoundResult: form.ultrasoundResult === "normal" ? "Normal" : `Abnormal: ${form.abnormality}`,
         abnormality: form.abnormality,
         procedureDate: form.procedureDate,
@@ -1460,6 +1465,34 @@ export default function FormF() {
                     {form.labTests === "advised" && (
                       <Input {...inp("labTestsDetail")} placeholder="Tests advised" className="h-11 text-base" />
                     )}
+                  </div>
+                </BigLabelRow>
+                <BigLabelRow label="Gestational Age (14a)">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={42}
+                        value={form.gestationalAgeWeeks}
+                        onChange={(e) => set("gestationalAgeWeeks", e.target.value)}
+                        placeholder="Weeks"
+                        className="h-11 text-base w-24 text-center"
+                      />
+                      <span className="text-sm font-medium text-gray-600">weeks</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={6}
+                        value={form.gestationalAgeDays}
+                        onChange={(e) => set("gestationalAgeDays", e.target.value)}
+                        placeholder="Days"
+                        className="h-11 text-base w-24 text-center"
+                      />
+                      <span className="text-sm font-medium text-gray-600">days</span>
+                    </div>
                   </div>
                 </BigLabelRow>
                 <BigLabelRow label="USG result">
