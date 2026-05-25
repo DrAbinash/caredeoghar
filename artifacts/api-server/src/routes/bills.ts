@@ -270,6 +270,7 @@ billsRouter.get("/", async (req, res) => {
   const dateFrom = typeof req.query.dateFrom === "string" && req.query.dateFrom ? req.query.dateFrom : null;
   const dateTo = typeof req.query.dateTo === "string" && req.query.dateTo ? req.query.dateTo : null;
   const dateField = req.query.dateField === "due" ? "due" : "created";
+  const createdBy = typeof req.query.createdBy === "string" && req.query.createdBy ? req.query.createdBy : null;
 
   // ISO date strings only — basic guard against SQL injection via the raw fragments.
   const isoDateRe = /^\d{4}-\d{2}-\d{2}$/;
@@ -282,7 +283,7 @@ billsRouter.get("/", async (req, res) => {
     return;
   }
 
-  const conditions: (ReturnType<typeof eq> | ReturnType<typeof gt>)[] = [];
+  const conditions: (ReturnType<typeof eq> | ReturnType<typeof gt> | ReturnType<typeof sql>)[] = [];
   if (status) conditions.push(eq(billsTable.status, status));
   else if (excludeCancelled) conditions.push(ne(billsTable.status, "cancelled"));
   if (patientId) conditions.push(eq(billsTable.patientId, patientId));
@@ -292,6 +293,9 @@ billsRouter.get("/", async (req, res) => {
     // but the status exclusion is a safety net for any legacy rows.
     conditions.push(gt(sql`${billsTable.balanceAmount}::numeric`, sql`0`));
     conditions.push(ne(billsTable.status, "cancelled"));
+  }
+  if (createdBy) {
+    conditions.push(sql`${billsTable.createdByName} = ${createdBy}`);
   }
   if (dateFrom || dateTo) {
     if (dateField === "due") {

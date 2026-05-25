@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, ChevronRight, Printer, Search, X, Receipt } from "lucide-react";
+import { Plus, ChevronRight, Printer, Search, X, Receipt, CalendarDays, User } from "lucide-react";
 import { useForm } from "react-hook-form";
 
 type BillSearchResult = {
@@ -63,7 +63,14 @@ export default function Billing() {
     return d.toISOString().slice(0, 10);
   });
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [createdBy, setCreatedBy] = useState("");
   const queryClient = useQueryClient();
+
+  const { data: staffList = [] } = useQuery<{ id: number; firstName: string; lastName: string; staffId: string }[]>({
+    queryKey: ["staff-list-active"],
+    queryFn: () => api.get("/api/staff?active=1"),
+    staleTime: 60_000,
+  });
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 350);
@@ -86,6 +93,7 @@ export default function Billing() {
     p.set("limit", "20");
     if (dateFrom) p.set("dateFrom", dateFrom);
     if (dateTo) p.set("dateTo", dateTo);
+    if (createdBy) p.set("createdBy", createdBy);
     return `/api/bills?${p.toString()}`;
   })();
 
@@ -99,7 +107,7 @@ export default function Billing() {
     total: number; page: number; limit: number;
     totals: { totalAmount: number; paidAmount: number; balanceAmount: number };
   }>({
-    queryKey: ["bills-list", status, page, dateFrom, dateTo],
+    queryKey: ["bills-list", status, page, dateFrom, dateTo, createdBy],
     queryFn: () => api.get(billsUrl),
     staleTime: 15_000,
   });
@@ -170,34 +178,81 @@ export default function Billing() {
                 )}
               </div>
             </div>
-            {/* Date / status filters — collapsed when searching */}
+            {/* Date / status / user filters — collapsed when searching */}
             {!isSearching && (
-              <div className="flex flex-wrap items-end gap-2">
-                <div>
-                  <Label className="text-xs text-muted-foreground">Status</Label>
-                  <Select value={status || "all"} onValueChange={(v) => { setPage(1); setStatus(v === "all" ? "" : v); }}>
-                    <SelectTrigger className="w-36 mt-0.5 h-8 text-sm">
-                      <SelectValue placeholder="All Statuses" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Statuses</SelectItem>
-                      {STATUSES.map((s) => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+              <div className="space-y-2">
+                {/* Quick date range chips */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <CalendarDays size={13} className="text-muted-foreground mr-1" />
+                  {[
+                    { label: "Today", fromDays: 0, toDays: 0 },
+                    { label: "Yesterday", fromDays: 1, toDays: 1 },
+                    { label: "Day Before", fromDays: 2, toDays: 2 },
+                    { label: "Last 7 Days", fromDays: 6, toDays: 0 },
+                    { label: "1 Month", fromDays: 30, toDays: 0 },
+                  ].map((chip) => {
+                    const eTo = new Date();
+                    eTo.setDate(eTo.getDate() - chip.toDays);
+                    const eFrom = new Date();
+                    eFrom.setDate(eFrom.getDate() - chip.fromDays);
+                    const toStr = eTo.toISOString().slice(0, 10);
+                    const fromStr = eFrom.toISOString().slice(0, 10);
+                    const chipActive = dateFrom === fromStr && dateTo === toStr;
+                    return (
+                      <button
+                        key={chip.label}
+                        type="button"
+                        onClick={() => { setPage(1); setDateFrom(fromStr); setDateTo(toStr); }}
+                        className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${chipActive ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}
+                      >
+                        {chip.label}
+                      </button>
+                    );
+                  })}
+                  {(dateFrom || dateTo || createdBy) && (
+                    <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={() => { setPage(1); setDateFrom(""); setDateTo(""); setCreatedBy(""); }}>
+                      <X size={12} className="mr-1" /> Clear
+                    </Button>
+                  )}
                 </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">From</Label>
-                  <Input type="date" value={dateFrom} onChange={(e) => { setPage(1); setDateFrom(e.target.value); }} className="w-36 mt-0.5 h-8 text-sm" />
+                <div className="flex flex-wrap items-end gap-2">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Status</Label>
+                    <Select value={status || "all"} onValueChange={(v) => { setPage(1); setStatus(v === "all" ? "" : v); }}>
+                      <SelectTrigger className="w-36 mt-0.5 h-8 text-sm">
+                        <SelectValue placeholder="All Statuses" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Statuses</SelectItem>
+                        {STATUSES.map((s) => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground flex items-center gap-1"><User size={11} /> User</Label>
+                    <Select value={createdBy || "all"} onValueChange={(v) => { setPage(1); setCreatedBy(v === "all" ? "" : v); }}>
+                      <SelectTrigger className="w-40 mt-0.5 h-8 text-sm">
+                        <SelectValue placeholder="All Users" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Users</SelectItem>
+                        {staffList.map((s) => (
+                          <SelectItem key={s.id} value={`${s.firstName} ${s.lastName}`}>
+                            {s.firstName} {s.lastName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">From</Label>
+                    <Input type="date" value={dateFrom} onChange={(e) => { setPage(1); setDateFrom(e.target.value); }} className="w-36 mt-0.5 h-8 text-sm" />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">To</Label>
+                    <Input type="date" value={dateTo} onChange={(e) => { setPage(1); setDateTo(e.target.value); }} className="w-36 mt-0.5 h-8 text-sm" />
+                  </div>
                 </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">To</Label>
-                  <Input type="date" value={dateTo} onChange={(e) => { setPage(1); setDateTo(e.target.value); }} className="w-36 mt-0.5 h-8 text-sm" />
-                </div>
-                {(dateFrom || dateTo) && (
-                  <Button variant="outline" size="sm" className="h-8 mt-4" onClick={() => { setPage(1); setDateFrom(""); setDateTo(""); }}>
-                    Clear dates
-                  </Button>
-                )}
               </div>
             )}
           </div>
