@@ -7,11 +7,11 @@
 # Optimized for Synology NAS (ARM or x86_64 architectures).
 # =============================================================================
 
-# ── Stage 1: Builder ────────────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+# ── Stage 1: Builder ───────────────────────────────────────────────────────────────
+FROM node:24-alpine AS builder
 
 # Install pnpm
-RUN npm install -g pnpm@9
+RUN npm install -g pnpm@10.26.1
 
 WORKDIR /app
 
@@ -26,6 +26,8 @@ COPY lib/api-zod/package.json ./lib/api-zod/
 COPY lib/crypto/package.json ./lib/crypto/
 COPY lib/integrations/package.json ./lib/integrations/
 COPY lib/integrations/gemini-ai/package.json ./lib/integrations/gemini-ai/
+COPY lib/api-client-react/package.json ./lib/api-client-react/
+COPY lib/api-spec/package.json ./lib/api-spec/
 COPY scripts/package.json ./scripts/
 
 # Install all workspace dependencies
@@ -37,8 +39,8 @@ COPY . .
 # Build the deploy bundle: API server + all 3 frontend SPAs
 RUN pnpm --filter @workspace/api-server run build:deploy
 
-# ── Stage 2: Runner ───────────────────────────────────────────────────────
-FROM node:20-alpine AS runner
+# ── Stage 2: Runner ───────────────────────────────────────────────────────────────
+FROM node:24-alpine AS runner
 
 # Install wget for healthchecks
 RUN apk add --no-cache wget

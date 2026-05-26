@@ -272,7 +272,7 @@ Yes — every Docker command above works identically on macOS (Docker Desktop)
 and Linux (`docker` + `docker compose` from your distro).
 
 ### Can I use this on a Raspberry Pi?
-Only if it's a Pi 4 / Pi 5 with a 64-bit OS. The base images (`node:20-alpine`,
+Only if it's a Pi 4 / Pi 5 with a 64-bit OS. The base images (`node:24-alpine`,
 `postgres:16-alpine`, `nginx:alpine`) are all multi-arch, so the build itself
 works. Performance is acceptable for a small clinic but not great for heavy
 reporting.

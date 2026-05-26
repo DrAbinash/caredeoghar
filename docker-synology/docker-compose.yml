@@ -58,11 +58,13 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       # Uncomment and fill in .env to enable features:
       # AI_INTEGRATIONS_GEMINI_API_KEY: ${AI_INTEGRATIONS_GEMINI_API_KEY:-}
+      # AI_INTEGRATIONS_GEMINI_BASE_URL: ${AI_INTEGRATIONS_GEMINI_BASE_URL:-}
       # ORTHANC_URL: ${ORTHANC_URL:-}
       # ORTHANC_USERNAME: ${ORTHANC_USERNAME:-}
       # ORTHANC_PASSWORD: ${ORTHANC_PASSWORD:-}
       # OHIF_URL: ${OHIF_URL:-}
       # FINGERPRINT_BRIDGE_SECRET: ${FINGERPRINT_BRIDGE_SECRET:-}
+      # SUPER_ADMIN_USB_KEY: ${SUPER_ADMIN_USB_KEY:-}
     depends_on:
       db:
         condition: service_healthy

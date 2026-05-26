@@ -28,7 +28,7 @@
 # Installs pnpm + every workspace dependency (deps and devDeps).
 # Used as the starting point for both the api and web build stages.
 # -----------------------------------------------------------------------------
-FROM node:20-alpine AS base
+FROM node:24-alpine AS base
 RUN apk add --no-cache libc6-compat \
  && corepack enable \
  && corepack prepare pnpm@10.26.1 --activate
@@ -57,7 +57,7 @@ RUN pnpm --filter @workspace/api-server run build \
 # Slim runtime image that only contains the bundled server + prod node_modules.
 # SERVE_STATIC_DIR is set by docker-compose to serve the three SPAs.
 # -----------------------------------------------------------------------------
-FROM node:20-alpine AS api
+FROM node:24-alpine AS api
 RUN apk add --no-cache libc6-compat tini
 WORKDIR /app
 ENV NODE_ENV=production
