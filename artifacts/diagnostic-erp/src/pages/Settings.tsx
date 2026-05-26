@@ -848,8 +848,12 @@ function ClinicInfoTab() {
             <Input value={current.tagline} onChange={(e) => update("tagline", e.target.value)} className="mt-1" placeholder="e.g. Diagnostic & Pathology Services" />
           </div>
           <div className="md:col-span-2">
-            <Label>Address</Label>
-            <Input value={current.address} onChange={(e) => update("address", e.target.value)} className="mt-1" placeholder="Full address" />
+            <Label>Address (Work / Operational)</Label>
+            <Input value={current.address} onChange={(e) => update("address", e.target.value)} className="mt-1" placeholder="Full work address" />
+          </div>
+          <div className="md:col-span-2">
+            <Label>Registered Address (Legal / Compliance)</Label>
+            <Input value={current.registeredAddress} onChange={(e) => update("registeredAddress", e.target.value)} className="mt-1" placeholder="Full registered address for legal documents" />
           </div>
           <div>
             <Label>Mobile / Phone Number</Label>
@@ -1036,7 +1040,7 @@ function ClinicInfoTab() {
                       }}>
                         <div>
                           <div style={{ fontSize: "6px", fontWeight: 800, color: preset.id === "classic" ? "#1e40af" : "#111" }}>CARE DIAGNOSTICS</div>
-                          <div style={{ fontSize: "4px", color: "#666" }}>Jayshankar Bhawan, Bilasi Town, Ward No. 27, Hiralal Pal Road</div>
+                          <div style={{ fontSize: "4px", color: "#666" }}>Subhash Chowk, Castair's Town, Near Bajla Mahila College</div>
                           <div style={{ fontSize: "4px", color: "#666" }}>Ph: 9973497200</div>
                         </div>
                         <div style={{ width: 12, height: 12, background: "#f0f0f0", border: "1px solid #ccc", borderRadius: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 3, color: "#999" }}>QR</div>

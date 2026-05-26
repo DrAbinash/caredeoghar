@@ -20,7 +20,7 @@ type SiteSettings = {
   siteTitle: string; tagline: string; about: string;
   contactEmail: string; contactPhone: string;
   whatsappNumber: string; whatsappEnabled: boolean; whatsappGreeting: string;
-  address: string; faviconUrl: string; logoUrl: string;
+  address: string; registeredAddress: string; faviconUrl: string; logoUrl: string;
   themeId: string; primaryColor: string; secondaryColor: string;
   accentColor: string; backgroundColor: string;
   fontHeading: string; fontBody: string; buttonStyle: string;
@@ -206,7 +206,8 @@ function SiteProfileTab({ settings, onSave, saving }: { settings: SiteSettings; 
   const init = {
     siteTitle: settings.siteTitle, tagline: settings.tagline, about: settings.about,
     contactEmail: settings.contactEmail, contactPhone: settings.contactPhone,
-    address: settings.address, faviconUrl: settings.faviconUrl, logoUrl: settings.logoUrl,
+    address: settings.address, registeredAddress: settings.registeredAddress,
+    faviconUrl: settings.faviconUrl, logoUrl: settings.logoUrl,
     socialLinks: settings.socialLinks,
   };
   const { draft, setDraft, dirty } = useDirtyForm(init);
@@ -227,7 +228,8 @@ function SiteProfileTab({ settings, onSave, saving }: { settings: SiteSettings; 
         <div><Label>Contact Email</Label><Input className="mt-1" type="email" value={draft.contactEmail} onChange={(e) => setDraft({ ...draft, contactEmail: e.target.value })} /></div>
         <div><Label>Contact Phone</Label><Input className="mt-1" value={draft.contactPhone} onChange={(e) => setDraft({ ...draft, contactPhone: e.target.value })} /></div>
       </FieldRow>
-      <div><Label>Address</Label><Textarea className="mt-1" value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} /></div>
+      <div><Label>Address (Work / Operational)</Label><Textarea className="mt-1" value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} placeholder="Displayed on site footer, contact page, and map" /></div>
+      <div><Label>Registered Address (Legal / Compliance)</Label><Textarea className="mt-1" value={draft.registeredAddress} onChange={(e) => setDraft({ ...draft, registeredAddress: e.target.value })} placeholder="Shown on policy pages and legal documents" /></div>
       <FieldRow>
         <div><Label>Logo URL</Label><Input className="mt-1" value={draft.logoUrl} onChange={(e) => setDraft({ ...draft, logoUrl: e.target.value })} placeholder="/uploads/site/logo.png" /></div>
         <div><Label>Favicon URL</Label><Input className="mt-1" value={draft.faviconUrl} onChange={(e) => setDraft({ ...draft, faviconUrl: e.target.value })} placeholder="/uploads/site/favicon.ico" /></div>

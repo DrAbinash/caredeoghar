@@ -31,7 +31,7 @@ export default function HomeScreen() {
           <View>
             <Text style={[styles.title, { color: colors.foreground }]}>Care Diagnostics</Text>
             <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-              Jayshankar Bhawan, Bilasi Town, Deoghar
+              Subhash Chowk, Castair's Town, Deoghar
             </Text>
           </View>
           <View style={[styles.logo, { backgroundColor: colors.primary }]}>
