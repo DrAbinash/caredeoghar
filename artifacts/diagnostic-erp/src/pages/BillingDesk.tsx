@@ -1044,6 +1044,21 @@ export default function BillingDesk() {
     function kbHandler(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement)?.tagName;
       const inInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+      // Intercept scanner QR-URL input: if the currently focused text input
+      // contains a bill-verification QR URL, open it instead of submitting.
+      if (inInput && e.key === "Enter") {
+        const el = e.target as HTMLInputElement;
+        const val = el?.value ?? "";
+        const m = val.match(/\/api\/verify\/bill\/([A-Za-z0-9\-]+)/);
+        if (m) {
+          e.preventDefault();
+          e.stopPropagation();
+          el.value = "";
+          const verifyUrl = `${window.location.origin}/api/verify/bill/${encodeURIComponent(m[1])}`;
+          window.open(verifyUrl, "_blank", "noopener,noreferrer");
+          return;
+        }
+      }
       // Esc — blur focused input, do NOT reset bill
       if (e.key === "Escape") {
         (document.activeElement as HTMLElement)?.blur();
