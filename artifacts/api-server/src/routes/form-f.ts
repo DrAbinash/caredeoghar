@@ -100,6 +100,23 @@ formFRouter.get("/fetch-billing/:search", async (req, res) => {
       age = String(now.getFullYear() - birth.getFullYear());
     }
 
+    // Look up any previously saved Form-F record for this patient to
+    // pre-fill address and guardian name if the patient table is empty.
+    let fallbackAddress = "";
+    let fallbackGuardian = "";
+    if (patient) {
+      const [latestFormF] = await db
+        .select({ address: formFRecordsTable.address, husbandFatherName: formFRecordsTable.husbandFatherName })
+        .from(formFRecordsTable)
+        .where(eq(formFRecordsTable.patientId, patient.id))
+        .orderBy(desc(formFRecordsTable.createdAt))
+        .limit(1);
+      if (latestFormF) {
+        fallbackAddress = latestFormF.address ?? "";
+        fallbackGuardian = latestFormF.husbandFatherName ?? "";
+      }
+    }
+
     res.json({
       billNumber: bill.billNumber,
       billDate: bill.createdAt ? dateToISTString(bill.createdAt) : "",
@@ -107,8 +124,8 @@ formFRouter.get("/fetch-billing/:search", async (req, res) => {
         ? `${patient.firstName} ${patient.lastName}`.trim()
         : "",
       age,
-      husbandFatherName: "",
-      address: patient?.address ?? "",
+      husbandFatherName: fallbackGuardian,
+      address: patient?.address ?? fallbackAddress,
       mobile: patient?.phone ?? "",
       referredBy,
       referredByName,

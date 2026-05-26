@@ -185,7 +185,7 @@ function FormFPrint({ form, idCardImageUrl }: FormFPrintProps) {
       id="formf-print"
       style={{
         width: "210mm",
-        minHeight: "280mm",
+        minHeight: "297mm",
         padding: "10mm 12mm 10mm 12mm",
         boxSizing: "border-box",
         fontFamily: "Arial, sans-serif",
@@ -426,13 +426,13 @@ function FormFPrint({ form, idCardImageUrl }: FormFPrintProps) {
         {form.billNumber ? ` | Bill No. ${form.billNumber}` : ""}
       </div>
 
-      {/* ── Compact ID Card thumbnail ── */}
+      {/* ── ID Card (enlarged to fill space better) ── */}
       {idCardImageUrl && (
-        <div style={{ marginTop: 8, borderTop: "1px dashed #999", paddingTop: 6, display: "flex", alignItems: "flex-start", gap: 8 }}>
-          <div style={{ flex: 1, fontSize: 9, color: "#555", lineHeight: 1.4 }}>
+        <div style={{ marginTop: 12, borderTop: "1px dashed #999", paddingTop: 8, display: "flex", alignItems: "flex-start", gap: 10 }}>
+          <div style={{ flex: 1, fontSize: 10, color: "#333", lineHeight: 1.5 }}>
             <span style={{ fontWeight: 700 }}>ID Proof attached:</span> Patient identification document verified and scanned. Original retained at clinic.
           </div>
-          <div style={{ width: "55mm", height: "38mm", border: "1px solid #333", borderRadius: 2, overflow: "hidden", flexShrink: 0, backgroundColor: "#f5f5f5" }}>
+          <div style={{ width: "85mm", height: "55mm", border: "1px solid #333", borderRadius: 2, overflow: "hidden", flexShrink: 0, backgroundColor: "#f5f5f5" }}>
             <img
               src={idCardImageUrl}
               alt="Patient ID"
