@@ -542,6 +542,12 @@ export default function FormF() {
       setIdCardOcrResult(resp.ocr ?? null);
       if (resp.ocr?.guardianName) setIdCardExtractedName(resp.ocr.guardianName);
       if (resp.ocr?.address) setIdCardExtractedAddress(resp.ocr.address);
+      // Auto-fill empty form fields from OCR so staff doesn't have to click "Use this"
+      setForm((prev) => ({
+        ...prev,
+        husbandFatherName: prev.husbandFatherName || resp.ocr?.guardianName || prev.husbandFatherName,
+        address: prev.address || resp.ocr?.address || prev.address,
+      }));
       toast({ title: resp.ocr ? `Scanner ID: ${resp.ocr.documentType}` : "Scanned (OCR unavailable)" });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not scan";
@@ -677,6 +683,12 @@ export default function FormF() {
         setIdCardOcrResult(resp.ocr ?? null);
         if (resp.ocr?.guardianName) setIdCardExtractedName(resp.ocr.guardianName);
         if (resp.ocr?.address) setIdCardExtractedAddress(resp.ocr.address);
+        // Auto-fill empty form fields from OCR so staff doesn't have to click "Use this"
+        setForm((prev) => ({
+          ...prev,
+          husbandFatherName: prev.husbandFatherName || resp.ocr?.guardianName || prev.husbandFatherName,
+          address: prev.address || resp.ocr?.address || prev.address,
+        }));
         toast({ title: resp.ocr ? `ID scanned: ${resp.ocr.documentType}` : "ID scanned (OCR unavailable)" });
         setIdCardUploading(false);
       };
