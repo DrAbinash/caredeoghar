@@ -131,13 +131,16 @@ export default function ScanStation() {
 
     // If the scanner read a QR code from a printed bill, it will emit a full
     // URL like https://<host>/api/verify/bill/<billNumber>. Detect this
-    // and show a helpful message instead of trying to look it up as a sample.
+    // and open the bill verification page directly so the user can verify it.
     const billNo = extractBillNumber(trimmed);
     if (billNo) {
       setLoading(false);
       setBuffer("");
       if (inputRef.current) inputRef.current.value = "";
-      setError(`Scanned a bill verification QR (Bill ${billNo}). This is not a sample barcode. Use the Billing Desk or open the bill directly.`);
+      setError(null);
+      // Open the public bill verification page in a new tab.
+      const verifyUrl = `${window.location.origin}/api/verify/bill/${encodeURIComponent(billNo)}`;
+      window.open(verifyUrl, "_blank", "noopener,noreferrer");
       setTimeout(() => inputRef.current?.focus(), 50);
       return;
     }
