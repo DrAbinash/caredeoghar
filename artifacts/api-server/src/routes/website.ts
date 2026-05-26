@@ -230,7 +230,7 @@ websiteRouter.patch("/settings", requireStaffAuth, requireStaffPermission("/webs
   await getOrCreateSettings();
   const allowed: (keyof typeof siteSettingsTable.$inferInsert)[] = [
     "siteTitle", "tagline", "about", "contactEmail", "contactPhone",
-    "whatsappNumber", "whatsappEnabled", "whatsappGreeting", "address",
+    "whatsappNumber", "whatsappEnabled", "whatsappGreeting", "address", "registeredAddress",
     "faviconUrl", "logoUrl",
     "themeId", "primaryColor", "secondaryColor", "accentColor",
     "backgroundColor", "fontHeading", "fontBody", "buttonStyle",

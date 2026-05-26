@@ -257,13 +257,14 @@ const BILLING_OWNED_SETTINGS_KEYS = new Set(["quickTestIds", "billPrintCopies"])
 router.get("/clinic-settings/branding", async (_req, res) => {
   const [row] = await db.select().from(clinicSettingsTable).limit(1);
   if (!row) {
-    res.json({ name: "Care Diagnostics", tagline: "", address: "", phone: "", email: "", website: "", gstin: "", logoDataUrl: null, footerNote: "", billPrintCopies: 1, billDefaultPaperSize: "A5", billShowCode: false, billShowCategory: false, qrOnBillEnabled: true, showTatOnBill: false, dayCloseAutoPrint: true, quickTestIds: "[null,null,null,null,null,null]", formFTestIds: "[]", formFBillingPrompt: false, formFAddressRequired: true, formFGuardianRequired: true });
+    res.json({ name: "Care Diagnostics", tagline: "", address: "", registeredAddress: "", phone: "", email: "", website: "", gstin: "", logoDataUrl: null, footerNote: "", billPrintCopies: 1, billDefaultPaperSize: "A5", billShowCode: false, billShowCategory: false, qrOnBillEnabled: true, showTatOnBill: false, dayCloseAutoPrint: true, quickTestIds: "[null,null,null,null,null,null]", formFTestIds: "[]", formFBillingPrompt: false, formFAddressRequired: true, formFGuardianRequired: true });
     return;
   }
   res.json({
     name: row.name ?? "",
     tagline: row.tagline ?? "",
     address: row.address ?? "",
+    registeredAddress: row.registeredAddress ?? "",
     phone: row.phone ?? "",
     email: row.email ?? "",
     website: row.website ?? "",

@@ -5,6 +5,7 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   name: text("name").notNull().default("Care Diagnostics"),
   tagline: text("tagline").notNull().default("Diagnostic & Pathology Services"),
   address: text("address").notNull().default(""),
+  registeredAddress: text("registered_address").notNull().default(""),
   email: text("email").notNull().default(""),
   phone: text("phone").notNull().default(""),
   website: text("website").notNull().default(""),

@@ -52,7 +52,7 @@ export function HeaderSection({ section, settings, pages, basePath }: { section:
   const ctaHref = safeCta.startsWith("/") ? `${basePath}${safeCta.replace(/^\//, "")}` : safeCta;
   const phone   = settings.contactPhone || "9973497200";
   const waNum   = (settings.whatsappNumber || phone).replace(/[^0-9]/g, "");
-  const addr    = settings.address || "Jayshankar Bhawan, Bilasi Town, Deoghar, Ward No. 27, Hiralal Pal Road, Deoghar, Jharkhand \u2013 814112";
+  const addr    = settings.address || "CARE DIAGNOSTICS, Subhash Chowk, Castair's Town, Near Bajla Mahila College, Deoghar\u2013814112";
 
   return (
     <>
@@ -662,7 +662,8 @@ export function FooterSection({ section, settings, basePath }: { section: Sectio
   const siteName  = settings.siteTitle || "Care Diagnostics";
   const phone     = settings.contactPhone || "9973497200";
   const email     = settings.contactEmail || "CARE.DEOGHAR@GMAIL.COM";
-  const addr      = settings.address || "Jayshankar Bhawan, Bilasi Town, Deoghar, Ward No. 27, Hiralal Pal Road, Deoghar, Jharkhand \u2013 814112";
+  const addr      = settings.address || "CARE DIAGNOSTICS, Subhash Chowk, Castair's Town, Near Bajla Mahila College, Deoghar\u2013814112";
+  const regAddr   = settings.registeredAddress || "Jayshankar Bhawan, Bilasi Town, Deoghar, Ward No. 27, Hiralal Pal Road, Deoghar, Jharkhand \u2013 814112";
   const waNum     = (settings.whatsappNumber || phone).replace(/[^0-9]/g, "");
   const social    = parseSocial(settings.socialLinks);
   const svcLinks  = Array.isArray(c.services) ? (c.services as Array<{ label: string; url: string }>) : [];
@@ -754,6 +755,9 @@ export function FooterSection({ section, settings, basePath }: { section: Sectio
           <div className="footer-contact-row">
             <MapPin size={14} />
             <span>{addr}</span>
+          </div>
+          <div className="footer-contact-row" style={{ fontSize: ".75rem", opacity: .75 }}>
+            <span style={{ marginLeft: 20 }}>Reg: {regAddr}</span>
           </div>
           <div className="footer-contact-row">
             <Phone size={14} />

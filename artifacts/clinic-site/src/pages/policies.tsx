@@ -2,12 +2,14 @@ import { useEffect } from "react";
 import { Phone, Mail, MapPin, ChevronLeft, Shield, FileText, RotateCcw, XCircle } from "lucide-react";
 import type { SiteSettings } from "../types";
 
-const NEW_ADDR = "Jayshankar Bhawan, Bilasi Town, Deoghar, Ward No. 27, Hiralal Pal Road, Deoghar, Jharkhand \u2013 814112";
+const WORK_ADDR = "CARE DIAGNOSTICS, Subhash Chowk, Castair's Town, Near Bajla Mahila College, Deoghar\u2013814112";
+const REG_ADDR = "Jayshankar Bhawan, Bilasi Town, Deoghar, Ward No. 27, Hiralal Pal Road, Deoghar, Jharkhand \u2013 814112";
 const PHONE = "9973497200";
 const EMAIL = "CARE.DEOGHAR@GMAIL.COM";
 
 export default function PoliciesPage({ settings }: { settings: SiteSettings }) {
-  const addr = settings.address || NEW_ADDR;
+  const workAddr = settings.address || WORK_ADDR;
+  const regAddr = settings.registeredAddress || REG_ADDR;
   const phone = settings.contactPhone || PHONE;
   const email = settings.contactEmail || EMAIL;
 
@@ -39,12 +41,15 @@ export default function PoliciesPage({ settings }: { settings: SiteSettings }) {
             Privacy Policy, Terms &amp; Conditions, Refund Policy and Cancellation Policy
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "1rem", fontSize: ".82rem", color: "hsl(var(--site-muted-fg))" }}>
-            <span><MapPin size={12} style={{ display: "inline", verticalAlign: "middle" }} /> {addr}</span>
+            <span><MapPin size={12} style={{ display: "inline", verticalAlign: "middle" }} /> {workAddr}</span>
             <span><Phone size={12} style={{ display: "inline", verticalAlign: "middle" }} /> {phone}</span>
             <span><Mail size={12} style={{ display: "inline", verticalAlign: "middle" }} /> {email}</span>
           </div>
           <p style={{ fontSize: ".78rem", color: "hsl(var(--site-muted-fg))", marginTop: ".5rem" }}>
             Owned By: Dr. Sugandha Priyadarshini &nbsp;|&nbsp; Effective Date: 26/05/2026
+          </p>
+          <p style={{ fontSize: ".72rem", color: "hsl(var(--site-muted-fg) / .7)", marginTop: ".25rem" }}>
+            <strong>Registered Address:</strong> {regAddr}
           </p>
         </div>
 
@@ -85,7 +90,7 @@ export default function PoliciesPage({ settings }: { settings: SiteSettings }) {
           <p>CARE DIAGNOSTICS uses third-party software, payment gateways, cloud services, PACS/RIS/LIS/ERP systems, and messaging services. It shall not be responsible for technical failure, downtime, cyberattack, or data issues caused by third parties beyond its reasonable control.</p>
 
           <h4>1.10 Grievance / Contact</h4>
-          <p>For concerns, contact: <strong>CARE DIAGNOSTICS</strong>, {addr}. Phone: {phone}. Email: {email}. Owned By: Dr. Sugandha Priyadarshini.</p>
+          <p>For concerns, contact: <strong>CARE DIAGNOSTICS</strong>, {workAddr}. Phone: {phone}. Email: {email}. Owned By: Dr. Sugandha Priyadarshini.</p>
         </PolicyBlock>
 
         {/* 2. TERMS & CONDITIONS */}
@@ -241,7 +246,10 @@ export default function PoliciesPage({ settings }: { settings: SiteSettings }) {
           borderRadius: 12, textAlign: "center",
         }}>
           <p style={{ fontWeight: 600, marginBottom: ".5rem" }}>CARE DIAGNOSTICS</p>
-          <p style={{ fontSize: ".85rem", color: "hsl(var(--site-muted-fg))", marginBottom: ".3rem" }}>{addr}</p>
+          <p style={{ fontSize: ".85rem", color: "hsl(var(--site-muted-fg))", marginBottom: ".3rem" }}>{workAddr}</p>
+          <p style={{ fontSize: ".75rem", color: "hsl(var(--site-muted-fg) / .7)" }}>
+            <strong>Registered Address:</strong> {regAddr}
+          </p>
           <p style={{ fontSize: ".85rem", color: "hsl(var(--site-muted-fg))" }}>
             Phone: {phone} &nbsp;|&nbsp; Email: {email} &nbsp;|&nbsp; Owned By: Dr. Sugandha Priyadarshini
           </p>

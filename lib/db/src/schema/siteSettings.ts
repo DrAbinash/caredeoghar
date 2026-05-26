@@ -15,6 +15,7 @@ export const siteSettingsTable = pgTable("site_settings", {
   whatsappEnabled: boolean("whatsapp_enabled").notNull().default(false),
   whatsappGreeting: text("whatsapp_greeting").notNull().default("Hi! I'd like to book an appointment."),
   address: text("address").notNull().default(""),
+  registeredAddress: text("registered_address").notNull().default(""),
   faviconUrl: text("favicon_url").notNull().default(""),
   logoUrl: text("logo_url").notNull().default(""),
 

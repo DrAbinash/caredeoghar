@@ -9,6 +9,7 @@ export type SiteSettings = {
   whatsappEnabled: boolean;
   whatsappGreeting: string;
   address: string;
+  registeredAddress: string;
   faviconUrl: string;
   logoUrl: string;
   themeId: string;

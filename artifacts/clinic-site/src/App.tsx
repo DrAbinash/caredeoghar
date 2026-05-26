@@ -26,7 +26,7 @@ function StructuredData({ settings }: { settings: SiteSettings }) {
 
     const phone = settings.contactPhone || "9973497200";
     const name  = settings.siteTitle || "Care Diagnostics";
-    const addr  = settings.address   || "Jayshankar Bhawan, Bilasi Town, Deoghar, Ward No. 27, Hiralal Pal Road, Deoghar, Jharkhand – 814112";
+    const addr  = settings.address   || "CARE DIAGNOSTICS, Subhash Chowk, Castair's Town, Near Bajla Mahila College, Deoghar\u2013814112";
     const email = settings.contactEmail || "CARE.DEOGHAR@GMAIL.COM";
 
     const schema = {
@@ -42,7 +42,7 @@ function StructuredData({ settings }: { settings: SiteSettings }) {
           "email": email,
           "address": {
             "@type": "PostalAddress",
-            "streetAddress": "Jayshankar Bhawan, Bilasi Town, Ward No. 27, Hiralal Pal Road",
+            "streetAddress": "Subhash Chowk, Castair's Town, Near Bajla Mahila College",
             "addressLocality": "Deoghar",
             "addressRegion": "Jharkhand",
             "postalCode": "814112",

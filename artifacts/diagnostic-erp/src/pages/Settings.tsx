@@ -459,7 +459,7 @@ function UsersTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
 
 type ClinicSettings = {
   id?: number;
-  name: string; tagline: string; address: string; email: string; phone: string;
+  name: string; tagline: string; address: string; registeredAddress: string; email: string; phone: string;
   website: string; gstin: string; logoDataUrl: string | null; footerNote: string;
   patientPhotoEnabled?: boolean;
   showTatOnBill?: boolean;
