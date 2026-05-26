@@ -5,9 +5,31 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Printer, RefreshCcw, FileText, List, User, Phone, Users, BookOpen, Upload, Camera, CheckCircle2, AlertTriangle, MessageCircle, Stethoscope, X, ChevronDown, Scan } from "lucide-react";
+import {
+  Search, Printer, RefreshCcw, FileText, List, User, Phone, Users, BookOpen,
+  Upload, Camera, CheckCircle2, AlertTriangle, MessageCircle, Stethoscope, X,
+  ChevronDown, Scan, ExternalLink
+} from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
 
 type DoctorOption = { id: number; name: string; registrationNumber: string | null };
+
+// ── Draggable bookmarklet link (raw HTML so React doesn't strip javascript: href) ──
+function BookmarkletLink({ billNumber }: { billNumber: string }) {
+  const erpUrl = window.location.origin;
+  const js = `(function(){const b='${erpUrl}/api/form-f/export-for-portal/${encodeURIComponent(billNumber)}';fetch(b,{headers:{'Authorization':'Bearer '+localStorage.getItem('erp_session')}}).then(r=>r.json()).then(d=>{const f=document.forms[0];if(!f)return alert('No form found');const set=(n,v)=>{const e=f.querySelector('[name*="'+n+'" i]')||f.querySelector('[id*="'+n+'" i]')||Array.from(f.elements).find(x=>x.name&&x.name.toLowerCase().includes(n.toLowerCase()));if(e)e.value=v||'';};set('centre',d.centreName);set('registration',d.registrationNo);set('patient',d.patientName);set('age',d.age);set('husband',d.husbandFatherName);set('address',d.address);set('mobile',d.mobile);set('referred',d.referredBy);set('lmp',d.lmpWeeks);set('doctor',d.doctorName);set('procedure',d.procedure);set('gestationalAge',(d.gestationalAgeWeeks||'')+'w '+(d.gestationalAgeDays||'')+'d');set('ultrasound',d.ultrasoundResult);set('abnormality',d.abnormality);set('date',d.procedureDate);alert('Form F fields filled. Please review and click Submit.')}).catch(e=>alert('Failed: '+e.message))})();`;
+  const href = `javascript:${encodeURIComponent(js)}`;
+  return (
+    <div
+      className="inline-block"
+      dangerouslySetInnerHTML={{
+        __html: `<a href="${href}" class="inline-block px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 cursor-move" draggable="true">Fill PCPNDT – ${billNumber || "Form F"}</a>`,
+      }}
+    />
+  );
+}
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -517,6 +539,9 @@ export default function FormF() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // ── PCPNDT Portal bookmarklet dialog ──
+  const [portalOpen, setPortalOpen] = useState(false);
 
   // ── Document scanner bridge state (physical flatbed/ADF scanner) ──
   const SCAN_BRIDGE_URL = "http://127.0.0.1:8766";
@@ -1046,9 +1071,59 @@ export default function FormF() {
             <Button size="sm" className="h-8 text-xs" onClick={printAndSave} disabled={saving}>
               <Printer size={12} className="mr-1" /> {saving ? "Saving…" : "Print A4"}
             </Button>
+            <Button variant="secondary" size="sm" className="h-8 text-xs" onClick={() => setPortalOpen(true)} disabled={!form.billNumber}>
+              <ExternalLink size={12} className="mr-1" /> PCPNDT Portal
+            </Button>
           </div>
         )}
       </div>
+
+      {/* ── PCPNDT Portal Bookmarklet Dialog ── */}
+      <Dialog open={portalOpen} onOpenChange={setPortalOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Upload to PCPNDT Government Portal</DialogTitle>
+            <DialogDescription>
+              This bookmarklet pre-fills the Jharkhand PCPNDT portal using your saved Form F data.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            <div className="rounded-md border p-3 bg-amber-50 border-amber-200">
+              <p className="font-medium text-amber-800 mb-1">How it works</p>
+              <ol className="list-decimal list-inside text-amber-700 space-y-1">
+                <li>Save your Form F record in the ERP first (click "Save" above).</li>
+                <li>Drag the button below to your browser bookmarks bar.</li>
+                <li>Open the PCPNDT portal: <a href="http://pcpndt.jharkhand.gov.in/secured/form-f/form-f-step1.jsp" target="_blank" rel="noopener noreferrer" className="underline text-blue-600">pcpndt.jharkhand.gov.in</a></li>
+                <li>Log in to the portal, then click the bookmarklet — it fills the form automatically.</li>
+                <li>Review the fields, then click <b>Submit</b> manually on the portal.</li>
+              </ol>
+            </div>
+
+            <div>
+              <p className="font-medium mb-2">1. Drag this button to your bookmarks bar:</p>
+              <BookmarkletLink billNumber={form.billNumber} />
+            </div>
+
+            <div className="rounded-md border p-3 bg-gray-50">
+              <p className="font-medium text-gray-700 mb-1">2. Alternative: copy-paste script</p>
+              <p className="text-xs text-gray-500 mb-2">
+                If drag doesn't work, open the portal, press F12 → Console, paste this, and press Enter:
+              </p>
+              <pre className="text-xs bg-gray-900 text-green-400 p-3 rounded overflow-x-auto whitespace-pre-wrap break-all">
+{(() => {
+  const erpUrl = window.location.origin;
+  const bill = form.billNumber;
+  return `fetch('${erpUrl}/api/form-f/export-for-portal/${encodeURIComponent(bill)}',{headers:{'Authorization':'Bearer '+localStorage.getItem('erp_session')}}).then(r=>r.json()).then(d=>{const f=document.forms[0];const set=(n,v)=>{const e=f.querySelector('[name*="'+n+'" i]')||f.querySelector('[id*="'+n+'" i]')||Array.from(f.elements).find(x=>x.name&&x.name.toLowerCase().includes(n.toLowerCase()));if(e)e.value=v||'';};set('centre',d.centreName);set('registration',d.registrationNo);set('patient',d.patientName);set('age',d.age);set('husband',d.husbandFatherName);set('address',d.address);set('mobile',d.mobile);set('referred',d.referredBy);set('doctor',d.doctorName);set('procedure',d.procedure);set('date',d.procedureDate);alert('Filled! Review and Submit.')}).catch(e=>alert('Error: '+e.message))`;
+})()}
+              </pre>
+            </div>
+
+            <p className="text-xs text-gray-500">
+              Note: The government portal has no API. This bookmarklet only fills fields — you must still click Submit manually for compliance.
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── PENDING QUEUE TAB ── */}
       {activeTab === "pending" && (

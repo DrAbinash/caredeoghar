@@ -609,4 +609,66 @@ Thank you!`;
   }
 });
 
+// ────────────────────────────────────────────────────────────────────
+// Export Form F data for PCPNDT portal bookmarklet (staff-authenticated)
+// Returns all fields needed to pre-fill the government portal form.
+// ────────────────────────────────────────────────────────────────────
+formFRouter.get("/export-for-portal/:billNumber", requireStaffPermission("/form-f"), async (req, res) => {
+  try {
+    const billNumber = String(req.params.billNumber ?? "").trim();
+    if (!billNumber) { res.status(400).json({ error: "billNumber required" }); return; }
+
+    // Find the latest saved Form-F record for this bill
+    const [record] = await db
+      .select()
+      .from(formFRecordsTable)
+      .where(ilike(formFRecordsTable.billNumber, `%${billNumber}%`))
+      .orderBy(desc(formFRecordsTable.createdAt))
+      .limit(1);
+
+    if (!record) {
+      res.status(404).json({ error: "No Form F record found for this bill" });
+      return;
+    }
+
+    res.json({
+      centreName: record.centreName,
+      registrationNo: record.registrationNo,
+      patientName: record.patientName,
+      age: record.age,
+      childrenDetails: record.childrenDetails,
+      husbandFatherName: record.husbandFatherName,
+      address: record.address,
+      mobile: record.mobile,
+      referredBy: record.referredBy,
+      lmpWeeks: record.lmpWeeks,
+      geneticHistory: record.geneticHistory,
+      basisDiagnosis: record.basisDiagnosis,
+      previousChildIssue: record.previousChildIssue,
+      indicationOther: record.indicationOther,
+      doctorName: record.doctorName,
+      procedure: record.procedure,
+      procedurePurpose: record.procedurePurpose,
+      invasiveProcedure: record.invasiveProcedure,
+      complication: record.complication,
+      labTests: record.labTests,
+      gestationalAgeWeeks: record.gestationalAgeWeeks,
+      gestationalAgeDays: record.gestationalAgeDays,
+      ultrasoundResult: record.ultrasoundResult,
+      abnormality: record.abnormality,
+      procedureDate: record.procedureDate,
+      consentDate: record.consentDate,
+      resultConveyed: record.resultConveyed,
+      mtpAdvised: record.mtpAdvised,
+      mtpDate: record.mtpDate,
+      date: record.date,
+      place: record.place,
+      billNumber: record.billNumber,
+    });
+  } catch (err) {
+    console.error("[form-f] export-for-portal error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 export default formFRouter;
