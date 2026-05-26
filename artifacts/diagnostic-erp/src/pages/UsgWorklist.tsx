@@ -15,7 +15,7 @@ import {
 
 interface WorklistEntry {
   id: number;
-  studyInstanceUID: string | null;
+  studyInstanceUid: string | null;
   accessionNumber: string | null;
   patientName: string | null;
   patientId: string | null;
@@ -66,21 +66,26 @@ export default function UsgWorklist() {
 
   async function launchViewer(studyUid: string, viewer: "ohif" | "weasis") {
     setLaunching(`${studyUid}:${viewer}`);
+    // Open a blank window *immediately* (synchronously) so mobile popup blockers allow it.
+    const w = window.open("", "_blank");
     try {
       const data = await fetchApi<{ ohifUrl?: string | null; weasisUrl?: string | null; error?: string }>(
         `/api/radiology/studies/${encodeURIComponent(studyUid)}/${viewer}-launch`
       );
       if (data.error) {
+        w?.close();
         toast({ title: `${viewer.toUpperCase()} not configured`, description: data.error, variant: "destructive" });
         return;
       }
       const url = viewer === "ohif" ? data.ohifUrl : data.weasisUrl;
       if (!url) {
+        w?.close();
         toast({ title: `${viewer.toUpperCase()} launch failed`, description: "No URL returned.", variant: "destructive" });
         return;
       }
-      window.open(url, "_blank", "noopener,noreferrer");
+      if (w) w.location.href = url;
     } catch {
+      w?.close();
       toast({ title: `Failed to launch ${viewer.toUpperCase()}`, variant: "destructive" });
     } finally {
       setLaunching(null);
@@ -135,7 +140,7 @@ export default function UsgWorklist() {
 
       <div className="space-y-3">
         {filtered.map((entry) => {
-          const uid = entry.studyInstanceUID;
+          const uid = entry.studyInstanceUid;
           return (
             <Card key={entry.id} className="group hover:border-primary/50 hover:shadow-md transition-all duration-150">
               <CardContent className="p-4">

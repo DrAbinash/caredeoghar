@@ -304,10 +304,15 @@ export default function Radiology() {
 
   const openPacsViewer = async (studyId: number) => {
     setPacsBusyId(studyId);
+    const w = window.open("", "_blank");
     try {
       const data = await api.get<{ weasisUrl: string; orthancViewerUrl: string; ohifUrl: string | null }>(`/api/radiology/studies/${studyId}/pacs-url`);
       const url = data.ohifUrl ?? data.weasisUrl ?? data.orthancViewerUrl;
-      window.open(url, "_blank", "noopener,noreferrer");
+      if (!url) { w?.close(); toast({ title: "No viewer URL", variant: "destructive" }); return; }
+      if (w) w.location.href = url;
+    } catch {
+      w?.close();
+      toast({ title: "Failed to open viewer", variant: "destructive" });
     } finally {
       setPacsBusyId(null);
     }

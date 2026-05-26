@@ -232,6 +232,7 @@ radiologyRouter.get("/worklist", async (req, res) => {
       acquiredAt: radiologyStudiesTable.acquiredAt,
       deliveredAt: radiologyStudiesTable.deliveredAt,
       numImages: radiologyStudiesTable.numImages,
+      studyInstanceUid: radiologyStudiesTable.studyInstanceUid,
       technicianId: radiologyStudiesTable.technicianId,
       technicianName: radiologyStudiesTable.technicianName,
       assignedRadiologistId: radiologyStudiesTable.assignedRadiologistId,
