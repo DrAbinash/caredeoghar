@@ -556,22 +556,22 @@ websiteRouter.get("/photos", async (req, res) => {
 websiteRouter.post("/photos", requireStaffAuth, requireStaffPermission("/website"), upload.single("photo"), async (req, res) => {
   if (!req.file) { res.status(400).json({ error: "No file" }); return; }
   try {
-    const uploadURL = await objectStorage.getObjectEntityUploadURL();
-    // Upload the buffer directly to the presigned URL
-    await fetch(uploadURL, {
-      method: "PUT",
-      headers: { "Content-Type": req.file.mimetype },
-      body: req.file.buffer,
-    });
-    const objectPath = objectStorage.normalizeObjectEntityPath(uploadURL);
+    // Ensure local upload directory exists (fallback when object storage unavailable)
+    await fs.mkdir(UPLOAD_DIR, { recursive: true });
+    const ext = MIME_TO_EXT[req.file.mimetype] || ".jpg";
+    const fileName = `${crypto.randomUUID()}${ext}`;
+    const filePath = path.join(UPLOAD_DIR, fileName);
+    await fs.writeFile(filePath, req.file.buffer);
+    // URL served by the existing static /uploads mount in app.ts
+    const url = `/uploads/site/${fileName}`;
     const [p] = await db.insert(sitePhotosTable).values({
-      url: objectPath,
+      url,
       alt: (req.body?.alt as string) ?? "",
       category: (req.body?.category as string) ?? "general",
     }).returning();
     res.status(201).json(p);
   } catch (err) {
-    req.log.error({ err }, "Website photo upload to object storage failed");
+    req.log.error({ err }, "Website photo upload failed");
     res.status(500).json({ error: "Upload failed" });
   }
 });
@@ -581,6 +581,11 @@ websiteRouter.delete("/photos/:id", requireStaffAuth, requireStaffPermission("/w
   const [p] = await db.select().from(sitePhotosTable).where(eq(sitePhotosTable.id, id));
   if (p?.url?.startsWith("/objects/")) {
     await objectStorage.deleteObjectEntity(p.url).catch(() => {});
+  }
+  // Also delete local file if stored in uploads directory
+  if (p?.url?.startsWith("/uploads/site/")) {
+    const localPath = path.join(UPLOAD_DIR, path.basename(p.url));
+    await fs.unlink(localPath).catch(() => {});
   }
   await db.delete(sitePhotosTable).where(eq(sitePhotosTable.id, id));
   res.json({ ok: true });
