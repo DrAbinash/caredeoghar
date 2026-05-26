@@ -19,7 +19,7 @@ formFRouter.get("/fetch-billing/:search", async (req, res) => {
     const byBillNumber = await db
       .select()
       .from(billsTable)
-      .where(ilike(billsTable.billNumber, search))
+      .where(ilike(billsTable.billNumber, `%${search}%`))
       .limit(1);
 
     if (byBillNumber[0]) {
@@ -32,6 +32,7 @@ formFRouter.get("/fetch-billing/:search", async (req, res) => {
           or(
             ilike(patientsTable.patientId, `%${search}%`),
             ilike(patientsTable.firstName, `%${search}%`),
+            ilike(patientsTable.lastName, `%${search}%`),
             ilike(patientsTable.phone, `%${search}%`)
           )
         )
