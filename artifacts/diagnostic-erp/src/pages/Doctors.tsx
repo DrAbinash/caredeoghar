@@ -41,6 +41,8 @@ type DoctorForm = {
   phone?: string;
   email?: string;
   hospitalAffiliation?: string;
+  address?: string;
+  area?: string;
   registrationNumber?: string;
 };
 
@@ -51,6 +53,8 @@ type Doctor = {
   phone?: string | null;
   email?: string | null;
   hospitalAffiliation?: string | null;
+  address?: string | null;
+  area?: string | null;
   registrationNumber?: string | null;
 };
 
@@ -102,10 +106,12 @@ export default function Doctors() {
         phone: d.phone ?? "",
         email: d.email ?? "",
         hospitalAffiliation: d.hospitalAffiliation ?? "",
+        address: d.address ?? "",
+        area: d.area ?? "",
         registrationNumber: d.registrationNumber ?? "",
       }));
       const csv = buildCsv(
-        ["name","specialization","phone","email","hospitalAffiliation","registrationNumber"],
+        ["name","specialization","phone","email","hospitalAffiliation","address","area","registrationNumber"],
         rows,
       );
       downloadCsv(csv, `doctors-${new Date().toISOString().slice(0, 10)}.csv`);
@@ -167,6 +173,8 @@ export default function Doctors() {
       phone: doc.phone ?? "",
       email: doc.email ?? "",
       hospitalAffiliation: doc.hospitalAffiliation ?? "",
+      address: doc.address ?? "",
+      area: doc.area ?? "",
       registrationNumber: doc.registrationNumber ?? "",
     });
   };
@@ -240,6 +248,12 @@ export default function Doctors() {
                           <Building2 size={11} /> {doc.hospitalAffiliation}
                         </div>
                       )}
+                      {doc.area && (
+                        <div className="mt-1 text-[11px] text-primary/80 font-medium">Area: {doc.area}</div>
+                      )}
+                      {doc.address && (
+                        <div className="mt-0.5 text-[11px] text-muted-foreground line-clamp-2">{doc.address}</div>
+                      )}
                       {doc.registrationNumber && (
                         <div className="mt-1 text-[11px] text-muted-foreground font-mono">
                           Reg. No: {doc.registrationNumber}
@@ -292,6 +306,14 @@ export default function Doctors() {
               <Input {...register("hospitalAffiliation")} className="mt-1" />
             </div>
             <div>
+              <Label>Address</Label>
+              <Input {...register("address")} className="mt-1" placeholder="Full clinic address" />
+            </div>
+            <div>
+              <Label>Area / Locality</Label>
+              <Input {...register("area")} className="mt-1" placeholder="e.g. Castair's Town, Deoghar" />
+            </div>
+            <div>
               <Label>Medical Council Registration No.</Label>
               <Input {...register("registrationNumber")} className="mt-1" placeholder="e.g. MCI-12345 or BMC/2018/4567" />
               <p className="mt-1 text-[11px] text-muted-foreground">Required on PCPNDT Form F prints and audit records.</p>
@@ -334,6 +356,14 @@ export default function Doctors() {
             <div>
               <Label>Hospital / Clinic Affiliation</Label>
               <Input {...regEdit("hospitalAffiliation")} className="mt-1" />
+            </div>
+            <div>
+              <Label>Address</Label>
+              <Input {...regEdit("address")} className="mt-1" placeholder="Full clinic address" />
+            </div>
+            <div>
+              <Label>Area / Locality</Label>
+              <Input {...regEdit("area")} className="mt-1" placeholder="e.g. Castair's Town, Deoghar" />
             </div>
             <div>
               <Label>Medical Council Registration No.</Label>
@@ -387,6 +417,8 @@ type DupDoctor = {
   phone?: string | null;
   email?: string | null;
   hospitalAffiliation?: string | null;
+  address?: string | null;
+  area?: string | null;
   registrationNumber?: string | null;
 };
 
@@ -462,6 +494,7 @@ function DuplicatesDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
                         <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Specialization</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Phone</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Email</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Area</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Affiliation</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Reg. No</th>
                         <th className="px-4 py-2 w-20"></th>
@@ -473,6 +506,7 @@ function DuplicatesDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
                           <td className="px-4 py-2 text-xs">{d.specialization}</td>
                           <td className="px-4 py-2 text-xs font-mono">{d.phone ?? "—"}</td>
                           <td className="px-4 py-2 text-xs">{d.email ?? "—"}</td>
+                          <td className="px-4 py-2 text-xs">{d.area ?? "—"}</td>
                           <td className="px-4 py-2 text-xs">{d.hospitalAffiliation ?? "—"}</td>
                           <td className="px-4 py-2 text-xs font-mono">{d.registrationNumber ?? "—"}</td>
                           <td className="px-4 py-2 text-right">

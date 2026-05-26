@@ -94,6 +94,8 @@ doctorsRouter.patch("/:id", async (req, res) => {
   if (body.phone !== undefined) updates.phone = body.phone || null;
   if (body.email !== undefined) updates.email = body.email || null;
   if (body.hospitalAffiliation !== undefined) updates.hospitalAffiliation = body.hospitalAffiliation || null;
+  if (body.address !== undefined) updates.address = body.address || null;
+  if (body.area !== undefined) updates.area = body.area || null;
   // Module B: registrationNumber persists from the Doctors form so PCPNDT Form F can auto-fill it.
   if (body.registrationNumber !== undefined) updates.registrationNumber = body.registrationNumber || null;
   if (body.defaultCommission !== undefined) updates.defaultCommission = String(body.defaultCommission);
@@ -148,10 +150,12 @@ doctorsRouter.post("/import", async (req, res) => {
     const email = typeof r.email === "string" && r.email.trim() ? r.email.trim() : null;
     const hospitalAffiliation = typeof r.hospitalAffiliation === "string" && r.hospitalAffiliation.trim()
       ? r.hospitalAffiliation.trim() : null;
+    const address = typeof r.address === "string" && r.address.trim() ? r.address.trim() : null;
+    const area = typeof r.area === "string" && r.area.trim() ? r.area.trim() : null;
     const registrationNumber = typeof r.registrationNumber === "string" && r.registrationNumber.trim()
       ? r.registrationNumber.trim() : null;
 
-    const values = { name, specialization, phone, email, hospitalAffiliation, registrationNumber };
+    const values = { name, specialization, phone, email, hospitalAffiliation, address, area, registrationNumber };
 
     try {
       // Match priority: registrationNumber > name+phone > name only.
