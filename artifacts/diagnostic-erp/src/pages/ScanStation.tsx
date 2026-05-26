@@ -118,15 +118,37 @@ export default function ScanStation() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  // Helper: detect if the scanned input is a bill-verification QR URL.
+  function extractBillNumber(raw: string): string | null {
+    // Accept both full URLs and paths: .../api/verify/bill/<billNumber>
+    const m = raw.match(/\/api\/verify\/bill\/([A-Za-z0-9\-]+)/);
+    return m ? m[1] : null;
+  }
+
   const lookupBarcode = useCallback(async (barcode: string) => {
-    if (!barcode.trim()) return;
+    const trimmed = barcode.trim();
+    if (!trimmed) return;
+
+    // If the scanner read a QR code from a printed bill, it will emit a full
+    // URL like https://<host>/api/verify/bill/<billNumber>. Detect this
+    // and show a helpful message instead of trying to look it up as a sample.
+    const billNo = extractBillNumber(trimmed);
+    if (billNo) {
+      setLoading(false);
+      setBuffer("");
+      if (inputRef.current) inputRef.current.value = "";
+      setError(`Scanned a bill verification QR (Bill ${billNo}). This is not a sample barcode. Use the Billing Desk or open the bill directly.`);
+      setTimeout(() => inputRef.current?.focus(), 50);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setSample(null);
     setRejecting(false);
     setRejectReason("");
     try {
-      const s = await api.get<Sample>(`/api/samples/scan/${encodeURIComponent(barcode.trim())}`);
+      const s = await api.get<Sample>(`/api/samples/scan/${encodeURIComponent(trimmed)}`);
       setSample(s);
     } catch (err: any) {
       setError(err?.message || "Sample not found");
