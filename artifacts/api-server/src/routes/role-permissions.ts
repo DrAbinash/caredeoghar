@@ -25,7 +25,7 @@ router.get("/", async (_req, res) => {
   res.json({ roles: ERP_ROLES, modules: PERMISSION_MODULES, permissions: grouped });
 });
 
-// PUT /api/admin/role-permissions — upsert a permission row
+// PUT /api/admin/role-permissions — single-row upsert (backward-compat)
 const UpsertBody = z.object({
   role: z.string().min(1),
   module: z.string().min(1),
@@ -100,6 +100,93 @@ router.put("/", async (req, res) => {
   }
 });
 
+// POST /api/admin/role-permissions — batch update from super-admin UI
+// Body: { updates: [{ role, module, permission, value }] }
+// permission key maps to canView, canCreate, canEdit, canDelete, canPrint,
+// canReprint, canRefund, canExport, canApprove, canFinalize.
+const BatchUpdateBody = z.object({
+  updates: z.array(z.object({
+    role: z.string().min(1),
+    module: z.string().min(1),
+    permission: z.string().min(1),
+    value: z.boolean(),
+  })),
+});
+
+const COL_MAP: Record<string, keyof typeof rolePermissionsTable> = {
+  view: "canView",
+  create: "canCreate",
+  edit: "canEdit",
+  delete: "canDelete",
+  print: "canPrint",
+  reprint: "canReprint",
+  refund: "canRefund",
+  export: "canExport",
+  approve: "canApprove",
+  finalize: "canFinalize",
+};
+
+router.post("/", async (req, res) => {
+  const parsed = BatchUpdateBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid body", details: parsed.error.format() });
+    return;
+  }
+
+  const { updates } = parsed.data;
+  if (updates.length === 0) {
+    res.json({ saved: 0 });
+    return;
+  }
+
+  try {
+    let saved = 0;
+    for (const u of updates) {
+      const col = COL_MAP[u.permission];
+      if (!col) continue;
+
+      const existing = await db
+        .select({ id: rolePermissionsTable.id })
+        .from(rolePermissionsTable)
+        .where(and(eq(rolePermissionsTable.role, u.role), eq(rolePermissionsTable.module, u.module)))
+        .limit(1);
+
+      if (existing[0]) {
+        await db
+          .update(rolePermissionsTable)
+          .set({ [col]: u.value, updatedAt: new Date() } as never)
+          .where(eq(rolePermissionsTable.id, existing[0].id));
+      } else {
+        const defaults: Record<string, boolean> = {
+          canView: false, canCreate: false, canEdit: false, canDelete: false,
+          canPrint: false, canReprint: false, canRefund: false, canExport: false,
+          canApprove: false, canFinalize: false,
+        };
+        defaults[u.permission] = u.value;
+        await db.insert(rolePermissionsTable).values({
+          role: u.role,
+          module: u.module,
+          canView: defaults.canView,
+          canCreate: defaults.canCreate,
+          canEdit: defaults.canEdit,
+          canDelete: defaults.canDelete,
+          canPrint: defaults.canPrint,
+          canReprint: defaults.canReprint,
+          canRefund: defaults.canRefund,
+          canExport: defaults.canExport,
+          canApprove: defaults.canApprove,
+          canFinalize: defaults.canFinalize,
+        });
+      }
+      saved++;
+    }
+    res.json({ saved });
+  } catch (err) {
+    logger.error({ err }, "Role permission batch save failed");
+    res.status(500).json({ error: "Failed to save role permissions" });
+  }
+});
+
 // POST /api/admin/role-permissions/seed — bootstrap default permissions
 router.post("/seed", async (_req, res) => {
   try {
@@ -146,20 +233,162 @@ router.post("/seed", async (_req, res) => {
         .onConflictDoNothing({ target: [rolePermissionsTable.role, rolePermissionsTable.module] });
     }
 
-    // Reception — patients, appointments, billing (view only), dashboard
+    // Reception — patients, appointments, billing (view), payments, queue, dashboard
     for (const mod of PERMISSION_MODULES) {
-      const perms = {
-        patients: { canView: true, canCreate: true, canEdit: true, canPrint: true, canExport: false },
-        billing: { canView: true, canCreate: false, canEdit: false, canPrint: true, canExport: false },
-        dashboard: { canView: true, canCreate: false, canEdit: false, canPrint: false, canExport: false },
-        payments: { canView: true, canCreate: true, canEdit: false, canPrint: true, canExport: false },
-        appointments: { canView: true, canCreate: true, canEdit: true, canPrint: true, canExport: false },
-      } as Record<string, Record<string, boolean>>;
-      const m = perms[mod] ?? { canView: false, canCreate: false, canEdit: false, canPrint: false, canExport: false };
+      const perms: Record<string, Partial<Record<string, boolean>>> = {
+        patients: { canView: true, canCreate: true, canEdit: true, canPrint: true },
+        appointments: { canView: true, canCreate: true, canEdit: true, canPrint: true },
+        queue: { canView: true, canCreate: true, canEdit: false, canPrint: true },
+        billing: { canView: true, canCreate: false, canEdit: false, canPrint: true },
+        payments: { canView: true, canCreate: true, canEdit: false, canPrint: true },
+        dashboard: { canView: true },
+      };
+      const m = perms[mod] ?? {};
       await db
         .insert(rolePermissionsTable)
         .values({
           role: "reception",
+          module: mod,
+          canView: m.canView ?? false,
+          canCreate: m.canCreate ?? false,
+          canEdit: m.canEdit ?? false,
+          canDelete: false,
+          canPrint: m.canPrint ?? false,
+          canReprint: false,
+          canRefund: false,
+          canExport: false,
+          canApprove: false,
+          canFinalize: false,
+        })
+        .onConflictDoNothing({ target: [rolePermissionsTable.role, rolePermissionsTable.module] });
+    }
+
+    // Billing — billing, payments, orders, reports (view), dashboard
+    for (const mod of PERMISSION_MODULES) {
+      const perms: Record<string, Partial<Record<string, boolean>>> = {
+        billing: { canView: true, canCreate: true, canEdit: true, canPrint: true, canReprint: true, canRefund: true },
+        payments: { canView: true, canCreate: true, canEdit: true, canPrint: true, canReprint: true },
+        orders: { canView: true, canCreate: true, canEdit: true, canPrint: true },
+        reports: { canView: true, canPrint: true, canExport: true },
+        dashboard: { canView: true },
+        queue: { canView: true, canCreate: true },
+      };
+      const m = perms[mod] ?? {};
+      await db
+        .insert(rolePermissionsTable)
+        .values({
+          role: "billing",
+          module: mod,
+          canView: m.canView ?? false,
+          canCreate: m.canCreate ?? false,
+          canEdit: m.canEdit ?? false,
+          canDelete: false,
+          canPrint: m.canPrint ?? false,
+          canReprint: m.canReprint ?? false,
+          canRefund: m.canRefund ?? false,
+          canExport: m.canExport ?? false,
+          canApprove: false,
+          canFinalize: false,
+        })
+        .onConflictDoNothing({ target: [rolePermissionsTable.role, rolePermissionsTable.module] });
+    }
+
+    // Radiology typist — radiology, reports
+    for (const mod of PERMISSION_MODULES) {
+      const perms: Record<string, Partial<Record<string, boolean>>> = {
+        radiology: { canView: true, canCreate: true, canEdit: true, canPrint: true },
+        reports: { canView: true, canCreate: true, canEdit: true, canPrint: true, canExport: true },
+      };
+      const m = perms[mod] ?? {};
+      await db
+        .insert(rolePermissionsTable)
+        .values({
+          role: "radiology_typist",
+          module: mod,
+          canView: m.canView ?? false,
+          canCreate: m.canCreate ?? false,
+          canEdit: m.canEdit ?? false,
+          canDelete: false,
+          canPrint: m.canPrint ?? false,
+          canReprint: false,
+          canRefund: false,
+          canExport: m.canExport ?? false,
+          canApprove: false,
+          canFinalize: false,
+        })
+        .onConflictDoNothing({ target: [rolePermissionsTable.role, rolePermissionsTable.module] });
+    }
+
+    // Radiologist — radiology, reports, doctors (view)
+    for (const mod of PERMISSION_MODULES) {
+      const perms: Record<string, Partial<Record<string, boolean>>> = {
+        radiology: { canView: true, canCreate: true, canEdit: true, canPrint: true, canApprove: true, canFinalize: true },
+        reports: { canView: true, canCreate: true, canEdit: true, canPrint: true, canExport: true, canApprove: true, canFinalize: true },
+        doctors: { canView: true, canPrint: true },
+      };
+      const m = perms[mod] ?? {};
+      await db
+        .insert(rolePermissionsTable)
+        .values({
+          role: "radiologist",
+          module: mod,
+          canView: m.canView ?? false,
+          canCreate: m.canCreate ?? false,
+          canEdit: m.canEdit ?? false,
+          canDelete: false,
+          canPrint: m.canPrint ?? false,
+          canReprint: false,
+          canRefund: false,
+          canExport: m.canExport ?? false,
+          canApprove: m.canApprove ?? false,
+          canFinalize: m.canFinalize ?? false,
+        })
+        .onConflictDoNothing({ target: [rolePermissionsTable.role, rolePermissionsTable.module] });
+    }
+
+    // Lab technician — lab, reports, tests
+    for (const mod of PERMISSION_MODULES) {
+      const perms: Record<string, Partial<Record<string, boolean>>> = {
+        lab: { canView: true, canCreate: true, canEdit: true, canPrint: true },
+        tests: { canView: true, canPrint: true },
+        reports: { canView: true, canCreate: true, canEdit: true, canPrint: true, canExport: true },
+        samples: { canView: true, canCreate: true, canEdit: true },
+      };
+      const m = perms[mod] ?? {};
+      await db
+        .insert(rolePermissionsTable)
+        .values({
+          role: "lab_technician",
+          module: mod,
+          canView: m.canView ?? false,
+          canCreate: m.canCreate ?? false,
+          canEdit: m.canEdit ?? false,
+          canDelete: false,
+          canPrint: m.canPrint ?? false,
+          canReprint: false,
+          canRefund: false,
+          canExport: m.canExport ?? false,
+          canApprove: false,
+          canFinalize: false,
+        })
+        .onConflictDoNothing({ target: [rolePermissionsTable.role, rolePermissionsTable.module] });
+    }
+
+    // Accountant — accounting, banking, reports, expenses, commission
+    for (const mod of PERMISSION_MODULES) {
+      const perms: Record<string, Partial<Record<string, boolean>>> = {
+        accounting: { canView: true, canCreate: true, canEdit: true, canPrint: true, canExport: true },
+        banking: { canView: true, canCreate: true, canEdit: true, canPrint: true },
+        reports: { canView: true, canPrint: true, canExport: true },
+        expenses: { canView: true, canCreate: true, canEdit: true },
+        commission: { canView: true, canCreate: true, canEdit: true, canPrint: true },
+        dashboard: { canView: true },
+      };
+      const m = perms[mod] ?? {};
+      await db
+        .insert(rolePermissionsTable)
+        .values({
+          role: "accountant",
           module: mod,
           canView: m.canView ?? false,
           canCreate: m.canCreate ?? false,

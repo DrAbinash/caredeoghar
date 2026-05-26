@@ -1449,6 +1449,30 @@ async function runStartupMigrations(): Promise<void> {
       -- ── Doctor address + area for marketing / area-based search ──
       ALTER TABLE doctors ADD COLUMN IF NOT EXISTS address TEXT;
       ALTER TABLE doctors ADD COLUMN IF NOT EXISTS area TEXT;
+
+      -- ── Role-Permissions Matrix (May 2026) ──
+      -- Granular per-role, per-module permission table.  The UI super-admin
+      -- portal edits this; at every staff login we derive the legacy
+      -- users.permissions JSON array from this table so existing ERP routes
+      -- and sidebar filtering keep working without code changes everywhere.
+      CREATE TABLE IF NOT EXISTS role_permissions (
+        id SERIAL PRIMARY KEY,
+        role TEXT NOT NULL,
+        module TEXT NOT NULL,
+        can_view BOOLEAN NOT NULL DEFAULT FALSE,
+        can_create BOOLEAN NOT NULL DEFAULT FALSE,
+        can_edit BOOLEAN NOT NULL DEFAULT FALSE,
+        can_delete BOOLEAN NOT NULL DEFAULT FALSE,
+        can_print BOOLEAN NOT NULL DEFAULT FALSE,
+        can_reprint BOOLEAN NOT NULL DEFAULT FALSE,
+        can_refund BOOLEAN NOT NULL DEFAULT FALSE,
+        can_export BOOLEAN NOT NULL DEFAULT FALSE,
+        can_approve BOOLEAN NOT NULL DEFAULT FALSE,
+        can_finalize BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(role, module)
+      );
     `);
     logger.info("Startup migrations applied");
   } catch (err) {

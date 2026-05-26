@@ -15,6 +15,25 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 
+// API response shape (camelCase with "can" prefix)
+interface ApiPermissionRow {
+  id: number;
+  role: string;
+  module: string;
+  canView: boolean;
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  canPrint: boolean;
+  canReprint: boolean;
+  canRefund: boolean;
+  canExport: boolean;
+  canApprove: boolean;
+  canFinalize: boolean;
+  updatedAt: string;
+}
+
+// UI shape (short lowercase keys)
 interface RolePermission {
   id: number;
   role: string;
@@ -32,16 +51,11 @@ interface RolePermission {
   updatedAt: string;
 }
 
-const ROLES = [
-  "super_admin",
-  "admin",
-  "reception",
-  "billing",
-  "radiology_typist",
-  "radiologist",
-  "lab_technician",
-  "accountant",
-];
+interface RolePermissionsResponse {
+  roles: string[];
+  modules: string[];
+  permissions: Record<string, ApiPermissionRow[]>;
+}
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: "Super Admin",
@@ -53,22 +67,6 @@ const ROLE_LABELS: Record<string, string> = {
   lab_technician: "Lab Technician",
   accountant: "Accountant",
 };
-
-const MODULES = [
-  "patients",
-  "doctors",
-  "tests",
-  "orders",
-  "billing",
-  "payments",
-  "reports",
-  "inventory",
-  "accounting",
-  "discounts",
-  "settings",
-  "appointments",
-  "banking",
-];
 
 const PERMISSIONS = [
   { key: "view", label: "View" },
@@ -83,15 +81,34 @@ const PERMISSIONS = [
   { key: "finalize", label: "Finalize" },
 ] as const;
 
+function apiRowToUi(row: ApiPermissionRow): RolePermission {
+  return {
+    id: row.id,
+    role: row.role,
+    module: row.module,
+    view: row.canView,
+    create: row.canCreate,
+    edit: row.canEdit,
+    delete: row.canDelete,
+    print: row.canPrint,
+    reprint: row.canReprint,
+    refund: row.canRefund,
+    export: row.canExport,
+    approve: row.canApprove,
+    finalize: row.canFinalize,
+    updatedAt: row.updatedAt,
+  };
+}
+
 export default function RolePermissions({ onBack }: { onBack: () => void }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [selectedRole, setSelectedRole] = useState<string>(ROLES[0]);
+  const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [dirty, setDirty] = useState<Set<string>>(new Set());
   const [changes, setChanges] = useState<Map<string, boolean>>(new Map());
   const [confirmReset, setConfirmReset] = useState(false);
 
-  const { data: permissions, isLoading } = useQuery<RolePermission[]>({
+  const { data, isLoading } = useQuery<RolePermissionsResponse>({
     queryKey: ["/api/admin/role-permissions"],
     queryFn: async () => {
       const res = await fetch("/api/admin/role-permissions", { headers: saAuthHeaders() });
@@ -100,11 +117,44 @@ export default function RolePermissions({ onBack }: { onBack: () => void }) {
     },
   });
 
+  const roles = data?.roles ?? [];
+  const modules = data?.modules ?? [];
+  // Default to first role once loaded
+  const activeRole = selectedRole ?? (roles[0] || null);
+
   const permMap = useMemo(() => {
     const map = new Map<string, RolePermission>();
-    permissions?.forEach(p => map.set(`${p.role}|${p.module}`, p));
+    if (!data?.permissions) return map;
+    for (const [role, rows] of Object.entries(data.permissions)) {
+      for (const row of rows) {
+        map.set(`${role}|${row.module}`, apiRowToUi(row));
+      }
+    }
+    // Fill missing modules with defaults (all false)
+    for (const role of roles) {
+      for (const mod of modules) {
+        if (!map.has(`${role}|${mod}`)) {
+          map.set(`${role}|${mod}`, {
+            id: 0,
+            role,
+            module: mod,
+            view: false,
+            create: false,
+            edit: false,
+            delete: false,
+            print: false,
+            reprint: false,
+            refund: false,
+            export: false,
+            approve: false,
+            finalize: false,
+            updatedAt: "",
+          });
+        }
+      }
+    }
     return map;
-  }, [permissions]);
+  }, [data, roles, modules]);
 
   const getPerm = (role: string, module: string, key: string): boolean => {
     const changeKey = `${role}|${module}|${key}`;
@@ -198,18 +248,21 @@ export default function RolePermissions({ onBack }: { onBack: () => void }) {
 
         {/* Role selector */}
         <div className="flex items-center gap-2 flex-wrap">
-          {ROLES.map(role => (
+          {roles.map(role => (
             <Button
               key={role}
-              variant={selectedRole === role ? "default" : "outline"}
+              variant={activeRole === role ? "default" : "outline"}
               size="sm"
               onClick={() => setSelectedRole(role)}
               className="capitalize"
             >
-              {ROLE_LABELS[role]}
+              {ROLE_LABELS[role] || role.replace(/_/g, " ")}
               {role === "super_admin" && <Lock size={11} className="ml-1.5 text-primary-foreground/70" />}
             </Button>
           ))}
+          {roles.length === 0 && (
+            <span className="text-sm text-muted-foreground">Loading roles…</span>
+          )}
         </div>
 
         {/* Permissions table */}
@@ -217,7 +270,7 @@ export default function RolePermissions({ onBack }: { onBack: () => void }) {
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm font-medium">
               <Shield size={14} className="text-primary" />
-              {ROLE_LABELS[selectedRole]} Permissions
+              {activeRole ? (ROLE_LABELS[activeRole] || activeRole.replace(/_/g, " ")) : "Select a role"} Permissions
             </div>
             {hasChanges && <Badge variant="secondary" className="text-[10px]">{dirty.size} unsaved changes</Badge>}
           </div>
@@ -235,18 +288,18 @@ export default function RolePermissions({ onBack }: { onBack: () => void }) {
                 {isLoading && (
                   <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">Loading permissions…</TableCell></TableRow>
                 )}
-                {MODULES.map(mod => (
+                {!isLoading && activeRole && modules.map(mod => (
                   <TableRow key={mod}>
                     <TableCell className="font-medium text-xs capitalize">{mod.replace(/_/g, " ")}</TableCell>
                     {PERMISSIONS.map(p => {
-                      const val = getPerm(selectedRole, mod, p.key);
-                      const changeKey = `${selectedRole}|${mod}|${p.key}`;
+                      const val = getPerm(activeRole, mod, p.key);
+                      const changeKey = `${activeRole}|${mod}|${p.key}`;
                       const isChanged = changes.has(changeKey);
                       return (
                         <TableCell key={p.key} className="text-center">
                           <Checkbox
                             checked={val}
-                            onCheckedChange={() => toggle(selectedRole, mod, p.key)}
+                            onCheckedChange={() => toggle(activeRole, mod, p.key)}
                             className={isChanged ? "border-primary" : ""}
                           />
                         </TableCell>
@@ -254,6 +307,9 @@ export default function RolePermissions({ onBack }: { onBack: () => void }) {
                     })}
                   </TableRow>
                 ))}
+                {!isLoading && !activeRole && (
+                  <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">Select a role to view permissions</TableCell></TableRow>
+                )}
               </TableBody>
             </Table>
           </div>
