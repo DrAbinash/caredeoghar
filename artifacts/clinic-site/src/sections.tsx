@@ -52,7 +52,7 @@ export function HeaderSection({ section, settings, pages, basePath }: { section:
   const ctaHref = safeCta.startsWith("/") ? `${basePath}${safeCta.replace(/^\//, "")}` : safeCta;
   const phone   = settings.contactPhone || "9973497200";
   const waNum   = (settings.whatsappNumber || phone).replace(/[^0-9]/g, "");
-  const addr    = settings.address || "Subhash Chowk, Castairs Town, Deoghar";
+  const addr    = settings.address || "Jayshankar Bhawan, Bilasi Town, Deoghar, Ward No. 27, Hiralal Pal Road, Deoghar, Jharkhand \u2013 814112";
 
   return (
     <>
@@ -661,8 +661,8 @@ export function FooterSection({ section, settings, basePath }: { section: Sectio
   const year      = new Date().getFullYear();
   const siteName  = settings.siteTitle || "Care Diagnostics";
   const phone     = settings.contactPhone || "9973497200";
-  const email     = settings.contactEmail || "care.deoghar@gmail.com";
-  const addr      = settings.address || "Subhash Chowk, Castairs Town, Deoghar, Jharkhand 814112";
+  const email     = settings.contactEmail || "CARE.DEOGHAR@GMAIL.COM";
+  const addr      = settings.address || "Jayshankar Bhawan, Bilasi Town, Deoghar, Ward No. 27, Hiralal Pal Road, Deoghar, Jharkhand \u2013 814112";
   const waNum     = (settings.whatsappNumber || phone).replace(/[^0-9]/g, "");
   const social    = parseSocial(settings.socialLinks);
   const svcLinks  = Array.isArray(c.services) ? (c.services as Array<{ label: string; url: string }>) : [];
@@ -687,6 +687,12 @@ export function FooterSection({ section, settings, basePath }: { section: Sectio
     { label: "Contact Us",       href: "#contact" },
     { label: "Patient Portal",   href: "/erp/portal" },
     { label: "Staff Login",      href: "/erp/portal" },
+  ];
+  const defaultPolicyLinks = [
+    { label: "Privacy Policy",       href: "/policies" },
+    { label: "Terms & Conditions",   href: "/policies" },
+    { label: "Refund Policy",        href: "/policies" },
+    { label: "Cancellation Policy",  href: "/policies" },
   ];
 
   return (
@@ -781,9 +787,9 @@ export function FooterSection({ section, settings, basePath }: { section: Sectio
       <div className="footer-bottom">
         <span>{customText || `© ${year} ${siteName}. All rights reserved.`}</span>
         <div className="footer-bottom-links">
-          <a href="#">Privacy Policy</a>
-          <a href="#">Refund Policy</a>
-          <a href="#">Terms & Conditions</a>
+          {defaultPolicyLinks.map((l, i) => (
+            <a key={`p${i}`} href={`${basePath}${l.href.replace(/^\//, "")}`.replace(/\/+/g, "/")}>{l.label}</a>
+          ))}
           <a href="/erp/portal">Staff Login</a>
         </div>
       </div>

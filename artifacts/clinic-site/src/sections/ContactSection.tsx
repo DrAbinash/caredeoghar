@@ -15,13 +15,13 @@ const DEFAULT_MAP = "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3644.
 export default function ContactSection({ section, settings }: { section: Section; settings: SiteSettings }) {
   const c        = section.config;
   const heading  = get(c, "heading",    "Visit Care Diagnostics");
-  const sub      = get(c, "subheading", "We are located at Subhash Chowk, Castairs Town, Deoghar. Call or WhatsApp us for appointments and report queries.");
+  const sub      = get(c, "subheading", "Jayshankar Bhawan, Bilasi Town, Deoghar, Ward No. 27, Hiralal Pal Road, Deoghar, Jharkhand \u2013 814112. Call or WhatsApp us for appointments and report queries.");
   const mapEmbed = get(c, "mapEmbed",   DEFAULT_MAP);
   const showForm = getBool(c, "showForm", true);
 
   const phone  = settings.contactPhone || "9973497200";
-  const email  = settings.contactEmail || "care.deoghar@gmail.com";
-  const addr   = settings.address      || "Subhash Chowk, Castairs Town, Deoghar, Jharkhand 814112";
+  const email  = settings.contactEmail || "CARE.DEOGHAR@GMAIL.COM";
+  const addr   = settings.address      || "Jayshankar Bhawan, Bilasi Town, Deoghar, Ward No. 27, Hiralal Pal Road, Deoghar, Jharkhand \u2013 814112";
   const waNum  = (settings.whatsappNumber || phone).replace(/[^0-9]/g, "");
 
   return (

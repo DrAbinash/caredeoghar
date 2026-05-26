@@ -311,7 +311,7 @@ export default function Doctors() {
             </div>
             <div>
               <Label>Area / Locality</Label>
-              <Input {...register("area")} className="mt-1" placeholder="e.g. Castair's Town, Deoghar" />
+              <Input {...register("area")} className="mt-1" placeholder="e.g. Bilasi Town, Deoghar" />
             </div>
             <div>
               <Label>Medical Council Registration No.</Label>
@@ -363,7 +363,7 @@ export default function Doctors() {
             </div>
             <div>
               <Label>Area / Locality</Label>
-              <Input {...regEdit("area")} className="mt-1" placeholder="e.g. Castair's Town, Deoghar" />
+              <Input {...regEdit("area")} className="mt-1" placeholder="e.g. Bilasi Town, Deoghar" />
             </div>
             <div>
               <Label>Medical Council Registration No.</Label>

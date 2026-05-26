@@ -1036,7 +1036,7 @@ function ClinicInfoTab() {
                       }}>
                         <div>
                           <div style={{ fontSize: "6px", fontWeight: 800, color: preset.id === "classic" ? "#1e40af" : "#111" }}>CARE DIAGNOSTICS</div>
-                          <div style={{ fontSize: "4px", color: "#666" }}>Subhash Chowk, Castair's Town</div>
+                          <div style={{ fontSize: "4px", color: "#666" }}>Jayshankar Bhawan, Bilasi Town, Ward No. 27, Hiralal Pal Road</div>
                           <div style={{ fontSize: "4px", color: "#666" }}>Ph: 9973497200</div>
                         </div>
                         <div style={{ width: 12, height: 12, background: "#f0f0f0", border: "1px solid #ccc", borderRadius: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 3, color: "#999" }}>QR</div>

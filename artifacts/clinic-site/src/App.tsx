@@ -8,6 +8,7 @@ import { applyTheme } from "./theme";
 import { HeadManager } from "./head";
 import { SectionRenderer } from "./sections";
 import { WhatsAppFab, PopupHost } from "./widgets";
+import PoliciesPage from "./pages/policies";
 
 const BASE = import.meta.env.BASE_URL;
 const ROUTER_BASE = BASE.replace(/\/$/, "");
@@ -25,8 +26,8 @@ function StructuredData({ settings }: { settings: SiteSettings }) {
 
     const phone = settings.contactPhone || "9973497200";
     const name  = settings.siteTitle || "Care Diagnostics";
-    const addr  = settings.address   || "Subhash Chowk, Castairs Town, Deoghar, Jharkhand 814112";
-    const email = settings.contactEmail || "care.deoghar@gmail.com";
+    const addr  = settings.address   || "Jayshankar Bhawan, Bilasi Town, Deoghar, Ward No. 27, Hiralal Pal Road, Deoghar, Jharkhand – 814112";
+    const email = settings.contactEmail || "CARE.DEOGHAR@GMAIL.COM";
 
     const schema = {
       "@context": "https://schema.org",
@@ -41,7 +42,7 @@ function StructuredData({ settings }: { settings: SiteSettings }) {
           "email": email,
           "address": {
             "@type": "PostalAddress",
-            "streetAddress": "Subhash Chowk, Castairs Town",
+            "streetAddress": "Jayshankar Bhawan, Bilasi Town, Ward No. 27, Hiralal Pal Road",
             "addressLocality": "Deoghar",
             "addressRegion": "Jharkhand",
             "postalCode": "814112",
@@ -154,6 +155,10 @@ function PageView({ slug, settings, pages, popups, isPreview }: { slug: string; 
   );
 }
 
+function PoliciesRoute({ settings }: { settings: SiteSettings }) {
+  return <PoliciesPage settings={settings} />;
+}
+
 function AppShell({ settings, pages, popups, isPreview }: { settings: SiteSettings; pages: Page[]; popups: Popup[]; isPreview: boolean }) {
   const [loc] = useLocation();
   const slug = loc === "/" || loc === "" ? "home" : loc.replace(/^\//, "").split("/")[0];
@@ -198,6 +203,15 @@ function AppShell({ settings, pages, popups, isPreview }: { settings: SiteSettin
   }, []);
 
   if (slug === "appointment") return null;
+
+  if (slug === "policies") {
+    return (
+      <>
+        {isPreview && <div className="preview-banner">Preview mode — showing drafts. Visitors won't see this until you publish.</div>}
+        <PoliciesRoute settings={settings} />
+      </>
+    );
+  }
 
   return (
     <>

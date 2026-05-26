@@ -24,7 +24,7 @@ export default function AboutScreen() {
         <View style={[styles.hero, { backgroundColor: colors.primary }]}>
           <Feather name="activity" size={36} color="#fff" />
           <Text style={styles.heroTitle}>Care Diagnostics</Text>
-          <Text style={styles.heroSub}>Subhash Chowk, Castairs Town, Deoghar</Text>
+          <Text style={styles.heroSub}>Jayshankar Bhawan, Bilasi Town, Deoghar</Text>
         </View>
 
         <Section title="About Us" colors={colors}>
@@ -44,9 +44,9 @@ export default function AboutScreen() {
 
         <Section title="Contact" colors={colors}>
           <ContactRow icon="phone" label="Phone" value={clinic.phone || "9973497200"} colors={colors} onPress={() => Linking.openURL(`tel:${clinic.phone || "9973497200"}`)} />
-          <ContactRow icon="map-pin" label="Address" value="Subhash Chowk, Castairs Town, Deoghar, Jharkhand" colors={colors} />
+          <ContactRow icon="map-pin" label="Address" value="Jayshankar Bhawan, Bilasi Town, Deoghar, Ward No. 27, Hiralal Pal Road, Deoghar, Jharkhand \u2013 814112" colors={colors} />
           <ContactRow icon="clock" label="Timings" value="Mon-Sat: 7:00 AM - 7:00 PM | Sun: 8:00 AM - 2:00 PM" colors={colors} />
-          <ContactRow icon="mail" label="Email" value={clinic.email || "care@diagnostics.com"} colors={colors} onPress={() => Linking.openURL(`mailto:${clinic.email || "care@diagnostics.com"}`)} />
+          <ContactRow icon="mail" label="Email" value={clinic.email || "CARE.DEOGHAR@GMAIL.COM"} colors={colors} onPress={() => Linking.openURL(`mailto:${clinic.email || "CARE.DEOGHAR@GMAIL.COM"}`)} />
         </Section>
 
         <Section title="Why Choose Us" colors={colors}>

@@ -67,7 +67,7 @@ type FormFData = {
 
 function defaultForm(): FormFData {
   return {
-    centreName: "CARE DIAGNOSTICS\nNear Bajla Mahila College, Saint Francis School Road, Castair's Town, Deoghar",
+    centreName: "CARE DIAGNOSTICS\nJayshankar Bhawan, Bilasi Town, Deoghar, Ward No. 27, Hiralal Pal Road, Deoghar, Jharkhand \u2013 814112",
     registrationNo: "34/2020",
     billNumber: "",
     patientName: "",
