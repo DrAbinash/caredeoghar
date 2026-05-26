@@ -421,22 +421,22 @@ function FormFPrint({ form, idCardImageUrl }: FormFPrintProps) {
       </div>
 
       {/* Footer note */}
-      <div style={{ fontSize: 8, color: "#666", textAlign: "center", marginTop: 6 }}>
+      <div style={{ fontSize: 8, color: "#666", textAlign: "center", marginTop: 4 }}>
         *Strike out whichever is not applicable or not necessary* &nbsp;|&nbsp; Reg. No. {form.registrationNo}
         {form.billNumber ? ` | Bill No. ${form.billNumber}` : ""}
       </div>
 
-      {/* ── ID Card Attachment ── */}
+      {/* ── Compact ID Card thumbnail ── */}
       {idCardImageUrl && (
-        <div style={{ marginTop: 10, borderTop: "1.5px dashed #666", paddingTop: 8, pageBreakInside: "avoid" }}>
-          <div style={{ fontSize: 10, fontWeight: 700, marginBottom: 6, textAlign: "center" }}>
-            ATTACHED ID CARD / AADHAAR COPY
+        <div style={{ marginTop: 8, borderTop: "1px dashed #999", paddingTop: 6, display: "flex", alignItems: "flex-start", gap: 8 }}>
+          <div style={{ flex: 1, fontSize: 9, color: "#555", lineHeight: 1.4 }}>
+            <span style={{ fontWeight: 700 }}>ID Proof attached:</span> Patient identification document verified and scanned. Original retained at clinic.
           </div>
-          <div style={{ display: "flex", justifyContent: "center" }}>
+          <div style={{ width: "55mm", height: "38mm", border: "1px solid #333", borderRadius: 2, overflow: "hidden", flexShrink: 0, backgroundColor: "#f5f5f5" }}>
             <img
               src={idCardImageUrl}
-              alt="Patient ID Card"
-              style={{ maxHeight: "80mm", maxWidth: "160mm", border: "1.5px solid #333", borderRadius: 3 }}
+              alt="Patient ID"
+              style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
             />
           </div>
         </div>
@@ -544,7 +544,14 @@ export default function FormF() {
       if (resp.ocr?.address) setIdCardExtractedAddress(resp.ocr.address);
       toast({ title: resp.ocr ? `Scanner ID: ${resp.ocr.documentType}` : "Scanned (OCR unavailable)" });
     } catch (e) {
-      toast({ title: "Scanner error", description: e instanceof Error ? e.message : "Could not scan", variant: "destructive" });
+      const msg = e instanceof Error ? e.message : "Could not scan";
+      toast({
+        title: "Scanner error",
+        description: msg === "Scan failed" || msg === "Internal server error"
+          ? "Scanner bridge responded with an error. Check that the scanner is powered on and the desktop bridge app is running. Try the Camera button as an alternative."
+          : msg,
+        variant: "destructive",
+      });
     } finally {
       setScanning(false);
     }
