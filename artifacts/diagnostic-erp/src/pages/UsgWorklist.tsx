@@ -109,6 +109,14 @@ export default function UsgWorklist() {
         }
       />
 
+      {/* ── Debug banner ── */}
+      {allWorklist.length > 0 && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+          <p className="font-semibold">Debug — {allWorklist.length} studies loaded</p>
+          <p>First entry ID={allWorklist[0].id} UID={JSON.stringify(allWorklist[0].studyInstanceUid)} Accession={JSON.stringify(allWorklist[0].accessionNumber)}</p>
+        </div>
+      )}
+
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -191,29 +199,44 @@ export default function UsgWorklist() {
 
                     <div className="flex flex-wrap gap-2 mt-3">
                       <Button size="sm" variant="default"
-                        disabled={!uid}
-                        onClick={() => uid && navigate(`/usg/measurements/${uid}`)}
+                        disabled={launching === `${uid}:meas`}
+                        onClick={() => {
+                          console.log("[USG] Measurements clicked", { uid, entryId: entry.id });
+                          if (!uid) { toast({ title: "No study UID", description: "This study has no DICOM UID assigned.", variant: "destructive" }); return; }
+                          window.location.href = `/erp/usg/measurements/${uid}`;
+                        }}
                       >
                         <ScanSearch className="h-3.5 w-3.5 mr-1.5" /> Measurements
                         <ChevronRight className="h-3.5 w-3.5 ml-1 opacity-60" />
                       </Button>
                       <Button size="sm" variant="outline"
-                        disabled={!uid || launching === `${uid}:ohif`}
-                        onClick={() => uid && launchViewer(uid, "ohif")}
+                        disabled={launching === `${uid}:ohif`}
+                        onClick={() => {
+                          console.log("[USG] OHIF clicked", { uid, entryId: entry.id });
+                          if (!uid) { toast({ title: "No study UID", description: "This study has no DICOM UID assigned.", variant: "destructive" }); return; }
+                          launchViewer(uid, "ohif");
+                        }}
                       >
                         <Monitor className="h-3.5 w-3.5 mr-1.5" /> OHIF
                         <ExternalLink className="h-3 w-3 ml-1 opacity-60" />
                       </Button>
                       <Button size="sm" variant="outline"
-                        disabled={!uid || launching === `${uid}:weasis`}
-                        onClick={() => uid && launchViewer(uid, "weasis")}
+                        disabled={launching === `${uid}:weasis`}
+                        onClick={() => {
+                          console.log("[USG] Weasis clicked", { uid, entryId: entry.id });
+                          if (!uid) { toast({ title: "No study UID", description: "This study has no DICOM UID assigned.", variant: "destructive" }); return; }
+                          launchViewer(uid, "weasis");
+                        }}
                       >
                         <Monitor className="h-3.5 w-3.5 mr-1.5" /> Weasis
                         <ExternalLink className="h-3 w-3 ml-1 opacity-60" />
                       </Button>
                       <Button size="sm" variant="outline"
-                        disabled={!uid}
-                        onClick={() => uid && navigate(`/usg/reporting?studyUID=${encodeURIComponent(uid)}`)}
+                        onClick={() => {
+                          console.log("[USG] Draft Report clicked", { uid, entryId: entry.id });
+                          if (!uid) { toast({ title: "No study UID", description: "This study has no DICOM UID assigned.", variant: "destructive" }); return; }
+                          window.location.href = `/erp/usg/reporting?studyUID=${encodeURIComponent(uid)}`;
+                        }}
                       >
                         <FileText className="h-3.5 w-3.5 mr-1.5" /> Draft Report
                       </Button>
