@@ -192,10 +192,7 @@ portalRouter.post("/patient-login", patientLoginLimiter, async (req, res) => {
     res.status(400).json({ error: "Mobile number and date of birth are required" });
     return;
   }
-  if (!accessCode) {
-    res.status(400).json({ error: "Portal access code is required. Please contact reception if you have not received one." });
-    return;
-  }
+  // NOTE: accessCode is optional while portal PIN self-service is not yet enabled.
 
   const digits = phone.replace(/\D/g, "");
   if (digits.length < 6) {
@@ -241,42 +238,37 @@ portalRouter.post("/patient-login", patientLoginLimiter, async (req, res) => {
     return;
   }
 
-  // Factor 3: portal access code must be set and match.
-  // If no access code has been issued for this patient, login is not possible.
-  if (!patient.portalPinHash) {
-    res.status(401).json({
-      error: "Your portal access has not been activated. Please visit reception to receive your portal access code.",
-    });
-    return;
-  }
-
-  // Per-patient lockout check
-  const now = Date.now();
-  const failure = patientLoginFailures.get(patient.id);
-  if (failure && failure.lockedUntil > now) {
-    const minutesLeft = Math.ceil((failure.lockedUntil - now) / 60_000);
-    res.status(429).json({
-      error: `Too many incorrect access code attempts. Please try again in ${minutesLeft} minute${minutesLeft !== 1 ? "s" : ""} or contact reception.`,
-    });
-    return;
-  }
-
-  const codeMatches = await bcrypt.compare(accessCode, patient.portalPinHash);
-  if (!codeMatches) {
-    // Increment failure counter
-    const prev = patientLoginFailures.get(patient.id) ?? { attempts: 0, lockedUntil: 0 };
-    const newAttempts = prev.attempts + 1;
-    if (newAttempts >= MAX_PATIENT_LOGIN_ATTEMPTS) {
-      patientLoginFailures.set(patient.id, { attempts: newAttempts, lockedUntil: now + PATIENT_LOCKOUT_MS });
-    } else {
-      patientLoginFailures.set(patient.id, { attempts: newAttempts, lockedUntil: 0 });
+  // Factor 3: portal access code (optional while self-service PIN is not enabled).
+  // If the patient has a portalPinHash and an accessCode is supplied, verify it.
+  // Otherwise login with phone + DOB only.
+  if (accessCode && patient.portalPinHash) {
+    // Per-patient lockout check
+    const now = Date.now();
+    const failure = patientLoginFailures.get(patient.id);
+    if (failure && failure.lockedUntil > now) {
+      const minutesLeft = Math.ceil((failure.lockedUntil - now) / 60_000);
+      res.status(429).json({
+        error: `Too many incorrect access code attempts. Please try again in ${minutesLeft} minute${minutesLeft !== 1 ? "s" : ""} or contact reception.`,
+      });
+      return;
     }
-    res.status(401).json({ error: genericError });
-    return;
-  }
 
-  // Successful login — clear failure record
-  patientLoginFailures.delete(patient.id);
+    const codeMatches = await bcrypt.compare(accessCode, patient.portalPinHash);
+    if (!codeMatches) {
+      const prev = patientLoginFailures.get(patient.id) ?? { attempts: 0, lockedUntil: 0 };
+      const newAttempts = prev.attempts + 1;
+      if (newAttempts >= MAX_PATIENT_LOGIN_ATTEMPTS) {
+        patientLoginFailures.set(patient.id, { attempts: newAttempts, lockedUntil: now + PATIENT_LOCKOUT_MS });
+      } else {
+        patientLoginFailures.set(patient.id, { attempts: newAttempts, lockedUntil: 0 });
+      }
+      res.status(401).json({ error: genericError });
+      return;
+    }
+
+    // Successful PIN verify — clear failure record
+    patientLoginFailures.delete(patient.id);
+  }
 
   await pruneExpiredSessions();
   const token = crypto.randomBytes(24).toString("hex");

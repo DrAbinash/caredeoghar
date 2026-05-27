@@ -351,7 +351,6 @@ function PatientLogin() {
   const [, navigate] = useLocation();
   const [phone, setPhone] = useState("");
   const [dob, setDob] = useState("");
-  const [accessCode, setAccessCode] = useState("");
   const [error, setError] = useState("");
   const { data: settings } = useQuery<PortalSettings>({
     queryKey: ["portal-settings"],
@@ -359,7 +358,7 @@ function PatientLogin() {
   });
 
   const login = useMutation({
-    mutationFn: (body: { phone: string; dateOfBirth: string; accessCode: string }) =>
+    mutationFn: (body: { phone: string; dateOfBirth: string }) =>
       api.post<PatientSession>("/api/portal/patient-login", body),
     onSuccess: (s) => {
       localStorage.setItem(PATIENT_KEY, JSON.stringify(s));
@@ -368,7 +367,7 @@ function PatientLogin() {
     onError: (e: Error) => setError(e.message),
   });
 
-  const canSubmit = phone.trim().length > 0 && dob.trim().length > 0 && accessCode.trim().length > 0;
+  const canSubmit = phone.trim().length > 0 && dob.trim().length > 0;
 
   return (
     <>
@@ -387,14 +386,14 @@ function PatientLogin() {
           </div>
           <h1 className="text-2xl font-bold text-center mb-2">Patient Login</h1>
           <p className="text-muted-foreground text-sm text-center mb-6">
-            Enter your registered mobile number, date of birth, and the portal access code provided by reception.
+            Enter your registered mobile number and date of birth to access your records.
           </p>
 
           <form
             onSubmit={(e) => {
               e.preventDefault();
               setError("");
-              login.mutate({ phone: phone.trim(), dateOfBirth: dob.trim(), accessCode: accessCode.trim() });
+              login.mutate({ phone: phone.trim(), dateOfBirth: dob.trim() });
             }}
             className="space-y-4"
           >
@@ -422,19 +421,6 @@ function PatientLogin() {
               />
             </div>
 
-            <div>
-              <Label htmlFor="accessCode">Portal Access Code</Label>
-              <Input
-                id="accessCode"
-                type="password"
-                placeholder="Code provided by reception"
-                value={accessCode}
-                onChange={(e) => setAccessCode(e.target.value)}
-                className="mt-1.5 h-12"
-                autoComplete="current-password"
-              />
-            </div>
-
             {error && (
               <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg p-3 text-sm text-red-700 dark:text-red-400 flex items-start gap-2">
                 <AlertCircle size={16} className="mt-0.5 shrink-0" /> {error}
@@ -445,10 +431,6 @@ function PatientLogin() {
               {login.isPending ? <><Loader2 size={16} className="mr-2 animate-spin" /> Signing in…</> : <>Continue <ArrowRight size={16} className="ml-2" /></>}
             </Button>
           </form>
-
-          <p className="text-xs text-muted-foreground text-center mt-6">
-            Don't have a portal access code? Please visit reception — they will set one up for you when you register.
-          </p>
         </div>
       </div>
     </>
