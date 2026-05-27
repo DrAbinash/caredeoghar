@@ -568,14 +568,20 @@ function FormulaHint({ text }: { text: string }) {
 // ─── Daily Financial Reconciliation ───────────────────────────────────────
 
 function DailyFinancialReconciliation({ summary: s }: { summary: MyDailySummarySummary }) {
-  // ── Three-step accounting flow (no "active bill" concept) ──
-  const totalRefunds = s.cashRefunded + s.digitalRefunded;
+  // ── Three-step accounting flow ──
+  // IMPORTANT: Refunds are NOT subtracted again here. When a bill is cancelled,
+  // the cancellation already removes the billing value from Effective Billing.
+  // The refund is just the cash movement that corresponds to that cancellation.
+  // Subtracting both would double-count the same ₹7,500.
 
   // Step 1: Effective Billing Value
   const effectiveBilling = s.grossBilledIncludingCancelled + s.duesCollectedTotal - s.cancelledAmount;
 
   // Step 2: Expected Collection
-  const expectedCollection = effectiveBilling - s.outstanding - totalRefunds - s.totalExpenses;
+  // Outstanding = money billed but not yet collected (still pending)
+  // Expenses = money collected but spent on business operations
+  // Refunds are already accounted for via cancellations above.
+  const expectedCollection = effectiveBilling - s.outstanding - s.totalExpenses;
 
   // Step 3: Expected Cash in Counter
   const netDigitalCollection = s.digitalCollection - s.digitalRefunded;
@@ -631,12 +637,12 @@ function DailyFinancialReconciliation({ summary: s }: { summary: MyDailySummaryS
         {/* ─── STEP 2: EXPECTED COLLECTION ─── */}
         <div className="mt-3" />
         <RecRow label="Pending Dues" value={s.outstanding} type="deduct" />
-        <CompactRow label="Refunds (Cash / Digital)" cash={s.cashRefunded} digital={s.digitalRefunded} isDeduct />
+        <CompactRow label="Refunds (Cash / Digital)" cash={s.cashRefunded} digital={s.digitalRefunded} />
         <CompactRow label="Expenses (Cash / Digital)" cash={s.cashExpenses} digital={s.digitalExpenses} isDeduct />
         <MajorDivider color="blue" />
         <div>
           <RecRow label="Expected Collection" value={expectedCollection} type="result" />
-          <FormulaHint text="Effective − Pending − Refunds − Expenses" />
+          <FormulaHint text="Effective − Pending − Expenses" />
         </div>
 
         {/* ─── STEP 3: EXPECTED CASH IN COUNTER ─── */}
@@ -663,7 +669,7 @@ function DailyFinancialReconciliation({ summary: s }: { summary: MyDailySummaryS
       <div className="px-5 py-2.5 bg-slate-50 dark:bg-slate-900/20 border-t border-gray-200 dark:border-card-border">
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400">
           <span>Effective = New Billing + Old Dues − Cancelled</span>
-          <span>Expected Collection = Effective − Pending − Refunds − Expenses</span>
+          <span>Expected Collection = Effective − Pending − Expenses</span>
           <span>Expected Cash = Expected Collection − Net Digital</span>
         </div>
       </div>
