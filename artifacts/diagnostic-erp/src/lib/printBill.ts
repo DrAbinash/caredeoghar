@@ -123,11 +123,11 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
   const chqAmt = payByMode["cheque"] || 0;
 
   // ── Sizing tuned for A5 thermal receipt ──
-  const pageMargin = isA5 ? "3mm" : "8mm";
+  const pageMargin = isA5 ? "2mm" : "8mm";
   const titleSize = isA5 ? "15px" : "16px";
-  const patientNameSize = isA5 ? "17px" : "18px";
-  const bodyPx = isA5 ? "13px" : "13px";
-  const headerPx = isA5 ? "13px" : "14px";       // clinic info right column
+  const patientNameSize = isA5 ? "14px" : "18px";   // smaller = less blank space below short bills
+  const bodyPx = isA5 ? "14px" : "13px";            // tagline under logo
+  const headerPx = isA5 ? "15px" : "14px";           // clinic address / phone / email (bigger)
   const tablePx = isA5 ? "12px" : "12px";
   const totalPx = isA5 ? "13px" : "13px";
   const footerPx = isA5 ? "11px" : "11px";
