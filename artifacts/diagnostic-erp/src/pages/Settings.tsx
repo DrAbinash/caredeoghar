@@ -1382,8 +1382,187 @@ type OnlineBookingSettings = {
   bharatpeMerchantId: string;
   cashfreeEnabled: boolean;
   cashfreeAppId: string;
-  onlineBookingAllowedTestIds: number[];
+  onlineBookingAllowedTestIds: string;
+  onlineBookingAllowedPackageIds: string;
 };
+
+type OBTest = { id: number; name: string; code: string; category: string; isActive: boolean };
+type OBPkg = { id: number; name: string; packageCode: string; price: number; isActive: boolean };
+
+function OnlineBookingCatalogSelector({
+  form,
+  setForm,
+  save,
+}: {
+  form: OnlineBookingSettings;
+  setForm: React.Dispatch<React.SetStateAction<OnlineBookingSettings | null>>;
+  save: ReturnType<typeof useMutation<unknown, Error, OnlineBookingSettings>>;
+}) {
+  const [testSearch, setTestSearch] = useState("");
+  const [pkgSearch, setPkgSearch] = useState("");
+
+  const { data: tests = [], isLoading: testsLoading } = useQuery<OBTest[]>({
+    queryKey: ["tests-all-ob"],
+    queryFn: () => api.get<{ tests: OBTest[] }>("/api/tests?limit=500").then((d) => d.tests ?? []),
+  });
+  const { data: pkgs = [], isLoading: pkgsLoading } = useQuery<OBPkg[]>({
+    queryKey: ["packages-all-ob"],
+    queryFn: () => api.get<OBPkg[]>("/api/packages"),
+  });
+
+  const allowedTestIds = useMemo(() => {
+    try { return new Set<number>(JSON.parse(form.onlineBookingAllowedTestIds || "[]")); }
+    catch { return new Set<number>(); }
+  }, [form.onlineBookingAllowedTestIds]);
+
+  const allowedPkgIds = useMemo(() => {
+    try { return new Set<number>(JSON.parse(form.onlineBookingAllowedPackageIds || "[]")); }
+    catch { return new Set<number>(); }
+  }, [form.onlineBookingAllowedPackageIds]);
+
+  const activeTests = tests.filter((t) => t.isActive !== false);
+  const filteredTests = activeTests.filter((t) => {
+    if (!testSearch.trim()) return true;
+    const q = testSearch.toLowerCase();
+    return t.name.toLowerCase().includes(q) || t.code.toLowerCase().includes(q) || t.category.toLowerCase().includes(q);
+  });
+
+  const activePkgs = pkgs.filter((p) => p.isActive !== false);
+  const filteredPkgs = activePkgs.filter((p) => {
+    if (!pkgSearch.trim()) return true;
+    const q = pkgSearch.toLowerCase();
+    return p.name.toLowerCase().includes(q) || (p.packageCode ?? "").toLowerCase().includes(q);
+  });
+
+  const byCategory: Record<string, OBTest[]> = {};
+  for (const t of filteredTests) {
+    if (!byCategory[t.category]) byCategory[t.category] = [];
+    byCategory[t.category].push(t);
+  }
+
+  const toggleTest = (id: number) => {
+    const next = new Set(allowedTestIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setForm((prev) => prev && { ...prev, onlineBookingAllowedTestIds: JSON.stringify([...next]) });
+  };
+  const togglePkg = (id: number) => {
+    const next = new Set(allowedPkgIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setForm((prev) => prev && { ...prev, onlineBookingAllowedPackageIds: JSON.stringify([...next]) });
+  };
+
+  if (testsLoading || pkgsLoading) {
+    return <div className="bg-card border border-card-border rounded-xl p-8 text-center text-muted-foreground animate-pulse">Loading catalog…</div>;
+  }
+
+  return (
+    <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-bold flex items-center gap-2">
+            <ClipboardList size={16} className="text-primary" />
+            Online Booking Catalog
+          </h3>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Pick which tests and packages patients can book online.
+            When <strong>none are selected</strong>, all active tests/packages are shown on the website.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-sm font-semibold text-primary">{allowedTestIds.size} test(s), {allowedPkgIds.size} package(s)</span>
+          <Button onClick={() => save.mutate(form)} disabled={save.isPending} size="sm">
+            {save.isPending ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </div>
+
+      {save.isSuccess && (
+        <div className="text-xs text-green-600 font-medium">✓ Catalog whitelist saved successfully.</div>
+      )}
+
+      {/* Tests */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <FlaskConical size={14} className="text-muted-foreground" />
+          <span className="font-semibold text-sm">Tests</span>
+          <span className="text-xs text-muted-foreground">({activeTests.length} active)</span>
+        </div>
+        <div className="relative mb-2">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search tests…"
+            value={testSearch}
+            onChange={(e) => setTestSearch(e.target.value)}
+            className="pl-9 h-9"
+          />
+        </div>
+        {Object.keys(byCategory).length === 0 ? (
+          <p className="text-sm text-muted-foreground">No active tests found.</p>
+        ) : (
+          <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+            {Object.entries(byCategory).sort(([a], [b]) => a.localeCompare(b)).map(([cat, items]) => (
+              <div key={cat}>
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">{cat}</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  {items.map((t) => (
+                    <label key={t.id} className="flex items-start gap-2 p-2 rounded-lg border border-card-border cursor-pointer hover:bg-muted/40 transition-colors">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 accent-primary w-4 h-4"
+                        checked={allowedTestIds.has(t.id)}
+                        onChange={() => toggleTest(t.id)}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{t.name}</div>
+                        <div className="text-xs text-muted-foreground">{t.code}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Packages */}
+      {activePkgs.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Boxes size={14} className="text-muted-foreground" />
+            <span className="font-semibold text-sm">Packages</span>
+            <span className="text-xs text-muted-foreground">({activePkgs.length} active)</span>
+          </div>
+          <div className="relative mb-2">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search packages…"
+              value={pkgSearch}
+              onChange={(e) => setPkgSearch(e.target.value)}
+              className="pl-9 h-9"
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
+            {filteredPkgs.map((p) => (
+              <label key={p.id} className="flex items-start gap-2 p-2 rounded-lg border border-card-border cursor-pointer hover:bg-muted/40 transition-colors">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 accent-primary w-4 h-4"
+                  checked={allowedPkgIds.has(p.id)}
+                  onChange={() => togglePkg(p.id)}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{p.name}</div>
+                  <div className="text-xs text-muted-foreground">₹{Number(p.price).toLocaleString("en-IN")}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function OnlineBookingTab() {
   const qc = useQueryClient();
@@ -1416,7 +1595,8 @@ function OnlineBookingTab() {
       bharatpeMerchantId: data.bharatpeMerchantId || "",
       cashfreeEnabled: data.cashfreeEnabled ?? false,
       cashfreeAppId: data.cashfreeAppId || "",
-      onlineBookingAllowedTestIds: data.onlineBookingAllowedTestIds || [],
+      onlineBookingAllowedTestIds: data.onlineBookingAllowedTestIds || "[]",
+      onlineBookingAllowedPackageIds: data.onlineBookingAllowedPackageIds || "[]",
     });
   }, [data]);
 
@@ -1475,6 +1655,8 @@ function OnlineBookingTab() {
           <Button onClick={() => save.mutate(form)} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
         </div>
       </div>
+
+      <OnlineBookingCatalogSelector form={form} setForm={setForm} save={save} />
 
       {/* PayU India */}
       <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
@@ -1699,14 +1881,6 @@ function OnlineBookingTab() {
         </div>
       </div>
 
-      {/* Test Whitelist */}
-      <OnlineBookingTestPicker
-        allowedIds={form.onlineBookingAllowedTestIds}
-        onChange={(ids) => setForm({ ...form, onlineBookingAllowedTestIds: ids })}
-        onSave={() => save.mutate(form)}
-        isPending={save.isPending}
-      />
-
       {bookingQrUrl && (
         <div className="bg-card border border-card-border rounded-xl p-5 space-y-3">
           <h3 className="font-bold">WhatsApp Booking QR (Fallback)</h3>
@@ -1722,99 +1896,6 @@ function OnlineBookingTab() {
               <p className="text-muted-foreground">Use this as a temporary booking entry point while online payment is being configured.</p>
             </div>
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function OnlineBookingTestPicker({ allowedIds, onChange, onSave, isPending }: { allowedIds: number[]; onChange: (ids: number[]) => void; onSave: () => void; isPending: boolean }) {
-  const [search, setSearch] = useState("");
-  const { data: testsData, isLoading } = useQuery<{ tests: { id: number; name: string; code: string; category: string; price: number }[] }>({
-    queryKey: ["tests"],
-    queryFn: () => api.get("/api/tests"),
-  });
-
-  const allTests = testsData?.tests ?? [];
-  const filtered = useMemo(() => {
-    if (!search.trim()) return allTests;
-    const q = search.toLowerCase();
-    return allTests.filter((t) => (t.name + " " + (t.code || "") + " " + (t.category || "")).toLowerCase().includes(q));
-  }, [allTests, search]);
-
-  const isSelected = (id: number) => allowedIds.includes(id);
-
-  const toggle = (id: number) => {
-    if (isSelected(id)) onChange(allowedIds.filter((x) => x !== id));
-    else onChange([...allowedIds, id]);
-  };
-
-  const categories = useMemo(() => {
-    const map: Record<string, typeof allTests> = {};
-    for (const t of filtered) {
-      const cat = t.category || "Uncategorized";
-      if (!map[cat]) map[cat] = [];
-      map[cat].push(t);
-    }
-    return Object.entries(map).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [filtered]);
-
-  return (
-    <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="font-bold">Tests Available for Online Booking</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Only the selected tests will appear on the mobile app and public website. {allowedIds.length} test(s) selected.
-          </p>
-        </div>
-        <Button onClick={onSave} disabled={isPending} size="sm">{isPending ? "Saving…" : "Save Selection"}</Button>
-      </div>
-
-      <div className="relative">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search tests by name, code, or category…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-        />
-      </div>
-
-      {isLoading ? (
-        <div className="text-center text-muted-foreground py-8">Loading tests…</div>
-      ) : allTests.length === 0 ? (
-        <div className="text-center text-muted-foreground py-8">No tests found in catalog.</div>
-      ) : (
-        <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
-          {categories.map(([cat, tests]) => (
-            <div key={cat}>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{cat}</p>
-              <div className="space-y-1">
-                {tests.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => toggle(t.id)}
-                    className={`w-full text-left flex items-start justify-between gap-3 px-3 py-2 rounded-md border transition-colors ${isSelected(t.id) ? "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-800" : "bg-muted/20 border-card-border hover:bg-muted/40"}`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isSelected(t.id) ? "bg-green-600 border-green-600" : "border-muted-foreground/40"}`}>
-                        {isSelected(t.id) && <Check size={12} className="text-white" />}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{t.name}</p>
-                        <p className="text-xs text-muted-foreground">{t.code || "—"} · Rs. {t.price ?? 0}</p>
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-          {filtered.length === 0 && search.trim() && (
-            <div className="text-center text-muted-foreground py-6">No tests match "{search}"</div>
-          )}
         </div>
       )}
     </div>

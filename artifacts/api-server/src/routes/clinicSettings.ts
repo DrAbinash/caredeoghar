@@ -54,6 +54,7 @@ async function getOrCreate() {
       kioskWelcomeMessage: "",
       kioskAllowedTestIds: "[]",
       onlineBookingAllowedTestIds: "[]",
+      onlineBookingAllowedPackageIds: "[]",
       sidebarTheme: "navy",
       billDefaultPaperSize: "A5",
       billShowCode: true,
@@ -126,7 +127,7 @@ clinicSettingsRouter.put("/", async (req, res) => {
     update.sidebarTheme = body.sidebarTheme;
   }
   const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "payuEnabled", "phonepeEnabled", "bharatpeEnabled", "cashfreeEnabled", "billShowCode", "billShowCategory", "dayCloseAutoPrint", "lanOnlyLogin", "fido2Enabled", "kioskEnabled", "formFBillingPrompt", "formFAddressRequired", "formFGuardianRequired"] as const;
-  const textFields = ["kioskUpiVpa", "kioskUpiName", "kioskWelcomeMessage", "kioskAllowedTestIds", "onlineBookingAllowedTestIds", "razorpayKeyId", "payuMerchantKey", "phonepeMerchantId", "bharatpeMerchantId", "cashfreeAppId", "formFTestIds", "quickTestIds", "footerNote", "commissionDiscountMode", "lanAllowedIps", "billDefaultPaperSize", "name", "tagline", "address", "registeredAddress", "email", "phone", "website", "gstin", "logoDataUrl", "portalHeading", "portalWelcomeMessage", "sidebarTheme"] as const;
+  const textFields = ["kioskUpiVpa", "kioskUpiName", "kioskWelcomeMessage", "kioskAllowedTestIds", "onlineBookingAllowedTestIds", "onlineBookingAllowedPackageIds", "razorpayKeyId", "payuMerchantKey", "phonepeMerchantId", "bharatpeMerchantId", "cashfreeAppId", "formFTestIds", "quickTestIds", "footerNote", "commissionDiscountMode", "lanAllowedIps", "billDefaultPaperSize", "name", "tagline", "address", "registeredAddress", "email", "phone", "website", "gstin", "logoDataUrl", "portalHeading", "portalWelcomeMessage", "sidebarTheme"] as const;
   // NOTE: quickTestIds and formFTestIds are intentionally NOT in boolFields
   // because they store JSON-as-text (e.g. "[null,null,null,null,null,null]").
   // They are listed in textFields above.
@@ -188,7 +189,7 @@ clinicSettingsRouter.put("/", async (req, res) => {
     }
     update.cashfreeAppId = body.cashfreeAppId.trim();
   }
-  const arrayJsonTextFields = ["kioskUpiVpa", "kioskUpiName", "kioskWelcomeMessage", "kioskAllowedTestIds", "onlineBookingAllowedTestIds"] as const;
+  const arrayJsonTextFields = ["kioskUpiVpa", "kioskUpiName", "kioskWelcomeMessage", "kioskAllowedTestIds", "onlineBookingAllowedTestIds", "onlineBookingAllowedPackageIds"] as const;
   for (const f of arrayJsonTextFields) {
     if (body[f] !== undefined) {
       if (typeof body[f] !== "string") {

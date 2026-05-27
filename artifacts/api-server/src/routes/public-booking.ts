@@ -180,6 +180,15 @@ publicBookingRouter.get("/tests", async (_req, res): Promise<void> => {
 
 // GET /api/public/booking/packages
 publicBookingRouter.get("/packages", async (_req, res): Promise<void> => {
+  const settings = await getSettings();
+  let allowedPkgIds: number[] = [];
+  try {
+    const parsed = JSON.parse(settings?.onlineBookingAllowedPackageIds || "[]");
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      allowedPkgIds = parsed.filter((v: unknown) => typeof v === "number" && Number.isInteger(v) && v > 0);
+    }
+  } catch { /* ignore */ }
+
   const pkgs = await db
     .select({
       id: packagesTable.id,
@@ -191,7 +200,12 @@ publicBookingRouter.get("/packages", async (_req, res): Promise<void> => {
     .from(packagesTable)
     .where(eq(packagesTable.isActive, true))
     .orderBy(packagesTable.name);
-  res.json({ packages: pkgs });
+
+  const filtered = allowedPkgIds.length > 0
+    ? pkgs.filter((p) => allowedPkgIds.includes(p.id))
+    : pkgs;
+
+  res.json({ packages: filtered });
 });
 
 // ── POST /api/public/booking/payu-initiate ────────────────────────────────────
