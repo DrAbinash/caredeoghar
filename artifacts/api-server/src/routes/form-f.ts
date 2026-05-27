@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, billsTable, patientsTable, formFRecordsTable, clinicSettingsTable } from "@workspace/db";
-import { eq, or, ilike, inArray, isNotNull, desc, and } from "drizzle-orm";
+import { eq, or, ilike, inArray, isNotNull, desc, and, gte, lt } from "drizzle-orm";
 import { ordersTable, orderTestsTable, testsTable, doctorsTable } from "@workspace/db";
 import { whatsappConversationsTable, whatsappSettingsTable } from "@workspace/db/schema";
 import { dateToISTString } from "../lib/istDate";
@@ -209,6 +209,8 @@ formFRouter.post("/save", async (req, res) => {
 
 formFRouter.get("/pending", async (req, res) => {
   try {
+    const dateRange = String(req.query.dateRange ?? "today").trim() as "today" | "yesterday" | "dayBefore" | "7days" | "all";
+
     const [settings] = await db.select().from(clinicSettingsTable).limit(1);
     const formFTestIds: number[] = JSON.parse(settings?.formFTestIds ?? "[]");
 
@@ -216,6 +218,36 @@ formFRouter.get("/pending", async (req, res) => {
       res.json([]);
       return;
     }
+
+    // Compute IST date bounds for the chosen range
+    const now = new Date();
+    const istToday = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    let startDate: string | null = null;
+    let endDate: string | null = null; // exclusive upper bound
+
+    if (dateRange === "today") {
+      startDate = istToday + "T00:00:00+05:30";
+      endDate = istToday + "T23:59:59.999+05:30";
+    } else if (dateRange === "yesterday") {
+      const y = new Date(now); y.setDate(y.getDate() - 1);
+      const ys = y.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+      startDate = ys + "T00:00:00+05:30";
+      endDate = ys + "T23:59:59.999+05:30";
+    } else if (dateRange === "dayBefore") {
+      const db = new Date(now); db.setDate(db.getDate() - 2);
+      const dbs = db.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+      startDate = dbs + "T00:00:00+05:30";
+      endDate = dbs + "T23:59:59.999+05:30";
+    } else if (dateRange === "7days") {
+      const d7 = new Date(now); d7.setDate(d7.getDate() - 6);
+      startDate = d7.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) + "T00:00:00+05:30";
+      endDate = istToday + "T23:59:59.999+05:30";
+    }
+
+    // Build date filter conditions
+    const dateFilters = [];
+    if (startDate) dateFilters.push(gte(billsTable.createdAt, new Date(startDate)));
+    if (endDate) dateFilters.push(lt(billsTable.createdAt, new Date(endDate)));
 
     // Bills that have at least one Form-F-required test (distinct on bill)
     const billsWithFormFTests = await db
@@ -229,7 +261,7 @@ formFRouter.get("/pending", async (req, res) => {
       .from(billsTable)
       .innerJoin(ordersTable, eq(billsTable.orderId, ordersTable.id))
       .innerJoin(orderTestsTable, eq(orderTestsTable.orderId, ordersTable.id))
-      .where(inArray(orderTestsTable.testId, formFTestIds))
+      .where(and(inArray(orderTestsTable.testId, formFTestIds), ...dateFilters))
       .orderBy(desc(billsTable.createdAt));
 
     if (billsWithFormFTests.length === 0) { res.json([]); return; }

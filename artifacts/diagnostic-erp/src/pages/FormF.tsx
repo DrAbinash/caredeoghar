@@ -635,6 +635,7 @@ export default function FormF() {
   const [pendingCategory, setPendingCategory] = useState("All Categories");
   const [pendingTests, setPendingTests] = useState<Array<{ id: number; name: string; code?: string | null; category?: string | null }>>([]);
   const [pendingTestsLoading, setPendingTestsLoading] = useState(false);
+  const [pendingDateRange, setPendingDateRange] = useState<"today" | "yesterday" | "dayBefore" | "7days" | "all">("today");
 
   // Records tab state
   const [listSearch, setListSearch] = useState("");
@@ -760,14 +761,16 @@ export default function FormF() {
   const fetchPending = useCallback(async () => {
     setPendingLoading(true);
     try {
-      const data = await api.get<PendingItem[]>("/api/form-f/pending");
+      const params = new URLSearchParams();
+      if (pendingDateRange !== "all") params.set("dateRange", pendingDateRange);
+      const data = await api.get<PendingItem[]>(`/api/form-f/pending?${params.toString()}`);
       setPendingQueue(data);
     } catch {
       setPendingQueue([]);
     } finally {
       setPendingLoading(false);
     }
-  }, []);
+  }, [pendingDateRange]);
 
   const fetchPendingTests = useCallback(async (q = "") => {
     setPendingTestsLoading(true);
@@ -1138,17 +1141,28 @@ export default function FormF() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Input
-                  placeholder="Search tests by name or code…"
-                  value={pendingTestSearch}
-                  onChange={(e) => setPendingTestSearch(e.target.value)}
-                  className="h-8 text-xs w-56"
-                />
-                <Input
-                  value={pendingCategory}
-                  onChange={(e) => setPendingCategory(e.target.value)}
-                  className="h-8 text-xs w-40"
-                />
+                {/* Date range filter */}
+                <div className="flex rounded-md border border-gray-200 overflow-hidden text-[11px]">
+                  {[
+                    { key: "today" as const, label: "Today" },
+                    { key: "yesterday" as const, label: "Yesterday" },
+                    { key: "dayBefore" as const, label: "Day Before" },
+                    { key: "7days" as const, label: "7 Days" },
+                    { key: "all" as const, label: "All" },
+                  ].map((btn) => (
+                    <button
+                      key={btn.key}
+                      onClick={() => setPendingDateRange(btn.key)}
+                      className={`px-2.5 py-1.5 font-medium transition-colors ${
+                        pendingDateRange === btn.key
+                          ? "bg-blue-600 text-white"
+                          : "bg-white text-gray-600 hover:bg-gray-50"
+                      } border-r border-gray-200 last:border-r-0`}
+                    >
+                      {btn.label}
+                    </button>
+                  ))}
+                </div>
                 <Button size="sm" variant="outline" className="h-8 text-xs" onClick={fetchPending} disabled={pendingLoading}>
                   <RefreshCcw size={12} className={`mr-1 ${pendingLoading ? "animate-spin" : ""}`} />
                   {pendingLoading ? "Refreshing…" : "Refresh"}
