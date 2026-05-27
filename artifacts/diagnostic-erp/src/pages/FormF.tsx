@@ -1435,17 +1435,21 @@ export default function FormF() {
                       />
                     </label>
                     {/* ── Physical scanner via bridge (WIA/SANE/folder-watch) ── */}
-                    {scanBridgeOk && (
-                      <button
-                        type="button"
-                        onClick={triggerScanBridge}
-                        disabled={scanning || idCardUploading}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed border-green-300 bg-green-50 hover:bg-green-100 text-green-700 text-sm font-medium transition-colors disabled:opacity-50"
-                        title="Use flatbed/ADF document scanner attached to this PC"
-                      >
-                        <Scan size={14} /> {scanning ? "Scanning…" : "Scanner"}
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={triggerScanBridge}
+                      disabled={!scanBridgeOk || scanning || idCardUploading}
+                      className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed text-sm font-medium transition-colors disabled:opacity-50 ${
+                        scanBridgeOk
+                          ? "border-green-300 bg-green-50 hover:bg-green-100 text-green-700"
+                          : "border-gray-300 bg-gray-50 text-gray-400 cursor-not-allowed"
+                      }`}
+                      title={scanBridgeOk
+                        ? "Use flatbed/ADF document scanner attached to this PC"
+                        : "Scanner bridge offline — connect the desktop bridge app or use Upload/Camera instead"}
+                    >
+                      <Scan size={14} /> {scanning ? "Scanning…" : "Scanner"}
+                    </button>
                     {/* ── Camera / webcam capture (phone or PC webcam) ── */}
                     <button
                       type="button"
