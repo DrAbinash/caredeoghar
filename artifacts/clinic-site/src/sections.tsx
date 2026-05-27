@@ -15,7 +15,16 @@ import { resolveAssetUrl } from "./config";
 const SAFE_URL_RE = /^(https?:|mailto:|tel:|\/(?!\/)|#)/i;
 function safeUrl(url: string, fallback = ""): string {
   if (!url) return fallback;
-  return SAFE_URL_RE.test(url.trim()) ? url.trim() : fallback;
+  const trimmed = url.trim();
+  // Legacy CMS hash links to the old appointment section → rewrite to new /book page
+  if (trimmed === "#appointment") return fallback || "book";
+  return SAFE_URL_RE.test(trimmed) ? trimmed : fallback;
+}
+function absoluteUrl(url: string, basePath: string): string {
+  if (!url) return "";
+  if (/^(https?:|mailto:|tel:)/i.test(url)) return url;
+  if (url.startsWith("/")) return `${basePath}${url.replace(/^\//, "")}`;
+  return `${basePath}${url}`;
 }
 function get(c: Record<string, unknown>, k: string, fb = ""): string {
   return typeof c[k] === "string" ? (c[k] as string) : fb;
@@ -49,7 +58,7 @@ export function HeaderSection({ section, settings, pages, basePath }: { section:
   useEffect(() => { setOpen(false); }, [loc]);
 
   const safeCta = safeUrl(ctaUrl, "book");
-  const ctaHref = safeCta.startsWith("/") ? `${basePath}${safeCta.replace(/^\//, "")}` : safeCta;
+  const ctaHref = absoluteUrl(safeCta, basePath);
   const phone   = settings.contactPhone || "9973497200";
   const waNum   = (settings.whatsappNumber || phone).replace(/[^0-9]/g, "");
   const addr    = settings.address || "CARE DIAGNOSTICS, Subhash Chowk, Castair's Town, Near Bajla Mahila College, Deoghar\u2013814112";
@@ -155,7 +164,7 @@ export function HeroSection({ section, settings, basePath }: { section: Section;
   const waNum      = (settings.whatsappNumber || phone).replace(/[^0-9]/g, "");
 
   const safeCta = safeUrl(ctaUrl, "book");
-  const ctaHref = safeCta.startsWith("/") ? `${basePath}${safeCta.replace(/^\//, "")}` : safeCta;
+  const ctaHref = absoluteUrl(safeCta, basePath);
 
   const heroImg = imageUrl
     ? resolveAssetUrl(imageUrl)

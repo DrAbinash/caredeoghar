@@ -164,8 +164,8 @@ function AppShell({ settings, pages, popups, isPreview }: { settings: SiteSettin
   const [loc] = useLocation();
   const slug = loc === "/" || loc === "" ? "home" : loc.replace(/^\//, "").split("/")[0];
 
-  // Scroll to hash anchor — fires on mount AND whenever the hash changes
-  // (e.g. "Book Now" clicked while already on the home page).
+  // Scroll to hash anchor — fires on mount AND whenever the hash changes.
+  // Redirect #appointment → /book (legacy CMS section links).
   useEffect(() => {
     let tid: ReturnType<typeof setTimeout>;
 
@@ -173,6 +173,10 @@ function AppShell({ settings, pages, popups, isPreview }: { settings: SiteSettin
       clearTimeout(tid);
       const hash = window.location.hash.replace(/^#/, "");
       if (!hash) return;
+      if (hash === "appointment") {
+        window.location.href = `${BASE}book`;
+        return;
+      }
       // Retry a few times to handle lazy-loaded sections that aren't in the
       // DOM immediately when the hashchange fires.
       let attempts = 0;
@@ -197,7 +201,7 @@ function AppShell({ settings, pages, popups, isPreview }: { settings: SiteSettin
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (slug === "book") {
+  if (slug === "book" || slug === "appointment") {
     return (
       <>
         {isPreview && <div className="preview-banner">Preview mode — showing drafts. Visitors won't see this until you publish.</div>}
