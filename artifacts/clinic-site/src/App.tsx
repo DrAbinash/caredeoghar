@@ -9,6 +9,7 @@ import { HeadManager } from "./head";
 import { SectionRenderer } from "./sections";
 import { WhatsAppFab, PopupHost } from "./widgets";
 import PoliciesPage from "./pages/policies";
+import BookPage from "./pages/book";
 
 const BASE = import.meta.env.BASE_URL;
 const ROUTER_BASE = BASE.replace(/\/$/, "");
@@ -105,7 +106,7 @@ function MobileCTABar({ settings }: { settings: SiteSettings }) {
           <span className="mobile-cta-label">WhatsApp</span>
         </a>
       )}
-      <a href="#appointment" className="mobile-cta-btn book" aria-label="Book a test">
+      <a href={`${BASE}book`} className="mobile-cta-btn book" aria-label="Book a test">
         <CalendarCheck size={19} />
         <span className="mobile-cta-label">Book Test</span>
       </a>
@@ -163,12 +164,6 @@ function AppShell({ settings, pages, popups, isPreview }: { settings: SiteSettin
   const [loc] = useLocation();
   const slug = loc === "/" || loc === "" ? "home" : loc.replace(/^\//, "").split("/")[0];
 
-  useEffect(() => {
-    if (slug === "appointment") {
-      window.location.replace(`${BASE}#appointment`);
-    }
-  }, [slug]);
-
   // Scroll to hash anchor — fires on mount AND whenever the hash changes
   // (e.g. "Book Now" clicked while already on the home page).
   useEffect(() => {
@@ -202,7 +197,14 @@ function AppShell({ settings, pages, popups, isPreview }: { settings: SiteSettin
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (slug === "appointment") return null;
+  if (slug === "book") {
+    return (
+      <>
+        {isPreview && <div className="preview-banner">Preview mode — showing drafts. Visitors won't see this until you publish.</div>}
+        <BookPage settings={settings} />
+      </>
+    );
+  }
 
   if (slug === "policies") {
     return (

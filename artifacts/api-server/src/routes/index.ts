@@ -67,7 +67,7 @@ import { booksSanityRouter } from "./books-sanity";
 import { requireSuperAdmin } from "../middleware/requireSuperAdmin";
 import { requireSuperAdminUsb } from "../middleware/requireSuperAdminUsb";
 import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
-import { db, clinicSettingsTable } from "@workspace/db";
+import { db, clinicSettingsTable, ledgersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { auditLogsRouter } from "./audit-logs";
 import { rolePermissionsRouter } from "./role-permissions";
@@ -201,7 +201,13 @@ router.use(
 // Expenses — /accounting permission (financial records)
 router.use("/expenses", requireStaffAuth, requireStaffPermission("/accounting"), expensesRouter);
 
-// Ledgers — /accounting permission (multi-ledger configuration)
+// Ledgers — /accounting permission for mutations; read accessible to all staff
+router.get("/ledgers", requireStaffAuth, async (_req, res) => {
+  const { ensureDefaultLedger } = await import("./ledgers");
+  await ensureDefaultLedger();
+  const ledgers = await db.select().from(ledgersTable).orderBy(ledgersTable.id);
+  res.json({ ledgers });
+});
 router.use("/ledgers", requireStaffAuth, requireStaffPermission("/accounting"), ledgersRouter);
 // Day-Close / Cash-Drawer-Close — admin + super-admin only (gated via the
 // /day-close path; FULL_ACCESS_ROLES auto-permits both roles). The reopen

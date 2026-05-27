@@ -42,13 +42,13 @@ function SectionFallback() {
 export function HeaderSection({ section, settings, pages, basePath }: { section: Section; settings: SiteSettings; pages: Page[]; basePath: string }) {
   const c = section.config;
   const ctaLabel = get(c, "ctaLabel", "Book Test");
-  const ctaUrl   = get(c, "ctaUrl", "#appointment");
+  const ctaUrl   = get(c, "ctaUrl", "book");
   const [loc] = useLocation();
   const [open, setOpen] = useState(false);
   const navPages = pages.filter((p) => p.showInNav && p.status === "published");
   useEffect(() => { setOpen(false); }, [loc]);
 
-  const safeCta = safeUrl(ctaUrl, "#appointment");
+  const safeCta = safeUrl(ctaUrl, "book");
   const ctaHref = safeCta.startsWith("/") ? `${basePath}${safeCta.replace(/^\//, "")}` : safeCta;
   const phone   = settings.contactPhone || "9973497200";
   const waNum   = (settings.whatsappNumber || phone).replace(/[^0-9]/g, "");
@@ -149,12 +149,12 @@ export function HeroSection({ section, settings, basePath }: { section: Section;
   const heading    = get(c, "heading", "Advanced Diagnostics.\nAccurate Reports.\nTrusted Care.");
   const subheading = get(c, "subheading", "MRI, CT, Ultrasound, Digital X-Ray, Pathology and Health Packages — delivered with precision, compassion and fast reporting at Care Diagnostics, Deoghar.");
   const ctaLabel   = get(c, "ctaLabel", "Book Test Online");
-  const ctaUrl     = get(c, "ctaUrl",   "#appointment");
+  const ctaUrl     = get(c, "ctaUrl",   "book");
   const imageUrl   = get(c, "imageUrl");
   const phone      = settings.contactPhone || "9973497200";
   const waNum      = (settings.whatsappNumber || phone).replace(/[^0-9]/g, "");
 
-  const safeCta = safeUrl(ctaUrl, "#appointment");
+  const safeCta = safeUrl(ctaUrl, "book");
   const ctaHref = safeCta.startsWith("/") ? `${basePath}${safeCta.replace(/^\//, "")}` : safeCta;
 
   const heroImg = imageUrl
@@ -508,7 +508,7 @@ export function HealthPackagesSection({ section, basePath }: { section: Section;
   const c = section.config;
   const heading  = get(c, "heading", "Popular Health Packages");
   const sub      = get(c, "subheading", "Preventive packages designed for families, senior citizens and chronic disease monitoring.");
-  const bookHref = `${basePath}#appointment`.replace(/\/+#/, "/#");
+  const bookHref = `${basePath}book`;
 
   return (
     <section className="section muted-bg">
@@ -681,13 +681,13 @@ export function FooterSection({ section, settings, basePath }: { section: Sectio
     "Pathology Lab", "ECG / EEG", "Health Packages", "Home Collection",
   ];
   const defaultQuickLinks = [
-    { label: "Book Appointment", href: "#appointment" },
-    { label: "Health Packages",  href: "#packages" },
-    { label: "Gallery",          href: "#gallery" },
-    { label: "FAQ",              href: "#faq" },
-    { label: "Contact Us",       href: "#contact" },
-    { label: "Patient Portal",   href: "/erp/portal" },
-    { label: "Staff Login",      href: "/erp/portal" },
+    { label: "Book Appointment", href: `${basePath}book` },
+    { label: "Health Packages",  href: `${basePath}#packages` },
+    { label: "Gallery",          href: `${basePath}#gallery` },
+    { label: "FAQ",              href: `${basePath}#faq` },
+    { label: "Contact Us",       href: `${basePath}#contact` },
+    { label: "Patient Portal",   href: `${basePath}erp/portal` },
+    { label: "Staff Login",      href: `${basePath}erp/portal` },
   ];
   const defaultPolicyLinks = [
     { label: "Privacy Policy",       href: "/policies" },
