@@ -123,11 +123,12 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
   const chqAmt = payByMode["cheque"] || 0;
 
   // ── Sizing tuned for A5 thermal receipt ──
+  // A5: flex column layout pushes footer to bottom so short bills fill the page
   const pageMargin = isA5 ? "2mm" : "8mm";
   const titleSize = isA5 ? "15px" : "16px";
-  const patientNameSize = isA5 ? "14px" : "18px";   // smaller = less blank space below short bills
-  const bodyPx = isA5 ? "14px" : "13px";            // tagline under logo
-  const headerPx = isA5 ? "15px" : "14px";           // clinic address / phone / email (bigger)
+  const patientNameSize = isA5 ? "14px" : "18px";    // compact patient / ref / date block
+  const bodyPx = isA5 ? "14px" : "13px";             // tagline under logo
+  const headerPx = isA5 ? "16px" : "14px";           // clinic address / phone / email (prominent)
   const tablePx = isA5 ? "12px" : "12px";
   const totalPx = isA5 ? "13px" : "13px";
   const footerPx = isA5 ? "11px" : "11px";
@@ -176,7 +177,7 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
   })();
 
   const page = (copyIdx: number) => `
-    <section class="receipt" style="${copyIdx > 0 ? "page-break-before:always;" : ""}">
+    <section class="receipt" style="${copyIdx > 0 ? "page-break-before:always;" : ""}${isA5 ? "display:flex;flex-direction:column;min-height:148mm;" : ""}">
 
       ${reprintBy || reprintReason ? `<div style="text-align:center;font-size:${tinyPx};color:#a16207;border:1px dashed #d97706;padding:2px 4px;margin-bottom:4px;text-transform:uppercase;font-weight:700">DUPLICATE / RE-PRINT${reprintBy ? ` · BY ${esc(reprintBy)}` : ""}${reprintReason ? ` · ${esc(reprintReason)}` : ""}</div>` : ""}
 
@@ -292,6 +293,9 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
         </tbody>
       </table>
 
+      <!-- Spacer pushes footer to bottom on A5 -->
+      ${isA5 ? '<div style="flex:1"></div>' : ""}
+
       <!-- FOOTER -->
       <div style="margin-top:4px;border-top:1px solid #000;padding-top:4px;text-align:center;page-break-inside:avoid">
         <div style="font-size:${footerPx};font-weight:700;color:#000;margin-bottom:1px;text-transform:uppercase">${esc(clinic?.footerNote || bill.reportCollectionNote || "Thank you for choosing our diagnostic services. Please collect your report within 7 days.")}</div>
@@ -318,9 +322,10 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
 <style>
   @page { size: ${paperSize} portrait; margin: ${pageMargin}; }
   *, *::before, *::after { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
+  html, body { margin: 0; padding: 0; height: 100%; }
   body { background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; font-size: ${bodyPx}; ${isBW ? "filter: grayscale(1) contrast(1.35); -webkit-print-color-adjust: exact; print-color-adjust: exact;" : ""} }
-  .receipt { width: 100%; padding: 2mm 3mm; }
+  .receipt { width: 100%; padding: 2mm 3mm; box-sizing: border-box; }
+  ${isA5 ? ".receipt { min-height: 100vh; display: flex; flex-direction: column; }" : ""}
   table { width: 100%; }
 </style></head><body>${pages}</body></html>`;
 }
