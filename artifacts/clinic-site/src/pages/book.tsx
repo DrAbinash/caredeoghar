@@ -3,8 +3,9 @@ import {
   Phone, Mail, MapPin, ChevronLeft, CalendarCheck, Clock,
   Star, Shield, Zap, Check, ChevronRight, Loader2, ArrowLeft,
   Stethoscope, FlaskConical, Package, User, CreditCard,
-  CalendarDays, MessageCircle,
+  CalendarDays, MessageCircle, QrCode,
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import type { SiteSettings } from "../types";
 
 const BASE = import.meta.env.BASE_URL;
@@ -51,7 +52,7 @@ function submitPayuForm(payuUrl: string, fields: Record<string, string>) {
 }
 
 /* ── Types ── */
-type BookingConfig = { enabled: boolean; keyId: string; vipEnabled: boolean; gateway: "payu" | "razorpay" | "phonepe" | "bharatpe" | null; payuMerchantKey?: string; phonepeMerchantId?: string; bharatpeMerchantId?: string };
+type BookingConfig = { enabled: boolean; keyId: string; vipEnabled: boolean; gateway: "payu" | "razorpay" | "phonepe" | "bharatpe" | null; payuMerchantKey?: string; phonepeMerchantId?: string; bharatpeMerchantId?: string; kioskUpiVpa?: string; kioskUpiName?: string; upiQrEnabled?: boolean; upiVpa?: string; upiQrImageUrl?: string };
 type TestItem = { id: number; code: string; name: string; category: string; price: string };
 type PkgItem  = { id: number; code: string; name: string; price: string; description: string };
 
@@ -114,13 +115,19 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
   const [config, setConfig] = useState<BookingConfig | null>(null);
   const [tests, setTests] = useState<TestItem[]>([]);
   const [pkgs, setPkgs] = useState<PkgItem[]>([]);
-  const [step, setStep] = useState<0 | 1 | 2 | 3 | 4>(0); // 0=details,1=select,2=review,3=done,4=failed
+  const [step, setStep] = useState<0 | 1 | 2 | 3 | 4 | 5>(0); // 0=details,1=select,2=review,3=done,4=failed,5=qr-payment
   const [error, setError] = useState("");
   const [paying, setPaying] = useState(false);
   const [successRef, setSuccessRef] = useState("");
   const [failReason, setFailReason] = useState("");
   const [catFilter, setCatFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [qrBookingRef, setQrBookingRef] = useState("");
+  const [qrAmount, setQrAmount] = useState(0);
+  const [qrUpiUrl, setQrUpiUrl] = useState("");
+  const [qrUpiVpa, setQrUpiVpa] = useState("");
+  const [qrUpiName, setQrUpiName] = useState("");
+  const [qrChecking, setQrChecking] = useState(false);
 
   const [pd, setPd] = useState({ name: "", phone: "", email: "", date: "", timeSlot: "", notes: "", isVip: false });
   const [selTests, setSelTests] = useState<Set<number>>(new Set());
@@ -264,12 +271,54 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
     return handleRazorpay();
   }
 
+  async function handleQrPay() {
+    if (selTests.size === 0 && selPkgs.size === 0) { setError("Please select at least one test or package."); return; }
+    setError(""); setPaying(true);
+    try {
+      const res = await bookingPost<{ bookingRef: string; amount: number; upiVpa: string; upiName: string; upiUrl: string; upiQrImageUrl: string; clinicName: string }>("/api/public/booking/qr-initiate", {
+        name: pd.name, phone: pd.phone, email: pd.email, selectedDate: pd.date, timeSlot: pd.timeSlot,
+        testIds: Array.from(selTests), packageIds: Array.from(selPkgs),
+        totalAmount: total, notes: pd.notes, isVip: pd.isVip,
+      });
+      setQrBookingRef(res.bookingRef);
+      setQrAmount(res.amount);
+      setQrUpiUrl(res.upiUrl);
+      setQrUpiVpa(res.upiVpa);
+      setQrUpiName(res.upiName);
+      setStep(5);
+      setPaying(false);
+    } catch (e: unknown) {
+      const msg = (e as { message?: string }).message || "Something went wrong.";
+      setError(msg); setPaying(false);
+    }
+  }
+
+  async function checkQrPayment() {
+    if (!qrBookingRef) return;
+    setQrChecking(true);
+    try {
+      const res = await bookingPost<{ success: boolean; status: string; alreadyPaid?: boolean }>("/api/public/booking/qr-confirm", { bookingRef: qrBookingRef });
+      if (res.success) {
+        setSuccessRef(qrBookingRef);
+        setStep(3);
+      } else {
+        setError("Payment not yet confirmed. Please complete the UPI payment and try again.");
+      }
+    } catch (e: unknown) {
+      const msg = (e as { message?: string }).message || "Could not verify payment. Please try again.";
+      setError(msg);
+    } finally {
+      setQrChecking(false);
+    }
+  }
+
   const gatewayLabel =
     config?.gateway === "bharatpe" ? "BharatPe" :
     config?.gateway === "phonepe" ? "PhonePe" :
     config?.gateway === "payu" ? "PayU" : "Razorpay";
 
   const isOnline = config?.enabled ?? false;
+  const hasRealGateway = Boolean(config?.gateway);
 
   /* ── Layout helpers ── */
   const cardStyle: React.CSSProperties = {
@@ -579,6 +628,75 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
               </div>
             )}
           </div>
+        ) : step === 5 ? (
+          /* QR Payment */
+          <div style={{ maxWidth: 480, margin: "0 auto" }}>
+            <div style={cardStyle}>
+              <div style={{ textAlign: "center", marginBottom: "1.25rem" }}>
+                {qrUpiUrl ? (
+                  <div style={{ display: "inline-block", padding: "1rem", background: "white", borderRadius: "var(--site-radius)", border: "1px solid hsl(var(--site-border))" }}>
+                    <QRCodeSVG value={qrUpiUrl} size={240} level="H" />
+                  </div>
+                ) : config?.upiQrImageUrl ? (
+                  <img src={config.upiQrImageUrl} alt="UPI QR Code" style={{ width: "100%", maxWidth: 320, borderRadius: "var(--site-radius)", border: "1px solid hsl(var(--site-border))" }} />
+                ) : (
+                  <div style={{ width: 240, height: 240, background: "hsl(var(--site-muted))", borderRadius: "var(--site-radius)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto" }}>
+                    <QrCode size={64} style={{ color: "hsl(var(--site-muted-fg))" }} />
+                  </div>
+                )}
+                <div style={{ fontSize: ".85rem", color: "hsl(var(--site-muted-fg))", marginTop: ".75rem" }}>
+                  Scan with any UPI app (PhonePe, Google Pay, Paytm, etc.) — amount is pre-filled
+                </div>
+                {qrUpiUrl && (
+                  <div style={{ fontSize: ".75rem", color: "hsl(var(--site-muted-fg))", marginTop: ".25rem" }}>
+                    Dynamic QR for <strong>{fmt(qrAmount)}</strong>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ background: "hsl(var(--site-muted) / .5)", borderRadius: "var(--site-radius)", padding: "1rem", marginBottom: "1.25rem" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: ".5rem" }}>
+                  <span style={{ fontSize: ".85rem" }}>Amount</span>
+                  <span style={{ fontWeight: 800, fontSize: "1.1rem" }}>{fmt(qrAmount)}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: ".5rem" }}>
+                  <span style={{ fontSize: ".85rem" }}>Booking Ref</span>
+                  <span style={{ fontFamily: "monospace", fontWeight: 600 }}>{qrBookingRef}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: ".5rem" }}>
+                  <span style={{ fontSize: ".85rem" }}>Pay to</span>
+                  <span style={{ fontWeight: 600 }}>{qrUpiName || config?.kioskUpiName || "Care Diagnostics"}</span>
+                </div>
+                {qrUpiVpa && (
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: ".85rem" }}>UPI ID</span>
+                    <span style={{ fontFamily: "monospace", fontSize: ".85rem" }}>{qrUpiVpa}</span>
+                  </div>
+                )}
+              </div>
+
+              {error && (
+                <div style={{ color: "hsl(0 72% 40%)", fontSize: ".85rem", marginBottom: ".75rem", padding: ".75rem", background: "hsl(0 85% 96%)", borderRadius: "var(--site-radius)", border: "1px solid hsl(0 72% 90%)" }}>
+                  {error}
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: ".75rem", flexWrap: "wrap" }}>
+                <button style={btnOutline} onClick={() => setStep(2)}><ArrowLeft size={16} /> Back</button>
+                <button style={{ ...btnPrimary, flex: 1 }} onClick={checkQrPayment} disabled={qrChecking}>
+                  {qrChecking ? (
+                    <><Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} /> Checking...</>
+                  ) : (
+                    <>I have paid</>
+                  )}
+                </button>
+              </div>
+
+              <p style={{ fontSize: ".75rem", color: "hsl(var(--site-muted-fg))", marginTop: ".75rem", textAlign: "center" }}>
+                After making the payment, click "I have paid". Staff will verify and confirm your booking.
+              </p>
+            </div>
+          </div>
         ) : (
           /* Review & Pay */
           <div style={{ maxWidth: 640, margin: "0 auto" }}>
@@ -640,16 +758,40 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
 
               <div style={{ display: "flex", gap: ".75rem", flexWrap: "wrap" }}>
                 <button style={btnOutline} onClick={() => setStep(1)}><ArrowLeft size={16} /> Back to Tests</button>
-                <button style={{ ...btnPrimary, flex: 1, fontSize: "1rem" }} onClick={handlePay} disabled={paying}>
-                  {paying ? (
-                    <>
-                      <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} /> Processing...
-                    </>
-                  ) : (
-                    <>Pay {fmt(total)} via {gatewayLabel}</>
-                  )}
-                </button>
+                {hasRealGateway ? (
+                  <button style={{ ...btnPrimary, flex: 1, fontSize: "1rem" }} onClick={handlePay} disabled={paying}>
+                    {paying ? (
+                      <>
+                        <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} /> Processing...
+                      </>
+                    ) : (
+                      <>Pay {fmt(total)} via {gatewayLabel}</>
+                    )}
+                  </button>
+                ) : (
+                  <button style={{ ...btnPrimary, flex: 1, fontSize: "1rem" }} onClick={handleQrPay} disabled={paying}>
+                    {paying ? (
+                      <>
+                        <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} /> Processing...
+                      </>
+                    ) : (
+                      <>Pay {fmt(total)}</>
+                    )}
+                  </button>
+                )}
               </div>
+
+              {/* QR Pay option — always shown alongside gateway payment for demo flexibility */}
+              {hasRealGateway && (
+                <button
+                  type="button"
+                  onClick={handleQrPay}
+                  disabled={paying}
+                  style={{ marginTop: ".5rem", width: "100%", background: "transparent", color: "hsl(var(--site-fg))", border: "1.5px solid hsl(var(--site-border))", borderRadius: "var(--site-radius)", padding: ".65rem 1rem", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: ".4rem" }}
+                >
+                  <QrCode size={18} style={{ color: "hsl(var(--site-muted-fg))" }} /> Pay via UPI QR
+                </button>
+              )}
 
               {settings.whatsappNumber && (
                 <button
@@ -666,7 +808,11 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
               )}
 
               <p style={{ fontSize: ".78rem", color: "hsl(var(--site-muted-fg))", marginTop: "1rem", textAlign: "center" }}>
-                Payments are processed securely via {gatewayLabel}. By proceeding, you agree to our <a href={`${BASE}policies`} style={{ color: "hsl(var(--site-primary))", textDecoration: "underline" }}>Terms &amp; Conditions</a>.
+                {hasRealGateway ? (
+                  <>Payments are processed securely via {gatewayLabel}. By proceeding, you agree to our <a href={`${BASE}policies`} style={{ color: "hsl(var(--site-primary))", textDecoration: "underline" }}>Terms &amp; Conditions</a>.</>
+                ) : (
+                  <>Please scan the QR code to pay. Staff will confirm your booking after payment verification.</>
+                )}
               </p>
             </div>
           </div>

@@ -1382,6 +1382,9 @@ type OnlineBookingSettings = {
   bharatpeMerchantId: string;
   cashfreeEnabled: boolean;
   cashfreeAppId: string;
+  upiQrEnabled: boolean;
+  upiVpa: string;
+  upiQrImageUrl: string;
   onlineBookingAllowedTestIds: string;
   onlineBookingAllowedPackageIds: string;
 };
@@ -1595,6 +1598,9 @@ function OnlineBookingTab() {
       bharatpeMerchantId: data.bharatpeMerchantId || "",
       cashfreeEnabled: data.cashfreeEnabled ?? false,
       cashfreeAppId: data.cashfreeAppId || "",
+      upiQrEnabled: data.upiQrEnabled ?? false,
+      upiVpa: data.upiVpa || "",
+      upiQrImageUrl: data.upiQrImageUrl || "",
       onlineBookingAllowedTestIds: data.onlineBookingAllowedTestIds || "[]",
       onlineBookingAllowedPackageIds: data.onlineBookingAllowedPackageIds || "[]",
     });
@@ -1804,6 +1810,62 @@ function OnlineBookingTab() {
         <p className="text-xs text-amber-700 dark:text-amber-400">
           In Replit: open Secrets, add <code>BHARATPE_API_KEY</code>, <code>BHARATPE_API_SECRET</code>, and <code>BHARATPE_MERCHANT_ID</code>. Then restart the API server.
         </p>
+      </div>
+
+      {/* UPI QR Fallback (dynamic amount) */}
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg bg-[#FF6B00] flex items-center justify-center shrink-0">
+            <QrCode size={16} className="text-white" />
+          </div>
+          <div>
+            <h3 className="font-bold">UPI QR Payment</h3>
+            <p className="text-xs text-muted-foreground">Dynamic UPI QR code with exact bill amount for online bookings.</p>
+          </div>
+        </div>
+        <Toggle
+          value={form.upiQrEnabled}
+          onChange={(v) => setForm({ ...form, upiQrEnabled: v })}
+          label="Enable UPI QR payment option"
+          hint="Shows a dynamic UPI QR code on the booking page. Patient scans and pays exact amount."
+        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <Label>UPI VPA / BharatPe ID</Label>
+            <p className="text-xs text-muted-foreground mb-1">e.g. 9431913477@bharatpe or 9431913477@okicici</p>
+            <Input
+              value={form.upiVpa}
+              onChange={(e) => setForm({ ...form, upiVpa: e.target.value })}
+              className="mt-1 max-w-md font-mono text-sm"
+              placeholder="your@upi"
+            />
+          </div>
+          <div>
+            <Label>Static QR Image URL (optional)</Label>
+            <p className="text-xs text-muted-foreground mb-1">Upload your QR image to <code>public/</code> and paste the URL here (e.g. <code>/bharatpe-qr.jpg</code>).</p>
+            <Input
+              value={form.upiQrImageUrl}
+              onChange={(e) => setForm({ ...form, upiQrImageUrl: e.target.value })}
+              className="mt-1 max-w-md font-mono text-sm"
+              placeholder="/bharatpe-qr.jpg"
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-2 border-t border-card-border">
+          <Button onClick={() => save.mutate(form)} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
+        </div>
+      </div>
+
+      <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-5 space-y-2">
+        <h3 className="font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
+          <QrCode size={15} /> How Dynamic UPI QR Works
+        </h3>
+        <ul className="text-sm text-emerald-800 dark:text-emerald-300 space-y-1 list-disc pl-4">
+          <li>The system builds a <code>upi://pay</code> intent URL with the <strong>exact amount</strong> and your VPA.</li>
+          <li>Patient scans the QR code with any UPI app (PhonePe, GPay, Paytm, BharatPe).</li>
+          <li>Amount is pre-filled — they just enter their UPI PIN to complete payment.</li>
+          <li>If you also upload a static QR image, it's shown alongside the dynamic one as a backup.</li>
+        </ul>
       </div>
 
       {/* Cashfree */}

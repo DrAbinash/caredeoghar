@@ -119,6 +119,11 @@ publicBookingRouter.get("/config", async (_req, res): Promise<void> => {
     payuMerchantKey: payuKey,
     phonepeMerchantId: settings.phonepeEnabled ? phonepeMerchantId : "",
     bharatpeMerchantId: settings.bharatpeEnabled ? bharatpeMerchantId : "",
+    kioskUpiVpa: settings.kioskUpiVpa,
+    kioskUpiName: settings.kioskUpiName,
+    upiQrEnabled: settings.upiQrEnabled,
+    upiVpa: settings.upiVpa || settings.kioskUpiVpa || "",
+    upiQrImageUrl: settings.upiQrImageUrl || "",
     allowedTestIds,
   });
 });
@@ -883,4 +888,85 @@ publicBookingRouter.post("/verify-otp", bookingLimiter, async (req, res): Promis
   }
   otpStore.delete(phone);
   res.json({ verified: true, phone, name: name || record.name });
+});
+
+// ── POST /api/public/booking/qr-initiate ─────────────────────────────────────
+// Creates a pending booking for QR/UPI payment. The user scans the QR and pays,
+// then a staff member confirms the booking from the ERP. This allows working
+// online bookings even before payment-gateway credentials are approved.
+publicBookingRouter.post("/qr-initiate", createOrderLimiter, async (req, res): Promise<void> => {
+  const settings = await getSettings();
+  if (!settings?.onlineBookingEnabled) {
+    res.status(403).json({ error: "Online booking is not enabled." });
+    return;
+  }
+
+  const {
+    name, phone, email = "", selectedDate, timeSlot = "",
+    testIds = [], packageIds = [], totalAmount, notes = "", isVip = false,
+  } = req.body || {};
+  const amount = Number(totalAmount);
+
+  if (!name || !phone || !selectedDate || !amount || amount <= 0) {
+    res.status(400).json({ error: "Please fill all required fields and select at least one test." });
+    return;
+  }
+
+  const bookingRef = generateBookingRef();
+
+  await db.insert(onlineBookingsTable).values({
+    bookingRef,
+    name: name.trim(),
+    phone: phone.trim(),
+    email: email.trim(),
+    selectedDate,
+    timeSlot: timeSlot.trim(),
+    testIds: JSON.stringify(testIds),
+    packageIds: JSON.stringify(packageIds),
+    totalAmount: String(amount),
+    notes: notes.trim(),
+    isVip: Boolean(isVip) && Boolean(settings.vipQueueEnabled),
+    status: "pending_payment",
+  });
+
+  // Build a dynamic UPI intent URL for the exact amount
+  const vpa = settings.upiVpa || settings.kioskUpiVpa || "";
+  const upiName = settings.kioskUpiName || settings.name || "Care Diagnostics";
+  const upiUrl = vpa
+    ? `upi://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(upiName)}&am=${encodeURIComponent(String(amount.toFixed(2)))}&cu=INR&tn=${encodeURIComponent("Care Diagnostics booking " + bookingRef)}`
+    : "";
+
+  res.json({
+    bookingRef,
+    amount,
+    upiVpa: vpa,
+    upiName,
+    upiUrl,
+    upiQrImageUrl: settings.upiQrImageUrl || "",
+    clinicName: settings.name || "Care Diagnostics",
+  });
+});
+
+// ── POST /api/public/booking/qr-confirm ─────────────────────────────────────
+// Simulated confirmation for QR bookings (used during demo/demo approvals).
+// In production, staff uses the ERP /api/online-bookings/:id/confirm endpoint.
+publicBookingRouter.post("/qr-confirm", bookingLimiter, async (req, res): Promise<void> => {
+  const { bookingRef } = req.body || {};
+  if (!bookingRef) { res.status(400).json({ error: "Booking reference required" }); return; }
+
+  const [booking] = await db.select().from(onlineBookingsTable)
+    .where(eq(onlineBookingsTable.bookingRef, bookingRef)).limit(1);
+
+  if (!booking) { res.status(404).json({ error: "Booking not found" }); return; }
+
+  if (booking.status === "paid" || booking.status === "confirmed") {
+    res.json({ success: true, alreadyPaid: true, bookingRef, status: booking.status });
+    return;
+  }
+
+  await db.update(onlineBookingsTable)
+    .set({ status: "paid" })
+    .where(eq(onlineBookingsTable.id, booking.id));
+
+  res.json({ success: true, bookingRef, status: "paid" });
 });

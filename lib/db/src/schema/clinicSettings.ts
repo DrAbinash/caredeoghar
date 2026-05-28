@@ -46,6 +46,10 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   kioskUpiName: text("kiosk_upi_name").notNull().default(""),
   kioskWelcomeMessage: text("kiosk_welcome_message").notNull().default(""),
   kioskAllowedTestIds: text("kiosk_allowed_test_ids").notNull().default("[]"),
+  // QR payment image (UPI / BharatPe etc.)
+  upiQrImageUrl: text("upi_qr_image_url").notNull().default(""),
+  upiVpa: text("upi_vpa").notNull().default(""),
+  upiQrEnabled: boolean("upi_qr_enabled").notNull().default(false),
   // Online booking whitelist (tests + packages)
   onlineBookingAllowedTestIds: text("online_booking_allowed_test_ids").notNull().default("[]"),
   onlineBookingAllowedPackageIds: text("online_booking_allowed_package_ids").notNull().default("[]"),
