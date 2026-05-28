@@ -34,6 +34,8 @@ export const orderTestsTable = pgTable("order_tests", {
   cancellationReason: text("cancellation_reason"),
   // Cost to outsourced lab for this test (for margin analysis).
   outsourceCost: numeric("outsource_cost", { precision: 10, scale: 2 }),
+  // Editable display name override — shown on bill instead of master test name.
+  displayName: text("display_name"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

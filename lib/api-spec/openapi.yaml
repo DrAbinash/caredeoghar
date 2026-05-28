@@ -2570,6 +2570,9 @@ components:
         cancellationReason:
           type: string
           nullable: true
+        displayName:
+          type: string
+          nullable: true
       required: [id, testId, test, price]
 
     OrderList:

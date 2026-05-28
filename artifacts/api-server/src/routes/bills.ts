@@ -143,6 +143,7 @@ async function buildBill(bill: typeof billsTable.$inferSelect) {
       tests: orderTestRows.map((ot) => ({
         ...ot.orderTest,
         price: Number(ot.orderTest.price),
+        displayName: ot.orderTest.displayName ?? null,
         test: ot.test ? { ...ot.test, price: Number(ot.test.price) } : null,
       })),
     };

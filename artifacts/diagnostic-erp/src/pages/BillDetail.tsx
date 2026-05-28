@@ -1612,6 +1612,8 @@ function TestsTable({
   const [singleCancelId, setSingleCancelId] = useState<number | null>(null);
   const [singleReason, setSingleReason] = useState("");
   const [singleBy, setSingleBy] = useState<string>(() => readStaffSession()?.user.name || "");
+  // Inline display-name edit state: { orderTestId → string }
+  const [editingName, setEditingName] = useState<Record<number, string>>({});
 
   const cancelSingle = useMutation<unknown, Error, void>({
     mutationFn: async () => {
@@ -1683,7 +1685,41 @@ function TestsTable({
                   )}
                   <td className="px-4 py-3 font-mono text-xs font-bold text-primary">{ot.test?.code}</td>
                   <td className="px-4 py-3 font-medium">
-                    {ot.test?.name}
+                    <div className="flex items-center gap-1 group">
+                      {editingName[ot.id] !== undefined ? (
+                        <Input
+                          value={editingName[ot.id]}
+                          onChange={(e) => setEditingName((prev) => ({ ...prev, [ot.id]: e.target.value }))}
+                          onBlur={() => {
+                            const val = editingName[ot.id].trim();
+                            if (val && val !== (ot.displayName ?? ot.test?.name ?? "")) {
+                              api.patch(`/api/orders/${bill?.order?.id}/tests/${ot.id}`, { displayName: val })
+                                .then(() => queryClient.invalidateQueries({ queryKey: getGetBillQueryKey(id) }));
+                            }
+                            setEditingName((prev) => { const n = { ...prev }; delete n[ot.id]; return n; });
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") { (e.target as HTMLInputElement).blur(); }
+                            if (e.key === "Escape") { setEditingName((prev) => { const n = { ...prev }; delete n[ot.id]; return n; }); }
+                          }}
+                          className="h-7 px-2 py-0 text-sm w-60"
+                          autoFocus
+                        />
+                      ) : (
+                        <>
+                          <span>{ot.displayName ?? ot.test?.name ?? "—"}</span>
+                          {!isBillCancelled && !isCancelled && (
+                            <button
+                              title="Edit display name"
+                              onClick={() => setEditingName((prev) => ({ ...prev, [ot.id]: ot.displayName ?? ot.test?.name ?? "" }))}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
                     {isCancelled && ot.cancelledByName && (
                       <div className="text-[11px] text-muted-foreground mt-0.5">
                         Cancelled by {ot.cancelledByName}

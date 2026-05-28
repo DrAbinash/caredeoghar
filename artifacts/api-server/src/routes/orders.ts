@@ -42,6 +42,7 @@ async function buildOrder(order: typeof ordersTable.$inferSelect) {
     tests: orderTestRows.map((ot) => ({
       ...ot.orderTest,
       price: Number(ot.orderTest.price),
+      displayName: ot.orderTest.displayName ?? null,
       test: ot.test ? { ...ot.test, price: Number(ot.test.price) } : null,
     })),
   };
@@ -269,4 +270,29 @@ ordersRouter.put("/:id", async (req, res) => {
     return;
   }
   res.json(await buildOrder(updated));
+});
+
+// ── Update display name on an individual order-test line item ──────────────────
+ordersRouter.patch("/:orderId/tests/:testId", async (req, res) => {
+  const orderId = Number(req.params.orderId);
+  const testId = Number(req.params.testId);
+  const { displayName } = req.body;
+
+  if (!Number.isFinite(orderId) || !Number.isFinite(testId)) {
+    res.status(400).json({ error: "Invalid order or test id" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(orderTestsTable)
+    .set({ displayName: typeof displayName === "string" && displayName.trim() ? displayName.trim() : null })
+    .where(and(eq(orderTestsTable.orderId, orderId), eq(orderTestsTable.id, testId)))
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "Order test not found" });
+    return;
+  }
+
+  res.json({ id: updated.id, displayName: updated.displayName });
 });

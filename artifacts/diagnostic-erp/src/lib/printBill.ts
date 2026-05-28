@@ -27,6 +27,7 @@ export type PrintBillData = {
       id?: number;
       price: number | string;
       status?: string | null;
+      displayName?: string | null;
       test?: { code?: string | null; name?: string | null; category?: string | null } | null;
     }>;
   } | null;
@@ -139,7 +140,7 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
   // ── Test rows ──
   const testRows = tests.map((t, i) => {
     const code = t.test?.code ?? "";
-    const name = t.test?.name ?? "";
+    const name = t.displayName ?? t.test?.name ?? "";
     const cat = t.test?.category ?? "";
     return `<tr>
       <td style="padding:4px 5px;border:1px solid #888;font-size:${tablePx};text-align:center">${i + 1}</td>
@@ -152,7 +153,7 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
 
   const cancelledRow = cancelled.length === 0 ? "" : `
     <div style="margin-top:4px;font-size:${tinyPx};color:#999">
-      <em>Cancelled: ${esc(cancelled.map((t) => t.test?.name ?? "").join(", "))}</em>
+      <em>Cancelled: ${esc(cancelled.map((t) => t.displayName ?? t.test?.name ?? "").join(", "))}</em>
     </div>`;
 
   // ── Payment detail rows ──

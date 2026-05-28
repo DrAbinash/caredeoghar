@@ -234,6 +234,7 @@ export interface OrderTest {
   cancelledByName?: string | null;
   cancelledAt?: string | null;
   cancellationReason?: string | null;
+  displayName?: string | null;
 }
 
 export interface Order {
