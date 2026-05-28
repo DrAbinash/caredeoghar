@@ -85,6 +85,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       totalAmount: billsTable.totalAmount,
       paidAmount: billsTable.paidAmount,
       balanceAmount: billsTable.balanceAmount,
+      refundAmount: billsTable.refundAmount,
       discount: billsTable.discount,
       discountReason: billsTable.discountReason,
       discountReasonNote: billsTable.discountReasonNote,
@@ -158,6 +159,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       billNumber: billsTable.billNumber,
       totalAmount: billsTable.totalAmount,
       balanceAmount: billsTable.balanceAmount,
+      refundAmount: billsTable.refundAmount,
       billStatus: billsTable.status,
       billCreatedAt: billsTable.createdAt,
       patientFirstName: patientsTable.firstName,
@@ -200,7 +202,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
         createdByName: r.createdByName ?? null,
         totalAmount: Number(r.totalAmount),
         duesCollected: 0,
-        remainingDues: Math.max(0, Number(r.balanceAmount ?? 0)),
+        remainingDues: trueOutstanding(r),
         billStatus: r.billStatus ?? "pending",
       });
     }
@@ -305,6 +307,16 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
   const paymentItems = allPaymentRows.filter((p) => Number(p.amount) > 0);
   const refundItems = allPaymentRows.filter((p) => Number(p.amount) < 0);
 
+  // Refunds increase balanceAmount (paidAmount goes down), so the refunded
+  // portion shows up as "still pending" if we use balanceAmount directly.
+  // True outstanding = balance − cumulative refund (the returned money is
+  // NOT money still owed by the patient).
+  const trueOutstanding = (r: typeof allBillRows[0]) => {
+    const bal = Math.max(0, Number(r.balanceAmount ?? 0));
+    const ref = Math.max(0, Number(r.refundAmount ?? 0));
+    return Math.max(0, bal - ref);
+  };
+
   // ── My Billing side (bills I created in the date range) ────────────────
   // Equation that balances:
   //   Gross Billed (incl. cancelled)
@@ -322,7 +334,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
     .reduce((s, r) => s + Number(r.totalAmount), 0);
   const grossBilling = activeBills.reduce((s, r) => s + Number(r.totalAmount), 0);
   const outstanding = activeBills.reduce(
-    (s, r) => s + Math.max(0, Number(r.balanceAmount ?? 0)),
+    (s, r) => s + trueOutstanding(r),
     0,
   );
   const netCollectedOnMyBills = grossBilling - outstanding;
@@ -441,7 +453,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       const sGrossBilled = sbills.reduce((s, r) => s + Number(r.totalAmount), 0);
       const sActiveBilling = sactive.reduce((s, r) => s + Number(r.totalAmount), 0);
       const sCancelled = scancelled.reduce((s, r) => s + Number(r.totalAmount), 0);
-      const sOutstanding = sactive.reduce((s, r) => s + Math.max(0, Number(r.balanceAmount ?? 0)), 0);
+      const sOutstanding = sactive.reduce((s, r) => s + trueOutstanding(r), 0);
       const sNetCollected = sActiveBilling - sOutstanding;
       const sCashIn = spayPos.reduce((s, p) => s + (isDigital(p.method) ? 0 : Number(p.amount)), 0);
       const sDigitalIn = spayPos.reduce((s, p) => s + (isDigital(p.method) ? Number(p.amount) : 0), 0);
@@ -601,7 +613,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
     duesBills,
     // Outstanding bills: active bills created in this period that still have a balance.
     outstandingBills: activeBills
-      .filter((r) => Math.max(0, Number(r.balanceAmount ?? 0)) > 0)
+      .filter((r) => trueOutstanding(r) > 0)
       .map((r) => ({
         billId: r.id,
         billNumber: r.billNumber,
@@ -612,7 +624,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
         createdByName: r.createdByName ?? null,
         totalAmount: Number(r.totalAmount),
         paidAmount: Number(r.paidAmount ?? 0),
-        outstanding: Math.max(0, Number(r.balanceAmount ?? 0)),
+        outstanding: trueOutstanding(r),
         status: r.status,
       }))
       .sort((a, b) => b.outstanding - a.outstanding),
