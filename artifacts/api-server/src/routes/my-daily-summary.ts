@@ -202,7 +202,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
         createdByName: r.createdByName ?? null,
         totalAmount: Number(r.totalAmount),
         duesCollected: 0,
-        remainingDues: trueOutstanding(r),
+        remainingDues: Math.max(0, Number(r.balanceAmount ?? 0)) - Math.max(0, Number(r.refundAmount ?? 0)),
         billStatus: r.billStatus ?? "pending",
       });
     }
