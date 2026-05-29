@@ -390,6 +390,13 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
     byMethod[m] = (byMethod[m] ?? 0) + Number(p.amount);
   }
 
+  // ── All staff names who appear in the data (for the filter dropdown) ──
+  const staffSet = new Set<string>();
+  for (const r of allBillRows) if (r.createdByName) staffSet.add(r.createdByName);
+  for (const p of allPaymentRows) if (p.recordedByName) staffSet.add(p.recordedByName);
+  for (const r of cancelledByMeRows) if (r.createdByName) staffSet.add(r.createdByName);
+  const staffNames = Array.from(staffSet).sort();
+
   // ── Per-staff breakdown (only when viewing All Staff aggregate) ──
   type StaffRow = {
     name: string;
@@ -442,7 +449,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       digitalExpPerPerson[r.approved_by] = Number(r.digital);
     }
 
-    byStaff = names.map((name) => {
+    byStaff = staffNames.map((name) => {
       const sbills = allBillRows.filter((r) => r.createdByName === name);
       const sactive = sbills.filter((r) => r.status !== "cancelled");
       const scancelled = sbills.filter((r) => r.status === "cancelled");
@@ -500,6 +507,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
     isFiltered: staffName !== null && isSuperAdmin && staffName !== session.subjectName,
     from,
     to,
+    staffNames,
     byStaff,
     summary: {
       grossBilling,

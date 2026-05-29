@@ -15,7 +15,6 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type AppUser = { id: number; name: string; role: string; isActive: boolean };
 
 type MyDailySummarySummary = {
   grossBilling: number;
@@ -53,6 +52,7 @@ type MyDailySummaryData = {
   isFiltered: boolean;
   from: string;
   to: string;
+  staffNames: string[];
   summary: MyDailySummarySummary;
   byMethod: Record<string, number>;
   bills: {
@@ -1112,14 +1112,6 @@ export default function MyDailySummary() {
     try { window.localStorage.setItem(LS_STAFF_FILTER_KEY, name); } catch { /* ignore */ }
   }
 
-  const { data: allUsers = [] } = useQuery<AppUser[]>({
-    queryKey: ["users"],
-    queryFn: () => api.get("/api/users"),
-    enabled: isOwner,
-    staleTime: 5 * 60_000,
-  });
-  const activeStaff = allUsers.filter((u) => u.isActive).sort((a, b) => a.name.localeCompare(b.name));
-
   function setPreset(fromDaysAgo: number, toDaysAgo: number) {
     setFrom(daysAgoISO(fromDaysAgo));
     setTo(daysAgoISO(toDaysAgo));
@@ -1202,7 +1194,7 @@ export default function MyDailySummary() {
           </div>
         </div>
 
-        {isSuperAdmin && activeStaff.length > 0 && (
+        {isSuperAdmin && (data?.staffNames?.length ?? 0) > 0 && (
           <div>
             <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">
               <Users size={12} /> Staff
@@ -1219,20 +1211,20 @@ export default function MyDailySummary() {
               >
                 All Staff / Total
               </button>
-              {activeStaff.map((u) => {
-                const isSelected = staffFilter === u.name;
+              {(data?.staffNames ?? []).map((name) => {
+                const isSelected = staffFilter === name;
                 return (
                   <button
-                    key={u.id}
+                    key={name}
                     type="button"
-                    onClick={() => saveStaffFilter(isSelected ? "" : u.name)}
+                    onClick={() => saveStaffFilter(isSelected ? "" : name)}
                     className={`flex-shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all whitespace-nowrap ${
                       isSelected
                         ? "bg-primary border-primary text-white shadow-sm"
                         : "border-gray-300 dark:border-card-border bg-white dark:bg-card text-gray-700 dark:text-gray-300 hover:border-primary hover:text-primary"
                     }`}
                   >
-                    {u.name}
+                    {name}
                   </button>
                 );
               })}

@@ -1543,6 +1543,7 @@ type OrderTest = {
   id: number;
   testId: number;
   price: number;
+  displayName?: string | null;
   status?: string | null;
   cancelledAt?: string | null;
   cancelledByName?: string | null;
@@ -1553,7 +1554,7 @@ type OrderTest = {
 type BillForTestsTable = {
   status?: string;
   paidAmount?: number | string;
-  order?: { tests?: OrderTest[] } | null;
+  order?: { id?: number; tests?: OrderTest[] } | null;
 };
 
 function TestsTable({
@@ -1694,7 +1695,7 @@ function TestsTable({
                             const val = editingName[ot.id].trim();
                             if (val && val !== (ot.displayName ?? ot.test?.name ?? "")) {
                               api.patch(`/api/orders/${bill?.order?.id}/tests/${ot.id}`, { displayName: val })
-                                .then(() => queryClient.invalidateQueries({ queryKey: getGetBillQueryKey(id) }));
+                                .then(() => onUpdated());
                             }
                             setEditingName((prev) => { const n = { ...prev }; delete n[ot.id]; return n; });
                           }}
