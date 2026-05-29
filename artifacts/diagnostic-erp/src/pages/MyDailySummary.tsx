@@ -1136,14 +1136,8 @@ export default function MyDailySummary() {
     staleTime: 2 * 60_000,
   });
 
-  // All staff names: merge registered users + data-derived names so inactive staff
-  // (or staff not yet in the users table) still appear in the filter.
-  const staffFilterList = Array.from(
-    new Set([
-      ...(activeStaff.map((u) => u.name)),
-      ...(data?.staffNames ?? []),
-    ])
-  ).sort((a, b) => a.localeCompare(b));
+  // All staff names from the registered users table — always visible regardless of date range.
+  const staffFilterList = activeStaff.map((u) => u.name);
 
   // Drawer status — always fetches for the current logged-in user, not filtered staff.
   const drawerQ = useQuery<DrawerStatus>({
@@ -1213,7 +1207,7 @@ export default function MyDailySummary() {
           </div>
         </div>
 
-        {isSuperAdmin && (data?.staffNames?.length ?? 0) > 0 && (
+        {isSuperAdmin && staffFilterList.length > 0 && (
           <div>
             <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">
               <Users size={12} /> Staff
@@ -1230,7 +1224,7 @@ export default function MyDailySummary() {
               >
                 All Staff / Total
               </button>
-              {(data?.staffNames ?? []).map((name) => {
+              {staffFilterList.map((name) => {
                 const isSelected = staffFilter === name;
                 return (
                   <button
