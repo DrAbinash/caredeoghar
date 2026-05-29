@@ -1112,6 +1112,16 @@ export default function MyDailySummary() {
     try { window.localStorage.setItem(LS_STAFF_FILTER_KEY, name); } catch { /* ignore */ }
   }
 
+  // All staff names: merge registered users + data-derived names so inactive staff
+  // (or staff not yet in the users table) still appear in the filter.
+  const { data: allUsers = [] } = useQuery<{ id: number; name: string; role: string; isActive: boolean }[]>({
+    queryKey: ["users"],
+    queryFn: () => api.get("/api/users"),
+    enabled: isOwner,
+    staleTime: 5 * 60_000,
+  });
+  const activeStaff = allUsers.filter((u) => u.isActive).sort((a, b) => a.name.localeCompare(b.name));
+
   function setPreset(fromDaysAgo: number, toDaysAgo: number) {
     setFrom(daysAgoISO(fromDaysAgo));
     setTo(daysAgoISO(toDaysAgo));
@@ -1125,6 +1135,15 @@ export default function MyDailySummary() {
     queryFn: () => api.get(`/api/dashboard/my-daily-summary?${queryParams}`),
     staleTime: 2 * 60_000,
   });
+
+  // All staff names: merge registered users + data-derived names so inactive staff
+  // (or staff not yet in the users table) still appear in the filter.
+  const staffFilterList = Array.from(
+    new Set([
+      ...(activeStaff.map((u) => u.name)),
+      ...(data?.staffNames ?? []),
+    ])
+  ).sort((a, b) => a.localeCompare(b));
 
   // Drawer status — always fetches for the current logged-in user, not filtered staff.
   const drawerQ = useQuery<DrawerStatus>({
