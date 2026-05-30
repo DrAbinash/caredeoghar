@@ -10,6 +10,7 @@ import {
   Upload, Camera, CheckCircle2, AlertTriangle, MessageCircle, Stethoscope, X,
   ChevronDown, Scan, ExternalLink
 } from "lucide-react";
+import OcrCapturePanel from "@/components/OcrCapturePanel";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -539,6 +540,8 @@ export default function FormF() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // OCR capture panel (new comprehensive capture modal)
+  const [ocrPanelOpen, setOcrPanelOpen] = useState(false);
 
   // ── PCPNDT Portal bookmarklet dialog ──
   const [portalOpen, setPortalOpen] = useState(false);
@@ -1450,14 +1453,14 @@ export default function FormF() {
                     >
                       <Scan size={14} /> {scanning ? "Scanning…" : "Scanner"}
                     </button>
-                    {/* ── Camera / webcam capture (phone or PC webcam) ── */}
+                    {/* ── Comprehensive capture panel (camera + OCR + diagnostics + fallbacks) ── */}
                     <button
                       type="button"
-                      onClick={() => setCameraOpen(true)}
+                      onClick={() => setOcrPanelOpen(true)}
                       className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm font-medium transition-colors"
-                      title="Use webcam or phone camera"
+                      title="Open advanced capture panel with camera diagnostics, OCR tests, and Tesseract fallback"
                     >
-                      <Camera size={14} /> Camera
+                      <Camera size={14} /> Capture ID
                     </button>
                   </div>
                 </BigLabelRow>
@@ -1820,7 +1823,7 @@ export default function FormF() {
         </div>
       </div>}
 
-      {/* ── Camera / Scanner Modal ── */}
+      {/* ── Old Camera / Scanner Modal (kept for backward compat, but now redirect to new panel) ── */}
       {cameraOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => { stopCamera(); setCameraOpen(false); }}>
           <div className="bg-white rounded-xl shadow-2xl p-4 max-w-lg w-full mx-4" onClick={(e) => e.stopPropagation()}>
@@ -1842,6 +1845,33 @@ export default function FormF() {
             <p className="text-xs text-muted-foreground mt-2 text-center">Position the ID card in front of the camera and click Capture. For physical scanners, use the Scanner button above.</p>
           </div>
         </div>
+      )}
+
+      {/* ── New Comprehensive OCR Capture Panel ── */}
+      {ocrPanelOpen && (
+        <OcrCapturePanel
+          onCapture={(result) => {
+            setIdCardImageUrl(result.imageUrl);
+            setIdCardOcrResult(result.ocr ?? null);
+            if (result.ocr?.guardianName) setIdCardExtractedName(result.ocr.guardianName);
+            if (result.ocr?.address) setIdCardExtractedAddress(result.ocr.address);
+            setForm((prev) => ({
+              ...prev,
+              husbandFatherName: prev.husbandFatherName || result.ocr?.guardianName || prev.husbandFatherName,
+              address: prev.address || result.ocr?.address || prev.address,
+            }));
+            toast({
+              title: result.ocr ? `ID captured: ${result.ocr.documentType}` : "ID captured (OCR unavailable)",
+              description: result.ocr?.confidence ? `Confidence: ${result.ocr.confidence}` : undefined,
+            });
+            setOcrPanelOpen(false);
+          }}
+          onClose={() => setOcrPanelOpen(false)}
+          scanBridgeOk={scanBridgeOk}
+          scanBridgeUrl={SCAN_BRIDGE_URL}
+          onScanBridgeTrigger={triggerScanBridge}
+          scanning={scanning}
+        />
       )}
     </div>
   );

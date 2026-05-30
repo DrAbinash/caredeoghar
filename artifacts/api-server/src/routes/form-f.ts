@@ -455,8 +455,34 @@ formFRouter.patch("/update-patient-data", requireStaffPermission("/form-f"), asy
   }
 });
 
-// ─── Upload ID card image + run AI OCR ────────────────────────────────────
+type OcrLogEntry = {
+  stage: string;
+  status: "ok" | "warn" | "error" | "info";
+  message: string;
+  detail?: string;
+};
+
+// ─── OCR status endpoint (diagnostics) ───────────────────────────────────
+formFRouter.get("/ocr-status", async (_req, res) => {
+  const logs: OcrLogEntry[] = [];
+  try {
+    logs.push({ stage: "config", status: "info", message: "Checking Gemini integration...", detail: `baseUrl: ${process.env.AI_INTEGRATIONS_GEMINI_BASE_URL ? "set" : "missing"}, apiKey: ${process.env.AI_INTEGRATIONS_GEMINI_API_KEY ? "set" : "missing"}` });
+    const configured = !!process.env.AI_INTEGRATIONS_GEMINI_BASE_URL && !!process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+    if (configured) {
+      logs.push({ stage: "config", status: "ok", message: "Gemini API credentials configured" });
+    } else {
+      logs.push({ stage: "config", status: "error", message: "Gemini API credentials missing", detail: "Set AI_INTEGRATIONS_GEMINI_BASE_URL and AI_INTEGRATIONS_GEMINI_API_KEY environment variables" });
+    }
+    res.json({ ok: true, geminiConfigured: configured, logs });
+  } catch (err) {
+    logs.push({ stage: "status", status: "error", message: "Status check failed", detail: String(err) });
+    res.status(500).json({ ok: false, geminiConfigured: false, logs });
+  }
+});
+
+// ─── Upload ID card image + run AI OCR (with detailed error logging) ─────
 formFRouter.post("/upload-id", requireStaffPermission("/form-f"), async (req, res) => {
+  const ocrLog: OcrLogEntry[] = [];
   try {
     const body = req.body ?? {};
     const formFId = Number(body.formFId ?? 0);
@@ -465,31 +491,44 @@ formFRouter.post("/upload-id", requireStaffPermission("/form-f"), async (req, re
     const imageUrl = String(body.imageUrl ?? "").trim();
 
     if (!imageBase64 && !imageUrl) {
-      res.status(400).json({ error: "imageBase64 or imageUrl required" });
+      ocrLog.push({ stage: "validate", status: "error", message: "No image data provided", detail: "Send imageBase64 or imageUrl" });
+      res.status(400).json({ ok: false, error: "imageBase64 or imageUrl required", ocrLog });
       return;
     }
 
     let base64 = imageBase64;
     // If imageUrl is provided instead, download it
     if (!base64 && imageUrl) {
+      ocrLog.push({ stage: "download", status: "info", message: "Downloading image from URL...", detail: imageUrl });
       try {
         const resp = await fetch(imageUrl);
         if (!resp.ok) throw new Error(`Download failed: ${resp.status}`);
         const buf = Buffer.from(await resp.arrayBuffer());
         base64 = buf.toString("base64");
+        ocrLog.push({ stage: "download", status: "ok", message: "Image downloaded", detail: `${buf.length} bytes` });
       } catch (e) {
+        const msg = e instanceof Error ? e.message : "Download error";
+        ocrLog.push({ stage: "download", status: "error", message: "Download failed", detail: msg });
         req.log?.warn?.({ err: e }, "Failed to download ID card image from URL");
-        res.status(502).json({ error: "Failed to download image" });
+        res.status(502).json({ ok: false, error: "Failed to download image", ocrLog });
         return;
       }
     }
 
+    if (base64) {
+      ocrLog.push({ stage: "validate", status: "ok", message: "Image data received", detail: `${base64.length} chars, ${mimeType}` });
+    }
+
     // Run Gemini OCR
     let ocrResult: { guardianName: string; address: string; documentType: string; confidence: string } | null = null;
+    ocrLog.push({ stage: "gemini", status: "info", message: "Starting Gemini OCR...", detail: "Calling geminiOcrIdCard()" });
     try {
       ocrResult = await geminiOcrIdCard(base64, mimeType);
+      ocrLog.push({ stage: "gemini", status: "ok", message: "Gemini OCR completed", detail: `documentType: ${ocrResult.documentType}, confidence: ${ocrResult.confidence}, guardianName: ${ocrResult.guardianName ? "found" : "empty"}, address: ${ocrResult.address ? "found" : "empty"}` });
     } catch (e) {
-      console.warn("[form-f] Gemini ID card OCR failed:", e);
+      const msg = e instanceof Error ? e.message : "Gemini OCR failed";
+      ocrLog.push({ stage: "gemini", status: "error", message: "Gemini OCR failed", detail: msg });
+      // Still return a structured response so the frontend can use Tesseract fallback
     }
 
     // If formFId is valid, update the record with extracted data and image reference
@@ -516,12 +555,15 @@ formFRouter.post("/upload-id", requireStaffPermission("/form-f"), async (req, re
                 confidence: ocrResult.confidence,
               }
             : null,
+          ocrLog,
+          ocrStage: ocrResult ? "gemini_success" : "gemini_failed",
+          suggestedAction: ocrResult ? "accept_or_verify" : "try_tesseract_fallback",
         });
         return;
       }
     }
 
-    // No record yet — just return OCR result (frontend will show it and staff can accept)
+    // No record yet — just return OCR result with detailed log
     res.json({
       ok: true,
       ocr: ocrResult
@@ -532,10 +574,15 @@ formFRouter.post("/upload-id", requireStaffPermission("/form-f"), async (req, re
             confidence: ocrResult.confidence,
           }
         : null,
+      ocrLog,
+      ocrStage: ocrResult ? "gemini_success" : "gemini_failed",
+      suggestedAction: ocrResult ? "accept_or_verify" : "try_tesseract_fallback",
     });
   } catch (err) {
+    const msg = err instanceof Error ? err.message : "Internal server error";
+    ocrLog.push({ stage: "server", status: "error", message: "Server error", detail: msg });
     console.error("[form-f] upload-id error:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ ok: false, error: "Internal server error", ocrLog, suggestedAction: "check_server_logs" });
   }
 });
 
