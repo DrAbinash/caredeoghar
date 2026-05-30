@@ -1167,6 +1167,19 @@ export default function MyDailySummary() {
     totalBilled: number;
     totalDue: number;
     expected: { cash: number; upi: number; card: number; cheque: number; other: number; total: number; count: number };
+    bills: Array<{
+      id: number;
+      billNumber: string;
+      patientName: string;
+      totalAmount: number;
+      paidAmount: number;
+      balanceAmount: number;
+      discount: number;
+      status: string;
+      referringDoctor: string | null;
+      createdByName: string;
+      createdAt: string;
+    }>;
   }>({
     queryKey: ["my-day-close-preview"],
     queryFn: () => api.get("/api/day-close/my-preview"),
@@ -1202,8 +1215,8 @@ export default function MyDailySummary() {
 
       {/* ── Day Close Open Window Quick View ── */}
       {myPreviewQ.data && (
-        <div className="bg-white dark:bg-card border border-blue-200 dark:border-blue-800 rounded-xl p-4 shadow-sm">
-          <div className="flex items-center gap-2 mb-3">
+        <div className="bg-white dark:bg-card border border-blue-200 dark:border-blue-800 rounded-xl p-4 shadow-sm space-y-4">
+          <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
             <h3 className="text-sm font-bold text-gray-800 dark:text-gray-100">Open Window (Live)</h3>
             <span className="text-xs text-gray-500 dark:text-gray-400">
@@ -1234,6 +1247,61 @@ export default function MyDailySummary() {
               <div className="text-xs text-gray-400">in hand</div>
             </div>
           </div>
+
+          {/* ── Open Window Bills Table ── */}
+          {myPreviewQ.data.bills && myPreviewQ.data.bills.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wide">Bills in Open Window</h4>
+                <span className="text-xs text-gray-400">{myPreviewQ.data.bills.length} bill{myPreviewQ.data.bills.length !== 1 ? "s" : ""}</span>
+              </div>
+              <div className="overflow-x-auto snap-x">
+                <table className="w-full text-xs min-w-[800px]">
+                  <thead className="bg-gray-50 dark:bg-muted/30">
+                    <tr>
+                      {["Bill #", "Patient", "Total", "Paid", "Balance", "Discount", "Status", "Referral Doctor", "Created By"].map((h) => (
+                        <th key={h} className="px-2 py-2 text-left font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-card-border">
+                    {myPreviewQ.data.bills.map((b) => (
+                      <tr key={b.id} className="hover:bg-gray-50 dark:hover:bg-muted/20">
+                        <td className="px-2 py-2 font-semibold">
+                          <Link href={`/billing/${b.id}`} className="text-primary hover:underline">{b.billNumber}</Link>
+                        </td>
+                        <td className="px-2 py-2 text-gray-800 dark:text-foreground font-semibold">{b.patientName}</td>
+                        <td className="px-2 py-2 font-semibold text-gray-900 dark:text-foreground tabular-nums">{fmt(b.totalAmount)}</td>
+                        <td className="px-2 py-2 text-green-700 dark:text-green-400 tabular-nums">{fmt(b.paidAmount)}</td>
+                        <td className="px-2 py-2 tabular-nums" style={{ color: b.balanceAmount > 0 ? "#dc2626" : "#16a34a" }}>{fmt(b.balanceAmount)}</td>
+                        <td className="px-2 py-2 text-amber-600 tabular-nums">{b.discount > 0 ? fmt(b.discount) : "—"}</td>
+                        <td className="px-2 py-2">
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold capitalize"
+                            style={{ background: `${statusColors[b.status] ?? "#94a3b8"}22`, color: statusColors[b.status] ?? "#94a3b8" }}>
+                            {b.status}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                          {b.referringDoctor ? b.referringDoctor : <span className="text-gray-400">—</span>}
+                        </td>
+                        <td className="px-2 py-2 text-gray-600 dark:text-gray-400 whitespace-nowrap">{b.createdByName}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-gray-50 dark:bg-muted/30 border-t-2 border-gray-200 dark:border-card-border">
+                    <tr>
+                      <td className="px-2 py-2 font-bold text-gray-800 dark:text-foreground" colSpan={2}>Total ({myPreviewQ.data.bills.length} bills)</td>
+                      <td className="px-2 py-2 font-bold tabular-nums text-gray-900 dark:text-foreground">{fmt(myPreviewQ.data.bills.reduce((s, b) => s + b.totalAmount, 0))}</td>
+                      <td className="px-2 py-2 font-bold tabular-nums text-green-700">{fmt(myPreviewQ.data.bills.reduce((s, b) => s + b.paidAmount, 0))}</td>
+                      <td className="px-2 py-2 font-bold tabular-nums text-red-600">{fmt(myPreviewQ.data.bills.reduce((s, b) => s + b.balanceAmount, 0))}</td>
+                      <td className="px-2 py-2 font-bold tabular-nums text-amber-600">{fmt(myPreviewQ.data.bills.reduce((s, b) => s + b.discount, 0))}</td>
+                      <td colSpan={3} />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

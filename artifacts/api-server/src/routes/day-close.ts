@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, paymentsTable, dayClosuresTable, userDayClosuresTable, billsTable, usersTable } from "@workspace/db";
-import { drawerAuditLogTable } from "@workspace/db/schema";
+import { drawerAuditLogTable, patientsTable, doctorsTable, ordersTable } from "@workspace/db/schema";
 import { eq, and, gt, lte, desc, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Response, NextFunction } from "express";
@@ -300,6 +300,18 @@ type UserSummary = {
   billsCount: number;
   totalBilled: number;
   totalDue: number;
+  bills: Array<{
+    id: number;
+    billNumber: string;
+    patientName: string;
+    totalAmount: number;
+    paidAmount: number;
+    balanceAmount: number;
+    discount: number;
+    status: string;
+    referringDoctor: string | null;
+    createdAt: string;
+  }>;
 };
 
 async function summarizeUserWindow(
@@ -338,16 +350,46 @@ async function summarizeUserWindow(
         sql`${billsTable.status} != 'cancelled'`,
       );
 
-  const bills = await db
-    .select({ totalAmount: billsTable.totalAmount, balanceAmount: billsTable.balanceAmount })
+  const billRows = await db
+    .select({
+      id: billsTable.id,
+      billNumber: billsTable.billNumber,
+      totalAmount: billsTable.totalAmount,
+      paidAmount: billsTable.paidAmount,
+      balanceAmount: billsTable.balanceAmount,
+      discount: billsTable.discount,
+      status: billsTable.status,
+      createdAt: billsTable.createdAt,
+      createdByName: billsTable.createdByName,
+      patientName: sql<string>`COALESCE(${patientsTable.firstName} || ' ' || COALESCE(${patientsTable.lastName}, ''), 'Unknown')`,
+      referringDoctor: doctorsTable.name,
+    })
     .from(billsTable)
-    .where(bWhere);
+    .leftJoin(patientsTable, eq(billsTable.patientId, patientsTable.id))
+    .leftJoin(ordersTable, eq(billsTable.orderId, ordersTable.id))
+    .leftJoin(doctorsTable, eq(ordersTable.doctorId, doctorsTable.id))
+    .where(bWhere)
+    .orderBy(desc(billsTable.createdAt));
+
+  const bills = billRows.map((b) => ({
+    id: b.id,
+    billNumber: b.billNumber ?? String(b.id),
+    patientName: b.patientName,
+    totalAmount: n(b.totalAmount),
+    paidAmount: n(b.paidAmount),
+    balanceAmount: n(b.balanceAmount),
+    discount: n(b.discount),
+    status: b.status ?? "pending",
+    referringDoctor: b.referringDoctor ?? null,
+    createdAt: b.createdAt ? new Date(b.createdAt).toISOString() : "",
+  }));
 
   return {
     totals,
     billsCount:  bills.length,
-    totalBilled: bills.reduce((s, b) => s + n(b.totalAmount), 0),
-    totalDue:    bills.reduce((s, b) => s + n(b.balanceAmount), 0),
+    totalBilled: bills.reduce((s, b) => s + b.totalAmount, 0),
+    totalDue:    bills.reduce((s, b) => s + b.balanceAmount, 0),
+    bills,
   };
 }
 
@@ -372,6 +414,7 @@ dayCloseRouter.get("/my-preview", async (req, res) => {
     paymentsCount: s.totals.count,
     totalBilled:   s.totalBilled,
     totalDue:      s.totalDue,
+    bills:         s.bills,
   });
 });
 
