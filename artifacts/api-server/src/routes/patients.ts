@@ -23,8 +23,10 @@ async function generatePatientId(): Promise<string> {
   // Derive next ID from the maximum numeric suffix in patient_id.
   // max(patient_id) is WRONG because string comparison is lexicographic:
   // 'P-00009' > 'P-00010' in Postgres, so the max string is not the latest number.
+  // Use REPLACE instead of REGEXP_REPLACE for portability (some Postgres builds
+  // lack the regexp extension). Patient IDs are always "P-NNNNN" format.
   const [row] = await db
-    .select({ max: sql<number | null>`MAX(REGEXP_REPLACE(patient_id, '[^0-9]', '', 'g')::int)` })
+    .select({ max: sql<number | null>`MAX(NULLIF(REPLACE(patient_id, 'P-', ''), '')::int)` })
     .from(patientsTable);
   const next = (row?.max ?? 0) + 1;
   return `P-${String(next).padStart(5, "0")}`;
