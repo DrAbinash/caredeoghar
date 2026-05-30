@@ -1157,6 +1157,23 @@ export default function MyDailySummary() {
     staleTime: 30_000,
   });
 
+  // Day Close open window preview — shows current open window count for the user
+  const myPreviewQ = useQuery<{
+    userName: string;
+    coveredFromTs: string | null;
+    coveredToTs: string;
+    billsCount: number;
+    paymentsCount: number;
+    totalBilled: number;
+    totalDue: number;
+    expected: { cash: number; upi: number; card: number; cheque: number; other: number; total: number; count: number };
+  }>({
+    queryKey: ["my-day-close-preview"],
+    queryFn: () => api.get("/api/day-close/my-preview"),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
   const s = data?.summary;
 
   const statusColors: Record<string, string> = {
@@ -1182,6 +1199,43 @@ export default function MyDailySummary() {
 
       {/* ── Drawer Status Warning Chips ── */}
       {drawerQ.data && <DrawerChips status={drawerQ.data} />}
+
+      {/* ── Day Close Open Window Quick View ── */}
+      {myPreviewQ.data && (
+        <div className="bg-white dark:bg-card border border-blue-200 dark:border-blue-800 rounded-xl p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+            <h3 className="text-sm font-bold text-gray-800 dark:text-gray-100">Open Window (Live)</h3>
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {myPreviewQ.data.coveredFromTs
+                ? `${new Date(myPreviewQ.data.coveredFromTs).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" })} — now`
+                : "Since start — now"}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+            <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-2.5">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Bills</div>
+              <div className="text-lg font-bold text-blue-700 dark:text-blue-300">{myPreviewQ.data.billsCount}</div>
+              <div className="text-xs text-gray-400">₹{myPreviewQ.data.totalBilled.toFixed(0)} billed</div>
+            </div>
+            <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-2.5">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Payments</div>
+              <div className="text-lg font-bold text-green-700 dark:text-green-300">{myPreviewQ.data.paymentsCount}</div>
+              <div className="text-xs text-gray-400">₹{myPreviewQ.data.expected.total.toFixed(0)} collected</div>
+            </div>
+            <div className="bg-amber-50 dark:bg-amber-950/30 rounded-lg p-2.5">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Total Due</div>
+              <div className="text-lg font-bold text-amber-700 dark:text-amber-300">₹{myPreviewQ.data.totalDue.toFixed(0)}</div>
+              <div className="text-xs text-gray-400">outstanding</div>
+            </div>
+            <div className="bg-violet-50 dark:bg-violet-950/30 rounded-lg p-2.5">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Expected Cash</div>
+              <div className="text-lg font-bold text-violet-700 dark:text-violet-300">₹{myPreviewQ.data.expected.cash.toFixed(0)}</div>
+              <div className="text-xs text-gray-400">in hand</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Date Range Picker ── */}
       <div className="bg-white dark:bg-card border border-gray-200 dark:border-card-border rounded-xl p-4 shadow-sm space-y-3">
