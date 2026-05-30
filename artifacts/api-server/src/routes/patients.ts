@@ -23,13 +23,27 @@ async function generatePatientId(): Promise<string> {
   // Derive next ID from the maximum numeric suffix in patient_id.
   // max(patient_id) is WRONG because string comparison is lexicographic:
   // 'P-00009' > 'P-00010' in Postgres, so the max string is not the latest number.
-  // Use REPLACE instead of REGEXP_REPLACE for portability (some Postgres builds
-  // lack the regexp extension). Patient IDs are always "P-NNNNN" format.
-  const [row] = await db
-    .select({ max: sql<number | null>`MAX(NULLIF(REPLACE(patient_id, 'P-', ''), '')::int)` })
-    .from(patientsTable);
-  const next = (row?.max ?? 0) + 1;
-  return `P-${String(next).padStart(5, "0")}`;
+  //
+  // We avoid SQL-only approaches (REGEXP_REPLACE, REPLACE + ::int) because some
+  // production databases lack regex extensions, and legacy patient_id values may
+  // contain non-numeric characters that crash the cast.
+  //
+  // Fetching all IDs and parsing in JS is O(N) but safe, portable, and handles
+  // any legacy or non-standard patient_id values gracefully.
+  const rows = await db
+    .select({ patientId: patientsTable.patientId })
+    .from(patientsTable)
+    .where(sql`${patientsTable.patientId} LIKE 'P-%'`);
+
+  let max = 0;
+  for (const row of rows) {
+    const id = row.patientId;
+    if (!id || !id.startsWith("P-")) continue;
+    const num = parseInt(id.slice(2).replace(/\D/g, ""), 10);
+    if (!isNaN(num) && num > max) max = num;
+  }
+
+  return `P-${String(max + 1).padStart(5, "0")}`;
 }
 
 patientsRouter.get("/", async (req, res) => {
