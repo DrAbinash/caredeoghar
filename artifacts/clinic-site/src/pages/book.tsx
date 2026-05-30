@@ -52,7 +52,7 @@ function submitPayuForm(payuUrl: string, fields: Record<string, string>) {
 }
 
 /* ── Types ── */
-type BookingConfig = { enabled: boolean; keyId: string; vipEnabled: boolean; gateway: "payu" | "razorpay" | "phonepe" | "bharatpe" | null; payuMerchantKey?: string; phonepeMerchantId?: string; bharatpeMerchantId?: string; kioskUpiVpa?: string; kioskUpiName?: string; upiQrEnabled?: boolean; upiVpa?: string; upiQrImageUrl?: string };
+type BookingConfig = { enabled: boolean; keyId: string; vipEnabled: boolean; gateway: "payu" | "razorpay" | "phonepe" | "bharatpe" | "icici" | null; payuMerchantKey?: string; phonepeMerchantId?: string; bharatpeMerchantId?: string; iciciMerchantId?: string; kioskUpiVpa?: string; kioskUpiName?: string; upiQrEnabled?: boolean; upiVpa?: string; upiQrImageUrl?: string };
 type TestItem = { id: number; code: string; name: string; category: string; price: string };
 type PkgItem  = { id: number; code: string; name: string; price: string; description: string };
 
@@ -265,10 +265,27 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
 
   async function handlePay() {
     if (selTests.size === 0 && selPkgs.size === 0) { setError("Please select at least one test or package."); return; }
+    if (config?.gateway === "icici") return handleICICI();
     if (config?.gateway === "bharatpe") return handleBharatPe();
     if (config?.gateway === "phonepe") return handlePhonePe();
     if (config?.gateway === "payu") return handlePayU();
     return handleRazorpay();
+  }
+
+  async function handleICICI() {
+    setError(""); setPaying(true);
+    try {
+      const res = await bookingPost<{ bookingRef: string; redirectUrl: string; tranCtx: string }>("/api/public/booking/icici-initiate", {
+        name: pd.name, phone: pd.phone, email: pd.email, selectedDate: pd.date, timeSlot: pd.timeSlot,
+        testIds: Array.from(selTests), packageIds: Array.from(selPkgs),
+        totalAmount: total, notes: pd.notes, isVip: pd.isVip,
+      });
+      setSuccessRef(res.bookingRef);
+      window.location.href = res.redirectUrl;
+    } catch (e: unknown) {
+      const msg = (e as { message?: string }).message || "Something went wrong.";
+      setError(msg); setPaying(false);
+    }
   }
 
   async function handleQrPay() {
@@ -313,6 +330,7 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
   }
 
   const gatewayLabel =
+    config?.gateway === "icici" ? "ICICI Bank" :
     config?.gateway === "bharatpe" ? "BharatPe" :
     config?.gateway === "phonepe" ? "PhonePe" :
     config?.gateway === "payu" ? "PayU" : "Razorpay";

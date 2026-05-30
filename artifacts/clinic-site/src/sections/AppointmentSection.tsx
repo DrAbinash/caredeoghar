@@ -83,7 +83,7 @@ export default function AppointmentSection({ section, settings }: { section: Sec
     urlChecked.current = true;
     const params = new URLSearchParams(window.location.search);
     const bookingStatus = params.get("booking");
-    if (bookingStatus === "success" || bookingStatus === "link_success" || bookingStatus === "phonepe_done" || bookingStatus === "bharatpe_done") {
+    if (bookingStatus === "success" || bookingStatus === "link_success" || bookingStatus === "phonepe_done" || bookingStatus === "bharatpe_done" || bookingStatus === "icici_done") {
       setSuccessRef(params.get("ref") ?? "");
       setStep("done");
     } else if (bookingStatus === "failed") {

@@ -97,8 +97,12 @@ publicBookingRouter.get("/config", async (_req, res): Promise<void> => {
   const bharatpeApiKey = process.env.BHARATPE_API_KEY || "";
   const bharatpeMerchantId = process.env.BHARATPE_MERCHANT_ID || settings.bharatpeMerchantId || "";
 
-  let gateway: "razorpay" | "payu" | "phonepe" | "bharatpe" | null = null;
-  if (settings.bharatpeEnabled && bharatpeMerchantId && bharatpeApiKey) gateway = "bharatpe";
+  const iciciSecret = process.env.ICICI_SECRET_KEY || "";
+  const iciciMerchantId = process.env.ICICI_MERCHANT_ID || settings.iciciMerchantId || "";
+
+  let gateway: "razorpay" | "payu" | "phonepe" | "bharatpe" | "icici" | null = null;
+  if (settings.iciciEnabled && iciciMerchantId && iciciSecret) gateway = "icici";
+  else if (settings.bharatpeEnabled && bharatpeMerchantId && bharatpeApiKey) gateway = "bharatpe";
   else if (settings.payuEnabled && payuKey && payuSalt) gateway = "payu";
   else if (settings.phonepeEnabled && phonepeMerchantId && phonepeSalt) gateway = "phonepe";
   else if (razorpayKeyId && razorpaySecret) gateway = "razorpay";
@@ -119,6 +123,7 @@ publicBookingRouter.get("/config", async (_req, res): Promise<void> => {
     payuMerchantKey: payuKey,
     phonepeMerchantId: settings.phonepeEnabled ? phonepeMerchantId : "",
     bharatpeMerchantId: settings.bharatpeEnabled ? bharatpeMerchantId : "",
+    iciciMerchantId: settings.iciciEnabled ? iciciMerchantId : "",
     kioskUpiVpa: settings.kioskUpiVpa,
     kioskUpiName: settings.kioskUpiName,
     upiQrEnabled: settings.upiQrEnabled,
@@ -744,6 +749,243 @@ publicBookingRouter.get("/bharatpe-callback", async (req, res): Promise<void> =>
     await db.update(onlineBookingsTable).set({ status: "payment_failed" }).where(eq(onlineBookingsTable.id, booking.id));
   }
   res.redirect(`${clinicSiteBase}/?booking=failed&reason=${encodeURIComponent(code || "Payment not completed")}`);
+});
+
+// ── ICICI Orange PG helpers ─────────────────────────────────────────────────
+
+const ICICI_UAT_BASE = "https://pgpayuat.icicibank.com";
+const ICICI_PROD_BASE = "https://pgpay.icicibank.com";
+
+function getIciciBase() {
+  return process.env.NODE_ENV === "production" ? ICICI_PROD_BASE : ICICI_UAT_BASE;
+}
+
+function generateIciciSecureHash(params: Record<string, string>, secretKey: string): string {
+  const keys = Object.keys(params).sort();
+  const hashText = keys.map((k) => params[k]).join("");
+  return crypto.createHmac("sha256", secretKey).update(hashText).digest("hex");
+}
+
+function formatTxnDate(d = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+
+// ── POST /api/public/booking/icici-initiate ──────────────────────────────────
+publicBookingRouter.post("/icici-initiate", createOrderLimiter, async (req, res): Promise<void> => {
+  const settings = await getSettings();
+  if (!settings?.onlineBookingEnabled) {
+    res.status(403).json({ error: "Online booking is not enabled." });
+    return;
+  }
+
+  const merchantId = process.env.ICICI_MERCHANT_ID || settings.iciciMerchantId || "";
+  const aggregatorId = process.env.ICICI_AGGREGATOR_ID || settings.iciciAggregatorId || "";
+  const secretKey = process.env.ICICI_SECRET_KEY || "";
+  if (!merchantId || !secretKey) {
+    res.status(503).json({ error: "ICICI payment gateway not configured. Please contact the clinic." });
+    return;
+  }
+
+  const {
+    name, phone, email = "", selectedDate, timeSlot = "",
+    testIds = [], packageIds = [], totalAmount,
+    notes = "", isVip = false,
+  } = req.body as {
+    name: string; phone: string; email?: string; selectedDate: string; timeSlot?: string;
+    testIds?: number[]; packageIds?: number[]; totalAmount: number;
+    notes?: string; isVip?: boolean;
+  };
+
+  if (!name?.trim() || !phone?.trim() || !selectedDate) {
+    res.status(400).json({ error: "Name, phone, and selected date are required." });
+    return;
+  }
+  if (!Array.isArray(testIds) || !Array.isArray(packageIds) || (testIds.length + packageIds.length) === 0) {
+    res.status(400).json({ error: "Please select at least one test or package." });
+    return;
+  }
+  const amount = Number(totalAmount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    res.status(400).json({ error: "Invalid total amount." });
+    return;
+  }
+
+  const bookingRef = generateBookingRef();
+  const base = getPublicBase(req as Parameters<typeof getPublicBase>[0]);
+  const returnUrl = `${base}/api/public/booking/icici-callback`;
+  const txnDate = formatTxnDate();
+  const amountStr = amount.toFixed(2);
+  const mobile = phone.replace(/\D/g, "").slice(-10);
+  const addlParam1 = bookingRef;
+  const addlParam2 = "care-diagnostics";
+
+  const hashParams: Record<string, string> = {
+    addlParam1,
+    addlParam2,
+    aggregatorID: aggregatorId,
+    amount: amountStr,
+    currencyCode: "356",
+    customerEmailID: email.trim() || "care.deoghar@gmail.com",
+    customerMobileNo: mobile,
+    customerName: name.trim(),
+    merchantId,
+    merchantTxnNo: bookingRef,
+    payType: "0",
+    returnURL: returnUrl,
+    transactionType: "SALE",
+    txnDate,
+  };
+  const secureHash = generateIciciSecureHash(hashParams, secretKey);
+
+  const payload = {
+    merchantId,
+    aggregatorID: aggregatorId,
+    merchantTxnNo: bookingRef,
+    amount: amountStr,
+    currencyCode: "356",
+    payType: "0",
+    customerEmailID: email.trim() || "care.deoghar@gmail.com",
+    transactionType: "SALE",
+    returnURL: returnUrl,
+    txnDate,
+    customerMobileNo: mobile,
+    customerName: name.trim(),
+    addlParam1,
+    addlParam2,
+    secureHash,
+  };
+
+  try {
+    const iciciRes = await fetch(`${getIciciBase()}/tsp/pg/api/v2/initiateSale`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const iciciData = (await iciciRes.json()) as {
+      responseCode?: string;
+      merchantId?: string;
+      merchantTxnNo?: string;
+      redirectURI?: string;
+      tranCtx?: string;
+      secureHash?: string;
+      respDescription?: string;
+    };
+    if (!iciciRes.ok || !iciciData.tranCtx || iciciData.responseCode !== "R1000") {
+      res.status(502).json({ error: "Could not initiate ICICI payment. Please try again.", details: iciciData.respDescription || iciciData.responseCode });
+      return;
+    }
+
+    const redirectTo = `${iciciData.redirectURI}?tranCtx=${encodeURIComponent(iciciData.tranCtx)}`;
+
+    await db.insert(onlineBookingsTable).values({
+      bookingRef,
+      name: name.trim(),
+      phone: phone.trim(),
+      email: email.trim(),
+      selectedDate,
+      timeSlot: timeSlot.trim(),
+      testIds: JSON.stringify(testIds),
+      packageIds: JSON.stringify(packageIds),
+      totalAmount: String(amount),
+      notes: notes.trim(),
+      isVip: Boolean(isVip) && Boolean(settings.vipQueueEnabled),
+      iciciTransactionId: bookingRef,
+      iciciProviderRefId: iciciData.tranCtx,
+      status: "pending_payment",
+    });
+
+    res.json({ bookingRef, redirectUrl: redirectTo, tranCtx: iciciData.tranCtx });
+  } catch {
+    res.status(502).json({ error: "Could not connect to ICICI payment gateway. Please try again." });
+  }
+});
+
+// ── GET /api/public/booking/icici-callback ───────────────────────────────────
+publicBookingRouter.get("/icici-callback", async (req, res): Promise<void> => {
+  const base = getPublicBase(req as Parameters<typeof getPublicBase>[0]);
+  const clinicSiteBase = base;
+
+  const { merchantTxnNo, responseCode, respDescription, txnID } = req.query as Record<string, string>;
+  if (!merchantTxnNo) {
+    res.redirect(`${clinicSiteBase}/?booking=failed&reason=missing_txn_id`);
+    return;
+  }
+
+  const [booking] = await db.select().from(onlineBookingsTable)
+    .where(eq(onlineBookingsTable.iciciTransactionId, merchantTxnNo))
+    .limit(1);
+
+  if (!booking) {
+    res.redirect(`${clinicSiteBase}/?booking=failed&reason=booking_not_found`);
+    return;
+  }
+
+  // If already paid, skip verification
+  if (booking.status === "paid" || booking.status === "confirmed") {
+    res.redirect(`${clinicSiteBase}/?booking=success&ref=${encodeURIComponent(merchantTxnNo)}`);
+    return;
+  }
+
+  const settings = await getSettings();
+  const merchantId = process.env.ICICI_MERCHANT_ID || settings?.iciciMerchantId || "";
+  const aggregatorId = process.env.ICICI_AGGREGATOR_ID || settings?.iciciAggregatorId || "";
+  const secretKey = process.env.ICICI_SECRET_KEY || "";
+
+  // Server-side status verification
+  if (secretKey && merchantId) {
+    try {
+      const statusHashParams: Record<string, string> = {
+        aggregatorID: aggregatorId,
+        merchantId,
+        merchantTxnNo,
+        originalTxnNo: merchantTxnNo,
+        transactionType: "STATUS",
+      };
+      const statusHash = generateIciciSecureHash(statusHashParams, secretKey);
+      const statusRes = await fetch(`${getIciciBase()}/tsp/pg/api/command`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          merchantId,
+          aggregatorID: aggregatorId,
+          merchantTxnNo,
+          originalTxnNo: merchantTxnNo,
+          transactionType: "STATUS",
+          secureHash: statusHash,
+        }),
+      });
+      const statusData = (await statusRes.json()) as {
+        txnStatus?: string;
+        txnResponseCode?: string;
+        responseCode?: string;
+        respDescription?: string;
+      };
+      if (statusData.txnStatus === "SUC" || statusData.txnResponseCode === "0000" || statusData.responseCode === "000") {
+        await db.update(onlineBookingsTable)
+          .set({ status: "paid", iciciProviderRefId: txnID || booking.iciciProviderRefId })
+          .where(eq(onlineBookingsTable.id, booking.id));
+        res.redirect(`${clinicSiteBase}/?booking=icici_done&ref=${encodeURIComponent(merchantTxnNo)}`);
+        return;
+      }
+    } catch { /* fall through to failure */ }
+  }
+
+  // Also mark as paid if callback query indicates success (defensive)
+  if (responseCode === "0000" || responseCode === "000") {
+    await db.update(onlineBookingsTable)
+      .set({ status: "paid", iciciProviderRefId: txnID || booking.iciciProviderRefId })
+      .where(eq(onlineBookingsTable.id, booking.id));
+    res.redirect(`${clinicSiteBase}/?booking=icici_done&ref=${encodeURIComponent(merchantTxnNo)}`);
+    return;
+  }
+
+  if (booking.status === "pending_payment") {
+    await db.update(onlineBookingsTable)
+      .set({ status: "payment_failed" })
+      .where(eq(onlineBookingsTable.id, booking.id));
+  }
+  res.redirect(`${clinicSiteBase}/?booking=failed&reason=${encodeURIComponent(respDescription || "Payment not completed")}`);
 });
 
 // ── POST /api/public/booking/create-order (Razorpay ─ kept for backwards compat) ──

@@ -40,6 +40,10 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   // Cashfree
   cashfreeEnabled: boolean("cashfree_enabled").notNull().default(false),
   cashfreeAppId: text("cashfree_app_id").notNull().default(""),
+  // ICICI Orange PG
+  iciciEnabled: boolean("icici_enabled").notNull().default(false),
+  iciciMerchantId: text("icici_merchant_id").notNull().default(""),
+  iciciAggregatorId: text("icici_aggregator_id").notNull().default(""),
   // Self-registration kiosk
   kioskEnabled: boolean("kiosk_enabled").notNull().default(false),
   kioskUpiVpa: text("kiosk_upi_vpa").notNull().default(""),

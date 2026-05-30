@@ -1382,6 +1382,9 @@ type OnlineBookingSettings = {
   bharatpeMerchantId: string;
   cashfreeEnabled: boolean;
   cashfreeAppId: string;
+  iciciEnabled: boolean;
+  iciciMerchantId: string;
+  iciciAggregatorId: string;
   upiQrEnabled: boolean;
   upiVpa: string;
   upiQrImageUrl: string;
@@ -1598,6 +1601,9 @@ function OnlineBookingTab() {
       bharatpeMerchantId: data.bharatpeMerchantId || "",
       cashfreeEnabled: data.cashfreeEnabled ?? false,
       cashfreeAppId: data.cashfreeAppId || "",
+      iciciEnabled: data.iciciEnabled ?? false,
+      iciciMerchantId: data.iciciMerchantId || "",
+      iciciAggregatorId: data.iciciAggregatorId || "",
       upiQrEnabled: data.upiQrEnabled ?? false,
       upiVpa: data.upiVpa || "",
       upiQrImageUrl: data.upiQrImageUrl || "",
@@ -1809,6 +1815,63 @@ function OnlineBookingTab() {
         </div>
         <p className="text-xs text-amber-700 dark:text-amber-400">
           In Replit: open Secrets, add <code>BHARATPE_API_KEY</code>, <code>BHARATPE_API_SECRET</code>, and <code>BHARATPE_MERCHANT_ID</code>. Then restart the API server.
+        </p>
+      </div>
+
+      {/* ICICI Orange PG */}
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg bg-[#C41E3A] flex items-center justify-center shrink-0">
+            <CreditCard size={16} className="text-white" />
+          </div>
+          <div>
+            <h3 className="font-bold">ICICI Orange PG</h3>
+            <p className="text-xs text-muted-foreground">ICICI Bank payment gateway for card, UPI, and net banking.</p>
+          </div>
+        </div>
+        <Toggle
+          value={form.iciciEnabled}
+          onChange={(v) => setForm({ ...form, iciciEnabled: v })}
+          label="Use ICICI as active payment gateway"
+          hint="When enabled, ICICI takes highest priority over all other gateways."
+        />
+        <div>
+          <Label>ICICI Merchant ID</Label>
+          <p className="text-xs text-muted-foreground mb-1">Your ICICI Merchant ID (e.g. 100000000007164). Safe to store here.</p>
+          <Input
+            value={form.iciciMerchantId}
+            onChange={(e) => setForm({ ...form, iciciMerchantId: e.target.value })}
+            className="mt-1 max-w-md font-mono text-sm"
+            placeholder="e.g. 100000000007164"
+          />
+        </div>
+        <div>
+          <Label>ICICI Aggregator ID</Label>
+          <p className="text-xs text-muted-foreground mb-1">Your ICICI Aggregator ID (e.g. A100000000007164). Safe to store here.</p>
+          <Input
+            value={form.iciciAggregatorId}
+            onChange={(e) => setForm({ ...form, iciciAggregatorId: e.target.value })}
+            className="mt-1 max-w-md font-mono text-sm"
+            placeholder="e.g. A100000000007164"
+          />
+        </div>
+        <div className="flex justify-end gap-2 pt-2 border-t border-card-border">
+          <Button onClick={() => save.mutate(form)} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
+        </div>
+      </div>
+
+      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-5 space-y-2">
+        <h3 className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2">
+          <KeyRound size={15} /> ICICI Secret Key
+        </h3>
+        <p className="text-sm text-amber-800 dark:text-amber-300">
+          This is used server-side for ICICI HMAC signing. It is <strong>never</strong> sent to the browser. Add as environment secret:
+        </p>
+        <div className="font-mono text-sm bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 rounded px-3 py-2 select-all">
+          ICICI_SECRET_KEY=your_secret_key
+        </div>
+        <p className="text-xs text-amber-700 dark:text-amber-400">
+          In Replit: open Secrets, add <code>ICICI_SECRET_KEY</code>. Optionally also add <code>ICICI_MERCHANT_ID</code> and <code>ICICI_AGGREGATOR_ID</code> as fallbacks. Then restart the API server.
         </p>
       </div>
 

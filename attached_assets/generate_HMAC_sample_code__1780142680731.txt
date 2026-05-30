@@ -1,0 +1,185 @@
+Java :
+
+public static String hmacDigest(String msg, String keyString) {
+String digest = null;
+try {
+SecretKeySpec key = new SecretKeySpec((keyString).getBytes("UTF-8"), “HmacSHA256”);
+Mac mac = Mac.getInstance(“HmacSHA256”);
+mac.init(key);
+byte[] bytes = mac.doFinal(msg.getBytes("ASCII"));
+StringBuffer hash = new StringBuffer();
+for (int i = 0; i <bytes.length; i++) {
+String hex = Integer.toHexString(0xFF & bytes[i]);
+if (hex.length() == 1) {
+hash.append('0');
+}
+hash.append(hex);
+}
+digest = hash.toString();
+} catch (UnsupportedEncodingException e) {
+} catch (InvalidKeyException e) {
+} catch (NoSuchAlgorithmException e) {
+}
+return digest;
+}
+
+Python:
+
+import hmac
+import hashlib
+
+def hmac_digest(msg, key_string):
+    # Encode the key and message as bytes
+    key = key_string.encode('utf-8')
+    msg_bytes = msg.encode('ascii')
+    
+    # Create an HMAC object with the SHA-256 algorithm
+    mac = hmac.new(key, msg_bytes, hashlib.sha256)
+    
+    # Return the hexadecimal digest
+    return mac.hexdigest()
+
+# Example usage
+msg = "your message here"
+key_string = "your secret key"
+digest = hmac_digest(msg, key_string)
+print("HMAC Digest:", digest)
+
+PHP:
+
+<?php
+
+function hmacDigest($msg, $keyString) {
+    // Create an HMAC digest using the SHA-256 algorithm
+    $digest = hash_hmac('sha256', $msg, $keyString);
+
+    return $digest;
+}
+
+// Example usage
+$msg = "your message here";
+$keyString = "your secret key";
+$digest = hmacDigest($msg, $keyString);
+echo "HMAC Digest: " . $digest;
+
+?>
+
+Node js:
+
+const crypto = require('crypto');
+
+function hmacDigest(msg, keyString) {
+    // Create HMAC using SHA-256 algorithm
+    const hmac = crypto.createHmac('sha256', keyString);
+    
+    // Update the HMAC with the message and compute the digest
+    hmac.update(msg);
+    
+    // Return the hexadecimal digest
+    return hmac.digest('hex');
+}
+
+// Example usage
+const msg = "your message here";
+const keyString = "your secret key";
+const digest = hmacDigest(msg, keyString);
+console.log("HMAC Digest:", digest);
+
+Angular:
+
+import { Component } from '@angular/core';
+import * as CryptoJS from 'crypto-js';
+
+@Component({
+  selector: 'app-hmac-example',
+  templateUrl: './hmac-example.component.html',
+  styleUrls: ['./hmac-example.component.css']
+})
+export class HmacExampleComponent {
+  
+  // Function to generate HMAC SHA-256 digest
+  hmacDigest(msg: string, keyString: string): string {
+    // Compute the HMAC using the key and message
+    const digest = CryptoJS.HmacSHA256(msg, keyString);
+    
+    // Convert the digest to a hexadecimal string and return
+    return digest.toString(CryptoJS.enc.Hex);
+  }
+
+  // Example usage
+  generateHmac() {
+    const msg = "your message here";
+    const keyString = "your secret key";
+    const digest = this.hmacDigest(msg, keyString);
+    console.log("HMAC Digest:", digest);
+  }
+}
+
+
+Ruby:
+
+require 'openssl'
+
+def hmac_digest(msg, key_string)
+  # Create an HMAC using SHA-256
+  hmac = OpenSSL::HMAC.new(key_string, OpenSSL::Digest::SHA256.new)
+
+  # Update the HMAC with the message and compute the digest
+  hmac.update(msg)
+
+  # Return the digest in hexadecimal format
+  return hmac.hexdigest
+end
+
+# Example usage
+msg = "your message here"
+key_string = "your secret key"
+digest = hmac_digest(msg, key_string)
+puts "HMAC Digest: #{digest}"
+
+
+
+.NET:
+
+using System;
+using System.Text;
+using System.Security.Cryptography;
+
+public class HmacHelper
+{
+    public static string HmacDigest(string msg, string keyString)
+    {
+        string digest = null;
+        try
+        {
+            // Convert the key string to a byte array
+            byte[] key = Encoding.UTF8.GetBytes(keyString);
+
+            // Create an HMACSHA256 instance and initialize with the key
+            using (var hmac = new HMACSHA256(key))
+            {
+                // Convert the message string to bytes
+                byte[] msgBytes = Encoding.ASCII.GetBytes(msg);
+
+                // Compute the HMAC digest
+                byte[] hashBytes = hmac.ComputeHash(msgBytes);
+
+                // Convert the hash bytes to a hexadecimal string
+                StringBuilder hash = new StringBuilder();
+                foreach (byte b in hashBytes)
+                {
+                    hash.Append(b.ToString("x2"));
+                }
+
+                digest = hash.ToString();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Handle exceptions (if necessary)
+            Console.WriteLine("Error: " + ex.Message);
+        }
+
+        return digest;
+    }
+}

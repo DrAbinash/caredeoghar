@@ -1,0 +1,181 @@
+MID – 100000000007164
+Agg ID - A100000000007164 
+
+Key - db06cca0-838b-4e01-8b20-6ac446ffb6bd
+ 
+
+Testing credentials :
+
+Cards:
+
+Card Number - 4761 3400 0000 0035
+Exp - 07/26
+CVV 123
+OTP : 123456
+
+Net Banking:
+
+CC Avenue Test Bank
+
+UPI:
+
+test@ybl
+
+ 
+
+7254081252
+
+rakesh pandey
+
+
+9438046114
+
+==========================================================================================================================================================
+
+API EndPoints:								
+						
+Initiate Sale URL: https://pgpayuat.icicibank.com/tsp/pg/api/v2/initiateSale								
+Initiate Sale Request:								
+{                                
+    "merchantId": "100000000007164", //fixed for UAT for live MID will get changed
+    "aggregatorID" :"A100000000007164",       // fixed for UAT for live aggID will get changed                        
+    "merchantTxnNo": "7575AB85887575",       // need to be unique for every initiation and alpha numeric only                
+    "amount": "100.00",                                
+    "currencyCode": "356",       // fixed                
+    "payType": "0",                 //fixed               
+    "customerEmailID": "test@gmail.com",    // you can pass user of any fix email                            
+    "transactionType": "SALE",        fixed                          
+    "returnURL": "https://pgpayuat.icicibank.com/tsp/pg/api/merchant",           w//here you want to capture your response                 
+    "txnDate": "20251121115413",    //YYYYMMDDHHMMSS                        
+    "customerMobileNo": "917709356600",         //user or your number                  
+    "customerName": "Test",                           // user name 
+    "addlParam1": "000",                   // additional parameters
+    "addlParam2": "111",              // additional parameters
+     
+    "secureHash": "b056fb6726703dd3ce11b71d5e59a6a55b301ceb429ba869a77d189eb3c2c458"                                
+}								
+								
+								
+Initiate Sale Response:								
+{"responseCode":"R1000","merchantId":"T_S0001","aggregatorID":null,"merchantTxnNo":"757585887575",
+"redirectURI":"https://pgpayuat.icicibank.com/tsp/pg/api/v2/authRedirect","showOTPCapturePage":"N","generateOTPURI":null,
+"verifyOTPURI":null,"authorizeURI":null,"tranCtx":"Ra3c22840-bb8b-4e44-b622-e35928b86858","secureHash":"1033eedc162c60a3dc4ed6c51fb73ddbc6f01d21d28f77cea20140747514144e"}								
+								
+Sample URL from Response: 
+
+Redirect Logic: https://pgpayuat.icicibank.com/tsp/pg/api/v2/authRedirect?tranCtx=Ra3c22840-bb8b-4e44-b622-e35928b86858								
+
+Secure Hash Logic:
+
+1. Sort the data alphabhetically and as below use hashText value only with secret key as mentioned above with SHA256 algorith to create secure hash.
+								
+HashKey = addlParam1addlParam2aggregatorIDamountcurrencyCodecustomerEmailIDcustomerMobileNocustomerNamemerchantIdmerchantTxnNopayTypereturnURLtransactionTypetxnDate								
+HashText:= 000111A100000000007164100.00356narayan.kapase@phicommerce.com917709356362NarayanT_S00017575858875750https://pgpayuat.icicibank.com/tsp/pg/api/merchantSALE20241121115413								
+secureHash: 205a2c1e897d3d654bbc92858b1da4929d0e2b1bbcedb781723f6db22768a10b	
+
+
+Response of sale API:
+
+{
+    "secureHash" : "b526bc01462146f70351649cf726406a2d7b97cdc8b552c52c22e301f3521edc",
+    "amount" : "100.00",
+    "respDescription" : "Transaction successful",
+    "paymentMode" : "Card",
+    "customerEmailID" : "test@gmail.com",
+    "addlParam2" : "111",
+    "paymentInstId" : "6XXX XXXX XXXX 3677",
+    "responseCode" : "0000",
+    "customerMobileNo" : "917709356672",
+    "paymentSubInstType" : "DC",
+    "merchantId" : "100000000007164",
+    "paymentID" : "91186569678",
+    "merchantTxnNo" : "757585887575",
+    "addlParam1" : "000",
+    "paymentDateTime" : "20250812180654",
+    "txnID" : "7700201519065"
+  }
+
+============================================================================================================================================================
+
+Status Check API:https://pgpayuat.icicibank.com/tsp/pg/api/command
+
+API:Refund/StatusCheck
+ 
+
+Curl Request:
+
+
+{
+    "merchantId": "100000000007164",
+    "aggregatorID" :"A100000000007164",	
+    "merchantTxnNo": "order1766376907065", same as txn no
+    "originalTxnNo": "order1766376907065", same as txn no  
+    "transactionType": "STATUS",
+	"amount":"10" //non mandatory
+    "secureHash":"d54e254f83626f1f6c73e9fb472a7aa0972304e42484237b945dbfe4829b3111"
+}
+
+{"aggregatorID":"A100000000007164","merchantId":"100000000007164"
+,"merchantTxnNo":"5421a38111bd4","originalTxnNo":"5421a38111bd4",
+"transactionType":"STATUS","secureHash":"767356c00f0dd505ffe9dd4bcce655cac1a176c87e1f4a4445fb10ea79f6711e"}
+
+
+Response:
+{"txnRespDescription":"Transaction successful","secureHash":"6096b328c4b3bebf6eaf60dd8b038ea9cca9f8904d1b4e987db8072837696e15",
+"amount":"10.00","txnAuthID":"314013704985","txnResponseCode":"0000","paymentMode":"NB","respDescription":"Request processed successfully"
+,"aggregatorID":"A100000000007164","oth_charge":"1.18","responseCode":"000","transactionType":"SALE","txnStatus":"SUC",
+"paymentSubInstType":"CC Avenues Test Bank","merchantId":"100000000007164","merchantTxnNo":"order1766376907065",
+"paymentDateTime":"20251222094517","txnID":"7700216351632"}
+
+
+============================================================================================================================================================
+
+Refund API: https://pgpayuat.icicibank.com/tsp/pg/api/command
+
+Curl Request:
+
+{
+    "merchantId": "100000000007164",
+    "aggregatorID" :"A100000000007164",
+    "merchantTxnNo": "ABC1234", new reference no
+    "originalTxnNo": "order1766376907065", same as txn no
+    "amount": "5.00",  mandatory
+    "transactionType": "REFUND",
+    "secureHash":"70ddaeeb4c02ab57100abc601859a315ed5c7f6b7a3d48e453b6cfdaf7bf3a7f"
+}
+
+Response:
+
+{"secureHash":"006bb5ab867ce96e238b5c2039b8ce8b090272708d6090eaa8f0e21b6481bd11","merchantId":"100000000007164",
+"respDescription":"Request processed successfully","merchantTxnNo":"ABC1234","aggregatorID":"A100000000007164",
+"responseCode":"R1000","txnID":"7700216351944"}
+
+===============================================================================================================================================================
+Settlement API:
+
+Find the sample Request and Response below.
+ 
+SHA PARAM:
+aggregatorIDmerchantIdoriginalTxnNotransactionType
+SHA VALUES:
+A1000000000071641000000000071647700218852216SETTLSTATUS
+
+POST https://pgpayuat.icicibank.com/tsp/mms/api/command
+ 
+content-type: application/x-www-form-urlencoded
+
+Request Body -
+{
+merchantId: "100000000007164"
+transactionType: "SETTLSTATUS"
+secureHash: "0fc39f838562d7ebc8ee4bec62770595aadf31deb0790806cf8ef58854caf96a"
+originalTxnNo: "7700218852216"
+aggregatorID: "A100000000007164"
+}
+ 
+Response Body - 
+{"secureHash":"f6c268dd6374dcf2c11e765597d99456aabd61c266171cf0ae99db90fcf157d2","txnStatus":"SUC","txnResponseCode":"0000",
+"merchantId":"100000000007164","settlementStatus":"NSD","responseDescription":"Request processed successfully",
+"merchantTxnNo":"93563AA","aggregatorID":"A100000000007164","txnAmount":1001.00,"responseCode":"000","txnID":"7700218852216"}
+							
+								
