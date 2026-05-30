@@ -115,7 +115,7 @@ async function summarizeWindow(from: Date | null, to: Date) {
 // ── Routes ─────────────────────────────────────────────────────────────────
 
 // Preview what closing the day right now would look like.
-dayCloseRouter.get("/preview", async (_req, res) => {
+dayCloseRouter.get("/preview", requireOwnerOrAdmin, async (_req, res) => {
   const from = await lastClosureBoundary();
   const to = new Date();
   const summary = await summarizeWindow(from, to);
@@ -141,7 +141,7 @@ const CreateBody = z.object({
 });
 
 // Close the day.
-dayCloseRouter.post("/", async (req, res) => {
+dayCloseRouter.post("/", requireOwnerOrAdmin, async (req, res) => {
   const parsed = CreateBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid request", details: parsed.error.format() });
@@ -207,7 +207,7 @@ dayCloseRouter.post("/", async (req, res) => {
 });
 
 // List all closures, newest first.
-dayCloseRouter.get("/", async (req, res) => {
+dayCloseRouter.get("/", requireOwnerOrAdmin, async (req, res) => {
   const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 60));
   const rows = await db
     .select()
@@ -218,7 +218,7 @@ dayCloseRouter.get("/", async (req, res) => {
 });
 
 // Single closure detail.
-dayCloseRouter.get("/:id", async (req, res) => {
+dayCloseRouter.get("/:id", requireOwnerOrAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     res.status(400).json({ error: "Invalid id" });
@@ -310,6 +310,7 @@ type UserSummary = {
     discount: number;
     status: string;
     referringDoctor: string | null;
+    createdByName: string;
     createdAt: string;
   }>;
 };
@@ -381,6 +382,7 @@ async function summarizeUserWindow(
     discount: n(b.discount),
     status: b.status ?? "pending",
     referringDoctor: b.referringDoctor ?? null,
+    createdByName: b.createdByName ?? "",
     createdAt: b.createdAt ? new Date(b.createdAt).toISOString() : "",
   }));
 

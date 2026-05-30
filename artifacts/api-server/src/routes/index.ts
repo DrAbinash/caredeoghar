@@ -209,10 +209,9 @@ router.get("/ledgers", requireStaffAuth, async (_req, res) => {
   res.json({ ledgers });
 });
 router.use("/ledgers", requireStaffAuth, requireStaffPermission("/accounting"), ledgersRouter);
-// Day-Close / Cash-Drawer-Close — admin + super-admin only (gated via the
-// /day-close path; FULL_ACCESS_ROLES auto-permits both roles). The reopen
-// sub-route inside the router additionally enforces requireSuperAdmin.
-router.use("/day-close", requireStaffAuth, requireStaffPermission("/day-close"), dayCloseRouter);
+// Day-Close — per-user endpoints (/my-preview, /my-drawer-status, /my-close, /my-list)
+// are open to all authenticated staff; admin-only routes are gated inline.
+router.use("/day-close", requireStaffAuth, dayCloseRouter);
 // Books Sanity / CA review — admin + super-admin only (same auth shape as day-close)
 router.use("/books-sanity", requireStaffAuth, requireStaffPermission("/day-close"), booksSanityRouter);
 
