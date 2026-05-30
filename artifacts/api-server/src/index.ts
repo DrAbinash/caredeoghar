@@ -184,6 +184,7 @@ async function runStartupMigrations(): Promise<void> {
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS icici_enabled BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS icici_merchant_id TEXT NOT NULL DEFAULT '';
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS icici_aggregator_id TEXT NOT NULL DEFAULT '';
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS icici_secret_key TEXT NOT NULL DEFAULT '';
       -- ICICI online bookings
       ALTER TABLE online_bookings ADD COLUMN IF NOT EXISTS icici_transaction_id TEXT;
       ALTER TABLE online_bookings ADD COLUMN IF NOT EXISTS icici_provider_ref_id TEXT;

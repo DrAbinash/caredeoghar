@@ -1385,6 +1385,7 @@ type OnlineBookingSettings = {
   iciciEnabled: boolean;
   iciciMerchantId: string;
   iciciAggregatorId: string;
+  iciciSecretKey: string;
   upiQrEnabled: boolean;
   upiVpa: string;
   upiQrImageUrl: string;
@@ -1604,6 +1605,7 @@ function OnlineBookingTab() {
       iciciEnabled: data.iciciEnabled ?? false,
       iciciMerchantId: data.iciciMerchantId || "",
       iciciAggregatorId: data.iciciAggregatorId || "",
+      iciciSecretKey: data.iciciSecretKey || "",
       upiQrEnabled: data.upiQrEnabled ?? false,
       upiVpa: data.upiVpa || "",
       upiQrImageUrl: data.upiQrImageUrl || "",
@@ -1860,20 +1862,17 @@ function OnlineBookingTab() {
         </div>
       </div>
 
-      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-5 space-y-2">
-        <h3 className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2">
-          <KeyRound size={15} /> ICICI Secret Key
-        </h3>
-        <p className="text-sm text-amber-800 dark:text-amber-300">
-          This is used server-side for ICICI HMAC signing. It is <strong>never</strong> sent to the browser. Add as environment secret:
-        </p>
-        <div className="font-mono text-sm bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 rounded px-3 py-2 select-all">
-          ICICI_SECRET_KEY=your_secret_key
+        <div>
+          <Label>ICICI Secret Key</Label>
+          <p className="text-xs text-muted-foreground mb-1">Your ICICI secret key for HMAC signing. Stored securely server-side.</p>
+          <Input
+            type="password"
+            value={form.iciciSecretKey}
+            onChange={(e) => setForm({ ...form, iciciSecretKey: e.target.value })}
+            className="mt-1 max-w-md font-mono text-sm"
+            placeholder="Enter your ICICI secret key"
+          />
         </div>
-        <p className="text-xs text-amber-700 dark:text-amber-400">
-          In Replit: open Secrets, add <code>ICICI_SECRET_KEY</code>. Optionally also add <code>ICICI_MERCHANT_ID</code> and <code>ICICI_AGGREGATOR_ID</code> as fallbacks. Then restart the API server.
-        </p>
-      </div>
 
       {/* UPI QR Fallback (dynamic amount) */}
       <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">

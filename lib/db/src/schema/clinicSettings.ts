@@ -44,6 +44,7 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   iciciEnabled: boolean("icici_enabled").notNull().default(false),
   iciciMerchantId: text("icici_merchant_id").notNull().default(""),
   iciciAggregatorId: text("icici_aggregator_id").notNull().default(""),
+  iciciSecretKey: text("icici_secret_key").notNull().default(""),
   // Self-registration kiosk
   kioskEnabled: boolean("kiosk_enabled").notNull().default(false),
   kioskUpiVpa: text("kiosk_upi_vpa").notNull().default(""),

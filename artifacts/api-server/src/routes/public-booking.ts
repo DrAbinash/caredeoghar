@@ -97,11 +97,11 @@ publicBookingRouter.get("/config", async (_req, res): Promise<void> => {
   const bharatpeApiKey = process.env.BHARATPE_API_KEY || "";
   const bharatpeMerchantId = process.env.BHARATPE_MERCHANT_ID || settings.bharatpeMerchantId || "";
 
-  const iciciSecret = process.env.ICICI_SECRET_KEY || "";
   const iciciMerchantId = process.env.ICICI_MERCHANT_ID || settings.iciciMerchantId || "";
+  const iciciSecretKey = process.env.ICICI_SECRET_KEY || settings.iciciSecretKey || "";
 
   let gateway: "razorpay" | "payu" | "phonepe" | "bharatpe" | "icici" | null = null;
-  if (settings.iciciEnabled && iciciMerchantId && iciciSecret) gateway = "icici";
+  if (settings.iciciEnabled && iciciMerchantId && iciciSecretKey) gateway = "icici";
   else if (settings.bharatpeEnabled && bharatpeMerchantId && bharatpeApiKey) gateway = "bharatpe";
   else if (settings.payuEnabled && payuKey && payuSalt) gateway = "payu";
   else if (settings.phonepeEnabled && phonepeMerchantId && phonepeSalt) gateway = "phonepe";
@@ -781,7 +781,7 @@ publicBookingRouter.post("/icici-initiate", createOrderLimiter, async (req, res)
 
   const merchantId = process.env.ICICI_MERCHANT_ID || settings.iciciMerchantId || "";
   const aggregatorId = process.env.ICICI_AGGREGATOR_ID || settings.iciciAggregatorId || "";
-  const secretKey = process.env.ICICI_SECRET_KEY || "";
+  const secretKey = process.env.ICICI_SECRET_KEY || settings.iciciSecretKey || "";
   if (!merchantId || !secretKey) {
     res.status(503).json({ error: "ICICI payment gateway not configured. Please contact the clinic." });
     return;
@@ -930,7 +930,7 @@ publicBookingRouter.get("/icici-callback", async (req, res): Promise<void> => {
   const settings = await getSettings();
   const merchantId = process.env.ICICI_MERCHANT_ID || settings?.iciciMerchantId || "";
   const aggregatorId = process.env.ICICI_AGGREGATOR_ID || settings?.iciciAggregatorId || "";
-  const secretKey = process.env.ICICI_SECRET_KEY || "";
+  const secretKey = process.env.ICICI_SECRET_KEY || settings?.iciciSecretKey || "";
 
   // Server-side status verification
   if (secretKey && merchantId) {
