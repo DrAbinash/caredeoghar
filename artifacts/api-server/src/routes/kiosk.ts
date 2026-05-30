@@ -40,9 +40,12 @@ function razorpayAuth(keyId: string, keySecret: string): string {
 }
 
 async function generateKioskPatientId(): Promise<string> {
-  const [row] = await db.select({ max: sql<string | null>`max(patient_id)` }).from(patientsTable);
-  const last = row?.max;
-  const next = last ? parseInt(last.slice(2), 10) + 1 : 1;
+  // max(patient_id) is WRONG because string comparison is lexicographic:
+  // 'P-00009' > 'P-00010' in Postgres, so the max string is not the latest number.
+  const [row] = await db
+    .select({ max: sql<number | null>`MAX(REGEXP_REPLACE(patient_id, '[^0-9]', '', 'g')::int)` })
+    .from(patientsTable);
+  const next = (row?.max ?? 0) + 1;
   return `P-${String(next).padStart(5, "0")}`;
 }
 

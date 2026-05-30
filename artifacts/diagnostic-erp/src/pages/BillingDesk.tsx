@@ -598,18 +598,18 @@ export default function BillingDesk() {
   });
 
   // ── Duplicate-bill detection: reuse the today-collections cache ───────────
+  // toLocaleDateString('en-CA') gives ISO-like format in local timezone
+  const todayIsoB = new Date().toLocaleDateString("en-CA");
   const { data: todayBillsData } = useQuery<{ bills: RecentBill[] }>({
-    queryKey: ["today-collections-panel"],
-    queryFn: () => api.get<{ bills: RecentBill[] }>("/api/bills?limit=30&page=1"),
+    queryKey: ["today-collections-panel", todayIsoB],
+    queryFn: () => api.get<{ bills: RecentBill[] }>(`/api/bills?dateFrom=${todayIsoB}&dateTo=${todayIsoB}&excludeCancelled=true&limit=100&page=1`),
     staleTime: 20_000,
     refetchOnWindowFocus: true,
   });
-  const todayStr = new Date().toDateString();
   const recentPatientBill = !lastBill && selectedPatient
     ? (todayBillsData?.bills ?? []).find(
         (b) =>
           b.patient?.patientId === selectedPatient.patientId &&
-          new Date(b.createdAt).toDateString() === todayStr &&
           b.status !== "cancelled",
       ) ?? null
     : null;
@@ -2473,18 +2473,20 @@ function BillSearchBox() {
 // ──────────────────────────────────────────────────────
 function TodayCollectionsPanel() {
   const [, navigate] = useLocation();
+  // toLocaleDateString('en-CA') gives ISO-like format in local timezone
+  const todayIso = new Date().toLocaleDateString("en-CA");
+  // Server-side filter by today's date so the panel reliably shows all bills
+  // from today regardless of how many earlier bills exist in the database.
   const { data, isLoading } = useQuery<{ bills: RecentBill[] }>({
-    queryKey: ["today-collections-panel"],
-    queryFn: () => api.get<{ bills: RecentBill[] }>("/api/bills?limit=30&page=1"),
+    queryKey: ["today-collections-panel", todayIso],
+    queryFn: () => api.get<{ bills: RecentBill[] }>(`/api/bills?dateFrom=${todayIso}&dateTo=${todayIso}&excludeCancelled=true&limit=100&page=1`),
     staleTime: 20_000,
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
   });
 
-  const todayStr = new Date().toDateString();
-  const allBills = (data?.bills ?? []).filter((b) => new Date(b.createdAt).toDateString() === todayStr && b.status !== "cancelled");
   // Dues on top, within each group newest first
-  const sorted = [...allBills].sort((a, b) => {
+  const sorted = [...(data?.bills ?? [])].sort((a, b) => {
     const aDue = a.balanceAmount > 0 ? 0 : 1;
     const bDue = b.balanceAmount > 0 ? 0 : 1;
     if (aDue !== bDue) return aDue - bDue;

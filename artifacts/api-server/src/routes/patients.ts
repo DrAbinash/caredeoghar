@@ -20,12 +20,13 @@ export function sanitizePatient(p: PatientRow) {
 }
 
 async function generatePatientId(): Promise<string> {
-  // Derive next ID from the maximum existing patient_id value
+  // Derive next ID from the maximum numeric suffix in patient_id.
+  // max(patient_id) is WRONG because string comparison is lexicographic:
+  // 'P-00009' > 'P-00010' in Postgres, so the max string is not the latest number.
   const [row] = await db
-    .select({ max: sql<string>`max(patient_id)` })
+    .select({ max: sql<number | null>`MAX(REGEXP_REPLACE(patient_id, '[^0-9]', '', 'g')::int)` })
     .from(patientsTable);
-  const last = row?.max; // e.g. "P-00003" or null
-  const next = last ? parseInt(last.slice(2), 10) + 1 : 1;
+  const next = (row?.max ?? 0) + 1;
   return `P-${String(next).padStart(5, "0")}`;
 }
 
