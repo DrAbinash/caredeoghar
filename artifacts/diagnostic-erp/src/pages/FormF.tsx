@@ -1379,7 +1379,7 @@ export default function FormF() {
       )}
 
       {activeTab === "form" && <div className="flex-1 overflow-y-auto p-4">
-        <div className="flex gap-4 max-w-7xl mx-auto">
+        <div className="flex gap-4 max-w-full">
 
           {/* ── LEFT: Edit Form (two sections) ── */}
           <div className="flex-1 space-y-3">
@@ -1588,6 +1588,34 @@ export default function FormF() {
                     )}
                   </div>
                 </BigLabelRow>
+                <BigLabelRow label="Gestational Age (14a)">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={42}
+                        value={form.gestationalAgeWeeks}
+                        onChange={(e) => set("gestationalAgeWeeks", e.target.value)}
+                        placeholder="Weeks"
+                        className="h-11 text-base w-24 text-center"
+                      />
+                      <span className="text-sm font-medium text-gray-600">weeks</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={6}
+                        value={form.gestationalAgeDays}
+                        onChange={(e) => set("gestationalAgeDays", e.target.value)}
+                        placeholder="Days"
+                        className="h-11 text-base w-24 text-center"
+                      />
+                      <span className="text-sm font-medium text-gray-600">days</span>
+                    </div>
+                  </div>
+                </BigLabelRow>
                 <BigLabelRow label="Indication">
                   <div className="space-y-3">
                     <div className="flex flex-wrap gap-2">
@@ -1636,34 +1664,6 @@ export default function FormF() {
                     {form.labTests === "advised" && (
                       <Input {...inp("labTestsDetail")} placeholder="Tests advised" className="h-11 text-base" />
                     )}
-                  </div>
-                </BigLabelRow>
-                <BigLabelRow label="Gestational Age (14a)">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        min={0}
-                        max={42}
-                        value={form.gestationalAgeWeeks}
-                        onChange={(e) => set("gestationalAgeWeeks", e.target.value)}
-                        placeholder="Weeks"
-                        className="h-11 text-base w-24 text-center"
-                      />
-                      <span className="text-sm font-medium text-gray-600">weeks</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        min={0}
-                        max={6}
-                        value={form.gestationalAgeDays}
-                        onChange={(e) => set("gestationalAgeDays", e.target.value)}
-                        placeholder="Days"
-                        className="h-11 text-base w-24 text-center"
-                      />
-                      <span className="text-sm font-medium text-gray-600">days</span>
-                    </div>
                   </div>
                 </BigLabelRow>
                 <BigLabelRow label="USG result">

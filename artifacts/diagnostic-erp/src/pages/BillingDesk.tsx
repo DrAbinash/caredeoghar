@@ -623,17 +623,17 @@ export default function BillingDesk() {
       let ageValue: number | null = null;
       let ageUnit: string | null = null;
       if (!isNaN(ageVal) && ageVal >= 0) {
-        ageValue = ageVal;
+        ageValue = Math.round(ageVal);
         ageUnit = unit;
         if (unit === "years") {
-          dateOfBirth = `${new Date().getFullYear() - ageVal}-01-01`;
+          dateOfBirth = `${new Date().getFullYear() - Math.round(ageVal)}-01-01`;
         } else if (unit === "months") {
           const d = new Date();
-          d.setMonth(d.getMonth() - ageVal);
+          d.setMonth(d.getMonth() - Math.round(ageVal));
           dateOfBirth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
         } else {
           const d = new Date();
-          d.setDate(d.getDate() - ageVal);
+          d.setDate(d.getDate() - Math.round(ageVal));
           dateOfBirth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
         }
       }
