@@ -199,10 +199,11 @@ function FormCheck({ checked, onChange, label }: { checked: boolean; onChange: (
 
 interface FormFPrintProps {
   form: FormFData;
-  idCardImageUrl?: string;
+  idCardFrontUrl?: string;
+  idCardBackUrl?: string;
 }
 
-function FormFPrint({ form, idCardImageUrl }: FormFPrintProps) {
+function FormFPrint({ form, idCardFrontUrl, idCardBackUrl }: FormFPrintProps) {
   return (
     <div
       id="formf-print"
@@ -449,18 +450,31 @@ function FormFPrint({ form, idCardImageUrl }: FormFPrintProps) {
         {form.billNumber ? ` | Bill No. ${form.billNumber}` : ""}
       </div>
 
-      {/* ── ID Card (enlarged to fill space better) ── */}
-      {idCardImageUrl && (
+      {/* ── ID Card Front & Back ── */}
+      {(idCardFrontUrl || idCardBackUrl) && (
         <div style={{ marginTop: 12, borderTop: "1px dashed #999", paddingTop: 8, display: "flex", alignItems: "flex-start", gap: 10 }}>
           <div style={{ flex: 1, fontSize: 10, color: "#333", lineHeight: 1.5 }}>
             <span style={{ fontWeight: 700 }}>ID Proof attached:</span> Patient identification document verified and scanned. Original retained at clinic.
           </div>
-          <div style={{ width: "85mm", height: "55mm", border: "1px solid #333", borderRadius: 2, overflow: "hidden", flexShrink: 0, backgroundColor: "#f5f5f5" }}>
-            <img
-              src={idCardImageUrl}
-              alt="Patient ID"
-              style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
-            />
+          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            {idCardFrontUrl && (
+              <div style={{ width: "85mm", height: "55mm", border: "1px solid #333", borderRadius: 2, overflow: "hidden", backgroundColor: "#f5f5f5" }}>
+                <img
+                  src={idCardFrontUrl}
+                  alt="ID Front"
+                  style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "center" }}
+                />
+              </div>
+            )}
+            {idCardBackUrl && (
+              <div style={{ width: "85mm", height: "55mm", border: "1px solid #333", borderRadius: 2, overflow: "hidden", backgroundColor: "#f5f5f5" }}>
+                <img
+                  src={idCardBackUrl}
+                  alt="ID Back"
+                  style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "center" }}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
