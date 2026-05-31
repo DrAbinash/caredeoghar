@@ -59,10 +59,11 @@ export default function QueuePage() {
     }
   });
 
-  const { data: ledgers = [] } = useQuery<Ledger[]>({
+  const { data: ledgersData } = useQuery<{ ledgers: Ledger[] }>({
     queryKey: ["ledgers"],
     queryFn: () => api.get("/api/ledgers"),
   });
+  const ledgers = ledgersData?.ledgers ?? [];
 
   const { data: departments = [] } = useQuery<Department[]>({
     queryKey: ["test-token-departments"],
