@@ -4,7 +4,7 @@ import { eq, or, ilike, inArray, isNotNull, desc, and, gte, lt } from "drizzle-o
 import { ordersTable, orderTestsTable, testsTable, doctorsTable } from "@workspace/db";
 import { whatsappConversationsTable, whatsappSettingsTable } from "@workspace/db/schema";
 import { dateToISTString } from "../lib/istDate";
-import { geminiOcrIdCard } from "@workspace/integrations-gemini-ai";
+import { geminiOcrIdCard, type IdCardOcrResult } from "@workspace/integrations-gemini-ai";
 import { requireStaffPermission } from "../middleware/requireStaffAuth";
 import { sendTextMessageRaw, resolveNumber, normalizePhone } from "./whatsapp";
 
@@ -522,11 +522,11 @@ formFRouter.post("/upload-id", requireStaffPermission("/form-f"), async (req, re
     }
 
     // Run Gemini OCR
-    let ocrResult: { guardianName: string; address: string; documentType: string; confidence: string } | null = null;
+    let ocrResult: IdCardOcrResult | null = null;
     ocrLog.push({ stage: "gemini", status: "info", message: "Starting Gemini OCR...", detail: "Calling geminiOcrIdCard()" });
     try {
       ocrResult = await geminiOcrIdCard(base64, mimeType);
-      ocrLog.push({ stage: "gemini", status: "ok", message: "Gemini OCR completed", detail: `documentType: ${ocrResult.documentType}, confidence: ${ocrResult.confidence}, guardianName: ${ocrResult.guardianName ? "found" : "empty"}, address: ${ocrResult.address ? "found" : "empty"}` });
+      ocrLog.push({ stage: "gemini", status: "ok", message: "Gemini OCR completed", detail: `documentType: ${ocrResult.documentType}, confidence: ${ocrResult.confidence}, guardianName: ${ocrResult.guardianName ? "found" : "empty"}, address: ${ocrResult.address ? "found" : "empty"}, extras: ${ocrResult.fullName ? "name" : ""}${ocrResult.dob ? " dob" : ""}${ocrResult.gender ? " gender" : ""}` });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Gemini OCR failed";
       ocrLog.push({ stage: "gemini", status: "error", message: "Gemini OCR failed", detail: msg });
@@ -549,14 +549,7 @@ formFRouter.post("/upload-id", requireStaffPermission("/form-f"), async (req, re
         res.json({
           ok: true,
           formF: updated,
-          ocr: ocrResult
-            ? {
-                guardianName: ocrResult.guardianName,
-                address: ocrResult.address,
-                documentType: ocrResult.documentType,
-                confidence: ocrResult.confidence,
-              }
-            : null,
+          ocr: ocrResult ?? null,
           ocrLog,
           ocrStage: ocrResult ? "gemini_success" : "gemini_failed",
           suggestedAction: ocrResult ? "accept_or_verify" : "try_tesseract_fallback",
@@ -568,14 +561,7 @@ formFRouter.post("/upload-id", requireStaffPermission("/form-f"), async (req, re
     // No record yet — just return OCR result with detailed log
     res.json({
       ok: true,
-      ocr: ocrResult
-        ? {
-            guardianName: ocrResult.guardianName,
-            address: ocrResult.address,
-            documentType: ocrResult.documentType,
-            confidence: ocrResult.confidence,
-          }
-        : null,
+      ocr: ocrResult ?? null,
       ocrLog,
       ocrStage: ocrResult ? "gemini_success" : "gemini_failed",
       suggestedAction: ocrResult ? "accept_or_verify" : "try_tesseract_fallback",

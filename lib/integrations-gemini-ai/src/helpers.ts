@@ -664,12 +664,48 @@ export interface IdCardOcrResult {
   address: string;
   documentType: string;
   confidence: "high" | "medium" | "low";
+  /** Optional extras extracted when the model finds them. */
+  fullName?: string;
+  dob?: string;
+  gender?: string;
+  aadhaarNumber?: string;
+  rawText?: string;
 }
+
+const ID_CARD_OCR_PROMPT = `You are an Indian government ID document reading assistant. Examine this Aadhaar / Voter ID / Passport / Ration card / PAN / Driving License image and extract as many fields as possible.
+
+Rules:
+- Aadhaar cards often show: name, DOB, gender, Aadhaar number, address, and father's/husband's name. Some Aadhaar cards show "S/O" (son of), "D/O" (daughter of), "W/O" (wife of), or "C/O" (care of) followed by the guardian name.
+- Voter ID (EPIC) cards show: name, father's name, age, gender, and address.
+- Passports show: name, father's name, address, date of birth.
+- Ration cards show: head of family name, address, and member names.
+- If the card has both front and back visible in the same image, read both sides.
+- If text is blurry or partially cut off, do your best guess and mark confidence as "medium" or "low".
+- For guardianName: return the husband's name, father's name, or head of family name — whichever is explicitly shown. Use the field labeled "Father's Name", "Husband's Name", "S/O", "D/O", "W/O", or "C/O".
+- For address: return the COMPLETE residential address as one comma-separated line. Do NOT truncate.
+- For confidence: use "high" if text is fully legible, "medium" if some text is blurry or partially obscured, "low" if most text is unreadable.
+
+Return ONLY valid JSON — no markdown fences, no explanation, no extra text.
+
+JSON schema:
+{
+  "guardianName": "string — husband's or father's full name as shown. If neither is shown, use guardian / head of family / S/O / D/O / W/O / C/O name. Empty string if not found.",
+  "address": "string — complete residential address, comma-separated, one line. Empty string if not found.",
+  "documentType": "string — one of: Aadhaar, VoterID, Passport, RationCard, PAN, DrivingLicense, Other",
+  "confidence": "string — one of: high, medium, low",
+  "fullName": "string — the card holder's own name if visible. Empty string if not found.",
+  "dob": "string — date of birth if shown. Empty string if not found.",
+  "gender": "string — M/F/Other if shown. Empty string if not found.",
+  "aadhaarNumber": "string — last 4 digits only for privacy, or empty string if not found.",
+  "rawText": "string — all readable text from the image concatenated as a single string, in the order it appears."
+}
+
+Return ONLY the JSON object.`;
 
 /**
  * Send an Aadhaar / identity card image to Gemini Vision and extract
  * the guardian/husband/father name and full address. Returns a structured
- * result with confidence level.
+ * result with confidence level. Also extracts extra fields when available.
  */
 export async function geminiOcrIdCard(
   imageBase64: string,
@@ -680,20 +716,6 @@ export async function geminiOcrIdCard(
     options.baseUrl ?? process.env.AI_INTEGRATIONS_GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com";
   const apiKey = options.apiKey ?? process.env.AI_INTEGRATIONS_GEMINI_API_KEY ?? "";
 
-  const prompt = `You are an Indian government ID document reading assistant. Examine this Aadhaar / voter ID / passport / ration card image and extract ONLY the following fields.
-
-Return ONLY valid JSON — no markdown fences, no explanation, no extra text.
-
-JSON schema:
-{
-  "guardianName": "string — the husband's or father's full name as shown on the card. If neither is shown, use the guardian / head of family name. Empty string if not found.",
-  "address": "string — the complete residential address as shown on the card, comma-separated, in one line. Empty string if not found.",
-  "documentType": "string — one of: Aadhaar, VoterID, Passport, RationCard, PAN, DrivingLicense, Other",
-  "confidence": "string — one of: high, medium, low — your confidence in the extracted data"
-}
-
-Return ONLY the JSON object.`;
-
   const url = `${baseUrl}/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
   const res = await fetch(url, {
     method: "POST",
@@ -702,11 +724,11 @@ Return ONLY the JSON object.`;
       contents: [{
         role: "user",
         parts: [
-          { text: prompt },
+          { text: ID_CARD_OCR_PROMPT },
           { inlineData: { mimeType, data: imageBase64 } },
         ],
       }],
-      generationConfig: { maxOutputTokens: 1024, temperature: 0.1 },
+      generationConfig: { maxOutputTokens: 1536, temperature: 0.05 },
     }),
   });
 
@@ -726,10 +748,34 @@ Return ONLY the JSON object.`;
     parsed = JSON.parse(clean) as Partial<IdCardOcrResult>;
   } catch { /* fall through to defaults */ }
 
+  // Normalize guardian name: remove common prefixes like "S/O", "D/O", "W/O", "C/O"
+  let guardianName = (parsed.guardianName ?? "").trim();
+  if (guardianName) {
+    guardianName = guardianName.replace(/^\s*(S\/O|D\/O|W\/O|C\/O|s\/o|d\/o|w\/o|c\/o)[\s:,-]+/i, "").trim();
+  }
+
+  // Normalize address: collapse multiple spaces, ensure commas
+  let address = (parsed.address ?? "").trim();
+  if (address) {
+    address = address.replace(/\s+/g, " ").replace(/,\s*/g, ", ").trim();
+  }
+
+  // Sanitize aadhaar number to last 4 digits only
+  let aadhaarNumber = (parsed.aadhaarNumber ?? "").trim();
+  if (aadhaarNumber) {
+    const digits = aadhaarNumber.replace(/\D/g, "");
+    aadhaarNumber = digits.slice(-4);
+  }
+
   return {
-    guardianName: parsed.guardianName ?? "",
-    address: parsed.address ?? "",
+    guardianName,
+    address,
     documentType: parsed.documentType ?? "Other",
     confidence: (parsed.confidence as IdCardOcrResult["confidence"]) ?? "low",
+    fullName: (parsed.fullName ?? "").trim() || undefined,
+    dob: (parsed.dob ?? "").trim() || undefined,
+    gender: (parsed.gender ?? "").trim() || undefined,
+    aadhaarNumber: aadhaarNumber || undefined,
+    rawText: (parsed.rawText ?? "").trim() || undefined,
   };
 }

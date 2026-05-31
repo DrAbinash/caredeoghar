@@ -147,15 +147,15 @@ function Tick({ checked }: { checked: boolean }) {
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <tr style={{ borderBottom: "1px solid #ccc" }}>
-      <td style={{ padding: "2px 4px", fontWeight: 600, fontSize: 8, width: "30%", verticalAlign: "top", whiteSpace: "nowrap" }}>{label}</td>
-      <td style={{ padding: "2px 4px", fontSize: 8, verticalAlign: "top" }}>{children}</td>
+      <td style={{ padding: "2px 4px", fontWeight: 700, fontSize: 9, width: "30%", verticalAlign: "top", whiteSpace: "nowrap" }}>{label}</td>
+      <td style={{ padding: "2px 4px", fontSize: 9, fontWeight: 700, verticalAlign: "top" }}>{children}</td>
     </tr>
   );
 }
 
 function BlankLine({ val, width = 120 }: { val: string; width?: number }) {
   return (
-    <span style={{ display: "inline-block", borderBottom: "1px solid #333", minWidth: width, fontSize: 9, fontWeight: 500, paddingLeft: 2, verticalAlign: "bottom" }}>
+    <span style={{ display: "inline-block", borderBottom: "1px solid #333", minWidth: width, fontSize: 10, fontWeight: 800, paddingLeft: 2, verticalAlign: "bottom" }}>
       {val || "\u00A0"}
     </span>
   );
@@ -581,7 +581,17 @@ export default function FormF() {
       setIdCardFrontUrl(dataUrl);
       // Send to OCR endpoint same as upload
       const resp = await api.post<{
-        ocr?: { guardianName?: string; address?: string; documentType?: string; confidence?: string; } | null;
+        ocr?: {
+          guardianName?: string;
+          address?: string;
+          documentType?: string;
+          confidence?: string;
+          fullName?: string;
+          dob?: string;
+          gender?: string;
+          aadhaarNumber?: string;
+          rawText?: string;
+        } | null;
         recordId?: number;
       }>("/api/form-f/upload-id", {
         formFId: 0,
@@ -723,7 +733,17 @@ export default function FormF() {
         if (!base64) { toast({ title: "Failed to read image", variant: "destructive" }); setIdCardUploading(false); return; }
         setIdCardFrontUrl(dataUrl);
         const resp = await api.post<{
-          ocr?: { guardianName?: string; address?: string; documentType?: string; confidence?: string; } | null;
+          ocr?: {
+            guardianName?: string;
+            address?: string;
+            documentType?: string;
+            confidence?: string;
+            fullName?: string;
+            dob?: string;
+            gender?: string;
+            aadhaarNumber?: string;
+            rawText?: string;
+          } | null;
           recordId?: number;
         }>("/api/form-f/upload-id", {
           formFId: 0,
