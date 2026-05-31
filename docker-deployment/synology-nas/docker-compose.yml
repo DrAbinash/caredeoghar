@@ -102,8 +102,8 @@ services:
   # ---------------------------------------------------------------------------
   backend:
     build:
-      context: ../..
-      dockerfile: docker-deployment/synology-nas/Dockerfile.backend
+      context: .
+      dockerfile: Dockerfile.backend
     container_name: care-diagnostics-backend
     restart: unless-stopped
     deploy:

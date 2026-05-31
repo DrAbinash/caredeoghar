@@ -42,20 +42,22 @@ Full paths:
 ## Step 2: Upload Project Files
 
 1. In File Station, open `docker/diagnostic-erp/project/`
-2. Upload these files into that folder:
+2. Upload **all 9 files** from the Synology deployment package into that folder:
    - `docker-compose.yml`
    - `Dockerfile.backend`
-   - `.env` (copy from `.env.example` and edit — see Step 3)
+   - `.env.example` (copy to `.env` and edit in Step 3)
+   - `synology-readme.md`
    - `synology-health-check.sh`
    - `synology-backup-db.sh`
    - `synology-restore-db.sh`
    - `synology-cleanup-old-backups.sh`
+   - `SYNOLOGY_PRODUCTION_CHECKLIST.md`
 
 Or use SSH to copy files:
 ```bash
 ssh admin@your-nas-ip
 cd /volume1/docker/diagnostic-erp/project/
-# Copy files here (scp, rsync, or upload via File Station)
+# Copy all 9 files here (scp, rsync, or upload via File Station)
 ```
 
 ## Step 3: Create .env File
