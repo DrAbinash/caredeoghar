@@ -106,6 +106,7 @@ publicBookingRouter.get("/config", async (_req, res): Promise<void> => {
   else if (settings.payuEnabled && payuKey && payuSalt) gateway = "payu";
   else if (settings.phonepeEnabled && phonepeMerchantId && phonepeSalt) gateway = "phonepe";
   else if (razorpayKeyId && razorpaySecret) gateway = "razorpay";
+  // else gateway stays null — QR/UPI fallback on frontend
 
   let allowedTestIds: number[] = [];
   try {

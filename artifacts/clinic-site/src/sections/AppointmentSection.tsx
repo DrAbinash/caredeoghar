@@ -1,12 +1,13 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import type { Section, SiteSettings } from "../types";
 import { buttonClass } from "../theme";
+import { Loader2 } from "lucide-react";
 
 function get(c: Record<string, unknown>, k: string, fb = ""): string {
   return typeof c[k] === "string" ? (c[k] as string) : fb;
 }
 
-type BookingConfig = { enabled: boolean; keyId: string; vipEnabled: boolean; gateway: "payu" | "razorpay" | "phonepe" | "bharatpe" | null; payuMerchantKey?: string; phonepeMerchantId?: string; bharatpeMerchantId?: string };
+type BookingConfig = { enabled: boolean; keyId: string; vipEnabled: boolean; gateway: "payu" | "razorpay" | "phonepe" | "bharatpe" | "icici" | null; payuMerchantKey?: string; phonepeMerchantId?: string; bharatpeMerchantId?: string; iciciMerchantId?: string; kioskUpiVpa?: string; kioskUpiName?: string; upiQrEnabled?: boolean; upiVpa?: string; upiQrImageUrl?: string };
 type TestItem = { id: number; code: string; name: string; category: string; price: string };
 type PkgItem  = { id: number; code: string; name: string; price: string; description: string };
 
@@ -59,7 +60,7 @@ export default function AppointmentSection({ section, settings }: { section: Sec
   const [config, setConfig] = useState<BookingConfig | null>(null);
   const [tests, setTests] = useState<TestItem[]>([]);
   const [pkgs, setPkgs] = useState<PkgItem[]>([]);
-  const [step, setStep] = useState<"form" | "select" | "pay" | "done" | "failed">("form");
+  const [step, setStep] = useState<"form" | "select" | "pay" | "qr" | "done" | "failed">("form");
   const [error, setError] = useState("");
   const [paying, setPaying] = useState(false);
   const [successRef, setSuccessRef] = useState("");
@@ -70,6 +71,12 @@ export default function AppointmentSection({ section, settings }: { section: Sec
   const [pd, setPd] = useState({ name: "", phone: "", email: "", date: "", timeSlot: "", notes: "", isVip: false });
   const [selTests, setSelTests] = useState<Set<number>>(new Set());
   const [selPkgs, setSelPkgs] = useState<Set<number>>(new Set());
+  const [qrBookingRef, setQrBookingRef] = useState("");
+  const [qrAmount, setQrAmount] = useState(0);
+  const [qrUpiUrl, setQrUpiUrl] = useState("");
+  const [qrUpiVpa, setQrUpiVpa] = useState("");
+  const [qrUpiName, setQrUpiName] = useState("");
+  const [qrChecking, setQrChecking] = useState(false);
 
   const qrBookingUrl = useMemo(() => {
     const phone = (settings.whatsappNumber || "").replace(/[^0-9]/g, "");
@@ -187,6 +194,62 @@ export default function AppointmentSection({ section, settings }: { section: Sec
     }
   }
 
+  async function handleICICI() {
+    setError(""); setPaying(true);
+    try {
+      const res = await bookingPost<{ bookingRef: string; redirectUrl: string; tranCtx: string }>("/api/public/booking/icici-initiate", {
+        name: pd.name, phone: pd.phone, email: pd.email, selectedDate: pd.date, timeSlot: pd.timeSlot,
+        testIds: Array.from(selTests), packageIds: Array.from(selPkgs),
+        totalAmount: total, notes: pd.notes, isVip: pd.isVip,
+      });
+      setSuccessRef(res.bookingRef);
+      window.location.href = res.redirectUrl;
+    } catch (e: unknown) {
+      const msg = (e as { message?: string }).message || "Something went wrong.";
+      setError(msg); setPaying(false);
+    }
+  }
+
+  async function handleQrPay() {
+    setError(""); setPaying(true);
+    try {
+      const res = await bookingPost<{ bookingRef: string; amount: number; upiVpa: string; upiName: string; upiUrl: string; upiQrImageUrl: string; clinicName: string }>("/api/public/booking/qr-initiate", {
+        name: pd.name, phone: pd.phone, email: pd.email, selectedDate: pd.date, timeSlot: pd.timeSlot,
+        testIds: Array.from(selTests), packageIds: Array.from(selPkgs),
+        totalAmount: total, notes: pd.notes, isVip: pd.isVip,
+      });
+      setQrBookingRef(res.bookingRef);
+      setQrAmount(res.amount);
+      setQrUpiUrl(res.upiUrl);
+      setQrUpiVpa(res.upiVpa);
+      setQrUpiName(res.upiName);
+      setStep("qr");
+      setPaying(false);
+    } catch (e: unknown) {
+      const msg = (e as { message?: string }).message || "Something went wrong.";
+      setError(msg); setPaying(false);
+    }
+  }
+
+  async function checkQrPayment() {
+    if (!qrBookingRef) return;
+    setQrChecking(true);
+    try {
+      const res = await bookingGet<{ status: string; bookingRef: string }>(`/api/public/booking/qr-status?ref=${encodeURIComponent(qrBookingRef)}`);
+      if (res.status === "paid" || res.status === "confirmed") {
+        setSuccessRef(res.bookingRef);
+        setStep("done");
+      } else {
+        setError("Payment not yet received. Please complete the payment and try again.");
+      }
+    } catch (e: unknown) {
+      const msg = (e as { message?: string }).message || "Something went wrong.";
+      setError(msg);
+    } finally {
+      setQrChecking(false);
+    }
+  }
+
   async function handleRazorpay() {
     setError(""); setPaying(true);
     try {
@@ -234,16 +297,19 @@ export default function AppointmentSection({ section, settings }: { section: Sec
 
   async function handlePay() {
     if (selTests.size === 0 && selPkgs.size === 0) { setError("Please select at least one test or package."); return; }
+    if (config?.gateway === "icici") return handleICICI();
     if (config?.gateway === "bharatpe") return handleBharatPe();
     if (config?.gateway === "phonepe") return handlePhonePe();
     if (config?.gateway === "payu") return handlePayU();
-    return handleRazorpay();
+    // No gateway configured — fall back to QR/UPI payment
+    return handleQrPay();
   }
 
   const gatewayLabel =
+    config?.gateway === "icici" ? "Orange Pay" :
     config?.gateway === "bharatpe" ? "BharatPe" :
     config?.gateway === "phonepe" ? "PhonePe" :
-    config?.gateway === "payu" ? "PayU" : "Razorpay";
+    config?.gateway === "payu" ? "PayU" : "QR / UPI";
 
   if (!config || !config.enabled) {
     return (
@@ -279,6 +345,29 @@ export default function AppointmentSection({ section, settings }: { section: Sec
             <h3 style={{ fontWeight: 700, fontSize: "1.15rem", marginBottom: ".5rem" }}>Payment Not Completed</h3>
             <p className="subtle" style={{ marginBottom: "1rem" }}>{failReason || "Your payment was not completed."}</p>
             <button type="button" className={buttonClass(settings, "primary")} onClick={() => { setStep("pay"); setFailReason(""); }} style={{ justifyContent: "center" }}>Try Again</button>
+          </div>
+        ) : step === "qr" ? (
+          <div className="card-soft" style={{ maxWidth: 480, margin: "0 auto" }}>
+            <h3 style={{ fontWeight: 700, marginBottom: "1rem" }}>Pay with UPI QR</h3>
+            <div style={{ textAlign: "center", marginBottom: "1rem" }}>
+              <div style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: ".5rem" }}>₹{qrAmount.toLocaleString("en-IN")}</div>
+              <div className="subtle" style={{ fontSize: ".85rem", marginBottom: ".75rem" }}>Scan with any UPI app (GPay, PhonePe, Paytm) to complete payment</div>
+              {qrUpiUrl ? (
+                <img src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(qrUpiUrl)}`} alt="UPI QR" style={{ width: 220, height: 220, margin: "0 auto", display: "block", background: "#fff", padding: 8, borderRadius: 12 }} />
+              ) : (
+                <div style={{ width: 220, height: 220, margin: "0 auto", background: "hsl(var(--site-muted))", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center" }}><Loader2 size={32} style={{ animation: "spin 1s linear infinite" }} /></div>
+              )}
+              <div style={{ marginTop: ".75rem", fontSize: ".85rem", fontWeight: 600 }}>{qrUpiVpa || qrUpiName}</div>
+            </div>
+            <div style={{ display: "flex", gap: ".75rem", marginBottom: ".75rem" }}>
+              <button type="button" className={buttonClass(settings, "outline")} onClick={() => setStep("pay")} style={{ flex: 1 }}>← Back</button>
+              <button type="button" className={buttonClass(settings, "primary")} onClick={checkQrPayment} disabled={qrChecking} style={{ flex: 1 }}>
+                {qrChecking ? "Checking..." : "I've Paid"}
+              </button>
+            </div>
+            <p className="subtle" style={{ fontSize: ".75rem", textAlign: "center" }}>
+              Booking ref: <span style={{ fontFamily: "monospace" }}>{qrBookingRef}</span>
+            </p>
           </div>
         ) : step === "done" ? (
           <div className="card-soft text-center" style={{ maxWidth: 480, margin: "0 auto" }}>

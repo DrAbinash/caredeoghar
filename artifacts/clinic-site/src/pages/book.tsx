@@ -269,7 +269,8 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
     if (config?.gateway === "bharatpe") return handleBharatPe();
     if (config?.gateway === "phonepe") return handlePhonePe();
     if (config?.gateway === "payu") return handlePayU();
-    return handleRazorpay();
+    // No gateway configured — fall back to QR/UPI payment
+    return handleQrPay();
   }
 
   async function handleICICI() {
@@ -330,10 +331,10 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
   }
 
   const gatewayLabel =
-    config?.gateway === "icici" ? "ICICI Bank" :
+    config?.gateway === "icici" ? "Orange Pay" :
     config?.gateway === "bharatpe" ? "BharatPe" :
     config?.gateway === "phonepe" ? "PhonePe" :
-    config?.gateway === "payu" ? "PayU" : "Razorpay";
+    config?.gateway === "payu" ? "PayU" : "QR / UPI";
 
   const isOnline = config?.enabled ?? false;
   const hasRealGateway = Boolean(config?.gateway);

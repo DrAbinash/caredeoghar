@@ -1642,7 +1642,7 @@ function OnlineBookingTab() {
           </div>
           <div>
             <h2 className="font-bold text-lg">Online Booking & Payment Gateway</h2>
-            <p className="text-sm text-muted-foreground mt-1">Allow patients to book tests and pay online via your clinic website. Configure PayU or Razorpay below.</p>
+            <p className="text-sm text-muted-foreground mt-1">Allow patients to book tests and pay online via your clinic website. Configure Orange Pay (ICICI) below.</p>
           </div>
         </div>
       </div>
@@ -1687,7 +1687,7 @@ function OnlineBookingTab() {
           value={form.payuEnabled}
           onChange={(v) => setForm({ ...form, payuEnabled: v })}
           label="Use PayU as active payment gateway"
-          hint="When enabled, PayU takes priority over Razorpay for online bookings."
+          hint="When enabled, PayU takes priority over Orange Pay for online bookings."
         />
         <div>
           <Label>PayU Merchant Key</Label>
@@ -1735,7 +1735,7 @@ function OnlineBookingTab() {
           value={form.phonepeEnabled}
           onChange={(v) => setForm({ ...form, phonepeEnabled: v })}
           label="Use PhonePe as active payment gateway"
-          hint="When enabled, PhonePe takes priority over PayU and Razorpay."
+          hint="When enabled, PhonePe takes priority over PayU and Orange Pay."
         />
         <div>
           <Label>PhonePe Merchant ID</Label>
@@ -1785,7 +1785,7 @@ function OnlineBookingTab() {
           value={form.bharatpeEnabled}
           onChange={(v) => setForm({ ...form, bharatpeEnabled: v })}
           label="Use BharatPe as active payment gateway"
-          hint="When enabled, BharatPe takes highest priority over PayU, PhonePe, and Razorpay."
+          hint="When enabled, BharatPe takes highest priority over PayU, PhonePe, and Orange Pay."
         />
         <div>
           <Label>BharatPe Merchant ID</Label>
