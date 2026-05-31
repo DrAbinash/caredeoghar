@@ -39,25 +39,45 @@ Full paths:
 
 > **Note:** If your volume is not `volume1`, change the path in `docker-compose.yml` accordingly.
 
-## Step 2: Upload Project Files
+## Step 2: Download Project Source Code
 
-1. In File Station, open `docker/diagnostic-erp/project/`
-2. Upload **all 9 files** from the Synology deployment package into that folder:
-   - `docker-compose.yml`
+The Docker build requires the full project source code (including the ICICI integration, API server, and frontend code). The deployment package only contains Docker configs.
+
+### Option A: Download Full Project (Recommended)
+
+1. Download the complete project source code from the repository
+2. In File Station, create the folder: `/volume1/docker/diagnostic-erp/project/`
+3. Upload the **entire project source code** into this folder
+4. Then upload the deployment files from this package into the same folder:
+   - `docker-compose.yml` 
    - `Dockerfile.backend`
-   - `.env.example` (copy to `.env` and edit in Step 3)
-   - `synology-readme.md`
-   - `synology-health-check.sh`
-   - `synology-backup-db.sh`
-   - `synology-restore-db.sh`
-   - `synology-cleanup-old-backups.sh`
-   - `SYNOLOGY_PRODUCTION_CHECKLIST.md`
+   - `.env` (copy from `.env.example` and edit in Step 3)
 
-Or use SSH to copy files:
+The folder structure should look like:
+```
+/volume1/docker/diagnostic-erp/project/
+  ├── docker-compose.yml          ← deployment file
+  ├── Dockerfile.backend          ← deployment file
+  ├── .env                        ← deployment file (created in Step 3)
+  ├── package.json                ← project source
+  ├── pnpm-workspace.yaml         ← project source
+  ├── artifacts/                  ← project source (API + frontend)
+  ├── lib/                        ← project source (shared libraries)
+  ├── scripts/                    ← project source
+  └── ...
+```
+
+### Option B: Use SSH to Copy
+
 ```bash
 ssh admin@your-nas-ip
+# Create the project folder
+mkdir -p /volume1/docker/diagnostic-erp/project/
+
+# Copy the full project source code (you need to get this from the repository)
+# Then copy the deployment files into the same folder:
 cd /volume1/docker/diagnostic-erp/project/
-# Copy all 9 files here (scp, rsync, or upload via File Station)
+# Place docker-compose.yml, Dockerfile.backend, and .env here
 ```
 
 ## Step 3: Create .env File
