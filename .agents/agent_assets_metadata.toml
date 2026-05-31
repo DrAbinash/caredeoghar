@@ -179,3 +179,9 @@ id = "mBWQsRfHmmN2w_1W23nog"
 uri = "file://scan-bridge/README.md"
 type = "text"
 title = "Scan Bridge README"
+
+[[outputs]]
+id = "3QNoizXmJ8y1mlm17Z3y4"
+uri = "file://docker-deployment/synology-nas-deploy.zip"
+type = "unspecified"
+title = "Synology NAS Docker Deployment Package"
