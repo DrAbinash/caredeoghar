@@ -462,7 +462,7 @@ function FormFPrint({ form, idCardFrontUrl, idCardBackUrl }: FormFPrintProps) {
                 <img
                   src={idCardFrontUrl}
                   alt="ID Front"
-                  style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "center" }}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
                 />
               </div>
             )}
@@ -471,7 +471,7 @@ function FormFPrint({ form, idCardFrontUrl, idCardBackUrl }: FormFPrintProps) {
                 <img
                   src={idCardBackUrl}
                   alt="ID Back"
-                  style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "center" }}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
                 />
               </div>
             )}
@@ -516,6 +516,12 @@ type RecordRow = {
   centreName?: string;
   registrationNo?: string;
   previousChildIssue?: string;
+  idCardFrontUrl?: string | null;
+  idCardBackUrl?: string | null;
+  idCardImageUrl?: string | null;
+  idCardExtractedName?: string | null;
+  idCardExtractedAddress?: string | null;
+  idCardVerified?: boolean | null;
   createdAt?: string;
 };
 
@@ -542,7 +548,8 @@ export default function FormF() {
   const [form, setForm] = useState<FormFData>(defaultForm());
 
   // ── Feature 2: ID Card Upload + AI OCR + Camera Scanner ──
-  const [idCardImageUrl, setIdCardImageUrl] = useState("");
+  const [idCardFrontUrl, setIdCardFrontUrl] = useState("");
+  const [idCardBackUrl, setIdCardBackUrl] = useState("");
   const [idCardExtractedName, setIdCardExtractedName] = useState("");
   const [idCardExtractedAddress, setIdCardExtractedAddress] = useState("");
   const [idCardVerified, setIdCardVerified] = useState(false);
@@ -571,7 +578,7 @@ export default function FormF() {
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.ok) throw new Error(j.error || "Scan failed");
       const dataUrl = `data:${j.mimeType ?? "image/jpeg"};base64,${j.imageBase64}`;
-      setIdCardImageUrl(dataUrl);
+      setIdCardFrontUrl(dataUrl);
       // Send to OCR endpoint same as upload
       const resp = await api.post<{
         ocr?: { guardianName?: string; address?: string; documentType?: string; confidence?: string; } | null;
@@ -714,7 +721,7 @@ export default function FormF() {
         const dataUrl = String(reader.result ?? "");
         const base64 = dataUrl.split(",")[1];
         if (!base64) { toast({ title: "Failed to read image", variant: "destructive" }); setIdCardUploading(false); return; }
-        setIdCardImageUrl(dataUrl);
+        setIdCardFrontUrl(dataUrl);
         const resp = await api.post<{
           ocr?: { guardianName?: string; address?: string; documentType?: string; confidence?: string; } | null;
           recordId?: number;
@@ -909,6 +916,11 @@ export default function FormF() {
       date: r.date ?? "",
       place: r.place ?? "",
     });
+    setIdCardFrontUrl(r.idCardFrontUrl ?? r.idCardImageUrl ?? "");
+    setIdCardBackUrl(r.idCardBackUrl ?? "");
+    setIdCardExtractedName(r.idCardExtractedName ?? "");
+    setIdCardExtractedAddress(r.idCardExtractedAddress ?? "");
+    setIdCardVerified(r.idCardVerified ?? false);
     setActiveTab("form");
     toast({ title: "Record loaded into form" });
   }
@@ -949,7 +961,8 @@ export default function FormF() {
         mtpDate: form.mtpDate,
         date: form.date,
         place: form.place,
-        idCardImageUrl: idCardImageUrl || null,
+        idCardFrontUrl: idCardFrontUrl || null,
+        idCardBackUrl: idCardBackUrl || null,
         idCardExtractedName: idCardExtractedName || null,
         idCardExtractedAddress: idCardExtractedAddress || null,
         idCardVerified: idCardVerified || false,
@@ -1085,7 +1098,7 @@ export default function FormF() {
                 <MessageCircle size={12} className="mr-1" />{waSending ? "Sending…" : "Request ID Card"}
               </Button>
             )}
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => { setForm(defaultForm()); setLastSaved(null); setIdCardImageUrl(""); setIdCardExtractedName(""); setIdCardExtractedAddress(""); setIdCardVerified(false); setIdCardOcrResult(null); }}>
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => { setForm(defaultForm()); setLastSaved(null); setIdCardFrontUrl(""); setIdCardBackUrl(""); setIdCardExtractedName(""); setIdCardExtractedAddress(""); setIdCardVerified(false); setIdCardOcrResult(null); }}>
               <RefreshCcw size={12} className="mr-1" /> Reset
             </Button>
             <Button size="sm" className="h-8 text-xs" onClick={printAndSave} disabled={saving}>
@@ -1825,7 +1838,7 @@ export default function FormF() {
                 border: "1px solid #ddd",
               }}
             >
-              <FormFPrint form={form} idCardImageUrl={idCardImageUrl} />
+              <FormFPrint form={form} idCardFrontUrl={idCardFrontUrl} idCardBackUrl={idCardBackUrl} />
             </div>
             <div className="mt-3 flex gap-2 justify-center">
               <Button className="h-8 text-xs" onClick={printAndSave} disabled={saving}>
@@ -1865,7 +1878,7 @@ export default function FormF() {
       {ocrPanelOpen && (
         <OcrCapturePanel
           onCapture={(result) => {
-            setIdCardImageUrl(result.imageUrl);
+            setIdCardFrontUrl(result.imageUrl);
             setIdCardOcrResult(result.ocr ?? null);
             if (result.ocr?.guardianName) setIdCardExtractedName(result.ocr.guardianName);
             if (result.ocr?.address) setIdCardExtractedAddress(result.ocr.address);

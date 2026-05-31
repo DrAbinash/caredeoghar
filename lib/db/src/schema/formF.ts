@@ -40,6 +40,8 @@ export const formFRecordsTable = pgTable("form_f_records", {
   date: text("date").notNull().default(""),
   place: text("place").notNull().default(""),
   idCardImageUrl: text("id_card_image_url"),
+  idCardFrontUrl: text("id_card_front_url"),
+  idCardBackUrl: text("id_card_back_url"),
   idCardExtractedName: text("id_card_extracted_name"),
   idCardExtractedAddress: text("id_card_extracted_address"),
   idCardVerified: boolean("id_card_verified").default(false),
