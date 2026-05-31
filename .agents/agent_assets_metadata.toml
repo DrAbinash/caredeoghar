@@ -185,3 +185,9 @@ id = "3QNoizXmJ8y1mlm17Z3y4"
 uri = "file://docker-deployment/synology-nas-deploy.zip"
 type = "unspecified"
 title = "Synology NAS Docker Deployment Package"
+
+[[outputs]]
+id = "5yEEYtjEb402mcoAD3zvv"
+uri = "file://synology-nas-deploy.zip"
+type = "unspecified"
+title = "Synology NAS Docker Deployment Package (Updated pnpm 11.16.0)"
