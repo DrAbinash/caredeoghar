@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
@@ -8,7 +8,8 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Save, RefreshCw, Play, Trash2, X, CheckCircle2,
   AlertTriangle, Database, HardDrive, Cloud, Clock, Settings,
-  ChevronDown, ChevronUp, Server, Info,
+  ChevronDown, ChevronUp, Server, Info, Download, Upload, Archive,
+  FileUp, FileDown, ShieldAlert,
 } from "lucide-react";
 
 interface BackupJob {
@@ -37,6 +38,16 @@ interface BackupJobLog {
   filePath: string | null;
   errorMessage: string | null;
   notes: string | null;
+}
+
+interface ExportResult {
+  ok: boolean;
+  filename: string;
+  filePath: string;
+  sizeBytes: number;
+  downloadUrl?: string;
+  includedFolders?: string[];
+  metadata?: Record<string, unknown>;
 }
 
 const BACKUP_TYPES = ["DB", "REPORTS", "DICOM_METADATA", "CONFIG", "FULL"];
@@ -147,6 +158,9 @@ export default function BackupReplication() {
   const [showForm, setShowForm] = useState(false);
   const [editingJob, setEditingJob] = useState<BackupJob | undefined>();
   const [expandedJob, setExpandedJob] = useState<number | null>(null);
+  const [showImportConfirm, setShowImportConfirm] = useState<string | null>(null);
+  const [pendingImport, setPendingImport] = useState<{ type: string; filePath: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: jobs = [], isLoading } = useQuery<BackupJob[]>({
     queryKey: ["backup-jobs"],
@@ -183,6 +197,88 @@ export default function BackupReplication() {
     onError: (e: Error) => toast({ title: "Run failed", description: e.message, variant: "destructive" }),
   });
 
+  // Direct export mutations
+  const exportDbMutation = useMutation({
+    mutationFn: () => api.post<ExportResult>("/api/admin/backup-replication/export-db", {}),
+    onSuccess: (r) => {
+      toast({ title: "Database exported", description: `${r.filename} (${formatBytes(r.sizeBytes)})` });
+      if (r.downloadUrl) window.open(r.downloadUrl, "_blank");
+    },
+    onError: (e: Error) => toast({ title: "Export failed", description: e.message, variant: "destructive" }),
+  });
+
+  const exportFilesMutation = useMutation({
+    mutationFn: () => api.post<ExportResult>("/api/admin/backup-replication/export-files", {}),
+    onSuccess: (r) => {
+      toast({ title: "Files exported", description: `${r.filename} (${formatBytes(r.sizeBytes)})` });
+      if (r.downloadUrl) window.open(r.downloadUrl, "_blank");
+    },
+    onError: (e: Error) => toast({ title: "Export failed", description: e.message, variant: "destructive" }),
+  });
+
+  const exportSnapshotMutation = useMutation({
+    mutationFn: () => api.post<ExportResult>("/api/admin/backup-replication/export-snapshot", {}),
+    onSuccess: (r) => {
+      toast({ title: "Snapshot exported", description: `${r.filename} (${formatBytes(r.sizeBytes)})` });
+      if (r.downloadUrl) window.open(r.downloadUrl, "_blank");
+    },
+    onError: (e: Error) => toast({ title: "Export failed", description: e.message, variant: "destructive" }),
+  });
+
+  // Import mutations
+  const importDbMutation = useMutation({
+    mutationFn: ({ filePath, confirm }: { filePath: string; confirm: boolean }) =>
+      api.post("/api/admin/backup-replication/import-db", { filePath, confirm }),
+    onSuccess: () => { toast({ title: "Database restored" }); setShowImportConfirm(null); setPendingImport(null); },
+    onError: (e: Error) => toast({ title: "Import failed", description: e.message, variant: "destructive" }),
+  });
+
+  const importFilesMutation = useMutation({
+    mutationFn: ({ filePath, confirm }: { filePath: string; confirm: boolean }) =>
+      api.post("/api/admin/backup-replication/import-files", { filePath, confirm }),
+    onSuccess: () => { toast({ title: "Files restored" }); setShowImportConfirm(null); setPendingImport(null); },
+    onError: (e: Error) => toast({ title: "Import failed", description: e.message, variant: "destructive" }),
+  });
+
+  const importSnapshotMutation = useMutation({
+    mutationFn: ({ filePath, confirm }: { filePath: string; confirm: boolean }) =>
+      api.post("/api/admin/backup-replication/import-snapshot", { filePath, confirm }),
+    onSuccess: () => { toast({ title: "Snapshot restored" }); setShowImportConfirm(null); setPendingImport(null); },
+    onError: (e: Error) => toast({ title: "Import failed", description: e.message, variant: "destructive" }),
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: ({ filename, data }: { filename: string; data: string }) =>
+      api.post<{ filePath: string }>("/api/admin/backup-replication/upload", { filename, data }),
+    onSuccess: (r, vars) => {
+      toast({ title: "File uploaded", description: vars.filename });
+      if (pendingImport) {
+        const fp = r.filePath;
+        if (pendingImport.type === "db") importDbMutation.mutate({ filePath: fp, confirm: true });
+        else if (pendingImport.type === "files") importFilesMutation.mutate({ filePath: fp, confirm: true });
+        else if (pendingImport.type === "snapshot") importSnapshotMutation.mutate({ filePath: fp, confirm: true });
+      }
+    },
+    onError: (e: Error) => toast({ title: "Upload failed", description: e.message, variant: "destructive" }),
+  });
+
+  function handleFileSelect(type: string) {
+    setPendingImport({ type, filePath: "" });
+    fileInputRef.current?.click();
+  }
+
+  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !pendingImport) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(",")[1];
+      uploadMutation.mutate({ filename: file.name, data: base64 });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  }
+
   const successJobs = jobs.filter((j) => j.lastStatus === "success").length;
   const failedJobs = jobs.filter((j) => j.lastStatus === "failed").length;
   const lastSuccess = jobs.filter((j) => j.lastStatus === "success").sort((a, b) => (b.lastRunAt ?? "").localeCompare(a.lastRunAt ?? ""))[0];
@@ -190,14 +286,22 @@ export default function BackupReplication() {
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
       <PageHeader
-        title="Backup Replication"
-        subtitle="Configure automated backup jobs for database, reports, and DICOM metadata to local or network destinations"
+        title="Backup & Replication"
+        subtitle="Configure automated backup jobs and perform manual export/import for database and uploaded files"
         actions={
           <Button className="gap-2" onClick={() => { setEditingJob(undefined); setShowForm(true); }}>
             <Plus size={14} /> New Backup Job
           </Button>
         }
       />
+
+      {/* Replit notice */}
+      <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-4 flex gap-3 text-xs">
+        <ShieldAlert size={14} className="text-amber-600 shrink-0 mt-0.5" />
+        <div className="space-y-1">
+          <p><strong>Manual export recommended on Replit.</strong> Scheduled backup jobs are not fully supported on Replit because the environment may sleep or restart. Use the buttons below for on-demand exports, and download the files to your local machine for safekeeping.</p>
+        </div>
+      </div>
 
       {/* Status cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -228,12 +332,61 @@ export default function BackupReplication() {
         </div>
       </div>
 
+      {/* Export / Import Actions */}
+      <div className="rounded-xl border bg-card p-4 space-y-4">
+        <h3 className="text-sm font-semibold">Quick Actions</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <Button variant="outline" className="gap-2 h-auto py-3 justify-start" disabled={exportDbMutation.isPending} onClick={() => exportDbMutation.mutate()}>
+            <Database size={16} className="text-blue-500" />
+            <div className="text-left">
+              <p className="text-sm font-medium">Export Database SQL</p>
+              <p className="text-[10px] text-muted-foreground">caredeoghar-db-YYYY-MM-DD.sql</p>
+            </div>
+          </Button>
+          <Button variant="outline" className="gap-2 h-auto py-3 justify-start" disabled={exportFilesMutation.isPending} onClick={() => exportFilesMutation.mutate()}>
+            <FileDown size={16} className="text-green-500" />
+            <div className="text-left">
+              <p className="text-sm font-medium">Export Files ZIP</p>
+              <p className="text-[10px] text-muted-foreground">Uploads + reports + attached assets</p>
+            </div>
+          </Button>
+          <Button variant="outline" className="gap-2 h-auto py-3 justify-start" disabled={exportSnapshotMutation.isPending} onClick={() => exportSnapshotMutation.mutate()}>
+            <Archive size={16} className="text-purple-500" />
+            <div className="text-left">
+              <p className="text-sm font-medium">Export Full Snapshot</p>
+              <p className="text-[10px] text-muted-foreground">DB + files + metadata.json</p>
+            </div>
+          </Button>
+          <Button variant="outline" className="gap-2 h-auto py-3 justify-start" onClick={() => { setPendingImport({ type: "db", filePath: "" }); fileInputRef.current?.click(); }}>
+            <FileUp size={16} className="text-orange-500" />
+            <div className="text-left">
+              <p className="text-sm font-medium">Import Database SQL</p>
+              <p className="text-[10px] text-muted-foreground">Restore from .sql file</p>
+            </div>
+          </Button>
+          <Button variant="outline" className="gap-2 h-auto py-3 justify-start" onClick={() => { setPendingImport({ type: "files", filePath: "" }); fileInputRef.current?.click(); }}>
+            <Upload size={16} className="text-orange-500" />
+            <div className="text-left">
+              <p className="text-sm font-medium">Import Files ZIP</p>
+              <p className="text-[10px] text-muted-foreground">Restore uploaded files</p>
+            </div>
+          </Button>
+          <Button variant="outline" className="gap-2 h-auto py-3 justify-start" onClick={() => { setPendingImport({ type: "snapshot", filePath: "" }); fileInputRef.current?.click(); }}>
+            <Archive size={16} className="text-orange-500" />
+            <div className="text-left">
+              <p className="text-sm font-medium">Import Full Snapshot</p>
+              <p className="text-[10px] text-muted-foreground">Restore DB + files from snapshot</p>
+            </div>
+          </Button>
+        </div>
+        <input ref={fileInputRef} type="file" className="hidden" accept=".sql,.zip" onChange={onFileChange} />
+      </div>
+
       {/* Synology hint */}
       <div className="rounded-xl border border-blue-200 bg-blue-50 dark:bg-blue-950/20 p-4 flex gap-3 text-xs">
         <Info size={14} className="text-blue-500 shrink-0 mt-0.5" />
         <div className="space-y-1">
-          <p><strong>Synology NAS Setup:</strong> Use a UNC path like <code className="bg-muted px-1 rounded">\\SYNOLOGY-NAS\care-diagnostics-backup</code> or an rsync endpoint. Ensure the NAS is accessible from the server. For S3-compatible, use MinIO or Wasabi with a compatible endpoint.</p>
-          <p className="text-muted-foreground">⚠️ Automated replication jobs run server-side. For cloud/NAS destinations, the server must have network access and appropriate credentials configured in environment variables.</p>
+          <p><strong>Synology NAS / Docker:</strong> Exported SQL is PostgreSQL 16 compatible. The ZIP can be extracted into a Docker volume mounted at <code className="bg-muted px-1 rounded">/app/data/uploads</code>. Do not overwrite <code className="bg-muted px-1 rounded">.env</code>, <code className="bg-muted px-1 rounded">docker-compose.yml</code>, or <code className="bg-muted px-1 rounded">Dockerfile</code> during import.</p>
         </div>
       </div>
 
@@ -298,6 +451,11 @@ export default function BackupReplication() {
                           {log.sizeBytes && <span>{formatBytes(log.sizeBytes)}</span>}
                           {log.rowCount && <span>{log.rowCount} rows</span>}
                           {log.errorMessage && <span className="text-red-500 truncate">{log.errorMessage}</span>}
+                          {log.filePath && (
+                            <a href={`/api/admin/backup-replication/download?file=${encodeURIComponent(log.filePath.split("/").pop() ?? "")}`} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">
+                              <Download size={10} className="inline" />
+                            </a>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -315,6 +473,32 @@ export default function BackupReplication() {
           onSave={(data) => editingJob ? updateMutation.mutate({ id: editingJob.id, data }) : createMutation.mutate(data)}
           onClose={() => { setShowForm(false); setEditingJob(undefined); }}
         />
+      )}
+
+      {/* Import confirmation dialog */}
+      {showImportConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowImportConfirm(null)} />
+          <div className="relative bg-background rounded-xl border shadow-2xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-center gap-2 text-amber-600">
+              <AlertTriangle size={20} />
+              <h2 className="text-base font-semibold">Confirm Import</h2>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              This will overwrite current data. A pre-restore backup will be created automatically. Continue?
+            </p>
+            <div className="flex gap-2 pt-2 border-t">
+              <Button variant="destructive" className="flex-1" onClick={() => {
+                if (pendingImport?.type === "db") importDbMutation.mutate({ filePath: pendingImport.filePath, confirm: true });
+                else if (pendingImport?.type === "files") importFilesMutation.mutate({ filePath: pendingImport.filePath, confirm: true });
+                else if (pendingImport?.type === "snapshot") importSnapshotMutation.mutate({ filePath: pendingImport.filePath, confirm: true });
+              }}>
+                Yes, Continue
+              </Button>
+              <Button variant="outline" onClick={() => setShowImportConfirm(null)}>Cancel</Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

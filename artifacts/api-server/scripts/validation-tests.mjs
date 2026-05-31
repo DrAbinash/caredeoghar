@@ -232,6 +232,53 @@ async function main() {
       const r = await req(token, "GET", "/api/radiology/worklist?assigned=mine");
       expectStatus(r.status, 400, r.body);
     });
+
+    console.log("\n# backup-replication: admin-only endpoints");
+
+    await check("GET /api/admin/backup-replication/jobs → 200", async () => {
+      const r = await req(token, "GET", "/api/admin/backup-replication/jobs");
+      expectStatus(r.status, 200, r.body);
+      if (!Array.isArray(r.body)) throw new Error("expected array of jobs");
+    });
+
+    await check("POST /api/admin/backup-replication/jobs → 201", async () => {
+      const r = await req(token, "POST", "/api/admin/backup-replication/jobs", {
+        jobName: "Test Backup Job",
+        backupType: "DB",
+        destinationType: "LOCAL",
+        schedule: "MANUAL",
+      });
+      expectStatus(r.status, 201, r.body);
+      if (!r.body.id) throw new Error("expected job id in response");
+      // Clean up the test job
+      await req(token, "DELETE", `/api/admin/backup-replication/jobs/${r.body.id}`);
+    });
+
+    console.log("\n# backup-replication: export endpoints");
+
+    await check("POST /api/admin/backup-replication/export-db → 200", async () => {
+      const r = await req(token, "POST", "/api/admin/backup-replication/export-db", {});
+      expectStatus(r.status, 200, r.body);
+      if (!r.body.ok || !r.body.filename || !r.body.filePath) {
+        throw new Error("expected { ok, filename, filePath } in response");
+      }
+    });
+
+    await check("POST /api/admin/backup-replication/export-files → 200", async () => {
+      const r = await req(token, "POST", "/api/admin/backup-replication/export-files", {});
+      expectStatus(r.status, 200, r.body);
+      if (!r.body.ok || !r.body.filename) {
+        throw new Error("expected { ok, filename } in response");
+      }
+    });
+
+    await check("POST /api/admin/backup-replication/export-snapshot → 200", async () => {
+      const r = await req(token, "POST", "/api/admin/backup-replication/export-snapshot", {});
+      expectStatus(r.status, 200, r.body);
+      if (!r.body.ok || !r.body.filename || !r.body.metadata) {
+        throw new Error("expected { ok, filename, metadata } in response");
+      }
+    });
   } finally {
     await dropStaffToken(token);
     await pool.end();

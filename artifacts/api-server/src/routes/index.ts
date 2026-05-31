@@ -47,6 +47,7 @@ import { machinesRouter } from "./machines";
 import { departmentsRouter } from "./departments";
 import { branchesRouter } from "./branches";
 import { backupRouter } from "./backup";
+import { backupReplicationRouter } from "./backupReplication";
 import internalBackupRouter from "./internal-backup";
 import { vendorsRouter } from "./vendors";
 import { websiteRouter } from "./website";
@@ -454,6 +455,9 @@ router.use("/system", requireSuperAdmin, systemRouter);
 router.use("/admin/audit-logs", requireSuperAdminUsb, requireSuperAdmin, auditLogsRouter);
 router.use("/admin/role-permissions", requireSuperAdminUsb, requireSuperAdmin, rolePermissionsRouter);
 router.use("/admin/system-health", requireSuperAdminUsb, requireSuperAdmin, systemHealthRouter);
+
+// ─── Backup & Replication (admin/super-admin) ─────────────────────────────
+router.use("/admin/backup-replication", requireStaffAuth, backupReplicationRouter);
 
 // ─── Super-admin-only routes ──────────────────────────────────────────────────
 // User management lives under the regular ERP "Settings" surface — admins

@@ -1,0 +1,104 @@
+Add a complete Admin Backup & Restore system to this ERP.
+
+Current issue:
+The frontend Backup Replication page exists, but backend APIs are missing. It gives:
+
+- Cannot GET /api/admin/backup-replication/jobs
+- Cannot POST /api/admin/backup-replication/jobs
+
+Goal:
+Create a safe hospital-ready backup/export/import system for running production on Replit now and later restoring/testing on Synology Docker.
+
+Requirements:
+
+1. Add backend APIs:
+
+- GET /api/admin/backup-replication/jobs
+- POST /api/admin/backup-replication/jobs
+- POST /api/admin/backup-replication/jobs/:id/run
+- GET /api/admin/backup-replication/jobs/:id/logs
+- DELETE /api/admin/backup-replication/jobs/:id
+
+2. Add simple Admin Backup page with buttons:
+
+- Export Database SQL
+- Export Uploaded Files ZIP
+- Export Full Snapshot ZIP
+- Import Database SQL
+- Import Uploaded Files ZIP
+- Import Full Snapshot ZIP
+
+3. Full snapshot ZIP must include:
+
+- database.sql
+- uploads.zip / object-storage.zip
+- reports.zip if present
+- metadata.json with app version, timestamp, environment, database name
+
+4. Database export:
+
+- Use pg_dump when available.
+- If pg_dump is not available on Replit, implement a fallback using node-postgres to export schema and data safely.
+- Do not include passwords or secrets in export.
+- Filename format:
+  caredeoghar-db-YYYY-MM-DD-HH-mm.sql
+
+5. Uploaded files export:
+
+- Include object storage / uploads / attached_assets / reports only if folders exist.
+- Do not crash if any folder is missing.
+- Filename format:
+  caredeoghar-files-YYYY-MM-DD-HH-mm.zip
+
+6. Import safety:
+
+- Import must be admin-only.
+- Before import, automatically create a pre-restore backup.
+- Show confirmation warning:
+  “This will overwrite current test data. Continue?”
+- Never overwrite .env, docker-compose.yml, Dockerfile, or Synology-specific config.
+- Import should restore only database and uploaded files.
+
+7. Permissions:
+
+- Only admin/superadmin can access backup and restore.
+- Add audit logs for every export/import/run/delete.
+- Log user, time, IP, action, file name, success/failure.
+
+8. Storage:
+
+- Save generated backup files temporarily in /tmp or exports/backups.
+- Provide download link.
+- Auto-delete old temporary export files after 24 hours.
+- Do not store secrets inside backup ZIP.
+
+9. Synology compatibility:
+
+- The exported SQL must be restorable into PostgreSQL 16.
+- The ZIP must be restorable into Docker volume object_storage or equivalent mounted folder.
+- Do not change Synology docker-compose.yml.
+- Do not change existing Docker config.
+
+10. UI:
+
+- Fix existing Backup Replication page so Save Job works.
+- Show:
+  Last Successful
+  Failed Jobs
+  Total Jobs
+  Manual Run button
+  Download latest backup
+  Logs
+- If scheduled jobs are not fully supported on Replit, clearly show “Manual export recommended on Replit”.
+
+11. Testing:
+
+- Add health test for:
+  /api/admin/backup-replication/jobs
+- Add test that creates a DB export successfully.
+- Add test that ZIP export works even when upload folders are missing.
+
+Important:
+Do not break existing ERP workflow.
+Do not change login, billing, patient registration, reports, Docker compose, or environment variable names.
+Implement incrementally and show changed files summary.
