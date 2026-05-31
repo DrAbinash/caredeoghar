@@ -576,38 +576,22 @@ export default function FormF() {
     try {
       const r = await fetch(`${SCAN_BRIDGE_URL}/scan`, { method: "POST", mode: "cors" });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok || !j.ok) throw new Error(j.error || "Scan failed");
+      if (!r.ok || !j.ok) {
+        // If WIA device is busy, auto-fallback to latest-scan pickup
+        if (j.code === "WIA_DEVICE_BUSY" || (j.error && /busy|in use/i.test(j.error))) {
+          toast({
+            title: "Scanner is busy",
+            description: "WIA device is in use by another app. Importing the latest scan from the watch folder instead.",
+          });
+          await importLatestScan();
+          return;
+        }
+        throw new Error(j.error || "Scan failed");
+      }
       const dataUrl = `data:${j.mimeType ?? "image/jpeg"};base64,${j.imageBase64}`;
       setIdCardFrontUrl(dataUrl);
-      // Send to OCR endpoint same as upload
-      const resp = await api.post<{
-        ocr?: {
-          guardianName?: string;
-          address?: string;
-          documentType?: string;
-          confidence?: string;
-          fullName?: string;
-          dob?: string;
-          gender?: string;
-          aadhaarNumber?: string;
-          rawText?: string;
-        } | null;
-        recordId?: number;
-      }>("/api/form-f/upload-id", {
-        formFId: 0,
-        imageBase64: j.imageBase64,
-        mimeType: j.mimeType ?? "image/jpeg",
-      });
-      setIdCardOcrResult(resp.ocr ?? null);
-      if (resp.ocr?.guardianName) setIdCardExtractedName(resp.ocr.guardianName);
-      if (resp.ocr?.address) setIdCardExtractedAddress(resp.ocr.address);
-      // Auto-fill empty form fields from OCR so staff doesn't have to click "Use this"
-      setForm((prev) => ({
-        ...prev,
-        husbandFatherName: prev.husbandFatherName || resp.ocr?.guardianName || prev.husbandFatherName,
-        address: prev.address || resp.ocr?.address || prev.address,
-      }));
-      toast({ title: resp.ocr ? `Scanner ID: ${resp.ocr.documentType}` : "Scanned (OCR unavailable)" });
+      await runOcrOnImage(j.imageBase64, j.mimeType ?? "image/jpeg");
+      toast({ title: "ID scanned successfully" });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not scan";
       toast({
@@ -619,6 +603,73 @@ export default function FormF() {
       });
     } finally {
       setScanning(false);
+    }
+  }
+
+  async function importLatestScan() {
+    setIdCardUploading(true);
+    try {
+      const r = await fetch(`${SCAN_BRIDGE_URL}/latest-scan`, { method: "POST", mode: "cors" });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || "No latest scan found");
+      const dataUrl = `data:${j.mimeType ?? "image/jpeg"};base64,${j.imageBase64}`;
+      setIdCardFrontUrl(dataUrl);
+      await runOcrOnImage(j.imageBase64, j.mimeType ?? "image/jpeg");
+      toast({ title: `Imported: ${j.filename || "latest scan"}` });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not import";
+      toast({
+        title: "Import failed",
+        description: msg,
+        variant: "destructive",
+      });
+    } finally {
+      setIdCardUploading(false);
+    }
+  }
+
+  async function openScannerApp() {
+    try {
+      const r = await fetch(`${SCAN_BRIDGE_URL}/open-scanner-app`, { method: "POST", mode: "cors" });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || "Could not open scanner app");
+      toast({
+        title: j.message || "Scanner app opened",
+        description: "After the scan completes, click Import Latest Scan to pull the image into Form F.",
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not open scanner app";
+      toast({
+        title: "Scanner app error",
+        description: msg,
+        variant: "destructive",
+      });
+    }
+  }
+
+  async function runOcrOnImage(imageBase64: string, mimeType: string) {
+    try {
+      const resp = await api.post<{
+        ocr?: {
+          guardianName?: string; address?: string; documentType?: string; confidence?: string;
+          fullName?: string; dob?: string; gender?: string; aadhaarNumber?: string; rawText?: string;
+        } | null;
+        recordId?: number;
+      }>("/api/form-f/upload-id", {
+        formFId: 0,
+        imageBase64,
+        mimeType,
+      });
+      setIdCardOcrResult(resp.ocr ?? null);
+      if (resp.ocr?.guardianName) setIdCardExtractedName(resp.ocr.guardianName);
+      if (resp.ocr?.address) setIdCardExtractedAddress(resp.ocr.address);
+      setForm((prev) => ({
+        ...prev,
+        husbandFatherName: prev.husbandFatherName || resp.ocr?.guardianName || prev.husbandFatherName,
+        address: prev.address || resp.ocr?.address || prev.address,
+      }));
+    } catch {
+      // OCR is optional; don't block the scan if it fails
     }
   }
   async function pingScanBridge() {
@@ -1484,7 +1535,7 @@ export default function FormF() {
                         }}
                       />
                     </label>
-                    {/* ── Physical scanner via bridge (WIA/SANE/folder-watch) ── */}
+                    {/* ── Direct WIA scan via bridge ── */}
                     <button
                       type="button"
                       onClick={triggerScanBridge}
@@ -1495,10 +1546,38 @@ export default function FormF() {
                           : "border-gray-300 bg-gray-50 text-gray-400 cursor-not-allowed"
                       }`}
                       title={scanBridgeOk
-                        ? "Use flatbed/ADF document scanner attached to this PC"
+                        ? "Direct scan using flatbed/ADF scanner attached to this PC"
                         : "Scanner bridge offline — connect the desktop bridge app or use Upload/Camera instead"}
                     >
-                      <Scan size={14} /> {scanning ? "Scanning…" : "Scanner"}
+                      <Scan size={14} /> {scanning ? "Scanning…" : "Direct Scan"}
+                    </button>
+                    {/* ── Import latest scan from watch folder (fallback when WIA is busy) ── */}
+                    <button
+                      type="button"
+                      onClick={importLatestScan}
+                      disabled={!scanBridgeOk || scanning || idCardUploading}
+                      className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed text-sm font-medium transition-colors disabled:opacity-50 ${
+                        scanBridgeOk
+                          ? "border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700"
+                          : "border-gray-300 bg-gray-50 text-gray-400 cursor-not-allowed"
+                      }`}
+                      title="Import the most recent scan saved to the watch folder (e.g., C:\Scans)"
+                    >
+                      <Upload size={14} /> {idCardUploading ? "Importing…" : "Import Latest Scan"}
+                    </button>
+                    {/* ── Open scanner app (Windows Fax and Scan / Canon) ── */}
+                    <button
+                      type="button"
+                      onClick={openScannerApp}
+                      disabled={!scanBridgeOk || scanning || idCardUploading}
+                      className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed text-sm font-medium transition-colors disabled:opacity-50 ${
+                        scanBridgeOk
+                          ? "border-teal-300 bg-teal-50 hover:bg-teal-100 text-teal-700"
+                          : "border-gray-300 bg-gray-50 text-gray-400 cursor-not-allowed"
+                      }`}
+                      title="Open Windows Fax and Scan or Canon scanner app on this PC"
+                    >
+                      <ExternalLink size={14} /> Open Scanner App
                     </button>
                     {/* ── Comprehensive capture panel (camera + OCR + diagnostics + fallbacks) ── */}
                     <button

@@ -103,7 +103,14 @@ export default {
         mimeType: "image/jpeg",
       };
     } catch (e) {
-      throw new Error(`WIA scan failed: ${e.message}`);
+      const msg = e.message || "";
+      // Detect common "device busy" errors from WIA COM
+      if (msg.includes("busy") || msg.includes("in use") || msg.includes("0x80210006") || msg.includes("0x8021000A") || msg.includes("already in use") || msg.includes("another app")) {
+        const err = new Error(msg);
+        err.code = "WIA_DEVICE_BUSY";
+        throw err;
+      }
+      throw new Error(`WIA scan failed: ${msg}`);
     }
   },
 };

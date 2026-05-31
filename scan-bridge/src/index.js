@@ -21,6 +21,10 @@
 import express from "express";
 import cors from "cors";
 import { loadAdapter } from "./adapters/index.js";
+import { promises as fs, constants } from "node:fs";
+import { join, basename, extname } from "node:path";
+import { tmpdir } from "node:os";
+import { execFile } from "node:child_process";
 
 const PORT = Number(process.env.BRIDGE_SCAN_PORT ?? 8766);
 const VENDOR = process.env.BRIDGE_SCAN_VENDOR ?? "mock";
@@ -67,11 +71,142 @@ app.get("/health", async (_req, res) => {
   }
 });
 
-// ── Scan a document and return base64 image ──────────────────────────────────────────────────────────────────
+// ── Scan a document and return base64 image ────────────────────────────────────
 app.post("/scan", async (_req, res) => {
   try {
     const result = await adapter.scan();
     res.json({ ok: true, imageBase64: result.imageBase64, mimeType: result.mimeType ?? "image/jpeg" });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message, code: e.code || null });
+  }
+});
+
+// ── Latest-scan pickup: grab the newest image from a watched folder ───────────
+const SCAN_WATCH_FOLDER = process.env.SCAN_WATCH_FOLDER ?? (process.platform === "win32" ? "C:\\Scans" : join(tmpdir(), "care-scans"));
+const SCAN_PROCESSED_FOLDER = process.env.SCAN_PROCESSED_FOLDER ?? join(SCAN_WATCH_FOLDER, "processed");
+
+const SCAN_EXTS = new Set(["jpg", "jpeg", "png", "pdf", "tiff", "tif", "bmp"]);
+const MIME_MAP = {
+  jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+  pdf: "application/pdf", tiff: "image/tiff", tif: "image/tiff", bmp: "image/bmp",
+};
+
+function extMatches(filename) {
+  const ext = basename(filename).split(".").pop()?.toLowerCase() ?? "";
+  return SCAN_EXTS.has(ext);
+}
+function mimeFromExt(filename) {
+  const ext = basename(filename).split(".").pop()?.toLowerCase() ?? "";
+  return MIME_MAP[ext] || "application/octet-stream";
+}
+
+app.post("/latest-scan", async (_req, res) => {
+  try {
+    let entries;
+    try {
+      entries = await fs.readdir(SCAN_WATCH_FOLDER, { withFileTypes: true });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: `Cannot read watch folder "${SCAN_WATCH_FOLDER}": ${e.message}` });
+      return;
+    }
+
+    const files = entries
+      .filter((e) => e.isFile() && extMatches(e.name))
+      .map((e) => ({ name: e.name, path: join(SCAN_WATCH_FOLDER, e.name) }));
+
+    if (files.length === 0) {
+      res.status(404).json({ ok: false, error: `No scan files found in "${SCAN_WATCH_FOLDER}". Please scan a document first.` });
+      return;
+    }
+
+    // Find newest by mtime
+    const withStats = await Promise.all(
+      files.map(async (f) => {
+        const stat = await fs.stat(f.path);
+        return { ...f, mtime: stat.mtimeMs };
+      })
+    );
+    withStats.sort((a, b) => b.mtime - a.mtime);
+    const newest = withStats[0];
+
+    const buffer = await fs.readFile(newest.path);
+    const result = {
+      ok: true,
+      imageBase64: buffer.toString("base64"),
+      mimeType: mimeFromExt(newest.name),
+      filename: newest.name,
+      pickedFrom: SCAN_WATCH_FOLDER,
+    };
+
+    // Move to processed folder after successful read
+    try {
+      await fs.mkdir(SCAN_PROCESSED_FOLDER, { recursive: true });
+      const dest = join(SCAN_PROCESSED_FOLDER, newest.name);
+      await fs.rename(newest.path, dest);
+    } catch {
+      // Non-fatal: keep the file in place if move fails
+    }
+
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── Open scanner application on the workstation ───────────────────────────────
+app.post("/open-scanner-app", async (_req, res) => {
+  try {
+    if (process.platform !== "win32") {
+      res.status(400).json({ ok: false, error: "Opening scanner app is only supported on Windows" });
+      return;
+    }
+
+    // Try Windows Fax and Scan first (built-in)
+    try {
+      await new Promise((resolve, reject) => {
+        execFile("powershell", [
+          "-Command",
+          `Start-Process "wiaacmgr" -ErrorAction Stop`,
+        ], { timeout: 5000, windowsHide: true }, (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+      res.json({ ok: true, message: "Windows Fax and Scan opened. After scanning completes, click Import Latest Scan.", app: "wiaacmgr" });
+      return;
+    } catch {
+      // Fallback: try to open any installed scanner utility
+    }
+
+    // Try Canon IJ Scan Utility (common Canon scanner software)
+    try {
+      const canonPaths = [
+        "C:\\Program Files (x86)\\Canon\\IJ Scan Utility\\CNMNUTIL.exe",
+        "C:\\Program Files\\Canon\\IJ Scan Utility\\CNMNUTIL.exe",
+      ];
+      for (const p of canonPaths) {
+        try {
+          await fs.access(p, constants.F_OK);
+          await new Promise((resolve, reject) => {
+            execFile("powershell", [
+              "-Command",
+              `Start-Process "${p}" -ErrorAction Stop`,
+            ], { timeout: 5000, windowsHide: true }, (err) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          });
+          res.json({ ok: true, message: "Canon IJ Scan Utility opened. After scanning completes, click Import Latest Scan.", app: "canon-ij-scan" });
+          return;
+        } catch {
+          // Try next path
+        }
+      }
+    } catch {
+      // No Canon utility found
+    }
+
+    res.status(404).json({ ok: false, error: "No scanner application found on this workstation. Please scan using your scanner software and save to the watch folder, then click Import Latest Scan." });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
