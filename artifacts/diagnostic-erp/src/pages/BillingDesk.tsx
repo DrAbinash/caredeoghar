@@ -2441,7 +2441,7 @@ function BillSearchBox() {
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-xs font-extrabold text-primary">{r.billNumber}</span>
                       {r.balanceAmount > 0 ? (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 font-bold">DUE</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-900/60 dark:text-white font-bold">DUE</span>
                       ) : (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-800 font-bold">PAID</span>
                       )}
@@ -2530,7 +2530,7 @@ function TodayCollectionsPanel() {
                   <div className="flex items-center gap-1.5">
                     <span className="font-mono text-[10px] font-extrabold text-primary truncate">{b.billNumber}</span>
                     {due ? (
-                      <span className="flex-shrink-0 text-[9px] px-1 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 font-extrabold">DUE</span>
+                      <span className="flex-shrink-0 text-[9px] px-1 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-900/60 dark:text-white font-extrabold">DUE</span>
                     ) : (
                       <span className="flex-shrink-0 text-[9px] px-1 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-800 font-extrabold">PAID</span>
                     )}
@@ -2607,7 +2607,7 @@ function RecentBillsPanel() {
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-xs font-extrabold text-primary truncate">{b.billNumber}</span>
                     {due ? (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 font-bold">DUE</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-900/60 dark:text-white font-bold">DUE</span>
                     ) : (
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-800 font-bold">PAID</span>
                     )}
