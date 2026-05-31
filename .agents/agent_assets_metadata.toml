@@ -191,3 +191,9 @@ id = "5yEEYtjEb402mcoAD3zvv"
 uri = "file://synology-nas-deploy.zip"
 type = "unspecified"
 title = "Synology NAS Docker Deployment (Fixed — all 9 files in same folder)"
+
+[[outputs]]
+id = "RmtEyWwmocyUTPk1JHqr3"
+uri = "file://synology-nas-deploy.tar.gz"
+type = "unspecified"
+title = "Synology NAS Deployment Package (self-contained, includes full project source + ICICI integration)"
