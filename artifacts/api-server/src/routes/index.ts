@@ -47,6 +47,7 @@ import { machinesRouter } from "./machines";
 import { departmentsRouter } from "./departments";
 import { branchesRouter } from "./branches";
 import { backupRouter } from "./backup";
+import internalBackupRouter from "./internal-backup";
 import { vendorsRouter } from "./vendors";
 import { websiteRouter } from "./website";
 import { systemRouter } from "./system";
@@ -103,6 +104,8 @@ router.use(healthRouter);
 router.use("/internal/cron", internalCronRouter);
 // Internal RIS/PACS automation endpoints — auth via INTERNAL_API_KEY bearer token.
 // Called by Conquest PACS scripts and other server-to-server automations.
+// Internal backup download — streams pg_dump output for off-site replication.
+router.use("/internal/backup", internalBackupRouter);
 router.use("/internal", internalRadiologyRouter);
 router.use("/super-admin", superAdminRouter);
 router.use("/portal", portalRouter);
