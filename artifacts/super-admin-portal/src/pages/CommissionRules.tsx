@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { useForm } from "react-hook-form";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Trash2, Stethoscope, Star, Percent } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Stethoscope, Star, Percent, Search } from "lucide-react";
 import {
   useListCommissionRules,
   useCreateCommissionRule,
@@ -48,6 +48,69 @@ const DISCOUNT_MODE_OPTIONS: { value: DiscountMode; label: string; description: 
   { value: "deduct", label: "Deduct from Commission", description: "Bill discount is subtracted from the doctor's commission. Commission is floored at \u20b90 — no negative payouts." },
   { value: "deduct_rollover", label: "Deduct with Rollover", description: "Bill discount is subtracted from commission. If discount exceeds commission the balance goes negative and is carried over (deducted from future payouts)." },
 ];
+
+function TestPicker({
+  tests,
+  selectedIds,
+  onChange,
+}: {
+  tests: SaTest[];
+  selectedIds: string;
+  onChange: (ids: string) => void;
+}) {
+  const [q, setQ] = useState("");
+  const selected = selectedIds.split(",").filter(Boolean).map(Number);
+  const filtered = q.trim()
+    ? tests.filter((t) => t.name.toLowerCase().includes(q.trim().toLowerCase()))
+    : tests;
+  const selectedTests = tests.filter((t) => selected.includes(t.id));
+  const unselectedTests = filtered.filter((t) => !selected.includes(t.id));
+  return (
+    <div>
+      <Label>Tests</Label>
+      <div className="mt-1 relative">
+        <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search tests..."
+          className="pl-8"
+        />
+      </div>
+      <div className="mt-2 border border-input rounded-lg p-2 max-h-40 overflow-y-auto space-y-1">
+        {/* Selected tests first */}
+        {selectedTests.map((t) => (
+          <label key={t.id} className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked
+              onChange={() => onChange(selected.filter((id) => id !== t.id).join(","))}
+              className="rounded"
+            />
+            <span className="font-semibold text-primary">{t.name}</span>
+          </label>
+        ))}
+        {selectedTests.length > 0 && unselectedTests.length > 0 && (
+          <div className="border-t border-dashed border-input my-1" />
+        )}
+        {unselectedTests.map((t) => (
+          <label key={t.id} className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              onChange={() => onChange([...selected, t.id].join(","))}
+              className="rounded"
+            />
+            {t.name}
+          </label>
+        ))}
+        {filtered.length === 0 && (
+          <p className="text-xs text-muted-foreground py-2 text-center">No tests match "{q}"</p>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground mt-1">{selected.length} selected</p>
+    </div>
+  );
+}
 
 export default function CommissionRules({ onBack }: { onBack: () => void }) {
   const { toast } = useToast();
@@ -407,28 +470,11 @@ export default function CommissionRules({ onBack }: { onBack: () => void }) {
               </div>
             )}
             {scope === "test" && (
-              <div>
-                <Label>Tests</Label>
-                <div className="mt-1 border border-input rounded-lg p-2 max-h-32 overflow-y-auto space-y-1">
-                  {tests.map(t => (
-                    <label key={t.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        value={t.id}
-                        onChange={e => {
-                          const cur = (watch("testIds") || "").split(",").filter(Boolean).map(Number);
-                          const id = Number(e.target.value);
-                          const next = e.target.checked ? [...cur, id] : cur.filter(x => x !== id);
-                          setValue("testIds", next.join(","));
-                        }}
-                        defaultChecked={editRule?.testIds.includes(t.id)}
-                        className="rounded"
-                      />
-                      {t.name}
-                    </label>
-                  ))}
-                </div>
-              </div>
+              <TestPicker
+                tests={tests}
+                selectedIds={watch("testIds") || ""}
+                onChange={(ids) => setValue("testIds", ids)}
+              />
             )}
             <div>
               <Label>Priority</Label>
