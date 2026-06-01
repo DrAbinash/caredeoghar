@@ -913,7 +913,9 @@ async function handleIciciCallback(req: any, res: any, queryOrBody: Record<strin
   const base = getPublicBase(req as Parameters<typeof getPublicBase>[0]);
   const clinicSiteBase = base;
 
-  const { merchantTxnNo, responseCode, respDescription, txnID } = queryOrBody;
+  logger.info({ keys: Object.keys(queryOrBody), queryOrBody }, "ICICI callback received");
+
+  const { merchantTxnNo, responseCode, respDescription, txnID, status } = queryOrBody;
   if (!merchantTxnNo) {
     res.redirect(`${clinicSiteBase}/?booking=failed&reason=missing_txn_id`);
     return;
@@ -979,7 +981,10 @@ async function handleIciciCallback(req: any, res: any, queryOrBody: Record<strin
   }
 
   // Also mark as paid if callback query/body indicates success (defensive)
-  if (responseCode === "0000" || responseCode === "000") {
+  const successCodes = ["0000", "000", "success", "SUCCESS", "SUC", "TXN_SUCCESS"];
+  const isSuccessByCode = successCodes.includes(responseCode) || successCodes.includes(status);
+  if (isSuccessByCode) {
+    logger.info({ merchantTxnNo, responseCode, status }, "ICICI callback marking as paid (success code)");
     await db.update(onlineBookingsTable)
       .set({ status: "paid", iciciProviderRefId: txnID || booking.iciciProviderRefId })
       .where(eq(onlineBookingsTable.id, booking.id));
@@ -988,6 +993,7 @@ async function handleIciciCallback(req: any, res: any, queryOrBody: Record<strin
   }
 
   if (booking.status === "pending_payment") {
+    logger.info({ merchantTxnNo, responseCode, status, respDescription }, "ICICI callback marking as payment_failed");
     await db.update(onlineBookingsTable)
       .set({ status: "payment_failed" })
       .where(eq(onlineBookingsTable.id, booking.id));
@@ -996,11 +1002,13 @@ async function handleIciciCallback(req: any, res: any, queryOrBody: Record<strin
 }
 
 publicBookingRouter.get("/icici-callback", async (req, res): Promise<void> => {
-  await handleIciciCallback(req, res, req.query as Record<string, string>);
+  const merged = { ...(req.query as Record<string, string>), ...(req.body as Record<string, string>) };
+  await handleIciciCallback(req, res, merged);
 });
 
 publicBookingRouter.post("/icici-callback", async (req, res): Promise<void> => {
-  await handleIciciCallback(req, res, req.body as Record<string, string>);
+  const merged = { ...(req.query as Record<string, string>), ...(req.body as Record<string, string>) };
+  await handleIciciCallback(req, res, merged);
 });
 
 // ── POST /api/public/booking/create-order (Razorpay ─ kept for backwards compat) ──
