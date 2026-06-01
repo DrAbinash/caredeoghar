@@ -14,7 +14,7 @@ import {
   paymentsTable,
   clinicSettingsTable,
 } from "@workspace/db/schema";
-import { eq, desc, and, or, ilike, sql } from "drizzle-orm";
+import { eq, desc, and, or, ilike, sql, inArray } from "drizzle-orm";
 import { generateBillNumber } from "./bills";
 import { generateTokenForBill } from "./tokens";
 import { generateTestTokensForOrder } from "./test-tokens";
@@ -123,7 +123,7 @@ onlineBookingsRouter.post("/:id/confirm", async (req: StaffAuthRequest, res): Pr
     const pkgTests = await db
       .select({ testId: packageTestsTable.testId })
       .from(packageTestsTable)
-      .where(sql`${packageTestsTable.packageId} = ANY(${packageIds})`);
+      .where(inArray(packageTestsTable.packageId, packageIds));
     for (const pt of pkgTests) extraTestIds.push(pt.testId);
   }
 
@@ -173,7 +173,7 @@ onlineBookingsRouter.post("/:id/confirm", async (req: StaffAuthRequest, res): Pr
   const tests = await db
     .select({ id: testsTable.id, price: testsTable.price, department: testsTable.department })
     .from(testsTable)
-    .where(sql`${testsTable.id} = ANY(${allTestIds})`);
+    .where(inArray(testsTable.id, allTestIds));
 
   const totalAmount = tests.reduce((sum, t) => sum + Number(t.price), 0);
 
@@ -221,13 +221,39 @@ onlineBookingsRouter.post("/:id/confirm", async (req: StaffAuthRequest, res): Pr
       })
       .returning();
 
-    // Record the Razorpay payment
+    // Determine gateway and payment reference from booking record
+    let paymentMethod = "Online";
+    let paymentRef = booking.bookingRef;
+    let paymentNotes = `Paid online. Booking ref: ${booking.bookingRef}`;
+
+    if (booking.razorpayPaymentId || booking.razorpayOrderId) {
+      paymentMethod = "Online (Razorpay)";
+      paymentRef = booking.razorpayPaymentId || booking.razorpayOrderId || booking.bookingRef;
+      paymentNotes = `Paid online via Razorpay. Booking ref: ${booking.bookingRef}`;
+    } else if (booking.payuTxnId || booking.payuPaymentId) {
+      paymentMethod = "Online (PayU)";
+      paymentRef = booking.payuPaymentId || booking.payuTxnId || booking.bookingRef;
+      paymentNotes = `Paid online via PayU. Booking ref: ${booking.bookingRef}`;
+    } else if (booking.phonepeTransactionId || booking.phonepeProviderRefId) {
+      paymentMethod = "Online (PhonePe)";
+      paymentRef = booking.phonepeProviderRefId || booking.phonepeTransactionId || booking.bookingRef;
+      paymentNotes = `Paid online via PhonePe. Booking ref: ${booking.bookingRef}`;
+    } else if (booking.bharatpeTransactionId || booking.bharatpeProviderRefId) {
+      paymentMethod = "Online (BharatPe)";
+      paymentRef = booking.bharatpeProviderRefId || booking.bharatpeTransactionId || booking.bookingRef;
+      paymentNotes = `Paid online via BharatPe. Booking ref: ${booking.bookingRef}`;
+    } else if (booking.iciciTransactionId || booking.iciciProviderRefId) {
+      paymentMethod = "Online (ICICI Orange Pay)";
+      paymentRef = booking.iciciProviderRefId || booking.iciciTransactionId || booking.bookingRef;
+      paymentNotes = `Paid online via ICICI Orange Pay. Booking ref: ${booking.bookingRef}`;
+    }
+
     await tx.insert(paymentsTable).values({
       billId: bill.id,
       amount: totalAmount.toFixed(2),
-      method: "Online (Razorpay)",
-      referenceNumber: booking.razorpayPaymentId || booking.razorpayOrderId || booking.bookingRef,
-      notes: `Paid online via Razorpay. Booking ref: ${booking.bookingRef}`,
+      method: paymentMethod,
+      referenceNumber: paymentRef,
+      notes: paymentNotes,
       recordedByName: "Online Booking",
     });
 
