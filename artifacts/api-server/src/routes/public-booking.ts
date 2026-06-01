@@ -907,12 +907,13 @@ publicBookingRouter.post("/icici-initiate", createOrderLimiter, async (req, res)
   }
 });
 
-// ── GET /api/public/booking/icici-callback ───────────────────────────────────
-publicBookingRouter.get("/icici-callback", async (req, res): Promise<void> => {
+// ── ICICI callback handler (shared for GET and POST) ─────────────────────────
+
+async function handleIciciCallback(req: any, res: any, queryOrBody: Record<string, string>): Promise<void> {
   const base = getPublicBase(req as Parameters<typeof getPublicBase>[0]);
   const clinicSiteBase = base;
 
-  const { merchantTxnNo, responseCode, respDescription, txnID } = req.query as Record<string, string>;
+  const { merchantTxnNo, responseCode, respDescription, txnID } = queryOrBody;
   if (!merchantTxnNo) {
     res.redirect(`${clinicSiteBase}/?booking=failed&reason=missing_txn_id`);
     return;
@@ -977,7 +978,7 @@ publicBookingRouter.get("/icici-callback", async (req, res): Promise<void> => {
     } catch { /* fall through to failure */ }
   }
 
-  // Also mark as paid if callback query indicates success (defensive)
+  // Also mark as paid if callback query/body indicates success (defensive)
   if (responseCode === "0000" || responseCode === "000") {
     await db.update(onlineBookingsTable)
       .set({ status: "paid", iciciProviderRefId: txnID || booking.iciciProviderRefId })
@@ -992,6 +993,14 @@ publicBookingRouter.get("/icici-callback", async (req, res): Promise<void> => {
       .where(eq(onlineBookingsTable.id, booking.id));
   }
   res.redirect(`${clinicSiteBase}/?booking=failed&reason=${encodeURIComponent(respDescription || "Payment not completed")}`);
+}
+
+publicBookingRouter.get("/icici-callback", async (req, res): Promise<void> => {
+  await handleIciciCallback(req, res, req.query as Record<string, string>);
+});
+
+publicBookingRouter.post("/icici-callback", async (req, res): Promise<void> => {
+  await handleIciciCallback(req, res, req.body as Record<string, string>);
 });
 
 // ── POST /api/public/booking/create-order (Razorpay ─ kept for backwards compat) ──
