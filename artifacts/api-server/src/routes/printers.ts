@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { eq } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { printerSettingsTable } from "@workspace/db/schema";
 
@@ -31,7 +32,7 @@ printersRouter.put("/settings", async (req, res) => {
   // tokenEnabled: accept both boolean and string
   if (typeof body.tokenEnabled === "boolean") updates.tokenEnabled = String(body.tokenEnabled);
   else if (typeof body.tokenEnabled === "string" && ["true", "false"].includes(body.tokenEnabled)) updates.tokenEnabled = body.tokenEnabled;
-  const [row] = await db.update(printerSettingsTable).set(updates).where({ id: current.id } as never).returning();
+  const [row] = await db.update(printerSettingsTable).set(updates).where(eq(printerSettingsTable.id, current.id)).returning();
   res.json(row);
 });
 
