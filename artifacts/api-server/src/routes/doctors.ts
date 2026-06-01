@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, doctorsTable, ordersTable, billsTable } from "@workspace/db";
+import { db, doctorsTable, ordersTable, billsTable, appointmentsTable, doctorPayoutsTable, commissionRulesTable } from "@workspace/db";
 import { ilike, or, desc, eq, and, sql, count } from "drizzle-orm";
 import {
   ListDoctorsQueryParams,
@@ -8,6 +8,7 @@ import {
   UpdateDoctorBody,
   DeleteDoctorParams,
 } from "@workspace/api-zod";
+import { logger } from "../lib/logger";
 
 export const doctorsRouter = Router();
 
@@ -201,7 +202,39 @@ doctorsRouter.delete("/:id", async (req, res) => {
     res.status(400).json({ error: "Invalid request", details: paramsParsed.error.issues });
     return;
   }
-  await db.delete(doctorsTable).where(eq(doctorsTable.id, paramsParsed.data.id));
-  res.json({ success: true });
+  const id = paramsParsed.data.id;
+
+  // Check for linked orders that would block deletion
+  const [linkedOrders] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(ordersTable)
+    .where(eq(ordersTable.doctorId, id));
+
+  if (linkedOrders && linkedOrders.count > 0) {
+    res.status(409).json({
+      error: "Doctor has linked orders",
+      details: `This doctor is referenced by ${linkedOrders.count} order(s). Remove or reassign those orders first, or use the merge feature instead.`,
+    });
+    return;
+  }
+
+  try {
+    // Unlink appointments (set doctorId to null)
+    await db.update(appointmentsTable).set({ doctorId: null }).where(eq(appointmentsTable.doctorId, id));
+
+    // Delete commission rules
+    await db.delete(commissionRulesTable).where(eq(commissionRulesTable.doctorId, id));
+
+    // Delete doctor payouts
+    await db.delete(doctorPayoutsTable).where(eq(doctorPayoutsTable.doctorId, id));
+
+    // Delete the doctor
+    await db.delete(doctorsTable).where(eq(doctorsTable.id, id));
+
+    res.json({ success: true });
+  } catch (err) {
+    logger.error({ err, doctorId: id }, "Failed to delete doctor");
+    res.status(500).json({ error: "Delete failed", details: (err as Error).message });
+  }
 });
 

@@ -435,6 +435,7 @@ function DuplicatesDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
     enabled: open,
   });
   const { toast } = useToast();
+  const [dupSearch, setDupSearch] = useState("");
 
   const delDoc = useDeleteDoctor({
     mutation: {
@@ -443,11 +444,14 @@ function DuplicatesDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
         qc.invalidateQueries({ queryKey: ["all-doctors-for-dups"] });
         toast({ title: "Duplicate deleted" });
       },
-      onError: (e: Error) => toast({ title: "Delete failed", description: e.message, variant: "destructive" }),
+      onError: (e: Error) => {
+        toast({ title: "Delete failed", description: e.message, variant: "destructive" });
+      },
     },
   });
 
   const doctors = (rawRes as { doctors?: DupDoctor[] } | undefined)?.doctors ?? [];
+  const searchTerm = dupSearch.trim().toLowerCase();
 
   const groups: DuplicateDoctorGroup[] = (() => {
     const map = new Map<string, DupDoctor[]>();
@@ -460,7 +464,11 @@ function DuplicatesDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
     }
     const out: DuplicateDoctorGroup[] = [];
     for (const [name, list] of map) {
-      if (list.length > 1) out.push({ name, doctors: list });
+      if (list.length > 1) {
+        if (!searchTerm || name.includes(searchTerm)) {
+          out.push({ name, doctors: list });
+        }
+      }
     }
     return out.sort((a, b) => a.name.localeCompare(b.name));
   })();
@@ -474,6 +482,15 @@ function DuplicatesDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
             Doctors with the same name are grouped below. Click the trash icon to delete the duplicate you don't want. Doctors linked to existing orders are protected from deletion.
           </DialogDescription>
         </DialogHeader>
+        <div className="px-1 pt-2 relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search by partial name (e.g. 'neha' to find 'DR NEHA' and 'DR NEHA PRIYA')"
+            value={dupSearch}
+            onChange={(e) => setDupSearch(e.target.value)}
+            className="text-sm pl-8"
+          />
+        </div>
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
             <div className="p-6 text-sm text-muted-foreground">Loading doctors…</div>
