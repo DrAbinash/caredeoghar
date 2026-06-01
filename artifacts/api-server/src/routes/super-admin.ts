@@ -121,9 +121,14 @@ superAdminRouter.get("/usb/status", (_req, res): void => {
 // the OpenAPI spec), so we declare local schemas and use the same safeParse
 // pattern as the validated routes (appointments, expenses, etc.).
 const LoginBody = z.object({
-  name: z.string().trim().min(1, "name is required"),
-  pin: z.string().trim().min(1, "pin is required"),
-});
+  name: z.string().trim().optional(),
+  pin: z.string().trim().optional(),
+  usbPin: z.string().trim().optional(),
+}).refine((data) => {
+  // If usbPin is not provided, both name and pin must be present
+  if (!data.usbPin) return (data.name && data.name.length > 0) && (data.pin && data.pin.length > 0);
+  return true;
+}, { message: "Name and PIN are required when usbPin is not provided", path: ["name", "pin"] });
 
 const LogoutBody = z.object({
   token: z.string().min(1, "token is required"),
@@ -162,6 +167,15 @@ async function verifyPin(plain: string, stored: string): Promise<boolean> {
   return crypto.timingSafeEqual(a, b);
 }
 
+function getUsbPinEnv(): string | null {
+  const v = process.env["SUPER_ADMIN_USB_PIN"];
+  return typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
+}
+
+function isUsbPinEnforced(): boolean {
+  return getUsbPinEnv() !== null;
+}
+
 // POST /api/super-admin/login — validates name + PIN, creates session token.
 // Gated by the USB pen-drive middleware: without a valid X-SA-USB-Key header
 // the request is rejected before the PIN is even checked. This makes the
@@ -169,32 +183,26 @@ async function verifyPin(plain: string, stored: string): Promise<boolean> {
 //
 // Exception: if the authenticated user has remoteLoginEnabled=true, the
 // USB gate is bypassed so the owner can log in from outside the hospital.
+//
+// Auto-login: if the request includes `usbPin` (the contents of `superadmin.pin`
+// from the pen drive) and it matches the SUPER_ADMIN_USB_PIN env secret, the
+// user is logged in immediately without checking the database PIN.
 superAdminRouter.post("/login", loginLimiter, async (req, res): Promise<void> => {
   const parsed = LoginBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid request", details: parsed.error.issues });
     return;
   }
-  const { name, pin } = parsed.data;
+  const { name, pin, usbPin } = parsed.data;
 
   const [user] = await db.select().from(usersTable)
     .where(and(sql`lower(${usersTable.name}) = lower(${name})`, eq(usersTable.isActive, true)));
 
   if (!user) { res.status(401).json({ error: "Invalid credentials" }); return; }
   if (user.role !== "super_admin") { res.status(403).json({ error: "Access denied — not a super admin" }); return; }
-  if (!user.pin) { res.status(401).json({ error: "No PIN configured for this user" }); return; }
 
-  const pinMatches = await verifyPin(pin, user.pin);
-  if (!pinMatches) { res.status(401).json({ error: "Invalid credentials" }); return; }
-
-  // Transparently upgrade plaintext legacy PINs to bcrypt on first successful login
-  if (!isBcryptHash(user.pin)) {
-    const hashed = await bcrypt.hash(pin, 12);
-    await db.update(usersTable).set({ pin: hashed }).where(eq(usersTable.id, user.id));
-  }
-
-  // USB pen-drive gate check — enforced after successful PIN so we know the
-  // user and can honour the remoteLoginEnabled bypass.
+  // USB pen-drive gate check — enforced before PIN so we know the user
+  // and can honour the remoteLoginEnabled bypass.
   if (isUsbGateEnforced()) {
     const usb = getUsbKeyHeader(req);
     const hasUsb = usb && isValidUsbKey(usb);
@@ -205,6 +213,30 @@ superAdminRouter.post("/login", loginLimiter, async (req, res): Promise<void> =>
     if (!hasUsb && user.remoteLoginEnabled) {
       logger.warn({ userId: user.id, userName: user.name },
         "USB gate bypassed — remoteLoginEnabled super-admin logged in without pen drive");
+    }
+  }
+
+  // Auto-login via usbPin from the pen drive
+  let autoLogin = false;
+  if (isUsbPinEnforced() && usbPin) {
+    const expectedPin = getUsbPinEnv()!;
+    const pinBuf = Buffer.from(usbPin);
+    const expectedBuf = Buffer.from(expectedPin);
+    if (pinBuf.length === expectedBuf.length && crypto.timingSafeEqual(pinBuf, expectedBuf)) {
+      autoLogin = true;
+      logger.info({ userId: user.id }, "Auto-login via usbPin");
+    }
+  }
+
+  if (!autoLogin) {
+    if (!pin || !pin.length) { res.status(401).json({ error: "PIN is required" }); return; }
+    if (!user.pin) { res.status(401).json({ error: "No PIN configured for this user" }); return; }
+    const pinMatches = await verifyPin(pin, user.pin);
+    if (!pinMatches) { res.status(401).json({ error: "Invalid credentials" }); return; }
+    // Transparently upgrade plaintext legacy PINs to bcrypt on first successful login
+    if (!isBcryptHash(user.pin)) {
+      const hashed = await bcrypt.hash(pin, 12);
+      await db.update(usersTable).set({ pin: hashed }).where(eq(usersTable.id, user.id));
     }
   }
 

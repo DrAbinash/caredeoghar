@@ -12,6 +12,8 @@ This works the same way on:
 
 ## One-time setup (do this once)
 
+### Step 1: Generate the key file
+
 1. **Generate a strong random key** on any computer:
    ```bash
    openssl rand -hex 32
@@ -28,6 +30,23 @@ This works the same way on:
    b. **As a plain text file named `superadmin.key` on your USB pen drive.**
       Just the value — no quotes, no newline tricks needed. Notepad / nano
       will work fine.
+
+### Step 2: Generate the PIN file (optional, for auto-login)
+
+1. **Generate a PIN** (e.g., 4-8 digits):
+   ```bash
+   openssl rand -hex 4
+   ```
+   This produces an 8-character hex string. You can also use a simple numeric PIN.
+
+2. **Save the same value in TWO places:**
+
+   a. **As the Replit secret `SUPER_ADMIN_USB_PIN`** in your project (Tools →
+      Secrets). The api-server reads this at startup. If unset, auto-login is
+      disabled and you must type the PIN manually (back-compat).
+
+   b. **As a plain text file named `superadmin.pin` on your USB pen drive.**
+      Just the value — no quotes, no newline tricks needed.
 
 3. **Plug the pen drive into the computer you bill from.**
 
@@ -61,7 +80,11 @@ per session manually.
    open — within a few seconds the link appears).
 2. The amber **"Super Admin"** link with a `KEY` badge will be visible at
    the bottom of the sidebar.
-3. Click it → opens the Super Admin Portal in a new tab. Log in with PIN.
+3. Click it → opens the Super Admin Portal in a new tab.
+   - If you have `superadmin.pin` on the pen drive, you'll be logged in
+     **automatically** — no typing needed.
+   - If you don't have the PIN file, you'll see the PIN screen. Log in with
+     your PIN as before.
 4. **Pull the pen drive** when you're done. Within 4 seconds the link
    disappears and the in-browser key is cleared automatically — anyone
    else using this PC sees no trace of the super-admin surface. Closing

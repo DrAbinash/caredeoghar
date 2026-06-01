@@ -144,3 +144,26 @@ export async function tryReadKey(): Promise<string | null> {
     return null;
   }
 }
+
+/**
+ * Silently try to read `superadmin.pin` from the paired directory.
+ * Returns the trimmed PIN text, or null if the file is missing / unreadable.
+ */
+export async function tryReadPin(): Promise<string | null> {
+  if (!isFsAccessSupported()) return null;
+  let dir: FsDirectoryHandle | undefined;
+  try { dir = await idbGet<FsDirectoryHandle>(IDB_HANDLE_KEY); } catch { return null; }
+  if (!dir) return null;
+  try {
+    if (typeof dir.queryPermission === "function") {
+      const perm = await dir.queryPermission({ mode: "read" });
+      if (perm !== "granted") return null;
+    }
+    const fileHandle = await dir.getFileHandle("superadmin.pin");
+    const file = await fileHandle.getFile();
+    const text = (await file.text()).trim();
+    return text.length > 0 ? text : null;
+  } catch {
+    return null;
+  }
+}

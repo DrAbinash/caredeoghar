@@ -12,6 +12,7 @@ import {
   isFsAccessSupported,
   pairPenDrive,
   tryReadKey,
+  tryReadPin,
   unpairPenDrive,
   hasPairedDrive,
 } from "./lib/usbPoller";
@@ -45,6 +46,8 @@ type LoginForm = {
   name: string;
   pin: string;
 };
+
+type AutoLoginState = "idle" | "attempting" | "failed" | "success";
 
 type Session = {
   token: string;
@@ -96,7 +99,15 @@ async function verifyAndStoreKey(text: string): Promise<string | null> {
   return null; // no error
 }
 
-function UsbUnlockScreen({ onUnlocked, onSkip }: { onUnlocked: () => void; onSkip: () => void }) {
+function UsbUnlockScreen({
+  onUnlocked,
+  onSkip,
+  onUsbPin,
+}: {
+  onUnlocked: () => void;
+  onSkip: () => void;
+  onUsbPin?: (pin: string | null) => void;
+}) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const fsSupported = isFsAccessSupported();
@@ -110,6 +121,9 @@ function UsbUnlockScreen({ onUnlocked, onSkip }: { onUnlocked: () => void; onSki
       const text = await pairPenDrive();
       const err = await verifyAndStoreKey(text);
       if (err) { setError(err); return; }
+      // Try reading the PIN file from the paired drive
+      const pin = await tryReadPin();
+      onUsbPin?.(pin);
       onUnlocked();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -217,29 +231,61 @@ function UsbUnlockScreen({ onUnlocked, onSkip }: { onUnlocked: () => void; onSki
   );
 }
 
-function LoginScreen({ onLogin, onLockUsb }: { onLogin: (session: Session) => void; onLockUsb: () => void }) {
+function LoginScreen({
+  onLogin,
+  onLockUsb,
+  autoUsbPin,
+}: {
+  onLogin: (session: Session) => void;
+  onLockUsb: () => void;
+  autoUsbPin?: string | null;
+}) {
   const { register, handleSubmit, formState: { isSubmitting, errors } } = useForm<LoginForm>();
   const [apiError, setApiError] = useState<string | null>(null);
   const [showPin, setShowPin] = useState(false);
+  const [autoLoginState, setAutoLoginState] = useState<AutoLoginState>("idle");
 
-  const onSubmit = async (data: LoginForm) => {
+  const doLogin = async (name: string, usbPin?: string) => {
     setApiError(null);
     try {
+      const body: Record<string, string> = { name };
+      if (usbPin) body.usbPin = usbPin;
       const res = await fetch(`${API_BASE}/super-admin/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...saUsbHeader() },
-        body: JSON.stringify({ name: data.name, pin: data.pin }),
+        body: JSON.stringify(body),
       });
-      const body = await res.json();
+      const result = await res.json();
       if (!res.ok) {
-        setApiError(body.error ?? "Login failed");
-        return;
+        setApiError(result.error ?? "Login failed");
+        return false;
       }
-      onLogin({ token: body.token, userName: body.userName, expiresAt: body.expiresAt });
+      onLogin({ token: result.token, userName: result.userName, expiresAt: result.expiresAt });
+      return true;
     } catch {
       setApiError("Network error — please try again");
+      return false;
     }
   };
+
+  const onSubmit = async (data: LoginForm) => {
+    await doLogin(data.name, autoUsbPin ?? undefined);
+  };
+
+  // Auto-login: if usbPin is available from the pen drive, try common names
+  useEffect(() => {
+    if (!autoUsbPin || autoLoginState !== "idle") return;
+    setAutoLoginState("attempting");
+    void (async () => {
+      const names = ["Super Admin", "Admin", "Owner", "Manager"];
+      for (const name of names) {
+        const ok = await doLogin(name, autoUsbPin);
+        if (ok) { setAutoLoginState("success"); return; }
+      }
+      setAutoLoginState("failed");
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoUsbPin]);
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-background p-4">
@@ -260,6 +306,19 @@ function LoginScreen({ onLogin, onLockUsb }: { onLogin: (session: Session) => vo
             <span>Use your super-admin name and PIN · 8-hour session</span>
           </div>
 
+          {/* Auto-login state */}
+          {autoLoginState === "attempting" && (
+            <div className="mb-4 text-center">
+              <div className="w-6 h-6 rounded-full border-2 border-primary border-t-transparent animate-spin mx-auto mb-2" />
+              <p className="text-xs text-muted-foreground">Auto-login via USB pen drive...</p>
+            </div>
+          )}
+          {autoLoginState === "failed" && (
+            <div className="mb-4 bg-destructive/10 border border-destructive/30 text-destructive text-xs rounded-lg px-3 py-2">
+              Auto-login failed. Please enter your name below.
+            </div>
+          )}
+
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
               <Label htmlFor="name" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -271,34 +330,39 @@ function LoginScreen({ onLogin, onLockUsb }: { onLogin: (session: Session) => vo
                 className="mt-1.5"
                 placeholder="e.g. Dr Abinash Kumar"
                 autoComplete="username"
+                disabled={autoLoginState === "attempting"}
               />
               {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
             </div>
 
-            <div>
-              <Label htmlFor="pin" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                PIN
-              </Label>
-              <div className="relative mt-1.5">
-                <Input
-                  id="pin"
-                  type={showPin ? "text" : "password"}
-                  {...register("pin", { required: "PIN is required" })}
-                  className="pr-10 font-mono tracking-widest"
-                  placeholder="4-digit PIN"
-                  autoComplete="current-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPin((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  tabIndex={-1}
-                >
-                  {showPin ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
+            {/* Only show PIN field when auto-login is not in progress */}
+            {autoLoginState !== "attempting" && (
+              <div>
+                <Label htmlFor="pin" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  PIN
+                </Label>
+                <div className="relative mt-1.5">
+                  <Input
+                    id="pin"
+                    type={showPin ? "text" : "password"}
+                    {...register("pin", { required: autoUsbPin ? false : "PIN is required" })}
+                    className="pr-10 font-mono tracking-widest"
+                    placeholder={autoUsbPin ? "(auto-filled from pen drive)" : "4-digit PIN"}
+                    autoComplete="current-password"
+                    disabled={!!autoUsbPin}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPin((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    tabIndex={-1}
+                  >
+                    {showPin ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
+                {errors.pin && <p className="text-xs text-destructive mt-1">{errors.pin.message}</p>}
               </div>
-              {errors.pin && <p className="text-xs text-destructive mt-1">{errors.pin.message}</p>}
-            </div>
+            )}
 
             {apiError && (
               <div className="bg-destructive/10 border border-destructive/30 text-destructive text-xs rounded-lg px-3 py-2">
@@ -309,9 +373,9 @@ function LoginScreen({ onLogin, onLockUsb }: { onLogin: (session: Session) => vo
             <Button
               type="submit"
               className="w-full mt-2"
-              disabled={isSubmitting}
+              disabled={isSubmitting || autoLoginState === "attempting"}
             >
-              {isSubmitting ? "Authenticating…" : "Authenticate"}
+              {isSubmitting ? "Authenticating…" : autoLoginState === "attempting" ? "Auto-login..." : "Authenticate"}
             </Button>
           </form>
 
@@ -582,6 +646,7 @@ function App() {
   // Initial view honours `#books` / `#commission-report` / etc. so the ERP
   // sidebar can deep-link straight into a specific module after PIN login.
   const [view, setView] = useState<SaView>(() => viewFromHash());
+  const [autoUsbPin, setAutoUsbPin] = useState<string | null>(null);
   const { toast } = useToast();
 
   // Keep the saApi helper in sync with the active super-admin token so all
@@ -668,11 +733,13 @@ function App() {
           <UsbUnlockScreen
             onUnlocked={() => setUsbUnlocked(true)}
             onSkip={() => setUsbUnlocked(true)}
+            onUsbPin={setAutoUsbPin}
           />
         ) : !session ? (
           <LoginScreen
             onLogin={(s) => { setSession(s); setView("home"); }}
             onLockUsb={doEjectUsb}
+            autoUsbPin={autoUsbPin}
           />
         ) : view === "books" ? (
           <BooksManager token={session.token} onBack={() => setView("home")} />
