@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import { readStaffSession, FULL_ACCESS_ROLES } from "@/lib/staffSession";
@@ -6,6 +6,8 @@ import PageHeader from "@/components/PageHeader";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
+import { SummaryExportToolbar } from "@/components/SummaryExport";
+import type { ExportConfig } from "@/components/SummaryExport";
 import {
   IndianRupee, Wallet, Banknote, Smartphone, TrendingDown, RotateCcw,
   XCircle, FileEdit, Clock, Calendar, RefreshCw, Tag, CheckCircle2,
@@ -1198,15 +1200,122 @@ export default function MyDailySummary() {
     cheque: "Cheque", neft: "NEFT/RTGS", online: "Online",
   };
 
+  const inr = (n: number) =>
+    new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
+
+  const exportConfig = useMemo<ExportConfig | null>(() => {
+    if (!s || !data) return null;
+    const effectiveBilling = s.grossBilledIncludingCancelled + s.duesCollectedTotal - s.cancelledAmount;
+    const expectedCollection = effectiveBilling - s.outstanding - s.totalExpenses;
+    const netDigitalCollection = s.digitalCollection - s.digitalRefunded;
+    const expectedPhysicalCash = expectedCollection - netDigitalCollection;
+    const mismatch = expectedPhysicalCash - s.physicalCashInHand;
+    return {
+      title: "My Daily Summary — Reconciliation",
+      subtitle: `${data.staffName} • ${from === to ? from : `${from} → ${to}`}`,
+      sections: [
+        {
+          title: "Reconciliation (End of Day)",
+          metrics: [
+            ["User Name", data.staffName],
+            ["New Billing", inr(s.grossBilledIncludingCancelled)],
+            ["Old Dues Collected", inr(s.duesCollectedTotal)],
+            ["Effective Billing", inr(effectiveBilling)],
+            ["Pending Dues", inr(s.outstanding)],
+            ["Refunds", inr(s.refundAmount)],
+            ["Expenses", inr(s.totalExpenses)],
+            ["Expected Collection", inr(expectedCollection)],
+            ["UPI / Digital", inr(netDigitalCollection)],
+            ["Total Cash", inr(expectedPhysicalCash)],
+            ["Discount Given", inr(s.discountsGiven)],
+            ["Cash in Counter (Actual)", inr(s.physicalCashInHand)],
+            ["Variance", Math.abs(mismatch) > 0.01 ? `₹${Math.abs(mismatch).toFixed(0)} ${mismatch > 0 ? "Surplus" : "Short"}` : "Balanced"],
+          ],
+        },
+        {
+          title: "My Billing",
+          metrics: [
+            ["Gross Billed", inr(s.grossBilledIncludingCancelled)],
+            ["Cancelled", inr(s.cancelledOnMyBills)],
+            ["Active Billing", inr(s.grossBilling)],
+            ["Outstanding", inr(s.outstanding)],
+            ["Net Collected on My Bills", inr(s.netCollectedOnMyBills)],
+          ],
+        },
+        {
+          title: "My Cashbox",
+          metrics: [
+            ["Cash In", inr(s.cashIn)],
+            ["Cash Refunded", inr(s.cashRefunded)],
+            ["Net Cash Collected", inr(s.cashCollection)],
+            ["Cash Expenses", inr(s.cashExpenses)],
+            ["Expected Physical Cash", inr(s.physicalCashInHand)],
+            ["Digital In", inr(s.digitalIn)],
+            ["Digital Refunded", inr(s.digitalRefunded)],
+            ["Net Digital Collection", inr(s.netDigital)],
+          ],
+        },
+        {
+          title: "KPIs",
+          metrics: [
+            ["Total Bills Generated", inr(s.grossBilledIncludingCancelled)],
+            ["Outstanding / Dues", inr(s.outstanding)],
+            ["Cancellations", inr(s.cancelledAmount)],
+            ["Total Expenses", inr(s.totalExpenses)],
+            ["Total Received", inr(s.totalReceived)],
+            ["Digital Collection", inr(s.digitalCollection)],
+            ["Dues Collected", inr(s.duesCollectedTotal)],
+            ["Discounts Given", inr(s.discountsGiven)],
+          ],
+        },
+      ],
+      tables: [
+        ...(data.bills.length > 0 ? [{
+          title: "Bills Created",
+          headers: ["Bill #", "Patient", "Total", "Paid", "Balance", "Discount", "Status", "Referral"],
+          rows: data.bills.map((b) => [
+            b.billNumber, b.patientName, inr(b.totalAmount), inr(b.paidAmount),
+            inr(b.balanceAmount), b.discount > 0 ? inr(b.discount) : "—",
+            b.status, b.referringDoctor ?? "—",
+          ]),
+        }] : []),
+        ...(data.payments.length > 0 ? [{
+          title: "Payments Collected",
+          headers: ["Bill #", "Amount", "Method"],
+          rows: data.payments.map((p) => [
+            `Bill #${p.billId}`, inr(p.amount), p.method,
+          ]),
+        }] : []),
+        ...(data.byStaff && data.byStaff.length > 0 ? [{
+          title: "Per-Staff Breakdown",
+          headers: ["Staff", "Gross Billed", "Active", "Cancelled", "Outstanding", "Net Collected", "Bills", "Cash In", "Digital In", "Net Cash", "Net Digital", "Total Received", "Cash Exp", "Phys. Cash", "Dues", "Disc.", "Canc."],
+          rows: data.byStaff.map((st) => [
+            st.name, inr(st.grossBilled), inr(st.activeBilling), inr(st.cancelled),
+            inr(st.outstanding), inr(st.netCollected), String(st.billCount),
+            inr(st.cashIn), inr(st.digitalIn), inr(st.netCash), inr(st.netDigital),
+            inr(st.totalReceived), inr(st.cashExpenses), inr(st.physicalCashInHand),
+            inr(st.duesCollected), inr(st.discountsGiven), String(st.cancellationCount),
+          ]),
+        }] : []),
+      ],
+    };
+  }, [s, data, from, to]);
+
   return (
     <div className="space-y-5">
       <PageHeader
         title="My Daily Summary"
         subtitle={data ? `${data.staffName} • ${from === to ? from : `${from} → ${to}`}` : "Personal financial summary"}
         actions={
-          <button onClick={() => { void refetch(); }} className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-primary transition-colors">
-            <RefreshCw size={13} /> Refresh
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <SummaryExportToolbar
+              config={exportConfig}
+              emailEndpoint="/api/dashboard/my-daily-summary/send-email"
+            />
+            <button onClick={() => { void refetch(); }} className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-primary transition-colors">
+              <RefreshCw size={13} /> Refresh
+            </button>
+          </div>
         }
       />
 
