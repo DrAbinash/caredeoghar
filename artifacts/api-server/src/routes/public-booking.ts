@@ -10,6 +10,7 @@ import {
   onlineBookingsTable,
 } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
+import { logger } from "../lib/logger";
 
 const otpStore = new Map<string, { code: string; name: string; expiresAt: number }>();
 
@@ -755,7 +756,7 @@ publicBookingRouter.get("/bharatpe-callback", async (req, res): Promise<void> =>
 // ── ICICI Orange PG helpers ─────────────────────────────────────────────────
 
 const ICICI_UAT_BASE = "https://pgpayuat.icicibank.com";
-const ICICI_PROD_BASE = "https://pgpay.icicibank.com";
+const ICICI_PROD_BASE = "https://pguat.icicibank.com";
 
 function getIciciBase() {
   return process.env.NODE_ENV === "production" ? ICICI_PROD_BASE : ICICI_UAT_BASE;
@@ -858,7 +859,9 @@ publicBookingRouter.post("/icici-initiate", createOrderLimiter, async (req, res)
   };
 
   try {
-    const iciciRes = await fetch(`${getIciciBase()}/tsp/pg/api/v2/initiateSale`, {
+    const iciciUrl = `${getIciciBase()}/tsp/pg/api/v2/initiateSale`;
+    logger.info({ iciciUrl, merchantId, aggregatorId, bookingRef }, "ICICI initiateSale request");
+    const iciciRes = await fetch(iciciUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(payload),
@@ -872,6 +875,7 @@ publicBookingRouter.post("/icici-initiate", createOrderLimiter, async (req, res)
       secureHash?: string;
       respDescription?: string;
     };
+    logger.info({ status: iciciRes.status, responseCode: iciciData.responseCode, respDescription: iciciData.respDescription }, "ICICI initiateSale response");
     if (!iciciRes.ok || !iciciData.tranCtx || iciciData.responseCode !== "R1000") {
       res.status(502).json({ error: "Could not initiate ICICI payment. Please try again.", details: iciciData.respDescription || iciciData.responseCode });
       return;
@@ -897,7 +901,8 @@ publicBookingRouter.post("/icici-initiate", createOrderLimiter, async (req, res)
     });
 
     res.json({ bookingRef, redirectUrl: redirectTo, tranCtx: iciciData.tranCtx });
-  } catch {
+  } catch (err) {
+    logger.error({ err, merchantId, bookingRef }, "ICICI initiateSale exception");
     res.status(502).json({ error: "Could not connect to ICICI payment gateway. Please try again." });
   }
 });
