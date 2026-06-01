@@ -210,6 +210,13 @@ clinicSettingsRouter.put("/", async (req, res) => {
     }
     update.iciciAggregatorId = body.iciciAggregatorId.trim();
   }
+  if (body.iciciSecretKey !== undefined) {
+    if (typeof body.iciciSecretKey !== "string") {
+      res.status(400).json({ error: "iciciSecretKey must be a string" });
+      return;
+    }
+    update.iciciSecretKey = body.iciciSecretKey.trim();
+  }
   const arrayJsonTextFields = ["kioskUpiVpa", "kioskUpiName", "kioskWelcomeMessage", "kioskAllowedTestIds", "onlineBookingAllowedTestIds", "onlineBookingAllowedPackageIds", "upiVpa", "upiQrImageUrl"] as const;
   for (const f of arrayJsonTextFields) {
     if (body[f] !== undefined) {
