@@ -1518,76 +1518,84 @@ export default function FormF() {
               </div>
               <div className="space-y-5">
                 <BigLabelRow label={`Husband / Father Name ${guardianRequired ? "*" : ""}`}>
-                  <div className="flex gap-2">
-                    <Input {...inp("husbandFatherName")} placeholder={guardianRequired ? "Required for PCPNDT" : "Optional — enter if available"} className="flex-1 text-base h-11" />
-                    {/* ── File upload (scanner / file picker) ── */}
-                    <label className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed border-orange-300 bg-orange-50 cursor-pointer text-sm font-medium transition-colors ${idCardUploading ? "opacity-60 cursor-wait" : "hover:bg-orange-100 text-orange-700"}`}>
-                      <Upload size={14} className={idCardUploading ? "animate-pulse" : ""} />
-                      <span>{idCardUploading ? "Scanning…" : "Upload ID"}</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          await processIdImage(file);
-                        }}
-                      />
-                    </label>
-                    {/* ── Direct WIA scan via bridge ── */}
-                    <button
-                      type="button"
-                      onClick={triggerScanBridge}
-                      disabled={!scanBridgeOk || scanning || idCardUploading}
-                      className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed text-sm font-medium transition-colors disabled:opacity-50 ${
-                        scanBridgeOk
-                          ? "border-green-300 bg-green-50 hover:bg-green-100 text-green-700"
-                          : "border-gray-300 bg-gray-50 text-gray-400 cursor-not-allowed"
+                  <div className="flex flex-col gap-2">
+                    {/* Row 1: Full-width input */}
+                    <Input
+                      {...inp("husbandFatherName")}
+                      placeholder={guardianRequired ? "Required for PCPNDT" : "Optional — enter if available"}
+                      className="w-full text-base h-11"
+                    />
+                    {/* Row 2: ID-capture buttons — flex-wrap so they stay visible */}
+                    <div className="flex flex-wrap gap-2">
+                      {/* ── Upload ID (file picker) — first and most prominent ── */}
+                      <label className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed border-orange-300 bg-orange-50 cursor-pointer text-sm font-medium transition-colors ${idCardUploading ? "opacity-60 cursor-wait" : "hover:bg-orange-100 text-orange-700"}`}>
+                        <Upload size={14} className={idCardUploading ? "animate-pulse" : ""} />
+                        <span>{idCardUploading ? "Scanning…" : "Upload ID"}</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            await processIdImage(file);
+                          }}
+                        />
+                      </label>
+                      {/* ── Capture ID (camera / OCR panel) ── */}
+                      <button
+                        type="button"
+                        onClick={() => setOcrPanelOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm font-medium transition-colors"
+                        title="Open advanced capture panel with camera diagnostics, OCR tests, and Tesseract fallback"
+                      >
+                        <Camera size={14} /> Capture ID
+                      </button>
+                      {/* ── Direct WIA scan via bridge ── */}
+                      <button
+                        type="button"
+                        onClick={triggerScanBridge}
+                        disabled={!scanBridgeOk || scanning || idCardUploading}
+                        className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed text-sm font-medium transition-colors disabled:opacity-50 ${
+                          scanBridgeOk
+                            ? "border-green-300 bg-green-50 hover:bg-green-100 text-green-700"
+                            : "border-gray-300 bg-gray-50 text-gray-400 cursor-not-allowed"
+                        }`}
+                        title={scanBridgeOk
+                          ? "Direct scan using flatbed/ADF scanner attached to this PC"
+                          : "Scanner bridge offline — connect the desktop bridge app or use Upload/Camera instead"}
+                      >
+                        <Scan size={14} /> {scanning ? "Scanning…" : "Direct Scan"}
+                      </button>
+                      {/* ── Import latest scan from watch folder ── */}
+                      <button
+                        type="button"
+                        onClick={importLatestScan}
+                        disabled={!scanBridgeOk || scanning || idCardUploading}
+                        className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed text-sm font-medium transition-colors disabled:opacity-50 ${
+                          scanBridgeOk
+                            ? "border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700"
+                            : "border-gray-300 bg-gray-50 text-gray-400 cursor-not-allowed"
                       }`}
-                      title={scanBridgeOk
-                        ? "Direct scan using flatbed/ADF scanner attached to this PC"
-                        : "Scanner bridge offline — connect the desktop bridge app or use Upload/Camera instead"}
-                    >
-                      <Scan size={14} /> {scanning ? "Scanning…" : "Direct Scan"}
-                    </button>
-                    {/* ── Import latest scan from watch folder (fallback when WIA is busy) ── */}
-                    <button
-                      type="button"
-                      onClick={importLatestScan}
-                      disabled={!scanBridgeOk || scanning || idCardUploading}
-                      className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed text-sm font-medium transition-colors disabled:opacity-50 ${
-                        scanBridgeOk
-                          ? "border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700"
-                          : "border-gray-300 bg-gray-50 text-gray-400 cursor-not-allowed"
-                      }`}
-                      title="Import the most recent scan saved to the watch folder (e.g., C:\Scans)"
-                    >
-                      <Upload size={14} /> {idCardUploading ? "Importing…" : "Import Latest Scan"}
-                    </button>
-                    {/* ── Open scanner app (Windows Fax and Scan / Canon) ── */}
-                    <button
-                      type="button"
-                      onClick={openScannerApp}
-                      disabled={!scanBridgeOk || scanning || idCardUploading}
-                      className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed text-sm font-medium transition-colors disabled:opacity-50 ${
-                        scanBridgeOk
-                          ? "border-teal-300 bg-teal-50 hover:bg-teal-100 text-teal-700"
-                          : "border-gray-300 bg-gray-50 text-gray-400 cursor-not-allowed"
-                      }`}
-                      title="Open Windows Fax and Scan or Canon scanner app on this PC"
-                    >
-                      <ExternalLink size={14} /> Open Scanner App
-                    </button>
-                    {/* ── Comprehensive capture panel (camera + OCR + diagnostics + fallbacks) ── */}
-                    <button
-                      type="button"
-                      onClick={() => setOcrPanelOpen(true)}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm font-medium transition-colors"
-                      title="Open advanced capture panel with camera diagnostics, OCR tests, and Tesseract fallback"
-                    >
-                      <Camera size={14} /> Capture ID
-                    </button>
+                        title="Import the most recent scan saved to the watch folder (e.g., C:\Scans)"
+                      >
+                        <Upload size={14} /> {idCardUploading ? "Importing…" : "Import Latest Scan"}
+                      </button>
+                      {/* ── Open scanner app (Windows Fax and Scan / Canon) ── */}
+                      <button
+                        type="button"
+                        onClick={openScannerApp}
+                        disabled={!scanBridgeOk || scanning || idCardUploading}
+                        className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed text-sm font-medium transition-colors disabled:opacity-50 ${
+                          scanBridgeOk
+                            ? "border-teal-300 bg-teal-50 hover:bg-teal-100 text-teal-700"
+                            : "border-gray-300 bg-gray-50 text-gray-400 cursor-not-allowed"
+                        }`}
+                        title="Open Windows Fax and Scan or Canon scanner app on this PC"
+                      >
+                        <ExternalLink size={14} /> Open Scanner App
+                      </button>
+                    </div>
                   </div>
                 </BigLabelRow>
 
