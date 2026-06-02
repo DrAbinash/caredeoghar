@@ -51,6 +51,10 @@ type Preview = {
   paymentsCount: number;
 };
 
+type RefundDetail = { id: number; billNumber: string; patientName: string; totalAmount: number; refundAmount: number };
+type ExpenseDetail = { id: number; amount: number; category: string; description: string };
+type TestSummary = { testId: number; testName: string; category: string; count: number; total: number };
+
 type Closure = {
   id: number;
   closureDate: string;
@@ -64,6 +68,14 @@ type Closure = {
   billsCount: number; paymentsCount: number;
   totalExpected: string; totalActual: string;
   staffBreakdown: StaffRow[];
+  // Report enrichments
+  totalBilled?: string;
+  totalRefunds?: string;
+  totalExpenses?: string;
+  totalDue?: string;
+  testSummary?: TestSummary[];
+  expenseDetails?: ExpenseDetail[];
+  refundDetails?: RefundDetail[];
   status: "closed" | "reopened";
   reopenedAt: string | null; reopenedByName: string; reopenReason: string;
 };
@@ -108,81 +120,217 @@ function n(v: string | number | undefined | null): number {
 function buildSummarySlipHtml(c: Closure, clinic: ClinicLite): string {
   const esc = (s: string) => String(s).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]!));
   const variance = n(c.variance);
-  const variancePill = variance === 0
+  const varianceLabel = variance === 0
     ? `<span style="color:#166534;font-weight:700">Balanced</span>`
     : variance < 0
       ? `<span style="color:#991b1b;font-weight:700">Short ${esc(inr(Math.abs(variance)))}</span>`
       : `<span style="color:#92400e;font-weight:700">Surplus ${esc(inr(variance))}</span>`;
 
-  const staffRows = (c.staffBreakdown ?? []).map((s) => `
-    <tr>
-      <td>${esc(s.userName)}</td>
-      <td style="text-align:right">${s.count}</td>
-      <td style="text-align:right">${esc(inr(n(s.total)))}</td>
-    </tr>`).join("");
+  const totalBilled = n(c.totalBilled ?? c.totalExpected);
+  const totalRefunds = n(c.totalRefunds);
+  const totalExpenses = n(c.totalExpenses);
+  const totalDue = n(c.totalDue);
+  const netCollection = totalBilled - totalRefunds - totalExpenses;
+  const digitalTotal = n(c.expectedUpi) + n(c.expectedCard) + n(c.expectedCheque) + n(c.expectedOther);
+  const actualCash = n(c.actualCash);
+  const actualDigital = n(c.actualUpi) + n(c.actualCard) + n(c.actualCheque) + n(c.actualOther);
+  const expectedCash = n(c.expectedCash);
 
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Day Close ${esc(c.closureDate)}</title>
-    <style>
-      @page { size: A5 portrait; margin: 8mm; }
-      body { font-family: Arial, sans-serif; color:#000; margin:0; padding:0; font-size:12px; }
-      h1 { font-size:18px; margin:0 0 4px; color:#1e40af; text-align:center; }
-      h2 { font-size:13px; margin:14px 0 4px; border-bottom:1px solid #ccc; padding-bottom:2px; }
-      table { width:100%; border-collapse:collapse; margin:4px 0; }
-      td, th { padding:4px 6px; border-bottom:1px solid #eee; vertical-align:top; }
-      th { text-align:left; background:#f4f4f4; font-size:11px; text-transform:uppercase; }
-      .meta { text-align:center; color:#555; font-size:11px; margin-bottom:8px; }
-      .totals td:first-child { font-weight:600; }
-      .totals td:last-child { text-align:right; font-family:monospace; }
-      .grand td { border-top:2px solid #000; padding-top:6px; font-size:14px; font-weight:800; }
-      .note { margin-top:10px; padding:6px; background:#fef9e7; border:1px dashed #d97706; font-size:11px; }
-      .footer { margin-top:14px; text-align:center; font-size:10px; color:#666; }
-    </style></head><body>
-    <h1>${esc(clinic?.name || "Diagnostic Centre")} — Day Close</h1>
-    <div class="meta">
-      ${esc(c.closureDate)} &middot; Closed by ${esc(c.closedByName)}<br/>
-      Window: ${esc(fmtIst(c.coveredFromTs))} &rarr; ${esc(fmtIst(c.coveredToTs))}<br/>
-      ${c.billsCount} bills &middot; ${c.paymentsCount} payments
+  const staffRows = (c.staffBreakdown ?? []).map((s) => {
+    const sCash = n(s.cash);
+    const sUpi = n(s.upi);
+    const sCard = n(s.card);
+    const sCheque = n(s.cheque);
+    const sOther = n(s.other);
+    const sDigital = sUpi + sCard + sCheque + sOther;
+    return `<tr>
+      <td style="padding:6px;border-bottom:1px solid #eee">${esc(s.userName)}</td>
+      <td style="padding:6px;border-bottom:1px solid #eee;text-align:right">${esc(inr(sCash))}</td>
+      <td style="padding:6px;border-bottom:1px solid #eee;text-align:right">${esc(inr(sDigital))}</td>
+      <td style="padding:6px;border-bottom:1px solid #eee;text-align:right;font-weight:700">${esc(inr(n(s.total)))}</td>
+    </tr>`;
+  }).join("");
+
+  const refundRows = (c.refundDetails ?? []).map((r) => `<tr>
+    <td style="padding:6px;border-bottom:1px solid #eee">${esc(r.billNumber)}</td>
+    <td style="padding:6px;border-bottom:1px solid #eee">${esc(r.patientName)}</td>
+    <td style="padding:6px;border-bottom:1px solid #eee;text-align:right">${esc(inr(n(r.totalAmount)))}</td>
+    <td style="padding:6px;border-bottom:1px solid #eee;text-align:right;font-weight:700">${esc(inr(n(r.refundAmount)))}</td>
+  </tr>`).join("");
+
+  const expenseRows = (c.expenseDetails ?? []).map((e) => `<tr>
+    <td style="padding:6px;border-bottom:1px solid #eee">${esc(e.category)}</td>
+    <td style="padding:6px;border-bottom:1px solid #eee">${esc(e.description)}</td>
+    <td style="padding:6px;border-bottom:1px solid #eee;text-align:right;font-weight:700">${esc(inr(n(e.amount)))}</td>
+  </tr>`).join("");
+
+  const testRows = (c.testSummary ?? []).map((t) => `<tr>
+    <td style="padding:6px;border-bottom:1px solid #eee">${esc(t.testName)}</td>
+    <td style="padding:6px;border-bottom:1px solid #eee">${esc(t.category)}</td>
+    <td style="padding:6px;border-bottom:1px solid #eee;text-align:right">${t.count}</td>
+    <td style="padding:6px;border-bottom:1px solid #eee;text-align:right;font-weight:700">${esc(inr(n(t.total)))}</td>
+  </tr>`).join("");
+
+  const cardBox = (label: string, value: string, accent: string) => `
+    <div style="flex:1;min-width:120px;background:#fff;border-radius:6px;border:1px solid #e2e8f0;padding:10px;text-align:center">
+      <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:4px">${esc(label)}</div>
+      <div style="font-size:18px;font-weight:700;color:${accent}">${esc(value)}</div>
+    </div>`;
+
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Daily Collection Report ${esc(c.closureDate)}</title>
+  <style>
+    @page { size: A4 portrait; margin: 10mm; }
+    body { font-family: Arial, sans-serif; color:#1a1a2e; margin:0; padding:0; font-size:12px; }
+    .header { text-align:center; padding:8px 0; border-bottom:3px solid #1e3a5f; margin-bottom:12px; }
+    .header h1 { font-size:20px; margin:0; color:#1e3a5f; }
+    .header .subtitle { font-size:12px; color:#64748b; margin-top:2px; }
+    .section-title { background:#1e3a5f; color:#fff; font-size:12px; font-weight:700; padding:6px 10px; margin:16px 0 0; border-radius:4px 4px 0 0; }
+    .table { width:100%; border-collapse:collapse; }
+    .table th { background:#f1f5f9; padding:6px 8px; text-align:left; font-size:11px; font-weight:700; border-bottom:2px solid #e2e8f0; }
+    .table td { padding:6px 8px; border-bottom:1px solid #f1f5f9; }
+    .table td:last-child, .table th:last-child { text-align:right; }
+    .card-row { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .two-col { display:flex; gap:16px; margin-top:8px; }
+    .col { flex:1; }
+    .col-table { width:100%; border-collapse:collapse; }
+    .col-table th { background:#f1f5f9; padding:5px 8px; text-align:left; font-size:11px; font-weight:700; border-bottom:2px solid #e2e8f0; }
+    .col-table td { padding:5px 8px; border-bottom:1px solid #f1f5f9; }
+    .col-table td:last-child { text-align:right; font-weight:600; }
+    .grand-row td { border-top:2px solid #1e3a5f; padding-top:6px; font-weight:700; font-size:13px; }
+    .note { margin-top:8px; padding:6px; background:#fef9e7; border:1px dashed #d97706; font-size:11px; border-radius:4px; }
+    .footer { margin-top:12px; text-align:center; font-size:10px; color:#666; padding-top:8px; border-top:1px solid #eee; }
+  </style></head><body>
+
+  <div class="header">
+    <h1>${esc(clinic?.name || "Diagnostic Centre")}</h1>
+    <div class="subtitle">Daily Collection Reconciliation Report &middot; ${esc(c.closureDate)}</div>
+    <div class="subtitle">Closed by ${esc(c.closedByName)} &middot; ${esc(fmtIst(c.coveredFromTs))} &rarr; ${esc(fmtIst(c.coveredToTs))}</div>
+  </div>
+
+  <!-- Summary Cards -->
+  <div class="card-row">
+    ${cardBox("Total Billed", inr(totalBilled), "#1e3a5f")}
+    ${cardBox("Cash", inr(expectedCash), "#059669")}
+    ${cardBox("UPI", inr(n(c.expectedUpi)), "#2563eb")}
+    ${cardBox("Card", inr(n(c.expectedCard)), "#7c3aed")}
+    ${cardBox("Refunds", inr(totalRefunds), "#991b1b")}
+    ${cardBox("Expenses", inr(totalExpenses), "#991b1b")}
+    ${cardBox("Net Collection", inr(netCollection), "#92400e")}
+    ${cardBox("Physical Cash", inr(actualCash), "#059669")}
+  </div>
+
+  <!-- Reconciliation Summary + Cash Reconciliation -->
+  <div class="two-col">
+    <div class="col">
+      <div class="section-title">Reconciliation Summary</div>
+      <table class="col-table">
+        <tbody>
+          <tr><td>Total Billed</td><td>${esc(inr(totalBilled))}</td></tr>
+          <tr><td>Total Collected</td><td>${esc(inr(n(c.totalActual)))}</td></tr>
+          <tr><td>Total Refunds</td><td>${esc(inr(totalRefunds))}</td></tr>
+          <tr><td>Total Expenses</td><td>${esc(inr(totalExpenses))}</td></tr>
+          <tr><td>Total Outstanding</td><td>${esc(inr(totalDue))}</td></tr>
+          <tr class="grand-row"><td>Net Collection</td><td>${esc(inr(netCollection))}</td></tr>
+          <tr><td>Variance</td><td>${varianceLabel}</td></tr>
+        </tbody>
+      </table>
     </div>
+    <div class="col">
+      <div class="section-title">Cash Reconciliation</div>
+      <table class="col-table">
+        <tbody>
+          <tr><td>Net Collection</td><td>${esc(inr(netCollection))}</td></tr>
+          <tr><td>Expected Cash</td><td>${esc(inr(expectedCash))}</td></tr>
+          <tr><td>Actual Cash</td><td>${esc(inr(actualCash))}</td></tr>
+          <tr><td>Cash Variance</td><td style="color:${actualCash - expectedCash === 0 ? "#166534" : "#991b1b"}">${esc(inr(actualCash - expectedCash))}</td></tr>
+          <tr><td>Digital Total</td><td>${esc(inr(digitalTotal))}</td></tr>
+          <tr><td>Actual Digital</td><td>${esc(inr(actualDigital))}</td></tr>
+          <tr class="grand-row"><td>Total Collection</td><td>${esc(inr(n(c.totalActual)))}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 
-    <h2>Cash Drawer</h2>
-    <table class="totals">
-      <thead><tr><th>Method</th><th style="text-align:right">Expected</th><th style="text-align:right">Actual</th><th style="text-align:right">Variance</th></tr></thead>
-      <tbody>
-        ${(["cash","upi","card","cheque","other"] as const).map((m) => {
-          const e = n((c as Record<string, unknown>)[`expected${m[0].toUpperCase()}${m.slice(1)}`] as string);
-          const a = n((c as Record<string, unknown>)[`actual${m[0].toUpperCase()}${m.slice(1)}`] as string);
-          const v = a - e;
-          return `<tr>
-            <td style="text-transform:uppercase">${m}</td>
-            <td style="text-align:right">${esc(inr(e))}</td>
-            <td style="text-align:right">${esc(inr(a))}</td>
-            <td style="text-align:right;color:${v < 0 ? "#991b1b" : v > 0 ? "#92400e" : "#166534"}">${v === 0 ? "—" : esc(inr(v))}</td>
-          </tr>`;
-        }).join("")}
-        <tr class="grand"><td>Total</td><td style="text-align:right">${esc(inr(n(c.totalExpected)))}</td><td style="text-align:right">${esc(inr(n(c.totalActual)))}</td><td style="text-align:right">${variancePill}</td></tr>
-      </tbody>
-    </table>
+  <!-- User Wise Collection -->
+  <div class="section-title">User Wise Collection</div>
+  <table class="table">
+    <thead><tr><th>Staff</th><th style="text-align:right">Cash</th><th style="text-align:right">Digital</th><th style="text-align:right">Total</th></tr></thead>
+    <tbody>
+      ${staffRows || `<tr><td colspan="4" style="text-align:center;color:#888;padding:8px">No staff breakdown</td></tr>`}
+      <tr class="grand-row"><td>Total</td><td style="text-align:right">${esc(inr(expectedCash))}</td><td style="text-align:right">${esc(inr(digitalTotal))}</td><td style="text-align:right">${esc(inr(n(c.totalActual)))}</td></tr>
+    </tbody>
+  </table>
 
-    ${staffRows ? `<h2>Per-Staff Collection</h2>
-    <table>
-      <thead><tr><th>Staff</th><th style="text-align:right">Payments</th><th style="text-align:right">Total</th></tr></thead>
-      <tbody>${staffRows}</tbody>
-    </table>` : ""}
+  <!-- Refund Details -->
+  <div class="section-title">Refund Details</div>
+  <table class="table">
+    <thead><tr><th>Bill #</th><th>Patient</th><th style="text-align:right">Bill Total</th><th style="text-align:right">Refund</th></tr></thead>
+    <tbody>
+      ${refundRows || `<tr><td colspan="4" style="text-align:center;color:#888;padding:8px">No refunds</td></tr>`}
+      ${refundRows ? `<tr class="grand-row"><td colspan="3">Total Refunds</td><td style="text-align:right">${esc(inr(totalRefunds))}</td></tr>` : ""}
+    </tbody>
+  </table>
 
-    ${c.varianceNote ? `<div class="note"><strong>Note:</strong> ${esc(c.varianceNote)}</div>` : ""}
-    <div class="footer">Printed ${esc(new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }))} IST &middot; Closure #${c.id}</div>
-  </body></html>`;
+  <!-- Expense Details -->
+  <div class="section-title">Expense Details</div>
+  <table class="table">
+    <thead><tr><th>Category</th><th>Description</th><th style="text-align:right">Amount</th></tr></thead>
+    <tbody>
+      ${expenseRows || `<tr><td colspan="3" style="text-align:center;color:#888;padding:8px">No expenses</td></tr>`}
+      ${expenseRows ? `<tr class="grand-row"><td colspan="2">Total Expenses</td><td style="text-align:right">${esc(inr(totalExpenses))}</td></tr>` : ""}
+    </tbody>
+  </table>
+
+  <!-- Outstanding / Dues -->
+  <div class="section-title">Outstanding / Dues Details</div>
+  <table class="table">
+    <tbody>
+      <tr><td>Total Outstanding</td><td style="text-align:right;font-weight:700">${esc(inr(totalDue))}</td></tr>
+      <tr><td>Total Bills</td><td style="text-align:right;font-weight:700">${c.billsCount}</td></tr>
+      <tr><td>Total Payments</td><td style="text-align:right;font-weight:700">${c.paymentsCount}</td></tr>
+    </tbody>
+  </table>
+
+  <!-- Test Wise Collection Summary -->
+  <div class="section-title">Test Wise Collection Summary</div>
+  <table class="table">
+    <thead><tr><th>Test</th><th>Category</th><th style="text-align:right">Count</th><th style="text-align:right">Total</th></tr></thead>
+    <tbody>
+      ${testRows || `<tr><td colspan="4" style="text-align:center;color:#888;padding:8px">No tests recorded</td></tr>`}
+      ${testRows ? `<tr class="grand-row"><td colspan="3">Grand Total</td><td style="text-align:right">${esc(inr((c.testSummary ?? []).reduce((s, t) => s + n(t.total), 0)))}</td></tr>` : ""}
+    </tbody>
+  </table>
+
+  ${c.varianceNote ? `<div class="note"><strong>Variance Note:</strong> ${esc(c.varianceNote)}</div>` : ""}
+  <div class="footer">Printed ${esc(new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }))} IST &middot; Closure #${c.id}</div>
+</body></html>`;
+}
+
+function openReportWindow(c: Closure, clinic: ClinicLite) {
+  const html = buildSummarySlipHtml(c, clinic);
+  const w = window.open("", "_blank", "width=900,height=800");
+  if (!w) {
+    alert("Pop-up blocked. Allow pop-ups to print the report.");
+    return null;
+  }
+  w.document.open(); w.document.write(html); w.document.close();
+  return w;
 }
 
 function autoPrintSlip(c: Closure, clinic: ClinicLite) {
-  const html = buildSummarySlipHtml(c, clinic);
-  const w = window.open("", "_blank", "width=520,height=720");
-  if (!w) {
-    alert("Pop-up blocked. Allow pop-ups to auto-print the Day Close summary slip.");
-    return;
-  }
-  w.document.open(); w.document.write(html); w.document.close();
-  w.onload = () => { w.focus(); w.print(); setTimeout(() => w.close(), 600); };
+  const w = openReportWindow(c, clinic);
+  if (!w) return;
+  w.onload = () => { w.focus(); w.print(); setTimeout(() => w.close(), 800); };
+}
+
+function downloadReportPdf(c: Closure, clinic: ClinicLite) {
+  const w = openReportWindow(c, clinic);
+  if (!w) return;
+  w.onload = () => {
+    w.focus();
+    // Modern browsers offer "Save as PDF" in the print dialog
+    w.print();
+  };
 }
 
 // ── Status helpers ────────────────────────────────────────────────────────────
@@ -756,16 +904,41 @@ export default function DayClose() {
 
       {/* Overall closure detail */}
       <Dialog open={!!detailOpen} onOpenChange={(o) => !o && setDetailOpen(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Closure #{detailOpen?.id} — {detailOpen?.closureDate}</DialogTitle></DialogHeader>
           {detailOpen && (
             <div className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-2">
                 <div><div className="text-muted-foreground text-xs">Closed By</div><div>{detailOpen.closedByName}</div></div>
                 <div><div className="text-muted-foreground text-xs">Closed At</div><div>{fmtIst(detailOpen.closedAt)}</div></div>
-                <div><div className="text-muted-foreground text-xs">Window From</div><div>{fmtIst(detailOpen.coveredFromTs)}</div></div>
-                <div><div className="text-muted-foreground text-xs">Window To</div><div>{fmtIst(detailOpen.coveredToTs)}</div></div>
+                <div><div className="text-muted-foreground text-xs">Window</div><div>{fmtIst(detailOpen.coveredFromTs)} &rarr; {fmtIst(detailOpen.coveredToTs)}</div></div>
+                <div><div className="text-muted-foreground text-xs">Bills / Payments</div><div>{detailOpen.billsCount} / {detailOpen.paymentsCount}</div></div>
               </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-4 gap-2">
+                <div className="bg-blue-50 dark:bg-blue-950/30 border rounded p-2 text-center">
+                  <div className="text-[10px] text-muted-foreground uppercase">Total Billed</div>
+                  <div className="font-bold text-blue-700">{inr(n(detailOpen.totalBilled ?? detailOpen.totalExpected))}</div>
+                </div>
+                <div className="bg-red-50 dark:bg-red-950/30 border rounded p-2 text-center">
+                  <div className="text-[10px] text-muted-foreground uppercase">Refunds</div>
+                  <div className="font-bold text-red-700">{inr(n(detailOpen.totalRefunds))}</div>
+                </div>
+                <div className="bg-red-50 dark:bg-red-950/30 border rounded p-2 text-center">
+                  <div className="text-[10px] text-muted-foreground uppercase">Expenses</div>
+                  <div className="font-bold text-red-700">{inr(n(detailOpen.totalExpenses))}</div>
+                </div>
+                <div className="bg-green-50 dark:bg-green-950/30 border rounded p-2 text-center">
+                  <div className="text-[10px] text-muted-foreground uppercase">Net</div>
+                  <div className="font-bold text-green-700">
+                    {inr(n(detailOpen.totalBilled ?? detailOpen.totalExpected) - n(detailOpen.totalRefunds) - n(detailOpen.totalExpenses))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Cash Drawer */}
+              <div className="font-semibold text-xs text-muted-foreground uppercase border-b pb-1">Cash Drawer</div>
               <table className="w-full text-xs border-t">
                 <thead><tr className="text-muted-foreground"><th className="text-left py-1">Method</th><th className="text-right">Expected</th><th className="text-right">Actual</th><th className="text-right">Diff</th></tr></thead>
                 <tbody>
@@ -779,6 +952,60 @@ export default function DayClose() {
                   })}
                 </tbody>
               </table>
+
+              {/* Outstanding */}
+              <div className="font-semibold text-xs text-muted-foreground uppercase border-b pb-1">Outstanding / Dues</div>
+              <div className="flex justify-between text-xs px-1">
+                <span>Total Outstanding</span>
+                <span className="font-bold">{inr(n(detailOpen.totalDue))}</span>
+              </div>
+
+              {/* Test Summary */}
+              {(detailOpen.testSummary ?? []).length > 0 && (
+                <>
+                  <div className="font-semibold text-xs text-muted-foreground uppercase border-b pb-1">Test Wise Summary</div>
+                  <table className="w-full text-xs border-t">
+                    <thead><tr className="text-muted-foreground"><th className="text-left py-1">Test</th><th className="text-right">Count</th><th className="text-right">Total</th></tr></thead>
+                    <tbody>
+                      {(detailOpen.testSummary ?? []).map((t) => (
+                        <tr key={t.testId} className="border-t"><td className="py-1">{t.testName}</td><td className="text-right">{t.count}</td><td className="text-right">{inr(n(t.total))}</td></tr>
+                      ))}
+                      <tr className="border-t font-bold"><td>Total</td><td className="text-right">{(detailOpen.testSummary ?? []).reduce((s, t) => s + t.count, 0)}</td><td className="text-right">{inr((detailOpen.testSummary ?? []).reduce((s, t) => s + n(t.total), 0))}</td></tr>
+                    </tbody>
+                  </table>
+                </>
+              )}
+
+              {/* Refund Details */}
+              {(detailOpen.refundDetails ?? []).length > 0 && (
+                <>
+                  <div className="font-semibold text-xs text-muted-foreground uppercase border-b pb-1">Refund Details</div>
+                  <table className="w-full text-xs border-t">
+                    <thead><tr className="text-muted-foreground"><th className="text-left py-1">Bill #</th><th className="text-left">Patient</th><th className="text-right">Refund</th></tr></thead>
+                    <tbody>
+                      {(detailOpen.refundDetails ?? []).map((r) => (
+                        <tr key={r.id} className="border-t"><td className="py-1">{r.billNumber}</td><td>{r.patientName}</td><td className="text-right">{inr(n(r.refundAmount))}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+
+              {/* Expense Details */}
+              {(detailOpen.expenseDetails ?? []).length > 0 && (
+                <>
+                  <div className="font-semibold text-xs text-muted-foreground uppercase border-b pb-1">Expense Details</div>
+                  <table className="w-full text-xs border-t">
+                    <thead><tr className="text-muted-foreground"><th className="text-left py-1">Category</th><th className="text-left">Description</th><th className="text-right">Amount</th></tr></thead>
+                    <tbody>
+                      {(detailOpen.expenseDetails ?? []).map((e) => (
+                        <tr key={e.id} className="border-t"><td className="py-1">{e.category}</td><td>{e.description}</td><td className="text-right">{inr(n(e.amount))}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+
               {detailOpen.varianceNote && <div className="p-2 bg-amber-50 dark:bg-amber-950/30 border rounded text-xs"><strong>Note:</strong> {detailOpen.varianceNote}</div>}
               {detailOpen.status === "reopened" && (
                 <div className="p-2 bg-red-50 dark:bg-red-950/30 border border-red-300 rounded text-xs">
@@ -788,8 +1015,9 @@ export default function DayClose() {
               )}
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => detailOpen && autoPrintSlip(detailOpen, clinicQ.data ?? {})}><Printer size={14} className="mr-2" /> Print Slip</Button>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => detailOpen && autoPrintSlip(detailOpen, clinicQ.data ?? {})}><Printer size={14} className="mr-2" /> Print Report</Button>
+            <Button variant="outline" onClick={() => detailOpen && downloadReportPdf(detailOpen, clinicQ.data ?? {})}><Printer size={14} className="mr-2" /> Download PDF</Button>
             <Button onClick={() => setDetailOpen(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>

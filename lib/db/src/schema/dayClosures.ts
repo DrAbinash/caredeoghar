@@ -50,6 +50,18 @@ export const dayClosuresTable = pgTable("day_closures", {
   // [{userId, userName, total, byMethod:{cash,upi,card,cheque,other}, count}]
   staffBreakdown: jsonb("staff_breakdown").notNull().default([]),
 
+  // Report enrichments
+  totalBilled: numeric("total_billed", { precision: 12, scale: 2 }).notNull().default("0"),
+  totalRefunds: numeric("total_refunds", { precision: 12, scale: 2 }).notNull().default("0"),
+  totalExpenses: numeric("total_expenses", { precision: 12, scale: 2 }).notNull().default("0"),
+  totalDue: numeric("total_due", { precision: 12, scale: 2 }).notNull().default("0"),
+  // [{testId, testName, category, count, total}]
+  testSummary: jsonb("test_summary").notNull().default([]),
+  // [{id, amount, category, description}]
+  expenseDetails: jsonb("expense_details").notNull().default([]),
+  // [{id, billNumber, patientName, totalAmount, refundAmount}]
+  refundDetails: jsonb("refund_details").notNull().default([]),
+
   // Re-open audit (super-admin only).
   status: text("status").notNull().default("closed"), // "closed" | "reopened"
   reopenedAt: timestamp("reopened_at", { withTimezone: true }),

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, paymentsTable, dayClosuresTable, userDayClosuresTable, billsTable, usersTable } from "@workspace/db";
+import { db, paymentsTable, dayClosuresTable, userDayClosuresTable, billsTable, usersTable, expensesTable, orderTestsTable, testsTable } from "@workspace/db";
 import { drawerAuditLogTable, patientsTable, doctorsTable, ordersTable } from "@workspace/db/schema";
 import { eq, and, gt, lte, desc, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -65,13 +65,24 @@ function bucketMethod(method: string): keyof Omit<MethodTotals, "total" | "count
   return "other";
 }
 
-// Aggregate payments in the window (from, to] grouped overall + by staff.
+type TestSummary = { testId: number; testName: string; category: string; count: number; total: number };
+
+// Aggregate payments, bills, expenses, and tests in the window (from, to].
 async function summarizeWindow(from: Date | null, to: Date) {
-  const where = from
+  const paymentWhere = from
     ? and(gt(paymentsTable.createdAt, from), lte(paymentsTable.createdAt, to))
     : lte(paymentsTable.createdAt, to);
 
-  const rows = await db
+  const billWhere = from
+    ? and(gt(billsTable.createdAt, from), lte(billsTable.createdAt, to))
+    : lte(billsTable.createdAt, to);
+
+  const expenseWhere = from
+    ? and(gt(expensesTable.createdAt, from), lte(expensesTable.createdAt, to))
+    : lte(expensesTable.createdAt, to);
+
+  // Payments
+  const payRows = await db
     .select({
       id: paymentsTable.id,
       amount: paymentsTable.amount,
@@ -81,19 +92,50 @@ async function summarizeWindow(from: Date | null, to: Date) {
       billId: paymentsTable.billId,
     })
     .from(paymentsTable)
-    .where(where);
+    .where(paymentWhere);
 
+  // Bills
+  const billRows = await db
+    .select({
+      id: billsTable.id,
+      billNumber: billsTable.billNumber,
+      totalAmount: billsTable.totalAmount,
+      paidAmount: billsTable.paidAmount,
+      balanceAmount: billsTable.balanceAmount,
+      refundAmount: billsTable.refundAmount,
+      status: billsTable.status,
+      orderId: billsTable.orderId,
+      patientName: sql<string>`COALESCE(${patientsTable.firstName} || ' ' || COALESCE(${patientsTable.lastName}, ''), 'Unknown')`,
+      createdAt: billsTable.createdAt,
+    })
+    .from(billsTable)
+    .leftJoin(patientsTable, eq(billsTable.patientId, patientsTable.id))
+    .where(billWhere);
+
+  // Expenses
+  const expRows = await db
+    .select({
+      id: expensesTable.id,
+      amount: expensesTable.amount,
+      category: expensesTable.category,
+      description: expensesTable.description,
+      createdAt: expensesTable.createdAt,
+    })
+    .from(expensesTable)
+    .where(expenseWhere);
+
+  // Aggregate payments
   const overall = emptyTotals();
   const byStaff = new Map<string, MethodTotals & { userId: number | null; userName: string }>();
-  const billIds = new Set<number>();
+  const paymentBillIds = new Set<number>();
 
-  for (const r of rows) {
+  for (const r of payRows) {
     const amt = n(r.amount);
     const bucket = bucketMethod(r.method);
     overall[bucket] += amt;
     overall.total += amt;
     overall.count += 1;
-    if (r.billId != null) billIds.add(r.billId);
+    if (r.billId != null) paymentBillIds.add(r.billId);
 
     const name = (r.recordedByName ?? "").trim() || "Unassigned";
     if (!byStaff.has(name)) {
@@ -105,10 +147,75 @@ async function summarizeWindow(from: Date | null, to: Date) {
     s.count += 1;
   }
 
+  // Aggregate bills
+  const totalBilled = billRows.reduce((s, b) => s + n(b.totalAmount), 0);
+  const totalRefunds = billRows.reduce((s, b) => s + n(b.refundAmount), 0);
+  const totalDue = billRows.reduce((s, b) => s + n(b.balanceAmount), 0);
+  const billsCount = billRows.length;
+  const cancelledBills = billRows.filter((b) => b.status === "cancelled");
+
+  // Aggregate expenses
+  const totalExpenses = expRows.reduce((s, e) => s + n(e.amount), 0);
+  const expensesByCategory = new Map<string, number>();
+  const expenseDetails = expRows.map((e) => ({
+    id: e.id,
+    amount: n(e.amount),
+    category: e.category ?? "General",
+    description: e.description ?? "",
+  }));
+  for (const e of expRows) {
+    const cat = e.category ?? "General";
+    expensesByCategory.set(cat, (expensesByCategory.get(cat) ?? 0) + n(e.amount));
+  }
+
+  // Aggregate test-wise collections
+  const testMap = new Map<number, TestSummary>();
+  const activeBillIds = billRows.filter((b) => b.status !== "cancelled").map((b) => b.id);
+  if (activeBillIds.length > 0) {
+    const orderIds = new Set<number>();
+    for (const b of billRows) {
+      if (b.status !== "cancelled" && b.orderId != null) orderIds.add(b.orderId);
+    }
+    if (orderIds.size > 0) {
+      const testRows = await db
+        .select({
+          testId: orderTestsTable.testId,
+          testName: sql<string>`COALESCE(${orderTestsTable.displayName}, ${testsTable.name}, 'Unknown')`,
+          category: sql<string>`COALESCE(${testsTable.category}, 'General')`,
+          price: orderTestsTable.price,
+        })
+        .from(orderTestsTable)
+        .leftJoin(testsTable, eq(orderTestsTable.testId, testsTable.id))
+        .where(and(
+          sql`${orderTestsTable.orderId} IN (${Array.from(orderIds).join(",")})`,
+          sql`${orderTestsTable.status} != 'cancelled'`,
+        ));
+
+      for (const t of testRows) {
+        const id = n(t.testId);
+        if (!testMap.has(id)) {
+          testMap.set(id, { testId: id, testName: t.testName, category: t.category, count: 0, total: 0 });
+        }
+        const ts = testMap.get(id)!;
+        ts.count += 1;
+        ts.total += n(t.price);
+      }
+    }
+  }
+
   return {
     overall,
     byStaff: Array.from(byStaff.values()).sort((a, b) => b.total - a.total),
-    billsCount: billIds.size,
+    billsCount,
+    paymentsCount: overall.count,
+    totalBilled,
+    totalRefunds,
+    totalDue,
+    cancelledBills,
+    totalExpenses,
+    expensesByCategory: Array.from(expensesByCategory.entries()).map(([category, total]) => ({ category, total })),
+    expenseDetails,
+    testSummary: Array.from(testMap.values()).sort((a, b) => b.total - a.total),
   };
 }
 
@@ -196,6 +303,19 @@ dayCloseRouter.post("/", requireOwnerOrAdmin, async (req, res) => {
         totalExpected: String(totalExpected),
         totalActual: String(totalActual),
         staffBreakdown: summary.byStaff,
+        totalBilled: String(summary.totalBilled),
+        totalRefunds: String(summary.totalRefunds),
+        totalExpenses: String(summary.totalExpenses),
+        totalDue: String(summary.totalDue),
+        testSummary: summary.testSummary,
+        expenseDetails: summary.expenseDetails,
+        refundDetails: summary.cancelledBills.map((b) => ({
+          id: b.id,
+          billNumber: b.billNumber ?? String(b.id),
+          patientName: b.patientName ?? "Unknown",
+          totalAmount: b.totalAmount,
+          refundAmount: b.refundAmount,
+        })),
         status: "closed",
       })
       .returning();
@@ -217,7 +337,7 @@ dayCloseRouter.get("/", requireOwnerOrAdmin, async (req, res) => {
   res.json(rows);
 });
 
-// Single closure detail.
+// Single closure detail (enriched with report data if missing from DB).
 dayCloseRouter.get("/:id", requireOwnerOrAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
@@ -229,7 +349,38 @@ dayCloseRouter.get("/:id", requireOwnerOrAdmin, async (req, res) => {
     res.status(404).json({ error: "Not found" });
     return;
   }
-  res.json(row);
+
+  const existing = row as Record<string, unknown>;
+  const hasReport = n(existing.totalBilled) !== 0 || n(existing.totalRefunds) !== 0 || n(existing.totalExpenses) !== 0 || (Array.isArray(existing.testSummary) && (existing.testSummary as unknown[]).length > 0);
+
+  if (hasReport) {
+    res.json(row);
+    return;
+  }
+
+  // Re-compute report data for legacy closures
+  const from = row.coveredFromTs ? new Date(row.coveredFromTs) : null;
+  const to = new Date(row.coveredToTs);
+  const summary = await summarizeWindow(from, to);
+
+  const enriched = {
+    ...row,
+    totalBilled: String(summary.totalBilled),
+    totalRefunds: String(summary.totalRefunds),
+    totalExpenses: String(summary.totalExpenses),
+    totalDue: String(summary.totalDue),
+    testSummary: summary.testSummary,
+    expenseDetails: summary.expenseDetails,
+    refundDetails: summary.cancelledBills.map((b) => ({
+      id: b.id,
+      billNumber: b.billNumber ?? String(b.id),
+      patientName: b.patientName ?? "Unknown",
+      totalAmount: b.totalAmount,
+      refundAmount: b.refundAmount,
+    })),
+  };
+
+  res.json(enriched);
 });
 
 // Re-open a closed day. SUPER-ADMIN role (regular ERP staff session) ONLY.
