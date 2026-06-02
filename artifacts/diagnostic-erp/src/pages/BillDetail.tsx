@@ -1613,8 +1613,14 @@ function TestsTable({
   const [singleCancelId, setSingleCancelId] = useState<number | null>(null);
   const [singleReason, setSingleReason] = useState("");
   const [singleBy, setSingleBy] = useState<string>(() => readStaffSession()?.user.name || "");
-  // Inline display-name edit state: { orderTestId → string }
-  const [editingName, setEditingName] = useState<Record<number, string>>({});
+  // Swap-test dialog state
+  const [swapTestOpen, setSwapTestOpen] = useState(false);
+  const [swapTestOrderTestId, setSwapTestOrderTestId] = useState<number | null>(null);
+  const [swapTestId, setSwapTestId] = useState<string>("");
+  const [swapTestReason, setSwapTestReason] = useState("");
+  const [swapTestBy, setSwapTestBy] = useState<string>(() => readStaffSession()?.user.name || "");
+
+  const { data: testsData } = useListTests({});
 
   const cancelSingle = useMutation<unknown, Error, void>({
     mutationFn: async () => {
@@ -1633,6 +1639,29 @@ function TestsTable({
     },
     onError: (e) => {
       toast({ title: "Failed to cancel test", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const swapTest = useMutation<unknown, Error, void>({
+    mutationFn: async () => {
+      if (!swapTestOrderTestId || !swapTestId) throw new Error("No test selected");
+      return api.post(`/api/bills/${billId}/swap-test`, {
+        orderTestId: swapTestOrderTestId,
+        newTestId: Number(swapTestId),
+        reason: swapTestReason,
+        performedBy: swapTestBy,
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Test swapped", description: "The test has been replaced and totals recalculated." });
+      setSwapTestOpen(false);
+      setSwapTestOrderTestId(null);
+      setSwapTestId("");
+      setSwapTestReason("");
+      onUpdated();
+    },
+    onError: (e) => {
+      toast({ title: "Failed to swap test", description: e.message, variant: "destructive" });
     },
   });
 
@@ -1687,38 +1716,20 @@ function TestsTable({
                   <td className="px-4 py-3 font-mono text-xs font-bold text-primary">{ot.test?.code}</td>
                   <td className="px-4 py-3 font-medium">
                     <div className="flex items-center gap-1 group">
-                      {editingName[ot.id] !== undefined ? (
-                        <Input
-                          value={editingName[ot.id]}
-                          onChange={(e) => setEditingName((prev) => ({ ...prev, [ot.id]: e.target.value }))}
-                          onBlur={() => {
-                            const val = editingName[ot.id].trim();
-                            if (val && val !== (ot.displayName ?? ot.test?.name ?? "")) {
-                              api.patch(`/api/orders/${bill?.order?.id}/tests/${ot.id}`, { displayName: val })
-                                .then(() => onUpdated());
-                            }
-                            setEditingName((prev) => { const n = { ...prev }; delete n[ot.id]; return n; });
+                      <span>{ot.displayName ?? ot.test?.name ?? "—"}</span>
+                      {!isBillCancelled && !isCancelled && (
+                        <button
+                          title="Swap test"
+                          onClick={() => {
+                            setSwapTestOrderTestId(ot.id);
+                            setSwapTestId("");
+                            setSwapTestReason("");
+                            setSwapTestOpen(true);
                           }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") { (e.target as HTMLInputElement).blur(); }
-                            if (e.key === "Escape") { setEditingName((prev) => { const n = { ...prev }; delete n[ot.id]; return n; }); }
-                          }}
-                          className="h-7 px-2 py-0 text-sm w-60"
-                          autoFocus
-                        />
-                      ) : (
-                        <>
-                          <span>{ot.displayName ?? ot.test?.name ?? "—"}</span>
-                          {!isBillCancelled && !isCancelled && (
-                            <button
-                              title="Edit display name"
-                              onClick={() => setEditingName((prev) => ({ ...prev, [ot.id]: ot.displayName ?? ot.test?.name ?? "" }))}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted"
-                            >
-                              <Pencil size={12} />
-                            </button>
-                          )}
-                        </>
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted"
+                        >
+                          <Pencil size={12} />
+                        </button>
                       )}
                     </div>
                     {isCancelled && ot.cancelledByName && (
@@ -1902,6 +1913,57 @@ function TestsTable({
                 className="bg-red-600 hover:bg-red-700 text-white"
               >
                 {cancelSingle.isPending ? "Cancelling…" : "Cancel Test"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Swap Test dialog */}
+      <Dialog open={swapTestOpen} onOpenChange={(o) => { if (!o) setSwapTestOpen(false); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Swap Test</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-1">
+            <p className="text-sm text-muted-foreground">
+              Replace the current test with a different one from the catalog. The bill total, commission, and balance will be recalculated automatically.
+            </p>
+            <div>
+              <Label>New Test <span className="text-red-500">*</span></Label>
+              <Select value={swapTestId} onValueChange={setSwapTestId}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select a test from catalog" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(testsData?.tests ?? []).filter((t: { isActive?: boolean }) => t.isActive !== false).map((t: { id: number; name: string; code?: string | null; price?: number | string | null }) => (
+                    <SelectItem key={t.id} value={String(t.id)}>
+                      {t.name} {t.code ? `(${t.code})` : ""} — ₹{Number(t.price ?? 0).toFixed(2)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Reason <span className="text-red-500">*</span></Label>
+              <Input
+                className="mt-1"
+                value={swapTestReason}
+                onChange={(e) => setSwapTestReason(e.target.value)}
+                placeholder="e.g. Wrong test selected, doctor requested change"
+              />
+            </div>
+            <div>
+              <Label>Performed By</Label>
+              <Input className="mt-1" value={swapTestBy} onChange={(e) => setSwapTestBy(e.target.value)} />
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" onClick={() => setSwapTestOpen(false)}>Close</Button>
+              <Button
+                disabled={!swapTestId || !swapTestReason.trim() || !swapTestBy.trim() || swapTest.isPending}
+                onClick={() => swapTest.mutate()}
+              >
+                {swapTest.isPending ? "Swapping…" : "Swap Test"}
               </Button>
             </div>
           </div>

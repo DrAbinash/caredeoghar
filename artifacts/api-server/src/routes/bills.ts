@@ -1752,7 +1752,7 @@ paymentsRouter.post("/", async (req, res) => {
 // ── Swap a test on an active bill (replaces testId + price, recalculates totals) ──
 // This replaces the old "display name" edit. The new test is selected from the
 // catalog, so commission rules apply correctly to the swapped testId.
-billsRouter.post("/:id/swap-test", async (req, res) => {
+billsRouter.post("/:id/swap-test", async (req: StaffAuthRequest, res) => {
   const id = Number(req.params.id);
   const { orderTestId, newTestId, reason, performedBy } = req.body as {
     orderTestId?: number; newTestId?: number; reason?: string; performedBy?: string;
@@ -1780,7 +1780,7 @@ billsRouter.post("/:id/swap-test", async (req, res) => {
     }
 
     // 2) Find the orderTest row
-    const [otRow] = await tx.select().from(orderTestsTable).where(eq(orderTestsTable.id, orderTestId));
+    const [otRow] = await tx.select().from(orderTestsTable).where(eq(orderTestsTable.id, orderTestId!));
     if (!otRow) throw Object.assign(new Error("Order test not found"), { httpStatus: 404 });
     if (otRow.status === "cancelled") {
       throw Object.assign(new Error("Cannot swap a cancelled test"), { httpStatus: 409 });
@@ -1790,7 +1790,7 @@ billsRouter.post("/:id/swap-test", async (req, res) => {
     }
 
     // 3) Fetch the new test
-    const [newTest] = await tx.select().from(testsTable).where(eq(testsTable.id, newTestId));
+    const [newTest] = await tx.select().from(testsTable).where(eq(testsTable.id, newTestId!));
     if (!newTest) throw Object.assign(new Error("New test not found in catalog"), { httpStatus: 404 });
     if (!newTest.isActive) {
       throw Object.assign(new Error("New test is inactive"), { httpStatus: 400 });
@@ -1806,8 +1806,7 @@ billsRouter.post("/:id/swap-test", async (req, res) => {
       testId: newTestId,
       price: newPrice.toFixed(2),
       displayName: null, // clear any old override
-      updatedAt: new Date(),
-    }).where(eq(orderTestsTable.id, orderTestId));
+    }).where(eq(orderTestsTable.id, orderTestId!));
 
     // 5) Recalculate order total
     const allTests = await tx.select().from(orderTestsTable).where(eq(orderTestsTable.orderId, bill.orderId));
