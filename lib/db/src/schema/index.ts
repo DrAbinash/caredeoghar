@@ -76,6 +76,7 @@ export * from "./rooms";
 export * from "./modalities";
 export * from "./aiReporting";
 export * from "./aiPromptTemplates";
+export * from "./aiModelRoutes";
 export * from "./drawerAuditLog";
 export * from "./enterpriseRadiology";
 export * from "./usgMeasurements";

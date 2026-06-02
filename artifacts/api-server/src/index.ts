@@ -1496,6 +1496,41 @@ async function runStartupMigrations(): Promise<void> {
         UNIQUE(role, module)
       );
     `);
+
+    // ── AI tables (Phase 1: prompt templates, Phase 4: model routing) ──────
+    // Idempotent creation so fresh/prod deploys have these tables without a
+    // separate drizzle migration. Schema mirrors lib/db/src/schema.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ai_prompt_templates (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        modality TEXT NOT NULL,
+        prompt_content TEXT NOT NULL,
+        version INTEGER NOT NULL DEFAULT 1,
+        created_by TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        is_system BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS ai_prompt_tpl_modality_idx ON ai_prompt_templates (modality);
+      CREATE INDEX IF NOT EXISTS ai_prompt_tpl_active_idx ON ai_prompt_templates (is_active);
+      CREATE UNIQUE INDEX IF NOT EXISTS ai_prompt_tpl_name_uq ON ai_prompt_templates (name);
+      CREATE UNIQUE INDEX IF NOT EXISTS ai_prompt_tpl_name_lower_uq ON ai_prompt_templates (lower(name));
+
+      CREATE TABLE IF NOT EXISTS ai_model_routes (
+        id SERIAL PRIMARY KEY,
+        task_key TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        model TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        updated_by TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS ai_model_routes_task_uq ON ai_model_routes (task_key);
+    `);
+
     logger.info("Startup migrations applied");
   } catch (err) {
     logger.error({ err }, "Startup migration failed — partial-cancel / outsourced-labs features may not work");

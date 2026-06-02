@@ -83,6 +83,7 @@ import { structuredReportTemplatesRouter } from "./structuredReportTemplates";
 import { floorsRouter, roomsRouter, modalitiesRouter } from "./locations";
 import { aiReportingRouter } from "./aiReporting";
 import { aiPromptTemplatesRouter } from "./aiPromptTemplates";
+import { aiModelRoutesRouter } from "./aiModelRoutes";
 import { bankingRouter, bankingWebhookRouter } from "./banking";
 import { syncRouter } from "./sync";
 import { usgExtractionRouter } from "./usgExtraction";
@@ -416,6 +417,7 @@ router.use("/ai-reporting", requireStaffAuth, aiReportingRouter);
 
 // AI Prompt Templates — modality-aware, versioned, editable-without-code prompts
 router.use("/ai-prompt-templates", requireStaffAuth, aiPromptTemplatesRouter);
+router.use("/ai-model-routing", requireStaffAuth, aiModelRoutesRouter);
 
 // AI endpoints — each sub-route applies its own requireStaffPermission matching
 // the data domain it accesses (patients PHI, billing records, or radiology

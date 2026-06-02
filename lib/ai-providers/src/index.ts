@@ -10,8 +10,8 @@
  * at runtime. Endpoint URLs (not secrets) are stored plaintext.
  */
 import { db } from "@workspace/db";
-import { aiProviderSettingsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { aiProviderSettingsTable, aiModelRoutesTable } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
 import { decryptSecret } from "@workspace/crypto";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -432,6 +432,101 @@ export async function generateAiResponse(
     model: options?.model ?? "",
     prompt,
     images: images ?? [],
+    maxTokens: options?.maxTokens,
+  });
+}
+
+// ─── Model Routing (Phase 4) ─────────────────────────────────────────────────
+
+export interface AiTaskDef {
+  key: string;
+  label: string;
+  description: string;
+  /** True if the task may send images to the provider (needs a vision model). */
+  vision: boolean;
+}
+
+/**
+ * Catalog of routable AI tasks. Adding a task here makes it configurable in the
+ * Model Routing UI; callers opt in by passing the matching key to
+ * generateAiForTask(). Tasks not present here simply use the default provider.
+ */
+export const AI_TASK_CATALOG: AiTaskDef[] = [
+  { key: "radiology_draft", label: "Radiology AI Draft", description: "AI-assisted radiology report drafting from study context/images.", vision: true },
+  { key: "report_enhancement", label: "Report Enhancement", description: "Auto-generate findings, impression and measurements for a report.", vision: false },
+  { key: "clinical_notes", label: "Clinical Notes", description: "Generate clinical notes from patient demographics and history.", vision: false },
+  { key: "billing_insights", label: "Billing Insights", description: "Summarize billing/revenue patterns for a patient or period.", vision: false },
+  { key: "patient_communication", label: "Patient Communication", description: "Draft patient-facing messages (reminders, results, follow-ups).", vision: false },
+  { key: "report_findings", label: "Radiology Findings", description: "Generate the findings section of a radiology report.", vision: false },
+  { key: "report_impression", label: "Radiology Impression", description: "Generate the impression section of a radiology report.", vision: false },
+];
+
+export const AI_TASK_KEYS = AI_TASK_CATALOG.map((t) => t.key);
+
+/**
+ * Resolve the default provider name: the explicit global default, else the first
+ * enabled provider, else gemini. Centralized here so every caller (legacy AI,
+ * radiology, routing) shares one fallback policy.
+ */
+export async function getDefaultProviderName(): Promise<string> {
+  const [global] = await db
+    .select({ settingsJson: aiProviderSettingsTable.settingsJson })
+    .from(aiProviderSettingsTable)
+    .where(eq(aiProviderSettingsTable.provider, "__global__"))
+    .limit(1);
+  if (global?.settingsJson) {
+    try {
+      const parsed = JSON.parse(global.settingsJson) as { defaultProvider?: string };
+      if (parsed.defaultProvider && BUILTIN_PROVIDER_NAMES.includes(parsed.defaultProvider)) {
+        return parsed.defaultProvider;
+      }
+    } catch {
+      /* ignore malformed settings */
+    }
+  }
+  for (const name of BUILTIN_PROVIDER_NAMES) {
+    const [p] = await db
+      .select({ isEnabled: aiProviderSettingsTable.isEnabled })
+      .from(aiProviderSettingsTable)
+      .where(eq(aiProviderSettingsTable.provider, name))
+      .limit(1);
+    if (p?.isEnabled) return name;
+  }
+  return "gemini";
+}
+
+/**
+ * Resolve the active route for a task, or null if none is configured.
+ */
+export async function resolveTaskRoute(
+  taskKey: string,
+): Promise<{ provider: string; model?: string } | null> {
+  const [row] = await db
+    .select({ provider: aiModelRoutesTable.provider, model: aiModelRoutesTable.model })
+    .from(aiModelRoutesTable)
+    .where(and(eq(aiModelRoutesTable.taskKey, taskKey), eq(aiModelRoutesTable.isActive, true)))
+    .limit(1);
+  if (!row) return null;
+  return { provider: row.provider, model: row.model ?? undefined };
+}
+
+/**
+ * Task-aware generation. Provider/model precedence:
+ *   explicit option override → configured task route → global default provider.
+ * With no route and no override this is identical to the previous behavior, so
+ * it is safe to swap existing callers over to it.
+ */
+export async function generateAiForTask(
+  taskKey: string,
+  prompt: string,
+  images?: string[],
+  options?: { provider?: string; model?: string; maxTokens?: number },
+): Promise<AiQueryResult> {
+  const route = options?.provider ? null : await resolveTaskRoute(taskKey);
+  const providerName = options?.provider ?? route?.provider ?? (await getDefaultProviderName());
+  const model = options?.model ?? route?.model;
+  return generateAiResponse(providerName, prompt, images, {
+    model,
     maxTokens: options?.maxTokens,
   });
 }

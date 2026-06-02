@@ -32,6 +32,7 @@ import {
   getProviderApiKey,
   getProviderEndpointUrl,
   generateAiResponse,
+  resolveTaskRoute,
 } from "@workspace/ai-providers";
 
 // ─── Prompt template presets ──────────────────────────────────────────────────
@@ -469,7 +470,11 @@ router.post("/query", async (req, res): Promise<void> => {
   };
 
   const shouldAnonymize = anonymize ?? globalSettings.anonymize;
-  const providerName = providerReq ?? globalSettings.defaultProvider;
+  // Phase 4: when the caller does not explicitly pick a provider, consult the
+  // per-task model route for "radiology_draft" before falling back to the
+  // global default. Explicit request values always win, so this is non-breaking.
+  const taskRoute = providerReq ? null : await resolveTaskRoute("radiology_draft");
+  const providerName = providerReq ?? taskRoute?.provider ?? globalSettings.defaultProvider;
 
   if (!BUILTIN_PROVIDER_NAMES.includes(providerName)) {
     res.status(400).json({ error: "Invalid provider." }); return;
@@ -480,7 +485,7 @@ router.post("/query", async (req, res): Promise<void> => {
     res.status(400).json({ error: `${providerName} provider is disabled or not configured. Enable it in AI Reporting Settings.` }); return;
   }
 
-  const model = modelReq ?? provConfig.defaultModel ?? "";
+  const model = modelReq ?? taskRoute?.model ?? provConfig.defaultModel ?? "";
 
   // Build prompt
   let finalPrompt = prompt?.trim() ?? "";

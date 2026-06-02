@@ -9,7 +9,7 @@ import {
   radiologyStudiesTable,
 } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
-import { generateAiResponse } from "@workspace/ai-providers";
+import { generateAiForTask } from "@workspace/ai-providers";
 
 export type AiEnhancementResult = {
   findings: string;
@@ -34,7 +34,10 @@ Please provide:
 Return ONLY a JSON object with this exact shape:
 {"findings": "...", "impression": "...", "measurements": [{"type": "...", "value": "...", "unit": "..."}, {"type": "...", "value": "...", "unit": "..."}]}`;
 
-  const result = await generateAiResponse(provider ?? "gemini", prompt, [], { maxTokens: 2048 });
+  const result = await generateAiForTask("report_enhancement", prompt, [], {
+    provider,
+    maxTokens: 2048,
+  });
   if (!result.success) {
     return null;
   }
