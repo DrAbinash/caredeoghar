@@ -3,6 +3,7 @@ import { db, billsTable, paymentsTable, ordersTable, patientsTable } from "@work
 import { billAuditsTable, superAdminSessionsTable, ledgersTable } from "@workspace/db/schema";
 import { sendBillEditEmail, sendBillReprintEmail } from "../email";
 import { isValidUsbKey, isUsbGateEnforced, getUsbKeyHeader } from "../middleware/requireSuperAdminUsb";
+import { auditFromRequest } from "../lib/audit";
 import type { Request, Response } from "express";
 
 /**
@@ -1746,4 +1747,215 @@ paymentsRouter.post("/", async (req, res) => {
   }
 
   res.status(201).json({ ...payment, amount: Number(payment.amount) });
+});
+
+// ── Swap a test on an active bill (replaces testId + price, recalculates totals) ──
+// This replaces the old "display name" edit. The new test is selected from the
+// catalog, so commission rules apply correctly to the swapped testId.
+billsRouter.post("/:id/swap-test", async (req, res) => {
+  const id = Number(req.params.id);
+  const { orderTestId, newTestId, reason, performedBy } = req.body as {
+    orderTestId?: number; newTestId?: number; reason?: string; performedBy?: string;
+  };
+
+  if (!Number.isFinite(id) || !Number.isFinite(orderTestId) || !Number.isFinite(newTestId)) {
+    res.status(400).json({ error: "Invalid bill, orderTest, or newTest id" });
+    return;
+  }
+  if (!reason || !reason.trim()) {
+    res.status(400).json({ error: "Reason is required" });
+    return;
+  }
+  if (!performedBy || !performedBy.trim()) {
+    res.status(401).json({ error: "Staff name required" });
+    return;
+  }
+
+  const txResult = await db.transaction(async (tx) => {
+    // 1) Lock the bill
+    const [bill] = await tx.select().from(billsTable).where(eq(billsTable.id, id)).for("update");
+    if (!bill) throw Object.assign(new Error("Bill not found"), { httpStatus: 404 });
+    if (bill.status === "cancelled") {
+      throw Object.assign(new Error("Bill is cancelled — cannot swap test"), { httpStatus: 409 });
+    }
+
+    // 2) Find the orderTest row
+    const [otRow] = await tx.select().from(orderTestsTable).where(eq(orderTestsTable.id, orderTestId));
+    if (!otRow) throw Object.assign(new Error("Order test not found"), { httpStatus: 404 });
+    if (otRow.status === "cancelled") {
+      throw Object.assign(new Error("Cannot swap a cancelled test"), { httpStatus: 409 });
+    }
+    if (otRow.orderId !== bill.orderId) {
+      throw Object.assign(new Error("Order test does not belong to this bill"), { httpStatus: 400 });
+    }
+
+    // 3) Fetch the new test
+    const [newTest] = await tx.select().from(testsTable).where(eq(testsTable.id, newTestId));
+    if (!newTest) throw Object.assign(new Error("New test not found in catalog"), { httpStatus: 404 });
+    if (!newTest.isActive) {
+      throw Object.assign(new Error("New test is inactive"), { httpStatus: 400 });
+    }
+
+    const oldTestName = otRow.displayName || (await tx.select({ name: testsTable.name }).from(testsTable).where(eq(testsTable.id, otRow.testId)).then(r => r[0]?.name ?? "Unknown"));
+    const oldPrice = Number(otRow.price);
+    const newPrice = Number(newTest.price);
+    const priceDiff = newPrice - oldPrice;
+
+    // 4) Update the orderTest row with new testId and price
+    await tx.update(orderTestsTable).set({
+      testId: newTestId,
+      price: newPrice.toFixed(2),
+      displayName: null, // clear any old override
+      updatedAt: new Date(),
+    }).where(eq(orderTestsTable.id, orderTestId));
+
+    // 5) Recalculate order total
+    const allTests = await tx.select().from(orderTestsTable).where(eq(orderTestsTable.orderId, bill.orderId));
+    const activeTests = allTests.filter((t) => t.status !== "cancelled");
+    const newOrderTotal = activeTests.reduce((s, t) => s + Number(t.price), 0);
+    await tx.update(ordersTable).set({
+      totalAmount: newOrderTotal.toFixed(2),
+      updatedAt: new Date(),
+    }).where(eq(ordersTable.id, bill.orderId));
+
+    // 6) Recalculate bill
+    const oldSubtotal = Number(bill.subtotal);
+    const oldDiscount = Number(bill.discount);
+    const newSubtotal = newOrderTotal;
+    const newTotal = newSubtotal - oldDiscount;
+    const paidAmount = Number(bill.paidAmount);
+    const newBalance = Math.max(0, newTotal - paidAmount);
+    const newStatus = newBalance <= 0.01 && paidAmount > 0 ? "paid" : paidAmount > 0 ? "partial" : "pending";
+
+    await tx.update(billsTable).set({
+      subtotal: newSubtotal.toFixed(2),
+      totalAmount: newTotal.toFixed(2),
+      balanceAmount: newBalance.toFixed(2),
+      status: newStatus,
+      updatedAt: new Date(),
+    }).where(eq(billsTable.id, id));
+
+    // 7) Audit the swap
+    await tx.insert(billAuditsTable).values({
+      billId: id,
+      editedBy: performedBy,
+      reason: reason.trim(),
+      changeType: "test_swapped",
+      oldValue: `${oldTestName} (testId=${otRow.testId}, price=${oldPrice.toFixed(2)})`,
+      newValue: `${newTest.name} (testId=${newTestId}, price=${newPrice.toFixed(2)})`,
+    });
+
+    // 8) If price increased, record a payment (auto-collect extra)
+    let extraPayment: { amount: number; method: string } | null = null;
+    if (priceDiff > 0.01) {
+      const method = (req.body.extraPaymentMethod as string) || "cash";
+      extraPayment = { amount: priceDiff, method };
+      await tx.insert(paymentsTable).values({
+        billId: id,
+        amount: priceDiff.toFixed(2),
+        method,
+        notes: `Extra charge for test swap: ${oldTestName} → ${newTest.name}`,
+        recordedByName: performedBy,
+      });
+      const newPaid = Math.round((paidAmount + priceDiff) * 100) / 100;
+      const newBalAfterPay = Math.max(0, newTotal - newPaid);
+      const newStatAfterPay = newBalAfterPay <= 0.01 && newPaid > 0 ? "paid" : newPaid > 0 ? "partial" : "pending";
+      await tx.update(billsTable).set({
+        paidAmount: newPaid.toFixed(2),
+        balanceAmount: newBalAfterPay.toFixed(2),
+        status: newStatAfterPay,
+        updatedAt: new Date(),
+      }).where(eq(billsTable.id, id));
+
+      await tx.insert(billAuditsTable).values({
+        billId: id,
+        editedBy: performedBy,
+        reason: reason.trim(),
+        changeType: "extra_payment",
+        oldValue: `paid=₹${paidAmount.toFixed(2)}`,
+        newValue: `paid=₹${newPaid.toFixed(2)} (+₹${priceDiff.toFixed(2)} ${method})`,
+      });
+    }
+
+    // 9) If price decreased, record a refund
+    let refundInfo: { amount: number; method: string } | null = null;
+    if (priceDiff < -0.01) {
+      const refundAmt = Math.abs(priceDiff);
+      const method = (req.body.refundMethod as string) || "cash";
+      refundInfo = { amount: refundAmt, method };
+      await tx.insert(paymentsTable).values({
+        billId: id,
+        amount: `-${refundAmt.toFixed(2)}`,
+        method,
+        notes: `Refund for test swap: ${oldTestName} → ${newTest.name}`,
+        recordedByName: performedBy,
+      });
+      const currentRefund = Number(bill.refundAmount);
+      const newRefund = Math.round((currentRefund + refundAmt) * 100) / 100;
+      const newPaidAfterRefund = Math.max(0, Math.round((paidAmount - refundAmt) * 100) / 100);
+      const newBalAfterRefund = Math.max(0, newTotal - newPaidAfterRefund);
+      const newStatAfterRefund = newBalAfterRefund <= 0.01 && newPaidAfterRefund > 0 ? "paid" : newPaidAfterRefund > 0 ? "partial" : "pending";
+      await tx.update(billsTable).set({
+        paidAmount: newPaidAfterRefund.toFixed(2),
+        refundAmount: newRefund.toFixed(2),
+        balanceAmount: newBalAfterRefund.toFixed(2),
+        status: newStatAfterRefund,
+        updatedAt: new Date(),
+      }).where(eq(billsTable.id, id));
+
+      await tx.insert(billAuditsTable).values({
+        billId: id,
+        editedBy: performedBy,
+        reason: reason.trim(),
+        changeType: "refund",
+        oldValue: `paid=₹${paidAmount.toFixed(2)}`,
+        newValue: `refund=₹${refundAmt.toFixed(2)} via ${method} (test swap)`,
+      });
+    }
+
+    return { billId: id, oldTestName, oldPrice, newTestName: newTest.name, newPrice, priceDiff, extraPayment, refundInfo };
+  }).catch((err: Error & { httpStatus?: number }) => {
+    if (err.httpStatus) {
+      res.status(err.httpStatus).json({ error: err.message });
+      return null;
+    }
+    throw err;
+  });
+
+  if (!txResult) return;
+
+  // 10) Best-effort auto-voucher for the payment/refund
+  if (txResult.extraPayment || txResult.refundInfo) {
+    const [billForVoucher] = await db.select({ billNumber: billsTable.billNumber, patientId: billsTable.patientId }).from(billsTable).where(eq(billsTable.id, id));
+    if (billForVoucher) {
+      const [patientRow] = await db.select({ firstName: patientsTable.firstName, lastName: patientsTable.lastName }).from(patientsTable).where(eq(patientsTable.id, billForVoucher.patientId));
+      const info = txResult.extraPayment || txResult.refundInfo;
+      if (info) {
+        autoVoucherForPayment({
+          billId: id,
+          amount: txResult.extraPayment ? info.amount : -info.amount,
+          method: info.method,
+          billNumber: billForVoucher.billNumber,
+          patientName: patientRow ? `${patientRow.firstName} ${patientRow.lastName}`.trim() : null,
+          performedBy: performedBy || null,
+        }).catch(() => {});
+      }
+    }
+  }
+
+  // 11) System audit log
+  await auditFromRequest(req as unknown as Request, {
+    userId: req.staffSession?.subjectId ?? null,
+    userName: performedBy || "system",
+    role: req.staffSession?.role ?? "system",
+    action: "edit",
+    module: "billing",
+    entityType: "bill",
+    entityId: String(id),
+    oldValue: JSON.stringify({ test: txResult.oldTestName, price: txResult.oldPrice }),
+    newValue: JSON.stringify({ test: txResult.newTestName, price: txResult.newPrice }),
+    reason: reason?.trim(),
+  });
+
+  res.json(await buildBill(await db.select().from(billsTable).where(eq(billsTable.id, id)).then(r => r[0]!)));
 });

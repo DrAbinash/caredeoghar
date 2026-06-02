@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import QRCode from "qrcode";
 import { Link, useLocation } from "wouter";
-import { useGetBill, useCreatePayment, getGetBillQueryKey, getListBillsQueryKey } from "@workspace/api-client-react";
+import { useGetBill, useCreatePayment, getGetBillQueryKey, getListBillsQueryKey, useListTests } from "@workspace/api-client-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
