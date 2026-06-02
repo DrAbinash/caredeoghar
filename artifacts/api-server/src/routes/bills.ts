@@ -330,6 +330,7 @@ billsRouter.get("/", async (req, res) => {
       totalAmount: sql<string>`COALESCE(SUM(${billsTable.totalAmount}::numeric), 0)`,
       paidAmount: sql<string>`COALESCE(SUM(${billsTable.paidAmount}::numeric), 0)`,
       balanceAmount: sql<string>`COALESCE(SUM(${billsTable.balanceAmount}::numeric), 0)`,
+      refundAmount: sql<string>`COALESCE(SUM(${billsTable.refundAmount}::numeric), 0)`,
     }).from(billsTable).where(where),
   ]);
 
@@ -343,6 +344,7 @@ billsRouter.get("/", async (req, res) => {
       totalAmount: Number(totalsResult[0]?.totalAmount ?? 0),
       paidAmount: Number(totalsResult[0]?.paidAmount ?? 0),
       balanceAmount: Number(totalsResult[0]?.balanceAmount ?? 0),
+      refundAmount: Number(totalsResult[0]?.refundAmount ?? 0),
     },
   });
 });

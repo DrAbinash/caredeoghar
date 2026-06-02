@@ -34,7 +34,7 @@ type DuesResponse = {
   total: number;
   page: number;
   limit: number;
-  totals: { totalAmount: number; paidAmount: number; balanceAmount: number };
+  totals: { totalAmount: number; paidAmount: number; balanceAmount: number; refundAmount: number };
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -234,7 +234,7 @@ export default function Dues() {
         </div>
 
         {/* Summary cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <SummaryCard
             label="Bills with Dues"
             value={totalCount.toLocaleString("en-IN")}
@@ -252,6 +252,12 @@ export default function Dues() {
             value={formatCurrency(totals?.balanceAmount ?? 0)}
             icon={<AlertCircle size={20} />}
             tone="danger"
+          />
+          <SummaryCard
+            label="Total Refunded"
+            value={formatCurrency(totals?.refundAmount ?? 0)}
+            icon={<IndianRupee size={20} />}
+            tone="warning"
           />
         </div>
 
@@ -385,11 +391,14 @@ function SummaryCard({ label, value, icon, tone }: {
   label: string;
   value: string;
   icon: React.ReactNode;
-  tone: "neutral" | "danger";
+  tone: "neutral" | "danger" | "warning";
 }) {
-  const toneClasses = tone === "danger"
-    ? "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900 text-red-700 dark:text-red-300"
-    : "bg-card border-card-border";
+  const toneClasses =
+    tone === "danger"
+      ? "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900 text-red-700 dark:text-red-300"
+      : tone === "warning"
+        ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900 text-amber-700 dark:text-amber-300"
+        : "bg-card border-card-border";
   return (
     <div className={`border rounded-xl p-5 shadow-sm ${toneClasses}`}>
       <div className="flex items-start justify-between">
