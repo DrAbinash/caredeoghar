@@ -95,9 +95,10 @@ app.get("/devices", async (_req, res) => {
 app.post("/scan", async (_req, res) => {
   try {
     const result = await adapter.scan();
-    res.json({ ok: true, imageBase64: result.imageBase64, mimeType: result.mimeType ?? "image/jpeg" });
+    res.json({ ok: true, imageBase64: result.imageBase64, mimeType: result.mimeType ?? "image/jpeg", filename: result.filename || null });
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message, code: e.code || null });
+    const isWiaUnsupported = e.code === "WIA_UNSUPPORTED_DRIVER" || e.code === "WIA_NO_DEVICE";
+    res.status(500).json({ ok: false, error: e.message, code: e.code || null, fallback: isWiaUnsupported ? "folder-watch" : null });
   }
 });
 
@@ -135,7 +136,7 @@ app.post("/latest-scan", async (_req, res) => {
       .map((e) => ({ name: e.name, path: join(SCAN_WATCH_FOLDER, e.name) }));
 
     if (files.length === 0) {
-      res.status(404).json({ ok: false, error: `No scan files found in "${SCAN_WATCH_FOLDER}". Please scan a document first.` });
+      res.status(404).json({ ok: false, error: `No scan files found in "${SCAN_WATCH_FOLDER}". Please scan a document first.`, fallback: "folder-watch" });
       return;
     }
 

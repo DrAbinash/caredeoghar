@@ -43,63 +43,6 @@ try {
   Write-Output "[]"
 }`;
 
-// ── PowerShell: generic scan with safe property-only WIA access ───────────────
-const PS_SCAN = `param(
-  [string]$OutputPath,
-  [int]$DeviceIndex = 1,
-  [int]$DPI = 300,
-  [int]$ColorMode = 1
-)
-try {
-  $deviceManager = New-Object -ComObject WIA.DeviceManager
-  if ($deviceManager.DeviceInfos.Count -eq 0) {
-    Write-Error "No WIA devices found"
-    exit 1
-  }
-  if ($DeviceIndex -gt $deviceManager.DeviceInfos.Count) {
-    Write-Error "Device index $DeviceIndex exceeds available devices ($($deviceManager.DeviceInfos.Count))"
-    exit 1
-  }
-  $deviceInfo = $deviceManager.DeviceInfos.Item($DeviceIndex)
-  $device = $deviceInfo.Connect()
-  $item = $device.Items.Item(1)
-  $props = $item.Properties
-
-  // Generic safe properties only — try each, silently skip if unsupported
-  try { $props["6147"].Value = $DPI } catch {}    // Horizontal DPI
-  try { $props["6148"].Value = $DPI } catch {}    // Vertical DPI
-  try { $props["6146"].Value = $ColorMode } catch {} // Color intent
-
-  // Scan fallback order:
-  // 1. Direct item.Transfer()
-  // 2. WIA.CommonDialog.ShowTransfer(item)
-  $imageFile = $null
-  try {
-    $imageFile = $item.Transfer()
-  } catch {
-    $dialog = New-Object -ComObject WIA.CommonDialog
-    $imageFile = $dialog.ShowTransfer($item)
-  }
-
-  if ($imageFile -eq $null) {
-    Write-Error "Transfer failed: driver does not support direct WIA scan. Try folder-watch mode."
-    exit 1
-  }
-
-  $imageFile.SaveFile($OutputPath)
-  Write-Output "OK"
-} catch {
-  $msg = $_.Exception.Message
-  if ($msg -match "busy|in use|0x80210006|0x8021000A|already in use|another app") {
-    Write-Error "Scanner is busy"
-  } elseif ($msg -match "0x80210015|0x8021000D|not supported|unsupported") {
-    Write-Error "Driver does not support direct WIA scan"
-  } else {
-    Write-Error $msg
-  }
-  exit 1
-}`;
-
 function execAsync(command, args, timeout = 60000) {
   return new Promise((resolve, reject) => {
     execFile(command, args, { timeout, windowsHide: true }, (err, stdout, stderr) => {
@@ -121,7 +64,7 @@ function classifyError(msg) {
     err.code = "WIA_DEVICE_BUSY";
     return err;
   }
-  if (m.includes("driver does not support") || m.includes("not supported") || m.includes("unsupported") || m.includes("0x80210015") || m.includes("0x8021000d")) {
+  if (m.includes("driver does not support") || m.includes("not supported") || m.includes("unsupported") || m.includes("0x80210015") || m.includes("0x8021000d") || m.includes("specified cast is not valid")) {
     const err = new Error("Scanner driver does not support direct WIA scan. Use folder-watch mode instead: set BRIDGE_SCAN_VENDOR=folder-watch and SCAN_WATCH_FOLDER to your scanner software's output folder.");
     err.code = "WIA_UNSUPPORTED_DRIVER";
     return err;
@@ -129,6 +72,80 @@ function classifyError(msg) {
   const err = new Error(`WIA scan failed: ${msg}`);
   err.code = "WIA_SCAN_FAILED";
   return err;
+}
+
+function buildPsScanScript(outputPath, deviceIndex, dpi, colorMode) {
+  // Values are embedded directly — no param() block, so no parameter passing issues.
+  const safePath = outputPath.replace(/'/g, "''");
+  return `
+$OutputPath = '${safePath}'
+$DeviceIndex = ${deviceIndex}
+$DPI = ${dpi}
+$ColorMode = ${colorMode}
+
+try {
+  $deviceManager = New-Object -ComObject WIA.DeviceManager
+  if ($deviceManager.DeviceInfos.Count -eq 0) {
+    Write-Error "No WIA devices found"
+    exit 1
+  }
+  if ($DeviceIndex -gt $deviceManager.DeviceInfos.Count) {
+    Write-Error "Device index $DeviceIndex exceeds available devices ($($deviceManager.DeviceInfos.Count))"
+    exit 1
+  }
+  $deviceInfo = $deviceManager.DeviceInfos.Item($DeviceIndex)
+  $device = $deviceInfo.Connect()
+  $item = $device.Items.Item(1)
+  $props = $item.Properties
+
+  // Set only safe optional properties — silently skip on any error.
+  // WIA property names are accessed by string key via the collection method.
+  try {
+    $p = $props.Item("Horizontal Resolution")
+    if ($p -ne $null) { $p.Value = $DPI }
+  } catch {}
+  try {
+    $p = $props.Item("Vertical Resolution")
+    if ($p -ne $null) { $p.Value = $DPI }
+  } catch {}
+  try {
+    $p = $props.Item("Current Intent")
+    if ($p -ne $null) { $p.Value = $ColorMode }
+  } catch {}
+
+  // Scan fallback order:
+  // 1. Direct item.Transfer()
+  // 2. WIA.CommonDialog.ShowTransfer(item)
+  $imageFile = $null
+  try {
+    $imageFile = $item.Transfer()
+  } catch {
+    try {
+      $dialog = New-Object -ComObject WIA.CommonDialog
+      $imageFile = $dialog.ShowTransfer($item)
+    } catch {
+      // ShowTransfer failed too
+    }
+  }
+
+  if ($imageFile -eq $null) {
+    Write-Error "Transfer failed: driver does not support direct WIA scan. Try folder-watch mode."
+    exit 1
+  }
+
+  $imageFile.SaveFile($OutputPath)
+  Write-Output "OK"
+} catch {
+  $msg = $_.Exception.Message
+  if ($msg -match "busy|in use|0x80210006|0x8021000A|already in use|another app") {
+    Write-Error "Scanner is busy"
+  } elseif ($msg -match "0x80210015|0x8021000D|not supported|unsupported|specified cast is not valid") {
+    Write-Error "Driver does not support direct WIA scan"
+  } else {
+    Write-Error $msg
+  }
+  exit 1
+}`;
 }
 
 export default {
@@ -168,24 +185,27 @@ export default {
 
   async scan() {
     const outPath = join(tmpdir(), `scan-${Date.now()}.jpg`);
+    const psScript = buildPsScanScript(outPath, DEVICE_INDEX, DPI, COLOR_MODE);
+    const psPath = join(tmpdir(), `scan-${Date.now()}.ps1`);
     try {
+      await fs.writeFile(psPath, psScript, "utf8");
       await execAsync("powershell", [
         "-ExecutionPolicy", "Bypass",
-        "-Command",
-        PS_SCAN,
-        "-OutputPath", outPath,
-        "-DeviceIndex", String(DEVICE_INDEX),
-        "-DPI", String(DPI),
-        "-ColorMode", String(COLOR_MODE),
-      ]);
+        "-File", psPath,
+      ], 60000);
       const buffer = await fs.readFile(outPath);
       await fs.unlink(outPath).catch(() => {});
+      const filename = outPath.split("\\").pop()?.split("/").pop() ?? "scan.jpg";
       return {
+        ok: true,
         imageBase64: buffer.toString("base64"),
         mimeType: "image/jpeg",
+        filename,
       };
     } catch (e) {
       throw classifyError(e.message || "");
+    } finally {
+      await fs.unlink(psPath).catch(() => {});
     }
   },
 };
