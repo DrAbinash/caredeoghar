@@ -817,6 +817,24 @@ export default function FormF() {
     } catch { toast({ title: "Upload failed", variant: "destructive" }); setIdCardUploading(false); }
   }
 
+  // ── ID card BACK side upload (no OCR, just stores image) ──
+  async function processIdBackImage(file: File) {
+    setIdCardUploading(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = String(reader.result ?? "");
+        setIdCardBackUrl(dataUrl);
+        toast({ title: "ID back side uploaded" });
+        setIdCardUploading(false);
+      };
+      reader.readAsDataURL(file);
+    } catch {
+      setIdCardUploading(false);
+      toast({ title: "Failed to process ID back image", variant: "destructive" });
+    }
+  }
+
   // ── Camera / scanner capture helpers ──
   async function startCamera() {
     try {
@@ -1527,7 +1545,7 @@ export default function FormF() {
                     />
                     {/* Row 2: ID-capture buttons — flex-wrap so they stay visible */}
                     <div className="flex flex-wrap gap-2">
-                      {/* ── Upload ID (file picker) — first and most prominent ── */}
+                      {/* ── Upload ID Front (file picker) ── */}
                       <label className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed border-orange-300 bg-orange-50 cursor-pointer text-sm font-medium transition-colors ${idCardUploading ? "opacity-60 cursor-wait" : "hover:bg-orange-100 text-orange-700"}`}>
                         <Upload size={14} className={idCardUploading ? "animate-pulse" : ""} />
                         <span>{idCardUploading ? "Scanning…" : "Upload ID"}</span>
@@ -1539,6 +1557,21 @@ export default function FormF() {
                             const file = e.target.files?.[0];
                             if (!file) return;
                             await processIdImage(file);
+                          }}
+                        />
+                      </label>
+                      {/* ── Upload ID Back (file picker) ── */}
+                      <label className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-dashed border-orange-300 bg-orange-50 cursor-pointer text-sm font-medium transition-colors ${idCardUploading ? "opacity-60 cursor-wait" : "hover:bg-orange-100 text-orange-700"} ${idCardBackUrl ? "border-orange-400 bg-orange-100" : ""}`}>
+                        <Upload size={14} className={idCardUploading ? "animate-pulse" : ""} />
+                        <span>{idCardBackUrl ? "Back ✓" : idCardUploading ? "Scanning…" : "Upload Back"}</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            await processIdBackImage(file);
                           }}
                         />
                       </label>
@@ -1638,6 +1671,42 @@ export default function FormF() {
                       </div>
                     )}
                   </div>
+                )}
+
+                {/* ── ID Card Preview (front + back) ── */}
+                {(idCardFrontUrl || idCardBackUrl) && (
+                  <BigLabelRow label="Uploaded ID">
+                    <div className="flex gap-3 flex-wrap">
+                      {idCardFrontUrl && (
+                        <div className="relative">
+                          <div className="text-[11px] text-muted-foreground mb-1">Front</div>
+                          <img src={idCardFrontUrl} alt="ID Front" className="w-40 h-24 object-cover border rounded" />
+                          <button
+                            type="button"
+                            onClick={() => setIdCardFrontUrl("")}
+                            className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] hover:bg-red-600"
+                            title="Remove front"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      )}
+                      {idCardBackUrl && (
+                        <div className="relative">
+                          <div className="text-[11px] text-muted-foreground mb-1">Back</div>
+                          <img src={idCardBackUrl} alt="ID Back" className="w-40 h-24 object-cover border rounded" />
+                          <button
+                            type="button"
+                            onClick={() => setIdCardBackUrl("")}
+                            className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] hover:bg-red-600"
+                            title="Remove back"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </BigLabelRow>
                 )}
 
                 <BigLabelRow label={`Full Address ${addressRequired ? "*" : ""}`}>
