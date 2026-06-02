@@ -904,9 +904,14 @@ billsRouter.post("/:id/cancel", async (req, res) => {
           notes: `REFUND on cancellation: ${reason}`,
           recordedByName: performedBy,
         });
+        const currentTotal = Number(bill.totalAmount);
+        const newTotal = Math.max(0, Math.round((currentTotal - refundedAmount) * 100) / 100);
+        const newBalance = Math.max(0, Math.round((newTotal - 0) * 100) / 100);
         await tx.update(billsTable).set({
+          totalAmount: String(newTotal),
           paidAmount: "0.00",
           refundAmount: String(newRefund),
+          balanceAmount: String(newBalance),
         }).where(eq(billsTable.id, id));
         await tx.insert(billAuditsTable).values({
           billId: id,
