@@ -649,7 +649,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <div key={id}>
                 <button
                   type="button"
-                  onClick={() => setOpenGroups((prev) => ({ ...prev, [id]: !open }))}
+                  onClick={() => {
+                    // Navigate to the first child by default (Bills for billing group)
+                    const defaultPath = children[0]?.path;
+                    if (defaultPath) {
+                      window.location.href = defaultPath;
+                    } else {
+                      setOpenGroups((prev) => ({ ...prev, [id]: !open }));
+                    }
+                  }}
                   className={cn(
                     "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer",
                     groupActive
@@ -664,6 +672,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   <ChevronRight
                     size={13}
                     className={cn("transition-transform duration-150", open && "rotate-90")}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpenGroups((prev) => ({ ...prev, [id]: !open }));
+                    }}
                   />
                 </button>
                 {open && (
