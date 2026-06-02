@@ -197,3 +197,9 @@ id = "RmtEyWwmocyUTPk1JHqr3"
 uri = "file://synology-nas-deploy.tar.gz"
 type = "unspecified"
 title = "Synology NAS Deployment Package (self-contained, includes full project source + ICICI integration)"
+
+[[outputs]]
+id = "RlG5nGyvza9bJxkDK6g5Z"
+uri = "file://exports/AI_Architecture_Analysis.md"
+type = "text"
+title = "AI Architecture Analysis Report"
