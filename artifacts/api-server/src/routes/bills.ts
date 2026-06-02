@@ -1028,13 +1028,14 @@ billsRouter.post("/:id/refund", async (req, res) => {
 
     const newPaid = Math.max(0, Math.round((currentPaid - amount) * 100) / 100);
     const newRefund = Math.round((currentRefund + amount) * 100) / 100;
-    const newBalance = Math.max(0, Math.round((currentTotal - newPaid) * 100) / 100);
+    const newTotal = Math.max(0, Math.round((currentTotal - amount) * 100) / 100);
+    const newBalance = Math.max(0, Math.round((newTotal - newPaid) * 100) / 100);
     // Don't auto-flip away from "cancelled" — once cancelled, stays cancelled.
     const newStatus = bill.status === "cancelled"
       ? "cancelled"
       : newPaid <= 0
         ? "pending"
-        : newPaid < currentTotal
+        : newPaid < newTotal
           ? "partial"
           : "paid";
 
@@ -1050,6 +1051,7 @@ billsRouter.post("/:id/refund", async (req, res) => {
     });
 
     const [updated] = await tx.update(billsTable).set({
+      totalAmount: String(newTotal),
       paidAmount: String(newPaid),
       refundAmount: String(newRefund),
       balanceAmount: String(newBalance),
