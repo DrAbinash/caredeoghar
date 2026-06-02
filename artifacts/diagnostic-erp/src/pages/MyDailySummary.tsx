@@ -1376,6 +1376,7 @@ export default function MyDailySummary() {
                 { label: "Today", fromAgo: 0, toAgo: 0 },
                 { label: "Yesterday", fromAgo: 1, toAgo: 1 },
                 { label: "Day Before", fromAgo: 2, toAgo: 2 },
+                { label: "7 Days", fromAgo: 6, toAgo: 0 },
                 { label: "1 Month", fromAgo: 29, toAgo: 0 },
               ].map((p) => (
                 <Button key={p.label} variant="outline" size="sm" className="h-8 text-xs px-3" onClick={() => setPreset(p.fromAgo, p.toAgo)}>
