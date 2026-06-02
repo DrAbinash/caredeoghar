@@ -1,17 +1,20 @@
-// Windows Image Acquisition (WIA) adapter.
+// Windows Image Acquisition (WIA) adapter — GENERIC for any scanner brand.
 // Uses an embedded PowerShell script to trigger scanning via the WIA COM API.
-// Works with any WIA-compatible flatbed or document-feeder scanner.
+// Works with any WIA-compatible flatbed or document-feeder (Canon, HP, Epson, Brother, Fujitsu, etc.).
 //
 // REAL DEPLOYMENT:
 // 1. Ensure the scanner driver is installed and visible in Windows Fax and Scan.
 // 2. Run the bridge with BRIDGE_SCAN_VENDOR=wia
 // 3. If you have multiple scanners, set WIA_DEVICE_INDEX (1-based) to pick one.
+// 4. If direct WIA fails, fall back to folder-watch mode:
+//    BRIDGE_SCAN_VENDOR=folder-watch SCAN_WATCH_FOLDER="C:\\Scans"
 //
 // TROUBLESHOOTING:
 // - "No WIA devices found": Install the scanner driver or check USB connection.
-// - "Access is denied": Run PowerShell with appropriate execution policy; the
-//   bridge already uses -ExecutionPolicy Bypass.
-// - Wrong scanner selected: Set WIA_DEVICE_INDEX env var.
+// - "Scanner is busy": Another app is using the scanner. Close it and retry.
+// - "Driver does not support direct WIA scan": The scanner vendor blocked programmatic access.
+//   Switch to folder-watch mode (see README).
+// - Wrong scanner selected: Set WIA_DEVICE_INDEX env var, or call /devices to see the list.
 
 import { execFile } from "node:child_process";
 import { promises as fs } from "node:fs";
@@ -22,7 +25,26 @@ const DEVICE_INDEX = Number(process.env.WIA_DEVICE_INDEX ?? "1");
 const DPI = Number(process.env.WIA_DPI ?? "300");
 const COLOR_MODE = Number(process.env.WIA_COLOR_MODE ?? "1"); // 1 = Color, 2 = Grayscale, 4 = B&W
 
-const PS_SCRIPT = `param(
+// ── PowerShell: enumerate all WIA devices ───────────────────────────────────
+const PS_DEVICES = `
+try {
+  $dm = New-Object -ComObject WIA.DeviceManager
+  $devices = @()
+  for ($i = 1; $i -le $dm.DeviceInfos.Count; $i++) {
+    $name = $dm.DeviceInfos.Item($i).Properties("Name").Value
+    $devices += "{ \"index\": $i, \"name\": \"$name\" }"
+  }
+  if ($devices.Count -eq 0) {
+    Write-Output "[]"
+  } else {
+    Write-Output ("[" + ($devices -join ",") + "]")
+  }
+} catch {
+  Write-Output "[]"
+}`;
+
+// ── PowerShell: generic scan with safe property-only WIA access ───────────────
+const PS_SCAN = `param(
   [string]$OutputPath,
   [int]$DeviceIndex = 1,
   [int]$DPI = 300,
@@ -42,40 +64,100 @@ try {
   $device = $deviceInfo.Connect()
   $item = $device.Items.Item(1)
   $props = $item.Properties
-  try { $props["6147"].Value = $ColorMode } catch {}
-  try { $props["6148"].Value = $DPI } catch {}
-  try { $props["6149"].Value = $DPI } catch {}
-  $imageFile = $item.Transfer()
+
+  // Generic safe properties only — try each, silently skip if unsupported
+  try { $props["6147"].Value = $DPI } catch {}    // Horizontal DPI
+  try { $props["6148"].Value = $DPI } catch {}    // Vertical DPI
+  try { $props["6146"].Value = $ColorMode } catch {} // Color intent
+
+  // Scan fallback order:
+  // 1. Direct item.Transfer()
+  // 2. WIA.CommonDialog.ShowTransfer(item)
+  $imageFile = $null
+  try {
+    $imageFile = $item.Transfer()
+  } catch {
+    $dialog = New-Object -ComObject WIA.CommonDialog
+    $imageFile = $dialog.ShowTransfer($item)
+  }
+
+  if ($imageFile -eq $null) {
+    Write-Error "Transfer failed: driver does not support direct WIA scan. Try folder-watch mode."
+    exit 1
+  }
+
   $imageFile.SaveFile($OutputPath)
   Write-Output "OK"
 } catch {
-  Write-Error $_.Exception.Message
+  $msg = $_.Exception.Message
+  if ($msg -match "busy|in use|0x80210006|0x8021000A|already in use|another app") {
+    Write-Error "Scanner is busy"
+  } elseif ($msg -match "0x80210015|0x8021000D|not supported|unsupported") {
+    Write-Error "Driver does not support direct WIA scan"
+  } else {
+    Write-Error $msg
+  }
   exit 1
 }`;
 
-function execAsync(command, args) {
+function execAsync(command, args, timeout = 60000) {
   return new Promise((resolve, reject) => {
-    execFile(command, args, { timeout: 60000, windowsHide: true }, (err, stdout, stderr) => {
+    execFile(command, args, { timeout, windowsHide: true }, (err, stdout, stderr) => {
       if (err) reject(new Error(stderr || stdout || err.message));
       else resolve({ stdout, stderr });
     });
   });
 }
 
+function classifyError(msg) {
+  const m = msg.toLowerCase();
+  if (m.includes("no wia devices found") || m.includes("device infos.count") || m.includes("count -eq 0")) {
+    const err = new Error("No WIA scanner found. Check USB connection and that the driver is installed.");
+    err.code = "WIA_NO_DEVICE";
+    return err;
+  }
+  if (m.includes("scanner is busy") || m.includes("busy") || m.includes("in use") || m.includes("0x80210006") || m.includes("0x8021000a") || m.includes("already in use") || m.includes("another app")) {
+    const err = new Error("Scanner is busy. Close any other scanning software and retry.");
+    err.code = "WIA_DEVICE_BUSY";
+    return err;
+  }
+  if (m.includes("driver does not support") || m.includes("not supported") || m.includes("unsupported") || m.includes("0x80210015") || m.includes("0x8021000d")) {
+    const err = new Error("Scanner driver does not support direct WIA scan. Use folder-watch mode instead: set BRIDGE_SCAN_VENDOR=folder-watch and SCAN_WATCH_FOLDER to your scanner software's output folder.");
+    err.code = "WIA_UNSUPPORTED_DRIVER";
+    return err;
+  }
+  const err = new Error(`WIA scan failed: ${msg}`);
+  err.code = "WIA_SCAN_FAILED";
+  return err;
+}
+
 export default {
   name: "wia",
-  async status() {
+
+  async devices() {
     try {
       const { stdout } = await execAsync("powershell", [
         "-ExecutionPolicy", "Bypass",
         "-Command",
-        `try { $d = New-Object -ComObject WIA.DeviceManager; $d.DeviceInfos.Count } catch { Write-Output 0 }`,
-      ]);
-      const count = parseInt(stdout.trim(), 10) || 0;
+        PS_DEVICES,
+      ], 15000);
+      const devices = JSON.parse(stdout.trim() || "[]");
+      return { devices };
+    } catch (e) {
+      return { devices: [], error: e.message };
+    }
+  },
+
+  async status() {
+    try {
+      const { devices } = await this.devices();
+      const selected = devices.find((d) => d.index === DEVICE_INDEX);
       return {
-        deviceConnected: count > 0,
-        deviceCount: count,
+        deviceConnected: devices.length > 0,
+        deviceCount: devices.length,
         deviceIndex: DEVICE_INDEX,
+        selectedDevice: selected?.name || null,
+        devices: devices.map((d) => ({ index: d.index, name: d.name })),
         type: "wia",
         dpi: DPI,
       };
@@ -90,7 +172,7 @@ export default {
       await execAsync("powershell", [
         "-ExecutionPolicy", "Bypass",
         "-Command",
-        PS_SCRIPT,
+        PS_SCAN,
         "-OutputPath", outPath,
         "-DeviceIndex", String(DEVICE_INDEX),
         "-DPI", String(DPI),
@@ -103,14 +185,7 @@ export default {
         mimeType: "image/jpeg",
       };
     } catch (e) {
-      const msg = e.message || "";
-      // Detect common "device busy" errors from WIA COM
-      if (msg.includes("busy") || msg.includes("in use") || msg.includes("0x80210006") || msg.includes("0x8021000A") || msg.includes("already in use") || msg.includes("another app")) {
-        const err = new Error(msg);
-        err.code = "WIA_DEVICE_BUSY";
-        throw err;
-      }
-      throw new Error(`WIA scan failed: ${msg}`);
+      throw classifyError(e.message || "");
     }
   },
 };

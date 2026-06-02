@@ -54,7 +54,7 @@ Clicking **Scanner** in the ERP returns the newest file from that folder.
 | `ERP_BASE_URL`         | _(optional)_                   | ERP URL; derived CORS allowlist. Set to your ERP origin.                                         |
 | `BRIDGE_ALLOW_ORIGINS` | ERP origin from `ERP_BASE_URL` | Comma-separated CORS allowlist. Do NOT use `*`.                                                  |
 | `SCAN_WATCH_FOLDER`    | `os.tmpdir() + "/care-scans"`  | (folder-watch only) Folder to watch for new scan files.                                          |
-| `WIA_DEVICE_INDEX`     | `1`                            | 1-based index if multiple WIA scanners are connected.                                              |
+| `WIA_DEVICE_INDEX`     | `1`                            | 1-based index if multiple WIA scanners are connected. Call /devices to see the list.             |
 | `WIA_DPI`              | `300`                          | Scan resolution (DPI) for WIA.                                                                   |
 | `SANE_DPI`             | `300`                          | Scan resolution (DPI) for SANE.                                                                  |
 
@@ -62,7 +62,9 @@ Clicking **Scanner** in the ERP returns the newest file from that folder.
 
 ```
 GET  /health    → { ok: true, deviceConnected: true, vendor: "wia", ... }
+GET  /devices   → { ok: true, devices: [{ index, name }] }
 POST /scan      → { ok: true, imageBase64: "...", mimeType: "image/jpeg" }
+POST /latest-scan → { ok: true, imageBase64: "...", filename: "..." }
 ```
 
 ## Plugging in a real scanner

@@ -14,6 +14,12 @@
 //   WIA_DPI                 Resolution for WIA scans (default 300)
 //   SANE_DPI                Resolution for SANE scans (default 300)
 //
+// Endpoints:
+//   GET  /health    → { ok: true, deviceConnected: true, vendor: "wia", ... }
+//   GET  /devices   → { ok: true, devices: [{ index, name }] }
+//   POST /scan      → { ok: true, imageBase64: "...", mimeType: "image/jpeg" }
+//   POST /latest-scan → { ok: true, imageBase64: "...", filename: "..." }
+//
 // Security:
 //   The bridge binds to 127.0.0.1 only. CORS allows the ERP origin derived
 //   from ERP_BASE_URL or explicitly via BRIDGE_ALLOW_ORIGINS.
@@ -68,6 +74,20 @@ app.get("/health", async (_req, res) => {
     res.json({ ok: true, vendor: VENDOR, adapter: adapter.name, version: "1.0.0", ...status });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message, vendor: VENDOR, adapter: adapter.name });
+  }
+});
+
+// ── List all detected scanners ─────────────────────────────────────────────────
+app.get("/devices", async (_req, res) => {
+  try {
+    if (typeof adapter.devices === "function") {
+      const result = await adapter.devices();
+      res.json({ ok: true, devices: result.devices || [] });
+    } else {
+      res.json({ ok: true, devices: [] });
+    }
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 
@@ -178,32 +198,34 @@ app.post("/open-scanner-app", async (_req, res) => {
       // Fallback: try to open any installed scanner utility
     }
 
-    // Try Canon IJ Scan Utility (common Canon scanner software)
-    try {
-      const canonPaths = [
-        "C:\\Program Files (x86)\\Canon\\IJ Scan Utility\\CNMNUTIL.exe",
-        "C:\\Program Files\\Canon\\IJ Scan Utility\\CNMNUTIL.exe",
-      ];
-      for (const p of canonPaths) {
-        try {
-          await fs.access(p, constants.F_OK);
-          await new Promise((resolve, reject) => {
-            execFile("powershell", [
-              "-Command",
-              `Start-Process "${p}" -ErrorAction Stop`,
-            ], { timeout: 5000, windowsHide: true }, (err) => {
-              if (err) reject(err);
-              else resolve();
-            });
+    // Try any vendor scanner utility found in well-known locations
+    const commonPaths = [
+      "C:\\Program Files (x86)\\Canon\\IJ Scan Utility\\CNMNUTIL.exe",
+      "C:\\Program Files\\Canon\\IJ Scan Utility\\CNMNUTIL.exe",
+      "C:\\Program Files (x86)\\HP\\HP Scan\\Scan.exe",
+      "C:\\Program Files\\HP\\HP Scan\\Scan.exe",
+      "C:\\Program Files (x86)\\Epson\\Epson Scan 2\\Scan.exe",
+      "C:\\Program Files\\Epson\\Epson Scan 2\\Scan.exe",
+      "C:\\Program Files (x86)\\Brother\\BrScan.exe",
+      "C:\\Program Files\\Brother\\BrScan.exe",
+    ];
+    for (const p of commonPaths) {
+      try {
+        await fs.access(p, constants.F_OK);
+        await new Promise((resolve, reject) => {
+          execFile("powershell", [
+            "-Command",
+            `Start-Process "${p}" -ErrorAction Stop`,
+          ], { timeout: 5000, windowsHide: true }, (err) => {
+            if (err) reject(err);
+            else resolve();
           });
-          res.json({ ok: true, message: "Canon IJ Scan Utility opened. After scanning completes, click Import Latest Scan.", app: "canon-ij-scan" });
-          return;
-        } catch {
-          // Try next path
-        }
+        });
+        res.json({ ok: true, message: "Scanner software opened. After scanning completes, click Import Latest Scan.", app: "vendor-scan" });
+        return;
+      } catch {
+        // Try next path
       }
-    } catch {
-      // No Canon utility found
     }
 
     res.status(404).json({ ok: false, error: "No scanner application found on this workstation. Please scan using your scanner software and save to the watch folder, then click Import Latest Scan." });

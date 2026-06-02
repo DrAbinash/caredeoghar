@@ -586,6 +586,24 @@ export default function FormF() {
           await importLatestScan();
           return;
         }
+        // If driver doesn't support direct WIA scan, prompt user to switch to folder-watch
+        if (j.code === "WIA_UNSUPPORTED_DRIVER" || (j.error && /does not support direct WIA scan/i.test(j.error))) {
+          toast({
+            title: "Driver not supported",
+            description: "This scanner driver does not support direct WIA scanning. Use folder-watch mode: set BRIDGE_SCAN_VENDOR=folder-watch and SCAN_WATCH_FOLDER to your scanner software's output folder.",
+            variant: "destructive",
+          });
+          return;
+        }
+        // If no scanner found, give clear instructions
+        if (j.code === "WIA_NO_DEVICE" || (j.error && /no WIA devices found/i.test(j.error))) {
+          toast({
+            title: "No scanner found",
+            description: "No WIA scanner detected. Check USB connection and driver installation, or switch to folder-watch mode.",
+            variant: "destructive",
+          });
+          return;
+        }
         throw new Error(j.error || "Scan failed");
       }
       const dataUrl = `data:${j.mimeType ?? "image/jpeg"};base64,${j.imageBase64}`;
@@ -1614,7 +1632,7 @@ export default function FormF() {
                       >
                         <Upload size={14} /> {idCardUploading ? "Importing…" : "Import Latest Scan"}
                       </button>
-                      {/* ── Open scanner app (Windows Fax and Scan / Canon) ── */}
+                      {/* ── Open scanner app (Windows Fax and Scan / any vendor) ── */}
                       <button
                         type="button"
                         onClick={openScannerApp}
@@ -1624,7 +1642,7 @@ export default function FormF() {
                             ? "border-teal-300 bg-teal-50 hover:bg-teal-100 text-teal-700"
                             : "border-gray-300 bg-gray-50 text-gray-400 cursor-not-allowed"
                         }`}
-                        title="Open Windows Fax and Scan or Canon scanner app on this PC"
+                        title="Open Windows Fax and Scan or vendor scanner app on this PC"
                       >
                         <ExternalLink size={14} /> Open Scanner App
                       </button>
