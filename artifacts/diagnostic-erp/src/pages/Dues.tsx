@@ -66,7 +66,7 @@ export default function Dues() {
   const formatCurrency = (n: number) =>
     new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(n);
 
-  const setQuickRange = (kind: "today" | "week" | "month" | "all-time") => {
+  const setQuickRange = (kind: "today" | "week" | "month" | "last-month" | "all-time") => {
     const now = new Date();
     setPage(1);
     if (kind === "today") {
@@ -82,6 +82,11 @@ export default function Dues() {
       const start = new Date(now.getFullYear(), now.getMonth(), 1);
       setDateFrom(start.toISOString().slice(0, 10));
       setDateTo(today());
+    } else if (kind === "last-month") {
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const end = new Date(now.getFullYear(), now.getMonth(), 0);
+      setDateFrom(start.toISOString().slice(0, 10));
+      setDateTo(end.toISOString().slice(0, 10));
     } else {
       setDateFrom("");
       setDateTo("");
@@ -196,10 +201,11 @@ export default function Dues() {
             </div>
             <div className="flex flex-col">
               <Label className="text-xs">Quick Ranges</Label>
-              <div className="flex gap-1 mt-1">
+              <div className="flex gap-1 mt-1 flex-wrap">
                 <Button size="sm" variant="outline" onClick={() => setQuickRange("today")}>Today</Button>
                 <Button size="sm" variant="outline" onClick={() => setQuickRange("week")}>7 Days</Button>
                 <Button size="sm" variant="outline" onClick={() => setQuickRange("month")}>This Month</Button>
+                <Button size="sm" variant="outline" onClick={() => setQuickRange("last-month")}>Last Month</Button>
                 <Button size="sm" variant="outline" onClick={() => setQuickRange("all-time")}>All</Button>
               </div>
             </div>
