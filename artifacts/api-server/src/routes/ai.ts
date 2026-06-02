@@ -2,10 +2,14 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { patientsTable, ordersTable } from "@workspace/db";
 import { orderTestsTable, testsTable, billsTable, paymentsTable } from "@workspace/db";
+import { aiProviderSettingsTable } from "@workspace/db";
 import { eq, desc, gte, lte, and } from "drizzle-orm";
 import { requireStaffAuth, requireStaffPermission } from "../middleware/requireStaffAuth";
 import {
-  geminiGenerate,
+  generateAiResponse,
+  BUILTIN_PROVIDER_NAMES,
+} from "@workspace/ai-providers";
+import {
   geminiTranscribe,
   buildClinicalNotePrompt,
   buildBillingInsightsPrompt,
@@ -24,6 +28,38 @@ const router = Router();
 // each endpoint accesses, so that low-privilege staff cannot use AI to
 // exfiltrate data from modules they have not been granted.
 router.use(requireStaffAuth);
+
+// ─── Unified AI provider helper for legacy AI endpoints ────────────────
+async function getDefaultAiProvider(): Promise<string> {
+  const row = await db
+    .select({ settingsJson: aiProviderSettingsTable.settingsJson })
+    .from(aiProviderSettingsTable)
+    .where(eq(aiProviderSettingsTable.provider, "__global__"))
+    .limit(1);
+  if (row[0]?.settingsJson) {
+    try {
+      const parsed = JSON.parse(row[0].settingsJson) as { defaultProvider?: string };
+      if (parsed.defaultProvider && BUILTIN_PROVIDER_NAMES.includes(parsed.defaultProvider)) {
+        return parsed.defaultProvider;
+      }
+    } catch { /* ignore */ }
+  }
+  // Fall back to first enabled provider, or gemini as last resort
+  for (const name of BUILTIN_PROVIDER_NAMES) {
+    const [p] = await db.select({ isEnabled: aiProviderSettingsTable.isEnabled }).from(aiProviderSettingsTable).where(eq(aiProviderSettingsTable.provider, name)).limit(1);
+    if (p?.isEnabled) return name;
+  }
+  return "gemini";
+}
+
+async function legacyAiGenerate(prompt: string, options?: { maxTokens?: number; provider?: string }): Promise<string> {
+  const providerName = options?.provider ?? await getDefaultAiProvider();
+  const result = await generateAiResponse(providerName, prompt, [], { maxTokens: options?.maxTokens });
+  if (!result.success) {
+    throw new Error(result.error || "AI provider error");
+  }
+  return result.text;
+}
 
 // Generate AI clinical notes for a patient — requires /patients permission
 // (loads patient demographics, orders, and test history from the patients module)
@@ -61,7 +97,7 @@ router.post("/clinical-note", requireStaffPermission("/patients"), async (req, r
   );
 
   try {
-    const note = await geminiGenerate(prompt);
+    const note = await legacyAiGenerate(prompt);
     res.json({ note });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -104,7 +140,7 @@ router.post("/billing-insights", requireStaffPermission("/reports"), async (req,
   });
 
   try {
-    const insights = await geminiGenerate(prompt);
+    const insights = await legacyAiGenerate(prompt);
     res.json({ insights });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -127,7 +163,7 @@ router.post("/patient-message", requireStaffPermission("/patients"), async (req,
   );
 
   try {
-    const message = await geminiGenerate(prompt, { maxTokens: 200 });
+    const message = await legacyAiGenerate(prompt, { maxTokens: 200 });
     res.json({ message });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -154,7 +190,7 @@ router.post("/radiology-findings", requireStaffAuth, async (req, res) => {
   const prompt = buildRadiologyFindingsPrompt({ modality, testName, clinicalHistory, dictation });
 
   try {
-    const findings = await geminiGenerate(prompt, { maxTokens: 8192 });
+    const findings = await legacyAiGenerate(prompt, { maxTokens: 8192 });
     res.json({ findings });
   } catch (err: unknown) {
     req.log?.error({ err }, "ai radiology-findings failed");
@@ -172,7 +208,7 @@ router.post("/radiology-impression", requireStaffAuth, async (req, res) => {
   if (!findings) { res.status(400).json({ error: "findings required" }); return; }
   const prompt = buildRadiologyImpressionPrompt({ findings, modality, testName });
   try {
-    const impression = await geminiGenerate(prompt, { maxTokens: 1024 });
+    const impression = await legacyAiGenerate(prompt, { maxTokens: 1024 });
     res.json({ impression });
   } catch (err: unknown) {
     req.log?.error({ err }, "ai radiology-impression failed");

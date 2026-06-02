@@ -37,7 +37,14 @@ interface AiSettings {
     includeDemographics: boolean;
     allowedRoles: string[];
   };
-  providers: Record<string, { isEnabled: boolean; isDefault: boolean; hasApiKey: boolean; hasEndpointUrl: boolean; defaultModel: string | null }>;
+  providers: Record<string, {
+    isEnabled: boolean;
+    isDefault: boolean;
+    hasApiKey: boolean;
+    hasEndpointUrl: boolean;
+    defaultModel: string | null;
+    label: string;
+  }>;
   promptTemplates: string[];
 }
 
@@ -51,13 +58,6 @@ interface AiDraft {
   status: string;
   createdAt: string;
 }
-
-const PROVIDER_LABELS: Record<string, string> = {
-  openai: "OpenAI GPT-4o",
-  gemini: "Google Gemini",
-  anthropic: "Anthropic Claude",
-  ollama: "Ollama (Local)",
-};
 
 // ─── WeasisInstallHint ────────────────────────────────────────────────────────
 function WeasisInstallHint() {
@@ -327,12 +327,14 @@ function AiDrawer({
               onChange={(e) => setProvider(e.target.value)}
               className="w-full h-8 px-2 text-xs rounded-lg border bg-background"
             >
-              {enabledProviders.length > 0 ? (
+              {aiSettings && enabledProviders.length > 0 ? (
                 enabledProviders.map((p) => (
-                  <option key={p} value={p}>{PROVIDER_LABELS[p] ?? p}</option>
+                  <option key={p} value={p}>{aiSettings.providers[p]?.label ?? p}</option>
                 ))
+              ) : aiSettings ? (
+                <option value={aiSettings.global.defaultProvider}>{aiSettings.providers[aiSettings.global.defaultProvider]?.label ?? aiSettings.global.defaultProvider} (not configured)</option>
               ) : (
-                <option value="gemini">Gemini (not configured)</option>
+                <option value={provider}>{provider}</option>
               )}
             </select>
           </div>

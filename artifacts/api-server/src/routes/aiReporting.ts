@@ -21,30 +21,17 @@ import {
 } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { type StaffAuthRequest, FULL_ACCESS_ROLES } from "../middleware/requireStaffAuth";
-import { encryptSecret, decryptSecret } from "../lib/cryptoUtils";
-
-// ─── Lazy-load heavy SDKs so the server boots even if packages are missing ────
-async function getOpenAI(apiKey: string) {
-  const { default: OpenAI } = await import("openai");
-  return new OpenAI({ apiKey });
-}
-
-async function getGeminiModel(apiKey: string, model: string) {
-  const { GoogleGenerativeAI } = await import("@google/generative-ai");
-  const genAI = new GoogleGenerativeAI(apiKey);
-  return genAI.getGenerativeModel({ model });
-}
-
-async function getAnthropic(apiKey: string) {
-  const { default: Anthropic } = await import("@anthropic-ai/sdk");
-  return new Anthropic({ apiKey });
-}
-
-async function getOllamaClient(endpointUrl: string) {
-  const { default: OpenAI } = await import("openai");
-  const base = endpointUrl.replace(/\/$/, "");
-  return new OpenAI({ baseURL: `${base}/v1`, apiKey: "ollama" });
-}
+import { encryptSecret } from "../lib/cryptoUtils";
+import {
+  BUILTIN_PROVIDER_NAMES,
+  BUILTIN_PROVIDER_CONFIGS,
+  loadProviderConfigs,
+  loadProviderConfig,
+  createAiProvider,
+  getProviderApiKey,
+  getProviderEndpointUrl,
+  generateAiResponse,
+} from "@workspace/ai-providers";
 
 // ─── Prompt template presets ──────────────────────────────────────────────────
 export const AI_PROMPT_TEMPLATES: Record<string, string> = {
@@ -134,30 +121,6 @@ async function getGlobalSettings(): Promise<{
   } catch {
     return defaults;
   }
-}
-
-async function getProviderApiKey(provider: string): Promise<string | null> {
-  const row = await db
-    .select({ encryptedApiKey: aiProviderSettingsTable.encryptedApiKey })
-    .from(aiProviderSettingsTable)
-    .where(eq(aiProviderSettingsTable.provider, provider))
-    .limit(1);
-  const enc = row[0]?.encryptedApiKey;
-  if (!enc) return null;
-  try {
-    return decryptSecret(enc);
-  } catch {
-    return null;
-  }
-}
-
-async function getProviderEndpointUrl(provider: string): Promise<string | null> {
-  const row = await db
-    .select({ endpointUrl: aiProviderSettingsTable.endpointUrl })
-    .from(aiProviderSettingsTable)
-    .where(eq(aiProviderSettingsTable.provider, provider))
-    .limit(1);
-  return row[0]?.endpointUrl ?? null;
 }
 
 // Fetch JPEG thumbnails from Orthanc DICOMweb for a study.
@@ -264,96 +227,6 @@ async function fetchStudyImages(opts: {
 }
 
 // ─── AI provider query functions ──────────────────────────────────────────────
-async function queryOpenAI(opts: {
-  apiKey: string;
-  model: string;
-  prompt: string;
-  images: string[];
-}): Promise<string> {
-  const openai = await getOpenAI(opts.apiKey);
-  type ContentItem =
-    | { type: "text"; text: string }
-    | { type: "image_url"; image_url: { url: string } };
-
-  const content: ContentItem[] = [{ type: "text", text: opts.prompt }];
-  for (const img of opts.images) {
-    content.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${img}` } });
-  }
-
-  const resp = await openai.chat.completions.create({
-    model: opts.model || "gpt-4o",
-    messages: [{ role: "user", content }],
-    max_tokens: 4096,
-  });
-  return resp.choices[0]?.message?.content ?? "";
-}
-
-async function queryGemini(opts: {
-  apiKey: string;
-  model: string;
-  prompt: string;
-  images: string[];
-}): Promise<string> {
-  const geminiModel = await getGeminiModel(opts.apiKey, opts.model || "gemini-1.5-pro");
-  type Part = { text: string } | { inlineData: { mimeType: string; data: string } };
-  const parts: Part[] = [{ text: opts.prompt }];
-  for (const img of opts.images) {
-    parts.push({ inlineData: { mimeType: "image/jpeg", data: img } });
-  }
-  const result = await geminiModel.generateContent(parts);
-  return result.response.text();
-}
-
-async function queryAnthropic(opts: {
-  apiKey: string;
-  model: string;
-  prompt: string;
-  images: string[];
-}): Promise<string> {
-  const anthropic = await getAnthropic(opts.apiKey);
-  type ContentBlock =
-    | { type: "text"; text: string }
-    | { type: "image"; source: { type: "base64"; media_type: "image/jpeg"; data: string } };
-
-  const content: ContentBlock[] = [];
-  for (const img of opts.images) {
-    content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: img } });
-  }
-  content.push({ type: "text", text: opts.prompt });
-
-  const resp = await anthropic.messages.create({
-    model: opts.model || "claude-3-5-sonnet-20241022",
-    max_tokens: 4096,
-    messages: [{ role: "user", content }],
-  });
-  const block = resp.content[0];
-  return block?.type === "text" ? block.text : "";
-}
-
-async function queryOllama(opts: {
-  endpointUrl: string;
-  model: string;
-  prompt: string;
-  images: string[];
-}): Promise<string> {
-  const client = await getOllamaClient(opts.endpointUrl);
-  type ContentItem =
-    | { type: "text"; text: string }
-    | { type: "image_url"; image_url: { url: string } };
-
-  const content: ContentItem[] = [{ type: "text", text: opts.prompt }];
-  for (const img of opts.images) {
-    content.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${img}` } });
-  }
-
-  const resp = await client.chat.completions.create({
-    model: opts.model || "gpt-oss:20b",
-    messages: [{ role: "user", content }],
-    max_tokens: 4096,
-  });
-  return resp.choices[0]?.message?.content ?? "";
-}
-
 // ─── Router ───────────────────────────────────────────────────────────────────
 const router = Router();
 
@@ -367,35 +240,31 @@ router.get("/settings", async (req, res): Promise<void> => {
 
   const [globalSettings, providers] = await Promise.all([
     getGlobalSettings(),
-    (async () => {
-      const [openaiRows, geminiRows, anthropicRows, ollamaRows] = await Promise.all([
-        db.select().from(aiProviderSettingsTable).where(eq(aiProviderSettingsTable.provider, "openai")).limit(1),
-        db.select().from(aiProviderSettingsTable).where(eq(aiProviderSettingsTable.provider, "gemini")).limit(1),
-        db.select().from(aiProviderSettingsTable).where(eq(aiProviderSettingsTable.provider, "anthropic")).limit(1),
-        db.select().from(aiProviderSettingsTable).where(eq(aiProviderSettingsTable.provider, "ollama")).limit(1),
-      ]);
-      return { openai: openaiRows[0], gemini: geminiRows[0], anthropic: anthropicRows[0], ollama: ollamaRows[0] };
-    })(),
+    loadProviderConfigs(),
   ]);
 
-  const sanitize = (row: typeof aiProviderSettingsTable.$inferSelect | undefined, providerName: string) => ({
-    provider: providerName,
-    isEnabled: row?.isEnabled ?? false,
-    isDefault: row?.isDefault ?? false,
-    hasApiKey: !!(row?.encryptedApiKey),
-    hasEndpointUrl: !!(row?.endpointUrl),
-    defaultModel: row?.defaultModel ?? null,
-    endpointUrl: row?.endpointUrl ?? null,
-  });
+  const providersOut: Record<string, object> = {};
+  for (const p of providers) {
+    const meta = BUILTIN_PROVIDER_CONFIGS[p.provider];
+    providersOut[p.provider] = {
+      provider: p.provider,
+      isEnabled: p.isEnabled ?? false,
+      isDefault: p.isDefault ?? false,
+      hasApiKey: p.hasApiKey,
+      hasEndpointUrl: p.hasEndpointUrl,
+      defaultModel: p.defaultModel ?? null,
+      endpointUrl: p.endpointUrl ?? null,
+      label: meta?.label ?? p.provider,
+      needsApiKey: meta?.needsApiKey ?? false,
+      needsEndpointUrl: meta?.needsEndpointUrl ?? false,
+      defaultModels: meta?.defaultModels ?? [],
+      placeholder: meta?.placeholder ?? "",
+    };
+  }
 
   res.json({
     global: globalSettings,
-    providers: {
-      openai: sanitize(providers.openai, "openai"),
-      gemini: sanitize(providers.gemini, "gemini"),
-      anthropic: sanitize(providers.anthropic, "anthropic"),
-      ollama: sanitize(providers.ollama, "ollama"),
-    },
+    providers: providersOut,
     promptTemplates: Object.keys(AI_PROMPT_TEMPLATES),
   });
 });
@@ -451,7 +320,7 @@ router.post("/settings", async (req, res): Promise<void> => {
     }
   }
 
-  for (const provName of ["openai", "gemini", "anthropic", "ollama"] as const) {
+  for (const provName of BUILTIN_PROVIDER_NAMES) {
     const pd = providersIn?.[provName];
     if (!pd) continue;
 
@@ -481,7 +350,7 @@ router.post("/settings", async (req, res): Promise<void> => {
     }
 
     if (pd.isDefault) {
-      for (const op of (["openai", "gemini", "anthropic", "ollama"] as const).filter((p) => p !== provName)) {
+      for (const op of BUILTIN_PROVIDER_NAMES.filter((p) => p !== provName)) {
         await db.update(aiProviderSettingsTable).set({ isDefault: false }).where(eq(aiProviderSettingsTable.provider, op));
       }
     }
@@ -499,57 +368,40 @@ router.post("/test-provider", async (req, res): Promise<void> => {
 
   const { provider, apiKey, model, endpointUrl } = req.body as { provider: string; apiKey?: string; model?: string; endpointUrl?: string };
 
+  if (!BUILTIN_PROVIDER_NAMES.includes(provider)) {
+    res.status(400).json({ error: "Unknown provider." }); return;
+  }
+
+  const config = BUILTIN_PROVIDER_CONFIGS[provider];
   let key = apiKey?.trim() ?? "";
   let url = endpointUrl?.trim() ?? "";
 
-  if (provider === "ollama") {
+  if (config.needsEndpointUrl) {
     if (!url) {
       const stored = await getProviderEndpointUrl(provider);
-      if (!stored) { res.status(400).json({ error: "No endpoint URL configured for Ollama." }); return; }
+      if (!stored) { res.status(400).json({ error: `No endpoint URL configured for ${config.label}.` }); return; }
       url = stored;
     }
-    // Test Ollama availability by listing models
-    try {
-      const tagsResp = await fetch(`${url.replace(/\/$/, "")}/api/tags`, { method: "GET" });
-      if (!tagsResp.ok) {
-        res.status(400).json({ success: false, error: `Ollama server returned ${tagsResp.status}` }); return;
-      }
-      const tagsData = await tagsResp.json() as { models?: Array<{ name: string; size?: number }> };
-      const models = tagsData.models?.map((m) => m.name) ?? [];
-      // Also test a quick chat completion
-      const chatResp = await queryOllama({ endpointUrl: url, model: model ?? "gpt-oss:20b", prompt: "Reply with exactly the word: CONNECTED", images: [] });
-      res.json({ success: true, response: chatResp.substring(0, 200), availableModels: models });
-      return;
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Ollama connection failed";
-      res.status(400).json({ success: false, error: msg });
-      return;
+  } else {
+    if (!key) {
+      const stored = await getProviderApiKey(provider);
+      if (!stored) { res.status(400).json({ error: "No API key configured for this provider." }); return; }
+      key = stored;
     }
   }
 
-  if (!key) {
-    const stored = await getProviderApiKey(provider);
-    if (!stored) { res.status(400).json({ error: "No API key configured for this provider." }); return; }
-    key = stored;
+  const instance = await createAiProvider(provider, key || undefined, url || undefined);
+  if (!instance) {
+    res.status(400).json({ error: "Could not create provider instance." }); return;
   }
 
-  try {
-    const testPrompt = "Reply with exactly the word: CONNECTED";
-    let response = "";
-    if (provider === "openai") {
-      response = await queryOpenAI({ apiKey: key, model: model ?? "gpt-4o", prompt: testPrompt, images: [] });
-    } else if (provider === "gemini") {
-      response = await queryGemini({ apiKey: key, model: model ?? "gemini-1.5-pro", prompt: testPrompt, images: [] });
-    } else if (provider === "anthropic") {
-      response = await queryAnthropic({ apiKey: key, model: model ?? "claude-3-5-sonnet-20241022", prompt: testPrompt, images: [] });
-    } else {
-      res.status(400).json({ error: "Unknown provider." }); return;
-    }
-    res.json({ success: true, response: response.substring(0, 200) });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Provider error";
-    res.status(400).json({ success: false, error: msg });
-  }
+  const result = await instance.testConnection();
+  res.json({
+    success: result.ok,
+    response: result.message.substring(0, 200),
+    availableModels: result.availableModels,
+    error: result.ok ? undefined : result.message,
+  });
 });
 
 /**
@@ -602,35 +454,16 @@ router.post("/query", async (req, res): Promise<void> => {
   const shouldAnonymize = anonymize ?? globalSettings.anonymize;
   const providerName = providerReq ?? globalSettings.defaultProvider;
 
-  if (!["openai", "gemini", "anthropic", "ollama"].includes(providerName)) {
+  if (!BUILTIN_PROVIDER_NAMES.includes(providerName)) {
     res.status(400).json({ error: "Invalid provider." }); return;
   }
 
-  // For Ollama, we need endpointUrl instead of API key
-  let apiKey: string | null = null;
-  let endpointUrl: string | null = null;
-  if (providerName === "ollama") {
-    endpointUrl = await getProviderEndpointUrl(providerName);
-    if (!endpointUrl) {
-      res.status(400).json({ error: `No endpoint URL configured for Ollama. Please add it in AI Reporting Settings.` }); return;
-    }
-  } else {
-    apiKey = await getProviderApiKey(providerName);
-    if (!apiKey) {
-      res.status(400).json({ error: `No API key configured for ${providerName}. Please add it in AI Reporting Settings.` }); return;
-    }
+  const provConfig = await loadProviderConfig(providerName);
+  if (!provConfig || !provConfig.isEnabled) {
+    res.status(400).json({ error: `${providerName} provider is disabled or not configured. Enable it in AI Reporting Settings.` }); return;
   }
 
-  const provRow = await db
-    .select({ defaultModel: aiProviderSettingsTable.defaultModel, isEnabled: aiProviderSettingsTable.isEnabled, endpointUrl: aiProviderSettingsTable.endpointUrl })
-    .from(aiProviderSettingsTable)
-    .where(eq(aiProviderSettingsTable.provider, providerName))
-    .limit(1);
-
-  if (!(provRow[0]?.isEnabled ?? false)) {
-    res.status(400).json({ error: `${providerName} provider is disabled. Enable it in AI Reporting Settings.` }); return;
-  }
-  const model = modelReq ?? provRow[0]?.defaultModel ?? "";
+  const model = modelReq ?? provConfig.defaultModel ?? "";
 
   // Build prompt
   let finalPrompt = prompt?.trim() ?? "";
@@ -681,25 +514,11 @@ router.post("/query", async (req, res): Promise<void> => {
     });
   }
 
-  // Call AI provider
-  let aiResponse = "";
-  let success = true;
-  let errorMsg: string | undefined;
-
-  try {
-    if (providerName === "openai") {
-      aiResponse = await queryOpenAI({ apiKey: apiKey!, model, prompt: finalPrompt, images });
-    } else if (providerName === "gemini") {
-      aiResponse = await queryGemini({ apiKey: apiKey!, model, prompt: finalPrompt, images });
-    } else if (providerName === "anthropic") {
-      aiResponse = await queryAnthropic({ apiKey: apiKey!, model, prompt: finalPrompt, images });
-    } else {
-      aiResponse = await queryOllama({ endpointUrl: endpointUrl!, model, prompt: finalPrompt, images });
-    }
-  } catch (err: unknown) {
-    success = false;
-    errorMsg = err instanceof Error ? err.message : "AI provider error";
-  }
+  // Call AI provider via unified abstraction
+  const aiResult = await generateAiResponse(providerName, finalPrompt, images, { model });
+  const success = aiResult.success;
+  const aiResponse = aiResult.text;
+  const errorMsg = aiResult.error;
 
   // Audit log (non-critical)
   await db.insert(aiReportingAuditLogsTable).values({

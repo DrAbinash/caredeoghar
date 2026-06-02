@@ -17,6 +17,9 @@
     },
     {
       "path": "./lib/crypto"
+    },
+    {
+      "path": "./lib/ai-providers"
     }
   ]
 }

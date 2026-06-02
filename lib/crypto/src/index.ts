@@ -72,3 +72,22 @@ export function encryptBackup(plaintext: string): string {
 export function decryptBackup(envelopeB64: string): string {
   return decryptWithSecret(envelopeB64, getBackupSecret());
 }
+
+// ─── AES-256-CBC (legacy) ─────────────────────────────────────────
+// Used by the API server for AI provider API keys. Format: iv_hex:ciphertext_hex
+
+function getCbcKey(): Buffer {
+  const secret = process.env.SESSION_SECRET ?? "default-fallback-ai-key-change-in-production";
+  return crypto.createHash("sha256").update(secret).digest();
+}
+
+/** AES-256-CBC decrypt. Input: "iv_hex:ciphertext_hex" (produced by encryptSecret). */
+export function decryptSecret(ciphertext: string): string {
+  const key = getCbcKey();
+  const parts = ciphertext.split(":");
+  if (parts.length !== 2) throw new Error("Invalid ciphertext format");
+  const iv = Buffer.from(parts[0], "hex");
+  const enc = Buffer.from(parts[1], "hex");
+  const decipher = crypto.createDecipheriv("aes-256-cbc", key, iv);
+  return Buffer.concat([decipher.update(enc), decipher.final()]).toString("utf8");
+}

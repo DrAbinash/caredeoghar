@@ -29,6 +29,11 @@ interface ProviderInfo {
   hasEndpointUrl: boolean;
   defaultModel: string | null;
   endpointUrl: string | null;
+  label: string;
+  needsApiKey: boolean;
+  needsEndpointUrl: boolean;
+  defaultModels: string[];
+  placeholder: string;
 }
 
 interface SettingsResponse {
@@ -48,35 +53,11 @@ interface ProviderDraft {
   testMessage: string;
 }
 
-const PROVIDER_META: Record<string, { label: string; color: string; models: string[]; placeholder: string; needsApiKey: boolean }> = {
-  openai: {
-    label: "OpenAI / ChatGPT",
-    color: "from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-green-200 dark:border-green-800",
-    models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4-vision-preview"],
-    placeholder: "sk-...",
-    needsApiKey: true,
-  },
-  gemini: {
-    label: "Google Gemini",
-    color: "from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border-blue-200 dark:border-blue-800",
-    models: ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-flash", "gemini-2.5-pro-preview-05-06"],
-    placeholder: "AIza...",
-    needsApiKey: true,
-  },
-  anthropic: {
-    label: "Anthropic Claude",
-    color: "from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 border-orange-200 dark:border-orange-800",
-    models: ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229", "claude-opus-4-5"],
-    placeholder: "sk-ant-...",
-    needsApiKey: true,
-  },
-  ollama: {
-    label: "Ollama (Local)",
-    color: "from-purple-50 to-violet-50 dark:from-purple-950/20 dark:to-violet-950/20 border-purple-200 dark:border-purple-800",
-    models: ["gpt-oss:20b", "gemma3:12b"],
-    placeholder: "http://100.79.100.41:11434",
-    needsApiKey: false,
-  },
+const PROVIDER_COLORS: Record<string, string> = {
+  openai: "from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-green-200 dark:border-green-800",
+  gemini: "from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border-blue-200 dark:border-blue-800",
+  anthropic: "from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 border-orange-200 dark:border-orange-800",
+  ollama: "from-purple-50 to-violet-50 dark:from-purple-950/20 dark:to-violet-950/20 border-purple-200 dark:border-purple-800",
 };
 
 const ALL_ROLES = ["admin", "super_admin", "doctor", "radiologist", "technician", "receptionist"];
@@ -93,20 +74,23 @@ const SECTION_LABELS: Record<string, string> = {
 // ─── ProviderCard ─────────────────────────────────────────────────────────────
 function ProviderCard({
   name,
+  meta,
   draft,
   onChange,
   onTest,
 }: {
   name: string;
+  meta: ProviderInfo;
   draft: ProviderDraft;
   onChange: (d: Partial<ProviderDraft>) => void;
   onTest: () => void;
 }) {
-  const meta = PROVIDER_META[name];
-  if (!meta) return null;
+  const color = PROVIDER_COLORS[name] ?? "bg-muted/50 border-muted";
+  const models = meta.defaultModels ?? [];
+  const needsApiKey = meta.needsApiKey ?? false;
 
   return (
-    <div className={`rounded-xl border bg-gradient-to-br p-5 space-y-4 ${meta.color}`}>
+    <div className={`rounded-xl border bg-gradient-to-br p-5 space-y-4 ${color}`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold text-sm">{meta.label}</h3>
@@ -127,7 +111,7 @@ function ProviderCard({
 
       {/* API Key or Endpoint URL */}
       <div className="space-y-1.5">
-        {meta.needsApiKey ? (
+        {needsApiKey ? (
           <>
             <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
               <Key size={11} /> API Key
@@ -183,10 +167,10 @@ function ProviderCard({
             className="flex-1 h-9 px-3 text-xs rounded-lg border bg-background"
           >
             <option value="">-- select model --</option>
-            {meta.models.map((m) => (
+            {models.map((m) => (
               <option key={m} value={m}>{m}</option>
             ))}
-            {draft.defaultModel && !meta.models.includes(draft.defaultModel) && (
+            {draft.defaultModel && !models.includes(draft.defaultModel) && (
               <option value={draft.defaultModel}>{draft.defaultModel} (custom)</option>
             )}
           </select>
@@ -264,32 +248,27 @@ export function AiReportingPanel() {
     allowedRoles: ["admin", "super_admin", "doctor", "radiologist"],
   });
 
-  const [providerDrafts, setProviderDrafts] = useState<Record<string, ProviderDraft>>({
-    openai: { isEnabled: false, isDefault: false, apiKey: "", endpointUrl: "", defaultModel: "gpt-4o", showKey: false, testStatus: "idle", testMessage: "" },
-    gemini: { isEnabled: false, isDefault: true, apiKey: "", endpointUrl: "", defaultModel: "gemini-1.5-pro", showKey: false, testStatus: "idle", testMessage: "" },
-    anthropic: { isEnabled: false, isDefault: false, apiKey: "", endpointUrl: "", defaultModel: "claude-3-5-sonnet-20241022", showKey: false, testStatus: "idle", testMessage: "" },
-    ollama: { isEnabled: false, isDefault: false, apiKey: "", endpointUrl: "", defaultModel: "gpt-oss:20b", showKey: false, testStatus: "idle", testMessage: "" },
-  });
-
+  const [providerDrafts, setProviderDrafts] = useState<Record<string, ProviderDraft>>({});
   const [hydrated, setHydrated] = useState(false);
 
   // Hydrate form from API data when it arrives
   if (data && !hydrated) {
     setHydrated(true);
     setGlobalDraft({ ...globalDraft, ...data.global });
-    const newDrafts = { ...providerDrafts };
-    for (const p of ["openai", "gemini", "anthropic", "ollama"] as const) {
+    const newDrafts: Record<string, ProviderDraft> = {};
+    for (const p of Object.keys(data.providers)) {
       const pd = data.providers[p];
-      if (pd) {
-        newDrafts[p] = {
-          ...newDrafts[p],
-          isEnabled: pd.isEnabled,
-          isDefault: pd.isDefault,
-          defaultModel: pd.defaultModel ?? newDrafts[p].defaultModel,
-          endpointUrl: pd.endpointUrl ?? newDrafts[p].endpointUrl,
-          apiKey: "",
-        };
-      }
+      const defaultModel = pd.defaultModel ?? (pd.defaultModels?.[0] ?? "");
+      newDrafts[p] = {
+        isEnabled: pd.isEnabled,
+        isDefault: pd.isDefault,
+        apiKey: "",
+        endpointUrl: pd.endpointUrl ?? "",
+        defaultModel,
+        showKey: false,
+        testStatus: "idle",
+        testMessage: "",
+      };
     }
     setProviderDrafts(newDrafts);
   }
@@ -306,7 +285,7 @@ export function AiReportingPanel() {
 
   function handleSave() {
     const providers: Record<string, Omit<ProviderDraft, "showKey" | "testStatus" | "testMessage">> = {};
-    for (const p of ["openai", "gemini", "anthropic", "ollama"] as const) {
+    for (const p of Object.keys(providerDrafts)) {
       const d = providerDrafts[p];
       providers[p] = { isEnabled: d.isEnabled, isDefault: d.isDefault, apiKey: d.apiKey, endpointUrl: d.endpointUrl, defaultModel: d.defaultModel };
     }
@@ -418,10 +397,10 @@ export function AiReportingPanel() {
                 onChange={(e) => setGlobalDraft((g) => ({ ...g, defaultProvider: e.target.value }))}
                 className="w-full h-9 px-3 text-sm rounded-lg border bg-background"
               >
-                <option value="openai">OpenAI / ChatGPT</option>
-                <option value="gemini">Google Gemini</option>
-                <option value="anthropic">Anthropic Claude</option>
-                <option value="ollama">Ollama (Local)</option>
+                {data && Object.values(data.providers).map((p) => (
+                  <option key={p.provider} value={p.provider}>{p.label}</option>
+                ))}
+                {!data && <option value={globalDraft.defaultProvider}>{globalDraft.defaultProvider}</option>}
               </select>
             </div>
 
@@ -491,13 +470,14 @@ export function AiReportingPanel() {
               <p>Enable at least one provider and set a default model before using AI reporting.</p>
             </div>
           </div>
-          {(["openai", "gemini", "anthropic", "ollama"] as const).map((p) => (
+          {data && Object.values(data.providers).map((p) => (
             <ProviderCard
-              key={p}
-              name={p}
-              draft={providerDrafts[p]}
-              onChange={(d) => setProviderDrafts((prev) => ({ ...prev, [p]: { ...prev[p], ...d } }))}
-              onTest={() => void handleTestProvider(p)}
+              key={p.provider}
+              name={p.provider}
+              meta={p}
+              draft={providerDrafts[p.provider]}
+              onChange={(d) => setProviderDrafts((prev) => ({ ...prev, [p.provider]: { ...prev[p.provider], ...d } }))}
+              onTest={() => void handleTestProvider(p.provider)}
             />
           ))}
         </div>
