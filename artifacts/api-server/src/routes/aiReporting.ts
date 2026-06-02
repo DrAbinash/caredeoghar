@@ -16,6 +16,7 @@ import {
   aiProviderSettingsTable,
   aiReportingAuditLogsTable,
   aiReportingDraftsTable,
+  aiPromptTemplatesTable,
   pacsSettingsTable,
   patientsTable,
 } from "@workspace/db";
@@ -238,9 +239,17 @@ router.get("/settings", async (req, res): Promise<void> => {
   const sReq = req as StaffAuthRequest;
   if (!sReq.staffSession) { res.status(401).json({ error: "Unauthorized" }); return; }
 
-  const [globalSettings, providers] = await Promise.all([
+  const [globalSettings, providers, dbTemplates] = await Promise.all([
     getGlobalSettings(),
     loadProviderConfigs(),
+    db
+      .select({
+        name: aiPromptTemplatesTable.name,
+        modality: aiPromptTemplatesTable.modality,
+      })
+      .from(aiPromptTemplatesTable)
+      .where(eq(aiPromptTemplatesTable.isActive, true))
+      .orderBy(aiPromptTemplatesTable.modality, aiPromptTemplatesTable.name),
   ]);
 
   const providersOut: Record<string, object> = {};
@@ -262,10 +271,18 @@ router.get("/settings", async (req, res): Promise<void> => {
     };
   }
 
+  // Phase 1: DB-backed templates are the source of truth; merge in any legacy
+  // hardcoded preset names that haven't been migrated yet (de-duplicated).
+  const dbNames = dbTemplates.map((t) => t.name);
+  const mergedTemplateNames = Array.from(
+    new Set([...dbNames, ...Object.keys(AI_PROMPT_TEMPLATES)]),
+  );
+
   res.json({
     global: globalSettings,
     providers: providersOut,
-    promptTemplates: Object.keys(AI_PROMPT_TEMPLATES),
+    promptTemplates: mergedTemplateNames,
+    promptTemplatesByModality: dbTemplates,
   });
 });
 
@@ -467,8 +484,25 @@ router.post("/query", async (req, res): Promise<void> => {
 
   // Build prompt
   let finalPrompt = prompt?.trim() ?? "";
-  if (!finalPrompt && templateName && AI_PROMPT_TEMPLATES[templateName]) {
-    finalPrompt = AI_PROMPT_TEMPLATES[templateName];
+  // Phase 1: prefer the DB-backed (editable) prompt template library, then fall
+  // back to the legacy hardcoded presets for backward compatibility.
+  if (!finalPrompt && templateName) {
+    const dbTpl = await db
+      .select({ promptContent: aiPromptTemplatesTable.promptContent })
+      .from(aiPromptTemplatesTable)
+      .where(
+        and(
+          eq(aiPromptTemplatesTable.name, templateName),
+          eq(aiPromptTemplatesTable.isActive, true),
+        ),
+      )
+      .orderBy(aiPromptTemplatesTable.id)
+      .limit(1);
+    if (dbTpl[0]?.promptContent) {
+      finalPrompt = dbTpl[0].promptContent;
+    } else if (AI_PROMPT_TEMPLATES[templateName]) {
+      finalPrompt = AI_PROMPT_TEMPLATES[templateName];
+    }
   }
   if (!finalPrompt) {
     finalPrompt = globalSettings.defaultPrompt || "Provide a detailed radiology report for the provided images.";

@@ -48,6 +48,7 @@ const RadiologyReportingWorkspace = lazy(() => import("@/pages/RadiologyReportin
 const PacsDashboard         = lazy(() => import("@/pages/PacsDashboard"));
 const MwlDashboard          = lazy(() => import("@/pages/MwlDashboard"));
 const RadiologySettings     = lazy(() => import("@/pages/RadiologySettings"));
+const AiPromptTemplates     = lazy(() => import("@/pages/AiPromptTemplates"));
 const DicomViewer           = lazy(() => import("@/pages/DicomViewer"));
 const AgentSetup            = lazy(() => import("@/pages/AgentSetup"));
 const PacsSettings          = lazy(() => import("@/pages/PacsSettings"));
@@ -127,7 +128,7 @@ const ERP_NAV_ORDER = [
   "/", "/dashboard", "/my-daily-summary", "/daily-summary", "/patients", "/appointments", "/queue", "/online-bookings",
   "/radiology", "/radiology/worklist", "/radiology/dicom-qr", "/radiology/report-generator", "/radiology/pacs-dashboard", "/radiology/pacs-settings", "/radiology/pacs-logs",
   "/radiology/dicom-agent-dashboard", "/radiology/modality-management",
-  "/radiology/mwl-dashboard", "/radiology/agent-setup", "/radiology/ai-reporting-settings",
+  "/radiology/mwl-dashboard", "/radiology/agent-setup", "/radiology/ai-reporting-settings", "/radiology/ai-prompt-templates",
   "/radiology/viewer", "/radiology/archive-lifecycle", "/radiology/watchdog", "/radiology/ai-inference-settings", "/radiology/hl7-settings", "/teleradiology",
   "/radiology/usg-measurements", "/radiology/usg-admin-settings",
   "/usg", "/usg/worklist", "/usg/measurements", "/usg/reporting", "/usg/doppler", "/usg/key-images", "/usg/settings", "/usg/critical", "/usg/analytics",
@@ -237,6 +238,7 @@ function Router() {
               <Route path="/radiology/viewer/:studyInstanceUID" component={DicomViewer} />
               <Route path="/radiology/agent-setup" component={AgentSetup} />
               <Route path="/radiology/ai-reporting-settings" component={AiReportingSettings} />
+              <Route path="/radiology/ai-prompt-templates" component={AiPromptTemplates} />
               <Route path="/radiology/archive-lifecycle" component={PacsArchiveLifecycle} />
               <Route path="/radiology/watchdog" component={PacsWatchdogDashboard} />
               <Route path="/radiology/ai-inference-settings" component={AiInferenceSettings} />

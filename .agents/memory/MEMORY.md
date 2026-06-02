@@ -1,0 +1,3 @@
+- [Drizzle push hazard](drizzle-push-hazard.md) — blind `drizzle-kit push` on this DB triggers a dangerous unrelated interactive rename; use SQL or push-force carefully.
+- [AI prompt templates](ai-prompt-templates.md) — DB-backed editable radiology prompt presets; name is the resolution key, kept unique case-insensitively.
+- [diagnostic-erp conventions](diagnostic-erp-conventions.md) — frontend/page/auth conventions for the ERP artifact.

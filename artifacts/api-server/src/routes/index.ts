@@ -82,6 +82,7 @@ import { radiologyReportGeneratorRouter } from "./radiology-report-generator";
 import { structuredReportTemplatesRouter } from "./structuredReportTemplates";
 import { floorsRouter, roomsRouter, modalitiesRouter } from "./locations";
 import { aiReportingRouter } from "./aiReporting";
+import { aiPromptTemplatesRouter } from "./aiPromptTemplates";
 import { bankingRouter, bankingWebhookRouter } from "./banking";
 import { syncRouter } from "./sync";
 import { usgExtractionRouter } from "./usgExtraction";
@@ -412,6 +413,9 @@ router.use("/signatures", requireStaffAuth, requireStaffPermission("/reports"), 
 
 // AI Radiology Reporting — encrypted API keys, audit logging, draft management
 router.use("/ai-reporting", requireStaffAuth, aiReportingRouter);
+
+// AI Prompt Templates — modality-aware, versioned, editable-without-code prompts
+router.use("/ai-prompt-templates", requireStaffAuth, aiPromptTemplatesRouter);
 
 // AI endpoints — each sub-route applies its own requireStaffPermission matching
 // the data domain it accesses (patients PHI, billing records, or radiology

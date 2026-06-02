@@ -147,6 +147,7 @@ const navItems: NavEntry[] = [
       { path: "/radiology/mwl-dashboard",         icon: ListChecks,   label: "MWL Dashboard" },
       { path: "/radiology/dicom-qr",              icon: Search,       label: "DICOM Query/Retrieve" },
       { path: "/radiology/ai-reporting-settings", icon: BrainCircuit, label: "AI Reporting" },
+      { path: "/radiology/ai-prompt-templates",   icon: FileText,     label: "AI Prompt Templates" },
       { path: "/teleradiology",                   icon: Globe,        label: "Teleradiology" },
       { path: "/radiology/pacs-logs",             icon: Activity,     label: "PACS Logs",             ownerOnly: true },
       { path: "/radiology/ai-inference-settings", icon: Cpu,          label: "AI Inference Settings", ownerOnly: true },
