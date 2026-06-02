@@ -25,6 +25,7 @@ export const billsTable = pgTable("bills", {
   cancelledByName: text("cancelled_by_name"),
   cancellationReason: text("cancellation_reason"),
   refundAmount: numeric("refund_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+  originalTotal: numeric("original_total", { precision: 10, scale: 2 }).notNull().default("0"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

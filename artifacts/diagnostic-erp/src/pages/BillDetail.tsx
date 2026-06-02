@@ -714,6 +714,12 @@ export default function BillDetail({ id }: { id: number }) {
                   <span>{formatCurrency(bill.taxAmount)}</span>
                 </div>
               )}
+              {Number((bill as { originalTotal?: number | string }).originalTotal ?? 0) > 0 && Number((bill as { originalTotal?: number | string }).originalTotal ?? 0) !== bill.totalAmount && (
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>Original Bill</span>
+                  <span>{formatCurrency(Number((bill as { originalTotal?: number | string }).originalTotal ?? 0))}</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm font-bold border-t border-border pt-2">
                 <span>Total</span>
                 <span>{formatCurrency(bill.totalAmount)}</span>
