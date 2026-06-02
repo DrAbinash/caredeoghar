@@ -37,7 +37,7 @@ interface AiSettings {
     includeDemographics: boolean;
     allowedRoles: string[];
   };
-  providers: Record<string, { isEnabled: boolean; isDefault: boolean; hasApiKey: boolean; defaultModel: string | null }>;
+  providers: Record<string, { isEnabled: boolean; isDefault: boolean; hasApiKey: boolean; hasEndpointUrl: boolean; defaultModel: string | null }>;
   promptTemplates: string[];
 }
 
@@ -56,6 +56,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   openai: "OpenAI GPT-4o",
   gemini: "Google Gemini",
   anthropic: "Anthropic Claude",
+  ollama: "Ollama (Local)",
 };
 
 // ─── WeasisInstallHint ────────────────────────────────────────────────────────
@@ -140,7 +141,7 @@ function AiDrawer({
   const [savedDraftId, setSavedDraftId] = useState<number | null>(null);
 
   const enabledProviders = Object.entries(aiSettings?.providers ?? {})
-    .filter(([, v]) => v.isEnabled && v.hasApiKey)
+    .filter(([, v]) => v.isEnabled && (v.hasApiKey || v.hasEndpointUrl))
     .map(([k]) => k);
 
   const notEnabled = !aiSettings?.global.enabled;
@@ -240,8 +241,8 @@ function AiDrawer({
           <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 p-3 text-xs flex gap-2">
             <AlertTriangle size={13} className="text-red-500 shrink-0 mt-0.5" />
             <span>
-              No provider has an API key.{" "}
-              <a href="/erp/radiology/ai-reporting-settings" className="underline font-medium">Add API keys.</a>
+              No provider has an API key or endpoint URL.{" "}
+              <a href="/erp/radiology/ai-reporting-settings" className="underline font-medium">Add API keys or endpoint URL.</a>
             </span>
           </div>
         )}

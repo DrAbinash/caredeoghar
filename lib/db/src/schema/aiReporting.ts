@@ -9,7 +9,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 // ─── AI provider settings ─────────────────────────────────────────────────────
-// One row per provider (openai | gemini | anthropic).
+// One row per provider (openai | gemini | anthropic | ollama).
 // The additional '__global__' row holds general settings as settingsJson.
 // encryptedApiKey is AES-256-CBC encrypted; never returned to the frontend raw.
 export const aiProviderSettingsTable = pgTable("ai_provider_settings", {
@@ -19,6 +19,7 @@ export const aiProviderSettingsTable = pgTable("ai_provider_settings", {
   isDefault: boolean("is_default").notNull().default(false),
   encryptedApiKey: text("encrypted_api_key"),   // null → key not yet set
   defaultModel: text("default_model"),           // e.g. 'gpt-4o', 'gemini-1.5-pro', 'claude-3-5-sonnet-20241022'
+  endpointUrl: text("endpoint_url"),             // e.g. 'http://100.79.100.41:11434' for local Ollama
   settingsJson: text("settings_json"),           // used by '__global__' row; JSON string
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

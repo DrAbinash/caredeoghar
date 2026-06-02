@@ -40,6 +40,12 @@ async function getAnthropic(apiKey: string) {
   return new Anthropic({ apiKey });
 }
 
+async function getOllamaClient(endpointUrl: string) {
+  const { default: OpenAI } = await import("openai");
+  const base = endpointUrl.replace(/\/$/, "");
+  return new OpenAI({ baseURL: `${base}/v1`, apiKey: "ollama" });
+}
+
 // ─── Prompt template presets ──────────────────────────────────────────────────
 export const AI_PROMPT_TEMPLATES: Record<string, string> = {
   "MRI Brain Report Sequence Wise":
@@ -143,6 +149,15 @@ async function getProviderApiKey(provider: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+async function getProviderEndpointUrl(provider: string): Promise<string | null> {
+  const row = await db
+    .select({ endpointUrl: aiProviderSettingsTable.endpointUrl })
+    .from(aiProviderSettingsTable)
+    .where(eq(aiProviderSettingsTable.provider, provider))
+    .limit(1);
+  return row[0]?.endpointUrl ?? null;
 }
 
 // Fetch JPEG thumbnails from Orthanc DICOMweb for a study.
@@ -315,6 +330,30 @@ async function queryAnthropic(opts: {
   return block?.type === "text" ? block.text : "";
 }
 
+async function queryOllama(opts: {
+  endpointUrl: string;
+  model: string;
+  prompt: string;
+  images: string[];
+}): Promise<string> {
+  const client = await getOllamaClient(opts.endpointUrl);
+  type ContentItem =
+    | { type: "text"; text: string }
+    | { type: "image_url"; image_url: { url: string } };
+
+  const content: ContentItem[] = [{ type: "text", text: opts.prompt }];
+  for (const img of opts.images) {
+    content.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${img}` } });
+  }
+
+  const resp = await client.chat.completions.create({
+    model: opts.model || "gpt-oss:20b",
+    messages: [{ role: "user", content }],
+    max_tokens: 4096,
+  });
+  return resp.choices[0]?.message?.content ?? "";
+}
+
 // ─── Router ───────────────────────────────────────────────────────────────────
 const router = Router();
 
@@ -329,12 +368,13 @@ router.get("/settings", async (req, res): Promise<void> => {
   const [globalSettings, providers] = await Promise.all([
     getGlobalSettings(),
     (async () => {
-      const [openaiRows, geminiRows, anthropicRows] = await Promise.all([
+      const [openaiRows, geminiRows, anthropicRows, ollamaRows] = await Promise.all([
         db.select().from(aiProviderSettingsTable).where(eq(aiProviderSettingsTable.provider, "openai")).limit(1),
         db.select().from(aiProviderSettingsTable).where(eq(aiProviderSettingsTable.provider, "gemini")).limit(1),
         db.select().from(aiProviderSettingsTable).where(eq(aiProviderSettingsTable.provider, "anthropic")).limit(1),
+        db.select().from(aiProviderSettingsTable).where(eq(aiProviderSettingsTable.provider, "ollama")).limit(1),
       ]);
-      return { openai: openaiRows[0], gemini: geminiRows[0], anthropic: anthropicRows[0] };
+      return { openai: openaiRows[0], gemini: geminiRows[0], anthropic: anthropicRows[0], ollama: ollamaRows[0] };
     })(),
   ]);
 
@@ -343,7 +383,9 @@ router.get("/settings", async (req, res): Promise<void> => {
     isEnabled: row?.isEnabled ?? false,
     isDefault: row?.isDefault ?? false,
     hasApiKey: !!(row?.encryptedApiKey),
+    hasEndpointUrl: !!(row?.endpointUrl),
     defaultModel: row?.defaultModel ?? null,
+    endpointUrl: row?.endpointUrl ?? null,
   });
 
   res.json({
@@ -352,6 +394,7 @@ router.get("/settings", async (req, res): Promise<void> => {
       openai: sanitize(providers.openai, "openai"),
       gemini: sanitize(providers.gemini, "gemini"),
       anthropic: sanitize(providers.anthropic, "anthropic"),
+      ollama: sanitize(providers.ollama, "ollama"),
     },
     promptTemplates: Object.keys(AI_PROMPT_TEMPLATES),
   });
@@ -383,6 +426,7 @@ router.post("/settings", async (req, res): Promise<void> => {
       isDefault?: boolean;
       apiKey?: string;
       defaultModel?: string;
+      endpointUrl?: string;
     }>;
   };
 
@@ -407,7 +451,7 @@ router.post("/settings", async (req, res): Promise<void> => {
     }
   }
 
-  for (const provName of ["openai", "gemini", "anthropic"] as const) {
+  for (const provName of ["openai", "gemini", "anthropic", "ollama"] as const) {
     const pd = providersIn?.[provName];
     if (!pd) continue;
 
@@ -424,6 +468,9 @@ router.post("/settings", async (req, res): Promise<void> => {
     if (pd.apiKey && pd.apiKey.trim().length > 0) {
       update.encryptedApiKey = encryptSecret(pd.apiKey.trim());
     }
+    if (pd.endpointUrl && pd.endpointUrl.trim().length > 0) {
+      update.endpointUrl = pd.endpointUrl.trim();
+    }
 
     if (existing[0]) {
       if (Object.keys(update).length > 0) {
@@ -434,7 +481,7 @@ router.post("/settings", async (req, res): Promise<void> => {
     }
 
     if (pd.isDefault) {
-      for (const op of (["openai", "gemini", "anthropic"] as const).filter((p) => p !== provName)) {
+      for (const op of (["openai", "gemini", "anthropic", "ollama"] as const).filter((p) => p !== provName)) {
         await db.update(aiProviderSettingsTable).set({ isDefault: false }).where(eq(aiProviderSettingsTable.provider, op));
       }
     }
@@ -450,9 +497,36 @@ router.post("/test-provider", async (req, res): Promise<void> => {
   const sReq = req as StaffAuthRequest;
   if (!canConfigure(sReq)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
 
-  const { provider, apiKey, model } = req.body as { provider: string; apiKey?: string; model?: string };
+  const { provider, apiKey, model, endpointUrl } = req.body as { provider: string; apiKey?: string; model?: string; endpointUrl?: string };
 
   let key = apiKey?.trim() ?? "";
+  let url = endpointUrl?.trim() ?? "";
+
+  if (provider === "ollama") {
+    if (!url) {
+      const stored = await getProviderEndpointUrl(provider);
+      if (!stored) { res.status(400).json({ error: "No endpoint URL configured for Ollama." }); return; }
+      url = stored;
+    }
+    // Test Ollama availability by listing models
+    try {
+      const tagsResp = await fetch(`${url.replace(/\/$/, "")}/api/tags`, { method: "GET" });
+      if (!tagsResp.ok) {
+        res.status(400).json({ success: false, error: `Ollama server returned ${tagsResp.status}` }); return;
+      }
+      const tagsData = await tagsResp.json() as { models?: Array<{ name: string; size?: number }> };
+      const models = tagsData.models?.map((m) => m.name) ?? [];
+      // Also test a quick chat completion
+      const chatResp = await queryOllama({ endpointUrl: url, model: model ?? "gpt-oss:20b", prompt: "Reply with exactly the word: CONNECTED", images: [] });
+      res.json({ success: true, response: chatResp.substring(0, 200), availableModels: models });
+      return;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Ollama connection failed";
+      res.status(400).json({ success: false, error: msg });
+      return;
+    }
+  }
+
   if (!key) {
     const stored = await getProviderApiKey(provider);
     if (!stored) { res.status(400).json({ error: "No API key configured for this provider." }); return; }
@@ -528,17 +602,27 @@ router.post("/query", async (req, res): Promise<void> => {
   const shouldAnonymize = anonymize ?? globalSettings.anonymize;
   const providerName = providerReq ?? globalSettings.defaultProvider;
 
-  if (!["openai", "gemini", "anthropic"].includes(providerName)) {
+  if (!["openai", "gemini", "anthropic", "ollama"].includes(providerName)) {
     res.status(400).json({ error: "Invalid provider." }); return;
   }
 
-  const apiKey = await getProviderApiKey(providerName);
-  if (!apiKey) {
-    res.status(400).json({ error: `No API key configured for ${providerName}. Please add it in AI Reporting Settings.` }); return;
+  // For Ollama, we need endpointUrl instead of API key
+  let apiKey: string | null = null;
+  let endpointUrl: string | null = null;
+  if (providerName === "ollama") {
+    endpointUrl = await getProviderEndpointUrl(providerName);
+    if (!endpointUrl) {
+      res.status(400).json({ error: `No endpoint URL configured for Ollama. Please add it in AI Reporting Settings.` }); return;
+    }
+  } else {
+    apiKey = await getProviderApiKey(providerName);
+    if (!apiKey) {
+      res.status(400).json({ error: `No API key configured for ${providerName}. Please add it in AI Reporting Settings.` }); return;
+    }
   }
 
   const provRow = await db
-    .select({ defaultModel: aiProviderSettingsTable.defaultModel, isEnabled: aiProviderSettingsTable.isEnabled })
+    .select({ defaultModel: aiProviderSettingsTable.defaultModel, isEnabled: aiProviderSettingsTable.isEnabled, endpointUrl: aiProviderSettingsTable.endpointUrl })
     .from(aiProviderSettingsTable)
     .where(eq(aiProviderSettingsTable.provider, providerName))
     .limit(1);
@@ -604,11 +688,13 @@ router.post("/query", async (req, res): Promise<void> => {
 
   try {
     if (providerName === "openai") {
-      aiResponse = await queryOpenAI({ apiKey, model, prompt: finalPrompt, images });
+      aiResponse = await queryOpenAI({ apiKey: apiKey!, model, prompt: finalPrompt, images });
     } else if (providerName === "gemini") {
-      aiResponse = await queryGemini({ apiKey, model, prompt: finalPrompt, images });
+      aiResponse = await queryGemini({ apiKey: apiKey!, model, prompt: finalPrompt, images });
+    } else if (providerName === "anthropic") {
+      aiResponse = await queryAnthropic({ apiKey: apiKey!, model, prompt: finalPrompt, images });
     } else {
-      aiResponse = await queryAnthropic({ apiKey, model, prompt: finalPrompt, images });
+      aiResponse = await queryOllama({ endpointUrl: endpointUrl!, model, prompt: finalPrompt, images });
     }
   } catch (err: unknown) {
     success = false;

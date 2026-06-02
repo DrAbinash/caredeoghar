@@ -26,7 +26,9 @@ interface ProviderInfo {
   isEnabled: boolean;
   isDefault: boolean;
   hasApiKey: boolean;
+  hasEndpointUrl: boolean;
   defaultModel: string | null;
+  endpointUrl: string | null;
 }
 
 interface SettingsResponse {
@@ -39,30 +41,41 @@ interface ProviderDraft {
   isEnabled: boolean;
   isDefault: boolean;
   apiKey: string;
+  endpointUrl: string;
   defaultModel: string;
   showKey: boolean;
   testStatus: "idle" | "testing" | "ok" | "fail";
   testMessage: string;
 }
 
-const PROVIDER_META: Record<string, { label: string; color: string; models: string[]; placeholder: string }> = {
+const PROVIDER_META: Record<string, { label: string; color: string; models: string[]; placeholder: string; needsApiKey: boolean }> = {
   openai: {
     label: "OpenAI / ChatGPT",
     color: "from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-green-200 dark:border-green-800",
     models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4-vision-preview"],
     placeholder: "sk-...",
+    needsApiKey: true,
   },
   gemini: {
     label: "Google Gemini",
     color: "from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border-blue-200 dark:border-blue-800",
     models: ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-flash", "gemini-2.5-pro-preview-05-06"],
     placeholder: "AIza...",
+    needsApiKey: true,
   },
   anthropic: {
     label: "Anthropic Claude",
     color: "from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 border-orange-200 dark:border-orange-800",
     models: ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229", "claude-opus-4-5"],
     placeholder: "sk-ant-...",
+    needsApiKey: true,
+  },
+  ollama: {
+    label: "Ollama (Local)",
+    color: "from-purple-50 to-violet-50 dark:from-purple-950/20 dark:to-violet-950/20 border-purple-200 dark:border-purple-800",
+    models: ["gpt-oss:20b", "gemma3:12b"],
+    placeholder: "http://100.79.100.41:11434",
+    needsApiKey: false,
   },
 };
 
@@ -112,30 +125,52 @@ function ProviderCard({
         </label>
       </div>
 
-      {/* API Key */}
+      {/* API Key or Endpoint URL */}
       <div className="space-y-1.5">
-        <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
-          <Key size={11} /> API Key
-        </label>
-        <div className="flex gap-2">
-          <div className="flex-1 relative">
-            <input
-              type={draft.showKey ? "text" : "password"}
-              value={draft.apiKey}
-              onChange={(e) => onChange({ apiKey: e.target.value })}
-              placeholder={draft.apiKey ? "••••••••••••••••" : `Enter ${meta.label} API key (${meta.placeholder})`}
-              className="w-full h-9 px-3 pr-9 text-xs rounded-lg border bg-background font-mono"
-            />
-            <button
-              type="button"
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-              onClick={() => onChange({ showKey: !draft.showKey })}
-            >
-              {draft.showKey ? <EyeOff size={13} /> : <Eye size={13} />}
-            </button>
-          </div>
-        </div>
-        <p className="text-[10px] text-muted-foreground">Leave blank to keep existing key. Only updated when you type a new one.</p>
+        {meta.needsApiKey ? (
+          <>
+            <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+              <Key size={11} /> API Key
+            </label>
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <input
+                  type={draft.showKey ? "text" : "password"}
+                  value={draft.apiKey}
+                  onChange={(e) => onChange({ apiKey: e.target.value })}
+                  placeholder={draft.apiKey ? "••••••••••••••••" : `Enter ${meta.label} API key (${meta.placeholder})`}
+                  className="w-full h-9 px-3 pr-9 text-xs rounded-lg border bg-background font-mono"
+                />
+                <button
+                  type="button"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  onClick={() => onChange({ showKey: !draft.showKey })}
+                >
+                  {draft.showKey ? <EyeOff size={13} /> : <Eye size={13} />}
+                </button>
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground">Leave blank to keep existing key. Only updated when you type a new one.</p>
+          </>
+        ) : (
+          <>
+            <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+              <Key size={11} /> Endpoint URL
+            </label>
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  value={draft.endpointUrl}
+                  onChange={(e) => onChange({ endpointUrl: e.target.value })}
+                  placeholder={draft.endpointUrl ? draft.endpointUrl : `Enter ${meta.label} endpoint (${meta.placeholder})`}
+                  className="w-full h-9 px-3 pr-9 text-xs rounded-lg border bg-background font-mono"
+                />
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground">Leave blank to keep existing URL. Only updated when you type a new one.</p>
+          </>
+        )}
       </div>
 
       {/* Default Model */}
@@ -230,9 +265,10 @@ export function AiReportingPanel() {
   });
 
   const [providerDrafts, setProviderDrafts] = useState<Record<string, ProviderDraft>>({
-    openai: { isEnabled: false, isDefault: false, apiKey: "", defaultModel: "gpt-4o", showKey: false, testStatus: "idle", testMessage: "" },
-    gemini: { isEnabled: false, isDefault: true, apiKey: "", defaultModel: "gemini-1.5-pro", showKey: false, testStatus: "idle", testMessage: "" },
-    anthropic: { isEnabled: false, isDefault: false, apiKey: "", defaultModel: "claude-3-5-sonnet-20241022", showKey: false, testStatus: "idle", testMessage: "" },
+    openai: { isEnabled: false, isDefault: false, apiKey: "", endpointUrl: "", defaultModel: "gpt-4o", showKey: false, testStatus: "idle", testMessage: "" },
+    gemini: { isEnabled: false, isDefault: true, apiKey: "", endpointUrl: "", defaultModel: "gemini-1.5-pro", showKey: false, testStatus: "idle", testMessage: "" },
+    anthropic: { isEnabled: false, isDefault: false, apiKey: "", endpointUrl: "", defaultModel: "claude-3-5-sonnet-20241022", showKey: false, testStatus: "idle", testMessage: "" },
+    ollama: { isEnabled: false, isDefault: false, apiKey: "", endpointUrl: "", defaultModel: "gpt-oss:20b", showKey: false, testStatus: "idle", testMessage: "" },
   });
 
   const [hydrated, setHydrated] = useState(false);
@@ -242,7 +278,7 @@ export function AiReportingPanel() {
     setHydrated(true);
     setGlobalDraft({ ...globalDraft, ...data.global });
     const newDrafts = { ...providerDrafts };
-    for (const p of ["openai", "gemini", "anthropic"] as const) {
+    for (const p of ["openai", "gemini", "anthropic", "ollama"] as const) {
       const pd = data.providers[p];
       if (pd) {
         newDrafts[p] = {
@@ -250,6 +286,7 @@ export function AiReportingPanel() {
           isEnabled: pd.isEnabled,
           isDefault: pd.isDefault,
           defaultModel: pd.defaultModel ?? newDrafts[p].defaultModel,
+          endpointUrl: pd.endpointUrl ?? newDrafts[p].endpointUrl,
           apiKey: "",
         };
       }
@@ -269,9 +306,9 @@ export function AiReportingPanel() {
 
   function handleSave() {
     const providers: Record<string, Omit<ProviderDraft, "showKey" | "testStatus" | "testMessage">> = {};
-    for (const p of ["openai", "gemini", "anthropic"] as const) {
+    for (const p of ["openai", "gemini", "anthropic", "ollama"] as const) {
       const d = providerDrafts[p];
-      providers[p] = { isEnabled: d.isEnabled, isDefault: d.isDefault, apiKey: d.apiKey, defaultModel: d.defaultModel };
+      providers[p] = { isEnabled: d.isEnabled, isDefault: d.isDefault, apiKey: d.apiKey, endpointUrl: d.endpointUrl, defaultModel: d.defaultModel };
     }
     saveMutation.mutate({ global: globalDraft, providers });
   }
@@ -282,9 +319,15 @@ export function AiReportingPanel() {
       [name]: { ...prev[name], testStatus: "testing", testMessage: "" },
     }));
     try {
-      const res = await api.post<{ success: boolean; response?: string; error?: string }>(
+      const payload: Record<string, unknown> = { provider: name, model: providerDrafts[name].defaultModel };
+      if (name === "ollama") {
+        payload.endpointUrl = providerDrafts[name].endpointUrl || undefined;
+      } else {
+        payload.apiKey = providerDrafts[name].apiKey || undefined;
+      }
+      const res = await api.post<{ success: boolean; response?: string; error?: string; availableModels?: string[] }>(
         "/api/ai-reporting/test-provider",
-        { provider: name, apiKey: providerDrafts[name].apiKey || undefined, model: providerDrafts[name].defaultModel },
+        payload,
       );
       setProviderDrafts((prev) => ({
         ...prev,
@@ -378,6 +421,7 @@ export function AiReportingPanel() {
                 <option value="openai">OpenAI / ChatGPT</option>
                 <option value="gemini">Google Gemini</option>
                 <option value="anthropic">Anthropic Claude</option>
+                <option value="ollama">Ollama (Local)</option>
               </select>
             </div>
 
@@ -447,7 +491,7 @@ export function AiReportingPanel() {
               <p>Enable at least one provider and set a default model before using AI reporting.</p>
             </div>
           </div>
-          {(["openai", "gemini", "anthropic"] as const).map((p) => (
+          {(["openai", "gemini", "anthropic", "ollama"] as const).map((p) => (
             <ProviderCard
               key={p}
               name={p}
