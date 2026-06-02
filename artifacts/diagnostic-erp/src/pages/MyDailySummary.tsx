@@ -1211,13 +1211,14 @@ export default function MyDailySummary() {
     const expectedPhysicalCash = expectedCollection - netDigitalCollection;
     const mismatch = expectedPhysicalCash - s.physicalCashInHand;
     return {
-      title: "My Daily Summary — Reconciliation",
+      title: "Daily Financial Reconciliation",
       subtitle: `${data.staffName} • ${from === to ? from : `${from} → ${to}`}`,
       sections: [
         {
-          title: "Reconciliation (End of Day)",
+          title: "Reconciliation Summary",
           metrics: [
-            ["User Name", data.staffName],
+            ["Staff", data.staffName],
+            ["Period", from === to ? from : `${from} to ${to}`],
             ["New Billing", inr(s.grossBilledIncludingCancelled)],
             ["Old Dues Collected", inr(s.duesCollectedTotal)],
             ["Effective Billing", inr(effectiveBilling)],
@@ -1232,66 +1233,14 @@ export default function MyDailySummary() {
             ["Variance", Math.abs(mismatch) > 0.01 ? `₹${Math.abs(mismatch).toFixed(0)} ${mismatch > 0 ? "Surplus" : "Short"}` : "Balanced"],
           ],
         },
-        {
-          title: "My Billing",
-          metrics: [
-            ["Gross Billed", inr(s.grossBilledIncludingCancelled)],
-            ["Cancelled", inr(s.cancelledOnMyBills)],
-            ["Active Billing", inr(s.grossBilling)],
-            ["Outstanding", inr(s.outstanding)],
-            ["Net Collected on My Bills", inr(s.netCollectedOnMyBills)],
-          ],
-        },
-        {
-          title: "My Cashbox",
-          metrics: [
-            ["Cash In", inr(s.cashIn)],
-            ["Cash Refunded", inr(s.cashRefunded)],
-            ["Net Cash Collected", inr(s.cashCollection)],
-            ["Cash Expenses", inr(s.cashExpenses)],
-            ["Expected Physical Cash", inr(s.physicalCashInHand)],
-            ["Digital In", inr(s.digitalIn)],
-            ["Digital Refunded", inr(s.digitalRefunded)],
-            ["Net Digital Collection", inr(s.netDigital)],
-          ],
-        },
-        {
-          title: "KPIs",
-          metrics: [
-            ["Total Bills Generated", inr(s.grossBilledIncludingCancelled)],
-            ["Outstanding / Dues", inr(s.outstanding)],
-            ["Cancellations", inr(s.cancelledAmount)],
-            ["Total Expenses", inr(s.totalExpenses)],
-            ["Total Received", inr(s.totalReceived)],
-            ["Digital Collection", inr(s.digitalCollection)],
-            ["Dues Collected", inr(s.duesCollectedTotal)],
-            ["Discounts Given", inr(s.discountsGiven)],
-          ],
-        },
       ],
       tables: [
-        ...(data.bills.length > 0 ? [{
-          title: "Bills Created",
-          headers: ["Bill #", "Patient", "Total", "Paid", "Balance", "Discount", "Status", "Referral"],
-          rows: data.bills.map((b) => [
-            b.billNumber, b.patientName, inr(b.totalAmount), inr(b.paidAmount),
-            inr(b.balanceAmount), b.discount > 0 ? inr(b.discount) : "—",
-            b.status, b.referringDoctor ?? "—",
-          ]),
-        }] : []),
-        ...(data.payments.length > 0 ? [{
-          title: "Payments Collected",
-          headers: ["Bill #", "Amount", "Method"],
-          rows: data.payments.map((p) => [
-            `Bill #${p.billId}`, inr(p.amount), p.method,
-          ]),
-        }] : []),
         ...(data.byStaff && data.byStaff.length > 0 ? [{
-          title: "Per-Staff Breakdown",
-          headers: ["Staff", "Gross Billed", "Active", "Cancelled", "Outstanding", "Net Collected", "Bills", "Cash In", "Digital In", "Net Cash", "Net Digital", "Total Received", "Cash Exp", "Phys. Cash", "Dues", "Disc.", "Canc."],
+          title: "User-wise Reconciliation",
+          headers: ["Staff", "Gross Billed", "Active Billing", "Cancelled", "Outstanding", "Net Collected", "Cash In", "Digital In", "Net Cash", "Net Digital", "Total Received", "Cash Exp", "Physical Cash", "Dues Collected", "Discounts", "Cancellations"],
           rows: data.byStaff.map((st) => [
             st.name, inr(st.grossBilled), inr(st.activeBilling), inr(st.cancelled),
-            inr(st.outstanding), inr(st.netCollected), String(st.billCount),
+            inr(st.outstanding), inr(st.netCollected),
             inr(st.cashIn), inr(st.digitalIn), inr(st.netCash), inr(st.netDigital),
             inr(st.totalReceived), inr(st.cashExpenses), inr(st.physicalCashInHand),
             inr(st.duesCollected), inr(st.discountsGiven), String(st.cancellationCount),
@@ -1427,8 +1376,7 @@ export default function MyDailySummary() {
                 { label: "Today", fromAgo: 0, toAgo: 0 },
                 { label: "Yesterday", fromAgo: 1, toAgo: 1 },
                 { label: "Day Before", fromAgo: 2, toAgo: 2 },
-                { label: "7 Days", fromAgo: 6, toAgo: 0 },
-                { label: "30 Days", fromAgo: 29, toAgo: 0 },
+                { label: "1 Month", fromAgo: 29, toAgo: 0 },
               ].map((p) => (
                 <Button key={p.label} variant="outline" size="sm" className="h-8 text-xs px-3" onClick={() => setPreset(p.fromAgo, p.toAgo)}>
                   {p.label}
