@@ -450,15 +450,15 @@ function FormFPrint({ form, idCardFrontUrl, idCardBackUrl }: FormFPrintProps) {
         {form.billNumber ? ` | Bill No. ${form.billNumber}` : ""}
       </div>
 
-      {/* ── ID Card Front & Back — enlarged for compliance readability ── */}
+      {/* ── ID Card Front & Back — sized to fit on same A4 page ── */}
       {(idCardFrontUrl || idCardBackUrl) && (
-        <div style={{ marginTop: 12, borderTop: "1.5px dashed #999", paddingTop: 8 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: "#333", marginBottom: 6, textAlign: "center" }}>
-            ID Proof attached — Patient identification document verified and scanned. Original retained at clinic.
+        <div style={{ marginTop: 8, borderTop: "1.5px dashed #999", paddingTop: 6 }}>
+          <div style={{ fontSize: 9, fontWeight: 700, color: "#333", marginBottom: 4, textAlign: "center" }}>
+            ID Proof attached — Original retained at clinic.
           </div>
-          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+          <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
             {idCardFrontUrl && (
-              <div style={{ width: "140mm", height: "90mm", border: "1.5px solid #333", borderRadius: 3, overflow: "hidden", backgroundColor: "#f5f5f5" }}>
+              <div style={{ width: "85mm", height: "54mm", border: "1.5px solid #333", borderRadius: 3, overflow: "hidden", backgroundColor: "#f5f5f5" }}>
                 <img
                   src={idCardFrontUrl}
                   alt="ID Front"
@@ -467,7 +467,7 @@ function FormFPrint({ form, idCardFrontUrl, idCardBackUrl }: FormFPrintProps) {
               </div>
             )}
             {idCardBackUrl && (
-              <div style={{ width: "140mm", height: "90mm", border: "1.5px solid #333", borderRadius: 3, overflow: "hidden", backgroundColor: "#f5f5f5" }}>
+              <div style={{ width: "85mm", height: "54mm", border: "1.5px solid #333", borderRadius: 3, overflow: "hidden", backgroundColor: "#f5f5f5" }}>
                 <img
                   src={idCardBackUrl}
                   alt="ID Back"
