@@ -160,6 +160,7 @@ const navItems: NavEntry[] = [
       { path: "/radiology/ai-dicom-findings",       icon: ScanSearch,   label: "AI DICOM Findings" },
       { path: "/radiology/rag-vector-store",         icon: Database,     label: "RAG Vector Store" },
       { path: "/radiology/ai-search-retrieval",      icon: Search,       label: "AI Search & Retrieval" },
+      { path: "/radiology/anomaly-alerts",         icon: ShieldAlert,  label: "Anomaly Alerts" },
       { path: "/teleradiology",                   icon: Globe,        label: "Teleradiology" },
       { path: "/radiology/pacs-logs",             icon: Activity,     label: "PACS Logs",             ownerOnly: true },
       { path: "/radiology/ai-inference-settings", icon: Cpu,          label: "AI Inference Settings", ownerOnly: true },

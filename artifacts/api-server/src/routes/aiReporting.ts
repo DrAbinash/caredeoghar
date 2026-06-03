@@ -22,6 +22,7 @@ import {
   aiDicomFindingsTable,
   ragDocumentEmbeddingsTable,
   ragSearchQueriesTable,
+  anomalyAlertsTable,
 } from "@workspace/db";
 import { eq, and, desc, gte, lte, sql } from "drizzle-orm";
 import { type StaffAuthRequest, FULL_ACCESS_ROLES } from "../middleware/requireStaffAuth";
@@ -1145,6 +1146,123 @@ router.get("/rag-search-history", async (req, res): Promise<void> => {
     .offset(Number(offset));
 
   res.json(rows);
+});
+
+// ──────────────────────────── Phase 7: Anomaly Detection / Alerting ────────────────────────────
+
+/**
+ * GET /api/ai-reporting/anomaly-alerts
+ * List anomaly alerts with filters. Staff can view; canConfigure for management.
+ */
+router.get("/anomaly-alerts", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const { status, severity, type, limit = "50" } = req.query as Record<string, string>;
+  const conditions = [];
+  if (status) conditions.push(eq(anomalyAlertsTable.status, status));
+  if (severity) conditions.push(eq(anomalyAlertsTable.severity, severity));
+  if (type) conditions.push(eq(anomalyAlertsTable.alertType, type));
+
+  const rows = await db
+    .select()
+    .from(anomalyAlertsTable)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(anomalyAlertsTable.createdAt))
+    .limit(Number(limit));
+
+  res.json(rows);
+});
+
+/**
+ * POST /api/ai-reporting/anomaly-alerts
+ * Create an anomaly alert (e.g. from an automated detector or manual entry).
+ */
+router.post("/anomaly-alerts", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canConfigure(sReq)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const b = req.body as {
+    alertType: string;
+    severity?: string;
+    message: string;
+    scope?: string;
+    relatedId?: number;
+    relatedTable?: string;
+  };
+
+  if (!b.alertType || !b.message) {
+    res.status(400).json({ error: "alertType and message required" }); return;
+  }
+
+  const inserted = await db.insert(anomalyAlertsTable).values({
+    alertType: b.alertType,
+    severity: b.severity ?? "medium",
+    message: b.message,
+    scope: b.scope ?? null,
+    relatedId: b.relatedId ?? null,
+    relatedTable: b.relatedTable ?? null,
+  }).returning();
+
+  res.json({ id: inserted[0]?.id, safetyNote: "AI Draft – Requires Radiologist Review" });
+});
+
+/**
+ * PATCH /api/ai-reporting/anomaly-alerts/:id
+ * Acknowledge or resolve an anomaly alert.
+ */
+router.patch("/anomaly-alerts/:id", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const id = Number(req.params.id);
+  const { status, notes } = req.body as { status: "acknowledged" | "resolved" | "ignored" | "open"; notes?: string };
+  if (!status) { res.status(400).json({ error: "status required" }); return; }
+
+  const user = sReq.staffSession!;
+  const update: Record<string, unknown> = {
+    status,
+    updatedAt: new Date(),
+  };
+  if (status === "acknowledged") {
+    update.acknowledgedById = user.subjectId;
+    update.acknowledgedByName = user.subjectName;
+    update.acknowledgedAt = new Date();
+  }
+  if (status === "resolved") {
+    update.resolvedAt = new Date();
+  }
+  if (notes) {
+    update.message = sql`COALESCE(${anomalyAlertsTable.message}, '') || ' [Note: ' || ${notes} || ']'`;
+  }
+
+  const [updated] = await db.update(anomalyAlertsTable).set(update).where(eq(anomalyAlertsTable.id, id)).returning();
+  if (!updated) { res.status(404).json({ error: "Not found" }); return; }
+  res.json({ ok: true });
+});
+
+/**
+ * GET /api/ai-reporting/anomaly-alerts/summary
+ * Anomaly alert summary counts by severity and status for dashboard.
+ */
+router.get("/anomaly-alerts/summary", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const rows = await db
+    .select({
+      severity: anomalyAlertsTable.severity,
+      status: anomalyAlertsTable.status,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(anomalyAlertsTable)
+    .groupBy(anomalyAlertsTable.severity, anomalyAlertsTable.status);
+
+  res.json({ summary: rows });
 });
 
 export const aiReportingRouter = router;

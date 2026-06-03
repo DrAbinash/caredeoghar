@@ -490,6 +490,28 @@ async function runStartupMigrations(): Promise<void> {
       CREATE INDEX IF NOT EXISTS rag_search_query_idx ON rag_search_queries(query_text);
       CREATE INDEX IF NOT EXISTS rag_search_user_idx ON rag_search_queries(user_id);
 
+      -- Phase 7: Anomaly Detection / Alerting
+      CREATE TABLE IF NOT EXISTS anomaly_alerts (
+        id SERIAL PRIMARY KEY,
+        alert_type TEXT NOT NULL,
+        severity TEXT NOT NULL DEFAULT 'medium',
+        message TEXT NOT NULL,
+        scope TEXT,
+        related_id INTEGER,
+        related_table TEXT,
+        status TEXT NOT NULL DEFAULT 'open',
+        acknowledged_by_id INTEGER,
+        acknowledged_by_name TEXT,
+        acknowledged_at TIMESTAMPTZ,
+        resolved_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS anomaly_alert_type_idx ON anomaly_alerts(alert_type);
+      CREATE INDEX IF NOT EXISTS anomaly_alert_severity_idx ON anomaly_alerts(severity);
+      CREATE INDEX IF NOT EXISTS anomaly_alert_status_idx ON anomaly_alerts(status);
+      CREATE INDEX IF NOT EXISTS anomaly_alert_scope_idx ON anomaly_alerts(scope, related_id);
+
       -- ── LAN-only login gate ──────────────────────────────────────────────
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS lan_only_login BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS lan_allowed_ips TEXT NOT NULL DEFAULT '[]';
