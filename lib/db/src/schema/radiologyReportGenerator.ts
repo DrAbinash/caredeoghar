@@ -116,6 +116,8 @@ export const radiologyReportPreferencesTable = pgTable(
     headerLine2Custom: text("header_line_2_custom"),
     // Workspace layout preference: "3_panel" | "preview_first" | "workflow"
     workspaceLayout: text("workspace_layout").notNull().default("3_panel"),
+    // Print mode: "letterhead" | "plain_paper"
+    printMode: text("print_mode").notNull().default("letterhead"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()

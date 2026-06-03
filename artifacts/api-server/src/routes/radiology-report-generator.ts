@@ -40,6 +40,7 @@ import {
   radiologyNormalSnippetsTable,
   radiologistStylePreferencesTable,
   radiologyReportLifecycleLogTable,
+  clinicSettingsTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, isNull, asc, ilike, or } from "drizzle-orm";
 import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
@@ -610,6 +611,10 @@ function escHtml(v: string): string {
       headerLine1?: string | null;
       headerLine2Source?: "template_name" | "custom";
       headerLine2Custom?: string | null;
+      printMode?: "letterhead" | "plain_paper";
+    };
+    clinicSettings?: {
+      name: string; address: string; phone: string; email: string; logoDataUrl: string | null;
     };
   }): string {
     const t = input.template;
@@ -663,19 +668,40 @@ function escHtml(v: string): string {
       ? prefs.headerLine2Custom
       : t.studyName;
 
+    const isPlainPaper = prefs.printMode === "plain_paper";
+    const c = input.clinicSettings;
+
+    const ptHeader = isPlainPaper && c
+      ? `<div style="text-align:center;margin-bottom:8px;">
+        <h1 style="font-size:18px;margin:0 0 2px;letter-spacing:1px;">${escHtml(c.name)}</h1>
+        <p style="font-size:11px;margin:0 0 1px;color:#333;">${escHtml(c.address)}</p>
+        <p style="font-size:11px;margin:0 0 1px;color:#333;">Ph: ${escHtml(c.phone)}${c.email ? ` | Email: ${escHtml(c.email)}` : ""}</p>
+        ${c.logoDataUrl ? `<img src="${escHtml(c.logoDataUrl)}" style="max-height:40px;margin:4px 0;" />` : ""}
+        <hr style="border:none;border-top:2px solid #000;margin:6px 0;" />
+      </div>`
+      : "";
+
+    const ptFooter = isPlainPaper && c
+      ? `<div style="margin-top:12px;border-top:1px solid #999;padding-top:6px;">
+        <p style="font-size:11px;color:#333;margin:0 0 2px;"><strong>${escHtml(c.name)}</strong></p>
+        <p style="font-size:10px;color:#555;margin:0;">${escHtml(c.address)} | Ph: ${escHtml(c.phone)}</p>
+        <p style="font-size:10px;color:#666;font-style:italic;margin:4px 0 0;">Please correlate with clinical history and findings. Report issued by authorized radiologist only.</p>
+      </div>`
+      : "";
+
     const headerHtml = prefs.headerLine1
       ? `<p style="margin:0 0 2px;"><strong>${escHtml(prefs.headerLine1)}</strong></p>
     <p style="margin:0 0 2px;"><strong>${escHtml(line2)}</strong></p>`
       : `<p style="margin:0 0 2px;"><strong>NAME: ${escHtml(input.patientName ?? "")} &nbsp;&nbsp; AGE/SEX: ${escHtml(input.age ?? "")}/${escHtml(input.sex ?? "")} &nbsp;&nbsp; UHID: ${escHtml(input.patientId ?? "")} &nbsp;&nbsp; ACC: ${escHtml(input.accessionNumber ?? "")}</strong></p>
     <p style="margin:0 0 2px;"><strong>REF. BY: ${escHtml(input.referringDoctor ?? "")} &nbsp;&nbsp; DATE: ${escHtml(input.studyDate ?? "")}</strong></p>`;
 
-    const footerBlock = prefs.showEndOfReportFooter !== false
+    const footerBlock = (!isPlainPaper && prefs.showEndOfReportFooter !== false)
       ? `<hr style="border:none;border-top:1px solid #999;margin:${sp2} 0 4px;" />
     ${prefs.footerText ? `<p style="font-size:11px;color:#444;margin:0 0 2px;">${escHtml(prefs.footerText)}</p>` : ""}
     <p style="font-size:11px;color:#666;font-style:italic;margin:0;">Please correlate with clinical history and findings. Report issued by authorized radiologist only.</p>`
       : "";
 
-    return `<div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.45;color:#111;max-width:720px;margin:0 auto;">
+    const contentBody = `<div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.45;color:#111;max-width:720px;margin:0 auto;">
     ${headerHtml}
     <hr style="border:none;border-top:2px solid #000;margin:6px 0;" />
     <h2 style="text-align:center;text-decoration:underline;font-size:15px;margin:8px 0;"><strong>${escHtml(t.studyName)}</strong></h2>
@@ -691,7 +717,15 @@ function escHtml(v: string): string {
     <h3 style="margin:${sp2} 0 ${sp};"><u>${fmtHeading("Recommendation", hc)}</u></h3>
     <p style="margin:0 0 ${sp};">${escHtml(input.recommendation ?? "Please correlate with clinical findings.")}</p>
     ${footerBlock}
-  </div>`.trim();
+  </div>`;
+
+    if (!isPlainPaper) return contentBody.trim();
+
+    return `<div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.45;color:#111;">
+      ${ptHeader}
+      ${contentBody}
+      ${ptFooter}
+    </div>`.trim();
   }
 
 // ── Router ────────────────────────────────────────────────────────────────────
@@ -776,6 +810,7 @@ const GenerateBody = z.object({
     headerLine1: z.string().optional().nullable(),
     headerLine2Source: z.enum(["template_name", "custom"]).optional(),
     headerLine2Custom: z.string().optional().nullable(),
+    printMode: z.enum(["letterhead", "plain_paper"]).optional(),
   }).optional(),
 });
 
@@ -789,11 +824,27 @@ radiologyReportGeneratorRouter.post("/generate", async (req: Request, res: Respo
   const data = parsed.data;
   const template = RADIOLOGY_TEMPLATES[data.templateId] ?? Object.values(RADIOLOGY_TEMPLATES)[0]!;
 
+  // Fetch clinic settings for plain-paper print mode
+  let clinicSettings: { name: string; address: string; phone: string; email: string; logoDataUrl: string | null } | undefined;
+  if (data.preferences?.printMode === "plain_paper") {
+    const [clinic] = await db.select().from(clinicSettingsTable).limit(1);
+    if (clinic) {
+      clinicSettings = {
+        name: clinic.name || "Care Diagnostics",
+        address: clinic.address || "",
+        phone: clinic.phone || "",
+        email: clinic.email || "",
+        logoDataUrl: clinic.logoDataUrl || null,
+      };
+    }
+  }
+
   const html = buildReportHtml({
     ...data,
     patientId: data.patientId != null ? String(data.patientId) : undefined,
     template,
     preferences: data.preferences,
+    clinicSettings,
   });
 
   const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -1031,7 +1082,7 @@ radiologyReportGeneratorRouter.get("/macros", async (req: StaffAuthRequest, res:
 
 const CreateMacroSchema = z.object({
   shortcut: z.string().min(1).max(50),
-  expansion: z.string().min(1).max(2000),
+  expansion: z.string().min(1).max(5000),
   modality: z.string().max(20).optional(),
   isGlobal: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
@@ -1058,7 +1109,7 @@ radiologyReportGeneratorRouter.post("/macros", async (req: StaffAuthRequest, res
 
 const UpdateMacroSchema = z.object({
   shortcut: z.string().min(1).max(50).optional(),
-  expansion: z.string().min(1).max(2000).optional(),
+  expansion: z.string().min(1).max(5000).optional(),
   modality: z.string().max(20).optional().nullable(),
   isGlobal: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
@@ -1116,6 +1167,7 @@ const PreferencesSchema = z.object({
   headerLine2Source: z.enum(["template_name", "custom"]),
   headerLine2Custom: z.string().max(200).optional(),
   workspaceLayout: z.enum(["3_panel", "preview_first", "workflow"]),
+  printMode: z.enum(["letterhead", "plain_paper"]).default("letterhead"),
 });
 
 // GET /preferences — fetch preferences for the authenticated user
@@ -1135,6 +1187,7 @@ radiologyReportGeneratorRouter.get("/preferences", async (req: StaffAuthRequest,
       headerLine2Source: "template_name",
       headerLine2Custom: null,
       workspaceLayout: "3_panel",
+      printMode: "letterhead",
     });
     return;
   }
@@ -1161,6 +1214,7 @@ radiologyReportGeneratorRouter.put("/preferences", async (req: StaffAuthRequest,
       headerLine2Source: data.headerLine2Source,
       headerLine2Custom: data.headerLine2Custom || null,
       workspaceLayout: data.workspaceLayout,
+      printMode: data.printMode,
     }).returning();
     res.status(201).json(row);
     return;
@@ -1176,6 +1230,7 @@ radiologyReportGeneratorRouter.put("/preferences", async (req: StaffAuthRequest,
       headerLine2Source: data.headerLine2Source,
       headerLine2Custom: data.headerLine2Custom || null,
       workspaceLayout: data.workspaceLayout,
+      printMode: data.printMode,
     })
     .where(eq(radiologyReportPreferencesTable.userId, Number(userId)))
     .returning();

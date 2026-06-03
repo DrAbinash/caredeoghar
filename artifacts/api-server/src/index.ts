@@ -1141,6 +1141,7 @@ async function runStartupMigrations(): Promise<void> {
         header_line_2_source TEXT NOT NULL DEFAULT 'template_name',
         header_line_2_custom TEXT,
         workspace_layout TEXT NOT NULL DEFAULT '3_panel',
+        print_mode TEXT NOT NULL DEFAULT 'letterhead',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );

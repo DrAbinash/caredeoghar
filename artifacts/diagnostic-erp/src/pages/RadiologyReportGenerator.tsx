@@ -106,6 +106,7 @@ interface ReportPreferences {
   headerLine2Source: "template_name" | "custom";
   headerLine2Custom: string | null;
   workspaceLayout: "3_panel" | "preview_first" | "workflow";
+  printMode: "letterhead" | "plain_paper";
 }
 
 const EMPTY_DEMOG: StudyDemog = {
@@ -133,6 +134,7 @@ const DEFAULT_PREFERENCES: ReportPreferences = {
   headerLine2Source: "template_name",
   headerLine2Custom: null,
   workspaceLayout: "3_panel",
+  printMode: "letterhead",
 };
 
 // ── Utility ───────────────────────────────────────────────────────────────────
@@ -190,11 +192,18 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
   // Text macros
   const [macros, setMacros] = useState<TextMacro[]>([]);
   const [showMacroManager, setShowMacroManager] = useState(false);
+  // Snippet sidebar
+  const [showSnippetSidebar, setShowSnippetSidebar] = useState(false);
+  const [snippetSearch, setSnippetSearch] = useState("");
+  const [snippetTarget, setSnippetTarget] = useState<"clinicalHistory" | "findings" | "impression" | "recommendation" | null>(null);
+  const snippetSidebarRef = useRef<HTMLDivElement>(null);
 
   // Report preferences
   const [preferences, setPreferences] = useState<ReportPreferences>(DEFAULT_PREFERENCES);
   const [showPreferences, setShowPreferences] = useState(false);
   const [prefsSaving, setPrefsSaving] = useState(false);
+  // Print mode quick-toggle (persists in preferences)
+  const [showPrintModeDropdown, setShowPrintModeDropdown] = useState(false);
 
   // Workspace layout
   const [layout, setLayout] = useLocalStorage<ReportPreferences["workspaceLayout"]>("rrg_layout", "3_panel");
@@ -530,6 +539,7 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
         headerLine1: preferences.headerLine1,
         headerLine2Source: preferences.headerLine2Source,
         headerLine2Custom: preferences.headerLine2Custom,
+        printMode: preferences.printMode,
       },
     };
   }
@@ -724,7 +734,16 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
       toast({ title: "Generate preview first before printing." });
       return;
     }
+    const mode = preferences.printMode ?? "letterhead";
+    const printMargin = mode === "letterhead" ? "50mm 15mm 30mm 15mm" : "15mm";
+    const printStyle = document.createElement("style");
+    printStyle.id = "rrg-print-mode-style";
+    printStyle.innerHTML = `@media print { @page { size: A4; margin: ${printMargin}; } }`;
+    const existing = document.getElementById("rrg-print-mode-style");
+    if (existing) existing.remove();
+    document.head.appendChild(printStyle);
     window.print();
+    setTimeout(() => { const s = document.getElementById("rrg-print-mode-style"); if (s) s.remove(); }, 500);
   }
 
   // ── Normal template picker ──────────────────────────────────────────────────
@@ -962,49 +981,140 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
             Type the shortcut followed by space or Enter in any text field to expand it.
           </p>
           {/* Create */}
-          <div className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
-            <div>
-              <Label className="text-xs">Shortcut</Label>
-              <Input className="h-8 text-sm" value={newShortcut} onChange={(e) => setNewShortcut(e.target.value)} placeholder="e.g. .pol" />
+          <div className="space-y-2">
+            <div className="grid grid-cols-[1fr_auto] gap-2 items-end">
+              <div>
+                <Label className="text-xs">Shortcut</Label>
+                <Input className="h-8 text-sm" value={newShortcut} onChange={(e) => setNewShortcut(e.target.value)} placeholder="e.g. .pol" />
+              </div>
+              <div className="w-28">
+                <Label className="text-xs">Modality filter (opt)</Label>
+                <Select value={newModality} onValueChange={setNewModality}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Any" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Any</SelectItem>
+                    {modalities.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div>
-              <Label className="text-xs">Expansion</Label>
-              <Input className="h-8 text-sm" value={newExpansion} onChange={(e) => setNewExpansion(e.target.value)} placeholder="Full phrase..." />
-            </div>
-            <Button size="sm" className="h-8" onClick={() => void createMacro()} disabled={savingMacro}>
-              {savingMacro ? <LoaderIcon size={12} className="animate-spin" /> : <Plus size={12} />}
-            </Button>
-          </div>
-          <div className="flex gap-2">
-            <div className="w-28">
-              <Label className="text-xs">Modality filter (opt)</Label>
-              <Select value={newModality} onValueChange={setNewModality}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Any" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Any</SelectItem>
-                  {modalities.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                </SelectContent>
-              </Select>
+            <div className="flex gap-2 items-end">
+              <Textarea
+                className="text-sm min-h-[60px] resize-y flex-1"
+                value={newExpansion}
+                onChange={(e) => setNewExpansion(e.target.value)}
+                placeholder="Multi-line expansion text... (type shortcut + space in any field to auto-expand)"
+              />
+              <Button size="sm" className="h-8 shrink-0" onClick={() => void createMacro()} disabled={savingMacro}>
+                {savingMacro ? <LoaderIcon size={12} className="animate-spin" /> : <Plus size={12} />}
+              </Button>
             </div>
           </div>
           {/* List */}
           <div className="space-y-1 max-h-56 overflow-y-auto">
             {macros.map((m) => (
-              <div key={m.id} className="flex items-center justify-between px-3 py-2 rounded-md border text-sm">
-                <div className="min-w-0">
-                  <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{m.shortcut}</code>
-                  <span className="mx-2 text-muted-foreground">\u2192</span>
-                  <span className="text-muted-foreground truncate">{m.expansion}</span>
-                  {m.modality && <Badge variant="outline" className="text-[10px] ml-2">{m.modality}</Badge>}
-                  {m.isGlobal && <Badge className="text-[10px] ml-2">Global</Badge>}
+              <div key={m.id} className="flex items-start justify-between px-3 py-2 rounded-md border text-sm">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{m.shortcut}</code>
+                    {m.modality && <Badge variant="outline" className="text-[10px]">{m.modality}</Badge>}
+                    {m.isGlobal && <Badge className="text-[10px]">Global</Badge>}
+                  </div>
+                  <div className="text-muted-foreground text-xs whitespace-pre-wrap leading-snug">{m.expansion}</div>
                 </div>
-                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-destructive" onClick={() => void deleteMacro(m.id)}>
-                  <Trash2 size={12} />
-                </Button>
+                <div className="flex flex-col gap-1 ml-2 shrink-0">
+                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-primary" title="Copy snippet" onClick={() => { navigator.clipboard.writeText(m.expansion); toast({ title: "Copied to clipboard" }); }}>
+                    <ClipboardList size={12} />
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-destructive" onClick={() => void deleteMacro(m.id)}>
+                    <Trash2 size={12} />
+                  </Button>
+                </div>
               </div>
             ))}
             {macros.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No macros yet. Create your first one above.</p>}
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderSnippetSidebar() {
+    const filtered = macros.filter((m) => {
+      if (!snippetSearch.trim()) return true;
+      const q = snippetSearch.toLowerCase();
+      return m.shortcut.toLowerCase().includes(q) || m.expansion.toLowerCase().includes(q);
+    });
+
+    function insertSnippet(text: string) {
+      const target = snippetTarget;
+      if (!target) {
+        toast({ title: "Select a target field first", description: "Click the snippet icon next to any text area" });
+        return;
+      }
+      const separator = target === "impression" ? "\n" : " ";
+      if (target === "clinicalHistory") setClinicalHistory((v) => (v ? v + separator + text : text));
+      else if (target === "findings") {
+        const section = template?.sections[0] ?? "Findings";
+        setFindingsSections((prev) => ({ ...prev, [section]: (prev[section] ?? "") + separator + text }));
+      } else if (target === "impression") setImpressionRaw((v) => (v ? v + "\n" + text : text));
+      else if (target === "recommendation") setRecommendation((v) => (v ? v + " " + text : text));
+      toast({ title: "Snippet inserted" });
+    }
+
+    return (
+      <div className="fixed inset-y-0 right-0 z-50 w-80 bg-card border-l shadow-xl flex flex-col" ref={snippetSidebarRef}>
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <h3 className="font-semibold text-sm flex items-center gap-2">
+            <Hash size={16} />
+            Snippet Quick-Insert
+          </h3>
+          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setShowSnippetSidebar(false)}><X size={14} /></Button>
+        </div>
+        <div className="px-4 py-3 border-b space-y-2">
+          <Input
+            className="h-8 text-sm"
+            placeholder="Search snippets..."
+            value={snippetSearch}
+            onChange={(e) => setSnippetSearch(e.target.value)}
+          />
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-muted-foreground">Target:</span>
+            <select
+              className="text-xs h-7 border rounded px-2 bg-background"
+              value={snippetTarget ?? ""}
+              onChange={(e) => setSnippetTarget(e.target.value as any || null)}
+            >
+              <option value="">Select field...</option>
+              <option value="clinicalHistory">Clinical History</option>
+              <option value="findings">Findings</option>
+              <option value="impression">Impression</option>
+              <option value="recommendation">Recommendation</option>
+            </select>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          {filtered.map((m) => (
+            <button
+              key={m.id}
+              className="w-full text-left rounded-md border p-2 hover:bg-muted transition-colors"
+              onClick={() => insertSnippet(m.expansion)}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <code className="text-[10px] bg-muted px-1 rounded">{m.shortcut}</code>
+                {m.modality && <Badge variant="outline" className="text-[10px]">{m.modality}</Badge>}
+              </div>
+              <div className="text-[11px] text-muted-foreground whitespace-pre-wrap leading-snug line-clamp-4">{m.expansion}</div>
+            </button>
+          ))}
+          {filtered.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              {snippetSearch ? "No snippets match your search." : "No snippets yet. Create macros in the Macros manager."}
+            </p>
+          )}
+        </div>
+        <div className="px-4 py-2 border-t text-[10px] text-muted-foreground">
+          Click a snippet to insert into the selected target field.
         </div>
       </div>
     );
@@ -1126,6 +1236,30 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
                   placeholder="e.g. MRI BRAIN WITH CONTRAST"
                 />
               )}
+            </div>
+            <div>
+              <Label className="text-xs">Print Paper</Label>
+              <div className="flex gap-2 mt-1">
+                <Button
+                  size="sm"
+                  variant={draft.printMode === "letterhead" ? "default" : "outline"}
+                  className="h-7 text-xs"
+                  onClick={() => setDraft((d) => ({ ...d, printMode: "letterhead" }))}
+                >
+                  Letterhead
+                </Button>
+                <Button
+                  size="sm"
+                  variant={draft.printMode === "plain_paper" ? "default" : "outline"}
+                  className="h-7 text-xs"
+                  onClick={() => setDraft((d) => ({ ...d, printMode: "plain_paper" }))}
+                >
+                  Plain Paper
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {draft.printMode === "letterhead" ? "Leaves top margin for pre-printed letterhead. No clinic header/footer in HTML." : "Prints full clinic header + footer on blank A4 paper."}
+              </p>
             </div>
           </div>
 
@@ -1273,6 +1407,7 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
       {showPreferences && renderPreferencesPanel()}
       {showDictation && renderDictationOverlay()}
       {showNormalTemplatePicker && renderNormalTemplatePicker()}
+      {showSnippetSidebar && renderSnippetSidebar()}
 
       {/* Header */}
       <div className="no-print">
@@ -1318,6 +1453,10 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
                 <Type size={14} className="mr-1" />
                 Macros
               </Button>
+              <Button size="sm" variant="outline" onClick={() => setShowSnippetSidebar(true)} title="Snippet quick-insert">
+                <Hash size={14} className="mr-1" />
+                Snippets
+              </Button>
               <Button size="sm" variant="outline" onClick={() => setShowPreferences(true)}>
                 <Settings size={14} className="mr-1" />
                 Preferences
@@ -1338,10 +1477,32 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
                 {generating ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Eye size={14} className="mr-1" />}
                 Generate
               </Button>
-              <Button size="sm" variant="outline" onClick={handlePrint}>
-                <Printer size={14} className="mr-1" />
-                Print
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button size="sm" variant="outline" onClick={handlePrint}>
+                  <Printer size={14} className="mr-1" />
+                  Print
+                </Button>
+                <Button size="sm" variant="ghost" className="px-1 h-7" onClick={() => setShowPrintModeDropdown((v) => !v)} title="Print mode">
+                  <ChevronDown size={12} />
+                </Button>
+                {showPrintModeDropdown && (
+                  <div className="absolute mt-8 z-50 bg-card border rounded-md shadow-lg p-2 space-y-1 text-xs w-36">
+                    <div className="text-muted-foreground px-1 py-0.5 font-medium">Paper mode</div>
+                    <button
+                      className={`w-full text-left px-2 py-1 rounded ${preferences.printMode === "letterhead" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                      onClick={() => { setPreferences((p) => ({ ...p, printMode: "letterhead" })); void savePreferences({ ...preferences, printMode: "letterhead" }); setShowPrintModeDropdown(false); }}
+                    >
+                      Letterhead
+                    </button>
+                    <button
+                      className={`w-full text-left px-2 py-1 rounded ${preferences.printMode === "plain_paper" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                      onClick={() => { setPreferences((p) => ({ ...p, printMode: "plain_paper" })); void savePreferences({ ...preferences, printMode: "plain_paper" }); setShowPrintModeDropdown(false); }}
+                    >
+                      Plain Paper
+                    </button>
+                  </div>
+                )}
+              </div>
               <Button
                 size="sm"
                 className="bg-green-600 hover:bg-green-700 text-white"
@@ -1446,7 +1607,12 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
             <div className="rounded-lg border bg-card p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <Label className="text-sm font-semibold">Clinical History</Label>
-                <VoiceDictationButton onInsert={(t) => setClinicalHistory((v) => v + t)} draftId={draftId ?? undefined} studyId={studyId} targetField="clinicalHistory" />
+                <div className="flex items-center gap-1">
+                  <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" title="Insert snippet" onClick={() => { setSnippetTarget("clinicalHistory"); setShowSnippetSidebar(true); }}>
+                    <Hash size={12} className="mr-1" /> Snippet
+                  </Button>
+                  <VoiceDictationButton onInsert={(t) => setClinicalHistory((v) => v + t)} draftId={draftId ?? undefined} studyId={studyId} targetField="clinicalHistory" />
+                </div>
               </div>
               <Textarea
                 className="text-sm min-h-[70px] resize-y"
@@ -1465,15 +1631,20 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
                   <div key={section} className="space-y-1">
                     <div className="flex items-center justify-between">
                       <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{section}</Label>
-                      <VoiceDictationButton
-                        onInsert={(t) =>
-                          setFindingsSections((prev) => ({ ...prev, [section]: (prev[section] ?? "") + t }))
-                        }
-                        draftId={draftId ?? undefined}
-                        studyId={studyId}
-                        targetField={`section:${section}`}
-                        className="h-6 px-2 text-[11px]"
-                      />
+                      <div className="flex items-center gap-1">
+                        <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" title="Insert snippet" onClick={() => { setSnippetTarget("findings"); setShowSnippetSidebar(true); }}>
+                          <Hash size={12} className="mr-1" /> Snippet
+                        </Button>
+                        <VoiceDictationButton
+                          onInsert={(t) =>
+                            setFindingsSections((prev) => ({ ...prev, [section]: (prev[section] ?? "") + t }))
+                          }
+                          draftId={draftId ?? undefined}
+                          studyId={studyId}
+                          targetField={`section:${section}`}
+                          className="h-6 px-2 text-[11px]"
+                        />
+                      </div>
                     </div>
                     <Textarea
                       className="text-sm min-h-[64px] resize-y"
@@ -1556,7 +1727,12 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
                   <Label className="text-sm font-semibold">Impression</Label>
                   <p className="text-[11px] text-muted-foreground">One bullet point per line</p>
                 </div>
-                <VoiceDictationButton onInsert={(t) => setImpressionRaw((v) => v + t)} draftId={draftId ?? undefined} studyId={studyId} targetField="impression" />
+                <div className="flex items-center gap-1">
+                  <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" title="Insert snippet" onClick={() => { setSnippetTarget("impression"); setShowSnippetSidebar(true); }}>
+                    <Hash size={12} className="mr-1" /> Snippet
+                  </Button>
+                  <VoiceDictationButton onInsert={(t) => setImpressionRaw((v) => v + t)} draftId={draftId ?? undefined} studyId={studyId} targetField="impression" />
+                </div>
               </div>
               <Textarea
                 className="text-sm min-h-[80px] resize-y"
@@ -1569,7 +1745,12 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
 
             {/* Recommendation */}
             <div className="rounded-lg border bg-card p-4 space-y-2">
-              <Label className="text-sm font-semibold">Recommendation</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold">Recommendation</Label>
+                <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" title="Insert snippet" onClick={() => { setSnippetTarget("recommendation"); setShowSnippetSidebar(true); }}>
+                  <Hash size={12} className="mr-1" /> Snippet
+                </Button>
+              </div>
               <Textarea
                 className="text-sm min-h-[60px] resize-y"
                 value={recommendation}
