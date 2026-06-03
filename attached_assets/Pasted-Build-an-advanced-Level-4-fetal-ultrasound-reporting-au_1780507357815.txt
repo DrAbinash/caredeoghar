@@ -1,0 +1,443 @@
+Build an advanced Level-4 fetal ultrasound reporting automation module inside my existing ERP/RIS/PACS system.
+
+Goal:
+Create a fast, safe, radiologist-review workflow where USG fetal studies are automatically received, classified, populated with measurements, converted into draft reports, reviewed by doctor, finalized, signed, stored, and sent to patient.
+
+Do NOT replace radiologist judgment. AI must only draft and assist. Final report must require human verification before release.
+
+Existing system context:
+
+- ERP already has patient registration, billing, reporting, radiology workflow, PACS integration.
+- PACS is Conquest PACS.
+- Viewer is Weasis.
+- Modalities include USG, MRI, CT, X-ray.
+- ERP has internal API routes for radiology worklist and reports.
+- Use the current project structure and database style.
+- Keep UI clean, fast, and suitable for diagnostic center daily workflow.
+
+Create the following modules:
+
+1. Fetal USG Worklist Automation
+
+- Detect incoming USG studies from PACS/DICOM.
+- Auto-create fetal ultrasound worklist entry.
+- Link study with patient registration/billing using patient ID/accession/mobile/name/date.
+- Show status:
+  - Received
+  - Measurements pending
+  - AI draft ready
+  - Doctor review
+  - Final signed
+  - Sent to patient
+- Add filters:
+  - Today
+  - Pending
+  - Finalized
+  - First trimester
+  - NT scan
+  - Anomaly scan
+  - Growth scan
+  - BPP
+  - Twin pregnancy
+
+2. Study Type Auto-Detection
+   Automatically classify fetal study into:
+
+- Early pregnancy / viability scan
+- NT/NB scan
+- Anomaly scan
+- Growth scan
+- Doppler study
+- BPP
+- Twin pregnancy
+- Follow-up pregnancy scan
+
+Use available DICOM metadata, image labels, OCR text if available, measurement names, and operator-selected fallback.
+
+Always allow manual override.
+
+3. DICOM SR / Measurement Extraction
+   Extract fetal measurements from DICOM SR if available:
+
+- LMP
+- GA by LMP
+- EDD by LMP
+- CRL
+- MSD
+- Yolk sac
+- FHR
+- NT
+- Nasal bone
+- BPD
+- HC
+- AC
+- FL
+- HL
+- EFW
+- AFI
+- SDP
+- Placenta location
+- Placenta grade
+- Presentation
+- Cervical length
+- Umbilical artery PI/RI/S-D
+- MCA PI/RI
+- CPR
+- Ductus venosus if available
+- Uterine artery PI/RI if available
+
+If DICOM SR is not available:
+
+- Provide quick structured form for manual entry.
+- Add OCR extraction from ultrasound screenshots/report images where possible.
+- Add confidence score for extracted values.
+- Highlight low-confidence extracted measurements for doctor verification.
+
+4. Smart Obstetric Calculations
+   Automatically calculate:
+
+- GA from LMP
+- EDD from LMP
+- GA from biometric parameters
+- Composite ultrasound GA
+- EFW using Hadlock formula
+- Growth percentile where chart data is available
+- Discordance in twins
+- AFI interpretation
+- Cervical length interpretation
+- Doppler interpretation with percentile/normal-abnormal flag where data available
+
+Important:
+
+- Do not invent values.
+- If value missing, leave blank or say “Not assessed”.
+- If dates are inconsistent, show warning.
+- If biometric GA and LMP GA differ significantly, show alert.
+
+5. Template Engine
+   Create dynamic report templates for:
+
+A. Early Pregnancy / Viability Scan
+Fields:
+
+- Uterus
+- Gestational sac
+- Yolk sac
+- Fetal pole
+- CRL
+- FHR
+- Subchorionic collection
+- Cervix
+- Adnexa
+- Impression
+
+B. NT/NB Scan
+Fields:
+
+- Single/twin live intrauterine fetus
+- CRL
+- FHR
+- NT
+- Nasal bone
+- Ductus venosus
+- Tricuspid flow if available
+- Placenta
+- Cervix
+- Impression
+
+C. Anomaly Scan
+Include structured organ checklist:
+
+- Skull/brain
+- Face
+- Spine
+- Thorax
+- Heart four-chamber view
+- Outflow tracts if assessed
+- Abdomen
+- Stomach bubble
+- Kidneys
+- Urinary bladder
+- Cord insertion
+- Limbs
+- Placenta
+- Liquor
+- Cervix
+- Impression
+
+D. Growth Scan
+Fields:
+
+- Presentation
+- Placenta location/grade
+- Liquor/AFI
+- BPD, HC, AC, FL
+- EFW
+- FHR
+- Cervical length
+- Doppler if done
+- Impression
+
+E. Doppler Study
+Fields:
+
+- Umbilical artery
+- MCA
+- CPR
+- Ductus venosus
+- Uterine artery
+- Impression
+
+F. BPP
+Fields:
+
+- Fetal breathing
+- Fetal movement
+- Fetal tone
+- AFI
+- NST if available
+- Total score
+- Impression
+
+G. Twin Pregnancy
+Fields:
+
+- Chorionicity/amnionicity
+- Twin A presentation, FHR, biometry, EFW
+- Twin B presentation, FHR, biometry, EFW
+- Weight discordance
+- Placenta
+- Liquor
+- Cervix
+- Impression
+
+6. AI Draft Report Generation
+   Create an AI report draft button:
+   “Generate Draft”
+
+AI should:
+
+- Use extracted/manual values.
+- Select correct template.
+- Write clean radiology-style report.
+- Highlight missing required fields.
+- Highlight abnormal findings in bold.
+- Create concise impression.
+- Suggest follow-up only when indicated.
+- Never fabricate fetal anatomy or measurements.
+- If anomaly scan is incomplete, mention “limited evaluation” or “correlate with detailed anomaly scan” as appropriate.
+
+7. Safety and Quality Rules
+   Add validation alerts:
+
+- FHR missing
+- GA missing
+- EDD missing
+- LMP and scan GA mismatch
+- EFW too low/high for GA
+- AFI abnormal
+- Cervical length short
+- Doppler abnormal
+- Twin discordance >20%
+- NT above threshold
+- Missing required anomaly checklist items
+- Report finalized without doctor review: block this.
+
+8. Doctor Review Interface
+   Create fetal report editor page:
+
+- Left side: measurements and checklist
+- Right side: generated report
+- Top: patient details and study details
+- Buttons:
+  - Open in Weasis
+  - Pull measurements again
+  - Generate draft
+  - Regenerate impression only
+  - Save draft
+  - Mark reviewed
+  - Final sign
+  - Send PDF/WhatsApp
+- Allow voice dictation field if browser supports speech-to-text.
+- Add quick phrase buttons:
+  - Single live intrauterine fetus
+  - Growth corresponding to gestational age
+  - No gross congenital anomaly detected in present scan
+  - Liquor adequate
+  - Placenta posterior/anterior/fundal
+  - Cervix closed
+  - Suggest follow-up anomaly scan
+  - Limited scan due to fetal position/maternal habitus
+
+9. PDF Report Output
+   Generate professional fetal USG PDF with:
+
+- Patient demographics
+- Referring doctor
+- Study name
+- LMP, GA, EDD
+- Measurements table
+- Findings
+- Impression
+- Doctor signature
+- QR verification
+- Disclaimer:
+  “This report is based on sonographic findings at the time of examination and should be correlated clinically.”
+
+10. Audit Trail
+    Track:
+
+- Who entered measurements
+- AI draft generation time
+- Edited fields
+- Doctor review time
+- Final sign time
+- PDF sent time
+- WhatsApp/email delivery status
+
+11. Advanced Features
+    Add these advanced workflow improvements:
+
+A. Auto Follow-up Suggestions
+Based on scan type and findings:
+
+- NT scan → anomaly scan at 18–22 weeks
+- Anomaly scan → growth scan if clinically indicated
+- Short cervix → clinical correlation
+- Abnormal Doppler → urgent obstetric correlation
+- Low AFI/high AFI → follow-up advice
+
+B. Smart Normal Report Generator
+One-click “Normal Growth Scan” generator after entering GA, FHR, placenta, AFI, biometry.
+
+C. Abnormal Finding Library
+Add selectable abnormal findings:
+
+- IUGR/FGR
+- Oligohydramnios
+- Polyhydramnios
+- Placenta previa / low-lying placenta
+- Short cervix
+- Absent/reversed EDF
+- Increased NT
+- Absent nasal bone
+- Anencephaly
+- Hydrocephalus
+- Spina bifida suspicion
+- Renal pelvic dilatation
+- Single umbilical artery
+- Fetal demise
+- Missed abortion
+- Blighted ovum
+- Subchorionic hematoma
+
+D. Doctor Preference Templates
+Allow saving doctor/radiologist preferred wording.
+
+E. Duplicate Study Detection
+Detect same patient same day duplicate USG study and warn.
+
+F. Pending Queue Dashboard
+Show:
+
+- Pending fetal reports
+- Reports waiting for measurements
+- Reports waiting for doctor sign
+- Critical abnormal reports not yet communicated
+
+G. Critical Alert System
+If fetal demise, severe oligohydramnios, absent/reversed EDF, placenta previa with bleeding history, or major anomaly is selected:
+
+- Mark as Critical
+- Require doctor acknowledgement
+- Show communication log field.
+
+12. Backend Requirements
+    Create necessary database tables:
+
+- fetal_usg_studies
+- fetal_usg_measurements
+- fetal_usg_checklists
+- fetal_usg_reports
+- fetal_usg_audit_logs
+- fetal_usg_template_preferences
+- fetal_usg_critical_alerts
+
+Create APIs:
+
+- GET /api/radiology/fetal-usg/worklist
+- POST /api/radiology/fetal-usg/study
+- GET /api/radiology/fetal-usg/:studyId
+- POST /api/radiology/fetal-usg/:studyId/measurements
+- POST /api/radiology/fetal-usg/:studyId/extract-measurements
+- POST /api/radiology/fetal-usg/:studyId/generate-draft
+- POST /api/radiology/fetal-usg/:studyId/save-draft
+- POST /api/radiology/fetal-usg/:studyId/final-sign
+- GET /api/radiology/fetal-usg/:studyId/pdf
+- POST /api/radiology/fetal-usg/:studyId/send
+- GET /api/radiology/fetal-usg/templates
+- POST /api/radiology/fetal-usg/templates/preference
+
+13. Frontend Routes
+    Create:
+
+- /radiology/fetal-usg
+- /radiology/fetal-usg/:studyId
+- /radiology/fetal-usg/templates
+- /radiology/fetal-usg/dashboard
+
+14. Important UI Design
+
+- Fast data entry.
+- Minimal typing.
+- Use dropdowns, toggles, default normal values.
+- Abnormal values highlighted.
+- One-click normal report.
+- Mobile/tablet friendly.
+- Keyboard shortcuts:
+  - Ctrl+S save
+  - Ctrl+D generate draft
+  - Ctrl+F final sign after review
+  - Ctrl+W open Weasis
+
+15. Testing
+    Add sample test data for:
+
+- Normal early pregnancy
+- Normal NT scan
+- Normal anomaly scan
+- Normal growth scan
+- IUGR with abnormal Doppler
+- Oligohydramnios
+- Twin pregnancy
+- Missed abortion
+
+Add validation tests:
+
+- No final sign without review
+- Missing FHR warning
+- Missing GA warning
+- Twin discordance calculation
+- AFI abnormal warning
+- Duplicate study warning
+
+Deliverables:
+
+- Working frontend pages
+- Backend APIs
+- Database schema/migrations
+- PDF output
+- AI draft generation
+- Audit logs
+- Critical alert system
+- Sample data
+- Clear testing instructions
+
+After implementation, give me:
+
+1. Files changed.
+2. Database tables added.
+3. How to test from UI.
+4. How to test APIs.
+5. Any environment variables needed.
+6. Limitations and next upgrade suggestions.

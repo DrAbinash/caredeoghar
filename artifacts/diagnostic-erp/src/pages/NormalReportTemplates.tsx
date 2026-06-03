@@ -112,7 +112,7 @@ export default function NormalReportTemplates() {
 
   const mergeMutation = useMutation({
     mutationFn: async () => {
-      return await api.post<{ reportText: string; mergedName: string }>("/api/ai-reporting/normal-templates/merge", { templateIds: mergeIds });
+      return await api.post<{ reportText: string; mergedName: string; mergedHeading: string }>("/api/ai-reporting/normal-templates/merge", { templateIds: mergeIds });
     },
     onSuccess: (res) => {
       toast({ title: `Merged: ${res.mergedName}` });

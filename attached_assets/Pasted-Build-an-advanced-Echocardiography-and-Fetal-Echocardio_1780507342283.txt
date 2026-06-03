@@ -1,0 +1,397 @@
+Build an advanced Echocardiography and Fetal Echocardiography reporting automation module inside my existing ERP/RIS/PACS system.
+
+Environment:
+
+- Existing ERP
+- Conquest PACS
+- Weasis Viewer
+- Existing radiology worklist
+- Existing patient registration, billing, reporting system
+
+Goal:
+Create a cardiology reporting workflow where Echo and Fetal Echo studies are automatically received, measurements extracted, structured reports generated, AI-assisted impressions created, reviewed by doctor, finalized, digitally signed, archived, and delivered to patient.
+
+Important:
+AI must NEVER independently diagnose.
+AI assists only.
+Final report requires doctor review and sign-off.
+
+====================================================
+MODULE 1 – ADULT 2D ECHOCARDIOGRAPHY
+
+Automatically capture or manually enter:
+
+Patient Details:
+
+- Height
+- Weight
+- BSA
+- BP
+- Heart Rate
+
+Measurements:
+
+- IVSd
+- IVSs
+- LVIDd
+- LVIDs
+- LVPWd
+- LVPWs
+- LA diameter
+- LA volume
+- RA size
+- Aortic root
+- Ascending aorta
+- RV dimensions
+- TAPSE
+- RVSP
+- EF Simpson
+- EF Teichholz
+- Fractional shortening
+- LV mass
+- LV mass index
+
+Doppler:
+
+- MV E
+- MV A
+- E/A ratio
+- Deceleration time
+- E/e’
+- Septal e’
+- Lateral e’
+- AV velocity
+- AV gradient
+- AV area
+- TR velocity
+- TR gradient
+- Pulmonary velocity
+- Pulmonary gradient
+
+Valve Assessment:
+
+- Mitral valve
+- Aortic valve
+- Tricuspid valve
+- Pulmonary valve
+
+Pericardium:
+
+- Normal
+- Effusion
+- Tamponade signs
+
+Regional Wall Motion:
+
+- Normal
+- RWMA
+- Hypokinesia
+- Akinesia
+- Dyskinesia
+
+====================================================
+AUTO CALCULATIONS
+
+Calculate:
+
+- LVH
+- Relative wall thickness
+- LV geometry
+- Diastolic dysfunction grade
+- Pulmonary hypertension probability
+- Indexed chamber sizes
+- Severity of valve disease
+
+Generate alerts:
+
+- Severe LV dysfunction
+- Moderate/severe MR
+- Moderate/severe AR
+- Moderate/severe TR
+- Severe AS
+- Pulmonary hypertension
+- Large pericardial effusion
+
+====================================================
+AI DRAFT REPORT
+
+Generate sections:
+
+Left Ventricle
+Right Ventricle
+Left Atrium
+Right Atrium
+Interatrial Septum
+Interventricular Septum
+Aortic Valve
+Mitral Valve
+Tricuspid Valve
+Pulmonary Valve
+Pericardium
+Doppler Findings
+
+Auto Impression Examples:
+
+- Normal Echocardiographic Study.
+- Mild concentric LVH.
+- Grade I LV diastolic dysfunction.
+- Moderate LV systolic dysfunction.
+- Severe MR with dilated LA.
+- Mild pulmonary arterial hypertension.
+- Small pericardial effusion.
+
+====================================================
+MODULE 2 – PEDIATRIC ECHO
+
+Add:
+
+- ASD
+- VSD
+- PDA
+- TOF
+- TGA
+- Coarctation
+- AV canal defect
+- Pulmonary stenosis
+- Aortic stenosis
+- Complex congenital heart disease
+
+Provide pediatric-specific templates.
+
+====================================================
+MODULE 3 – FETAL ECHO
+
+Create dedicated fetal echo workflow.
+
+Capture:
+
+Maternal Details:
+
+- GA
+- EDD
+- LMP
+
+Fetal Parameters:
+
+- Fetal Heart Rate
+- Situs
+- Cardiac axis
+- Cardiac position
+- AV concordance
+- VA concordance
+
+Chambers:
+
+- RA
+- LA
+- RV
+- LV
+
+Views:
+
+- Four chamber view
+- LVOT
+- RVOT
+- Three vessel view
+- Three vessel trachea view
+- Aortic arch
+- Ductal arch
+
+Septa:
+
+- Interatrial septum
+- Interventricular septum
+
+Valves:
+
+- Mitral
+- Tricuspid
+- Aortic
+- Pulmonary
+
+Rhythm:
+
+- Normal sinus rhythm
+- Tachycardia
+- Bradycardia
+- Arrhythmia
+
+Doppler:
+
+- Umbilical artery
+- Ductus venosus
+- MCA if available
+
+====================================================
+FETAL ECHO ABNORMALITY LIBRARY
+
+Selectable abnormalities:
+
+- VSD
+- ASD
+- AV canal defect
+- TOF
+- TGA
+- DORV
+- HLHS
+- Coarctation
+- Pulmonary stenosis
+- Aortic stenosis
+- Ebstein anomaly
+- Cardiac rhabdomyoma
+- Pericardial effusion
+- Fetal arrhythmia
+- Cardiomegaly
+- Hydrops fetalis
+
+====================================================
+AI FETAL ECHO REPORT GENERATOR
+
+Generate:
+
+Cardiac Situs
+Cardiac Position
+Four Chamber View
+Outflow Tracts
+Three Vessel View
+Aortic Arch
+Ductal Arch
+Rhythm
+Doppler Assessment
+
+Impression Examples:
+
+- No major structural fetal cardiac abnormality detected.
+- Small muscular VSD suspected.
+- Features suggestive of Tetralogy of Fallot.
+- Fetal bradycardia noted.
+- Mild fetal cardiomegaly.
+
+====================================================
+SMART QUALITY CHECKS
+
+Warn if:
+
+- FHR missing
+- Situs not documented
+- Four chamber view not documented
+- Outflow tracts not documented
+- Rhythm not documented
+- Impression missing
+
+Block final sign until mandatory fields completed.
+
+====================================================
+VOICE REPORTING
+
+Add:
+
+“Start Dictation”
+
+Convert voice directly into structured fields.
+
+Example:
+
+"Normal fetal echo. Situs solitus. Four chamber view normal. Outflow tracts normal. FHR 145."
+
+System automatically fills fields.
+
+====================================================
+AI COPILOT
+
+Create side panel:
+
+Suggest:
+
+- Missing measurements
+- Missing views
+- Abnormal calculations
+- Possible report wording
+
+Never auto-finalize.
+
+====================================================
+PDF OUTPUT
+
+Generate professional reports with:
+
+- Demographics
+- Measurements table
+- Findings
+- Impression
+- Doctor signature
+- QR verification
+- Audit trail
+
+====================================================
+CRITICAL ALERT SYSTEM
+
+Flag studies:
+
+- Severe LV dysfunction
+- Severe valve disease
+- Cardiac tamponade
+- Complex congenital heart disease
+- Fetal hydrops
+- Significant fetal arrhythmia
+
+Require acknowledgement before final sign.
+
+====================================================
+DATABASE TABLES
+
+echo_studies
+echo_measurements
+echo_doppler
+echo_reports
+echo_audit_logs
+
+fetal_echo_studies
+fetal_echo_measurements
+fetal_echo_reports
+fetal_echo_audit_logs
+
+====================================================
+API ROUTES
+
+/api/echo/worklist
+/api/echo/:studyId
+/api/echo/:studyId/generate-draft
+/api/echo/:studyId/final-sign
+
+/api/fetal-echo/worklist
+/api/fetal-echo/:studyId
+/api/fetal-echo/:studyId/generate-draft
+/api/fetal-echo/:studyId/final-sign
+
+====================================================
+DASHBOARDS
+
+Create:
+
+/echo
+/echo/dashboard
+/fetal-echo
+/fetal-echo/dashboard
+
+Include:
+
+- Pending reports
+- Abnormal studies
+- Critical alerts
+- Finalized today
+- Average reporting time
+
+====================================================
+FUTURE READY
+
+Architecture must support future AI image analysis:
+
+- Chamber segmentation
+- EF estimation
+- Valve tracking
+- Strain imaging
+- Congenital heart disease detection
+- Automated fetal cardiac view recognition
+
+Implement database and APIs now so future AI models can plug in without redesign.

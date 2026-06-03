@@ -89,6 +89,7 @@ interface StudyDemog {
   orderId: number | null;
   billId: number | null;
   studyDescription: string | null;
+  modality: string;
 }
 
 interface TextMacro {
@@ -126,6 +127,7 @@ const EMPTY_DEMOG: StudyDemog = {
   orderId: null,
   billId: null,
   studyDescription: null,
+  modality: "",
 };
 
 const DEFAULT_PREFERENCES: ReportPreferences = {
@@ -230,6 +232,9 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
   const [normalTemplatesLoading, setNormalTemplatesLoading] = useState(false);
   const [mergeTemplateMode, setMergeTemplateMode] = useState(false);
   const [mergeTemplateIds, setMergeTemplateIds] = useState<string[]>([]);
+  // Quick findings: body-part-specific templates that adapt to the current study
+  const [quickFindings, setQuickFindings] = useState<Array<{ id: number; name: string; category: string; findings: string; impression: string }>>([]);
+  const [quickFindingsLoading, setQuickFindingsLoading] = useState(false);
 
   // Spinal measurements
   const [showSpinalPanel, setShowSpinalPanel] = useState(false);
@@ -252,6 +257,11 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
     void loadStudyData(studyId);
     void loadExistingDraft(studyId);
   }, [studyId]);
+
+  useEffect(() => {
+    void loadQuickFindings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateId, template?.modality, demog.modality, demog.studyDescription]);
 
   useEffect(() => {
     if (!template) return;
@@ -290,6 +300,22 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
       const rows = await api.get<Array<{ id: number; shortcut: string; expansion: string; modality: string | null; bodyPart: string | null; isMeasurementMacro: boolean; measurementParams: string | null; autoSuggestOn: boolean; isGlobal: boolean; sortOrder: number }>>("/api/radiology/report-generator/smart-macros");
       setSmartMacros(rows);
     } catch { /* ignore */ }
+  }
+
+  async function loadQuickFindings() {
+    const currentModality = template?.modality ?? demog.modality ?? "";
+    const currentBodyPart = template?.studyName ?? demog.studyDescription ?? "";
+    if (!currentModality) { setQuickFindings([]); return; }
+    setQuickFindingsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("modality", currentModality);
+      if (currentBodyPart) params.set("bodyPart", currentBodyPart);
+      const items = await api.get<Array<{ id: number; name: string; modality: string; category: string; findings: string; impression: string; technique: string | null; clinicalHistory: string | null; comparison: string | null }>>(`/api/ai-reporting/normal-templates?${params.toString()}`);
+      // Keep only the first 8, showing all categories
+      setQuickFindings(items.slice(0, 8).map((t) => ({ id: t.id, name: t.name, category: t.category, findings: t.findings, impression: t.impression })));
+    } catch { setQuickFindings([]); }
+    finally { setQuickFindingsLoading(false); }
   }
 
   async function loadPreferences() {
@@ -382,6 +408,7 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
           orderId: s.orderId ?? null,
           billId: s.billId ?? null,
           studyDescription: s.studyDescription ?? null,
+          modality: s.modality,
         });
         if (s.clinicalHistory) setClinicalHistory(s.clinicalHistory);
         pickTemplateForModality(s.modality, s.studyDescription);
@@ -400,6 +427,7 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
           orderId: null,
           billId: null,
           studyDescription: w.studyDescription ?? null,
+          modality: w.modality,
         });
         pickTemplateForModality(w.modality, w.studyDescription);
       }
@@ -1485,7 +1513,7 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
   async function applyMergedTemplates() {
     if (mergeTemplateIds.length < 2) return;
     try {
-      const res = await api.post<{ reportText: string; mergedName: string }>("/api/ai-reporting/normal-templates/merge", { templateIds: mergeTemplateIds.map(Number) });
+      const res = await api.post<{ reportText: string; mergedName: string; mergedHeading: string }>("/api/ai-reporting/normal-templates/merge", { templateIds: mergeTemplateIds.map(Number) });
       setClinicalHistory("As per referral.");
       setImpressionRaw("");
       setRecommendation("Please correlate with clinical findings.");
@@ -1493,7 +1521,7 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
       setShowNormalTemplatePicker(false);
       setMergeTemplateMode(false);
       setMergeTemplateIds([]);
-      toast({ title: `Merged: ${res.mergedName}`, description: "AI Draft – Requires Radiologist Review" });
+      toast({ title: res.mergedHeading || `Merged: ${res.mergedName}`, description: "AI Draft – Requires Radiologist Review" });
     } catch (e) {
       toast({ variant: "destructive", title: "Merge failed", description: String(e) });
     }
@@ -1847,6 +1875,37 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
                 onKeyDown={(e) => handleTextareaMacro(e, clinicalHistory, setClinicalHistory)}
                 placeholder="Enter clinical history, symptoms, and indication..."
               />
+            </div>
+
+            {/* Quick findings buttons */}
+            <div className="rounded-lg border bg-card p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-sm">Quick Findings</h3>
+                <span className="text-[10px] text-muted-foreground">
+                  {quickFindingsLoading ? "Loading…" : `${quickFindings.length} for ${template?.modality || demog.modality || "this study"}`}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {quickFindings.map((t) => (
+                  <button
+                    key={t.id}
+                    className="text-[11px] px-2.5 py-1 rounded border hover:bg-muted transition-colors"
+                    title={t.name}
+                    onClick={() => {
+                      const section = template?.sections[0] || "Findings";
+                      setFindingsSections((prev) => ({ ...prev, [section]: (prev[section] ? prev[section] + "\n" : "") + t.findings }));
+                      setImpressionRaw((prev) => (prev ? prev + "\n" : "") + t.impression);
+                      toast({ title: `Applied: ${t.name}`, description: "Appended to findings" });
+                    }}
+                  >
+                    <span className={`inline-block w-2 h-2 rounded-full mr-1 ${t.category === "normal" ? "bg-green-400" : t.category === "pathology" ? "bg-amber-400" : t.category === "trauma" ? "bg-red-400" : t.category === "screening" ? "bg-blue-400" : "bg-purple-400"}`} />
+                    {t.name}
+                  </button>
+                ))}
+                {quickFindings.length === 0 && !quickFindingsLoading && (
+                  <span className="text-[11px] text-muted-foreground">No quick findings available for this study.</span>
+                )}
+              </div>
             </div>
 
             {/* Findings sections */}

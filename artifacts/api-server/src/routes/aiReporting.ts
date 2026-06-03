@@ -2558,7 +2558,7 @@ router.post("/normal-templates/:id/apply", async (req, res): Promise<void> => {
 
 /**
  * POST /api/ai-reporting/normal-templates/merge
- * Merge two templates into a single report. Accepts array of templateIds.
+ * Merge N templates into a single report. Deduplicates common phrases.
  */
 router.post("/normal-templates/merge", async (req, res): Promise<void> => {
   const sReq = req as StaffAuthRequest;
@@ -2578,15 +2578,37 @@ router.post("/normal-templates/merge", async (req, res): Promise<void> => {
   if (ordered.length === 0) { res.status(404).json({ error: "No valid templates found" }); return; }
 
   const session = sReq.staffSession!;
-  const mergedName = ordered.map((t) => t.name).join(" + ");
-  const mergedFindings = ordered.map((t) => `=== ${t.name} ===\n${t.findings}`).join("\n\n");
+
+  // Deduplicate common sentences across findings
+  const allSentences = ordered.flatMap((t) => t.findings.split(/\.\s+/));
+  const sentenceCounts = new Map<string, number>();
+  for (const s of allSentences) {
+    const key = s.trim().toLowerCase().replace(/\s+/g, " ");
+    if (key.length > 10) sentenceCounts.set(key, (sentenceCounts.get(key) || 0) + 1);
+  }
+  const commonSentences = new Set([...sentenceCounts.entries()].filter(([, c]) => c > 1).map(([k]) => k));
+
+  const dedupedFindings = ordered.map((t) => {
+    const sentences = t.findings.split(/\.\s+/);
+    const unique = sentences.filter((s) => {
+      const key = s.trim().toLowerCase().replace(/\s+/g, " ");
+      return key.length <= 10 || !commonSentences.has(key);
+    });
+    return { ...t, uniqueFindings: unique.join(". ") };
+  });
+
+  const mergedName = ordered.map((t) => `${t.modality} ${t.bodyPart || t.name.split("–")[0]?.trim() || ""}`.replace(/\s+/g, " ").trim()).join(" + ");
+  const mergedHeading = ordered.map((t) => `${t.modality} ${t.bodyPart || ""}`.replace(/\s+/g, " ").trim()).join(" WITH ");
+
+  const mergedFindings = dedupedFindings.map((t) => `=== ${t.modality} – ${t.bodyPart || "Study"} ===\n${t.uniqueFindings}`).join("\n\n");
   const mergedImpression = ordered.map((t) => `• ${t.impression}`).join("\n");
-  const mergedTechnique = ordered.map((t) => t.technique).filter(Boolean).join("; ");
-  const mergedClinicalHistory = ordered.map((t) => t.clinicalHistory).filter(Boolean).join("; ");
-  const mergedComparison = ordered.map((t) => t.comparison).filter(Boolean).join("; ");
+  const mergedTechnique = [...new Set(ordered.map((t) => t.technique).filter(Boolean))].join("; ");
+  const mergedClinicalHistory = [...new Set(ordered.map((t) => t.clinicalHistory).filter(Boolean))].join("; ");
+  const mergedComparison = [...new Set(ordered.map((t) => t.comparison).filter(Boolean))].join("; ");
 
   const reportText = [
-    "CLINICAL HISTORY:", mergedClinicalHistory || "As per referral.",
+    "STUDY:", mergedHeading,
+    "\nCLINICAL HISTORY:", mergedClinicalHistory || "As per referral.",
     "\nTECHNIQUE:", mergedTechnique || "As per protocol.",
     "\nCOMPARISON:", mergedComparison || "None available.",
     "\nFINDINGS:", mergedFindings,
@@ -2597,6 +2619,7 @@ router.post("/normal-templates/merge", async (req, res): Promise<void> => {
   res.json({
     templateIds,
     mergedName,
+    mergedHeading,
     reportText,
     aiSafetyLabel: "AI Draft – Requires Radiologist Review",
     message: "Merged templates applied. Radiologist must review and finalize.",
