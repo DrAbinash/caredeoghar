@@ -23,6 +23,14 @@ import {
   ragDocumentEmbeddingsTable,
   ragSearchQueriesTable,
   anomalyAlertsTable,
+  reportTemplateVersionsTable,
+  aiBillingSuggestionsTable,
+  peerReviewAssignmentsTable,
+  turnaroundTimesTable,
+  aiTrainingDataExportsTable,
+  reportQualityGatesTable,
+  criticalFindingsTable,
+  aiProviderHealthLogsTable,
 } from "@workspace/db";
 import { eq, and, desc, gte, lte, sql } from "drizzle-orm";
 import { type StaffAuthRequest, FULL_ACCESS_ROLES } from "../middleware/requireStaffAuth";
@@ -1263,6 +1271,754 @@ router.get("/anomaly-alerts/summary", async (req, res): Promise<void> => {
     .groupBy(anomalyAlertsTable.severity, anomalyAlertsTable.status);
 
   res.json({ summary: rows });
+});
+
+// ──────────────────────────── Phase 13: AI Report Diff Viewer ────────────────────────────
+
+/**
+ * GET /api/ai-reporting/report-diff/:worklistId
+ * Returns AI draft vs. final radiologist report for side-by-side comparison.
+ */
+router.get("/report-diff/:worklistId", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const wlId = Number(req.params.worklistId);
+  const [wl] = await db.select().from(radiologyWorklistTable).where(eq(radiologyWorklistTable.id, wlId)).limit(1);
+  if (!wl) { res.status(404).json({ error: "Worklist not found" }); return; }
+
+  const aiDraft = wl.aiDraftJson ? JSON.parse(wl.aiDraftJson) : null;
+  const aiText = aiDraft?.text ?? aiDraft?.content ?? aiDraft?.findings ?? wl.aiDraftJson ?? "";
+
+  const [draft] = await db.select({ id: aiReportingDraftsTable.id, draftText: aiReportingDraftsTable.draftText, status: aiReportingDraftsTable.status })
+    .from(aiReportingDraftsTable).where(eq(aiReportingDraftsTable.studyInstanceUID, wl.studyInstanceUID ?? "")).limit(1);
+
+  const finalText = draft?.draftText ?? "";
+
+  res.json({
+    worklistId: wlId,
+    aiDraft: aiText,
+    finalReport: finalText,
+    aiDraftStatus: wl.aiDraftStatus,
+    aiSafetyLabel: "AI Draft – Requires Radiologist Review",
+    // Simple diff: show which lines are present only in AI vs. only in final
+    diff: computeSimpleDiff(aiText, finalText),
+  });
+});
+
+function computeSimpleDiff(ai: string, final: string) {
+  const aiLines = ai.split("\n").map((l) => l.trim()).filter(Boolean);
+  const finalLines = final.split("\n").map((l) => l.trim()).filter(Boolean);
+  const aiSet = new Set(aiLines);
+  const finalSet = new Set(finalLines);
+  return {
+    addedByRadiologist: finalLines.filter((l) => !aiSet.has(l)),
+    removedByRadiologist: aiLines.filter((l) => !finalSet.has(l)),
+    unchanged: aiLines.filter((l) => finalSet.has(l)),
+  };
+}
+
+// ──────────────────────────── Phase 14: AI Feedback Loop Analytics ────────────────────────────
+
+/**
+ * GET /api/ai-reporting/feedback-loop-analytics
+ * Correlates radiologist feedback (thumbs up/down) with AI model/provider performance.
+ */
+router.get("/feedback-loop-analytics", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const { from, to, provider } = req.query as Record<string, string>;
+  const dateFrom = from ? new Date(from) : new Date(Date.now() - 30 * 86400000);
+  const dateTo = to ? new Date(to) : new Date();
+
+  const conditions = [
+    gte(aiReportingDraftsTable.createdAt, dateFrom),
+    lte(aiReportingDraftsTable.createdAt, dateTo),
+  ];
+
+  const rows = await db
+    .select({
+      provider: aiReportingDraftsTable.provider,
+      model: aiReportingDraftsTable.model,
+      total: sql<number>`count(*)::int`,
+    })
+    .from(aiReportingDraftsTable)
+    .where(and(...conditions))
+    .groupBy(aiReportingDraftsTable.provider, aiReportingDraftsTable.model);
+
+  res.json({ dateFrom: dateFrom.toISOString(), dateTo: dateTo.toISOString(), byProvider: rows });
+});
+
+// ──────────────────────────── Phase 15: Report Template Versioning ────────────────────────────
+
+/**
+ * GET /api/ai-reporting/template-versions
+ * List versions of a template.
+ */
+router.get("/template-versions", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const { templateId } = req.query as Record<string, string>;
+  const conditions = templateId ? [eq(reportTemplateVersionsTable.templateId, templateId)] : [];
+  const rows = await db
+    .select()
+    .from(reportTemplateVersionsTable)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(reportTemplateVersionsTable.version));
+  res.json(rows);
+});
+
+/**
+ * POST /api/ai-reporting/template-versions
+ * Save a new version of a template.
+ */
+router.post("/template-versions", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  if (!canConfigure(sReq)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const b = req.body as {
+    templateId: string;
+    name: string;
+    content: string;
+    changeNotes?: string;
+  };
+  if (!b.templateId || !b.name || !b.content) { res.status(400).json({ error: "templateId, name, and content required" }); return; }
+
+  const [latest] = await db
+    .select({ version: reportTemplateVersionsTable.version })
+    .from(reportTemplateVersionsTable)
+    .where(eq(reportTemplateVersionsTable.templateId, b.templateId))
+    .orderBy(desc(reportTemplateVersionsTable.version))
+    .limit(1);
+
+  const nextVersion = (latest?.version ?? 0) + 1;
+  const user = sReq.staffSession!;
+
+  const inserted = await db.insert(reportTemplateVersionsTable).values({
+    templateId: b.templateId,
+    version: nextVersion,
+    name: b.name,
+    content: b.content,
+    createdById: user.subjectId,
+    createdByName: user.subjectName,
+    changeNotes: b.changeNotes ?? null,
+  }).returning();
+
+  res.json({ id: inserted[0]?.id, version: nextVersion });
+});
+
+// ──────────────────────────── Phase 16: AI Billing Code Suggestions ────────────────────────────
+
+/**
+ * GET /api/ai-reporting/billing-suggestions
+ * List AI billing suggestions.
+ */
+router.get("/billing-suggestions", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const { worklistId, status } = req.query as Record<string, string>;
+  const conditions = [];
+  if (worklistId) conditions.push(eq(aiBillingSuggestionsTable.worklistId, Number(worklistId)));
+  if (status) conditions.push(eq(aiBillingSuggestionsTable.status, status));
+  const rows = await db
+    .select()
+    .from(aiBillingSuggestionsTable)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(aiBillingSuggestionsTable.createdAt));
+  res.json(rows);
+});
+
+/**
+ * POST /api/ai-reporting/billing-suggestions
+ * Create a billing suggestion.
+ */
+router.post("/billing-suggestions", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const b = req.body as { worklistId: number; cptCodes?: string; icdCodes?: string; overallConfidence?: number; reportId?: number };
+  if (!b.worklistId) { res.status(400).json({ error: "worklistId required" }); return; }
+
+  const inserted = await db.insert(aiBillingSuggestionsTable).values({
+    worklistId: b.worklistId,
+    reportId: b.reportId ?? null,
+    cptCodes: b.cptCodes ?? null,
+    icdCodes: b.icdCodes ?? null,
+    overallConfidence: b.overallConfidence ?? null,
+  }).returning();
+
+  res.json({ id: inserted[0]?.id, safetyNote: "AI Draft – Requires Radiologist Review" });
+});
+
+/**
+ * PATCH /api/ai-reporting/billing-suggestions/:id
+ * Review a billing suggestion.
+ */
+router.patch("/billing-suggestions/:id", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const id = Number(req.params.id);
+  const { status, reviewedNotes } = req.body as { status: "accepted" | "rejected" | "reviewed"; reviewedNotes?: string };
+  if (!status) { res.status(400).json({ error: "status required" }); return; }
+
+  const user = sReq.staffSession!;
+  const [updated] = await db.update(aiBillingSuggestionsTable).set({
+    status,
+    reviewedById: user.subjectId,
+    reviewedByName: user.subjectName,
+    reviewedAt: new Date(),
+    reviewedNotes: reviewedNotes ?? null,
+    updatedAt: new Date(),
+  }).where(eq(aiBillingSuggestionsTable.id, id)).returning();
+  if (!updated) { res.status(404).json({ error: "Not found" }); return; }
+  res.json({ ok: true });
+});
+
+// ──────────────────────────── Phase 17: Peer Review Auto-Assignment ────────────────────────────
+
+/**
+ * GET /api/ai-reporting/peer-review-assignments
+ * List peer review assignments.
+ */
+router.get("/peer-review-assignments", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const { status, assigneeId } = req.query as Record<string, string>;
+  const conditions = [];
+  if (status) conditions.push(eq(peerReviewAssignmentsTable.status, status));
+  if (assigneeId) conditions.push(eq(peerReviewAssignmentsTable.assignedToId, Number(assigneeId)));
+  const rows = await db
+    .select()
+    .from(peerReviewAssignmentsTable)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(peerReviewAssignmentsTable.createdAt));
+  res.json(rows);
+});
+
+/**
+ * POST /api/ai-reporting/peer-review-assignments
+ * Create a peer review assignment.
+ */
+router.post("/peer-review-assignments", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const b = req.body as {
+    reportId: number;
+    worklistId?: number;
+    assignedToId: number;
+    assignedToName?: string;
+    priority?: string;
+    aiConfidenceScore?: number;
+    autoAssignedReason?: string;
+  };
+  if (!b.reportId || !b.assignedToId) { res.status(400).json({ error: "reportId and assignedToId required" }); return; }
+
+  const user = sReq.staffSession!;
+  const inserted = await db.insert(peerReviewAssignmentsTable).values({
+    reportId: b.reportId,
+    worklistId: b.worklistId ?? null,
+    assignedToId: b.assignedToId,
+    assignedToName: b.assignedToName ?? null,
+    assignedById: user.subjectId,
+    assignedByName: user.subjectName,
+    priority: b.priority ?? "normal",
+    aiConfidenceScore: b.aiConfidenceScore ?? null,
+    autoAssignedReason: b.autoAssignedReason ?? null,
+  }).returning();
+
+  res.json({ id: inserted[0]?.id });
+});
+
+/**
+ * PATCH /api/ai-reporting/peer-review-assignments/:id
+ * Update peer review status (complete/reject).
+ */
+router.patch("/peer-review-assignments/:id", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const id = Number(req.params.id);
+  const { status, notes } = req.body as { status: "in_review" | "approved" | "rejected"; notes?: string };
+  if (!status) { res.status(400).json({ error: "status required" }); return; }
+
+  const update: Record<string, unknown> = { status, updatedAt: new Date() };
+  if (status === "approved" || status === "rejected") {
+    update.completedAt = new Date();
+    update.completedNotes = notes ?? null;
+  }
+
+  const [updated] = await db.update(peerReviewAssignmentsTable).set(update).where(eq(peerReviewAssignmentsTable.id, id)).returning();
+  if (!updated) { res.status(404).json({ error: "Not found" }); return; }
+  res.json({ ok: true });
+});
+
+// ──────────────────────────── Phase 18: Turnaround Time Analytics ────────────────────────────
+
+/**
+ * GET /api/ai-reporting/turnaround-times
+ * Turnaround time analytics with optional aggregation.
+ */
+router.get("/turnaround-times", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const { dateFrom, dateTo, modality, radiologistId, groupBy } = req.query as Record<string, string>;
+  const conditions = [];
+  if (dateFrom) conditions.push(gte(turnaroundTimesTable.dateBucket, dateFrom));
+  if (dateTo) conditions.push(lte(turnaroundTimesTable.dateBucket, dateTo));
+  if (modality) conditions.push(eq(turnaroundTimesTable.modality, modality));
+  if (radiologistId) conditions.push(eq(turnaroundTimesTable.radiologistId, Number(radiologistId)));
+
+  const rows = await db
+    .select()
+    .from(turnaroundTimesTable)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(turnaroundTimesTable.dateBucket));
+
+  // Aggregation
+  const stats: Record<string, { count: number; avgMinutes: number; min: number; max: number }> = {};
+  if (groupBy) {
+    for (const row of rows) {
+      const key = (groupBy === "modality" ? row.modality : groupBy === "radiologist" ? row.radiologistName : row.dateBucket) ?? "unknown";
+      if (!stats[key]) stats[key] = { count: 0, avgMinutes: 0, min: Infinity, max: 0 };
+      const m = row.minutesToReport ?? 0;
+      stats[key].count += 1;
+      stats[key].avgMinutes += m;
+      stats[key].min = Math.min(stats[key].min, m);
+      stats[key].max = Math.max(stats[key].max, m);
+    }
+    for (const k of Object.keys(stats)) {
+      stats[k].avgMinutes = stats[k].count > 0 ? Math.round(stats[k].avgMinutes / stats[k].count) : 0;
+    }
+  }
+
+  res.json({ rows: groupBy ? undefined : rows, aggregates: groupBy ? stats : undefined });
+});
+
+/**
+ * POST /api/ai-reporting/turnaround-times
+ * Record a turnaround time snapshot.
+ */
+router.post("/turnaround-times", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const b = req.body as {
+    worklistId: number;
+    studyId?: number;
+    modality?: string;
+    radiologistId?: number;
+    radiologistName?: string;
+    minutesToReport?: number;
+    minutesToFirstReview?: number;
+    minutesToPeerReview?: number;
+    dateBucket: string;
+  };
+  if (!b.worklistId || !b.dateBucket) { res.status(400).json({ error: "worklistId and dateBucket required" }); return; }
+
+  const inserted = await db.insert(turnaroundTimesTable).values({
+    worklistId: b.worklistId,
+    studyId: b.studyId ?? null,
+    modality: b.modality ?? null,
+    radiologistId: b.radiologistId ?? null,
+    radiologistName: b.radiologistName ?? null,
+    minutesToReport: b.minutesToReport ?? null,
+    minutesToFirstReview: b.minutesToFirstReview ?? null,
+    minutesToPeerReview: b.minutesToPeerReview ?? null,
+    dateBucket: b.dateBucket,
+  }).returning();
+
+  res.json({ id: inserted[0]?.id });
+});
+
+// ──────────────────────────── Phase 19: AI Training Data Export ────────────────────────────
+
+/**
+ * GET /api/ai-reporting/training-data-exports
+ * List training data exports.
+ */
+router.get("/training-data-exports", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  if (!canConfigure(sReq)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const rows = await db
+    .select()
+    .from(aiTrainingDataExportsTable)
+    .orderBy(desc(aiTrainingDataExportsTable.createdAt))
+    .limit(50);
+  res.json(rows);
+});
+
+/**
+ * POST /api/ai-reporting/training-data-exports
+ * Queue a training data export.
+ */
+router.post("/training-data-exports", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  if (!canConfigure(sReq)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const b = req.body as {
+    exportName: string;
+    modality?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    minQualityScore?: number;
+  };
+  if (!b.exportName) { res.status(400).json({ error: "exportName required" }); return; }
+
+  const user = sReq.staffSession!;
+  const inserted = await db.insert(aiTrainingDataExportsTable).values({
+    exportName: b.exportName,
+    modality: b.modality ?? null,
+    dateFrom: b.dateFrom ?? null,
+    dateTo: b.dateTo ?? null,
+    minQualityScore: b.minQualityScore ?? null,
+    status: "pending",
+    exportedById: user.subjectId,
+    exportedByName: user.subjectName,
+  }).returning();
+
+  res.json({ id: inserted[0]?.id, status: "pending" });
+});
+
+/**
+ * PATCH /api/ai-reporting/training-data-exports/:id
+ * Update export status (super-admin only).
+ */
+router.patch("/training-data-exports/:id", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  if (!canConfigure(sReq)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const id = Number(req.params.id);
+  const { status, recordsCount, filePath } = req.body as { status: string; recordsCount?: number; filePath?: string };
+  if (!status) { res.status(400).json({ error: "status required" }); return; }
+
+  const update: Record<string, unknown> = { status, updatedAt: new Date() };
+  if (recordsCount !== undefined) update.recordsCount = recordsCount;
+  if (filePath) update.filePath = filePath;
+
+  await db.update(aiTrainingDataExportsTable).set(update).where(eq(aiTrainingDataExportsTable.id, id));
+  res.json({ ok: true });
+});
+
+// ──────────────────────────── Phase 20: Report Quality Gate ────────────────────────────
+
+/**
+ * GET /api/ai-reporting/quality-gates
+ * List quality gate checks.
+ */
+router.get("/quality-gates", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const { reportId, passed } = req.query as Record<string, string>;
+  const conditions = [];
+  if (reportId) conditions.push(eq(reportQualityGatesTable.reportId, Number(reportId)));
+  if (passed) conditions.push(eq(reportQualityGatesTable.allPassed, passed === "true"));
+  const rows = await db
+    .select()
+    .from(reportQualityGatesTable)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(reportQualityGatesTable.createdAt));
+  res.json(rows);
+});
+
+/**
+ * POST /api/ai-reporting/quality-gates
+ * Run a quality gate check on a report.
+ */
+router.post("/quality-gates", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const b = req.body as {
+    reportId: number;
+    findingsPresent?: boolean;
+    impressionPresent?: boolean;
+    signaturePresent?: boolean;
+    clinicalHistoryPresent?: boolean;
+    techniquePresent?: boolean;
+    comparisonPresent?: boolean;
+  };
+  if (!b.reportId) { res.status(400).json({ error: "reportId required" }); return; }
+
+  const findingsPresent = b.findingsPresent ?? false;
+  const impressionPresent = b.impressionPresent ?? false;
+  const signaturePresent = b.signaturePresent ?? false;
+  const clinicalHistoryPresent = b.clinicalHistoryPresent ?? false;
+  const techniquePresent = b.techniquePresent ?? false;
+  const comparisonPresent = b.comparisonPresent ?? false;
+
+  const allPassed = findingsPresent && impressionPresent && signaturePresent;
+  const failed = [];
+  if (!findingsPresent) failed.push("findings");
+  if (!impressionPresent) failed.push("impression");
+  if (!signaturePresent) failed.push("signature");
+  if (!clinicalHistoryPresent) failed.push("clinical_history");
+  if (!techniquePresent) failed.push("technique");
+  if (!comparisonPresent) failed.push("comparison");
+
+  const existing = await db
+    .select({ id: reportQualityGatesTable.id })
+    .from(reportQualityGatesTable)
+    .where(eq(reportQualityGatesTable.reportId, b.reportId))
+    .limit(1);
+
+  if (existing.length > 0) {
+    await db.update(reportQualityGatesTable).set({
+      findingsPresent, impressionPresent, signaturePresent,
+      clinicalHistoryPresent, techniquePresent, comparisonPresent,
+      allPassed, failedChecks: JSON.stringify(failed),
+      passedAt: allPassed ? new Date() : null,
+      updatedAt: new Date(),
+    }).where(eq(reportQualityGatesTable.id, existing[0].id));
+    res.json({ id: existing[0].id, allPassed, failedChecks: failed });
+    return;
+  }
+
+  const inserted = await db.insert(reportQualityGatesTable).values({
+    reportId: b.reportId,
+    findingsPresent, impressionPresent, signaturePresent,
+    clinicalHistoryPresent, techniquePresent, comparisonPresent,
+    allPassed, failedChecks: JSON.stringify(failed),
+    passedAt: allPassed ? new Date() : null,
+  }).returning();
+
+  res.json({ id: inserted[0]?.id, allPassed, failedChecks: failed });
+});
+
+// ──────────────────────────── Phase 21: Critical Finding Escalation ────────────────────────────
+
+/**
+ * GET /api/ai-reporting/critical-findings
+ * List critical findings.
+ */
+router.get("/critical-findings", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const { status, patientId } = req.query as Record<string, string>;
+  const conditions = [];
+  if (status) conditions.push(eq(criticalFindingsTable.status, status));
+  if (patientId) conditions.push(eq(criticalFindingsTable.patientId, Number(patientId)));
+  const rows = await db
+    .select()
+    .from(criticalFindingsTable)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(criticalFindingsTable.createdAt));
+  res.json(rows);
+});
+
+/**
+ * POST /api/ai-reporting/critical-findings
+ * Create a critical finding record.
+ */
+router.post("/critical-findings", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const b = req.body as {
+    reportId: number;
+    worklistId?: number;
+    patientId?: number;
+    findingKeywords: string[];
+    severity?: string;
+  };
+  if (!b.reportId || !b.findingKeywords?.length) { res.status(400).json({ error: "reportId and findingKeywords required" }); return; }
+
+  const inserted = await db.insert(criticalFindingsTable).values({
+    reportId: b.reportId,
+    worklistId: b.worklistId ?? null,
+    patientId: b.patientId ?? null,
+    findingKeywords: JSON.stringify(b.findingKeywords),
+    severity: b.severity ?? "high",
+  }).returning();
+
+  res.json({ id: inserted[0]?.id });
+});
+
+/**
+ * PATCH /api/ai-reporting/critical-findings/:id
+ * Update notification status.
+ */
+router.patch("/critical-findings/:id", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const id = Number(req.params.id);
+  const { status, notifiedTo, notificationMethod, escalationReason } = req.body as {
+    status: string; notifiedTo?: string; notificationMethod?: string; escalationReason?: string;
+  };
+  if (!status) { res.status(400).json({ error: "status required" }); return; }
+
+  const update: Record<string, unknown> = { status, updatedAt: new Date() };
+  if (notifiedTo) update.notifiedTo = notifiedTo;
+  if (notificationMethod) update.notificationMethod = notificationMethod;
+  if (escalationReason) update.escalationReason = escalationReason;
+  if (status === "notified") update.notifiedAt = new Date();
+  if (status === "escalated") update.escalatedAt = new Date();
+
+  await db.update(criticalFindingsTable).set(update).where(eq(criticalFindingsTable.id, id));
+  res.json({ ok: true });
+});
+
+// ──────────────────────────── Phase 22: AI Provider Health Monitor ────────────────────────────
+
+/**
+ * GET /api/ai-reporting/provider-health
+ * AI provider health status.
+ */
+router.get("/provider-health", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const { provider, limit = "50" } = req.query as Record<string, string>;
+  const conditions = [];
+  if (provider) conditions.push(eq(aiProviderHealthLogsTable.provider, provider));
+  const rows = await db
+    .select()
+    .from(aiProviderHealthLogsTable)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(aiProviderHealthLogsTable.createdAt))
+    .limit(Number(limit));
+
+  // Compute aggregates per provider
+  const providerMap: Record<string, { total: number; success: number; avgLatency: number; lastStatus: string; lastAt: string }> = {};
+  for (const row of rows) {
+    const p = row.provider;
+    const rowAt = row.createdAt ? new Date(row.createdAt).toISOString() : "";
+    if (!providerMap[p]) providerMap[p] = { total: 0, success: 0, avgLatency: 0, lastStatus: row.status, lastAt: rowAt };
+    providerMap[p].total += 1;
+    if (row.isSuccess) providerMap[p].success += 1;
+    if (row.latencyMs) providerMap[p].avgLatency += row.latencyMs;
+    if (rowAt > providerMap[p].lastAt) {
+      providerMap[p].lastStatus = row.status;
+      providerMap[p].lastAt = rowAt;
+    }
+  }
+  for (const p of Object.keys(providerMap)) {
+    providerMap[p].avgLatency = providerMap[p].total > 0 ? Math.round(providerMap[p].avgLatency / providerMap[p].total) : 0;
+  }
+
+  res.json({ logs: rows.slice(0, 20), providers: providerMap });
+});
+
+/**
+ * POST /api/ai-reporting/provider-health
+ * Log a health check result.
+ */
+router.post("/provider-health", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const b = req.body as {
+    provider: string;
+    endpointUrl?: string;
+    model?: string;
+    latencyMs?: number;
+    status: string;
+    statusCode?: number;
+    errorMessage?: string;
+    isSuccess?: boolean;
+  };
+  if (!b.provider || !b.status) { res.status(400).json({ error: "provider and status required" }); return; }
+
+  const inserted = await db.insert(aiProviderHealthLogsTable).values({
+    provider: b.provider,
+    endpointUrl: b.endpointUrl ?? null,
+    model: b.model ?? null,
+    latencyMs: b.latencyMs ?? null,
+    status: b.status,
+    statusCode: b.statusCode ?? null,
+    errorMessage: b.errorMessage ?? null,
+    isSuccess: b.isSuccess ?? false,
+  }).returning();
+
+  res.json({ id: inserted[0]?.id });
+});
+
+// ──────────────────────────── Phase 23: Radiology Command Center ────────────────────────────
+
+/**
+ * GET /api/ai-reporting/command-center
+ * Consolidated KPI dashboard: daily volume, TAT, AI usage, quality scores, anomalies, peer review backlog.
+ */
+router.get("/command-center", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const today = new Date().toISOString().split("T")[0];
+
+  const [dailyVolume] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(radiologyWorklistTable)
+    .where(gte(radiologyWorklistTable.createdAt, new Date(today)));
+
+  const [aiUsage] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(aiReportingDraftsTable)
+    .where(gte(aiReportingDraftsTable.createdAt, new Date(today)));
+
+  const [pendingPeerReview] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(peerReviewAssignmentsTable)
+    .where(eq(peerReviewAssignmentsTable.status, "pending"));
+
+  const [openAnomalies] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(anomalyAlertsTable)
+    .where(eq(anomalyAlertsTable.status, "open"));
+
+  const [pendingCritical] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(criticalFindingsTable)
+    .where(eq(criticalFindingsTable.status, "pending_notification"));
+
+  const [failedQuality] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(reportQualityGatesTable)
+    .where(eq(reportQualityGatesTable.allPassed, false));
+
+  const [avgTat] = await db
+    .select({ avg: sql<number>`COALESCE(AVG(minutes_to_report), 0)::int` })
+    .from(turnaroundTimesTable)
+    .where(eq(turnaroundTimesTable.dateBucket, today));
+
+  res.json({
+    today,
+    dailyVolume: dailyVolume?.count ?? 0,
+    aiUsageToday: aiUsage?.count ?? 0,
+    pendingPeerReview: pendingPeerReview?.count ?? 0,
+    openAnomalies: openAnomalies?.count ?? 0,
+    pendingCriticalFindings: pendingCritical?.count ?? 0,
+    failedQualityGates: failedQuality?.count ?? 0,
+    avgTurnaroundMinutes: avgTat?.avg ?? 0,
+  });
 });
 
 export const aiReportingRouter = router;

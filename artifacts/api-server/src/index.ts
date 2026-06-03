@@ -512,6 +512,158 @@ async function runStartupMigrations(): Promise<void> {
       CREATE INDEX IF NOT EXISTS anomaly_alert_status_idx ON anomaly_alerts(status);
       CREATE INDEX IF NOT EXISTS anomaly_alert_scope_idx ON anomaly_alerts(scope, related_id);
 
+      -- Phase 15: Report Template Versioning
+      CREATE TABLE IF NOT EXISTS report_template_versions (
+        id SERIAL PRIMARY KEY,
+        template_id TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        name TEXT NOT NULL,
+        created_by_id INTEGER,
+        created_by_name TEXT,
+        change_notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS rtv_template_idx ON report_template_versions(template_id);
+      CREATE INDEX IF NOT EXISTS rtv_version_idx ON report_template_versions(template_id, version);
+
+      -- Phase 16: AI Billing Code Suggestions
+      CREATE TABLE IF NOT EXISTS ai_billing_suggestions (
+        id SERIAL PRIMARY KEY,
+        worklist_id INTEGER NOT NULL,
+        report_id INTEGER,
+        cpt_codes TEXT,
+        icd_codes TEXT,
+        overall_confidence REAL,
+        ai_safety_label TEXT NOT NULL DEFAULT 'AI Draft – Requires Radiologist Review',
+        status TEXT NOT NULL DEFAULT 'pending',
+        reviewed_by_id INTEGER,
+        reviewed_by_name TEXT,
+        reviewed_at TIMESTAMPTZ,
+        reviewed_notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS ai_billing_wl_idx ON ai_billing_suggestions(worklist_id);
+      CREATE INDEX IF NOT EXISTS ai_billing_status_idx ON ai_billing_suggestions(status);
+
+      -- Phase 17: Peer Review Assignments
+      CREATE TABLE IF NOT EXISTS peer_review_assignments (
+        id SERIAL PRIMARY KEY,
+        report_id INTEGER NOT NULL,
+        worklist_id INTEGER,
+        assigned_to_id INTEGER NOT NULL,
+        assigned_to_name TEXT,
+        assigned_by_id INTEGER,
+        assigned_by_name TEXT,
+        priority TEXT NOT NULL DEFAULT 'normal',
+        status TEXT NOT NULL DEFAULT 'pending',
+        ai_confidence_score INTEGER,
+        auto_assigned_reason TEXT,
+        completed_at TIMESTAMPTZ,
+        completed_notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS pra_report_idx ON peer_review_assignments(report_id);
+      CREATE INDEX IF NOT EXISTS pra_assignee_idx ON peer_review_assignments(assigned_to_id, status);
+      CREATE INDEX IF NOT EXISTS pra_status_idx ON peer_review_assignments(status);
+
+      -- Phase 18: Turnaround Time Analytics
+      CREATE TABLE IF NOT EXISTS turnaround_times (
+        id SERIAL PRIMARY KEY,
+        worklist_id INTEGER NOT NULL,
+        study_id INTEGER,
+        modality TEXT,
+        radiologist_id INTEGER,
+        radiologist_name TEXT,
+        minutes_to_report REAL,
+        minutes_to_first_review REAL,
+        minutes_to_peer_review REAL,
+        date_bucket TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS tat_wl_idx ON turnaround_times(worklist_id);
+      CREATE INDEX IF NOT EXISTS tat_date_idx ON turnaround_times(date_bucket);
+      CREATE INDEX IF NOT EXISTS tat_modality_idx ON turnaround_times(modality, date_bucket);
+      CREATE INDEX IF NOT EXISTS tat_rad_idx ON turnaround_times(radiologist_id, date_bucket);
+
+      -- Phase 19: AI Training Data Export
+      CREATE TABLE IF NOT EXISTS ai_training_data_exports (
+        id SERIAL PRIMARY KEY,
+        export_name TEXT NOT NULL,
+        modality TEXT,
+        date_from TEXT,
+        date_to TEXT,
+        min_quality_score INTEGER,
+        records_count INTEGER,
+        status TEXT NOT NULL DEFAULT 'pending',
+        file_path TEXT,
+        exported_by_id INTEGER,
+        exported_by_name TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS tde_status_idx ON ai_training_data_exports(status);
+      CREATE INDEX IF NOT EXISTS tde_name_idx ON ai_training_data_exports(export_name);
+
+      -- Phase 20: Report Quality Gates
+      CREATE TABLE IF NOT EXISTS report_quality_gates (
+        id SERIAL PRIMARY KEY,
+        report_id INTEGER NOT NULL UNIQUE,
+        findings_present BOOLEAN NOT NULL DEFAULT FALSE,
+        impression_present BOOLEAN NOT NULL DEFAULT FALSE,
+        signature_present BOOLEAN NOT NULL DEFAULT FALSE,
+        clinical_history_present BOOLEAN NOT NULL DEFAULT FALSE,
+        technique_present BOOLEAN NOT NULL DEFAULT FALSE,
+        comparison_present BOOLEAN NOT NULL DEFAULT FALSE,
+        all_passed BOOLEAN NOT NULL DEFAULT FALSE,
+        failed_checks TEXT,
+        passed_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS rqg_report_idx ON report_quality_gates(report_id);
+      CREATE INDEX IF NOT EXISTS rqg_passed_idx ON report_quality_gates(all_passed);
+
+      -- Phase 21: Critical Finding Escalation
+      CREATE TABLE IF NOT EXISTS critical_findings (
+        id SERIAL PRIMARY KEY,
+        report_id INTEGER NOT NULL,
+        worklist_id INTEGER,
+        patient_id INTEGER,
+        finding_keywords TEXT NOT NULL,
+        severity TEXT NOT NULL DEFAULT 'high',
+        status TEXT NOT NULL DEFAULT 'pending_notification',
+        notified_at TIMESTAMPTZ,
+        notified_to TEXT,
+        notification_method TEXT,
+        escalation_reason TEXT,
+        escalated_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS cf_report_idx ON critical_findings(report_id);
+      CREATE INDEX IF NOT EXISTS cf_status_idx ON critical_findings(status);
+      CREATE INDEX IF NOT EXISTS cf_patient_idx ON critical_findings(patient_id);
+
+      -- Phase 22: AI Provider Health Monitor
+      CREATE TABLE IF NOT EXISTS ai_provider_health_logs (
+        id SERIAL PRIMARY KEY,
+        provider TEXT NOT NULL,
+        endpoint_url TEXT,
+        model TEXT,
+        latency_ms INTEGER,
+        status TEXT NOT NULL,
+        status_code INTEGER,
+        error_message TEXT,
+        is_success BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS aphl_provider_idx ON ai_provider_health_logs(provider);
+      CREATE INDEX IF NOT EXISTS aphl_status_idx ON ai_provider_health_logs(status);
+      CREATE INDEX IF NOT EXISTS aphl_created_idx ON ai_provider_health_logs(created_at);
+
       -- ── LAN-only login gate ──────────────────────────────────────────────
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS lan_only_login BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS lan_allowed_ips TEXT NOT NULL DEFAULT '[]';

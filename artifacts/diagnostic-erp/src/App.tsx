@@ -58,6 +58,17 @@ const AiDicomFindings       = lazy(() => import("@/pages/AiDicomFindings"));
 const RagVectorStore        = lazy(() => import("@/pages/RagVectorStore"));
 const AiSearchRetrieval     = lazy(() => import("@/pages/AiSearchRetrieval"));
 const AnomalyAlerts         = lazy(() => import("@/pages/AnomalyAlerts"));
+const ReportDiffViewer      = lazy(() => import("@/pages/ReportDiffViewer"));
+const FeedbackLoopAnalytics = lazy(() => import("@/pages/FeedbackLoopAnalytics"));
+const TemplateVersions      = lazy(() => import("@/pages/TemplateVersions"));
+const AiBillingSuggestions  = lazy(() => import("@/pages/AiBillingSuggestions"));
+const PeerReviewAssignments = lazy(() => import("@/pages/PeerReviewAssignments"));
+const TurnaroundTimeAnalytics = lazy(() => import("@/pages/TurnaroundTimeAnalytics"));
+const TrainingDataExports   = lazy(() => import("@/pages/TrainingDataExports"));
+const ReportQualityGates    = lazy(() => import("@/pages/ReportQualityGates"));
+const CriticalFindings      = lazy(() => import("@/pages/CriticalFindings"));
+const ProviderHealthMonitor = lazy(() => import("@/pages/ProviderHealthMonitor"));
+const CommandCenter         = lazy(() => import("@/pages/CommandCenter"));
 const DicomViewer           = lazy(() => import("@/pages/DicomViewer"));
 const AgentSetup            = lazy(() => import("@/pages/AgentSetup"));
 const PacsSettings          = lazy(() => import("@/pages/PacsSettings"));
@@ -257,6 +268,17 @@ function Router() {
       <Route path="/radiology/rag-vector-store" component={RagVectorStore} />
       <Route path="/radiology/ai-search-retrieval" component={AiSearchRetrieval} />
       <Route path="/radiology/anomaly-alerts" component={AnomalyAlerts} />
+      <Route path="/radiology/report-diff" component={ReportDiffViewer} />
+      <Route path="/radiology/feedback-loop-analytics" component={FeedbackLoopAnalytics} />
+      <Route path="/radiology/template-versions" component={TemplateVersions} />
+      <Route path="/radiology/billing-suggestions" component={AiBillingSuggestions} />
+      <Route path="/radiology/peer-review-assignments" component={PeerReviewAssignments} />
+      <Route path="/radiology/turnaround-times" component={TurnaroundTimeAnalytics} />
+      <Route path="/radiology/training-data-exports" component={TrainingDataExports} />
+      <Route path="/radiology/quality-gates" component={ReportQualityGates} />
+      <Route path="/radiology/critical-findings" component={CriticalFindings} />
+      <Route path="/radiology/provider-health" component={ProviderHealthMonitor} />
+      <Route path="/radiology/command-center" component={CommandCenter} />
               <Route path="/radiology/archive-lifecycle" component={PacsArchiveLifecycle} />
               <Route path="/radiology/watchdog" component={PacsWatchdogDashboard} />
               <Route path="/radiology/ai-inference-settings" component={AiInferenceSettings} />
