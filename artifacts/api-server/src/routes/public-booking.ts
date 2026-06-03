@@ -135,6 +135,17 @@ publicBookingRouter.get("/config", async (_req, res): Promise<void> => {
   });
 });
 
+// GET /api/public/booking/by-ref?ref=...
+publicBookingRouter.get("/by-ref", async (req, res): Promise<void> => {
+  const ref = String(req.query.ref || "").trim();
+  if (!ref) { res.status(400).json({ error: "ref is required" }); return; }
+  const [row] = await db.select().from(onlineBookingsTable)
+    .where(eq(onlineBookingsTable.bookingRef, ref))
+    .limit(1);
+  if (!row) { res.status(404).json({ error: "Booking not found" }); return; }
+  res.json({ booking: row });
+});
+
 // GET /api/public/booking/my-bookings
 publicBookingRouter.get("/my-bookings", async (req, res): Promise<void> => {
   const phone = String(req.query.phone || "");
@@ -323,19 +334,18 @@ publicBookingRouter.post("/payu-success", async (req, res): Promise<void> => {
   const merchantKey = settings?.payuMerchantKey || "";
 
   const base = getPublicBase(req as Parameters<typeof getPublicBase>[0]);
-  const clinicSiteBase = base;
 
   // Verify hash
   if (salt && merchantKey && txnid) {
     const expected = payuResponseHash({ key: merchantKey, txnid, amount: amount ?? "", productinfo: productinfo ?? "", firstname: firstname ?? "", email: email ?? "", status: status ?? "", salt });
     if (expected !== returnedHash) {
-      res.redirect(`${clinicSiteBase}/?booking=failed&reason=hash_mismatch`);
+      res.redirect(getBookingConfirmationUrl(base, "", "payu", true, "hash_mismatch"));
       return;
     }
   }
 
   if (status !== "success") {
-    res.redirect(`${clinicSiteBase}/?booking=failed&reason=${encodeURIComponent(status ?? "unknown")}`);
+    res.redirect(getBookingConfirmationUrl(base, "", "payu", true, status ?? "unknown"));
     return;
   }
 
@@ -347,12 +357,12 @@ publicBookingRouter.post("/payu-success", async (req, res): Promise<void> => {
     .limit(1);
 
   if (!booking) {
-    res.redirect(`${clinicSiteBase}/?booking=failed&reason=not_found`);
+    res.redirect(getBookingConfirmationUrl(base, "", "payu", true, "not_found"));
     return;
   }
 
   if (booking.status === "paid" || booking.status === "confirmed") {
-    res.redirect(`${clinicSiteBase}/?booking=success&ref=${encodeURIComponent(booking.bookingRef)}`);
+    res.redirect(getBookingConfirmationUrl(base, booking.bookingRef, "payu"));
     return;
   }
 
@@ -361,7 +371,7 @@ publicBookingRouter.post("/payu-success", async (req, res): Promise<void> => {
     .set({ payuPaymentId: mihpayid ?? "", status: "paid" })
     .where(eq(onlineBookingsTable.id, booking.id));
 
-  res.redirect(`${clinicSiteBase}/?booking=success&ref=${encodeURIComponent(booking.bookingRef)}`);
+  res.redirect(getBookingConfirmationUrl(base, booking.bookingRef, "payu"));
 });
 
 // ── POST /api/public/booking/payu-failure ─────────────────────────────────────
@@ -370,7 +380,6 @@ publicBookingRouter.post("/payu-failure", async (req, res): Promise<void> => {
   const { txnid, error_Message } = body;
 
   const base = getPublicBase(req as Parameters<typeof getPublicBase>[0]);
-  const clinicSiteBase = base;
 
   if (txnid) {
     const [booking] = await db.select().from(onlineBookingsTable).where(eq(onlineBookingsTable.payuTxnId, txnid)).limit(1);
@@ -379,7 +388,7 @@ publicBookingRouter.post("/payu-failure", async (req, res): Promise<void> => {
     }
   }
 
-  res.redirect(`${clinicSiteBase}/?booking=failed&reason=${encodeURIComponent(error_Message ?? "Payment cancelled")}`);
+  res.redirect(getBookingConfirmationUrl(base, "", "payu", true, error_Message ?? "Payment cancelled"));
 });
 
 // ── PhonePe helpers ───────────────────────────────────────────────────────────
@@ -514,11 +523,10 @@ publicBookingRouter.get("/phonepe-callback", async (req, res): Promise<void> => 
   const merchantId = process.env.PHONEPE_MERCHANT_ID || settings?.phonepeMerchantId || "";
 
   const base = getPublicBase(req as Parameters<typeof getPublicBase>[0]);
-  const clinicSiteBase = base;
 
   const { merchantTransactionId, code } = req.query as Record<string, string>;
   if (!merchantTransactionId) {
-    res.redirect(`${clinicSiteBase}/?booking=failed&reason=missing_txn_id`);
+    res.redirect(getBookingConfirmationUrl(base, "", "phonepe", true, "missing_txn_id"));
     return;
   }
 
@@ -549,7 +557,7 @@ publicBookingRouter.get("/phonepe-callback", async (req, res): Promise<void> => 
           .set({ status: "paid", phonepeProviderRefId: statusData.data?.transactionId || booking.phonepeProviderRefId })
           .where(eq(onlineBookingsTable.id, booking.id));
       }
-      res.redirect(`${clinicSiteBase}/?booking=success&ref=${encodeURIComponent(merchantTransactionId)}`);
+      res.redirect(getBookingConfirmationUrl(base, merchantTransactionId, "phonepe"));
       return;
     }
   } catch { /* fall through to failure */ }
@@ -561,7 +569,7 @@ publicBookingRouter.get("/phonepe-callback", async (req, res): Promise<void> => 
   if (booking && booking.status === "pending_payment") {
     await db.update(onlineBookingsTable).set({ status: "payment_failed" }).where(eq(onlineBookingsTable.id, booking.id));
   }
-  res.redirect(`${clinicSiteBase}/?booking=failed&reason=${encodeURIComponent(code || "Payment not completed")}`);
+  res.redirect(getBookingConfirmationUrl(base, merchantTransactionId, "phonepe", true, code || "Payment not completed"));
 });
 
 // ── BharatPe helpers ─────────────────────────────────────────────────────────────────────────
@@ -698,11 +706,10 @@ publicBookingRouter.get("/bharatpe-callback", async (req, res): Promise<void> =>
   const merchantId = process.env.BHARATPE_MERCHANT_ID || settings?.bharatpeMerchantId || "";
 
   const base = getPublicBase(req as Parameters<typeof getPublicBase>[0]);
-  const clinicSiteBase = base;
 
   const { merchantTransactionId, status, code } = req.query as Record<string, string>;
   if (!merchantTransactionId) {
-    res.redirect(`${clinicSiteBase}/?booking=failed&reason=missing_txn_id`);
+    res.redirect(getBookingConfirmationUrl(base, "", "bharatpe", true, "missing_txn_id"));
     return;
   }
 
@@ -739,7 +746,7 @@ publicBookingRouter.get("/bharatpe-callback", async (req, res): Promise<void> =>
           .set({ status: "paid", bharatpeProviderRefId: statusData.data?.transactionId || booking.bharatpeProviderRefId })
           .where(eq(onlineBookingsTable.id, booking.id));
       }
-      res.redirect(`${clinicSiteBase}/?booking=success&ref=${encodeURIComponent(merchantTransactionId)}`);
+      res.redirect(getBookingConfirmationUrl(base, merchantTransactionId, "bharatpe"));
       return;
     }
   } catch { /* fall through to failure */ }
@@ -750,7 +757,7 @@ publicBookingRouter.get("/bharatpe-callback", async (req, res): Promise<void> =>
   if (booking && booking.status === "pending_payment") {
     await db.update(onlineBookingsTable).set({ status: "payment_failed" }).where(eq(onlineBookingsTable.id, booking.id));
   }
-  res.redirect(`${clinicSiteBase}/?booking=failed&reason=${encodeURIComponent(code || "Payment not completed")}`);
+  res.redirect(getBookingConfirmationUrl(base, merchantTransactionId, "bharatpe", true, code || "Payment not completed"));
 });
 
 // ── ICICI Orange PG helpers ─────────────────────────────────────────────────
@@ -909,15 +916,22 @@ publicBookingRouter.post("/icici-initiate", createOrderLimiter, async (req, res)
 
 // ── ICICI callback handler (shared for GET and POST) ─────────────────────────
 
+function getBookingConfirmationUrl(base: string, ref: string, gateway: string, failed?: boolean, reason?: string): string {
+  const path = `${base}/book`;
+  if (failed) {
+    return `${path}?failed=1&reason=${encodeURIComponent(reason || "Payment not completed")}`;
+  }
+  return `${path}?confirmed=1&ref=${encodeURIComponent(ref)}&gateway=${encodeURIComponent(gateway)}`;
+}
+
 async function handleIciciCallback(req: any, res: any, queryOrBody: Record<string, string>): Promise<void> {
   const base = getPublicBase(req as Parameters<typeof getPublicBase>[0]);
-  const clinicSiteBase = base;
 
   logger.info({ keys: Object.keys(queryOrBody), queryOrBody }, "ICICI callback received");
 
   const { merchantTxnNo, responseCode, respDescription, txnID, status } = queryOrBody;
   if (!merchantTxnNo) {
-    res.redirect(`${clinicSiteBase}/?booking=failed&reason=missing_txn_id`);
+    res.redirect(getBookingConfirmationUrl(base, "", "icici", true, "missing_txn_id"));
     return;
   }
 
@@ -926,13 +940,13 @@ async function handleIciciCallback(req: any, res: any, queryOrBody: Record<strin
     .limit(1);
 
   if (!booking) {
-    res.redirect(`${clinicSiteBase}/?booking=failed&reason=booking_not_found`);
+    res.redirect(getBookingConfirmationUrl(base, "", "icici", true, "booking_not_found"));
     return;
   }
 
   // If already paid, skip verification
   if (booking.status === "paid" || booking.status === "confirmed") {
-    res.redirect(`${clinicSiteBase}/?booking=success&ref=${encodeURIComponent(merchantTxnNo)}`);
+    res.redirect(getBookingConfirmationUrl(base, booking.bookingRef, "icici"));
     return;
   }
 
@@ -974,7 +988,7 @@ async function handleIciciCallback(req: any, res: any, queryOrBody: Record<strin
         await db.update(onlineBookingsTable)
           .set({ status: "paid", iciciProviderRefId: txnID || booking.iciciProviderRefId })
           .where(eq(onlineBookingsTable.id, booking.id));
-        res.redirect(`${clinicSiteBase}/?booking=icici_done&ref=${encodeURIComponent(merchantTxnNo)}`);
+        res.redirect(getBookingConfirmationUrl(base, booking.bookingRef, "icici"));
         return;
       }
     } catch { /* fall through to failure */ }
@@ -988,7 +1002,7 @@ async function handleIciciCallback(req: any, res: any, queryOrBody: Record<strin
     await db.update(onlineBookingsTable)
       .set({ status: "paid", iciciProviderRefId: txnID || booking.iciciProviderRefId })
       .where(eq(onlineBookingsTable.id, booking.id));
-    res.redirect(`${clinicSiteBase}/?booking=icici_done&ref=${encodeURIComponent(merchantTxnNo)}`);
+    res.redirect(getBookingConfirmationUrl(base, booking.bookingRef, "icici"));
     return;
   }
 
@@ -998,7 +1012,7 @@ async function handleIciciCallback(req: any, res: any, queryOrBody: Record<strin
       .set({ status: "payment_failed" })
       .where(eq(onlineBookingsTable.id, booking.id));
   }
-  res.redirect(`${clinicSiteBase}/?booking=failed&reason=${encodeURIComponent(respDescription || "Payment not completed")}`);
+  res.redirect(getBookingConfirmationUrl(base, booking.bookingRef, "icici", true, respDescription || "Payment not completed"));
 }
 
 publicBookingRouter.get("/icici-callback", async (req, res): Promise<void> => {

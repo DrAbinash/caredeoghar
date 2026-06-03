@@ -1,9 +1,9 @@
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   Phone, Mail, MapPin, ChevronLeft, CalendarCheck, Clock,
   Star, Shield, Zap, Check, ChevronRight, Loader2, ArrowLeft,
   Stethoscope, FlaskConical, Package, User, CreditCard,
-  CalendarDays, MessageCircle, QrCode,
+  CalendarDays, MessageCircle, QrCode, Printer, Receipt,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import type { SiteSettings } from "../types";
@@ -115,7 +115,7 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
   const [config, setConfig] = useState<BookingConfig | null>(null);
   const [tests, setTests] = useState<TestItem[]>([]);
   const [pkgs, setPkgs] = useState<PkgItem[]>([]);
-  const [step, setStep] = useState<0 | 1 | 2 | 3 | 4 | 5>(0); // 0=details,1=select,2=review,3=done,4=failed,5=qr-payment
+  const [step, setStep] = useState<0 | 1 | 2 | 3 | 4 | 5 | 6>(0); // 0=details,1=select,2=review,3=done,4=failed,5=qr-payment,6=confirmed
   const [error, setError] = useState("");
   const [paying, setPaying] = useState(false);
   const [successRef, setSuccessRef] = useState("");
@@ -129,6 +129,13 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
   const [qrUpiName, setQrUpiName] = useState("");
   const [qrChecking, setQrChecking] = useState(false);
 
+  const [confirmedBooking, setConfirmedBooking] = useState<{
+    name: string; phone: string; email: string; selectedDate: string; timeSlot: string;
+    totalAmount: string; notes: string; testIds: string; packageIds: string;
+    bookingRef: string; status: string; isVip: boolean;
+  } | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
   const [pd, setPd] = useState({ name: "", phone: "", email: "", date: "", timeSlot: "", notes: "", isVip: false });
   const [selTests, setSelTests] = useState<Set<number>>(new Set());
   const [selPkgs, setSelPkgs] = useState<Set<number>>(new Set());
@@ -137,6 +144,53 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
     bookingGet<BookingConfig>("/api/public/booking/config")
       .then(setConfig)
       .catch(() => setConfig({ enabled: false, keyId: "", vipEnabled: false, gateway: null }));
+  }, []);
+
+  // Detect payment confirmation / failure from query params (ICICI, PhonePe, BharatPe)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const confirmed = params.get("confirmed");
+    const failed = params.get("failed");
+    const ref = params.get("ref") || "";
+    const gateway = params.get("gateway") || "";
+    const reason = params.get("reason") || "";
+
+    if (confirmed === "1" && ref) {
+      setConfirming(true);
+      setSuccessRef(ref);
+      bookingGet<{ booking: Record<string, string> }>(`/api/public/booking/by-ref?ref=${encodeURIComponent(ref)}`)
+        .then((res) => {
+          const b = res.booking;
+          setConfirmedBooking({
+            name: b.name || "",
+            phone: b.phone || "",
+            email: b.email || "",
+            selectedDate: b.selected_date || "",
+            timeSlot: b.time_slot || "",
+            totalAmount: b.total_amount || "0",
+            notes: b.notes || "",
+            testIds: b.test_ids || "[]",
+            packageIds: b.package_ids || "[]",
+            bookingRef: b.booking_ref || ref,
+            status: b.status || "",
+            isVip: b.is_vip === "true",
+          });
+          setStep(6);
+          setConfirming(false);
+          // Clean URL so refresh doesn't re-trigger
+          window.history.replaceState({}, "", window.location.pathname);
+        })
+        .catch(() => {
+          // Still show basic confirmation with ref only
+          setStep(6);
+          setConfirming(false);
+          window.history.replaceState({}, "", window.location.pathname);
+        });
+    } else if (failed === "1") {
+      setFailReason(reason || "Payment not completed.");
+      setStep(4);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
   }, []);
 
   const loadCatalog = () => {
@@ -713,6 +767,117 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
 
               <p style={{ fontSize: ".75rem", color: "hsl(var(--site-muted-fg))", marginTop: ".75rem", textAlign: "center" }}>
                 After making the payment, click "I have paid". Staff will verify and confirm your booking.
+              </p>
+            </div>
+          </div>
+        ) : step === 6 ? (
+          /* Payment Confirmed — ICICI / gateway confirmation */
+          <div style={{ maxWidth: 560, margin: "0 auto" }}>
+            <div style={{ ...cardStyle, textAlign: "center" }}>
+              <div style={{ width: 72, height: 72, borderRadius: 9999, background: "hsl(142 76% 92%)", color: "hsl(142 71% 35%)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem" }}>
+                <Check size={36} />
+              </div>
+              <h2 style={{ fontWeight: 800, fontSize: "1.3rem", marginBottom: ".5rem" }}>
+                Payment Successful
+              </h2>
+              <p style={{ color: "hsl(var(--site-muted-fg))", marginBottom: "1rem", fontSize: ".92rem" }}>
+                Your booking is confirmed and payment received.
+              </p>
+
+              {confirming ? (
+                <div style={{ marginBottom: "1rem", color: "hsl(var(--site-muted-fg))" }}>
+                  <Loader2 size={20} style={{ animation: "spin 1s linear infinite", margin: "0 auto .5rem" }} /> Loading booking details…
+                </div>
+              ) : (
+                <div style={{ marginBottom: "1.5rem", textAlign: "left" }}>
+                  <div style={{ fontFamily: "monospace", fontSize: "1.3rem", fontWeight: 800, letterSpacing: 2, color: "hsl(var(--site-primary))", textAlign: "center", marginBottom: "1rem" }}>
+                    {successRef}
+                  </div>
+
+                  {confirmedBooking && (
+                    <div style={{ background: "hsl(var(--site-muted) / .4)", borderRadius: "var(--site-radius)", padding: "1rem", fontSize: ".92rem", lineHeight: 1.5 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: ".35rem" }}>
+                        <span style={{ color: "hsl(var(--site-muted-fg))" }}>Patient</span>
+                        <span style={{ fontWeight: 600 }}>{confirmedBooking.name}</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: ".35rem" }}>
+                        <span style={{ color: "hsl(var(--site-muted-fg))" }}>Phone</span>
+                        <span style={{ fontWeight: 600 }}>{confirmedBooking.phone}</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: ".35rem" }}>
+                        <span style={{ color: "hsl(var(--site-muted-fg))" }}>Date</span>
+                        <span style={{ fontWeight: 600 }}>{confirmedBooking.selectedDate}</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: ".35rem" }}>
+                        <span style={{ color: "hsl(var(--site-muted-fg))" }}>Time</span>
+                        <span style={{ fontWeight: 600 }}>{confirmedBooking.timeSlot}</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: ".35rem" }}>
+                        <span style={{ color: "hsl(var(--site-muted-fg))" }}>Amount Paid</span>
+                        <span style={{ fontWeight: 800, color: "hsl(var(--site-primary))" }}>
+                          {fmt(Number(confirmedBooking.totalAmount))}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: ".35rem" }}>
+                        <span style={{ color: "hsl(var(--site-muted-fg))" }}>Status</span>
+                        <span style={{ fontWeight: 600, textTransform: "capitalize" }}>{confirmedBooking.status}</span>
+                      </div>
+                      {confirmedBooking.isVip && (
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: ".35rem" }}>
+                          <span style={{ color: "hsl(var(--site-muted-fg))" }}>Queue</span>
+                          <span style={{ fontWeight: 600, color: "hsl(45 93% 45%)" }}>⭐ VIP</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: ".75rem", justifyContent: "center", flexWrap: "wrap" }}>
+                <button
+                  style={{ ...btnPrimary, textDecoration: "none" }}
+                  onClick={() => {
+                    const el = document.getElementById("booking-receipt");
+                    if (el) {
+                      const win = window.open("", "_blank", "width=600,height=700");
+                      if (win) {
+                        win.document.write(`
+                          <html><head><title>Booking Receipt – Care Diagnostics</title>
+                          <style>
+                            body { font-family: system-ui, sans-serif; padding: 1.5rem; color: #111; max-width: 480px; margin: 0 auto; }
+                            h1 { font-size: 1.2rem; margin-bottom: .5rem; }
+                            .ref { font-family: monospace; font-size: 1.2rem; font-weight: 800; color: #0b4f8a; margin-bottom: 1rem; }
+                            .row { display: flex; justify-content: space-between; padding: .35rem 0; border-bottom: 1px solid #eee; }
+                            .label { color: #666; }
+                            .footer { margin-top: 1.5rem; font-size: .85rem; color: #666; text-align: center; }
+                            .paid { color: #1a7c37; font-weight: 700; }
+                          </style></head><body>
+                          <h1>Care Diagnostics – Booking Receipt</h1>
+                          <div class="ref">${successRef}</div>
+                          <div class="row"><span class="label">Patient</span><strong>${confirmedBooking?.name || "-"}</strong></div>
+                          <div class="row"><span class="label">Phone</span><strong>${confirmedBooking?.phone || "-"}</strong></div>
+                          <div class="row"><span class="label">Date</span><strong>${confirmedBooking?.selectedDate || "-"}</strong></div>
+                          <div class="row"><span class="label">Time</span><strong>${confirmedBooking?.timeSlot || "-"}</strong></div>
+                          <div class="row"><span class="label">Amount Paid</span><strong class="paid">${fmt(Number(confirmedBooking?.totalAmount || 0))}</strong></div>
+                          <div class="row"><span class="label">Status</span><strong class="paid">${confirmedBooking?.status || "Paid"}</strong></div>
+                          <div class="footer">Thank you for choosing Care Diagnostics, Deoghar.<br/>${phone} | ${email}</div>
+                          </body></html>
+                        `);
+                        win.document.close();
+                        win.print();
+                      }
+                    }
+                  }}
+                >
+                  <Receipt size={16} /> Print Receipt
+                </button>
+                <a href={BASE} style={{ ...btnOutline, textDecoration: "none" }}>
+                  <ChevronLeft size={16} /> Back to Home
+                </a>
+              </div>
+
+              <p style={{ fontSize: ".78rem", color: "hsl(var(--site-muted-fg))", marginTop: "1rem" }}>
+                Please save this booking reference. You may receive a confirmation call or WhatsApp message.
               </p>
             </div>
           </div>
