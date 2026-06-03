@@ -426,6 +426,70 @@ async function runStartupMigrations(): Promise<void> {
       CREATE INDEX IF NOT EXISTS ai_qs_date_idx ON ai_quality_scores(date_from, date_to);
       CREATE INDEX IF NOT EXISTS ai_qs_computed_idx ON ai_quality_scores(computed_at DESC);
 
+      -- Phase 3: AI-Powered DICOM Findings
+      CREATE TABLE IF NOT EXISTS ai_dicom_findings (
+        id SERIAL PRIMARY KEY,
+        worklist_id INTEGER NOT NULL,
+        study_instance_uid TEXT,
+        accession_number TEXT,
+        modality TEXT,
+        body_part TEXT,
+        study_description TEXT,
+        suggested_findings TEXT,
+        suggested_impression TEXT,
+        confidence_score REAL,
+        ai_safety_label TEXT NOT NULL DEFAULT 'AI Draft – Requires Radiologist Review',
+        status TEXT NOT NULL DEFAULT 'pending',
+        reviewed_by_id INTEGER,
+        reviewed_by_name TEXT,
+        reviewed_at TIMESTAMPTZ,
+        reviewed_notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS ai_dicom_findings_wl_idx ON ai_dicom_findings(worklist_id);
+      CREATE INDEX IF NOT EXISTS ai_dicom_findings_uid_idx ON ai_dicom_findings(study_instance_uid);
+      CREATE INDEX IF NOT EXISTS ai_dicom_findings_status_idx ON ai_dicom_findings(status);
+
+      -- Phase 9: RAG Vector Store (document embeddings)
+      CREATE TABLE IF NOT EXISTS rag_document_embeddings (
+        id SERIAL PRIMARY KEY,
+        document_id TEXT NOT NULL,
+        document_type TEXT NOT NULL,
+        content TEXT NOT NULL,
+        embedding TEXT,
+        embedding_dimension INTEGER DEFAULT 384,
+        modality TEXT,
+        patient_id INTEGER,
+        study_id INTEGER,
+        source_url TEXT,
+        source_title TEXT,
+        search_count INTEGER NOT NULL DEFAULT 0,
+        last_searched_at TIMESTAMPTZ,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS rag_doc_doc_id_idx ON rag_document_embeddings(document_id);
+      CREATE INDEX IF NOT EXISTS rag_doc_type_idx ON rag_document_embeddings(document_type);
+      CREATE INDEX IF NOT EXISTS rag_doc_modality_idx ON rag_document_embeddings(modality);
+      CREATE INDEX IF NOT EXISTS rag_doc_patient_idx ON rag_document_embeddings(patient_id);
+
+      -- Phase 10: RAG Search Queries log
+      CREATE TABLE IF NOT EXISTS rag_search_queries (
+        id SERIAL PRIMARY KEY,
+        query_text TEXT NOT NULL,
+        embedding TEXT,
+        top_k INTEGER NOT NULL DEFAULT 5,
+        results_json TEXT,
+        user_id INTEGER,
+        user_name TEXT,
+        duration_ms INTEGER,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS rag_search_query_idx ON rag_search_queries(query_text);
+      CREATE INDEX IF NOT EXISTS rag_search_user_idx ON rag_search_queries(user_id);
+
       -- ── LAN-only login gate ──────────────────────────────────────────────
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS lan_only_login BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS lan_allowed_ips TEXT NOT NULL DEFAULT '[]';

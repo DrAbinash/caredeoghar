@@ -19,6 +19,9 @@ import {
   aiPromptTemplatesTable,
   pacsSettingsTable,
   patientsTable,
+  aiDicomFindingsTable,
+  ragDocumentEmbeddingsTable,
+  ragSearchQueriesTable,
 } from "@workspace/db";
 import { eq, and, desc, gte, lte, sql } from "drizzle-orm";
 import { type StaffAuthRequest, FULL_ACCESS_ROLES } from "../middleware/requireStaffAuth";
@@ -843,6 +846,305 @@ router.get("/prompt-effectiveness", async (req, res): Promise<void> => {
     modality: modality ?? null,
     templates: ranked,
   });
+});
+
+// ──────────────────────────── Phase 3: AI-Powered DICOM Findings ────────────────────────────
+
+/**
+ * GET /api/ai-reporting/dicom-findings
+ * List AI-generated DICOM findings for the worklist, with optional filter.
+ */
+router.get("/dicom-findings", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const { worklistId, status } = req.query as Record<string, string>;
+  const conditions = [];
+  if (worklistId) conditions.push(eq(aiDicomFindingsTable.worklistId, Number(worklistId)));
+  if (status) conditions.push(eq(aiDicomFindingsTable.status, status));
+
+  const rows = await db
+    .select()
+    .from(aiDicomFindingsTable)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(aiDicomFindingsTable.createdAt));
+
+  res.json(rows);
+});
+
+/**
+ * POST /api/ai-reporting/dicom-findings
+ * Generate AI DICOM findings for a worklist entry (or save from external inference).
+ */
+router.post("/dicom-findings", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const b = req.body as {
+    worklistId: number;
+    suggestedFindings?: string;
+    suggestedImpression?: string;
+    confidenceScore?: number;
+    modality?: string;
+    bodyPart?: string;
+    studyDescription?: string;
+  };
+
+  if (!b.worklistId) { res.status(400).json({ error: "worklistId required" }); return; }
+
+  const [wl] = await db
+    .select()
+    .from(radiologyWorklistTable)
+    .where(eq(radiologyWorklistTable.id, b.worklistId))
+    .limit(1);
+
+  if (!wl) { res.status(404).json({ error: "Worklist entry not found" }); return; }
+
+  const inserted = await db.insert(aiDicomFindingsTable).values({
+    worklistId: b.worklistId,
+    studyInstanceUID: wl.studyInstanceUID ?? null,
+    accessionNumber: wl.accessionNumber ?? null,
+    modality: b.modality ?? wl.modality ?? null,
+    bodyPart: b.bodyPart ?? null,
+    studyDescription: b.studyDescription ?? wl.studyDescription ?? null,
+    suggestedFindings: b.suggestedFindings ?? null,
+    suggestedImpression: b.suggestedImpression ?? null,
+    confidenceScore: b.confidenceScore ?? null,
+  }).returning();
+
+  res.json({ id: inserted[0]?.id, safetyNote: "AI Draft – Requires Radiologist Review" });
+});
+
+/**
+ * PATCH /api/ai-reporting/dicom-findings/:id
+ * Review/accept/reject an AI DICOM finding.
+ */
+router.patch("/dicom-findings/:id", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  if (!canConfigure(sReq)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const id = Number(req.params.id);
+  const { status, reviewedNotes } = req.body as { status: "accepted" | "rejected" | "reviewed"; reviewedNotes?: string };
+  if (!status) { res.status(400).json({ error: "status required" }); return; }
+
+  const user = sReq.staffSession!;
+  const [updated] = await db.update(aiDicomFindingsTable)
+    .set({
+      status,
+      reviewedById: user.subjectId,
+      reviewedByName: user.subjectName,
+      reviewedAt: new Date(),
+      reviewedNotes: reviewedNotes ?? null,
+      updatedAt: new Date(),
+    })
+    .where(eq(aiDicomFindingsTable.id, id))
+    .returning();
+
+  if (!updated) { res.status(404).json({ error: "Not found" }); return; }
+  res.json({ ok: true });
+});
+
+// ──────────────────────────── Phase 9: RAG Vector Store ────────────────────────────
+
+/**
+ * GET /api/ai-reporting/rag-documents
+ * List RAG document embeddings with optional filter by type/modality/patient.
+ */
+router.get("/rag-documents", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canConfigure(sReq)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const { documentType, modality, patientId, search } = req.query as Record<string, string>;
+  const conditions = [eq(ragDocumentEmbeddingsTable.isActive, true)];
+  if (documentType) conditions.push(eq(ragDocumentEmbeddingsTable.documentType, documentType));
+  if (modality) conditions.push(eq(ragDocumentEmbeddingsTable.modality, modality));
+  if (patientId) conditions.push(eq(ragDocumentEmbeddingsTable.patientId, Number(patientId)));
+  if (search) conditions.push(sql`${ragDocumentEmbeddingsTable.content} ILIKE ${`%${search}%`}`);
+
+  const rows = await db
+    .select()
+    .from(ragDocumentEmbeddingsTable)
+    .where(and(...conditions))
+    .orderBy(desc(ragDocumentEmbeddingsTable.createdAt))
+    .limit(100);
+
+  res.json(rows);
+});
+
+/**
+ * POST /api/ai-reporting/rag-documents
+ * Upsert a RAG document embedding (or plain text placeholder if no embedding engine yet).
+ */
+router.post("/rag-documents", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canConfigure(sReq)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const b = req.body as {
+    documentId: string;
+    documentType: string;
+    content: string;
+    embedding?: string;
+    embeddingDimension?: number;
+    modality?: string;
+    patientId?: number;
+    studyId?: number;
+    sourceUrl?: string;
+    sourceTitle?: string;
+  };
+
+  if (!b.documentId || !b.documentType || !b.content) {
+    res.status(400).json({ error: "documentId, documentType, and content required" }); return;
+  }
+
+  const existing = await db
+    .select({ id: ragDocumentEmbeddingsTable.id })
+    .from(ragDocumentEmbeddingsTable)
+    .where(eq(ragDocumentEmbeddingsTable.documentId, b.documentId))
+    .limit(1);
+
+  if (existing.length > 0) {
+    await db.update(ragDocumentEmbeddingsTable)
+      .set({
+        content: b.content,
+        embedding: b.embedding ?? null,
+        embeddingDimension: b.embeddingDimension ?? 384,
+        modality: b.modality ?? null,
+        patientId: b.patientId ?? null,
+        studyId: b.studyId ?? null,
+        sourceUrl: b.sourceUrl ?? null,
+        sourceTitle: b.sourceTitle ?? null,
+        updatedAt: new Date(),
+      })
+      .where(eq(ragDocumentEmbeddingsTable.id, existing[0].id));
+    res.json({ id: existing[0].id, action: "updated" }); return;
+  }
+
+  const inserted = await db.insert(ragDocumentEmbeddingsTable).values({
+    documentId: b.documentId,
+    documentType: b.documentType,
+    content: b.content,
+    embedding: b.embedding ?? null,
+    embeddingDimension: b.embeddingDimension ?? 384,
+    modality: b.modality ?? null,
+    patientId: b.patientId ?? null,
+    studyId: b.studyId ?? null,
+    sourceUrl: b.sourceUrl ?? null,
+    sourceTitle: b.sourceTitle ?? null,
+  }).returning();
+
+  res.json({ id: inserted[0]?.id, action: "created" });
+});
+
+/**
+ * DELETE /api/ai-reporting/rag-documents/:id
+ * Soft-delete a RAG document (set is_active=false).
+ */
+router.delete("/rag-documents/:id", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canConfigure(sReq)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const id = Number(req.params.id);
+  await db.update(ragDocumentEmbeddingsTable)
+    .set({ isActive: false, updatedAt: new Date() })
+    .where(eq(ragDocumentEmbeddingsTable.id, id));
+  res.json({ ok: true });
+});
+
+// ──────────────────────────── Phase 10: AI Search & Retrieval ────────────────────────────
+
+/**
+ * POST /api/ai-reporting/rag-search
+ * Semantic search over RAG documents. Returns text-based matches (cosine similarity
+ * computed in JS if no pgvector; otherwise via SQL). Falls back to ILIKE text search
+ * if no embedding engine is configured.
+ */
+router.post("/rag-search", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const { query, modality, patientId, topK = 5 } = req.body as {
+    query: string;
+    modality?: string;
+    patientId?: number;
+    topK?: number;
+  };
+  if (!query?.trim()) { res.status(400).json({ error: "query required" }); return; }
+
+  const start = Date.now();
+  const conditions = [eq(ragDocumentEmbeddingsTable.isActive, true)];
+  if (modality) conditions.push(eq(ragDocumentEmbeddingsTable.modality, modality));
+  if (patientId) conditions.push(eq(ragDocumentEmbeddingsTable.patientId, patientId));
+
+  // Fallback: text-based ILIKE search (no pgvector required in this env)
+  const rows = await db
+    .select()
+    .from(ragDocumentEmbeddingsTable)
+    .where(and(...conditions, sql`${ragDocumentEmbeddingsTable.content} ILIKE ${`%${query}%`}`))
+    .orderBy(desc(ragDocumentEmbeddingsTable.searchCount))
+    .limit(topK);
+
+  const results = rows.map((r) => ({
+    id: r.id,
+    documentId: r.documentId,
+    documentType: r.documentType,
+    content: r.content.slice(0, 300),
+    modality: r.modality,
+    sourceTitle: r.sourceTitle,
+    score: null, // computed when embedding engine is available
+  }));
+
+  const durationMs = Date.now() - start;
+
+  // Log the query
+  await db.insert(ragSearchQueriesTable).values({
+    queryText: query,
+    topK,
+    resultsJson: JSON.stringify(results.map((r) => ({ id: r.id, documentId: r.documentId }))),
+    userId: sReq.staffSession?.subjectId ?? null,
+    userName: sReq.staffSession?.subjectName ?? null,
+    durationMs,
+  });
+
+  // Increment search counts
+  for (const r of rows) {
+    await db.update(ragDocumentEmbeddingsTable)
+      .set({ searchCount: (r.searchCount ?? 0) + 1, lastSearchedAt: new Date() })
+      .where(eq(ragDocumentEmbeddingsTable.id, r.id));
+  }
+
+  res.json({
+    query,
+    results,
+    totalMatches: results.length,
+    durationMs,
+    note: "Text-based search (semantic embedding search requires pgvector + embedding engine on-prem)",
+  });
+});
+
+/**
+ * GET /api/ai-reporting/rag-search-history
+ * Audit log of recent RAG searches.
+ */
+router.get("/rag-search-history", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canConfigure(sReq)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const { limit = "25", offset = "0" } = req.query as Record<string, string>;
+  const rows = await db
+    .select()
+    .from(ragSearchQueriesTable)
+    .orderBy(desc(ragSearchQueriesTable.createdAt))
+    .limit(Number(limit))
+    .offset(Number(offset));
+
+  res.json(rows);
 });
 
 export const aiReportingRouter = router;

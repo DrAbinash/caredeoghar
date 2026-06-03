@@ -78,6 +78,8 @@ export * from "./aiReporting";
 export * from "./aiPromptTemplates";
 export * from "./aiModelRoutes";
 export * from "./aiQualityScores";
+export * from "./aiDicomFindings";
+export * from "./ragDocuments";
 export * from "./drawerAuditLog";
 export * from "./enterpriseRadiology";
 export * from "./usgMeasurements";

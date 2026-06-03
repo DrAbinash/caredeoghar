@@ -54,6 +54,9 @@ const ReportTemplatesPage   = lazy(() => import("@/pages/ReportTemplates"));
 const AiAuditLog            = lazy(() => import("@/pages/AiAuditLog"));
 const AiQualityScores       = lazy(() => import("@/pages/AiQualityScores"));
 const AiPromptEffectiveness = lazy(() => import("@/pages/AiPromptEffectiveness"));
+const AiDicomFindings       = lazy(() => import("@/pages/AiDicomFindings"));
+const RagVectorStore        = lazy(() => import("@/pages/RagVectorStore"));
+const AiSearchRetrieval     = lazy(() => import("@/pages/AiSearchRetrieval"));
 const DicomViewer           = lazy(() => import("@/pages/DicomViewer"));
 const AgentSetup            = lazy(() => import("@/pages/AgentSetup"));
 const PacsSettings          = lazy(() => import("@/pages/PacsSettings"));
@@ -249,6 +252,9 @@ function Router() {
               <Route path="/radiology/ai-audit-log" component={AiAuditLog} />
       <Route path="/radiology/ai-quality-scores" component={AiQualityScores} />
       <Route path="/radiology/ai-prompt-effectiveness" component={AiPromptEffectiveness} />
+      <Route path="/radiology/ai-dicom-findings" component={AiDicomFindings} />
+      <Route path="/radiology/rag-vector-store" component={RagVectorStore} />
+      <Route path="/radiology/ai-search-retrieval" component={AiSearchRetrieval} />
               <Route path="/radiology/archive-lifecycle" component={PacsArchiveLifecycle} />
               <Route path="/radiology/watchdog" component={PacsWatchdogDashboard} />
               <Route path="/radiology/ai-inference-settings" component={AiInferenceSettings} />
