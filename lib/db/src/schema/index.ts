@@ -55,6 +55,8 @@ export {
   radiologyNormalSnippetsTable,
   radiologistStylePreferencesTable,
   radiologyReportLifecycleLogTable,
+  spinalMeasurementsTable,
+  radiologySmartMacrosTable,
 } from "./radiologyReportGenerator";
 export * from "./reportDeliveryLogs";
 export * from "./whatsapp";

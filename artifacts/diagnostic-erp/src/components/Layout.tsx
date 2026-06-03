@@ -82,6 +82,7 @@ import {
   HardDrive,
   AlertTriangle,
   Send,
+  Bell,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -322,6 +323,39 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { updateAvailable, dismiss: dismissUpdate } = useVersionCheck();
   const isOnline = useOnlineStatus();
   const { isActive: scannerActive } = useGlobalScanner();
+
+  // ── Study Auto-ingest Notifications ───────────────────────────────────────────────────────────────────────────────
+  const [newStudyCount, setNewStudyCount] = useState(0);
+  const lastCheckRef = useRef<string>(new Date(Date.now() - 5 * 60_000).toISOString());
+  useEffect(() => {
+    if (!session) return;
+    let mounted = true;
+    const poll = async () => {
+      try {
+        const res = await api.get<{ studies: Array<{ id: number; patientName: string; modality: string; studyDescription: string | null; numberOfImages: number }>; serverTime: string }>(
+          `/api/dicom-studies/new?since=${encodeURIComponent(lastCheckRef.current)}`,
+        );
+        if (!mounted) return;
+        if (res.studies && res.studies.length > 0) {
+          setNewStudyCount((c) => c + res.studies.length);
+          // Show toast for the most recent study
+          const latest = res.studies[0];
+          import("@/hooks/use-toast").then(({ toast }) => {
+            toast({
+              title: `New DICOM study: ${latest.patientName || "Unknown"}`,
+              description: `${latest.modality || "OT"} — ${latest.studyDescription || "No description"} (${latest.numberOfImages} images)`,
+            });
+          });
+        }
+        lastCheckRef.current = res.serverTime || new Date().toISOString();
+      } catch {
+        // silently ignore polling errors
+      }
+    };
+    void poll();
+    const id = window.setInterval(() => { void poll(); }, 30_000);
+    return () => { mounted = false; window.clearInterval(id); };
+  }, [session]);
 
   // Mini sidebar theme picker state
   const [themePickerOpen, setThemePickerOpen] = useState(false);
@@ -699,6 +733,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 >
                   <GroupIcon size={15} />
                   <span className="flex-1 text-left">{label}</span>
+                  {id === "radiology-grp" && newStudyCount > 0 && (
+                    <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
+                      {newStudyCount}
+                    </span>
+                  )}
                   <ChevronRight
                     size={13}
                     className={cn("transition-transform duration-150", open && "rotate-90")}

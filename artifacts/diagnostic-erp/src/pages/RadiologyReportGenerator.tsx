@@ -18,6 +18,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { readStaffSession } from "@/lib/staffSession";
 import { api } from "@/lib/fetchApi";
+import SpinalMeasurementPanel from "@/components/SpinalMeasurementPanel";
 import {
   FileText,
   Save,
@@ -50,6 +51,8 @@ import {
   Hash,
   ClipboardCheck,
   Zap,
+  Ruler,
+  Bell,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -225,6 +228,13 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
   const [normalTemplates, setNormalTemplates] = useState<Array<{ id: number; name: string; modality: string; findings: string; impression: string; technique: string | null; clinicalHistory: string | null; comparison: string | null }>>([]);
   const [normalTemplatesLoading, setNormalTemplatesLoading] = useState(false);
 
+  // Spinal measurements
+  const [showSpinalPanel, setShowSpinalPanel] = useState(false);
+
+  // Smart macros
+  const [smartMacros, setSmartMacros] = useState<Array<{ id: number; shortcut: string; expansion: string; modality: string | null; bodyPart: string | null; isMeasurementMacro: boolean; measurementParams: string | null; autoSuggestOn: boolean; isGlobal: boolean; sortOrder: number }>>([]);
+  const [showSmartMacroManager, setShowSmartMacroManager] = useState(false);
+
   // ── Effects ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -254,6 +264,7 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
   // Load macros and preferences once
   useEffect(() => {
     void loadMacros();
+    void loadSmartMacros();
     void loadPreferences();
   }, []);
 
@@ -268,6 +279,13 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
     try {
       const rows = await api.get<TextMacro[]>("/api/radiology/report-generator/macros");
       setMacros(rows);
+    } catch { /* ignore */ }
+  }
+
+  async function loadSmartMacros() {
+    try {
+      const rows = await api.get<Array<{ id: number; shortcut: string; expansion: string; modality: string | null; bodyPart: string | null; isMeasurementMacro: boolean; measurementParams: string | null; autoSuggestOn: boolean; isGlobal: boolean; sortOrder: number }>>("/api/radiology/report-generator/smart-macros");
+      setSmartMacros(rows);
     } catch { /* ignore */ }
   }
 
@@ -482,14 +500,24 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
   const expandMacros = useCallback(
     (text: string, modalityFilter?: string) => {
       let result = text;
+      // 1. Regular macros
       const applicable = macros.filter((m) => !m.modality || m.modality === modalityFilter);
       for (const macro of applicable) {
         const re = new RegExp(`\\b${macro.shortcut.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "g");
         result = result.replace(re, macro.expansion);
       }
+      // 2. Smart macros (measurement-aware) — run after regular macros so they can override
+      const smartApplicable = smartMacros.filter((m) => {
+        if (m.modality && modalityFilter && m.modality !== modalityFilter) return false;
+        return true;
+      });
+      for (const macro of smartApplicable) {
+        const re = new RegExp(`\\b${macro.shortcut.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "g");
+        result = result.replace(re, macro.expansion);
+      }
       return result;
     },
-    [macros],
+    [macros, smartMacros],
   );
 
   function handleTextareaMacro(
@@ -1039,6 +1067,131 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
     );
   }
 
+  function renderSmartMacroManager() {
+    const [newShortcut, setNewShortcut] = useState("");
+    const [newExpansion, setNewExpansion] = useState("");
+    const [newModality, setNewModality] = useState("");
+    const [newBodyPart, setNewBodyPart] = useState("");
+    const [isMeasurementMacro, setIsMeasurementMacro] = useState(false);
+    const [savingMacro, setSavingMacro] = useState(false);
+
+    async function createSmartMacro() {
+      if (!newShortcut.trim() || !newExpansion.trim()) return;
+      setSavingMacro(true);
+      try {
+        const row = await api.post<{
+          id: number; shortcut: string; expansion: string; modality: string | null; bodyPart: string | null; isMeasurementMacro: boolean; measurementParams: string | null; autoSuggestOn: boolean; isGlobal: boolean; sortOrder: number;
+        }>("/api/radiology/report-generator/smart-macros", {
+          shortcut: newShortcut.trim(),
+          expansion: newExpansion.trim(),
+          modality: newModality || undefined,
+          bodyPart: newBodyPart || undefined,
+          isMeasurementMacro,
+          measurementParams: isMeasurementMacro ? JSON.stringify({ vertebraLevel: "", canalAP: "" }) : undefined,
+        });
+        setSmartMacros((prev) => [...prev, row]);
+        setNewShortcut("");
+        setNewExpansion("");
+        setNewModality("");
+        setNewBodyPart("");
+        setIsMeasurementMacro(false);
+        toast({ title: "Smart macro created" });
+      } catch (e) {
+        toast({ variant: "destructive", title: "Failed", description: String(e) });
+      } finally {
+        setSavingMacro(false);
+      }
+    }
+
+    async function deleteSmartMacro(id: number) {
+      try {
+        await api.delete(`/api/radiology/report-generator/smart-macros/${id}`);
+        setSmartMacros((prev) => prev.filter((m) => m.id !== id));
+        toast({ title: "Smart macro deleted" });
+      } catch (e) {
+        toast({ variant: "destructive", title: "Failed", description: String(e) });
+      }
+    }
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowSmartMacroManager(false)}>
+        <div className="bg-card border rounded-xl shadow-lg w-full max-w-lg mx-4 p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-base flex items-center gap-2">
+              <Zap size={16} />
+              Smart Macros
+            </h3>
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setShowSmartMacroManager(false)}><X size={14} /></Button>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Measurement-aware macros. Type the shortcut followed by space to expand. Use <code className="bg-muted px-1 rounded">{"{{canalAP}}"}</code> as placeholders for measurement data.
+          </p>
+          <div className="space-y-2">
+            <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-end">
+              <div>
+                <Label className="text-xs">Shortcut</Label>
+                <Input className="h-8 text-sm" value={newShortcut} onChange={(e) => setNewShortcut(e.target.value)} placeholder="e.g. .canal_l4" />
+              </div>
+              <div className="w-28">
+                <Label className="text-xs">Modality</Label>
+                <Select value={newModality} onValueChange={setNewModality}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Any" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Any</SelectItem>
+                    {modalities.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="w-28">
+                <Label className="text-xs">Body Part</Label>
+                <Input className="h-8 text-sm" value={newBodyPart} onChange={(e) => setNewBodyPart(e.target.value)} placeholder="e.g. Spine" />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="measurement-macro" checked={isMeasurementMacro} onChange={(e) => setIsMeasurementMacro(e.target.checked)} className="h-4 w-4" />
+              <Label htmlFor="measurement-macro" className="text-xs">Measurement macro (auto-fills from spinal tracker)</Label>
+            </div>
+            <div className="flex gap-2 items-end">
+              <Textarea
+                className="text-sm min-h-[60px] resize-y flex-1"
+                value={newExpansion}
+                onChange={(e) => setNewExpansion(e.target.value)}
+                placeholder={`Spinal canal at L4 measures {{canalAP}} mm AP. {{stenosisGrade}} canal stenosis. Normal cord signal.`}
+              />
+              <Button size="sm" className="h-8 shrink-0" onClick={() => void createSmartMacro()} disabled={savingMacro}>
+                {savingMacro ? <LoaderIcon size={12} className="animate-spin" /> : <Plus size={12} />}
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-1 max-h-56 overflow-y-auto">
+            {smartMacros.map((m) => (
+              <div key={m.id} className="flex items-start justify-between px-3 py-2 rounded-md border text-sm">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{m.shortcut}</code>
+                    {m.modality && <Badge variant="outline" className="text-[10px]">{m.modality}</Badge>}
+                    {m.isMeasurementMacro && <Badge variant="secondary" className="text-[10px]">Measurement</Badge>}
+                    {m.isGlobal && <Badge className="text-[10px]">Global</Badge>}
+                  </div>
+                  <div className="text-muted-foreground text-xs whitespace-pre-wrap leading-snug">{m.expansion}</div>
+                </div>
+                <div className="flex flex-col gap-1 ml-2 shrink-0">
+                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-primary" title="Copy" onClick={() => { navigator.clipboard.writeText(m.expansion); toast({ title: "Copied" }); }}>
+                    <ClipboardList size={12} />
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-destructive" onClick={() => void deleteSmartMacro(m.id)}>
+                    <Trash2 size={12} />
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {smartMacros.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No smart macros yet. Create your first one above.</p>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   function renderSnippetSidebar() {
     const filtered = macros.filter((m) => {
       if (!snippetSearch.trim()) return true;
@@ -1408,6 +1561,7 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
       {showDictation && renderDictationOverlay()}
       {showNormalTemplatePicker && renderNormalTemplatePicker()}
       {showSnippetSidebar && renderSnippetSidebar()}
+      {showSmartMacroManager && renderSmartMacroManager()}
 
       {/* Header */}
       <div className="no-print">
@@ -1453,10 +1607,20 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
                 <Type size={14} className="mr-1" />
                 Macros
               </Button>
+              <Button size="sm" variant="outline" onClick={() => setShowSmartMacroManager(true)} title="Measurement-aware macros">
+                <Zap size={14} className="mr-1" />
+                Smart Macros
+              </Button>
               <Button size="sm" variant="outline" onClick={() => setShowSnippetSidebar(true)} title="Snippet quick-insert">
                 <Hash size={14} className="mr-1" />
                 Snippets
               </Button>
+              {studyId && (
+                <Button size="sm" variant="outline" onClick={() => setShowSpinalPanel((v) => !v)} title="Spinal measurements">
+                  <Ruler size={14} className="mr-1" />
+                  {showSpinalPanel ? "Hide Spine" : "Spine"}
+                </Button>
+              )}
               <Button size="sm" variant="outline" onClick={() => setShowPreferences(true)}>
                 <Settings size={14} className="mr-1" />
                 Preferences
@@ -1603,6 +1767,19 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
 
           {/* ── CENTER: Editor Form ── */}
           <div className="space-y-4 no-print">
+            {/* Spinal Measurements Panel */}
+            {showSpinalPanel && studyId && (
+              <SpinalMeasurementPanel
+                studyId={studyId}
+                draftId={draftId}
+                patientId={demog.patientId}
+                onInsertIntoReport={(text) => {
+                  const section = template?.sections.find((s) => s.includes("SPINAL CANAL")) || template?.sections[0] || "Findings";
+                  setFindingsSections((prev) => ({ ...prev, [section]: (prev[section] ?? "") + (prev[section] ? "\n" : "") + text }));
+                }}
+              />
+            )}
+
             {/* Clinical History */}
             <div className="rounded-lg border bg-card p-4 space-y-2">
               <div className="flex items-center justify-between">

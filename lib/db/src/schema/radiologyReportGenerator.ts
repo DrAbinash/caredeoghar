@@ -239,3 +239,76 @@ export const radiologyReportLifecycleLogTable = pgTable(
     byAction: index("rad_lifecycle_action_idx").on(t.action),
   }),
 );
+
+// spinal_measurements — per-vertebral-level canal/cord measurements for spine MRI reports
+export const spinalMeasurementsTable = pgTable(
+  "spinal_measurements",
+  {
+    id: serial("id").primaryKey(),
+    studyId: integer("study_id").notNull(),
+    draftId: integer("draft_id"),
+    patientId: integer("patient_id"),
+    worklistId: integer("worklist_id"),
+    // Vertebral level: C1-C7, T1-T12, L1-L5, S1
+    vertebraLevel: text("vertebra_level").notNull(),
+    // Spinal canal dimensions (mm)
+    canalAP: text("canal_ap"),          // anterior-posterior diameter
+    canalTransverse: text("canal_transverse"), // transverse diameter
+    canalArea: text("canal_area"),      // cross-sectional area mm²
+    // Spinal cord dimensions (mm)
+    cordAP: text("cord_ap"),            // cord AP diameter
+    cordTransverse: text("cord_transverse"), // cord transverse diameter
+    cordArea: text("cord_area"),        // cord cross-sectional area mm²
+    // Disc height
+    discHeight: text("disc_height"),    // mm
+    // Stenosis / compression grading
+    stenosisGrade: text("stenosis_grade").notNull().default("none"), // none | mild | moderate | severe
+    stenosisNotes: text("stenosis_notes"),
+    // Foraminal narrowing
+    leftForaminal: text("left_foraminal").notNull().default("normal"), // normal | mild | moderate | severe
+    rightForaminal: text("right_foraminal").notNull().default("normal"),
+    // Alignment
+    alignment: text("alignment").notNull().default("normal"), // normal | kyphosis | lordosis | scoliosis | listhesis
+    alignmentNotes: text("alignment_notes"),
+    // Who measured and when
+    measuredBy: text("measured_by").notNull(),
+    measuredAt: timestamp("measured_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  },
+  (t) => ({
+    byStudy: index("spinal_measurements_study_idx").on(t.studyId),
+    byDraft: index("spinal_measurements_draft_idx").on(t.draftId),
+    byLevel: index("spinal_measurements_level_idx").on(t.vertebraLevel),
+    byStenosis: index("spinal_measurements_stenosis_idx").on(t.stenosisGrade),
+  }),
+);
+
+// radiology_text_macro_v2 — measurement-aware smart macros
+export const radiologySmartMacrosTable = pgTable(
+  "radiology_smart_macros",
+  {
+    id: serial("id").primaryKey(),
+    createdBy: text("created_by").notNull(),
+    shortcut: text("shortcut").notNull(),
+    expansion: text("expansion").notNull(),
+    modality: text("modality"),
+    bodyPart: text("body_part"),
+    // Measurement macro: if true, expansion may contain placeholders
+    isMeasurementMacro: boolean("is_measurement_macro").notNull().default(false),
+    // Measurement parameters (JSON): vertebraLevel, canalAP, canalTransverse, etc.
+    measurementParams: text("measurement_params"),
+    // Auto-suggest: triggers when this bodyPart + modality is active
+    autoSuggestOn: boolean("auto_suggest_on").notNull().default(false),
+    isGlobal: boolean("is_global").notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  },
+  (t) => ({
+    byCreator: index("smart_macros_creator_idx").on(t.createdBy),
+    byShortcut: index("smart_macros_shortcut_idx").on(t.shortcut),
+    byModality: index("smart_macros_modality_idx").on(t.modality),
+    byBodyPart: index("smart_macros_body_part_idx").on(t.bodyPart),
+  }),
+);

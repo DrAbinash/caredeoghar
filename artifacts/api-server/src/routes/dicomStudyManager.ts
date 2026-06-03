@@ -134,6 +134,36 @@ router.get("/", async (req, res) => {
   res.json({ studies: rows, total: countRow?.c ?? 0, limit: q.limit, offset: q.offset });
 });
 
+// ── GET /new ── Polling endpoint for new studies since last check ───────────────────────────────────────────────────────────────────────────────────────────────
+router.get("/new", async (req, res) => {
+  const since = req.query.since ? String(req.query.since) : undefined;
+  const limit = z.coerce.number().max(50).default(20).safeParse(req.query.limit).data ?? 20;
+  const now = new Date().toISOString();
+  const conditions = [];
+  conditions.push(eq(dicomStudiesTable.ingestStatus, "ingested"));
+  if (since) {
+    conditions.push(gte(dicomStudiesTable.createdAt, new Date(since)));
+  } else {
+    // Default: last 5 minutes
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+    conditions.push(gte(dicomStudiesTable.createdAt, fiveMinAgo));
+  }
+  const rows = await db.select({
+    id: dicomStudiesTable.id,
+    studyInstanceUID: dicomStudiesTable.studyInstanceUID,
+    patientName: dicomStudiesTable.patientName,
+    modality: dicomStudiesTable.modality,
+    studyDescription: dicomStudiesTable.studyDescription,
+    bodyPartExamined: dicomStudiesTable.bodyPartExamined,
+    numberOfImages: dicomStudiesTable.numberOfImages,
+    createdAt: dicomStudiesTable.createdAt,
+  }).from(dicomStudiesTable)
+    .where(and(...conditions))
+    .orderBy(desc(dicomStudiesTable.createdAt))
+    .limit(limit);
+  res.json({ studies: rows, serverTime: now });
+});
+
 // ── GET /:id ── Single study with series ─────────────────────────────────────────────────────────────────────────────────────────
 
 router.get("/:id", async (req, res) => {

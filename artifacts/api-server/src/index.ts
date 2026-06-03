@@ -1878,6 +1878,59 @@ async function runStartupMigrations(): Promise<void> {
       CREATE UNIQUE INDEX IF NOT EXISTS ai_model_routes_task_uq ON ai_model_routes (task_key);
     `);
 
+    // ── Spinal measurements + smart macros (Phase 27+ spine tracker) ─────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS spinal_measurements (
+        id SERIAL PRIMARY KEY,
+        study_id INTEGER NOT NULL,
+        draft_id INTEGER,
+        patient_id INTEGER,
+        worklist_id INTEGER,
+        vertebra_level TEXT NOT NULL,
+        canal_ap TEXT,
+        canal_transverse TEXT,
+        canal_area TEXT,
+        cord_ap TEXT,
+        cord_transverse TEXT,
+        cord_area TEXT,
+        disc_height TEXT,
+        stenosis_grade TEXT NOT NULL DEFAULT 'none',
+        stenosis_notes TEXT,
+        left_foraminal TEXT NOT NULL DEFAULT 'normal',
+        right_foraminal TEXT NOT NULL DEFAULT 'normal',
+        alignment TEXT NOT NULL DEFAULT 'normal',
+        alignment_notes TEXT,
+        measured_by TEXT NOT NULL,
+        measured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS spinal_measurements_study_idx ON spinal_measurements (study_id);
+      CREATE INDEX IF NOT EXISTS spinal_measurements_draft_idx ON spinal_measurements (draft_id);
+      CREATE INDEX IF NOT EXISTS spinal_measurements_level_idx ON spinal_measurements (vertebra_level);
+      CREATE INDEX IF NOT EXISTS spinal_measurements_stenosis_idx ON spinal_measurements (stenosis_grade);
+
+      CREATE TABLE IF NOT EXISTS radiology_smart_macros (
+        id SERIAL PRIMARY KEY,
+        created_by TEXT NOT NULL,
+        shortcut TEXT NOT NULL,
+        expansion TEXT NOT NULL,
+        modality TEXT,
+        body_part TEXT,
+        is_measurement_macro BOOLEAN NOT NULL DEFAULT FALSE,
+        measurement_params TEXT,
+        auto_suggest_on BOOLEAN NOT NULL DEFAULT FALSE,
+        is_global BOOLEAN NOT NULL DEFAULT FALSE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS smart_macros_creator_idx ON radiology_smart_macros (created_by);
+      CREATE INDEX IF NOT EXISTS smart_macros_shortcut_idx ON radiology_smart_macros (shortcut);
+      CREATE INDEX IF NOT EXISTS smart_macros_modality_idx ON radiology_smart_macros (modality);
+      CREATE INDEX IF NOT EXISTS smart_macros_body_part_idx ON radiology_smart_macros (body_part);
+    `);
+
     logger.info("Startup migrations applied");
   } catch (err) {
     logger.error({ err }, "Startup migration failed — partial-cancel / outsourced-labs features may not work");

@@ -41,6 +41,8 @@ import {
   radiologistStylePreferencesTable,
   radiologyReportLifecycleLogTable,
   clinicSettingsTable,
+  spinalMeasurementsTable,
+  radiologySmartMacrosTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, isNull, asc, ilike, or } from "drizzle-orm";
 import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
@@ -1411,4 +1413,221 @@ radiologyReportGeneratorRouter.post("/log-action", async (req: StaffAuthRequest,
     details: data.details ?? null,
   }).returning();
   res.status(201).json(row);
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════
+// SPINAL MEASUREMENTS — per-vertebral-level canal/cord tracking for MRI spine
+// ══════════════════════════════════════════════════════════════════════════════════
+
+radiologyReportGeneratorRouter.get("/spinal-measurements", async (req: StaffAuthRequest, res: Response) => {
+  const studyId = req.query.studyId ? Number(req.query.studyId) : null;
+  const draftId = req.query.draftId ? Number(req.query.draftId) : null;
+  if (!studyId && !draftId) { res.status(400).json({ error: "studyId or draftId required" }); return; }
+  const conds = [];
+  if (studyId) conds.push(eq(spinalMeasurementsTable.studyId, studyId));
+  if (draftId) conds.push(eq(spinalMeasurementsTable.draftId, draftId));
+  const rows = await db.select().from(spinalMeasurementsTable).where(conds.length ? and(...conds) : undefined).orderBy(asc(spinalMeasurementsTable.vertebraLevel));
+  res.json(rows);
+});
+
+const SpinalMeasurementSchema = z.object({
+  studyId: z.number().int(),
+  draftId: z.number().int().optional(),
+  patientId: z.number().int().optional(),
+  worklistId: z.number().int().optional(),
+  vertebraLevel: z.string().min(1).max(10),
+  canalAP: z.string().max(20).optional(),
+  canalTransverse: z.string().max(20).optional(),
+  canalArea: z.string().max(20).optional(),
+  cordAP: z.string().max(20).optional(),
+  cordTransverse: z.string().max(20).optional(),
+  cordArea: z.string().max(20).optional(),
+  discHeight: z.string().max(20).optional(),
+  stenosisGrade: z.enum(["none", "mild", "moderate", "severe"]).optional(),
+  stenosisNotes: z.string().max(500).optional(),
+  leftForaminal: z.enum(["normal", "mild", "moderate", "severe"]).optional(),
+  rightForaminal: z.enum(["normal", "mild", "moderate", "severe"]).optional(),
+  alignment: z.enum(["normal", "kyphosis", "lordosis", "scoliosis", "listhesis"]).optional(),
+  alignmentNotes: z.string().max(500).optional(),
+});
+
+// POST /spinal-measurements — create or replace (upsert per vertebraLevel + studyId)
+radiologyReportGeneratorRouter.post("/spinal-measurements", async (req: StaffAuthRequest, res: Response) => {
+  const userName = req.staffSession?.subjectName;
+  if (!userName) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const parsed = SpinalMeasurementSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid body", issues: parsed.error.issues }); return; }
+  const d = parsed.data;
+  // Check existing for this study + level
+  const existing = await db.select({ id: spinalMeasurementsTable.id }).from(spinalMeasurementsTable).where(
+    and(eq(spinalMeasurementsTable.studyId, d.studyId), eq(spinalMeasurementsTable.vertebraLevel, d.vertebraLevel))
+  );
+  if (existing.length > 0) {
+    const [row] = await db.update(spinalMeasurementsTable).set({
+      draftId: d.draftId ?? null,
+      patientId: d.patientId ?? null,
+      worklistId: d.worklistId ?? null,
+      canalAP: d.canalAP ?? null,
+      canalTransverse: d.canalTransverse ?? null,
+      canalArea: d.canalArea ?? null,
+      cordAP: d.cordAP ?? null,
+      cordTransverse: d.cordTransverse ?? null,
+      cordArea: d.cordArea ?? null,
+      discHeight: d.discHeight ?? null,
+      stenosisGrade: d.stenosisGrade ?? "none",
+      stenosisNotes: d.stenosisNotes ?? null,
+      leftForaminal: d.leftForaminal ?? "normal",
+      rightForaminal: d.rightForaminal ?? "normal",
+      alignment: d.alignment ?? "normal",
+      alignmentNotes: d.alignmentNotes ?? null,
+      measuredBy: userName,
+      measuredAt: new Date(),
+    }).where(eq(spinalMeasurementsTable.id, existing[0].id)).returning();
+    res.json(row);
+    return;
+  }
+  const [row] = await db.insert(spinalMeasurementsTable).values({
+    studyId: d.studyId,
+    draftId: d.draftId ?? null,
+    patientId: d.patientId ?? null,
+    worklistId: d.worklistId ?? null,
+    vertebraLevel: d.vertebraLevel,
+    canalAP: d.canalAP ?? null,
+    canalTransverse: d.canalTransverse ?? null,
+    canalArea: d.canalArea ?? null,
+    cordAP: d.cordAP ?? null,
+    cordTransverse: d.cordTransverse ?? null,
+    cordArea: d.cordArea ?? null,
+    discHeight: d.discHeight ?? null,
+    stenosisGrade: d.stenosisGrade ?? "none",
+    stenosisNotes: d.stenosisNotes ?? null,
+    leftForaminal: d.leftForaminal ?? "normal",
+    rightForaminal: d.rightForaminal ?? "normal",
+    alignment: d.alignment ?? "normal",
+    alignmentNotes: d.alignmentNotes ?? null,
+    measuredBy: userName,
+    measuredAt: new Date(),
+  }).returning();
+  res.status(201).json(row);
+});
+
+radiologyReportGeneratorRouter.delete("/spinal-measurements/:id", async (req: StaffAuthRequest, res: Response) => {
+  const id = Number(req.params.id);
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.delete(spinalMeasurementsTable).where(eq(spinalMeasurementsTable.id, id));
+  res.json({ success: true });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════
+// SMART MACROS — measurement-aware text expansions
+// ══════════════════════════════════════════════════════════════════════════════════
+
+radiologyReportGeneratorRouter.get("/smart-macros", async (req: StaffAuthRequest, res: Response) => {
+  const userName = req.staffSession?.subjectName;
+  if (!userName) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const modality = String(req.query.modality || "").trim() || undefined;
+  const bodyPart = String(req.query.bodyPart || "").trim() || undefined;
+  const query = db
+    .select()
+    .from(radiologySmartMacrosTable)
+    .where(
+      or(
+        eq(radiologySmartMacrosTable.createdBy, userName),
+        eq(radiologySmartMacrosTable.isGlobal, true),
+      ),
+    )
+    .orderBy(asc(radiologySmartMacrosTable.sortOrder), desc(radiologySmartMacrosTable.createdAt));
+  const rows = await query;
+  const filtered = rows.filter((r) => {
+    if (modality && r.modality && r.modality !== modality) return false;
+    if (bodyPart && r.bodyPart && r.bodyPart !== bodyPart) return false;
+    return true;
+  });
+  res.json(filtered);
+});
+
+const SmartMacroSchema = z.object({
+  shortcut: z.string().min(1).max(50),
+  expansion: z.string().min(1).max(5000),
+  modality: z.string().max(20).optional(),
+  bodyPart: z.string().max(30).optional(),
+  isMeasurementMacro: z.boolean().optional(),
+  measurementParams: z.string().max(2000).optional(),
+  autoSuggestOn: z.boolean().optional(),
+  isGlobal: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+radiologyReportGeneratorRouter.post("/smart-macros", async (req: StaffAuthRequest, res: Response) => {
+  const userName = req.staffSession?.subjectName;
+  if (!userName) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const parsed = SmartMacroSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
+  const data = parsed.data;
+  const isGlobal = req.staffSession?.role === "super_admin" ? (data.isGlobal ?? false) : false;
+  const [row] = await db.insert(radiologySmartMacrosTable).values({
+    createdBy: userName,
+    shortcut: data.shortcut,
+    expansion: data.expansion,
+    modality: data.modality || null,
+    bodyPart: data.bodyPart || null,
+    isMeasurementMacro: data.isMeasurementMacro ?? false,
+    measurementParams: data.measurementParams || null,
+    autoSuggestOn: data.autoSuggestOn ?? false,
+    isGlobal,
+    sortOrder: data.sortOrder ?? 0,
+  }).returning();
+  res.status(201).json(row);
+});
+
+const UpdateSmartMacroSchema = z.object({
+  shortcut: z.string().min(1).max(50).optional(),
+  expansion: z.string().min(1).max(5000).optional(),
+  modality: z.string().max(20).optional().nullable(),
+  bodyPart: z.string().max(30).optional().nullable(),
+  isMeasurementMacro: z.boolean().optional(),
+  measurementParams: z.string().max(2000).optional().nullable(),
+  autoSuggestOn: z.boolean().optional(),
+  isGlobal: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+radiologyReportGeneratorRouter.put("/smart-macros/:id", async (req: StaffAuthRequest, res: Response) => {
+  const userName = req.staffSession?.subjectName;
+  const role = req.staffSession?.role;
+  if (!userName) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const id = Number(req.params.id);
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [existing] = await db.select().from(radiologySmartMacrosTable).where(eq(radiologySmartMacrosTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  const canEdit = existing.createdBy === userName || role === "super_admin";
+  if (!canEdit) { res.status(403).json({ error: "Forbidden" }); return; }
+  const parsed = UpdateSmartMacroSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
+  const update: Record<string, unknown> = {};
+  if (parsed.data.shortcut !== undefined) update.shortcut = parsed.data.shortcut;
+  if (parsed.data.expansion !== undefined) update.expansion = parsed.data.expansion;
+  if (parsed.data.modality !== undefined) update.modality = parsed.data.modality;
+  if (parsed.data.bodyPart !== undefined) update.bodyPart = parsed.data.bodyPart;
+  if (parsed.data.isMeasurementMacro !== undefined) update.isMeasurementMacro = parsed.data.isMeasurementMacro;
+  if (parsed.data.measurementParams !== undefined) update.measurementParams = parsed.data.measurementParams;
+  if (parsed.data.autoSuggestOn !== undefined) update.autoSuggestOn = parsed.data.autoSuggestOn;
+  if (parsed.data.isGlobal !== undefined && role === "super_admin") update.isGlobal = parsed.data.isGlobal;
+  if (parsed.data.sortOrder !== undefined) update.sortOrder = parsed.data.sortOrder;
+  const [row] = await db.update(radiologySmartMacrosTable).set(update).where(eq(radiologySmartMacrosTable.id, id)).returning();
+  res.json(row);
+});
+
+radiologyReportGeneratorRouter.delete("/smart-macros/:id", async (req: StaffAuthRequest, res: Response) => {
+  const userName = req.staffSession?.subjectName;
+  const role = req.staffSession?.role;
+  if (!userName) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const id = Number(req.params.id);
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [existing] = await db.select().from(radiologySmartMacrosTable).where(eq(radiologySmartMacrosTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  const canDelete = existing.createdBy === userName || role === "super_admin";
+  if (!canDelete) { res.status(403).json({ error: "Forbidden" }); return; }
+  await db.delete(radiologySmartMacrosTable).where(eq(radiologySmartMacrosTable.id, id));
+  res.json({ success: true });
 });
