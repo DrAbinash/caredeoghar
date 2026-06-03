@@ -20,7 +20,7 @@ import {
   pacsSettingsTable,
   patientsTable,
 } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, gte, lte, sql } from "drizzle-orm";
 import { type StaffAuthRequest, FULL_ACCESS_ROLES } from "../middleware/requireStaffAuth";
 import { encryptSecret } from "../lib/cryptoUtils";
 import {
@@ -34,6 +34,7 @@ import {
   generateAiResponse,
   resolveTaskRoute,
 } from "@workspace/ai-providers";
+import { radiologyWorklistTable } from "@workspace/db/schema";
 
 // ─── Prompt template presets ──────────────────────────────────────────────────
 export const AI_PROMPT_TEMPLATES: Record<string, string> = {
@@ -704,6 +705,144 @@ router.post("/insert-to-report", async (req, res): Promise<void> => {
     .where(eq(aiReportingAuditLogsTable.draftId, draftId));
 
   res.json({ success: true });
+});
+
+/**
+ * GET /api/ai-reporting/quality-scores
+ * Phase 5: Reporting Quality Scoring — aggregate metrics from radiologist feedback.
+ */
+router.get("/quality-scores", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canConfigure(sReq)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const { from, to, scope = "overall" } = req.query as Record<string, string>;
+  const dateFrom = from ? new Date(from) : new Date(Date.now() - 30 * 86400000);
+  const dateTo = to ? new Date(to) : new Date();
+
+  const whereClause = and(
+    gte(radiologyWorklistTable.createdAt, dateFrom),
+    lte(radiologyWorklistTable.createdAt, dateTo),
+  );
+
+  const [overall, byModality] = await Promise.all([
+    db
+      .select({
+        totalDrafts: sql<number>`count(*)`,
+        totalWithFeedback: sql<number>`count(case when ${radiologyWorklistTable.aiFeedback} is not null then 1 end)`,
+        helpfulCount: sql<number>`count(case when ${radiologyWorklistTable.aiFeedback}::text like '%"verdict":"helpful"%' then 1 end)`,
+        needsImprovementCount: sql<number>`count(case when ${radiologyWorklistTable.aiFeedback}::text like '%"verdict":"needs_improvement"%' then 1 end)`,
+        inaccurateCount: sql<number>`count(case when ${radiologyWorklistTable.aiFeedback}::text like '%"verdict":"inaccurate"%' then 1 end)`,
+      })
+      .from(radiologyWorklistTable)
+      .where(whereClause),
+    db
+      .select({
+        modality: radiologyWorklistTable.modality,
+        totalWithFeedback: sql<number>`count(case when ${radiologyWorklistTable.aiFeedback} is not null then 1 end)`,
+        helpfulCount: sql<number>`count(case when ${radiologyWorklistTable.aiFeedback}::text like '%"verdict":"helpful"%' then 1 end)`,
+        needsImprovementCount: sql<number>`count(case when ${radiologyWorklistTable.aiFeedback}::text like '%"verdict":"needs_improvement"%' then 1 end)`,
+        inaccurateCount: sql<number>`count(case when ${radiologyWorklistTable.aiFeedback}::text like '%"verdict":"inaccurate"%' then 1 end)`,
+      })
+      .from(radiologyWorklistTable)
+      .where(whereClause)
+      .groupBy(radiologyWorklistTable.modality),
+  ]);
+
+  const o = overall[0];
+  const total = o.totalWithFeedback || 1;
+  const qualityScore = (o.helpfulCount * 100 + o.needsImprovementCount * 50) / total;
+
+  const modalityBreakdown = byModality.map((m) => {
+    const t = m.totalWithFeedback || 1;
+    return {
+      modality: m.modality,
+      totalWithFeedback: m.totalWithFeedback,
+      helpfulCount: m.helpfulCount,
+      needsImprovementCount: m.needsImprovementCount,
+      inaccurateCount: m.inaccurateCount,
+      qualityScore: Number(((m.helpfulCount * 100 + m.needsImprovementCount * 50) / t).toFixed(1)),
+      helpfulRate: Number(((m.helpfulCount / t) * 100).toFixed(1)),
+    };
+  });
+
+  res.json({
+    scope,
+    dateFrom: dateFrom.toISOString(),
+    dateTo: dateTo.toISOString(),
+    overall: {
+      totalDrafts: o.totalDrafts,
+      totalWithFeedback: o.totalWithFeedback,
+      helpfulCount: o.helpfulCount,
+      needsImprovementCount: o.needsImprovementCount,
+      inaccurateCount: o.inaccurateCount,
+      qualityScore: Number(qualityScore.toFixed(1)),
+      helpfulRate: Number(((o.helpfulCount / total) * 100).toFixed(1)),
+    },
+    byModality: modalityBreakdown,
+  });
+});
+
+/**
+ * GET /api/ai-reporting/prompt-effectiveness
+ * Phase 6: AI Prompt Effectiveness — rank templates by radiologist feedback.
+ */
+router.get("/prompt-effectiveness", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canConfigure(sReq)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const { from, to, modality } = req.query as Record<string, string>;
+  const dateFrom = from ? new Date(from) : new Date(Date.now() - 30 * 86400000);
+  const dateTo = to ? new Date(to) : new Date();
+
+  const dateFilter = and(
+    gte(radiologyWorklistTable.createdAt, dateFrom),
+    lte(radiologyWorklistTable.createdAt, dateTo),
+  );
+
+  const modalityFilter = modality ? eq(radiologyWorklistTable.modality, modality) : undefined;
+  const whereClause = modalityFilter ? and(dateFilter, modalityFilter) : dateFilter;
+
+  const byTemplate = await db
+    .select({
+      templateName: aiReportingDraftsTable.templateName,
+      modality: radiologyWorklistTable.modality,
+      totalDrafts: sql<number>`count(*)`,
+      totalWithFeedback: sql<number>`count(case when ${radiologyWorklistTable.aiFeedback} is not null then 1 end)`,
+      helpfulCount: sql<number>`count(case when ${radiologyWorklistTable.aiFeedback}::text like '%"verdict":"helpful"%' then 1 end)`,
+      needsImprovementCount: sql<number>`count(case when ${radiologyWorklistTable.aiFeedback}::text like '%"verdict":"needs_improvement"%' then 1 end)`,
+      inaccurateCount: sql<number>`count(case when ${radiologyWorklistTable.aiFeedback}::text like '%"verdict":"inaccurate"%' then 1 end)`,
+    })
+    .from(aiReportingDraftsTable)
+    .leftJoin(radiologyWorklistTable, eq(radiologyWorklistTable.studyInstanceUID, aiReportingDraftsTable.studyInstanceUID))
+    .where(whereClause)
+    .groupBy(aiReportingDraftsTable.templateName, radiologyWorklistTable.modality);
+
+  const ranked = byTemplate
+    .filter((t) => t.templateName)
+    .map((t) => {
+      const total = t.totalWithFeedback || 1;
+      return {
+        templateName: t.templateName!,
+        modality: t.modality,
+        totalDrafts: t.totalDrafts,
+        totalWithFeedback: t.totalWithFeedback,
+        helpfulCount: t.helpfulCount,
+        needsImprovementCount: t.needsImprovementCount,
+        inaccurateCount: t.inaccurateCount,
+        qualityScore: Number(((t.helpfulCount * 100 + t.needsImprovementCount * 50) / total).toFixed(1)),
+        helpfulRate: Number(((t.helpfulCount / total) * 100).toFixed(1)),
+      };
+    })
+    .sort((a, b) => b.qualityScore - a.qualityScore);
+
+  res.json({
+    dateFrom: dateFrom.toISOString(),
+    dateTo: dateTo.toISOString(),
+    modality: modality ?? null,
+    templates: ranked,
+  });
 });
 
 export const aiReportingRouter = router;

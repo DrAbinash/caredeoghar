@@ -405,6 +405,27 @@ async function runStartupMigrations(): Promise<void> {
       ALTER TABLE diagnostic_tests ADD COLUMN IF NOT EXISTS modality_id INTEGER;
       ALTER TABLE diagnostic_tests ADD COLUMN IF NOT EXISTS floor_label TEXT NOT NULL DEFAULT '';
 
+      -- Phase 5: AI Quality Scores (computed metrics from radiologist feedback)
+      CREATE TABLE IF NOT EXISTS ai_quality_scores (
+        id SERIAL PRIMARY KEY,
+        scope TEXT NOT NULL,
+        scope_key TEXT,
+        date_from TIMESTAMPTZ NOT NULL,
+        date_to TIMESTAMPTZ NOT NULL,
+        total_drafts INTEGER NOT NULL DEFAULT 0,
+        total_with_feedback INTEGER NOT NULL DEFAULT 0,
+        helpful_count INTEGER NOT NULL DEFAULT 0,
+        needs_improvement_count INTEGER NOT NULL DEFAULT 0,
+        inaccurate_count INTEGER NOT NULL DEFAULT 0,
+        helpful_rate REAL NOT NULL DEFAULT 0,
+        quality_score REAL NOT NULL DEFAULT 0,
+        avg_turnaround_minutes REAL,
+        computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS ai_qs_scope_key_idx ON ai_quality_scores(scope, scope_key);
+      CREATE INDEX IF NOT EXISTS ai_qs_date_idx ON ai_quality_scores(date_from, date_to);
+      CREATE INDEX IF NOT EXISTS ai_qs_computed_idx ON ai_quality_scores(computed_at DESC);
+
       -- ── LAN-only login gate ──────────────────────────────────────────────
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS lan_only_login BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS lan_allowed_ips TEXT NOT NULL DEFAULT '[]';

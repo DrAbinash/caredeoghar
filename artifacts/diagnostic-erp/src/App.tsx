@@ -52,6 +52,8 @@ const AiPromptTemplates     = lazy(() => import("@/pages/AiPromptTemplates"));
 const AiModelRouting        = lazy(() => import("@/pages/AiModelRouting"));
 const ReportTemplatesPage   = lazy(() => import("@/pages/ReportTemplates"));
 const AiAuditLog            = lazy(() => import("@/pages/AiAuditLog"));
+const AiQualityScores       = lazy(() => import("@/pages/AiQualityScores"));
+const AiPromptEffectiveness = lazy(() => import("@/pages/AiPromptEffectiveness"));
 const DicomViewer           = lazy(() => import("@/pages/DicomViewer"));
 const AgentSetup            = lazy(() => import("@/pages/AgentSetup"));
 const PacsSettings          = lazy(() => import("@/pages/PacsSettings"));
@@ -245,6 +247,8 @@ function Router() {
               <Route path="/radiology/ai-model-routing" component={AiModelRouting} />
               <Route path="/radiology/structured-report-templates" component={ReportTemplatesPage} />
               <Route path="/radiology/ai-audit-log" component={AiAuditLog} />
+      <Route path="/radiology/ai-quality-scores" component={AiQualityScores} />
+      <Route path="/radiology/ai-prompt-effectiveness" component={AiPromptEffectiveness} />
               <Route path="/radiology/archive-lifecycle" component={PacsArchiveLifecycle} />
               <Route path="/radiology/watchdog" component={PacsWatchdogDashboard} />
               <Route path="/radiology/ai-inference-settings" component={AiInferenceSettings} />
