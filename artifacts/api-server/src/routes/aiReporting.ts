@@ -35,7 +35,7 @@ import {
   aiPatientCommunicationsTable,
   aiNormalReportTemplatesTable,
 } from "@workspace/db";
-import { eq, and, desc, gte, lte, sql } from "drizzle-orm";
+import { eq, and, desc, gte, lte, sql, inArray } from "drizzle-orm";
 import { type StaffAuthRequest, FULL_ACCESS_ROLES } from "../middleware/requireStaffAuth";
 import { encryptSecret } from "../lib/cryptoUtils";
 import {
@@ -2423,9 +2423,10 @@ router.get("/normal-templates", async (req, res): Promise<void> => {
   const globalSettings = await getGlobalSettings();
   if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
 
-  const { modality } = req.query;
+  const { modality, category } = req.query;
   const conditions: any[] = [];
   if (modality) conditions.push(eq(aiNormalReportTemplatesTable.modality, String(modality)));
+  if (category) conditions.push(eq(aiNormalReportTemplatesTable.category, String(category)));
 
   const rows = await db
     .select()
@@ -2460,11 +2461,11 @@ router.post("/normal-templates", async (req, res): Promise<void> => {
   const globalSettings = await getGlobalSettings();
   if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
 
-  const { name, modality, bodyPart, findings, impression, technique, clinicalHistory, comparison, sortOrder } = req.body;
+  const { name, modality, bodyPart, category, findings, impression, technique, clinicalHistory, comparison, sortOrder } = req.body;
   if (!name || !modality || !findings || !impression) { res.status(400).json({ error: "name, modality, findings, impression are required" }); return; }
 
   const inserted = await db.insert(aiNormalReportTemplatesTable).values({
-    name, modality, bodyPart: bodyPart ?? null, findings, impression,
+    name, modality, bodyPart: bodyPart ?? null, category: category || "normal", findings, impression,
     technique: technique ?? null, clinicalHistory: clinicalHistory ?? null, comparison: comparison ?? null,
     sortOrder: sortOrder ? Number(sortOrder) : 0,
   }).returning({ id: aiNormalReportTemplatesTable.id });
@@ -2482,7 +2483,7 @@ router.patch("/normal-templates/:id", async (req, res): Promise<void> => {
   if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
 
   const id = Number(req.params.id);
-  const { name, modality, bodyPart, findings, impression, technique, clinicalHistory, comparison, sortOrder } = req.body;
+  const { name, modality, bodyPart, category, findings, impression, technique, clinicalHistory, comparison, sortOrder } = req.body;
   const [row] = await db.select().from(aiNormalReportTemplatesTable).where(eq(aiNormalReportTemplatesTable.id, id)).limit(1);
   if (!row) { res.status(404).json({ error: "Template not found" }); return; }
 
@@ -2490,6 +2491,7 @@ router.patch("/normal-templates/:id", async (req, res): Promise<void> => {
   if (name !== undefined) updateData.name = name;
   if (modality !== undefined) updateData.modality = modality;
   if (bodyPart !== undefined) updateData.bodyPart = bodyPart;
+  if (category !== undefined) updateData.category = category;
   if (findings !== undefined) updateData.findings = findings;
   if (impression !== undefined) updateData.impression = impression;
   if (technique !== undefined) updateData.technique = technique;
@@ -2551,6 +2553,53 @@ router.post("/normal-templates/:id/apply", async (req, res): Promise<void> => {
     reportText,
     aiSafetyLabel: "AI Draft – Requires Radiologist Review",
     message: "Template applied. Radiologist must review and finalize the report.",
+  });
+});
+
+/**
+ * POST /api/ai-reporting/normal-templates/merge
+ * Merge two templates into a single report. Accepts array of templateIds.
+ */
+router.post("/normal-templates/merge", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const { templateIds } = req.body as { templateIds?: number[] };
+  if (!Array.isArray(templateIds) || templateIds.length < 2) { res.status(400).json({ error: "templateIds must be an array of at least 2 IDs" }); return; }
+
+  const templates = await db
+    .select()
+    .from(aiNormalReportTemplatesTable)
+    .where(inArray(aiNormalReportTemplatesTable.id, templateIds));
+
+  const byId = new Map(templates.map((t) => [t.id, t]));
+  const ordered = templateIds.map((id) => byId.get(id)).filter(Boolean) as typeof templates;
+  if (ordered.length === 0) { res.status(404).json({ error: "No valid templates found" }); return; }
+
+  const session = sReq.staffSession!;
+  const mergedName = ordered.map((t) => t.name).join(" + ");
+  const mergedFindings = ordered.map((t) => `=== ${t.name} ===\n${t.findings}`).join("\n\n");
+  const mergedImpression = ordered.map((t) => `• ${t.impression}`).join("\n");
+  const mergedTechnique = ordered.map((t) => t.technique).filter(Boolean).join("; ");
+  const mergedClinicalHistory = ordered.map((t) => t.clinicalHistory).filter(Boolean).join("; ");
+  const mergedComparison = ordered.map((t) => t.comparison).filter(Boolean).join("; ");
+
+  const reportText = [
+    "CLINICAL HISTORY:", mergedClinicalHistory || "As per referral.",
+    "\nTECHNIQUE:", mergedTechnique || "As per protocol.",
+    "\nCOMPARISON:", mergedComparison || "None available.",
+    "\nFINDINGS:", mergedFindings,
+    "\nIMPRESSION:", mergedImpression,
+    "\n\n[Reported by: " + (session.subjectName ?? "Radiologist") + "]",
+  ].join("\n");
+
+  res.json({
+    templateIds,
+    mergedName,
+    reportText,
+    aiSafetyLabel: "AI Draft – Requires Radiologist Review",
+    message: "Merged templates applied. Radiologist must review and finalize.",
   });
 });
 

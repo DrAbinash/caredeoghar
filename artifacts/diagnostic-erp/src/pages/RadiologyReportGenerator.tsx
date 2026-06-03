@@ -53,6 +53,7 @@ import {
   Zap,
   Ruler,
   Bell,
+  Merge,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -225,8 +226,10 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
   // Normal templates
   const [showNormalTemplatePicker, setShowNormalTemplatePicker] = useState(false);
   const [normalTemplateId, setNormalTemplateId] = useState<string>("");
-  const [normalTemplates, setNormalTemplates] = useState<Array<{ id: number; name: string; modality: string; findings: string; impression: string; technique: string | null; clinicalHistory: string | null; comparison: string | null }>>([]);
+  const [normalTemplates, setNormalTemplates] = useState<Array<{ id: number; name: string; modality: string; category: string; findings: string; impression: string; technique: string | null; clinicalHistory: string | null; comparison: string | null }>>([]);
   const [normalTemplatesLoading, setNormalTemplatesLoading] = useState(false);
+  const [mergeTemplateMode, setMergeTemplateMode] = useState(false);
+  const [mergeTemplateIds, setMergeTemplateIds] = useState<string[]>([]);
 
   // Spinal measurements
   const [showSpinalPanel, setShowSpinalPanel] = useState(false);
@@ -784,7 +787,7 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
       const params = new URLSearchParams();
       const currentModality = template?.modality ?? "";
       if (currentModality) params.set("modality", currentModality);
-      const items = await api.get<Array<{ id: number; name: string; modality: string; findings: string; impression: string; technique: string | null; clinicalHistory: string | null; comparison: string | null }>>(`/api/ai-reporting/normal-templates?${params.toString()}`);
+      const items = await api.get<Array<{ id: number; name: string; modality: string; category: string; findings: string; impression: string; technique: string | null; clinicalHistory: string | null; comparison: string | null }>>(`/api/ai-reporting/normal-templates?${params.toString()}`);
       setNormalTemplates(items);
     } catch (e) {
       toast({ variant: "destructive", title: "Failed to load templates", description: String(e) });
@@ -1476,6 +1479,26 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
 
   // ── Normal template picker overlay ──────────────────────────────────────────
 
+  const CATEGORY_LABELS_RRG: Record<string, string> = { normal: "Normal", pathology: "Pathology", trauma: "Trauma", screening: "Screening", contrast: "Contrast" };
+  const CATEGORY_COLORS_RRG: Record<string, string> = { normal: "bg-green-50 text-green-700 border-green-200", pathology: "bg-amber-50 text-amber-700 border-amber-200", trauma: "bg-red-50 text-red-700 border-red-200", screening: "bg-blue-50 text-blue-700 border-blue-200", contrast: "bg-purple-50 text-purple-700 border-purple-200" };
+
+  async function applyMergedTemplates() {
+    if (mergeTemplateIds.length < 2) return;
+    try {
+      const res = await api.post<{ reportText: string; mergedName: string }>("/api/ai-reporting/normal-templates/merge", { templateIds: mergeTemplateIds.map(Number) });
+      setClinicalHistory("As per referral.");
+      setImpressionRaw("");
+      setRecommendation("Please correlate with clinical findings.");
+      setFindingsSections({ "Findings": res.reportText });
+      setShowNormalTemplatePicker(false);
+      setMergeTemplateMode(false);
+      setMergeTemplateIds([]);
+      toast({ title: `Merged: ${res.mergedName}`, description: "AI Draft – Requires Radiologist Review" });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Merge failed", description: String(e) });
+    }
+  }
+
   function renderNormalTemplatePicker() {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowNormalTemplatePicker(false)}>
@@ -1483,15 +1506,28 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-base flex items-center gap-2">
               <ClipboardCheck size={16} />
-              Apply Normal Template
+              {mergeTemplateMode ? "Merge Templates" : "Apply Normal Template"}
             </h3>
-            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setShowNormalTemplatePicker(false)}>
-              <X size={14} />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant={mergeTemplateMode ? "default" : "outline"} onClick={() => { setMergeTemplateMode(!mergeTemplateMode); setMergeTemplateIds([]); setNormalTemplateId(""); }}>
+                <Merge size={14} className="mr-1" /> {mergeTemplateMode ? "Merging" : "Merge"}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setShowNormalTemplatePicker(false)}>
+                <X size={14} />
+              </Button>
+            </div>
           </div>
           <p className="text-sm text-muted-foreground">
-            Select a pre-built normal template for this study. Populates findings and impression instantly.
+            {mergeTemplateMode
+              ? "Select 2+ templates to merge into a single combined report."
+              : "Select a pre-built normal template for this study. Populates findings and impression instantly."}
           </p>
+          {mergeTemplateMode && (
+            <div className="bg-muted rounded p-2 text-sm flex items-center justify-between">
+              <span>{mergeTemplateIds.length === 0 ? "Select 2+ templates" : `${mergeTemplateIds.length} selected`}</span>
+              <Button size="sm" variant="outline" onClick={() => setMergeTemplateIds([])}>Clear</Button>
+            </div>
+          )}
           {normalTemplatesLoading ? (
             <div className="flex items-center justify-center py-6">
               <Loader2 size={18} className="animate-spin text-muted-foreground" />
@@ -1506,11 +1542,18 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
               {normalTemplates.map((t) => (
                 <div
                   key={t.id}
-                  className={`rounded-md border p-3 cursor-pointer transition-colors ${String(t.id) === normalTemplateId ? "border-primary bg-primary/5" : "hover:bg-muted"}`}
-                  onClick={() => setNormalTemplateId(String(t.id))}
+                  className={`rounded-md border p-3 cursor-pointer transition-colors ${mergeTemplateMode ? (mergeTemplateIds.includes(String(t.id)) ? "border-primary bg-primary/5" : "hover:bg-muted") : (String(t.id) === normalTemplateId ? "border-primary bg-primary/5" : "hover:bg-muted")}`}
+                  onClick={() => {
+                    if (mergeTemplateMode) {
+                      setMergeTemplateIds((prev) => prev.includes(String(t.id)) ? prev.filter((id) => id !== String(t.id)) : [...prev, String(t.id)]);
+                    } else {
+                      setNormalTemplateId(String(t.id));
+                    }
+                  }}
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Badge variant="outline">{t.modality}</Badge>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded border ${CATEGORY_COLORS_RRG[t.category] || 'bg-gray-50 text-gray-700 border-gray-200'}`}>{CATEGORY_LABELS_RRG[t.category] || t.category}</span>
                     <span className="font-medium text-sm">{t.name}</span>
                   </div>
                   <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.findings}</div>
@@ -1522,9 +1565,15 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
             <Badge variant="outline" className="text-[10px]">AI Draft – Requires Radiologist Review</Badge>
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={() => setShowNormalTemplatePicker(false)}>Cancel</Button>
-              <Button size="sm" onClick={() => applyNormalTemplate(normalTemplateId)} disabled={!normalTemplateId}>
-                <Zap size={14} className="mr-1" /> Apply
-              </Button>
+              {mergeTemplateMode ? (
+                <Button size="sm" onClick={() => applyMergedTemplates()} disabled={mergeTemplateIds.length < 2}>
+                  <Merge size={14} className="mr-1" /> Merge & Apply
+                </Button>
+              ) : (
+                <Button size="sm" onClick={() => applyNormalTemplate(normalTemplateId)} disabled={!normalTemplateId}>
+                  <Zap size={14} className="mr-1" /> Apply
+                </Button>
+              )}
             </div>
           </div>
         </div>

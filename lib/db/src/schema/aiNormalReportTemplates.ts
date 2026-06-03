@@ -5,6 +5,8 @@ export const aiNormalReportTemplatesTable = pgTable("ai_normal_report_templates"
   name: text("name").notNull(),
   modality: text("modality").notNull(),
   bodyPart: text("body_part"),
+  category: text("category").notNull().default("normal"),
+  // normal | pathology | trauma | screening | contrast
   findings: text("findings").notNull(),
   impression: text("impression").notNull(),
   technique: text("technique"),
