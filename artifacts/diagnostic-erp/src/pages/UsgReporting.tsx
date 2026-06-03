@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { fetchApi } from "@/lib/fetchApi";
@@ -15,7 +15,7 @@ import VoiceDictationButton from "@/components/VoiceDictationButton";
 import {
   FileText, Plus, CheckCircle2, Clock, Archive, ArrowLeft,
   ChevronDown, ChevronUp, Sparkles, RefreshCw, ShieldCheck, History, AlertTriangle,
-  Lock, FileWarning, ShieldBan, Loader2,
+  Lock, FileWarning, ShieldBan, Loader2, Zap, Type, Layers, Merge,
 } from "lucide-react";
 
 interface ReportDraft {
@@ -93,6 +93,17 @@ export default function UsgReporting() {
     templateType: "WHOLE_ABDOMEN",
     draftContent: "",
   });
+  // --- Quick Findings & Macros ---
+  const [showQuickFindings, setShowQuickFindings] = useState(false);
+  const [showMacros, setShowMacros] = useState(false);
+  const [showFormatButtons, setShowFormatButtons] = useState(false);
+  const [showTemplateMerge, setShowTemplateMerge] = useState(false);
+  const [mergeTemplateIds, setMergeTemplateIds] = useState<string[]>([]);
+  const [customMacros, setCustomMacros] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem("usg_macros") ?? "{}"); } catch { return {}; }
+  });
+  const [priorContent, setPriorContent] = useState<Record<number, string>>({});
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: templates = [] } = useQuery<TemplateDescriptor[]>({
     queryKey: ["usg-templates"],
@@ -245,6 +256,133 @@ export default function UsgReporting() {
 
   const dirtyContentFor = (id: number, original: string) => editContent[id] ?? original;
 
+  // --- Quick Findings Helpers ---
+  const QUICK_FINDINGS = [
+    { group: "General", items: [
+      { label: "Normal All", text: "LIVER: Normal in size and echotexture. No focal lesion.\nGALLBLADDER: Normal size, wall thickness <3 mm. No calculus.\nCBD: Not dilated.\nSPLEEN: Normal size.\nPANCREAS: Normal size and echotexture.\nRIGHT KIDNEY: Normal size (9-12 cm), echotexture and PCS. No calculus.\nLEFT KIDNEY: Normal size (9-12 cm), echotexture and PCS. No calculus.\nURINARY BLADDER: Normal wall thickness, no calculus.\nPROSTATE: Normal size.\nFREE FLUID: No free fluid.\nIMPRESSION: Normal USG examination." },
+      { label: "Hepatomegaly", text: "LIVER: Enlarged with span of [___] cm. [Describe echotexture and focal lesions if any]." },
+      { label: "Splenomegaly", text: "SPLEEN: Enlarged with span of [___] cm. Homogeneous echotexture." },
+      { label: "Free Fluid", text: "FREE FLUID: Minimal/moderate free fluid seen in Morrison\u2019s pouch and pelvis." },
+    ]},
+    { group: "Liver", items: [
+      { label: "Fatty Liver", text: "LIVER: Diffusely increased echogenicity with poor sound transmission, consistent with hepatic steatosis / fatty liver." },
+      { label: "Liver Cyst", text: "LIVER: [Solitary/multiple] anechoic well-defined cystic lesion(s) in [segment] measuring [___] cm. No internal vascularity." },
+      { label: "Hepatomegaly", text: "LIVER: Enlarged with span of [___] cm. [Describe echotexture]." },
+      { label: "Liver Abscess", text: "LIVER: Hypoechoic collection in [segment] measuring [___] cm with internal echoes/debris. Suggest correlation with CECT/clinical." },
+    ]},
+    { group: "Gallbladder", items: [
+      { label: "GB Calculus", text: "GALLBLADDER: [Solitary/multiple] echogenic calculi with posterior acoustic shadowing within the gallbladder, the largest measuring [___] cm." },
+      { label: "GB Sludge", text: "GALLBLADDER: Echogenic sludge layering in the gallbladder without acoustic shadowing." },
+      { label: "GB Polyp", text: "GALLBLADDER: Hyperechoic polypoid lesion measuring [___] cm attached to the wall. No posterior shadowing." },
+      { label: "Pericholecystic Fluid", text: "GALLBLADDER: Thickened wall (>3 mm). Pericholecystic fluid seen. Calculus at the neck/cystic duct." },
+    ]},
+    { group: "Kidney", items: [
+      { label: "Hydronephrosis", text: "KIDNEY: [Mild/Moderate/Severe] hydronephrosis of the [RIGHT/LEFT] kidney with pelvi-calyceal system (PCS) dilation." },
+      { label: "Renal Calculus", text: "KIDNEY: [Solitary/multiple] echogenic calculus in the [RIGHT/LEFT] kidney with posterior acoustic shadowing measuring [___] cm." },
+      { label: "Renal Cyst", text: "KIDNEY: [Solitary/multiple] anechoic well-defined cyst in the [RIGHT/LEFT] kidney measuring [___] cm. No septation/solid component." },
+    ]},
+    { group: "Prostate", items: [
+      { label: "Prostate Enlarged", text: "PROSTATE: Enlarged gland with volume [___] mL. Homogeneous echotexture." },
+      { label: "BPH", text: "PROSTATE: Enlarged with volume [___] mL. Prominent middle lobe. Post-void residual [___] mL." },
+    ]},
+    { group: "Doppler", items: [
+      { label: "Normal Doppler", text: "DOPPLER: Normal colour and spectral flow in all vessels. No significant stenosis or thrombosis." },
+      { label: "DVT Positive", text: "DOPPLER: Non-compressible vein with absent flow. Intraluminal echogenic thrombus seen. Acute DVT [location]." },
+    ]},
+  ];
+
+  function insertText(draftId: number | "new", text: string) {
+    if (draftId === "new") {
+      setNewForm((f) => ({ ...f, draftContent: f.draftContent + (f.draftContent.endsWith("\n") ? "" : "\n") + text }));
+    } else {
+      setEditContent((prev) => {
+        const draft = drafts.find((d) => d.id === draftId);
+        const base = prev[draftId] ?? draft?.draftContent ?? "";
+        return { ...prev, [draftId]: base + (base.endsWith("\n") ? "" : "\n") + text };
+      });
+    }
+  }
+
+  // --- Macro Expansion ---
+  const BUILTIN_MACROS: Record<string, string> = {
+    fatty: "LIVER: Diffusely increased echogenicity with poor sound transmission, consistent with hepatic steatosis / fatty liver.",
+    gbc: "GALLBLADDER: Echogenic calculi with posterior acoustic shadowing within the gallbladder, the largest measuring [___] cm.",
+    hydro: "KIDNEY: Mild hydronephrosis with pelvi-calyceal system dilation.",
+    normal: "LIVER: Normal. GALLBLADDER: Normal. CBD: Not dilated. SPLEEN: Normal. PANCREAS: Normal. BOTH KIDNEYS: Normal. BLADDER: Normal. PROSTATE: Normal. No free fluid.",
+    cyst: "ANECHOIC well-defined cystic lesion with no internal vascularity.",
+    dvt: "NON-COMPRESSIBLE vein with absent flow. Intraluminal echogenic thrombus. Acute DVT.",
+    bph: "PROSTATE: Enlarged with volume [___] mL. Prominent middle lobe. Post-void residual [___] mL.",
+  };
+
+  function expandMacro(text: string, macros: Record<string, string>): string {
+    const all = { ...BUILTIN_MACROS, ...macros };
+    const words = text.split(/(\s+)/);
+    let changed = false;
+    const expanded = words.map((word) => {
+      const clean = word.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (all[clean] && (word.trim() === clean || word.trim().toLowerCase() === clean)) {
+        changed = true;
+        return all[clean];
+      }
+      return word;
+    });
+    return changed ? expanded.join("") : text;
+  }
+
+  function handleTextChange(draftId: number | "new", value: string) {
+    const expanded = expandMacro(value, customMacros);
+    if (draftId === "new") {
+      setNewForm((f) => ({ ...f, draftContent: expanded }));
+    } else {
+      setEditContent((prev) => ({ ...prev, [draftId]: expanded }));
+    }
+  }
+
+  function saveMacro(shortcut: string, expansion: string) {
+    const next = { ...customMacros, [shortcut.toLowerCase().replace(/[^a-z0-9]/g, "")]: expansion };
+    setCustomMacros(next);
+    localStorage.setItem("usg_macros", JSON.stringify(next));
+    toast({ title: "Macro saved", description: `${shortcut} \u2192 ${expansion.slice(0, 40)}...` });
+  }
+
+  // --- Format Insert ---
+  const FORMAT_HEADINGS = [
+    { label: "FINDINGS", text: "\nFINDINGS:\n" },
+    { label: "IMPRESSION", text: "\nIMPRESSION:\n" },
+    { label: "RECOMMENDATION", text: "\nRECOMMENDATION:\n" },
+    { label: "COMPARISON", text: "\nCOMPARISON:\n" },
+    { label: "TECHNIQUE", text: "\nTECHNIQUE:\n" },
+  ];
+
+  // --- Template Merge ---
+  function mergeTemplates() {
+    if (mergeTemplateIds.length === 0) {
+      toast({ title: "Select at least 2 templates to merge", variant: "destructive" });
+      return;
+    }
+    const merged = mergeTemplateIds.map((id) => templates.find((t) => t.id === id)?.label ?? id).join(" + ");
+    setNewForm((f) => ({ ...f, draftContent: f.draftContent + (f.draftContent.endsWith("\n") ? "" : "\n") + `\n--- MERGED: ${merged} ---\n` }));
+    toast({ title: "Templates merged", description: merged });
+    setShowTemplateMerge(false);
+  }
+
+  // --- Prior Auto-Merge ---
+  async function loadPriorContent(draftId: number, patientId: number) {
+    try {
+      const res = await fetchApi(`/api/usg-reports/prior/by-patient/${patientId}`) as Array<{ id: number; draftContent: string }>;
+      const latest = res[0];
+      if (latest) {
+        setEditContent((prev) => ({ ...prev, [draftId]: latest.draftContent }));
+        setPriorContent((prev) => ({ ...prev, [draftId]: latest.draftContent }));
+        toast({ title: "Prior report loaded", description: `Loaded from report #${latest.id}` });
+      } else {
+        toast({ title: "No prior reports found", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Failed to load prior", variant: "destructive" });
+    }
+  }
+
   return (
     <div className="p-4 md:p-6 space-y-6">
       <PageHeader
@@ -341,21 +479,141 @@ export default function UsgReporting() {
                   Suggest Template Automatically
                 </Button>
               ) : null}
+              <Button variant="outline" size="sm" onClick={() => setShowQuickFindings((s) => !s)}>
+                <Zap className="h-3.5 w-3.5 mr-1.5" /> Quick Findings
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setShowMacros((s) => !s)}>
+                <Type className="h-3.5 w-3.5 mr-1.5" /> Macros
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setShowFormatButtons((s) => !s)}>
+                <Type className="h-3.5 w-3.5 mr-1.5" /> Format
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setShowTemplateMerge((s) => !s)}>
+                <Merge className="h-3.5 w-3.5 mr-1.5" /> Merge
+              </Button>
             </div>
+
+            {/* Quick Findings Panel */}
+            {showQuickFindings && (
+              <Card className="border-amber-200/50 bg-amber-50/30 dark:bg-amber-950/10">
+                <CardContent className="p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-amber-700">Quick Findings</span>
+                    <Button variant="ghost" size="sm" className="h-6 px-2" onClick={() => setShowQuickFindings(false)}>Close</Button>
+                  </div>
+                  {QUICK_FINDINGS.map((group) => (
+                    <div key={group.group} className="space-y-1">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">{group.group}</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {group.items.map((item) => (
+                          <Button key={item.label} variant="outline" size="sm" className="h-7 text-[10px]"
+                            onClick={() => insertText("new", item.text)}>
+                            {item.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Macros Panel */}
+            {showMacros && (
+              <Card className="border-violet-200/50 bg-violet-50/30 dark:bg-violet-950/10">
+                <CardContent className="p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-violet-700">Macros (type + space to expand)</span>
+                    <Button variant="ghost" size="sm" className="h-6 px-2" onClick={() => setShowMacros(false)}>Close</Button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {Object.entries(BUILTIN_MACROS).map(([shortcut, text]) => (
+                      <div key={shortcut} className="flex items-center gap-1 border rounded px-2 py-1 text-[10px] bg-background">
+                        <span className="font-mono font-bold text-violet-600">{shortcut}</span>
+                        <span className="text-muted-foreground">\u2192</span>
+                        <span className="text-muted-foreground truncate max-w-[180px]">{text.slice(0, 40)}...</span>
+                      </div>
+                    ))}
+                    {Object.entries(customMacros).map(([shortcut, text]) => (
+                      <div key={shortcut} className="flex items-center gap-1 border rounded px-2 py-1 text-[10px] bg-background">
+                        <span className="font-mono font-bold text-violet-600">{shortcut}</span>
+                        <span className="text-muted-foreground">\u2192</span>
+                        <span className="text-muted-foreground truncate max-w-[180px]">{text.slice(0, 40)}...</span>
+                        <Button variant="ghost" size="sm" className="h-4 w-4 p-0 ml-1" onClick={() => {
+                          const next = { ...customMacros };
+                          delete next[shortcut];
+                          setCustomMacros(next);
+                          localStorage.setItem("usg_macros", JSON.stringify(next));
+                        }}>\u00d7</Button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input placeholder="Shortcut (e.g. bph)" className="h-7 text-[10px]" id="macro-shortcut" />
+                    <Input placeholder="Full text expansion" className="h-7 text-[10px]" id="macro-expansion" />
+                    <Button size="sm" className="h-7 text-[10px]" onClick={() => {
+                      const s = (document.getElementById("macro-shortcut") as HTMLInputElement)?.value.trim();
+                      const e = (document.getElementById("macro-expansion") as HTMLInputElement)?.value.trim();
+                      if (s && e) { saveMacro(s, e); (document.getElementById("macro-shortcut") as HTMLInputElement).value = ""; (document.getElementById("macro-expansion") as HTMLInputElement).value = ""; }
+                    }}>Save</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Format Buttons */}
+            {showFormatButtons && (
+              <div className="flex flex-wrap gap-1.5">
+                {FORMAT_HEADINGS.map((h) => (
+                  <Button key={h.label} variant="outline" size="sm" className="h-7 text-[10px]"
+                    onClick={() => insertText("new", h.text)}>
+                    {h.label}
+                  </Button>
+                ))}
+                <Button variant="ghost" size="sm" className="h-7 text-[10px]" onClick={() => setShowFormatButtons(false)}>Hide</Button>
+              </div>
+            )}
+
+            {/* Template Merge */}
+            {showTemplateMerge && (
+              <Card className="border-teal-200/50 bg-teal-50/30 dark:bg-teal-950/10">
+                <CardContent className="p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-teal-700">Merge Templates</span>
+                    <Button variant="ghost" size="sm" className="h-6 px-2" onClick={() => setShowTemplateMerge(false)}>Close</Button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {templates.map((t) => (
+                      <Button key={t.id} variant={mergeTemplateIds.includes(t.id) ? "default" : "outline"} size="sm" className="h-7 text-[10px]"
+                        onClick={() => setMergeTemplateIds((prev) => prev.includes(t.id) ? prev.filter((id) => id !== t.id) : [...prev, t.id])}>
+                        {t.label}
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={mergeTemplates} disabled={mergeTemplateIds.length < 2}>
+                      <Merge className="h-3.5 w-3.5 mr-1.5" /> Merge Selected
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setMergeTemplateIds([])}>Clear</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             <div className="space-y-1.5">
               <Label>Report Content</Label>
               <Textarea
+                ref={textareaRef}
                 rows={12}
                 placeholder="Click 'Auto-Generate' above to populate this with the chosen template + approved measurements."
                 value={newForm.draftContent}
-                onChange={(e) => setNewForm((f) => ({ ...f, draftContent: e.target.value }))}
+                onChange={(e) => handleTextChange("new", e.target.value)}
                 className="font-mono text-xs"
               />
               <div className="flex justify-end">
                 <VoiceDictationButton
                   targetField="draftContent"
-                  onInsert={(text) => setNewForm((f) => ({ ...f, draftContent: f.draftContent + (f.draftContent.endsWith("\n") ? "" : "\n") + text }))}
+                  onInsert={(text) => insertText("new", text)}
                 />
               </div>
             </div>
@@ -442,59 +700,117 @@ export default function UsgReporting() {
                       rows={14}
                       className="font-mono text-xs resize-y"
                       value={content}
-                      onChange={(e) => setEditContent((prev) => ({ ...prev, [draft.id]: e.target.value }))}
+                      onChange={(e) => handleTextChange(draft.id, e.target.value)}
                       readOnly={isFinalized}
                     />
 
                     {!isFinalized && (
-                      <div className="flex gap-2 flex-wrap items-center">
-                        <VoiceDictationButton
-                          draftId={draft.id}
-                          patientId={draft.patientId ?? undefined}
-                          targetField="draftContent"
-                          onInsert={(text) => setEditContent((prev) => ({ ...prev, [draft.id]: (prev[draft.id] ?? draft.draftContent) + text }))}
-                        />
-                        <Button variant="outline" size="sm"
-                          onClick={() => regenerateMutation.mutate({ id: draft.id })}
-                          disabled={regenerateMutation.isPending}
-                        >
-                          <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Regenerate
-                        </Button>
-                        {draft.patientId && (
-                          <Button variant="ghost" size="sm"
-                            onClick={() => setShowPriorFor({ id: draft.id, patientId: draft.patientId! })}
-                          >
-                            <History className="h-3.5 w-3.5 mr-1.5" /> Prior Studies
-                          </Button>
-                        )}
-                        <Button variant="outline" size="sm"
-                          onClick={() => qualityCheckMutation.mutate(draft.id)}
-                          disabled={qualityCheckMutation.isPending}
-                        >
-                          <FileWarning className="h-3.5 w-3.5 mr-1.5" />
-                          {qualityCheckMutation.isPending ? "Checking\u2026" : "Quality Check"}
-                        </Button>
-                        <div className="ml-auto flex gap-2">
+                      <div className="space-y-2">
+                        {/* Quick toolbar */}
+                        <div className="flex gap-2 flex-wrap items-center">
+                          <VoiceDictationButton
+                            draftId={draft.id}
+                            patientId={draft.patientId ?? undefined}
+                            targetField="draftContent"
+                            onInsert={(text) => insertText(draft.id, text)}
+                          />
                           <Button variant="outline" size="sm"
-                            onClick={() => saveMutation.mutate({ id: draft.id, draftContent: content })}
-                            disabled={saveMutation.isPending}
+                            onClick={() => regenerateMutation.mutate({ id: draft.id })}
+                            disabled={regenerateMutation.isPending}
                           >
-                            Save Draft
+                            <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Regenerate
                           </Button>
-                          {draft.status !== "verified" && (
-                            <Button variant="secondary" size="sm"
-                              onClick={() => verifyMutation.mutate(draft.id)}
-                              disabled={verifyMutation.isPending}
-                            >
-                              <ShieldCheck className="h-3.5 w-3.5 mr-1.5" /> Verify
-                            </Button>
+                          {draft.patientId && (
+                            <>
+                              <Button variant="ghost" size="sm"
+                                onClick={() => setShowPriorFor({ id: draft.id, patientId: draft.patientId! })}
+                              >
+                                <History className="h-3.5 w-3.5 mr-1.5" /> Prior Studies
+                              </Button>
+                              <Button variant="outline" size="sm"
+                                onClick={() => loadPriorContent(draft.id, draft.patientId!)}
+                              >
+                                <Layers className="h-3.5 w-3.5 mr-1.5" /> Load from Prior
+                              </Button>
+                            </>
                           )}
-                          <Button size="sm"
-                            onClick={() => setConfirmFinalizeId(draft.id)}
-                            className="bg-emerald-600 hover:bg-emerald-700"
+                          <Button variant="outline" size="sm"
+                            onClick={() => qualityCheckMutation.mutate(draft.id)}
+                            disabled={qualityCheckMutation.isPending}
                           >
-                            <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Finalize\u2026
+                            <FileWarning className="h-3.5 w-3.5 mr-1.5" />
+                            {qualityCheckMutation.isPending ? "Checking\u2026" : "Quality Check"}
                           </Button>
+                          <div className="ml-auto flex gap-2">
+                            <Button variant="outline" size="sm"
+                              onClick={() => saveMutation.mutate({ id: draft.id, draftContent: content })}
+                              disabled={saveMutation.isPending}
+                            >
+                              Save Draft
+                            </Button>
+                            {draft.status !== "verified" && (
+                              <Button variant="secondary" size="sm"
+                                onClick={() => verifyMutation.mutate(draft.id)}
+                                disabled={verifyMutation.isPending}
+                              >
+                                <ShieldCheck className="h-3.5 w-3.5 mr-1.5" /> Verify
+                              </Button>
+                            )}
+                            <Button size="sm"
+                              onClick={() => setConfirmFinalizeId(draft.id)}
+                              className="bg-emerald-600 hover:bg-emerald-700"
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Finalize\u2026
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Quick findings inline */}
+                        <div className="flex flex-wrap gap-1">
+                          <span className="text-[10px] text-muted-foreground uppercase self-center mr-1">Quick:</span>
+                          {QUICK_FINDINGS.map((g) =>
+                            g.items.slice(0, 3).map((item) => (
+                              <Button key={item.label} variant="outline" size="sm" className="h-6 text-[10px] px-2"
+                                onClick={() => insertText(draft.id, item.text)}>
+                                {item.label}
+                              </Button>
+                            ))
+                          )}
+                          <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => setShowQuickFindings((s) => !s)}>
+                            More&hellip;
+                          </Button>
+                        </div>
+
+                        {/* Expanded quick findings */}
+                        {showQuickFindings && (
+                          <Card className="border-amber-200/50 bg-amber-50/30 dark:bg-amber-950/10">
+                            <CardContent className="p-2 space-y-2">
+                              {QUICK_FINDINGS.map((group) => (
+                                <div key={group.group} className="space-y-1">
+                                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">{group.group}</p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {group.items.map((item) => (
+                                      <Button key={item.label} variant="outline" size="sm" className="h-6 text-[10px] px-2"
+                                        onClick={() => insertText(draft.id, item.text)}>
+                                        {item.label}
+                                      </Button>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </CardContent>
+                          </Card>
+                        )}
+
+                        {/* Format buttons */}
+                        <div className="flex flex-wrap gap-1">
+                          <span className="text-[10px] text-muted-foreground uppercase self-center mr-1">Format:</span>
+                          {FORMAT_HEADINGS.map((h) => (
+                            <Button key={h.label} variant="outline" size="sm" className="h-6 text-[10px] px-2"
+                              onClick={() => insertText(draft.id, h.text)}>
+                              {h.label}
+                            </Button>
+                          ))}
                         </div>
                       </div>
                     )}

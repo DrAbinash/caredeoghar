@@ -115,6 +115,7 @@ router.get("/prior/by-patient/:patientId", async (req, res) => {
     accessionNumber: usgReportDraftsTable.accessionNumber,
     templateType: usgReportDraftsTable.templateType,
     status: usgReportDraftsTable.status,
+    draftContent: usgReportDraftsTable.draftContent,
     finalizedAt: usgReportDraftsTable.finalizedAt,
     createdAt: usgReportDraftsTable.createdAt,
   })
