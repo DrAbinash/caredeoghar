@@ -37,6 +37,9 @@ export const radiologyWorklistTable = pgTable(
     // AI draft state: NONE | PENDING | READY | ERROR
     aiDraftStatus: text("ai_draft_status").notNull().default("NONE"),
     aiDraftJson: text("ai_draft_json"),        // JSON of last AI draft payload
+    // Phase 11: Radiologist feedback on AI draft (thumbs up/down + text)
+    aiFeedback: text("ai_feedback"),
+    aiFeedbackAt: timestamp("ai_feedback_at", { withTimezone: true }),
     reportId: integer("report_id"),            // FK → patient_reports.id once saved
     // Delivery: null | READY_TO_SEND | SENT
     // NOTE: automated sending is NOT implemented yet — only flag the status.

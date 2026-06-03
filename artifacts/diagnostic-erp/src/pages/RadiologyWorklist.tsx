@@ -15,9 +15,14 @@ import {
   ScanSearch, RefreshCw, ExternalLink, Sparkles, FileEdit, CheckCircle2,
   Search, Filter, Clock, CheckCheck, AlertCircle, MonitorPlay, Tv2,
   ClipboardList, CalendarDays, ShieldCheck, ShieldOff, Database,
-  ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp, Eye, MessageSquare, ThumbsUp, ThumbsDown, Trash2,
+  X,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { MwlPanel } from "@/pages/MwlDashboard";
 
 type WorklistEntry = {
@@ -68,6 +73,13 @@ function StatusBadge({ status }: { status: string }) {
 
 const MODALITY_OPTIONS = ["all", "CR", "MR", "CT", "US", "MG", "BMD", "OT"];
 const STATUS_OPTIONS = ["all", "STUDY_RECEIVED", "AI_DRAFT_READY", "REPORT_IN_PROGRESS", "REPORT_FINAL", "DELIVERED"];
+
+const AI_DRAFT_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+  NONE:    { label: "None",    color: "bg-gray-100 text-gray-600 border-gray-200" },
+  PENDING: { label: "Pending", color: "bg-yellow-50 text-yellow-700 border-yellow-200" },
+  READY:   { label: "Ready",   color: "bg-purple-50 text-purple-700 border-purple-200" },
+  ERROR:   { label: "Error",   color: "bg-red-50 text-red-700 border-red-200" },
+};
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "\u2014";
@@ -304,6 +316,9 @@ export default function RadiologyWorklist() {
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [showSentinel, setShowSentinel] = useState(false);
   const [showRawJson, setShowRawJson] = useState(false);
+  const [draftViewer, setDraftViewer] = useState<{ id: number; draft: Record<string, unknown> | null } | null>(null);
+  const [feedbackEntry, setFeedbackEntry] = useState<number | null>(null);
+  const [feedbackText, setFeedbackText] = useState("");
   const prevEntriesLen = useRef(-1);
 
   const { data: entries = [], isLoading, isError, error, refetch } = useQuery<WorklistEntry[]>({
@@ -443,6 +458,44 @@ export default function RadiologyWorklist() {
     window.localStorage.removeItem("pacs_worklist_cache");
     console.log("[PACS-WORKLIST] React Query cache cleared, re-fetching…");
     setTimeout(() => void refetch(), 100);
+  }
+
+  // Phase 8: View stored AI draft
+  async function viewAiDraft(id: number) {
+    try {
+      const result = await api.get<{ draft: Record<string, unknown> | null; safetyNote: string }>(`/api/radiology/pacs-worklist/${id}/ai-draft`);
+      setDraftViewer({ id, draft: result.draft });
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to load draft", variant: "destructive" });
+    }
+  }
+
+  // Phase 11: Submit feedback (thumbs up/down) with optional text
+  async function submitFeedback(id: number, verdict: "helpful" | "needs_improvement" | "inaccurate") {
+    if (verdict === "needs_improvement" || verdict === "inaccurate") {
+      setFeedbackEntry(id);
+      return; // wait for text dialog
+    }
+    try {
+      await api.post(`/api/radiology/pacs-worklist/${id}/ai-feedback`, { verdict, notes: "" });
+      toast({ title: "Feedback saved" });
+      void qc.invalidateQueries({ queryKey: ["radiology-pacs-worklist"] });
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to save feedback", variant: "destructive" });
+    }
+  }
+
+  async function submitFeedbackWithNotes() {
+    if (!feedbackEntry) return;
+    try {
+      await api.post(`/api/radiology/pacs-worklist/${feedbackEntry}/ai-feedback`, { verdict: "needs_improvement", notes: feedbackText });
+      toast({ title: "Feedback saved" });
+      setFeedbackEntry(null);
+      setFeedbackText("");
+      void qc.invalidateQueries({ queryKey: ["radiology-pacs-worklist"] });
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to save feedback", variant: "destructive" });
+    }
   }
 
   const trulyEmpty = entries.length === 0 && !isLoading;
@@ -608,6 +661,7 @@ export default function RadiologyWorklist() {
                       <th className="px-3 py-2.5 font-medium whitespace-nowrap">Source AE</th>
                       <th className="px-3 py-2.5 font-medium whitespace-nowrap">Created At</th>
                       <th className="px-3 py-2.5 font-medium whitespace-nowrap">Status</th>
+                      <th className="px-3 py-2.5 font-medium whitespace-nowrap">AI Draft</th>
                       <th className="px-3 py-2.5 font-medium text-right whitespace-nowrap">Actions</th>
                     </tr>
                   </thead>
@@ -644,6 +698,41 @@ export default function RadiologyWorklist() {
                         </td>
                         <td className="px-3 py-2.5 whitespace-nowrap">
                           <StatusBadge status={entry.status} />
+                        </td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          {entry.id === -1 ? (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-medium ${AI_DRAFT_STATUS_CONFIG[entry.aiDraftStatus]?.color ?? "bg-gray-100 text-gray-600 border-gray-200"}`}>
+                                {entry.aiDraftStatus === "NONE" && "—"}
+                                {entry.aiDraftStatus === "PENDING" && (
+                                  <><RefreshCw className="h-3 w-3 animate-spin" /> PENDING</>
+                                )}
+                                {entry.aiDraftStatus === "READY" && (
+                                  <><Sparkles className="h-3 w-3" /> READY</>
+                                )}
+                                {entry.aiDraftStatus === "ERROR" && (
+                                  <><AlertCircle className="h-3 w-3" /> ERROR</>
+                                )}
+                              </span>
+                              {entry.aiDraftStatus === "READY" && (
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-xs" title="View AI Draft" onClick={() => viewAiDraft(entry.id)}>
+                                  <Eye className="h-3 w-3" />
+                                </Button>
+                              )}
+                              {entry.aiDraftStatus === "READY" && (
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-xs text-green-600" title="Helpful" onClick={() => submitFeedback(entry.id, "helpful")}>
+                                  <ThumbsUp className="h-3 w-3" />
+                                </Button>
+                              )}
+                              {entry.aiDraftStatus === "READY" && (
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-xs text-red-500" title="Needs Improvement" onClick={() => submitFeedback(entry.id, "needs_improvement")}>
+                                  <ThumbsDown className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td className="px-3 py-2.5">
                           <div className="flex items-center justify-end gap-1 flex-wrap">
@@ -774,6 +863,58 @@ export default function RadiologyWorklist() {
           <MwlPanel />
         </TabsContent>
       </Tabs>
+
+      {/* Phase 8: AI Draft Viewer Dialog */}
+      <Dialog open={!!draftViewer} onOpenChange={() => setDraftViewer(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-sm flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-purple-500" /> AI Draft Viewer
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              AI Draft — Requires Radiologist Review
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            {draftViewer?.draft ? (
+              <div className="rounded border bg-muted/40 p-3 max-h-96 overflow-y-auto">
+                <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(draftViewer.draft, null, 2)}</pre>
+              </div>
+            ) : (
+              <p className="text-muted-foreground">No draft stored for this study.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Phase 11: Feedback Text Dialog */}
+      <Dialog open={!!feedbackEntry} onOpenChange={() => { setFeedbackEntry(null); setFeedbackText(""); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-sm">AI Draft Feedback</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Describe what was wrong or what needs improvement.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Textarea
+              placeholder="e.g. Findings were inaccurate, impression was too vague, missed a lesion...
+              "
+              value={feedbackText}
+              onChange={(e) => setFeedbackText(e.target.value)}
+              rows={4}
+            />
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" onClick={() => { setFeedbackEntry(null); setFeedbackText(""); }}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={submitFeedbackWithNotes} disabled={!feedbackText.trim()}>
+                Submit Feedback
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

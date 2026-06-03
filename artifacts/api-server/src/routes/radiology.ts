@@ -5,7 +5,7 @@ import {
   radiologyStudiesTable, radiologyFilmIssuesTable, radiologyShareLinksTable,
   testsTable, patientsTable, ordersTable, orderTestsTable,
   billsTable, reportTemplatesTable, staffTable, radiologyPromptsTable,
-  radiologyWorklistTable,
+  radiologyWorklistTable, radiologyAuditLogTable,
   pacsSettingsTable, dicomModalitiesTable, pacsLogsTable,
   radiologyPriorityRulesTable,
   radiologistAssignmentRulesTable,
@@ -323,6 +323,80 @@ radiologyRouter.get("/pacs-worklist", async (req, res) => {
 
   req.log.info({ rowsReturned: filtered.length, rawRows: rows.length, status: status || "all", modality: modality || "all" }, "[pacs-worklist] query complete");
   res.json(filtered);
+});
+
+/**
+ * GET /api/radiology/pacs-worklist/:id/ai-draft
+ * Retrieve the stored AI draft JSON for a worklist entry.
+ */
+radiologyRouter.get("/pacs-worklist/:id/ai-draft", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [row] = await db
+    .select({ aiDraftJson: radiologyWorklistTable.aiDraftJson, aiDraftStatus: radiologyWorklistTable.aiDraftStatus })
+    .from(radiologyWorklistTable)
+    .where(eq(radiologyWorklistTable.id, id))
+    .limit(1);
+
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+
+  let draft: Record<string, unknown> | null = null;
+  try {
+    if (row.aiDraftJson) draft = JSON.parse(row.aiDraftJson) as Record<string, unknown>;
+  } catch {
+    draft = null;
+  }
+
+  res.json({
+    id,
+    aiDraftStatus: row.aiDraftStatus,
+    draft,
+    safetyNote: "AI Draft — Requires Radiologist Review",
+  });
+});
+
+/**
+ * POST /api/radiology/pacs-worklist/:id/ai-feedback
+ * Phase 11: Radiologist feedback on an AI draft (thumbs up/down + optional text).
+ */
+radiologyRouter.post("/pacs-worklist/:id/ai-feedback", async (req, res) => {
+  const sReq = req as StaffAuthRequest;
+  if (!sReq.staffSession) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const { verdict, notes } = req.body as { verdict?: "helpful" | "needs_improvement" | "inaccurate"; notes?: string };
+  if (!verdict || !["helpful", "needs_improvement", "inaccurate"].includes(verdict)) {
+    res.status(400).json({ error: "verdict must be helpful | needs_improvement | inaccurate" }); return;
+  }
+
+  const feedbackJson = JSON.stringify({
+    verdict,
+    notes: notes?.trim() ?? "",
+    radiologist: sReq.staffSession.subjectName,
+    radiologistId: sReq.staffSession.subjectId,
+  });
+
+  const [row] = await db
+    .update(radiologyWorklistTable)
+    .set({ aiFeedback: feedbackJson, aiFeedbackAt: new Date(), updatedAt: new Date() })
+    .where(eq(radiologyWorklistTable.id, id))
+    .returning();
+
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+
+  // Also log into the audit table for compliance
+  await db.insert(radiologyAuditLogTable).values({
+    worklistId: id,
+    accessionNumber: row.accessionNumber ?? "",
+    action: "AI_DRAFT_FEEDBACK",
+    actor: sReq.staffSession.subjectName,
+    details: feedbackJson,
+  });
+
+  res.json({ ok: true });
 });
 
 // GET /api/radiology/options — modalities + departments + status enum

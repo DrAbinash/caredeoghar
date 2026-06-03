@@ -303,6 +303,11 @@ async function runStartupMigrations(): Promise<void> {
       ALTER TABLE radiology_worklist ADD COLUMN IF NOT EXISTS source_pacs TEXT;
       ALTER TABLE radiology_worklist ADD COLUMN IF NOT EXISTS source_ae_title TEXT;
       ALTER TABLE radiology_worklist ADD COLUMN IF NOT EXISTS dicom_metadata TEXT;
+      ALTER TABLE radiology_worklist ADD COLUMN IF NOT EXISTS ai_draft_status TEXT NOT NULL DEFAULT 'NONE';
+      ALTER TABLE radiology_worklist ADD COLUMN IF NOT EXISTS ai_draft_json TEXT;
+      ALTER TABLE radiology_worklist ADD COLUMN IF NOT EXISTS ai_feedback TEXT;
+      ALTER TABLE radiology_worklist ADD COLUMN IF NOT EXISTS ai_feedback_at TIMESTAMPTZ;
+      ALTER TABLE radiology_worklist ADD COLUMN IF NOT EXISTS assigned_radiologist TEXT;
       CREATE TABLE IF NOT EXISTS pacs_settings (
         id SERIAL PRIMARY KEY,
         key TEXT NOT NULL,
