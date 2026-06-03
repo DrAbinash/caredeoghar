@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation, useRoute } from "wouter";
 import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
@@ -15,9 +16,12 @@ import {
   Baby, Zap, Save, Send, AlertTriangle, CheckCircle2, ChevronLeft, Stethoscope,
   Plus, Filter, RefreshCw, FileText, CheckCircle, Download, Phone, Mail, ExternalLink,
   Mic, MicOff, Calendar, BarChart3,
+  Settings2,
 } from "lucide-react";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+import ReportPrintSettingsDialog from "@/components/ReportPrintSettingsDialog";
+import {
+  generateReportPDF, loadPrintSettings, savePrintSettings, type PrintSettings,
+} from "@/lib/reportPdfGenerator";
 
 interface Study {
   id: number; studyId: number; patientId: number; studyType: string; trimester: string;
@@ -82,6 +86,14 @@ export default function FetalUsgLevel4() {
   const [showFollowUp, setShowFollowUp] = useState(false);
   const [followUpSuggestions, setFollowUpSuggestions] = useState<Array<{ type: string; reason: string; suggestedGa?: string }>>([]);
   const recognitionRef = useRef<any>(null);
+  // Print / PDF
+  const [printSettings, setPrintSettings] = useState<PrintSettings>(loadPrintSettings);
+  const [printSettingsOpen, setPrintSettingsOpen] = useState(false);
+  const { data: clinicSettings } = useQuery<{ name?: string; tagline?: string; address?: string; phone?: string; email?: string; website?: string; logoDataUrl?: string | null }>({
+    queryKey: ["clinic-settings"],
+    queryFn: () => api.get("/api/clinic-settings/branding"),
+    staleTime: 5 * 60_000,
+  });
 
   const routeStudyId = params?.studyId ? Number(params.studyId) : null;
 
@@ -212,25 +224,29 @@ export default function FetalUsgLevel4() {
   // --- PDF Generation ---
   function downloadPdf() {
     if (!study) return;
-    const doc = new jsPDF();
-    doc.setFontSize(14);
-    doc.text("Fetal USG Level-4 Report", 14, 18);
-    doc.setFontSize(10);
-    doc.text(`Study: ${study.studyType.toUpperCase()} | GA: ${study.gaWeeks ? `${study.gaWeeks}w ${study.gaDays ?? 0}d` : "?"} | EDD: ${study.edd ?? "?"}`, 14, 26);
-    const rows: [string, string][] = [
-      ["CRL", meas.crl?.toString() ?? ""], ["NT", meas.nt?.toString() ?? ""], ["BPD", meas.bpd?.toString() ?? ""],
-      ["HC", meas.hc?.toString() ?? ""], ["AC", meas.ac?.toString() ?? ""], ["FL", meas.fl?.toString() ?? ""],
-      ["EFW", meas.efw?.toString() ?? ""], ["AFI", meas.afi?.toString() ?? ""], ["FHR", meas.fetalHeartRate?.toString() ?? ""],
-    ];
-    autoTable(doc, { startY: 32, head: [["Measurement", "Value"]], body: rows, styles: { fontSize: 9 } });
-    const finalY = (doc as any).lastAutoTable?.finalY || 80;
-    doc.text("Findings:", 14, finalY + 8);
-    doc.text(report.findings ?? "-", 14, finalY + 14, { maxWidth: 180 });
-    doc.text("Impression:", 14, finalY + 30);
-    doc.text(report.impression ?? "-", 14, finalY + 36, { maxWidth: 180 });
-    doc.text("Recommendation:", 14, finalY + 52);
-    doc.text(report.recommendation ?? "-", 14, finalY + 58, { maxWidth: 180 });
-    doc.save(`fetal-usg-${study.id}.pdf`);
+    const measurements = [
+      { label: "CRL", value: meas.crl?.toString() ?? "" },
+      { label: "NT", value: meas.nt?.toString() ?? "" },
+      { label: "BPD", value: meas.bpd?.toString() ?? "" },
+      { label: "HC", value: meas.hc?.toString() ?? "" },
+      { label: "AC", value: meas.ac?.toString() ?? "" },
+      { label: "FL", value: meas.fl?.toString() ?? "" },
+      { label: "EFW", value: meas.efw?.toString() ?? "" },
+      { label: "AFI", value: meas.afi?.toString() ?? "" },
+      { label: "FHR", value: meas.fetalHeartRate?.toString() ?? "" },
+    ].filter((m) => m.value);
+    generateReportPDF({
+      patientName: `Patient #${study.patientId}`,
+      studyDate: new Date(study.createdAt).toLocaleDateString(),
+      modality: "USG",
+      bodyPart: study.studyType.toUpperCase(),
+      clinicalHistory: `GA: ${study.gaWeeks ? `${study.gaWeeks}w ${study.gaDays ?? 0}d` : "?"} | EDD: ${study.edd ?? "?"}`,
+      findings: report.findings,
+      impression: report.impression,
+      recommendation: report.recommendation,
+      measurements,
+      reportTitle: "Fetal USG Level-4 Report",
+    }, printSettings, clinicSettings ?? null);
     toast({ title: "PDF downloaded" });
   }
 
@@ -650,6 +666,9 @@ export default function FetalUsgLevel4() {
                 <Button size="sm" variant="outline" onClick={downloadPdf} disabled={!report.status}>
                   <Download size={14} className="mr-1" /> PDF
                 </Button>
+                <Button size="sm" variant="ghost" onClick={() => setPrintSettingsOpen(true)}>
+                  <Settings2 size={14} className="mr-1" /> Settings
+                </Button>
                 <Button size="sm" variant="outline" onClick={openPacsViewer}>
                   <ExternalLink size={14} className="mr-1" /> PACS
                 </Button>
@@ -736,6 +755,13 @@ export default function FetalUsgLevel4() {
           </Tabs>
         </>
       )}
+      {/* Print Settings Dialog */}
+      <ReportPrintSettingsDialog
+        open={printSettingsOpen}
+        onClose={() => setPrintSettingsOpen(false)}
+        settings={printSettings}
+        onChange={(s) => { setPrintSettings(s); savePrintSettings(s); }}
+      />
     </div>
   );
 }

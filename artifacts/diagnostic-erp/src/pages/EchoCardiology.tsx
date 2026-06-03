@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
@@ -14,9 +15,12 @@ import {
   Heart, Activity, Ruler, Zap, Save, Send, AlertTriangle,
   CheckCircle2, RefreshCw, ChevronLeft, Stethoscope,
   Download, Mic, MicOff,
+  Settings2,
 } from "lucide-react";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+import ReportPrintSettingsDialog from "@/components/ReportPrintSettingsDialog";
+import {
+  generateReportPDF, loadPrintSettings, savePrintSettings, type PrintSettings,
+} from "@/lib/reportPdfGenerator";
 
 interface EchoMeasurements {
   id?: number;
@@ -146,6 +150,14 @@ export default function EchoCardiology() {
   const [voiceActive, setVoiceActive] = useState(false);
   const [voiceTarget, setVoiceTarget] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
+  // Print / PDF
+  const [printSettings, setPrintSettings] = useState<PrintSettings>(loadPrintSettings);
+  const [printSettingsOpen, setPrintSettingsOpen] = useState(false);
+  const { data: clinicSettings } = useQuery({
+    queryKey: ["clinic-settings"],
+    queryFn: () => api.get("/api/clinic-settings/branding"),
+    staleTime: 5 * 60_000,
+  });
 
   const params = new URLSearchParams(window.location.search);
   const sid = Number(params.get("studyId"));
@@ -259,23 +271,27 @@ export default function EchoCardiology() {
   // --- PDF Generation ---
   function downloadPdf() {
     if (!studyId) return;
-    const doc = new jsPDF();
-    doc.setFontSize(14);
-    doc.text("2D Echo Cardiology Report", 14, 18);
-    doc.setFontSize(10);
-    doc.text(`Study ID: ${studyId}`, 14, 26);
-    const rows: [string, string][] = [
-      ["IVSd", meas.ivsd?.toString() ?? ""], ["IVSs", meas.ivss?.toString() ?? ""], ["LVIDd", meas.lvidd?.toString() ?? ""],
-      ["LVIDs", meas.lvids?.toString() ?? ""], ["LVPWd", meas.lvpwd?.toString() ?? ""], ["EF", meas.efSimpson?.toString() ?? ""],
-      ["FS", meas.fractionalShortening?.toString() ?? ""], ["LV Mass", meas.lvMass?.toString() ?? ""],
-    ];
-    autoTable(doc, { startY: 32, head: [["Measurement", "Value"]], body: rows, styles: { fontSize: 9 } });
-    const finalY = (doc as any).lastAutoTable?.finalY || 80;
-    doc.text("Impression:", 14, finalY + 8);
-    doc.text(report.impression ?? "-", 14, finalY + 14, { maxWidth: 180 });
-    doc.text("Recommendation:", 14, finalY + 30);
-    doc.text(report.recommendation ?? "-", 14, finalY + 36, { maxWidth: 180 });
-    doc.save(`echo-${studyId}.pdf`);
+    const measurements = [
+      { label: "IVSd", value: meas.ivsd?.toString() ?? "" },
+      { label: "IVSs", value: meas.ivss?.toString() ?? "" },
+      { label: "LVIDd", value: meas.lvidd?.toString() ?? "" },
+      { label: "LVIDs", value: meas.lvids?.toString() ?? "" },
+      { label: "LVPWd", value: meas.lvpwd?.toString() ?? "" },
+      { label: "EF", value: meas.efSimpson?.toString() ?? "" },
+      { label: "FS", value: meas.fractionalShortening?.toString() ?? "" },
+      { label: "LV Mass", value: meas.lvMass?.toString() ?? "" },
+    ].filter((m) => m.value);
+    generateReportPDF({
+      patientName: "Patient",
+      studyDate: new Date().toLocaleDateString(),
+      modality: "2D Echo",
+      bodyPart: "Heart",
+      findings: report.dopplerFindings,
+      impression: report.impression,
+      recommendation: report.recommendation,
+      measurements,
+      reportTitle: "2D Echo Cardiology Report",
+    }, printSettings, clinicSettings ?? null);
     toast({ title: "PDF downloaded" });
   }
 
@@ -518,6 +534,9 @@ export default function EchoCardiology() {
             <Button size="sm" variant="outline" onClick={downloadPdf} disabled={!report.status}>
               <Download size={14} className="mr-1" /> PDF
             </Button>
+            <Button size="sm" variant="ghost" onClick={() => setPrintSettingsOpen(true)}>
+              <Settings2 size={14} className="mr-1" /> Settings
+            </Button>
           </div>
 
           {report.aiDraft && (
@@ -564,6 +583,13 @@ export default function EchoCardiology() {
           </div>
         </TabsContent>
       </Tabs>
+      {/* Print Settings Dialog */}
+      <ReportPrintSettingsDialog
+        open={printSettingsOpen}
+        onClose={() => setPrintSettingsOpen(false)}
+        settings={printSettings}
+        onChange={(s) => { setPrintSettings(s); savePrintSettings(s); }}
+      />
     </div>
   );
 }

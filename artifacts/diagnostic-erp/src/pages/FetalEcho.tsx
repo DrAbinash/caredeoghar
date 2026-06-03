@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
@@ -13,9 +14,12 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Baby, Heart, Activity, Zap, Save, Send, AlertTriangle,
   CheckCircle2, ChevronLeft, Stethoscope, Download, Mic,
+  Settings2,
 } from "lucide-react";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+import ReportPrintSettingsDialog from "@/components/ReportPrintSettingsDialog";
+import {
+  generateReportPDF, loadPrintSettings, savePrintSettings, type PrintSettings,
+} from "@/lib/reportPdfGenerator";
 
 interface FetalEchoData {
   id?: number;
@@ -88,6 +92,14 @@ export default function FetalEcho() {
   const [voiceActive, setVoiceActive] = useState(false);
   const [voiceTarget, setVoiceTarget] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
+  // Print / PDF
+  const [printSettings, setPrintSettings] = useState<PrintSettings>(loadPrintSettings);
+  const [printSettingsOpen, setPrintSettingsOpen] = useState(false);
+  const { data: clinicSettings } = useQuery({
+    queryKey: ["clinic-settings"],
+    queryFn: () => api.get("/api/clinic-settings/branding"),
+    staleTime: 5 * 60_000,
+  });
 
   const params = new URLSearchParams(window.location.search);
   const sid = Number(params.get("studyId"));
@@ -180,24 +192,29 @@ export default function FetalEcho() {
   // --- PDF Generation ---
   function downloadPdf() {
     if (!studyId) return;
-    const doc = new jsPDF();
-    doc.setFontSize(14);
-    doc.text("Fetal Echo Report", 14, 18);
-    doc.setFontSize(10);
-    doc.text(`GA: ${data.gaWeeks ? `${data.gaWeeks}w ${data.gaDays ?? 0}d` : "?"} | FHR: ${data.fetalHeartRate ?? "?"} bpm`, 14, 26);
-    const rows: [string, string][] = [
-      ["Situs", data.situs ?? ""], ["Cardiac Axis", data.cardiacAxis ?? ""], ["AV Concordance", data.avConcordance ?? ""],
-      ["VA Concordance", data.vaConcordance ?? ""], ["LVOT", data.lvot ?? ""], ["RVOT", data.rvot ?? ""],
-      ["Aortic Valve", data.aorticValve ?? ""], ["Pulmonary Valve", data.pulmonaryValve ?? ""],
-      ["UA PI", data.umbilicalArteryPi?.toString() ?? ""], ["MCA PI", data.mcaPi?.toString() ?? ""],
-    ];
-    autoTable(doc, { startY: 32, head: [["Parameter", "Value"]], body: rows, styles: { fontSize: 9 } });
-    const finalY = (doc as any).lastAutoTable?.finalY || 80;
-    doc.text("Impression:", 14, finalY + 8);
-    doc.text(data.impression ?? "-", 14, finalY + 14, { maxWidth: 180 });
-    doc.text("Recommendation:", 14, finalY + 30);
-    doc.text(data.recommendation ?? "-", 14, finalY + 36, { maxWidth: 180 });
-    doc.save(`fetal-echo-${studyId}.pdf`);
+    const measurements = [
+      { label: "Situs", value: data.situs ?? "" },
+      { label: "Cardiac Axis", value: data.cardiacAxis ?? "" },
+      { label: "AV Concordance", value: data.avConcordance ?? "" },
+      { label: "VA Concordance", value: data.vaConcordance ?? "" },
+      { label: "LVOT", value: data.lvot ?? "" },
+      { label: "RVOT", value: data.rvot ?? "" },
+      { label: "Aortic Valve", value: data.aorticValve ?? "" },
+      { label: "Pulmonary Valve", value: data.pulmonaryValve ?? "" },
+      { label: "UA PI", value: data.umbilicalArteryPi?.toString() ?? "" },
+      { label: "MCA PI", value: data.mcaPi?.toString() ?? "" },
+    ].filter((m) => m.value);
+    generateReportPDF({
+      patientName: "Patient",
+      studyDate: new Date().toLocaleDateString(),
+      modality: "Fetal Echo",
+      bodyPart: "Fetal Heart",
+      clinicalHistory: `GA: ${data.gaWeeks ? `${data.gaWeeks}w ${data.gaDays ?? 0}d` : "?"} | FHR: ${data.fetalHeartRate ?? "?"} bpm`,
+      impression: data.impression,
+      recommendation: data.recommendation,
+      measurements,
+      reportTitle: "Fetal Echo Report",
+    }, printSettings, clinicSettings ?? null);
     toast({ title: "PDF downloaded" });
   }
 
@@ -453,6 +470,9 @@ export default function FetalEcho() {
             <Button size="sm" variant="outline" onClick={downloadPdf} disabled={!data.status}>
               <Download size={14} className="mr-1" /> PDF
             </Button>
+            <Button size="sm" variant="ghost" onClick={() => setPrintSettingsOpen(true)}>
+              <Settings2 size={14} className="mr-1" /> Settings
+            </Button>
           </div>
 
           {data.aiDraft && (
@@ -479,6 +499,13 @@ export default function FetalEcho() {
           </Card>
         </TabsContent>
       </Tabs>
+      {/* Print Settings Dialog */}
+      <ReportPrintSettingsDialog
+        open={printSettingsOpen}
+        onClose={() => setPrintSettingsOpen(false)}
+        settings={printSettings}
+        onChange={(s) => { setPrintSettings(s); savePrintSettings(s); }}
+      />
     </div>
   );
 }

@@ -12,10 +12,15 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { readStaffSession, FULL_ACCESS_ROLES } from "@/lib/staffSession";
 import VoiceDictationButton from "@/components/VoiceDictationButton";
+import ReportPrintSettingsDialog from "@/components/ReportPrintSettingsDialog";
+import {
+  generateReportPDF, loadPrintSettings, savePrintSettings, type PrintSettings,
+} from "@/lib/reportPdfGenerator";
 import {
   FileText, Plus, CheckCircle2, Clock, Archive, ArrowLeft,
   ChevronDown, ChevronUp, Sparkles, RefreshCw, ShieldCheck, History, AlertTriangle,
   Lock, FileWarning, ShieldBan, Loader2, Zap, Type, Layers, Merge,
+  Download, Settings2,
 } from "lucide-react";
 
 interface ReportDraft {
@@ -104,6 +109,14 @@ export default function UsgReporting() {
   });
   const [priorContent, setPriorContent] = useState<Record<number, string>>({});
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // --- Print / PDF ---
+  const [printSettings, setPrintSettings] = useState<PrintSettings>(loadPrintSettings);
+  const [printSettingsOpen, setPrintSettingsOpen] = useState(false);
+  const { data: clinicSettings } = useQuery<{ name?: string; tagline?: string; address?: string; phone?: string; email?: string; website?: string; logoDataUrl?: string | null }>({
+    queryKey: ["clinic-settings"],
+    queryFn: () => fetchApi("/api/clinic-settings/branding"),
+    staleTime: 5 * 60_000,
+  });
 
   const { data: templates = [] } = useQuery<TemplateDescriptor[]>({
     queryKey: ["usg-templates"],
@@ -395,6 +408,9 @@ export default function UsgReporting() {
             </Button>
             <Button size="sm" onClick={() => setShowCreate(true)}>
               <Plus className="h-4 w-4 mr-2" /> New Report
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setPrintSettingsOpen(true)}>
+              <Settings2 className="h-4 w-4" />
             </Button>
           </div>
         }
@@ -762,6 +778,21 @@ export default function UsgReporting() {
                             >
                               <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Finalize\u2026
                             </Button>
+                            <Button variant="outline" size="sm"
+                              onClick={() => {
+                                generateReportPDF({
+                                  patientName: "Patient #" + draft.patientId,
+                                  accessionNumber: draft.accessionNumber ?? undefined,
+                                  studyDate: new Date(draft.createdAt).toLocaleDateString(),
+                                  modality: "USG",
+                                  bodyPart: templateLabel(draft.templateType),
+                                  findings: content,
+                                  reportTitle: "USG Report",
+                                }, printSettings, clinicSettings ?? null);
+                              }}
+                            >
+                              <Download className="h-3.5 w-3.5 mr-1.5" /> PDF
+                            </Button>
                           </div>
                         </div>
 
@@ -992,6 +1023,13 @@ export default function UsgReporting() {
           </Card>
         </div>
       )}
+      {/* Print Settings Dialog */}
+      <ReportPrintSettingsDialog
+        open={printSettingsOpen}
+        onClose={() => setPrintSettingsOpen(false)}
+        settings={printSettings}
+        onChange={(s) => { setPrintSettings(s); savePrintSettings(s); }}
+      />
     </div>
   );
 }
