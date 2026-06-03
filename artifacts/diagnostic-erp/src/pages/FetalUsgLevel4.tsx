@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, useRoute } from "wouter";
 import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
@@ -13,8 +13,11 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Baby, Zap, Save, Send, AlertTriangle, CheckCircle2, ChevronLeft, Stethoscope,
-  Plus, Filter, RefreshCw, FileText, CheckCircle,
+  Plus, Filter, RefreshCw, FileText, CheckCircle, Download, Phone, Mail, ExternalLink,
+  Mic, MicOff, Calendar, BarChart3,
 } from "lucide-react";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface Study {
   id: number; studyId: number; patientId: number; studyType: string; trimester: string;
@@ -74,6 +77,11 @@ export default function FetalUsgLevel4() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("worklist");
+  const [voiceActive, setVoiceActive] = useState(false);
+  const [voiceTarget, setVoiceTarget] = useState<"findings" | "impression" | "recommendation" | null>(null);
+  const [showFollowUp, setShowFollowUp] = useState(false);
+  const [followUpSuggestions, setFollowUpSuggestions] = useState<Array<{ type: string; reason: string; suggestedGa?: string }>>([]);
+  const recognitionRef = useRef<any>(null);
 
   const routeStudyId = params?.studyId ? Number(params.studyId) : null;
 
@@ -201,6 +209,96 @@ export default function FetalUsgLevel4() {
     setChecklist((prev) => ({ ...prev, [key]: value }));
   }
 
+  // --- PDF Generation ---
+  function downloadPdf() {
+    if (!study) return;
+    const doc = new jsPDF();
+    doc.setFontSize(14);
+    doc.text("Fetal USG Level-4 Report", 14, 18);
+    doc.setFontSize(10);
+    doc.text(`Study: ${study.studyType.toUpperCase()} | GA: ${study.gaWeeks ? `${study.gaWeeks}w ${study.gaDays ?? 0}d` : "?"} | EDD: ${study.edd ?? "?"}`, 14, 26);
+    const rows: [string, string][] = [
+      ["CRL", meas.crl?.toString() ?? ""], ["NT", meas.nt?.toString() ?? ""], ["BPD", meas.bpd?.toString() ?? ""],
+      ["HC", meas.hc?.toString() ?? ""], ["AC", meas.ac?.toString() ?? ""], ["FL", meas.fl?.toString() ?? ""],
+      ["EFW", meas.efw?.toString() ?? ""], ["AFI", meas.afi?.toString() ?? ""], ["FHR", meas.fetalHeartRate?.toString() ?? ""],
+    ];
+    autoTable(doc, { startY: 32, head: [["Measurement", "Value"]], body: rows, styles: { fontSize: 9 } });
+    const finalY = (doc as any).lastAutoTable?.finalY || 80;
+    doc.text("Findings:", 14, finalY + 8);
+    doc.text(report.findings ?? "-", 14, finalY + 14, { maxWidth: 180 });
+    doc.text("Impression:", 14, finalY + 30);
+    doc.text(report.impression ?? "-", 14, finalY + 36, { maxWidth: 180 });
+    doc.text("Recommendation:", 14, finalY + 52);
+    doc.text(report.recommendation ?? "-", 14, finalY + 58, { maxWidth: 180 });
+    doc.save(`fetal-usg-${study.id}.pdf`);
+    toast({ title: "PDF downloaded" });
+  }
+
+  // --- Voice Dictation ---
+  function toggleVoice(target: "findings" | "impression" | "recommendation") {
+    if (voiceActive && voiceTarget === target) {
+      recognitionRef.current?.stop();
+      setVoiceActive(false);
+      setVoiceTarget(null);
+      return;
+    }
+    if (voiceActive) {
+      recognitionRef.current?.stop();
+    }
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast({ variant: "destructive", title: "Speech recognition not supported in this browser" });
+      return;
+    }
+    const rec = new SpeechRecognition();
+    rec.lang = "en-IN";
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.onresult = (event: any) => {
+      const text = Array.from(event.results).map((r: any) => r[0].transcript).join(" ");
+      setReport((prev) => ({ ...prev, [target]: (prev[target as keyof Report] ?? "" as any) + text }));
+    };
+    rec.onerror = (e: any) => {
+      if (e.error !== "aborted") toast({ variant: "destructive", title: "Voice error", description: e.error });
+      setVoiceActive(false);
+    };
+    rec.onend = () => setVoiceActive(false);
+    rec.start();
+    recognitionRef.current = rec;
+    setVoiceActive(true);
+    setVoiceTarget(target);
+  }
+
+  // --- Follow-up Suggestion ---
+  async function fetchFollowUpSuggestions() {
+    if (!studyId) return;
+    try {
+      const res = await api.get<{ suggestions: Array<{ type: string; reason: string; suggestedGa?: string }> }>(`/api/fetal-usg/${studyId}/follow-up-suggestion`);
+      setFollowUpSuggestions(res.suggestions);
+      setShowFollowUp(true);
+    } catch (e) { toast({ variant: "destructive", title: "Failed", description: String(e) }); }
+  }
+
+  // --- PACS Viewer ---
+  async function openPacsViewer() {
+    if (!studyId) return;
+    try {
+      const res = await api.get<{ viewerUrl: string; weasisUrl: string | null }>(`/api/fetal-usg/${studyId}/pacs-viewer`);
+      window.open(res.viewerUrl, "_blank");
+    } catch (e) { toast({ variant: "destructive", title: "Failed", description: String(e) }); }
+  }
+
+  // --- DICOM SR Extract ---
+  async function extractDicomMeasurements() {
+    if (!studyId) return;
+    setLoading(true);
+    try {
+      const res = await api.post<{ extracted: Record<string, number | string | null> }>(`/api/fetal-usg/${studyId}/extract-measurements`, {});
+      toast({ title: "DICOM extraction", description: res.extracted.status as string });
+    } catch (e) { toast({ variant: "destructive", title: "Failed", description: String(e) }); }
+    finally { setLoading(false); }
+  }
+
   const filteredWorklist = filter === "all" ? worklist : worklist.filter((s) => {
     if (filter === "today") return new Date(s.createdAt).toISOString().split("T")[0] === new Date().toISOString().split("T")[0];
     if (filter === "pending") return s.status === "received" || s.status === "draft";
@@ -325,6 +423,7 @@ export default function FetalUsgLevel4() {
               <TabsTrigger value="measurements"><Baby size={14} className="mr-1" /> Measurements</TabsTrigger>
               <TabsTrigger value="checklist"><CheckCircle size={14} className="mr-1" /> Checklist</TabsTrigger>
               <TabsTrigger value="report"><Stethoscope size={14} className="mr-1" /> Report</TabsTrigger>
+              <TabsTrigger value="growth"><BarChart3 size={14} className="mr-1" /> Growth</TabsTrigger>
               <TabsTrigger value="audit"><FileText size={14} className="mr-1" /> Audit</TabsTrigger>
             </TabsList>
 
@@ -548,7 +647,33 @@ export default function FetalUsgLevel4() {
                 <Button size="sm" onClick={finalizeReport} disabled={report.status === "final"}>
                   <Send size={14} className="mr-1" /> Finalize
                 </Button>
+                <Button size="sm" variant="outline" onClick={downloadPdf} disabled={!report.status}>
+                  <Download size={14} className="mr-1" /> PDF
+                </Button>
+                <Button size="sm" variant="outline" onClick={openPacsViewer}>
+                  <ExternalLink size={14} className="mr-1" /> PACS
+                </Button>
+                <Button size="sm" variant="outline" onClick={extractDicomMeasurements} disabled={loading}>
+                  <BarChart3 size={14} className="mr-1" /> DICOM Extract
+                </Button>
+                <Button size="sm" variant="outline" onClick={fetchFollowUpSuggestions} disabled={report.status !== "final"}>
+                  <Calendar size={14} className="mr-1" /> Follow-up
+                </Button>
               </div>
+              {showFollowUp && (
+                <Card>
+                  <CardHeader><CardTitle className="text-sm">Follow-up Suggestions</CardTitle></CardHeader>
+                  <CardContent className="space-y-2">
+                    {followUpSuggestions.length === 0 && <p className="text-sm text-muted-foreground">No follow-up suggestions.</p>}
+                    {followUpSuggestions.map((s, i) => (
+                      <div key={i} className="flex items-center justify-between text-sm border rounded-md p-2">
+                        <span className="capitalize">{s.type.replace(/_/g, " ")}</span>
+                        <span className="text-muted-foreground">{s.reason} {s.suggestedGa ? `(at ${s.suggestedGa})` : ""}</span>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
               {report.aiDraft && (
                 <Card>
                   <CardHeader><CardTitle className="text-sm">AI Draft</CardTitle></CardHeader>
@@ -563,9 +688,18 @@ export default function FetalUsgLevel4() {
               <Card>
                 <CardHeader><CardTitle className="text-sm">Report Editor</CardTitle></CardHeader>
                 <CardContent className="space-y-3">
-                  <div><Label className="text-xs font-semibold">Findings</Label><Textarea className="text-sm" value={report.findings ?? ""} onChange={(e) => setReport((prev) => ({ ...prev, findings: e.target.value }))} rows={4} /></div>
-                  <div><Label className="text-xs font-semibold">Impression</Label><Textarea className="text-sm font-medium" value={report.impression ?? ""} onChange={(e) => setReport((prev) => ({ ...prev, impression: e.target.value }))} rows={4} /></div>
-                  <div><Label className="text-xs font-semibold">Recommendation</Label><Textarea className="text-sm" value={report.recommendation ?? ""} onChange={(e) => setReport((prev) => ({ ...prev, recommendation: e.target.value }))} rows={2} /></div>
+                  <div>
+                    <div className="flex items-center justify-between"><Label className="text-xs font-semibold">Findings</Label><Button size="sm" variant="ghost" onClick={() => toggleVoice("findings")} className={voiceActive && voiceTarget === "findings" ? "text-red-500" : ""}><Mic size={12} /> {voiceActive && voiceTarget === "findings" ? "Stop" : "Dictate"}</Button></div>
+                    <Textarea className="text-sm" value={report.findings ?? ""} onChange={(e) => setReport((prev) => ({ ...prev, findings: e.target.value }))} rows={4} />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between"><Label className="text-xs font-semibold">Impression</Label><Button size="sm" variant="ghost" onClick={() => toggleVoice("impression")} className={voiceActive && voiceTarget === "impression" ? "text-red-500" : ""}><Mic size={12} /> {voiceActive && voiceTarget === "impression" ? "Stop" : "Dictate"}</Button></div>
+                    <Textarea className="text-sm font-medium" value={report.impression ?? ""} onChange={(e) => setReport((prev) => ({ ...prev, impression: e.target.value }))} rows={4} />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between"><Label className="text-xs font-semibold">Recommendation</Label><Button size="sm" variant="ghost" onClick={() => toggleVoice("recommendation")} className={voiceActive && voiceTarget === "recommendation" ? "text-red-500" : ""}><Mic size={12} /> {voiceActive && voiceTarget === "recommendation" ? "Stop" : "Dictate"}</Button></div>
+                    <Textarea className="text-sm" value={report.recommendation ?? ""} onChange={(e) => setReport((prev) => ({ ...prev, recommendation: e.target.value }))} rows={2} />
+                  </div>
                 </CardContent>
               </Card>
               <div className="flex justify-end">
@@ -573,6 +707,22 @@ export default function FetalUsgLevel4() {
                   <Save size={14} className="mr-1" /> {saving ? "Saving..." : "Save Draft"}
                 </Button>
               </div>
+            </TabsContent>
+
+            <TabsContent value="growth" className="space-y-4">
+              <Card>
+                <CardHeader><CardTitle className="text-sm">Fetal Growth Charts</CardTitle></CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground mb-2">WHO/ICB fetal growth reference charts (simplified preview). Full charts coming soon.</p>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="border rounded-md p-2"><div className="font-semibold mb-1">EFW Percentile</div><div className="text-muted-foreground">{meas.efwPercentile ?? "?"} (ref: 10-90th)</div></div>
+                    <div className="border rounded-md p-2"><div className="font-semibold mb-1">AC vs GA</div><div className="text-muted-foreground">{meas.ac ?? "?"} mm (ref: ~26mm at 12w, ~200mm at 32w)</div></div>
+                    <div className="border rounded-md p-2"><div className="font-semibold mb-1">BPD vs GA</div><div className="text-muted-foreground">{meas.bpd ?? "?"} mm (ref: ~20mm at 12w, ~80mm at 32w)</div></div>
+                    <div className="border rounded-md p-2"><div className="font-semibold mb-1">FL vs GA</div><div className="text-muted-foreground">{meas.fl ?? "?"} mm (ref: ~7mm at 12w, ~62mm at 32w)</div></div>
+                    <div className="border rounded-md p-2"><div className="font-semibold mb-1">HC vs GA</div><div className="text-muted-foreground">{meas.hc ?? "?"} mm (ref: ~75mm at 12w, ~290mm at 32w)</div></div>
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
 
             <TabsContent value="audit" className="space-y-4">

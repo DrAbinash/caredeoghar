@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
@@ -13,7 +13,10 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Heart, Activity, Ruler, Zap, Save, Send, AlertTriangle,
   CheckCircle2, RefreshCw, ChevronLeft, Stethoscope,
+  Download, Mic, MicOff,
 } from "lucide-react";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface EchoMeasurements {
   id?: number;
@@ -140,6 +143,9 @@ export default function EchoCardiology() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("measurements");
+  const [voiceActive, setVoiceActive] = useState(false);
+  const [voiceTarget, setVoiceTarget] = useState<string | null>(null);
+  const recognitionRef = useRef<any>(null);
 
   const params = new URLSearchParams(window.location.search);
   const sid = Number(params.get("studyId"));
@@ -248,6 +254,59 @@ export default function EchoCardiology() {
       setReport((prev) => ({ ...prev, criticalAlertsAcknowledged: true }));
       toast({ title: "Critical alerts acknowledged" });
     } catch (e) { toast({ variant: "destructive", title: "Failed", description: String(e) }); }
+  }
+
+  // --- PDF Generation ---
+  function downloadPdf() {
+    if (!studyId) return;
+    const doc = new jsPDF();
+    doc.setFontSize(14);
+    doc.text("2D Echo Cardiology Report", 14, 18);
+    doc.setFontSize(10);
+    doc.text(`Study ID: ${studyId}`, 14, 26);
+    const rows: [string, string][] = [
+      ["IVSd", meas.ivsd?.toString() ?? ""], ["IVSs", meas.ivss?.toString() ?? ""], ["LVIDd", meas.lvidd?.toString() ?? ""],
+      ["LVIDs", meas.lvids?.toString() ?? ""], ["LVPWd", meas.lvpwd?.toString() ?? ""], ["EF", meas.efSimpson?.toString() ?? ""],
+      ["FS", meas.fractionalShortening?.toString() ?? ""], ["LV Mass", meas.lvMass?.toString() ?? ""],
+    ];
+    autoTable(doc, { startY: 32, head: [["Measurement", "Value"]], body: rows, styles: { fontSize: 9 } });
+    const finalY = (doc as any).lastAutoTable?.finalY || 80;
+    doc.text("Impression:", 14, finalY + 8);
+    doc.text(report.impression ?? "-", 14, finalY + 14, { maxWidth: 180 });
+    doc.text("Recommendation:", 14, finalY + 30);
+    doc.text(report.recommendation ?? "-", 14, finalY + 36, { maxWidth: 180 });
+    doc.save(`echo-${studyId}.pdf`);
+    toast({ title: "PDF downloaded" });
+  }
+
+  // --- Voice Dictation ---
+  function toggleVoice(target: string) {
+    if (voiceActive && voiceTarget === target) {
+      recognitionRef.current?.stop();
+      setVoiceActive(false);
+      setVoiceTarget(null);
+      return;
+    }
+    if (voiceActive) recognitionRef.current?.stop();
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast({ variant: "destructive", title: "Speech recognition not supported in this browser" });
+      return;
+    }
+    const rec = new SpeechRecognition();
+    rec.lang = "en-IN";
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.onresult = (event: any) => {
+      const text = Array.from(event.results).map((r: any) => r[0].transcript).join(" ");
+      setReport((prev) => ({ ...prev, [target]: (prev[target as keyof EchoReport] ?? "" as any) + text }));
+    };
+    rec.onerror = (e: any) => { if (e.error !== "aborted") toast({ variant: "destructive", title: "Voice error", description: e.error }); setVoiceActive(false); };
+    rec.onend = () => setVoiceActive(false);
+    rec.start();
+    recognitionRef.current = rec;
+    setVoiceActive(true);
+    setVoiceTarget(target);
   }
 
   function updateMeas<K extends keyof EchoMeasurements>(key: K, value: EchoMeasurements[K]) {
@@ -456,6 +515,9 @@ export default function EchoCardiology() {
             <Button size="sm" onClick={finalizeReport} disabled={report.status === "final"}>
               <Send size={14} className="mr-1" /> Finalize
             </Button>
+            <Button size="sm" variant="outline" onClick={downloadPdf} disabled={!report.status}>
+              <Download size={14} className="mr-1" /> PDF
+            </Button>
           </div>
 
           {report.aiDraft && (
@@ -484,8 +546,14 @@ export default function EchoCardiology() {
                   <Textarea className="text-sm" value={(report as any)[key] ?? ""} onChange={(e) => setReport((prev) => ({ ...prev, [key]: e.target.value }))} rows={2} />
                 </div>
               ))}
-              <div><Label className="text-xs font-semibold">Impression</Label><Textarea className="text-sm font-medium" value={report.impression ?? ""} onChange={(e) => setReport((prev) => ({ ...prev, impression: e.target.value }))} rows={4} /></div>
-              <div><Label className="text-xs font-semibold">Recommendation</Label><Textarea className="text-sm" value={report.recommendation ?? ""} onChange={(e) => setReport((prev) => ({ ...prev, recommendation: e.target.value }))} rows={2} /></div>
+              <div>
+                <div className="flex items-center justify-between"><Label className="text-xs font-semibold">Impression</Label><Button size="sm" variant="ghost" onClick={() => toggleVoice("impression")} className={voiceActive && voiceTarget === "impression" ? "text-red-500" : ""}><Mic size={12} /> {voiceActive && voiceTarget === "impression" ? "Stop" : "Dictate"}</Button></div>
+                <Textarea className="text-sm font-medium" value={report.impression ?? ""} onChange={(e) => setReport((prev) => ({ ...prev, impression: e.target.value }))} rows={4} />
+              </div>
+              <div>
+                <div className="flex items-center justify-between"><Label className="text-xs font-semibold">Recommendation</Label><Button size="sm" variant="ghost" onClick={() => toggleVoice("recommendation")} className={voiceActive && voiceTarget === "recommendation" ? "text-red-500" : ""}><Mic size={12} /> {voiceActive && voiceTarget === "recommendation" ? "Stop" : "Dictate"}</Button></div>
+                <Textarea className="text-sm" value={report.recommendation ?? ""} onChange={(e) => setReport((prev) => ({ ...prev, recommendation: e.target.value }))} rows={2} />
+              </div>
             </CardContent>
           </Card>
 

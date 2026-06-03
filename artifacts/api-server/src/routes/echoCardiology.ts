@@ -12,6 +12,7 @@ import {
 import { eq, and, desc } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
+import { generateAiForTask } from "@workspace/ai-providers";
 
 const router = Router();
 
@@ -559,7 +560,7 @@ router.post("/fetal/:studyId/acknowledge-critical", async (req, res) => {
   res.json({ success: true, data: row });
 });
 
-// AI Draft generation
+// AI Draft generation — uses pluggable AI provider (Gemini/OpenAI/Ollama) with template fallback
 router.post("/reports/:studyId/generate-draft", async (req, res) => {
   const sReq = req as StaffAuthRequest;
   const studyId = Number(req.params.studyId);
@@ -577,7 +578,24 @@ router.post("/reports/:studyId/generate-draft", async (req, res) => {
     .from(echoRegionalWallTable)
     .where(eq(echoRegionalWallTable.studyId, studyId));
   const meas = m[0];
-  const aiDraft = generateEchoDraft(meas, valves, walls);
+
+  // Always generate template fallback
+  const templateDraft = generateEchoDraft(meas, valves, walls);
+
+  // Try AI provider (Gemini/OpenAI/Ollama) if configured
+  let aiDraft = templateDraft;
+  let providerUsed = "template";
+  try {
+    const prompt = buildEchoAiPrompt(meas, valves, walls);
+    const aiResult = await generateAiForTask("echo_draft", prompt, [], { maxTokens: 2048 });
+    if (aiResult.success && aiResult.text) {
+      aiDraft = aiResult.text;
+      providerUsed = "ai";
+    }
+  } catch (err) {
+    logger.warn({ err, studyId }, "AI draft generation failed, using template fallback");
+  }
+
   const existing = await db
     .select()
     .from(echoReportsTable)
@@ -596,8 +614,8 @@ router.post("/reports/:studyId/generate-draft", async (req, res) => {
       .values({ studyId, aiDraft, aiDraftAt: new Date(), status: "draft" })
       .returning();
   }
-  audit(sReq, { entityType: "echo", entityId: studyId, action: "ai_draft_generated", details: "ai_draft_generated" });
-  res.json({ success: true, aiDraft, data: row });
+  audit(sReq, { entityType: "echo", entityId: studyId, action: "ai_draft_generated", details: providerUsed });
+  res.json({ success: true, aiDraft, templateDraft, providerUsed, data: row });
 });
 
 router.post("/fetal/:studyId/generate-draft", async (req, res) => {
@@ -609,14 +627,28 @@ router.post("/fetal/:studyId/generate-draft", async (req, res) => {
     .where(eq(fetalEchoStudiesTable.studyId, studyId))
     .limit(1);
   if (!rows[0]) { res.status(404).json({ error: "No fetal echo data found" }); return; }
-  const aiDraft = generateFetalEchoDraft(rows[0]);
+
+  const templateDraft = generateFetalEchoDraft(rows[0]);
+  let aiDraft = templateDraft;
+  let providerUsed = "template";
+  try {
+    const prompt = buildFetalEchoAiPrompt(rows[0]);
+    const aiResult = await generateAiForTask("fetal_echo_draft", prompt, [], { maxTokens: 2048 });
+    if (aiResult.success && aiResult.text) {
+      aiDraft = aiResult.text;
+      providerUsed = "ai";
+    }
+  } catch (err) {
+    logger.warn({ err, studyId }, "Fetal echo AI draft generation failed, using template fallback");
+  }
+
   const [row] = await db
     .update(fetalEchoStudiesTable)
     .set({ aiDraft, aiDraftAt: new Date(), updatedAt: new Date() })
     .where(eq(fetalEchoStudiesTable.id, rows[0].id))
     .returning();
-  audit(sReq, { entityType: "fetal_echo", entityId: studyId, action: "ai_draft_generated", details: "ai_draft_generated" });
-  res.json({ success: true, aiDraft, data: row });
+  audit(sReq, { entityType: "fetal_echo", entityId: studyId, action: "ai_draft_generated", details: providerUsed });
+  res.json({ success: true, aiDraft, templateDraft, providerUsed, data: row });
 });
 
 // ── AI Draft Helpers ──────────────────────────────────────────────────────
@@ -720,6 +752,69 @@ function generateFetalEchoDraft(
   }
   parts.push("IMPRESSION:");
   parts.push("AI Draft – Requires Radiologist Review.");
+  return parts.join("\n");
+}
+
+function buildEchoAiPrompt(
+  meas: typeof echoMeasurementsTable.$inferSelect | undefined,
+  valves: Array<typeof echoValveAssessmentTable.$inferSelect>,
+  walls: Array<typeof echoRegionalWallTable.$inferSelect>,
+): string {
+  const parts: string[] = [];
+  parts.push("You are an expert cardiologist. Generate a structured 2D echocardiography report from the following measurements. Use professional medical terminology.");
+  parts.push("");
+  if (meas) {
+    parts.push("Patient vitals: " + (meas.bpSystolic ? `BP ${meas.bpSystolic}/${meas.bpDiastolic} mmHg, ` : "") + (meas.heartRate ? `HR ${meas.heartRate} bpm` : ""));
+    parts.push("");
+    parts.push("LEFT VENTRICLE:");
+    parts.push(`LVEDD ${meas.lvidd ?? "-"} mm, LVESD ${meas.lvids ?? "-"} mm. EF (Simpson) ${meas.efSimpson ?? "-"}%, EF (Teichholz) ${meas.efTeichholz ?? "-"}%. LV mass index ${meas.lvMassIndex ?? "-"}. Geometry: ${meas.lvGeometry ?? "normal"}. LVH: ${meas.lvh ? "Yes" : "No"}. RWT: ${meas.relativeWallThickness ?? "-"}.`);
+    parts.push("");
+    parts.push("RIGHT VENTRICLE:");
+    parts.push(`TAPSE ${meas.tapase ?? "-"} mm. RVSP ${meas.rvsp ?? "-"} mmHg.`);
+    parts.push("");
+    parts.push("DOPPLER:");
+    parts.push(`MV E/A ${meas.mvEaRatio ?? "-"}, E/e' ${meas.mvEePrime ?? "-"}. AV Vmax ${meas.avVelocity ?? "-"} m/s, gradient ${meas.avGradient ?? "-"} mmHg. TR gradient ${meas.trGradient ?? "-"} mmHg. Diastolic dysfunction: ${meas.diastolicDysfunctionGrade ?? "none"}. Pulmonary hypertension: ${meas.pulmonaryHypertension ? "Yes" : "No"}.`);
+  }
+  parts.push("");
+  parts.push("VALVES:");
+  for (const v of valves) {
+    parts.push(`${v.valveName.toUpperCase()}: morphology ${v.morphology ?? "normal"}, stenosis ${v.stenosis ?? "none"}, regurgitation ${v.regurgitation ?? "none"}.`);
+  }
+  if (valves.length === 0) parts.push("All valves structurally normal.");
+  parts.push("");
+  parts.push("REGIONAL WALL MOTION:");
+  const abnormal = walls.filter((w) => w.motion !== "normal");
+  if (abnormal.length > 0) {
+    parts.push(abnormal.map((w) => `${w.segment}: ${w.motion}`).join("; "));
+  } else {
+    parts.push("All segments contracting normally.");
+  }
+  parts.push("");
+  parts.push("Generate a structured report with sections: LEFT VENTRICLE, RIGHT VENTRICLE, VALVES, REGIONAL WALL MOTION, DOPPLER, IMPRESSION, RECOMMENDATION.");
+  return parts.join("\n");
+}
+
+function buildFetalEchoAiPrompt(
+  f: typeof fetalEchoStudiesTable.$inferSelect,
+): string {
+  const parts: string[] = [];
+  parts.push("You are an expert pediatric cardiologist. Generate a structured fetal echocardiography report from the following parameters.");
+  parts.push("");
+  parts.push(`GA: ${f.gaWeeks ?? "-"} weeks ${f.gaDays ?? "-"} days. FHR: ${f.fetalHeartRate ?? "-"} bpm.`);
+  parts.push(`Situs: ${f.situs ?? "not documented"}. Cardiac axis: ${f.cardiacAxis ?? "-"}. Position: ${f.cardiacPosition ?? "-"}.`);
+  parts.push(`AV concordance: ${f.avConcordance ?? "-"}. VA concordance: ${f.vaConcordance ?? "-"}.`);
+  parts.push(`RA: ${f.raNormal ? "normal" : "abnormal"}, LA: ${f.laNormal ? "normal" : "abnormal"}, RV: ${f.rvNormal ? "normal" : "abnormal"}, LV: ${f.lvNormal ? "normal" : "abnormal"}.`);
+  parts.push(`Four-chamber view: ${f.fourChamberView ?? "-"}. LVOT: ${f.lvot ?? "-"}. RVOT: ${f.rvot ?? "-"}.`);
+  parts.push(`3-vessel view: ${f.threeVesselView ?? "-"}. 3-vessel trachea view: ${f.threeVesselTracheaView ?? "-"}.`);
+  parts.push(`Aortic arch: ${f.aorticArch ?? "-"}. Ductal arch: ${f.ductalArch ?? "-"}.`);
+  parts.push(`IAS: ${f.interatrialSeptum ?? "-"}. IVS: ${f.interventricularSeptum ?? "-"}.`);
+  parts.push(`Mitral valve: ${f.mitralValve ?? "-"}. Tricuspid valve: ${f.tricuspidValve ?? "-"}. Aortic valve: ${f.aorticValve ?? "-"}. Pulmonary valve: ${f.pulmonaryValve ?? "-"}.`);
+  parts.push(`Rhythm: ${f.rhythm ?? "-"}. ${f.rhythmNotes ?? ""}`);
+  parts.push(`Doppler: UA PI ${f.umbilicalArteryPi ?? "-"}, MCA PI ${f.mcaPi ?? "-"}, DV a-wave ${f.ductusVenoususAWave ?? "-"}.`);
+  const abnormals = JSON.parse(f.suspectedAbnormalities ?? "[]") as string[];
+  if (abnormals.length > 0) parts.push(`Suspected abnormalities: ${abnormals.join("; ")}`);
+  parts.push("");
+  parts.push("Generate a structured report with sections: CARDIAC SITUS, FOUR CHAMBER VIEW, OUTFLOW TRACTS, ARCHES, SEPTA, VALVES, RHYTHM, DOPPLER, IMPRESSION, RECOMMENDATION.");
   return parts.join("\n");
 }
 

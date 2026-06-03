@@ -459,6 +459,11 @@ export const AI_TASK_CATALOG: AiTaskDef[] = [
   { key: "patient_communication", label: "Patient Communication", description: "Draft patient-facing messages (reminders, results, follow-ups).", vision: false },
   { key: "report_findings", label: "Radiology Findings", description: "Generate the findings section of a radiology report.", vision: false },
   { key: "report_impression", label: "Radiology Impression", description: "Generate the impression section of a radiology report.", vision: false },
+  { key: "echo_draft", label: "Echo Cardiology AI Draft", description: "AI-assisted 2D echocardiography report drafting from measurements and valve assessment.", vision: false },
+  { key: "fetal_echo_draft", label: "Fetal Echo AI Draft", description: "AI-assisted fetal echocardiography report drafting from fetal echo parameters.", vision: false },
+  { key: "fetal_usg_draft", label: "Fetal USG Level-4 AI Draft", description: "AI-assisted fetal ultrasound report drafting from biometry and anomaly scan data.", vision: false },
+  { key: "echo_report_delivery", label: "Echo Report Delivery Message", description: "Draft patient-facing message for echo report delivery.", vision: false },
+  { key: "fetal_usg_report_delivery", label: "Fetal USG Report Delivery Message", description: "Draft patient-facing message for fetal USG report delivery.", vision: false },
 ];
 
 export const AI_TASK_KEYS = AI_TASK_CATALOG.map((t) => t.key);

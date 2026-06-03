@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
@@ -12,8 +12,10 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Baby, Heart, Activity, Zap, Save, Send, AlertTriangle,
-  CheckCircle2, ChevronLeft, Stethoscope,
+  CheckCircle2, ChevronLeft, Stethoscope, Download, Mic,
 } from "lucide-react";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface FetalEchoData {
   id?: number;
@@ -55,6 +57,8 @@ interface FetalEchoData {
   suspectedAbnormalities?: string;
   status?: string;
   aiDraft?: string;
+  impression?: string;
+  recommendation?: string;
   criticalAlertsAcknowledged?: boolean;
 }
 
@@ -81,6 +85,9 @@ export default function FetalEcho() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("maternal");
+  const [voiceActive, setVoiceActive] = useState(false);
+  const [voiceTarget, setVoiceTarget] = useState<string | null>(null);
+  const recognitionRef = useRef<any>(null);
 
   const params = new URLSearchParams(window.location.search);
   const sid = Number(params.get("studyId"));
@@ -168,6 +175,60 @@ export default function FetalEcho() {
 
   function toggleAbnormality(a: string) {
     setSelectedAbnormalities((prev) => prev.includes(a) ? prev.filter((x) => x !== a) : [...prev, a]);
+  }
+
+  // --- PDF Generation ---
+  function downloadPdf() {
+    if (!studyId) return;
+    const doc = new jsPDF();
+    doc.setFontSize(14);
+    doc.text("Fetal Echo Report", 14, 18);
+    doc.setFontSize(10);
+    doc.text(`GA: ${data.gaWeeks ? `${data.gaWeeks}w ${data.gaDays ?? 0}d` : "?"} | FHR: ${data.fetalHeartRate ?? "?"} bpm`, 14, 26);
+    const rows: [string, string][] = [
+      ["Situs", data.situs ?? ""], ["Cardiac Axis", data.cardiacAxis ?? ""], ["AV Concordance", data.avConcordance ?? ""],
+      ["VA Concordance", data.vaConcordance ?? ""], ["LVOT", data.lvot ?? ""], ["RVOT", data.rvot ?? ""],
+      ["Aortic Valve", data.aorticValve ?? ""], ["Pulmonary Valve", data.pulmonaryValve ?? ""],
+      ["UA PI", data.umbilicalArteryPi?.toString() ?? ""], ["MCA PI", data.mcaPi?.toString() ?? ""],
+    ];
+    autoTable(doc, { startY: 32, head: [["Parameter", "Value"]], body: rows, styles: { fontSize: 9 } });
+    const finalY = (doc as any).lastAutoTable?.finalY || 80;
+    doc.text("Impression:", 14, finalY + 8);
+    doc.text(data.impression ?? "-", 14, finalY + 14, { maxWidth: 180 });
+    doc.text("Recommendation:", 14, finalY + 30);
+    doc.text(data.recommendation ?? "-", 14, finalY + 36, { maxWidth: 180 });
+    doc.save(`fetal-echo-${studyId}.pdf`);
+    toast({ title: "PDF downloaded" });
+  }
+
+  // --- Voice Dictation ---
+  function toggleVoice(target: string) {
+    if (voiceActive && voiceTarget === target) {
+      recognitionRef.current?.stop();
+      setVoiceActive(false);
+      setVoiceTarget(null);
+      return;
+    }
+    if (voiceActive) recognitionRef.current?.stop();
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast({ variant: "destructive", title: "Speech recognition not supported in this browser" });
+      return;
+    }
+    const rec = new SpeechRecognition();
+    rec.lang = "en-IN";
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.onresult = (event: any) => {
+      const text = Array.from(event.results).map((r: any) => r[0].transcript).join(" ");
+      setData((prev) => ({ ...prev, [target]: (prev[target as keyof FetalEchoData] ?? "" as any) + text }));
+    };
+    rec.onerror = (e: any) => { if (e.error !== "aborted") toast({ variant: "destructive", title: "Voice error", description: e.error }); setVoiceActive(false); };
+    rec.onend = () => setVoiceActive(false);
+    rec.start();
+    recognitionRef.current = rec;
+    setVoiceActive(true);
+    setVoiceTarget(target);
   }
 
   return (
@@ -389,6 +450,9 @@ export default function FetalEcho() {
             <Button size="sm" onClick={finalizeReport} disabled={data.status === "final"}>
               <Send size={14} className="mr-1" /> Finalize
             </Button>
+            <Button size="sm" variant="outline" onClick={downloadPdf} disabled={!data.status}>
+              <Download size={14} className="mr-1" /> PDF
+            </Button>
           </div>
 
           {data.aiDraft && (
@@ -399,6 +463,20 @@ export default function FetalEcho() {
               </CardContent>
             </Card>
           )}
+
+          <Card>
+            <CardHeader><CardTitle className="text-sm">Report Editor</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <div className="flex items-center justify-between"><Label className="text-xs font-semibold">Impression</Label><Button size="sm" variant="ghost" onClick={() => toggleVoice("impression")} className={voiceActive && voiceTarget === "impression" ? "text-red-500" : ""}><Mic size={12} /> {voiceActive && voiceTarget === "impression" ? "Stop" : "Dictate"}</Button></div>
+                <Textarea className="text-sm font-medium" value={data.impression ?? ""} onChange={(e) => updateData("impression", e.target.value)} rows={4} />
+              </div>
+              <div>
+                <div className="flex items-center justify-between"><Label className="text-xs font-semibold">Recommendation</Label><Button size="sm" variant="ghost" onClick={() => toggleVoice("recommendation")} className={voiceActive && voiceTarget === "recommendation" ? "text-red-500" : ""}><Mic size={12} /> {voiceActive && voiceTarget === "recommendation" ? "Stop" : "Dictate"}</Button></div>
+                <Textarea className="text-sm" value={data.recommendation ?? ""} onChange={(e) => updateData("recommendation", e.target.value)} rows={2} />
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
