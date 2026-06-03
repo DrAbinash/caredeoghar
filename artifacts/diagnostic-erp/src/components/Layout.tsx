@@ -176,6 +176,7 @@ const navItems: NavEntry[] = [
       { path: "/radiology/command-center",         icon: LayoutDashboard, label: "Command Center" },
       { path: "/radiology/voice-dictation",        icon: Mic,            label: "Voice Dictation" },
       { path: "/radiology/patient-communication",  icon: MessageSquare,  label: "Patient Communication" },
+      { path: "/radiology/normal-templates",       icon: ClipboardCheck, label: "Normal Templates" },
       { path: "/teleradiology",                   icon: Globe,        label: "Teleradiology" },
       { path: "/radiology/pacs-logs",             icon: Activity,     label: "PACS Logs",             ownerOnly: true },
       { path: "/radiology/ai-inference-settings", icon: Cpu,          label: "AI Inference Settings", ownerOnly: true },

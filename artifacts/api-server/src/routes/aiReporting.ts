@@ -33,6 +33,7 @@ import {
   aiProviderHealthLogsTable,
   aiVoiceTranscriptionsTable,
   aiPatientCommunicationsTable,
+  aiNormalReportTemplatesTable,
 } from "@workspace/db";
 import { eq, and, desc, gte, lte, sql } from "drizzle-orm";
 import { type StaffAuthRequest, FULL_ACCESS_ROLES } from "../middleware/requireStaffAuth";
@@ -2408,6 +2409,148 @@ router.post("/patient-communications/:id/send", async (req, res): Promise<void> 
     id,
     status: "sent",
     message: "Communication marked as sent. Integrate with WhatsApp/email API for actual delivery.",
+  });
+});
+
+// ──────────────────────────── Phase 26: One-Click Normal Report Templates ────────────────────────────
+
+/**
+ * GET /api/ai-reporting/normal-templates
+ * List all normal report templates with optional filter by modality.
+ */
+router.get("/normal-templates", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const { modality } = req.query;
+  const conditions: any[] = [];
+  if (modality) conditions.push(eq(aiNormalReportTemplatesTable.modality, String(modality)));
+
+  const rows = await db
+    .select()
+    .from(aiNormalReportTemplatesTable)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(aiNormalReportTemplatesTable.sortOrder);
+
+  res.json(rows);
+});
+
+/**
+ * GET /api/ai-reporting/normal-templates/:id
+ * Detail view of a single template.
+ */
+router.get("/normal-templates/:id", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const id = Number(req.params.id);
+  const [row] = await db.select().from(aiNormalReportTemplatesTable).where(eq(aiNormalReportTemplatesTable.id, id)).limit(1);
+  if (!row) { res.status(404).json({ error: "Template not found" }); return; }
+  res.json(row);
+});
+
+/**
+ * POST /api/ai-reporting/normal-templates
+ * Create a new normal report template.
+ */
+router.post("/normal-templates", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const { name, modality, bodyPart, findings, impression, technique, clinicalHistory, comparison, sortOrder } = req.body;
+  if (!name || !modality || !findings || !impression) { res.status(400).json({ error: "name, modality, findings, impression are required" }); return; }
+
+  const inserted = await db.insert(aiNormalReportTemplatesTable).values({
+    name, modality, bodyPart: bodyPart ?? null, findings, impression,
+    technique: technique ?? null, clinicalHistory: clinicalHistory ?? null, comparison: comparison ?? null,
+    sortOrder: sortOrder ? Number(sortOrder) : 0,
+  }).returning({ id: aiNormalReportTemplatesTable.id });
+
+  res.json({ id: inserted[0]?.id });
+});
+
+/**
+ * PATCH /api/ai-reporting/normal-templates/:id
+ * Update a template.
+ */
+router.patch("/normal-templates/:id", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const id = Number(req.params.id);
+  const { name, modality, bodyPart, findings, impression, technique, clinicalHistory, comparison, sortOrder } = req.body;
+  const [row] = await db.select().from(aiNormalReportTemplatesTable).where(eq(aiNormalReportTemplatesTable.id, id)).limit(1);
+  if (!row) { res.status(404).json({ error: "Template not found" }); return; }
+
+  const updateData: any = { updatedAt: new Date() };
+  if (name !== undefined) updateData.name = name;
+  if (modality !== undefined) updateData.modality = modality;
+  if (bodyPart !== undefined) updateData.bodyPart = bodyPart;
+  if (findings !== undefined) updateData.findings = findings;
+  if (impression !== undefined) updateData.impression = impression;
+  if (technique !== undefined) updateData.technique = technique;
+  if (clinicalHistory !== undefined) updateData.clinicalHistory = clinicalHistory;
+  if (comparison !== undefined) updateData.comparison = comparison;
+  if (sortOrder !== undefined) updateData.sortOrder = Number(sortOrder);
+
+  await db.update(aiNormalReportTemplatesTable).set(updateData).where(eq(aiNormalReportTemplatesTable.id, id));
+  res.json({ id, ...updateData });
+});
+
+/**
+ * DELETE /api/ai-reporting/normal-templates/:id
+ * Remove a template.
+ */
+router.delete("/normal-templates/:id", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const id = Number(req.params.id);
+  await db.delete(aiNormalReportTemplatesTable).where(eq(aiNormalReportTemplatesTable.id, id));
+  res.json({ ok: true });
+});
+
+/**
+ * POST /api/ai-reporting/normal-templates/:id/apply
+ * Apply a normal template to a worklist. Returns the full report text.
+ */
+router.post("/normal-templates/:id/apply", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const id = Number(req.params.id);
+  const { worklistId } = req.body;
+  if (!worklistId) { res.status(400).json({ error: "worklistId is required" }); return; }
+
+  const [template] = await db.select().from(aiNormalReportTemplatesTable).where(eq(aiNormalReportTemplatesTable.id, id)).limit(1);
+  if (!template) { res.status(404).json({ error: "Template not found" }); return; }
+
+  const [wl] = await db.select().from(radiologyWorklistTable).where(eq(radiologyWorklistTable.id, Number(worklistId))).limit(1);
+  if (!wl) { res.status(404).json({ error: "Worklist not found" }); return; }
+
+  const session = sReq.staffSession!;
+  const reportText = [
+    "CLINICAL HISTORY:", template.clinicalHistory ?? "As per referral.",
+    "\nTECHNIQUE:", template.technique ?? `${wl.modality} of ${template.bodyPart ?? wl.studyDescription ?? "the requested region"}.`,
+    "\nCOMPARISON:", template.comparison ?? "None available.",
+    "\nFINDINGS:", template.findings,
+    "\nIMPRESSION:", template.impression,
+    "\n\n[Reported by: " + (session.subjectName ?? "Radiologist") + "]",
+  ].join("\n");
+
+  res.json({
+    worklistId: Number(worklistId),
+    templateId: id,
+    templateName: template.name,
+    reportText,
+    aiSafetyLabel: "AI Draft – Requires Radiologist Review",
+    message: "Template applied. Radiologist must review and finalize the report.",
   });
 });
 

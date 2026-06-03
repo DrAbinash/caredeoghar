@@ -1,3 +1,5 @@
 - [Drizzle push hazard](drizzle-push-hazard.md) — blind `drizzle-kit push` on this DB triggers a dangerous unrelated interactive rename; use SQL or push-force carefully.
 - [AI prompt templates](ai-prompt-templates.md) — DB-backed editable radiology prompt presets; name is the resolution key, kept unique case-insensitively.
 - [diagnostic-erp conventions](diagnostic-erp-conventions.md) — frontend/page/auth conventions for the ERP artifact.
+- [Normal report templates](normal-report-templates.md) — pre-built normal templates for common studies; one-click apply from report generator toolbar with inline picker overlay.
+- [AI safety label](ai-safety-label.md) — every AI-assisted output must show "AI Draft – Requires Radiologist Review" and never auto-finalize/sign reports.

@@ -71,6 +71,7 @@ const ProviderHealthMonitor = lazy(() => import("@/pages/ProviderHealthMonitor")
 const CommandCenter         = lazy(() => import("@/pages/CommandCenter"));
 const VoiceDictation        = lazy(() => import("@/pages/VoiceDictation"));
 const PatientCommunication  = lazy(() => import("@/pages/PatientCommunication"));
+const NormalReportTemplates = lazy(() => import("@/pages/NormalReportTemplates"));
 const DicomViewer           = lazy(() => import("@/pages/DicomViewer"));
 const AgentSetup            = lazy(() => import("@/pages/AgentSetup"));
 const PacsSettings          = lazy(() => import("@/pages/PacsSettings"));
@@ -283,6 +284,7 @@ function Router() {
       <Route path="/radiology/command-center" component={CommandCenter} />
       <Route path="/radiology/voice-dictation" component={VoiceDictation} />
       <Route path="/radiology/patient-communication" component={PatientCommunication} />
+      <Route path="/radiology/normal-templates" component={NormalReportTemplates} />
               <Route path="/radiology/archive-lifecycle" component={PacsArchiveLifecycle} />
               <Route path="/radiology/watchdog" component={PacsWatchdogDashboard} />
               <Route path="/radiology/ai-inference-settings" component={AiInferenceSettings} />

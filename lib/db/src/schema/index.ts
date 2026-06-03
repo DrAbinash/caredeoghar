@@ -91,6 +91,7 @@ export * from "./criticalFindings";
 export * from "./aiProviderHealth";
 export * from "./aiVoiceTranscriptions";
 export * from "./aiPatientCommunications";
+export * from "./aiNormalReportTemplates";
 export * from "./drawerAuditLog";
 export * from "./enterpriseRadiology";
 export * from "./usgMeasurements";

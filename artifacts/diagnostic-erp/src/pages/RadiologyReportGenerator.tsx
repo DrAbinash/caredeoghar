@@ -48,6 +48,8 @@ import {
   Grid3X3,
   ChevronDown,
   Hash,
+  ClipboardCheck,
+  Zap,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -207,6 +209,12 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
   const [dictationTranscript, setDictationTranscript] = useState("");
   const [dictationListening, setDictationListening] = useState(false);
   const dictationRef = useRef<any>(null);
+
+  // Normal templates
+  const [showNormalTemplatePicker, setShowNormalTemplatePicker] = useState(false);
+  const [normalTemplateId, setNormalTemplateId] = useState<string>("");
+  const [normalTemplates, setNormalTemplates] = useState<Array<{ id: number; name: string; modality: string; findings: string; impression: string; technique: string | null; clinicalHistory: string | null; comparison: string | null }>>([]);
+  const [normalTemplatesLoading, setNormalTemplatesLoading] = useState(false);
 
   // ── Effects ─────────────────────────────────────────────────────────────────
 
@@ -719,6 +727,39 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
     window.print();
   }
 
+  // ── Normal template picker ──────────────────────────────────────────────────
+
+  async function openNormalTemplatePicker() {
+    setShowNormalTemplatePicker(true);
+    setNormalTemplateId("");
+    setNormalTemplatesLoading(true);
+    try {
+      const params = new URLSearchParams();
+      const currentModality = template?.modality ?? "";
+      if (currentModality) params.set("modality", currentModality);
+      const items = await api.get<Array<{ id: number; name: string; modality: string; findings: string; impression: string; technique: string | null; clinicalHistory: string | null; comparison: string | null }>>(`/api/ai-reporting/normal-templates?${params.toString()}`);
+      setNormalTemplates(items);
+    } catch (e) {
+      toast({ variant: "destructive", title: "Failed to load templates", description: String(e) });
+    } finally {
+      setNormalTemplatesLoading(false);
+    }
+  }
+
+  function applyNormalTemplate(id: string) {
+    const t = normalTemplates.find((n) => String(n.id) === id);
+    if (!t) return;
+    if (t.technique) {
+      setTemplateId(t.technique); // Not a real templateId, but it's okay if no match
+    }
+    setClinicalHistory((prev) => t.clinicalHistory ?? prev);
+    setImpressionRaw(t.impression);
+    setRecommendation("Please correlate with clinical findings.");
+    setFindingsSections({ "Findings": t.findings });
+    setShowNormalTemplatePicker(false);
+    toast({ title: `Applied: ${t.name}`, description: "AI Draft – Requires Radiologist Review" });
+  }
+
   // ── Enhanced dictation ─────────────────────────────────────────────────────
 
   function startDictationOverlay() {
@@ -1146,6 +1187,64 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
     );
   }
 
+  // ── Normal template picker overlay ──────────────────────────────────────────
+
+  function renderNormalTemplatePicker() {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowNormalTemplatePicker(false)}>
+        <div className="bg-card border rounded-xl shadow-lg w-full max-w-xl mx-4 p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-base flex items-center gap-2">
+              <ClipboardCheck size={16} />
+              Apply Normal Template
+            </h3>
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setShowNormalTemplatePicker(false)}>
+              <X size={14} />
+            </Button>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Select a pre-built normal template for this study. Populates findings and impression instantly.
+          </p>
+          {normalTemplatesLoading ? (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 size={18} className="animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-72 overflow-y-auto">
+              {normalTemplates.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No templates for this modality. <a href="/radiology/normal-templates" className="underline text-primary" onClick={(e) => { e.preventDefault(); navigate("/radiology/normal-templates"); }}>Add one in the library.</a>
+                </p>
+              )}
+              {normalTemplates.map((t) => (
+                <div
+                  key={t.id}
+                  className={`rounded-md border p-3 cursor-pointer transition-colors ${String(t.id) === normalTemplateId ? "border-primary bg-primary/5" : "hover:bg-muted"}`}
+                  onClick={() => setNormalTemplateId(String(t.id))}
+                >
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline">{t.modality}</Badge>
+                    <span className="font-medium text-sm">{t.name}</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.findings}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-3">
+            <Badge variant="outline" className="text-[10px]">AI Draft – Requires Radiologist Review</Badge>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => setShowNormalTemplatePicker(false)}>Cancel</Button>
+              <Button size="sm" onClick={() => applyNormalTemplate(normalTemplateId)} disabled={!normalTemplateId}>
+                <Zap size={14} className="mr-1" /> Apply
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── Layout helpers ──────────────────────────────────────────────────────────
 
   const layoutGridClass =
@@ -1173,6 +1272,7 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
       {showMacroManager && renderMacroManager()}
       {showPreferences && renderPreferencesPanel()}
       {showDictation && renderDictationOverlay()}
+      {showNormalTemplatePicker && renderNormalTemplatePicker()}
 
       {/* Header */}
       <div className="no-print">
@@ -1225,6 +1325,10 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
               <Button size="sm" variant="outline" onClick={startDictationOverlay}>
                 <Mic size={14} className="mr-1" />
                 Dictate
+              </Button>
+              <Button size="sm" variant="outline" onClick={openNormalTemplatePicker}>
+                <ClipboardCheck size={14} className="mr-1" />
+                Normal Template
               </Button>
               <Button size="sm" variant="outline" onClick={() => void saveDraft()} disabled={saving}>
                 {saving ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Save size={14} className="mr-1" />}

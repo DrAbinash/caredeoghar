@@ -717,6 +717,35 @@ async function runStartupMigrations(): Promise<void> {
       CREATE INDEX IF NOT EXISTS apc_type_idx ON ai_patient_communications(communication_type);
       CREATE INDEX IF NOT EXISTS apc_created_idx ON ai_patient_communications(created_at);
 
+      -- Phase 26: One-Click Normal Report Templates
+      CREATE TABLE IF NOT EXISTS ai_normal_report_templates (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        modality TEXT NOT NULL,
+        body_part TEXT,
+        findings TEXT NOT NULL,
+        impression TEXT NOT NULL,
+        technique TEXT,
+        clinical_history TEXT,
+        comparison TEXT,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS anrt_modality_idx ON ai_normal_report_templates(modality);
+      CREATE INDEX IF NOT EXISTS anrt_sort_idx ON ai_normal_report_templates(sort_order);
+      CREATE UNIQUE INDEX IF NOT EXISTS anrt_name_modality_uq ON ai_normal_report_templates(name, modality);
+
+      -- Seed default normal templates (idempotent)
+      INSERT INTO ai_normal_report_templates (name, modality, body_part, findings, impression, technique, sort_order)
+      VALUES
+        ('MRI Brain – Normal', 'MRI', 'brain',
+         'Brain parenchyma shows normal signal intensity on all sequences. No evidence of acute infarction, hemorrhage, or mass lesion. Ventricles are normal in size and configuration. No midline shift. No abnormal enhancement.',
+         'Normal MRI brain.',
+         'MRI brain performed on 1.5T/3T scanner with T1, T2, FLAIR, DWI, and post-contrast sequences.',
+         1)
+      ON CONFLICT (name, modality) DO NOTHING;
+
       -- ── LAN-only login gate ──────────────────────────────────────────────
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS lan_only_login BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS lan_allowed_ips TEXT NOT NULL DEFAULT '[]';
