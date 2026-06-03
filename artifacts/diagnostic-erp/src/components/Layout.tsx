@@ -305,7 +305,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     staleTime: 60_000,
   });
 
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const isMobile = useIsMobile();
   const [autoMinimise] = useState(() => localStorage.getItem("sidebarAutoMinimise") === "1");
@@ -683,7 +683,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     // Navigate to the first child by default (Bills for billing group)
                     const defaultPath = children[0]?.path;
                     if (defaultPath) {
-                      window.location.href = defaultPath;
+                      navigate(defaultPath);
                     } else {
                       setOpenGroups((prev) => ({ ...prev, [id]: !open }));
                     }
