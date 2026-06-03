@@ -43,9 +43,9 @@ try {
   Write-Output "[]"
 }`;
 
-function execAsync(command, args, timeout = 60000) {
+function execAsync(command, args, timeout = 60000, windowsHide = true) {
   return new Promise((resolve, reject) => {
-    execFile(command, args, { timeout, windowsHide: true }, (err, stdout, stderr) => {
+    execFile(command, args, { timeout, windowsHide }, (err, stdout, stderr) => {
       if (err) reject(new Error(stderr || stdout || err.message));
       else resolve({ stdout, stderr });
     });
@@ -189,10 +189,11 @@ export default {
     const psPath = join(tmpdir(), `scan-${Date.now()}.ps1`);
     try {
       await fs.writeFile(psPath, psScript, "utf8");
+      // windowsHide=false so the WIA CommonDialog.ShowTransfer() scanner dialog can appear.
       await execAsync("powershell", [
         "-ExecutionPolicy", "Bypass",
         "-File", psPath,
-      ], 60000);
+      ], 60000, false);
       const buffer = await fs.readFile(outPath);
       await fs.unlink(outPath).catch(() => {});
       const filename = outPath.split("\\").pop()?.split("/").pop() ?? "scan.jpg";
