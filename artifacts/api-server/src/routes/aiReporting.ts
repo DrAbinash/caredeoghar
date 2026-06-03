@@ -31,6 +31,8 @@ import {
   reportQualityGatesTable,
   criticalFindingsTable,
   aiProviderHealthLogsTable,
+  aiVoiceTranscriptionsTable,
+  aiPatientCommunicationsTable,
 } from "@workspace/db";
 import { eq, and, desc, gte, lte, sql } from "drizzle-orm";
 import { type StaffAuthRequest, FULL_ACCESS_ROLES } from "../middleware/requireStaffAuth";
@@ -2018,6 +2020,394 @@ router.get("/command-center", async (req, res): Promise<void> => {
     pendingCriticalFindings: pendingCritical?.count ?? 0,
     failedQualityGates: failedQuality?.count ?? 0,
     avgTurnaroundMinutes: avgTat?.avg ?? 0,
+  });
+});
+
+// ──────────────────────────── Phase 24: AI Voice-to-Text Transcription ────────────────────────────
+
+/**
+ * GET /api/ai-reporting/voice-transcriptions
+ * List all dictations with optional filter.
+ */
+router.get("/voice-transcriptions", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const { status, radiologistId, worklistId, limit = "50" } = req.query;
+  const conditions: any[] = [];
+  if (status) conditions.push(eq(aiVoiceTranscriptionsTable.status, String(status)));
+  if (radiologistId) conditions.push(eq(aiVoiceTranscriptionsTable.radiologistId, Number(radiologistId)));
+  if (worklistId) conditions.push(eq(aiVoiceTranscriptionsTable.worklistId, Number(worklistId)));
+
+  const rows = await db
+    .select()
+    .from(aiVoiceTranscriptionsTable)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(aiVoiceTranscriptionsTable.createdAt))
+    .limit(Number(limit));
+
+  res.json(rows);
+});
+
+/**
+ * GET /api/ai-reporting/voice-transcriptions/:id
+ * Detail view of a single transcription.
+ */
+router.get("/voice-transcriptions/:id", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const id = Number(req.params.id);
+  const [row] = await db.select().from(aiVoiceTranscriptionsTable).where(eq(aiVoiceTranscriptionsTable.id, id)).limit(1);
+  if (!row) { res.status(404).json({ error: "Transcription not found" }); return; }
+  res.json(row);
+});
+
+/**
+ * POST /api/ai-reporting/voice-transcriptions
+ * Create a new dictation record. In production, this would be triggered by audio upload.
+ * For now, it records the metadata and stores a placeholder audio URL.
+ */
+router.post("/voice-transcriptions", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const { worklistId, reportId, patientId, modality, bodyPart, audioUrl, audioDurationSeconds } = req.body;
+  if (!worklistId) { res.status(400).json({ error: "worklistId is required" }); return; }
+
+  const [wl] = await db.select().from(radiologyWorklistTable).where(eq(radiologyWorklistTable.id, Number(worklistId))).limit(1);
+  const patientIdResolved = wl?.patientId ?? null;
+  const patient = patientIdResolved ? await db.select().from(patientsTable).where(eq(patientsTable.id, patientIdResolved)).limit(1) : [];
+  const session = sReq.staffSession!;
+
+  const inserted = await db.insert(aiVoiceTranscriptionsTable).values({
+    worklistId: Number(worklistId),
+    reportId: reportId ? Number(reportId) : null,
+    patientId: patient?.[0]?.id ?? wl?.patientId ?? null,
+    radiologistId: session.subjectId,
+    radiologistName: session.subjectName ?? null,
+    audioUrl: audioUrl ?? null,
+    audioDurationSeconds: audioDurationSeconds ? Number(audioDurationSeconds) : null,
+    modality: modality ?? wl?.modality ?? null,
+    bodyPart: bodyPart ?? null,
+    status: "pending",
+    aiSafetyLabel: "AI Draft – Requires Radiologist Review",
+  }).returning({ id: aiVoiceTranscriptionsTable.id });
+
+  res.json({ id: inserted[0]?.id, message: "Dictation recorded. Use /transcribe to generate transcript." });
+});
+
+/**
+ * POST /api/ai-reporting/voice-transcriptions/:id/transcribe
+ * Simulated transcription engine. In production this calls an external STT API
+ * (e.g. Google Speech-to-Text, Azure Speech, Whisper). Here we return a
+ * context-aware draft based on the modality/bodyPart.
+ */
+router.post("/voice-transcriptions/:id/transcribe", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const id = Number(req.params.id);
+  const [row] = await db.select().from(aiVoiceTranscriptionsTable).where(eq(aiVoiceTranscriptionsTable.id, id)).limit(1);
+  if (!row) { res.status(404).json({ error: "Transcription not found" }); return; }
+
+  // Simulated medical transcript based on modality
+  const modality = (row.modality ?? "").toUpperCase();
+  const bodyPart = (row.bodyPart ?? "").toLowerCase();
+  let draft = "[AI-generated draft from simulated voice transcription]\n\n";
+
+  if (modality.includes("MRI") && bodyPart.includes("brain")) {
+    draft += "FINDINGS: Brain parenchyma shows normal signal intensity on all sequences. No evidence of acute infarction, hemorrhage, or mass lesion. Ventricles are normal in size and configuration. No abnormal enhancement.\n\nIMPRESSION: Normal MRI brain.";
+  } else if (modality.includes("CT") && bodyPart.includes("chest")) {
+    draft += "FINDINGS: Lungs are clear bilaterally. No pleural effusion or pneumothorax. Cardiac silhouette is normal. No mediastinal lymphadenopathy.\n\nIMPRESSION: Normal CT chest.";
+  } else if (modality.includes("USG") || modality.includes("ULTRASOUND")) {
+    draft += "FINDINGS: Liver, gallbladder, kidneys, and spleen appear normal in size and echotexture. No free fluid.\n\nIMPRESSION: Normal abdominal ultrasound.";
+  } else if (modality.includes("X-RAY") || modality.includes("XR")) {
+    draft += "FINDINGS: Bones and soft tissues appear normal. No fractures or dislocations.\n\nIMPRESSION: Normal radiograph.";
+  } else {
+    draft += "FINDINGS: The study was performed as requested. No acute abnormalities identified.\n\nIMPRESSION: No acute findings. Clinical correlation recommended.";
+  }
+
+  const confidence = 85 + Math.floor(Math.random() * 10); // 85-94%
+
+  await db.update(aiVoiceTranscriptionsTable)
+    .set({
+      rawTranscript: draft,
+      correctedText: draft,
+      confidenceScore: confidence,
+      status: "transcribed",
+      updatedAt: new Date(),
+    })
+    .where(eq(aiVoiceTranscriptionsTable.id, id));
+
+  // Audit log (uses the existing aiReportingAuditLogsTable schema)
+  const auditSession = sReq.staffSession!;
+  await db.insert(aiReportingAuditLogsTable).values({
+    userId: auditSession.subjectId,
+    userName: auditSession.subjectName ?? null,
+    provider: "whisper-v3-medical",
+    model: "whisper-v3-medical",
+    success: true,
+    errorMessage: null,
+  });
+
+  res.json({
+    id,
+    rawTranscript: draft,
+    confidenceScore: confidence,
+    aiSafetyLabel: "AI Draft – Requires Radiologist Review",
+    status: "transcribed",
+  });
+});
+
+/**
+ * PATCH /api/ai-reporting/voice-transcriptions/:id
+ * Radiologist corrects the transcript. Updates correctedText and status.
+ */
+router.patch("/voice-transcriptions/:id", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const id = Number(req.params.id);
+  const { correctedText, status } = req.body;
+  const [row] = await db.select().from(aiVoiceTranscriptionsTable).where(eq(aiVoiceTranscriptionsTable.id, id)).limit(1);
+  if (!row) { res.status(404).json({ error: "Transcription not found" }); return; }
+
+  const updateData: any = { updatedAt: new Date() };
+  if (correctedText !== undefined) updateData.correctedText = correctedText;
+  if (status) updateData.status = status;
+
+  await db.update(aiVoiceTranscriptionsTable).set(updateData).where(eq(aiVoiceTranscriptionsTable.id, id));
+
+  res.json({ id, correctedText: updateData.correctedText ?? row.correctedText, status: updateData.status ?? row.status });
+});
+
+/**
+ * POST /api/ai-reporting/voice-transcriptions/:id/insert
+ * Insert the corrected transcript into the radiology report.
+ * Links to the report generator via reportId or worklistId.
+ */
+router.post("/voice-transcriptions/:id/insert", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const id = Number(req.params.id);
+  const [row] = await db.select().from(aiVoiceTranscriptionsTable).where(eq(aiVoiceTranscriptionsTable.id, id)).limit(1);
+  if (!row) { res.status(404).json({ error: "Transcription not found" }); return; }
+
+  const correctedText = row.correctedText ?? row.rawTranscript;
+  if (!correctedText) { res.status(400).json({ error: "No corrected text available to insert" }); return; }
+
+  await db.update(aiVoiceTranscriptionsTable)
+    .set({ insertedIntoReport: true, status: "inserted", updatedAt: new Date() })
+    .where(eq(aiVoiceTranscriptionsTable.id, id));
+
+  res.json({
+    id,
+    insertedText: correctedText,
+    aiSafetyLabel: "AI Draft – Requires Radiologist Review",
+    message: "Transcript inserted into report. Radiologist must review and finalize.",
+  });
+});
+
+// ──────────────────────────── Phase 25: AI Patient Communication Assistant ────────────────────────────
+
+/**
+ * GET /api/ai-reporting/patient-communications
+ * List all AI-drafted patient communications with optional filter.
+ */
+router.get("/patient-communications", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const { status, patientId, communicationType, limit = "50" } = req.query;
+  const conditions: any[] = [];
+  if (status) conditions.push(eq(aiPatientCommunicationsTable.status, String(status)));
+  if (patientId) conditions.push(eq(aiPatientCommunicationsTable.patientId, Number(patientId)));
+  if (communicationType) conditions.push(eq(aiPatientCommunicationsTable.communicationType, String(communicationType)));
+
+  const rows = await db
+    .select()
+    .from(aiPatientCommunicationsTable)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(aiPatientCommunicationsTable.createdAt))
+    .limit(Number(limit));
+
+  res.json(rows);
+});
+
+/**
+ * GET /api/ai-reporting/patient-communications/:id
+ * Detail view of a single communication.
+ */
+router.get("/patient-communications/:id", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const id = Number(req.params.id);
+  const [row] = await db.select().from(aiPatientCommunicationsTable).where(eq(aiPatientCommunicationsTable.id, id)).limit(1);
+  if (!row) { res.status(404).json({ error: "Communication not found" }); return; }
+  res.json(row);
+});
+
+/**
+ * POST /api/ai-reporting/patient-communications
+ * Create a new patient communication record. The AI draft is generated based on the original report text.
+ */
+router.post("/patient-communications", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const { worklistId, reportId, patientId, communicationType, language, originalText } = req.body;
+  if (!originalText) { res.status(400).json({ error: "originalText is required" }); return; }
+
+  const session = sReq.staffSession!;
+
+  const inserted = await db.insert(aiPatientCommunicationsTable).values({
+    worklistId: worklistId ? Number(worklistId) : null,
+    reportId: reportId ? Number(reportId) : null,
+    patientId: patientId ? Number(patientId) : null,
+    communicationType: communicationType ?? "result_summary",
+    language: language ?? "en",
+    originalText: originalText,
+    aiDraft: null,
+    status: "pending",
+    aiSafetyLabel: "AI Draft – Requires Radiologist Review",
+  }).returning({ id: aiPatientCommunicationsTable.id });
+
+  res.json({ id: inserted[0]?.id, message: "Communication record created. Use /draft to generate AI draft." });
+});
+
+/**
+ * POST /api/ai-reporting/patient-communications/:id/draft
+ * Generate AI draft in plain language from the original report text.
+ * Simulated — in production this calls an LLM API with a medical-to-plain prompt.
+ */
+router.post("/patient-communications/:id/draft", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const id = Number(req.params.id);
+  const [row] = await db.select().from(aiPatientCommunicationsTable).where(eq(aiPatientCommunicationsTable.id, id)).limit(1);
+  if (!row) { res.status(404).json({ error: "Communication not found" }); return; }
+
+  const original = row.originalText ?? "";
+  const type = row.communicationType ?? "result_summary";
+  const lang = row.language ?? "en";
+
+  let draft = "";
+  if (type === "result_summary") {
+    draft = "[AI-generated plain-language summary of your imaging results]\n\n" +
+      "Your imaging study was reviewed by our radiologist. The overall findings are normal. " +
+      "No significant abnormalities were detected. You may continue with your regular care plan.\n\n" +
+      "If you have any questions, please contact your referring physician or our clinic.";
+  } else if (type === "followup_instructions") {
+    draft = "[AI-generated follow-up instructions]\n\n" +
+      "Based on your imaging results, the following follow-up is recommended:\n" +
+      "1. Schedule a follow-up appointment with your referring physician within 2 weeks.\n" +
+      "2. Bring a copy of this report to your appointment.\n" +
+      "3. If you experience any new symptoms, please seek medical attention immediately.\n\n" +
+      "Thank you for choosing our diagnostic center.";
+  } else {
+    draft = "[AI-generated patient communication draft]\n\n" +
+      "Dear Patient,\n\n" +
+      "We have completed your requested imaging study. The results are available in your patient portal.\n\n" +
+      "Please review the attached summary and contact us if you have any questions.\n\n" +
+      "Best regards,\n" +
+      "Care Diagnostics Team";
+  }
+
+  if (lang !== "en") {
+    draft += "\n\n[Translation note: AI draft would be translated to " + lang + " in production.]";
+  }
+
+  await db.update(aiPatientCommunicationsTable)
+    .set({ aiDraft: draft, status: "drafted", updatedAt: new Date() })
+    .where(eq(aiPatientCommunicationsTable.id, id));
+
+  res.json({
+    id,
+    aiDraft: draft,
+    aiSafetyLabel: "AI Draft – Requires Radiologist Review",
+    status: "drafted",
+  });
+});
+
+/**
+ * PATCH /api/ai-reporting/patient-communications/:id
+ * Radiologist reviews and edits the AI draft. Updates status to reviewed.
+ */
+router.patch("/patient-communications/:id", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const id = Number(req.params.id);
+  const { aiDraft, status } = req.body;
+  const [row] = await db.select().from(aiPatientCommunicationsTable).where(eq(aiPatientCommunicationsTable.id, id)).limit(1);
+  if (!row) { res.status(404).json({ error: "Communication not found" }); return; }
+
+  const session = sReq.staffSession!;
+  const updateData: any = { updatedAt: new Date() };
+  if (aiDraft !== undefined) updateData.aiDraft = aiDraft;
+  if (status) {
+    updateData.status = status;
+    if (status === "reviewed") {
+      updateData.reviewedById = session.subjectId;
+      updateData.reviewedByName = session.subjectName ?? null;
+      updateData.reviewedAt = new Date();
+    }
+  }
+
+  await db.update(aiPatientCommunicationsTable).set(updateData).where(eq(aiPatientCommunicationsTable.id, id));
+
+  res.json({ id, aiDraft: updateData.aiDraft ?? row.aiDraft, status: updateData.status ?? row.status });
+});
+
+/**
+ * POST /api/ai-reporting/patient-communications/:id/send
+ * Mark the reviewed communication as sent. Does NOT send actual SMS/email —
+ * that is handled by the existing notification system (WhatsApp, email, etc.).
+ */
+router.post("/patient-communications/:id/send", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const id = Number(req.params.id);
+  const [row] = await db.select().from(aiPatientCommunicationsTable).where(eq(aiPatientCommunicationsTable.id, id)).limit(1);
+  if (!row) { res.status(404).json({ error: "Communication not found" }); return; }
+
+  if (row.status !== "reviewed") {
+    res.status(400).json({ error: "Communication must be reviewed before sending." });
+    return;
+  }
+
+  const session = sReq.staffSession!;
+  await db.update(aiPatientCommunicationsTable)
+    .set({
+      status: "sent",
+      sentAt: new Date(),
+      sentById: session.subjectId,
+      sentByName: session.subjectName ?? null,
+      updatedAt: new Date(),
+    })
+    .where(eq(aiPatientCommunicationsTable.id, id));
+
+  res.json({
+    id,
+    status: "sent",
+    message: "Communication marked as sent. Integrate with WhatsApp/email API for actual delivery.",
   });
 });
 

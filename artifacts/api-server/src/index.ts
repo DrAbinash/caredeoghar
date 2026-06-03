@@ -664,6 +664,59 @@ async function runStartupMigrations(): Promise<void> {
       CREATE INDEX IF NOT EXISTS aphl_status_idx ON ai_provider_health_logs(status);
       CREATE INDEX IF NOT EXISTS aphl_created_idx ON ai_provider_health_logs(created_at);
 
+      -- Phase 24: AI Voice-to-Text Transcription
+      CREATE TABLE IF NOT EXISTS ai_voice_transcriptions (
+        id SERIAL PRIMARY KEY,
+        worklist_id INTEGER,
+        report_id INTEGER,
+        patient_id INTEGER,
+        radiologist_id INTEGER,
+        radiologist_name TEXT,
+        audio_url TEXT,
+        audio_duration_seconds REAL,
+        raw_transcript TEXT,
+        confidence_score REAL,
+        corrected_text TEXT,
+        inserted_into_report BOOLEAN NOT NULL DEFAULT FALSE,
+        status TEXT NOT NULL DEFAULT 'pending',
+        modality TEXT,
+        body_part TEXT,
+        ai_safety_label TEXT NOT NULL DEFAULT 'AI Draft – Requires Radiologist Review',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS avt_worklist_idx ON ai_voice_transcriptions(worklist_id);
+      CREATE INDEX IF NOT EXISTS avt_report_idx ON ai_voice_transcriptions(report_id);
+      CREATE INDEX IF NOT EXISTS avt_rad_idx ON ai_voice_transcriptions(radiologist_id);
+      CREATE INDEX IF NOT EXISTS avt_status_idx ON ai_voice_transcriptions(status);
+      CREATE INDEX IF NOT EXISTS avt_created_idx ON ai_voice_transcriptions(created_at);
+
+      -- Phase 25: AI Patient Communication Assistant
+      CREATE TABLE IF NOT EXISTS ai_patient_communications (
+        id SERIAL PRIMARY KEY,
+        worklist_id INTEGER,
+        report_id INTEGER,
+        patient_id INTEGER,
+        communication_type TEXT NOT NULL DEFAULT 'result_summary',
+        language TEXT NOT NULL DEFAULT 'en',
+        original_text TEXT,
+        ai_draft TEXT,
+        ai_safety_label TEXT NOT NULL DEFAULT 'AI Draft – Requires Radiologist Review',
+        status TEXT NOT NULL DEFAULT 'pending',
+        reviewed_by_id INTEGER,
+        reviewed_by_name TEXT,
+        reviewed_at TIMESTAMPTZ,
+        sent_at TIMESTAMPTZ,
+        sent_by_id INTEGER,
+        sent_by_name TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS apc_patient_idx ON ai_patient_communications(patient_id);
+      CREATE INDEX IF NOT EXISTS apc_status_idx ON ai_patient_communications(status);
+      CREATE INDEX IF NOT EXISTS apc_type_idx ON ai_patient_communications(communication_type);
+      CREATE INDEX IF NOT EXISTS apc_created_idx ON ai_patient_communications(created_at);
+
       -- ── LAN-only login gate ──────────────────────────────────────────────
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS lan_only_login BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS lan_allowed_ips TEXT NOT NULL DEFAULT '[]';

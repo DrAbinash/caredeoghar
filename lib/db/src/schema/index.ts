@@ -89,6 +89,8 @@ export * from "./aiTrainingDataExports";
 export * from "./reportQualityGates";
 export * from "./criticalFindings";
 export * from "./aiProviderHealth";
+export * from "./aiVoiceTranscriptions";
+export * from "./aiPatientCommunications";
 export * from "./drawerAuditLog";
 export * from "./enterpriseRadiology";
 export * from "./usgMeasurements";
