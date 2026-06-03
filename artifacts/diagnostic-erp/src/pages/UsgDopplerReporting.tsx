@@ -3,6 +3,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { fetchApi } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
+import ReportPrintSettingsDialog from "@/components/ReportPrintSettingsDialog";
+import {
+  generateReportPDF, loadPrintSettings, savePrintSettings, type PrintSettings,
+} from "@/lib/reportPdfGenerator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +18,7 @@ import { readStaffSession } from "@/lib/staffSession";
 import VoiceDictationButton from "@/components/VoiceDictationButton";
 import {
   Activity, Plus, CheckCircle2, XCircle, Clock, ArrowLeft,
-  ChevronDown, ChevronUp, Waves,
+  ChevronDown, ChevronUp, Waves, Download, Settings2,
 } from "lucide-react";
 
 interface DopplerMeasurement {
@@ -82,6 +86,15 @@ export default function UsgDopplerReporting() {
   const [showCreate, setShowCreate] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [form, setForm] = useState(emptyForm);
+
+  // Print / PDF
+  const [printSettings, setPrintSettings] = useState<PrintSettings>(loadPrintSettings);
+  const [printSettingsOpen, setPrintSettingsOpen] = useState(false);
+  const { data: clinicSettings } = useQuery<{ name?: string; tagline?: string; address?: string; phone?: string; email?: string; website?: string; logoDataUrl?: string | null }>({
+    queryKey: ["clinic-settings"],
+    queryFn: () => fetchApi("/api/clinic-settings/branding"),
+    staleTime: 5 * 60_000,
+  });
 
   const { data: measurements = [], isLoading } = useQuery<DopplerMeasurement[]>({
     queryKey: ["usg-doppler"],
@@ -151,6 +164,30 @@ export default function UsgDopplerReporting() {
             </Button>
             <Button size="sm" onClick={() => setShowCreate(true)}>
               <Plus className="h-4 w-4 mr-2" /> Add Vessel
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => {
+              if (measurements.length === 0) { toast({ title: "No measurements to print" }); return; }
+              const meas = measurements.map((m) => ({
+                label: `${m.vesselName} ${m.side !== "unknown" ? `(${m.side})` : ""}`,
+                value: [`PSV: ${m.psv ?? "—"}`, `EDV: ${m.edv ?? "—"}`, `RI: ${m.ri ?? "—"}`, `PI: ${m.pi ?? "—"}`, `S/D: ${m.sdRatio ?? "—"}`].join(" | "),
+              }));
+              generateReportPDF({
+                patientName: "Doppler Study",
+                studyDate: new Date().toLocaleDateString(),
+                modality: "USG Doppler",
+                findings: `Reviewed: ${measurements.filter((m) => m.status === "approved").length} / Pending: ${measurements.filter((m) => m.status === "pending_review").length}`,
+                measurements: meas,
+                impression: "Doppler velocimetry measurements as above. Correlate clinically.",
+                recommendation: "Please correlate with clinical findings.",
+                reportTitle: "Doppler Velocimetry Report",
+                printedBy: session?.user.name ?? undefined,
+              }, printSettings, clinicSettings ?? null);
+              toast({ title: "PDF downloaded" });
+            }}>
+              <Download className="h-4 w-4 mr-1" /> PDF
+            </Button>
+            <Button size="sm" variant="ghost" className="px-2" onClick={() => setPrintSettingsOpen(true)} title="Print settings">
+              <Settings2 className="h-4 w-4" />
             </Button>
           </div>
         }
@@ -360,6 +397,13 @@ export default function UsgDopplerReporting() {
           );
         })}
       </div>
+
+      <ReportPrintSettingsDialog
+        open={printSettingsOpen}
+        onClose={() => setPrintSettingsOpen(false)}
+        settings={printSettings}
+        onChange={(s) => { setPrintSettings(s); savePrintSettings(s); }}
+      />
     </div>
   );
 }

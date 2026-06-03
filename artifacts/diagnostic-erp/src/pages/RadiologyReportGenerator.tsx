@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import PageHeader from "@/components/PageHeader";
 import VoiceDictationButton from "@/components/VoiceDictationButton";
@@ -19,9 +20,14 @@ import { useToast } from "@/hooks/use-toast";
 import { readStaffSession } from "@/lib/staffSession";
 import { api } from "@/lib/fetchApi";
 import SpinalMeasurementPanel from "@/components/SpinalMeasurementPanel";
+import ReportPrintSettingsDialog from "@/components/ReportPrintSettingsDialog";
+import {
+  generateReportPDF, loadPrintSettings, savePrintSettings, type PrintSettings,
+} from "@/lib/reportPdfGenerator";
 import {
   FileText,
   Save,
+  Download,
   Printer,
   Image,
   Trash2,
@@ -35,6 +41,7 @@ import {
   Upload,
   Type,
   Settings,
+  Settings2,
   Layout,
   LayoutTemplate,
   PanelLeft,
@@ -193,6 +200,8 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
   const [saving, setSaving] = useState(false);
   const [finalSaving, setFinalSaving] = useState(false);
 
+  const session = readStaffSession();
+
   // ── TextRad features ────────────────────────────────────────────────────────
 
   // Text macros
@@ -210,6 +219,15 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
   const [prefsSaving, setPrefsSaving] = useState(false);
   // Print mode quick-toggle (persists in preferences)
   const [showPrintModeDropdown, setShowPrintModeDropdown] = useState(false);
+
+  // Print / PDF
+  const [printSettings, setPrintSettings] = useState<PrintSettings>(loadPrintSettings);
+  const [printSettingsOpen, setPrintSettingsOpen] = useState(false);
+  const { data: clinicSettings } = useQuery<{ name?: string; tagline?: string; address?: string; phone?: string; email?: string; website?: string; logoDataUrl?: string | null }>({
+    queryKey: ["clinic-settings"],
+    queryFn: () => api.get("/api/clinic-settings/branding"),
+    staleTime: 5 * 60_000,
+  });
 
   // Workspace layout
   const [layout, setLayout] = useLocalStorage<ReportPreferences["workspaceLayout"]>("rrg_layout", "3_panel");
@@ -788,21 +806,30 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
     } catch { /* ignore */ }
   }
 
-  function handlePrint() {
+  function handlePrintPDF() {
     if (!previewHtml) {
       toast({ title: "Generate preview first before printing." });
       return;
     }
-    const mode = preferences.printMode ?? "letterhead";
-    const printMargin = mode === "letterhead" ? "50mm 15mm 30mm 15mm" : "15mm";
-    const printStyle = document.createElement("style");
-    printStyle.id = "rrg-print-mode-style";
-    printStyle.innerHTML = `@media print { @page { size: A4; margin: ${printMargin}; } }`;
-    const existing = document.getElementById("rrg-print-mode-style");
-    if (existing) existing.remove();
-    document.head.appendChild(printStyle);
-    window.print();
-    setTimeout(() => { const s = document.getElementById("rrg-print-mode-style"); if (s) s.remove(); }, 500);
+    const findings = Object.values(findingsSections).filter(Boolean).join("\n\n");
+    generateReportPDF({
+      patientName: demog.patientName || "Patient",
+      age: demog.age ?? undefined,
+      sex: demog.sex ?? undefined,
+      accessionNumber: demog.accessionNumber ?? undefined,
+      studyDate: demog.studyDate ?? undefined,
+      referringDoctor: demog.referringDoctor ?? undefined,
+      modality: demog.modality ?? undefined,
+      bodyPart: demog.studyDescription ?? undefined,
+      clinicalHistory,
+      findings,
+      impression: impressionRaw,
+      recommendation,
+      keyImages: keyImages.length ? keyImages.map((i) => i.thumbnailUrl).filter((u): u is string => u != null) : undefined,
+      reportTitle: template?.studyName ? `${template.studyName} Report` : "Radiology Report",
+      printedBy: session?.user.name ?? undefined,
+    }, printSettings, clinicSettings ?? null);
+    toast({ title: "PDF downloaded" });
   }
 
   // ── Normal template picker ──────────────────────────────────────────────────
@@ -1719,30 +1746,13 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
                 Generate
               </Button>
               <div className="flex items-center gap-1">
-                <Button size="sm" variant="outline" onClick={handlePrint}>
-                  <Printer size={14} className="mr-1" />
-                  Print
+                <Button size="sm" variant="outline" onClick={handlePrintPDF}>
+                  <Download size={14} className="mr-1" />
+                  PDF
                 </Button>
-                <Button size="sm" variant="ghost" className="px-1 h-7" onClick={() => setShowPrintModeDropdown((v) => !v)} title="Print mode">
-                  <ChevronDown size={12} />
+                <Button size="sm" variant="ghost" className="px-1 h-7" onClick={() => setPrintSettingsOpen(true)} title="Print settings">
+                  <Settings2 size={14} />
                 </Button>
-                {showPrintModeDropdown && (
-                  <div className="absolute mt-8 z-50 bg-card border rounded-md shadow-lg p-2 space-y-1 text-xs w-36">
-                    <div className="text-muted-foreground px-1 py-0.5 font-medium">Paper mode</div>
-                    <button
-                      className={`w-full text-left px-2 py-1 rounded ${preferences.printMode === "letterhead" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
-                      onClick={() => { setPreferences((p) => ({ ...p, printMode: "letterhead" })); void savePreferences({ ...preferences, printMode: "letterhead" }); setShowPrintModeDropdown(false); }}
-                    >
-                      Letterhead
-                    </button>
-                    <button
-                      className={`w-full text-left px-2 py-1 rounded ${preferences.printMode === "plain_paper" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
-                      onClick={() => { setPreferences((p) => ({ ...p, printMode: "plain_paper" })); void savePreferences({ ...preferences, printMode: "plain_paper" }); setShowPrintModeDropdown(false); }}
-                    >
-                      Plain Paper
-                    </button>
-                  </div>
-                )}
               </div>
               <Button
                 size="sm"
@@ -2084,6 +2094,13 @@ export default function RadiologyReportGenerator({ studyId }: { studyId?: number
           </div>
         </div>
       </div>
+
+      <ReportPrintSettingsDialog
+        open={printSettingsOpen}
+        onClose={() => setPrintSettingsOpen(false)}
+        settings={printSettings}
+        onChange={(s) => { setPrintSettings(s); savePrintSettings(s); }}
+      />
     </div>
   );
 }

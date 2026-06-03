@@ -3,6 +3,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
+import ReportPrintSettingsDialog from "@/components/ReportPrintSettingsDialog";
+import {
+  generateReportPDF, loadPrintSettings, savePrintSettings, type PrintSettings,
+} from "@/lib/reportPdfGenerator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,7 +17,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, ExternalLink, Sparkles, Save, CheckCircle2, AlertTriangle,
-  User, FileText, RefreshCw, ChevronDown, ChevronUp,
+  User, FileText, RefreshCw, ChevronDown, ChevronUp, Download, Settings2,
 } from "lucide-react";
 import { readStaffSession } from "@/lib/staffSession";
 
@@ -102,6 +106,15 @@ export default function RadiologyReportEditor({ studyId }: { studyId: number }) 
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [showRawFindings, setShowRawFindings] = useState(true);
   const [previewMode, setPreviewMode] = useState(false);
+
+  // Print / PDF
+  const [printSettings, setPrintSettings] = useState<PrintSettings>(loadPrintSettings);
+  const [printSettingsOpen, setPrintSettingsOpen] = useState(false);
+  const { data: clinicSettings } = useQuery<{ name?: string; tagline?: string; address?: string; phone?: string; email?: string; website?: string; logoDataUrl?: string | null }>({
+    queryKey: ["clinic-settings"],
+    queryFn: () => api.get("/api/clinic-settings/branding"),
+    staleTime: 5 * 60_000,
+  });
 
   // Load worklist entry
   const { data: entry, isLoading: entryLoading } = useQuery<WorklistEntry>({
@@ -265,6 +278,31 @@ export default function RadiologyReportEditor({ studyId }: { studyId: number }) 
               title={entry.weasisUrl ? "Open in Weasis DICOM Viewer" : "No Weasis URL"}
             >
               <ExternalLink className="h-4 w-4 mr-1" /> Open in Weasis
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => {
+              if (!entry) return;
+              generateReportPDF({
+                patientName: entry.patientName,
+                age: entry.age ?? undefined,
+                sex: entry.sex ?? undefined,
+                accessionNumber: entry.accessionNumber,
+                studyDate: entry.studyDate ?? undefined,
+                referringDoctor: entry.referringDoctor ?? undefined,
+                modality: entry.modality,
+                bodyPart: entry.studyDescription ?? undefined,
+                clinicalHistory,
+                findings: reportBody,
+                impression,
+                recommendation: criticalNote || undefined,
+                reportTitle: reportTitle || "Radiology Report",
+                printedBy: session?.user.name ?? undefined,
+              }, printSettings, clinicSettings ?? null);
+              toast({ title: "PDF downloaded" });
+            }}>
+              <Download className="h-4 w-4 mr-1" /> PDF
+            </Button>
+            <Button size="sm" variant="ghost" className="px-2" onClick={() => setPrintSettingsOpen(true)} title="Print settings">
+              <Settings2 className="h-4 w-4" />
             </Button>
           </div>
         }
@@ -491,6 +529,13 @@ export default function RadiologyReportEditor({ studyId }: { studyId: number }) 
           </Button>
         </div>
       )}
+
+      <ReportPrintSettingsDialog
+        open={printSettingsOpen}
+        onClose={() => setPrintSettingsOpen(false)}
+        settings={printSettings}
+        onChange={(s) => { setPrintSettings(s); savePrintSettings(s); }}
+      />
     </div>
   );
 }

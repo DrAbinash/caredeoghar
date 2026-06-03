@@ -4,6 +4,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import { useLocation } from "wouter";
 import PageHeader from "@/components/PageHeader";
+import ReportPrintSettingsDialog from "@/components/ReportPrintSettingsDialog";
+import {
+  generateReportPDF, loadPrintSettings, savePrintSettings, type PrintSettings,
+} from "@/lib/reportPdfGenerator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +25,7 @@ import {
   VolumeX,
   Upload,
   Download,
+  Settings2,
   FileText,
   AlertTriangle,
   ChevronDown,
@@ -317,6 +322,10 @@ export default function ReportGenerator() {
   const labName = clinic?.name ? `${clinic.name} Laboratory` : "Care Diagnostics Laboratory";
   const [reportDate, setReportDate] = useState(new Date().toISOString().slice(0, 10));
   const [outputFormat, setOutputFormat] = useState<"print" | "html" | "text">("print");
+
+  // Print / PDF
+  const [printSettings, setPrintSettings] = useState<PrintSettings>(loadPrintSettings);
+  const [printSettingsOpen, setPrintSettingsOpen] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [templateContent, setTemplateContent] = useState<string | null>(null);
   const [templateResult, setTemplateResult] = useState<string | null>(null);
@@ -735,7 +744,31 @@ export default function ReportGenerator() {
   };
 
   // Export handlers
-  const handlePrint = () => window.print();
+  const handlePrintPDF = () => {
+    if (!patient || !order) {
+      toast({ title: "Select patient and order first" });
+      return;
+    }
+    const measurements = findings.flatMap((f) => f.parameters.map((p) => ({
+      label: `${f.testName} — ${p.name}`,
+      value: `${p.result} ${p.unit}${FLAG_PRINT[p.flag]}`.trim(),
+    })));
+    generateReportPDF({
+      patientName: `${patient.firstName} ${patient.lastName}`,
+      age: ageDisplay ?? undefined,
+      sex: patient.gender ?? undefined,
+      accessionNumber: order.orderNumber,
+      studyDate: reportDate,
+      referringDoctor: order.doctor?.name ?? undefined,
+      modality: "LAB",
+      findings: templateResult ?? undefined,
+      impression: `${abnormalCount} abnormal finding${abnormalCount !== 1 ? "s" : ""}`,
+      recommendation: "Please correlate with clinical findings.",
+      measurements,
+      reportTitle: "Diagnostic Laboratory Report",
+    }, printSettings, clinic ?? null);
+    toast({ title: "PDF downloaded" });
+  };
 
   const handleDownloadHTML = () => {
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Diagnostic Report</title><style>
@@ -803,7 +836,7 @@ export default function ReportGenerator() {
   };
 
   const handleExport = () => {
-    if (outputFormat === "print") handlePrint();
+    if (outputFormat === "print") handlePrintPDF();
     else if (outputFormat === "html") handleDownloadHTML();
     else handleDownloadText();
   };
@@ -812,14 +845,6 @@ export default function ReportGenerator() {
 
   return (
     <>
-      {/* Print CSS */}
-      <style>{`
-        @media print {
-          .no-print { display: none !important; }
-          .print-container { margin: 0; padding: 0; }
-          #report-preview { font-size: 11pt; }
-        }
-      `}</style>
 
       <div className="pb-10">
         <PageHeader title="Report Generator" subtitle="Create formatted diagnostic reports" />
@@ -949,7 +974,16 @@ export default function ReportGenerator() {
                   onClick={handleExport}
                 >
                   <Printer size={13} className="mr-1.5" />
-                  {outputFormat === "print" ? "Print / PDF" : "Download"}
+                  {outputFormat === "print" ? "PDF" : "Download"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="w-full"
+                  onClick={() => setPrintSettingsOpen(true)}
+                >
+                  <Settings2 size={13} className="mr-1.5" />
+                  Print Settings
                 </Button>
               </div>
 
@@ -1506,6 +1540,13 @@ export default function ReportGenerator() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ReportPrintSettingsDialog
+        open={printSettingsOpen}
+        onClose={() => setPrintSettingsOpen(false)}
+        settings={printSettings}
+        onChange={(s) => { setPrintSettings(s); savePrintSettings(s); }}
+      />
     </>
   );
 }
