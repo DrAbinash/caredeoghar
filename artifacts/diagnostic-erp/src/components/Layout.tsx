@@ -83,6 +83,8 @@ import {
   AlertTriangle,
   Send,
   Bell,
+  Heart,
+  Baby,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -192,6 +194,9 @@ const navItems: NavEntry[] = [
       { path: "/radiology/radiologist-queue",      icon: ActivitySquare,label: "Radiologist Queue" },
       { path: "/radiology/ai-extraction-review",  icon: Microscope,   label: "AI Extraction Review" },
       { path: "/radiology/hanging-protocols",      icon: ImagePlus,    label: "Hanging Protocols" },
+      { path: "/echo",                                icon: Heart,          label: "Echo Cardiology" },
+      { path: "/fetal-echo",                         icon: Baby,           label: "Fetal Echo" },
+      { path: "/fetal-usg",                          icon: Baby,           label: "Fetal USG" },
       // Phase 12: Real Radiology Workflow & DICOM Operations
       { path: "/radiology/command-center",         icon: Zap,            label: "Command Center" },
       { path: "/radiology/acquisition-gateway",   icon: HardDrive,    label: "Acquisition Gateway" },

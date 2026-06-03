@@ -125,6 +125,9 @@ const AiPipelineManager      = lazy(() => import("@/pages/AiPipelineManager"));
 const CriticalAlertsManager  = lazy(() => import("@/pages/CriticalAlertsManager"));
 const StorageLifecycle       = lazy(() => import("@/pages/StorageLifecycle"));
 const RadiologistTools       = lazy(() => import("@/pages/RadiologistTools"));
+const EchoCardiology         = lazy(() => import("@/pages/EchoCardiology"));
+const FetalEcho              = lazy(() => import("@/pages/FetalEcho"));
+const FetalUsgLevel4         = lazy(() => import("@/pages/FetalUsgLevel4"));
 
 function PageLoader() {
   return (
@@ -155,6 +158,7 @@ const ERP_NAV_ORDER = [
   "/radiology/viewer", "/radiology/archive-lifecycle", "/radiology/watchdog", "/radiology/ai-inference-settings", "/radiology/hl7-settings", "/teleradiology",
   "/radiology/usg-measurements", "/radiology/usg-admin-settings",
   "/usg", "/usg/worklist", "/usg/measurements", "/usg/reporting", "/usg/doppler", "/usg/key-images", "/usg/settings", "/usg/critical", "/usg/analytics",
+  "/echo", "/fetal-echo", "/fetal-usg", "/fetal-usg/:studyId",
   "/settings/radiology", "/backup-replication",
   "/orders", "/tests", "/packages", "/billing", "/payments", "/reports",
   "/report-generator", "/report-hub", "/inventory", "/expenses", "/staff", "/referrals",
@@ -323,6 +327,12 @@ function Router() {
               </Route>
               <Route path="/radiology/ai-extraction-review" component={AiExtractionReview} />
               <Route path="/radiology/hanging-protocols" component={HangingProtocols} />
+              <Route path="/echo" component={EchoCardiology} />
+              <Route path="/fetal-echo" component={FetalEcho} />
+              <Route path="/fetal-usg" component={FetalUsgLevel4} />
+              <Route path="/fetal-usg/:studyId">
+                {(params) => <FetalUsgLevel4 />}
+              </Route>
               <Route path="/m/viewer/:studyInstanceUID" component={MobileViewer} />
               <Route path="/packages" component={Packages} />
               <Route path="/expenses" component={Expenses} />

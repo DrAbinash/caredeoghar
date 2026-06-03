@@ -2127,6 +2127,222 @@ async function runStartupMigrations(): Promise<void> {
       CREATE INDEX IF NOT EXISTS smart_macros_shortcut_idx ON radiology_smart_macros (shortcut);
       CREATE INDEX IF NOT EXISTS smart_macros_modality_idx ON radiology_smart_macros (modality);
       CREATE INDEX IF NOT EXISTS smart_macros_body_part_idx ON radiology_smart_macros (body_part);
+
+      -- Echo Cardiology tables
+      CREATE TABLE IF NOT EXISTS echo_measurements (
+        id SERIAL PRIMARY KEY,
+        study_id INTEGER NOT NULL,
+        patient_id INTEGER,
+        height_cm REAL, weight_kg REAL, bsa REAL,
+        bp_systolic INTEGER, bp_diastolic INTEGER, heart_rate INTEGER,
+        ivsd REAL, ivss REAL, lvidd REAL, lvids REAL, lvpwd REAL, lvpws REAL,
+        la_diameter REAL, la_volume REAL, la_volume_index REAL,
+        ra_size REAL, aortic_root REAL, ascending_aorta REAL,
+        rv_basal REAL, rv_mid REAL, rv_length REAL, tapase REAL, rvsp REAL,
+        ef_simpson REAL, ef_teichholz REAL, fractional_shortening REAL,
+        lv_mass REAL, lv_mass_index REAL, lvh BOOLEAN,
+        relative_wall_thickness REAL, lv_geometry VARCHAR(30),
+        mv_e REAL, mv_a REAL, mv_ea_ratio REAL, mv_decel_time REAL,
+        mv_ee_prime REAL, septal_e_prime REAL, lateral_e_prime REAL,
+        av_velocity REAL, av_gradient REAL, av_area REAL,
+        tr_velocity REAL, tr_gradient REAL,
+        pulmonary_velocity REAL, pulmonary_gradient REAL,
+        diastolic_dysfunction_grade VARCHAR(20), pulmonary_hypertension BOOLEAN,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS echo_valve_assessment (
+        id SERIAL PRIMARY KEY,
+        study_id INTEGER NOT NULL,
+        valve_name VARCHAR(20) NOT NULL,
+        morphology VARCHAR(20), stenosis VARCHAR(20),
+        stenosis_notes TEXT, regurgitation VARCHAR(20),
+        regurgitation_notes TEXT, additional_findings TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS echo_regional_wall (
+        id SERIAL PRIMARY KEY,
+        study_id INTEGER NOT NULL,
+        segment VARCHAR(30) NOT NULL,
+        motion VARCHAR(20) NOT NULL DEFAULT 'normal',
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS echo_reports (
+        id SERIAL PRIMARY KEY,
+        study_id INTEGER NOT NULL,
+        patient_id INTEGER,
+        left_ventricle TEXT, right_ventricle TEXT,
+        left_atrium TEXT, right_atrium TEXT,
+        interatrial_septum TEXT, interventricular_septum TEXT,
+        aortic_valve TEXT, mitral_valve TEXT,
+        tricuspid_valve TEXT, pulmonary_valve TEXT,
+        pericardium TEXT, doppler_findings TEXT,
+        impression TEXT, recommendation TEXT,
+        status VARCHAR(20) NOT NULL DEFAULT 'draft',
+        ai_draft TEXT,
+        critical_alerts_acknowledged BOOLEAN DEFAULT FALSE,
+        reviewed_by INTEGER, reviewed_at TIMESTAMPTZ,
+        finalized_by INTEGER, finalized_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS echo_audit_logs (
+        id SERIAL PRIMARY KEY,
+        study_id INTEGER NOT NULL,
+        action VARCHAR(40) NOT NULL,
+        performed_by VARCHAR(100) NOT NULL,
+        details TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS fetal_echo_studies (
+        id SERIAL PRIMARY KEY,
+        study_id INTEGER NOT NULL,
+        patient_id INTEGER NOT NULL,
+        ga_weeks INTEGER, ga_days INTEGER,
+        edd VARCHAR(20), lmp VARCHAR(20),
+        fetal_heart_rate INTEGER,
+        situs VARCHAR(20), cardiac_axis VARCHAR(20), cardiac_position VARCHAR(20),
+        av_concordance VARCHAR(20), va_concordance VARCHAR(20),
+        ra_normal BOOLEAN, la_normal BOOLEAN, rv_normal BOOLEAN, lv_normal BOOLEAN,
+        four_chamber_view VARCHAR(20), lvot VARCHAR(20), rvot VARCHAR(20),
+        three_vessel_view VARCHAR(20), three_vessel_trachea_view VARCHAR(20),
+        aortic_arch VARCHAR(20), ductal_arch VARCHAR(20),
+        interatrial_septum TEXT, interventricular_septum TEXT,
+        mitral_valve VARCHAR(20), tricuspid_valve VARCHAR(20),
+        aortic_valve VARCHAR(20), pulmonary_valve VARCHAR(20),
+        rhythm VARCHAR(20), rhythm_notes TEXT,
+        umbilical_artery_pi REAL, umbilical_artery_ri REAL,
+        ductus_venosus_pi REAL, ductus_venosus_a_wave VARCHAR(10),
+        mca_pi REAL, mca_ri REAL, cpr REAL,
+        suspected_abnormalities TEXT,
+        status VARCHAR(20) NOT NULL DEFAULT 'draft',
+        ai_draft TEXT,
+        critical_alerts_acknowledged BOOLEAN DEFAULT FALSE,
+        reviewed_by INTEGER, reviewed_at TIMESTAMPTZ,
+        finalized_by INTEGER, finalized_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS fetal_echo_audit_logs (
+        id SERIAL PRIMARY KEY,
+        study_id INTEGER NOT NULL,
+        action VARCHAR(40) NOT NULL,
+        performed_by VARCHAR(100) NOT NULL,
+        details TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      -- Fetal USG Level-4 tables
+      CREATE TABLE IF NOT EXISTS fetal_usg_studies (
+        id SERIAL PRIMARY KEY,
+        study_id INTEGER NOT NULL,
+        patient_id INTEGER NOT NULL,
+        study_type VARCHAR(40) NOT NULL DEFAULT 'unknown',
+        trimester VARCHAR(10) NOT NULL DEFAULT 'unknown',
+        lmp VARCHAR(20),
+        ga_weeks INTEGER,
+        ga_days INTEGER,
+        edd VARCHAR(20),
+        lmp_ga INTEGER,
+        biometric_ga INTEGER,
+        composite_ga INTEGER,
+        parity VARCHAR(20),
+        gravida INTEGER,
+        is_twin BOOLEAN DEFAULT FALSE,
+        chorionicity VARCHAR(20),
+        amnionicity VARCHAR(20),
+        doppler_study_done BOOLEAN DEFAULT FALSE,
+        bpp_done BOOLEAN DEFAULT FALSE,
+        status VARCHAR(20) NOT NULL DEFAULT 'received',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS fetal_usg_measurements (
+        id SERIAL PRIMARY KEY,
+        study_id INTEGER NOT NULL REFERENCES fetal_usg_studies(id),
+        crl NUMERIC(6,2), msd NUMERIC(6,2), yolk_sac NUMERIC(6,2), fetal_heart_rate INTEGER,
+        nt NUMERIC(5,2), nasal_bone VARCHAR(20), ductus_venosus VARCHAR(20), tricuspid_flow VARCHAR(20),
+        bpd NUMERIC(6,2), hc NUMERIC(6,2), ac NUMERIC(6,2), fl NUMERIC(6,2), hl NUMERIC(6,2),
+        efw NUMERIC(8,2), efw_percentile NUMERIC(5,2),
+        afi NUMERIC(5,1), afi_interpretation VARCHAR(30), sdp NUMERIC(5,1),
+        placenta_location VARCHAR(30), placenta_grade VARCHAR(10), presentation VARCHAR(20),
+        cervical_length NUMERIC(5,2), cervical_length_interpretation VARCHAR(30),
+        umbilical_artery_pi NUMERIC(5,2), umbilical_artery_ri NUMERIC(5,2), umbilical_artery_sd NUMERIC(5,2),
+        mca_pi NUMERIC(5,2), mca_ri NUMERIC(5,2), cpr NUMERIC(5,2),
+        ductus_venosus_pi NUMERIC(5,2), ductus_venosus_a_wave VARCHAR(10),
+        uterine_artery_pi NUMERIC(5,2), uterine_artery_ri NUMERIC(5,2),
+        extracted_from VARCHAR(20) DEFAULT 'manual', confidence_score INTEGER,
+        twin_a_fhr INTEGER, twin_a_bpd NUMERIC(6,2), twin_a_hc NUMERIC(6,2), twin_a_ac NUMERIC(6,2), twin_a_fl NUMERIC(6,2), twin_a_efw NUMERIC(8,2), twin_a_presentation VARCHAR(20),
+        twin_b_fhr INTEGER, twin_b_bpd NUMERIC(6,2), twin_b_hc NUMERIC(6,2), twin_b_ac NUMERIC(6,2), twin_b_fl NUMERIC(6,2), twin_b_efw NUMERIC(8,2), twin_b_presentation VARCHAR(20),
+        discordance_percent NUMERIC(5,2),
+        bpp_fetal_breathing INTEGER, bpp_fetal_movement INTEGER, bpp_fetal_tone INTEGER, bpp_afi INTEGER, bpp_total INTEGER,
+        nst_done BOOLEAN DEFAULT FALSE, nst_result VARCHAR(30),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS fetal_usg_checklists (
+        id SERIAL PRIMARY KEY,
+        study_id INTEGER NOT NULL REFERENCES fetal_usg_studies(id),
+        skull_brain VARCHAR(20) DEFAULT 'not_assessed',
+        face VARCHAR(20) DEFAULT 'not_assessed',
+        spine VARCHAR(20) DEFAULT 'not_assessed',
+        thorax VARCHAR(20) DEFAULT 'not_assessed',
+        heart_four_chamber VARCHAR(20) DEFAULT 'not_assessed',
+        outflow_tracts VARCHAR(20) DEFAULT 'not_assessed',
+        abdomen VARCHAR(20) DEFAULT 'not_assessed',
+        stomach_bubble VARCHAR(20) DEFAULT 'not_assessed',
+        kidneys VARCHAR(20) DEFAULT 'not_assessed',
+        urinary_bladder VARCHAR(20) DEFAULT 'not_assessed',
+        cord_insertion VARCHAR(20) DEFAULT 'not_assessed',
+        limbs VARCHAR(20) DEFAULT 'not_assessed',
+        placenta VARCHAR(20) DEFAULT 'not_assessed',
+        liquor VARCHAR(20) DEFAULT 'not_assessed',
+        cervix VARCHAR(20) DEFAULT 'not_assessed',
+        notes TEXT,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS fetal_usg_reports (
+        id SERIAL PRIMARY KEY,
+        study_id INTEGER NOT NULL REFERENCES fetal_usg_studies(id),
+        findings TEXT,
+        impression TEXT,
+        recommendation TEXT,
+        ai_draft TEXT,
+        status VARCHAR(20) NOT NULL DEFAULT 'draft',
+        reviewed_by INTEGER,
+        reviewed_at TIMESTAMPTZ,
+        finalized_by INTEGER,
+        finalized_at TIMESTAMPTZ,
+        critical_alerts_acknowledged BOOLEAN DEFAULT FALSE,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS fetal_usg_audit_logs (
+        id SERIAL PRIMARY KEY,
+        study_id INTEGER NOT NULL REFERENCES fetal_usg_studies(id),
+        action VARCHAR(40) NOT NULL,
+        performed_by VARCHAR(100) NOT NULL,
+        details TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS fetal_usg_critical_alerts (
+        id SERIAL PRIMARY KEY,
+        study_id INTEGER NOT NULL REFERENCES fetal_usg_studies(id),
+        alert_type VARCHAR(40) NOT NULL,
+        alert_message TEXT NOT NULL,
+        acknowledged BOOLEAN DEFAULT FALSE,
+        acknowledged_by VARCHAR(100),
+        acknowledged_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS fetal_usg_template_preferences (
+        id SERIAL PRIMARY KEY,
+        doctor_id INTEGER NOT NULL,
+        study_type VARCHAR(40) NOT NULL,
+        template_json JSON NOT NULL,
+        is_default BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
     `);
 
     logger.info("Startup migrations applied");

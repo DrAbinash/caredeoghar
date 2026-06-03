@@ -97,6 +97,8 @@ export * from "./aiNormalReportTemplates";
 export * from "./drawerAuditLog";
 export * from "./enterpriseRadiology";
 export * from "./usgMeasurements";
+export * from "./echoCardiology";
+export * from "./fetalUsgLevel4";
 export * from "./dicomStudies";
 export * from "./smartRadiology";
 export * from "./risMonitoring";

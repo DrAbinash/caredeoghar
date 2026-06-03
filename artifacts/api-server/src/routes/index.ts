@@ -91,6 +91,8 @@ import { usgDopplerRouter } from "./usgDoppler";
 import { usgReportsRouter } from "./usgReports";
 import { usgCriticalAlertsRouter } from "./usgCriticalAlerts";
 import { usgAnalyticsRouter } from "./usgAnalytics";
+import echoCardiologyRouter from "./echoCardiology";
+import fetalUsgLevel4Router from "./fetalUsgLevel4";
 import dicomStudyManagerRouter from "./dicomStudyManager";
 import dicomWorkflowRouter from "./dicomWorkflow";
 import smartRadiologyRouter from "./smartRadiology";
@@ -373,6 +375,8 @@ router.use("/usg-doppler", requireStaffAuth, usgDopplerRouter);
 router.use("/usg-reports", requireStaffAuth, usgReportsRouter);
 router.use("/usg-critical", requireStaffAuth, usgCriticalAlertsRouter);
 router.use("/usg-analytics", requireStaffAuth, usgAnalyticsRouter);
+router.use("/echo-cardiology", requireStaffAuth, echoCardiologyRouter);
+router.use("/fetal-usg", requireStaffAuth, fetalUsgLevel4Router);
 
 // Phase 10: RIS/PACS Foundation — DICOM study management + smart workflow
 router.use("/dicom-studies", requireStaffAuth, dicomStudyManagerRouter);
