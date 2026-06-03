@@ -52,6 +52,16 @@ export type PrintSettings = {
     impression: boolean;
     recommendation: boolean;
   };
+  /** Digital signature block at the bottom of the report */
+  signature: {
+    enabled: boolean;
+    name: string;
+    qualification: string;
+    registrationNo: string;
+    imageDataUrl: string | null;
+    showQualification: boolean;
+    showRegistrationNo: boolean;
+  };
 };
 
 export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
@@ -85,6 +95,15 @@ export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
     keyImages: true,
     impression: true,
     recommendation: true,
+  },
+  signature: {
+    enabled: true,
+    name: "Dr. Sugandha Priyadarshini",
+    qualification: "MBBS, MD(Radiology)",
+    registrationNo: "",
+    imageDataUrl: null,
+    showQualification: true,
+    showRegistrationNo: false,
   },
 };
 
@@ -378,6 +397,50 @@ export function generateReportPDF(
         break;
       }
     }
+  }
+
+  // ── SIGNATURE BLOCK ──
+  if (settings.signature.enabled) {
+    const sig = settings.signature;
+    const sigHeight = 25;
+    if (y + sigHeight > pageH - m.bottom - 10) {
+      doc.addPage();
+      y = m.top;
+    }
+
+    // Signature line
+    doc.setDrawColor(100);
+    doc.setLineWidth(0.3);
+    const lineY = y + 12;
+    const lineWidth = 60;
+    doc.line(pageW - m.right - lineWidth, lineY, pageW - m.right, lineY);
+
+    // Signature image if available
+    if (sig.imageDataUrl) {
+      try {
+        const imgW = 30;
+        const imgH = 15;
+        doc.addImage(sig.imageDataUrl, "PNG", pageW - m.right - lineWidth, y - 2, imgW, imgH);
+      } catch { /* skip broken signature image */ }
+    }
+
+    // Name (bold)
+    doc.setFontSize(fs.body);
+    doc.setFont(font, "bold");
+    doc.text(sig.name, pageW - m.right, lineY + 4, { align: "right" });
+
+    // Qualification & Registration
+    const details: string[] = [];
+    if (sig.showQualification && sig.qualification) details.push(sig.qualification);
+    if (sig.showRegistrationNo && sig.registrationNo) details.push(`Reg. No: ${sig.registrationNo}`);
+
+    if (details.length > 0) {
+      doc.setFontSize(fs.body - 1);
+      doc.setFont(font, "normal");
+      doc.text(details.join(" | "), pageW - m.right, lineY + 8, { align: "right" });
+    }
+
+    y += sigHeight;
   }
 
   // ── FOOTER / DISCLAIMER ──

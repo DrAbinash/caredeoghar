@@ -213,6 +213,45 @@ export default function ReportPrintSettingsDialog({
               <input type="range" min={0} max={50} step={1} value={s.watermarkOpacity * 100} onChange={(e) => update({ watermarkOpacity: Number(e.target.value) / 100 })} className="flex-1" />
             </div>
           </div>
+
+          {/* Signature */}
+          <div className="space-y-2 border rounded p-2">
+            <div className="flex items-center justify-between">
+              <Label>Digital Signature</Label>
+              <Switch checked={s.signature.enabled} onCheckedChange={(v) => update({ signature: { ...s.signature, enabled: v } })} />
+            </div>
+            {s.signature.enabled && (
+              <div className="space-y-2">
+                <Input placeholder="Doctor Name" value={s.signature.name} onChange={(e) => update({ signature: { ...s.signature, name: e.target.value } })} />
+                <Input placeholder="Qualifications (e.g. MBBS, MD(Radiology))" value={s.signature.qualification} onChange={(e) => update({ signature: { ...s.signature, qualification: e.target.value } })} />
+                <Input placeholder="Registration Number" value={s.signature.registrationNo} onChange={(e) => update({ signature: { ...s.signature, registrationNo: e.target.value } })} />
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">Signature Image</Label>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = () => update({ signature: { ...s.signature, imageDataUrl: String(reader.result) } });
+                      reader.readAsDataURL(file);
+                    }}
+                    className="block w-full text-xs"
+                  />
+                  {s.signature.imageDataUrl && (
+                    <img src={s.signature.imageDataUrl} alt="Signature preview" className="h-12 object-contain border rounded" />
+                  )}
+                </div>
+                <div className="flex gap-2 items-center">
+                  <Switch checked={s.signature.showQualification} onCheckedChange={(v) => update({ signature: { ...s.signature, showQualification: v } })} />
+                  <Label className="text-[10px] text-muted-foreground">Show Qualification</Label>
+                  <Switch checked={s.signature.showRegistrationNo} onCheckedChange={(v) => update({ signature: { ...s.signature, showRegistrationNo: v } })} />
+                  <Label className="text-[10px] text-muted-foreground">Show Reg. No</Label>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <DialogFooter className="gap-2">
