@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, paymentsTable, dayClosuresTable, userDayClosuresTable, billsTable, usersTable, expensesTable, orderTestsTable, testsTable } from "@workspace/db";
 import { drawerAuditLogTable, patientsTable, doctorsTable, ordersTable } from "@workspace/db/schema";
-import { eq, and, gt, lte, desc, sql } from "drizzle-orm";
+import { eq, and, gt, lte, desc, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
 import type { Response, NextFunction } from "express";
 import type { StaffAuthRequest } from "../middleware/requireStaffAuth";
@@ -187,7 +187,7 @@ async function summarizeWindow(from: Date | null, to: Date) {
         .from(orderTestsTable)
         .leftJoin(testsTable, eq(orderTestsTable.testId, testsTable.id))
         .where(and(
-          sql`${orderTestsTable.orderId} IN (${Array.from(orderIds).join(",")})`,
+          inArray(orderTestsTable.orderId, Array.from(orderIds)),
           sql`${orderTestsTable.status} != 'cancelled'`,
         ));
 
