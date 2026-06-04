@@ -1,0 +1,263 @@
+CARE DIAGNOSTICS BILLING SYSTEM V3 ENHANCEMENT
+
+The Premium A5 Format is now stable and production ready.
+
+Do NOT redesign the bill again.
+
+Focus only on branding, patient engagement, and future-proof enhancements.
+
+═══════════════════════════════════════════════
+
+1. BILL MESSAGE MANAGEMENT
+   ═══════════════════════════════════════════════
+
+Create:
+
+Settings → Receipt Messages
+
+Admin can edit messages without code changes.
+
+Fields:
+
+Thank You Message
+Default:
+Touching Lives With Care
+
+Report Collection Message
+Default:
+Please collect reports within 7 days.
+
+QR Verification Message
+Default:
+Scan QR code to verify receipt and download reports.
+
+Promotional Message
+Default:
+Advanced Diagnostic & Imaging Centre
+
+All messages optional.
+
+Show/Hide toggles.
+
+═══════════════════════════════════════════════
+2. SERVICE FOOTER MANAGEMENT
+═══════════════════════════════════════════════
+
+Create:
+
+Settings → Footer Services
+
+Admin can edit services displayed on bill.
+
+Default:
+
+MRI
+CT Scan
+Ultrasound
+Digital X-Ray
+Mammography
+Pathology
+
+Display automatically in footer.
+
+Editable anytime.
+
+═══════════════════════════════════════════════
+3. CARE DIAGNOSTICS BRAND PROFILE
+═══════════════════════════════════════════════
+
+Create:
+
+Settings → Branding
+
+Fields:
+
+Logo
+Center Name
+Tagline
+Address
+Phone
+Email
+Website
+
+Use these values everywhere:
+
+- Bills
+- QR verification page
+- PDF receipts
+- Future patient portal
+
+No hardcoded branding.
+
+═══════════════════════════════════════════════
+4. QR ENHANCEMENT
+═══════════════════════════════════════════════
+
+Receipt QR should open:
+
+/verify-receipt/{billId}
+
+Verification page should show:
+
+- Care Diagnostics logo
+- Patient name
+- Receipt number
+- Bill date
+- Tests performed
+- Amount paid
+- Paid status
+- Download receipt PDF
+
+Future-ready structure.
+
+═══════════════════════════════════════════════
+5. PATIENT RETENTION FEATURES
+═══════════════════════════════════════════════
+
+Create optional settings:
+
+Show Follow-Up Message
+ON/OFF
+
+Examples:
+
+Thank you for trusting Care Diagnostics.
+
+OR
+
+For future investigations, please quote your Patient ID.
+
+OR
+
+Keep this receipt for future reference.
+
+Admin editable.
+
+═══════════════════════════════════════════════
+6. HEALTH PACKAGE PROMOTION
+═══════════════════════════════════════════════
+
+Create:
+
+Settings → Promotional Footer
+
+Admin can enter:
+
+Title
+Description
+
+Example:
+
+Executive Health Checkup Available
+
+OR
+
+Women's Wellness Package Available
+
+OR
+
+MRI Brain Screening Package
+
+Display only when enabled.
+
+This allows marketing directly through every printed bill.
+
+═══════════════════════════════════════════════
+7. PATIENT IDENTITY BLOCK
+═══════════════════════════════════════════════
+
+Add optional setting:
+
+Show Patient Since Date
+ON/OFF
+
+Display:
+
+Patient ID
+Patient Since
+Visit Number
+
+Helps create loyalty and patient retention.
+
+═══════════════════════════════════════════════
+8. RECEIPT SECURITY
+═══════════════════════════════════════════════
+
+Add optional:
+
+Verified Receipt Badge
+
+ON/OFF
+
+Display:
+
+VERIFIED DIGITAL RECEIPT
+
+alongside QR section.
+
+Improves trust and professionalism.
+
+═══════════════════════════════════════════════
+9. FUTURE WHATSAPP INTEGRATION READY
+═══════════════════════════════════════════════
+
+Store receipt URL for each bill.
+
+Future use:
+
+Send via WhatsApp:
+
+- Receipt Link
+- PDF Receipt
+- Report Link
+
+Do not implement WhatsApp yet.
+
+Prepare database fields and APIs.
+
+═══════════════════════════════════════════════
+10. ANALYTICS PREPARATION
+═══════════════════════════════════════════════
+
+Track:
+
+QR Scan Count
+Receipt Verification Count
+PDF Download Count
+
+Per bill.
+
+Store for future dashboard analytics.
+
+═══════════════════════════════════════════════
+11. DO NOT CHANGE
+═══════════════════════════════════════════════
+
+Do not change:
+
+- Existing bill layouts
+- Existing print workflow
+- Fast Billing Mode
+- Preview logic
+- A5 print sizing
+- QR functionality
+- Billing calculations
+- Discounts
+- Refunds
+- Due calculations
+
+Only add branding and patient engagement enhancements.
+
+═══════════════════════════════════════════════
+FINAL GOAL
+═══════════════════════════════════════════════
+
+Every receipt should function as:
+
+1. Payment Receipt
+2. Brand Advertisement
+3. Patient Retention Tool
+4. QR Verification Tool
+5. Future Patient Portal Entry Point
+
+without affecting billing speed.
