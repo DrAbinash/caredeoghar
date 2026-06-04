@@ -43,14 +43,14 @@
     showWatermark: true,
     showPatientInstructions: true,
     showSystemInfo: true,
-    showWorkingHours: true,
-    showHomeCollection: true,
+    showWorkingHours: false,
+    showHomeCollection: false,
     showEmergency: true,
-    showReferralProgram: true,
-    showHealthPackages: true,
-    showAccreditation: true,
+    showReferralProgram: false,
+    showHealthPackages: false,
+    showAccreditation: false,
     showWhatsAppBooking: true,
-    showCustomFooterMessage: true,
+    showCustomFooterMessage: false,
   });
 
   // Preview 3: Premium A5 V2 format, 2 tests, discount, UPI
