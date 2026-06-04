@@ -26,6 +26,15 @@ export type BuildPremiumBillOpts = {
   showWatermark?: boolean;
   showPatientInstructions?: boolean;
   showSystemInfo?: boolean;
+  // V3 toggles
+  showReceiptThankYou?: boolean;
+  showReceiptCollection?: boolean;
+  showReceiptQrMessage?: boolean;
+  showReceiptPromotional?: boolean;
+  showVerifiedBadge?: boolean;
+  showFollowUpMessage?: boolean;
+  showPatientSince?: boolean;
+  showPromotionalFooter?: boolean;
   barcodeDataUrl?: string;
   customFooter?: string | null;
   reportCollectionNote?: string | null;
@@ -90,6 +99,15 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
     showServiceFooter = true, showBrandingFooter = true,
     showBarcode = false, showWatermark = false,
     showPatientInstructions = false, showSystemInfo = false,
+    // V3 toggles
+    showReceiptThankYou = false,
+    showReceiptCollection = false,
+    showReceiptQrMessage = false,
+    showReceiptPromotional = false,
+    showVerifiedBadge = false,
+    showFollowUpMessage = false,
+    showPatientSince = false,
+    showPromotionalFooter = false,
     barcodeDataUrl,
     customFooter,
     reportCollectionNote,
@@ -104,6 +122,8 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
   const isCancelled = (bill.status ?? "") === "cancelled";
   const rawDoctor = bill.order?.doctor?.name ?? "";
   const testCount = tests.length;
+  // V3: Patient since date (from patient.createdAt; not on PrintBillData so we approximate)
+  const patientCreatedDate = bill.createdAt ? new Date(bill.createdAt).toLocaleDateString("en-IN", { year: "numeric", month: "short" }) : "";
 
   // ── Density: sparse = 1-2, normal = 3-5, compact = 6+ ──
   const isSparse = testCount <= 2;
@@ -221,17 +241,60 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
 
   const amountInWords = showAmountInWords ? `<div style="font-size:${tinyPx};font-style:italic;margin:3px 0 6px">${esc(numberToWords(Number(bill.totalAmount)))}</div>` : "";
 
-  // ── Service footer ──
+  // ── Service footer (V3: from clinic settings JSON) ──
+  let parsedServices: string[] = [];
+  try {
+    if (clinic?.serviceFooter) parsedServices = JSON.parse(clinic.serviceFooter);
+  } catch { /* ignore */ }
   const serviceFooter = showServiceFooter
-    ? `<div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.95)}px;text-align:center;letter-spacing:0.3px;font-weight:700">MRI · CT SCAN · ULTRASOUND · DIGITAL X-RAY · MAMMOGRAPHY · PATHOLOGY</div>`
+    ? `<div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.95)}px;text-align:center;letter-spacing:0.3px;font-weight:700">${parsedServices.length > 0 ? esc(parsedServices.join(" · ").toUpperCase()) : "MRI · CT SCAN · ULTRASOUND · DIGITAL X-RAY · MAMMOGRAPHY · PATHOLOGY"}</div>`
     : "";
 
+  // ── V3 receipt messages (clinic-driven) ──
+  const receiptThankYou = showReceiptThankYou && clinic?.receiptThankYouMessage
+    ? `<div style="font-size:${Math.round(parseInt(footerPx, 10) * 1.1)}px;font-weight:900;text-align:center;letter-spacing:0.8px;text-transform:uppercase">${esc(clinic.receiptThankYouMessage)}</div>`
+    : "";
+
+  const receiptCollection = showReceiptCollection && clinic?.receiptCollectionMessage
+    ? `<div style="font-size:${tinyPx};text-align:center;margin:3px 0;font-weight:600">${esc(clinic.receiptCollectionMessage)}</div>`
+    : "";
+
+  const receiptQrMessage = showReceiptQrMessage && clinic?.receiptQrMessage
+    ? `<div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.95)}px;text-align:center;margin:2px 0;font-weight:600">${esc(clinic.receiptQrMessage)}</div>`
+    : "";
+
+  const receiptPromotional = showReceiptPromotional && clinic?.receiptPromotionalMessage
+    ? `<div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.95)}px;text-align:center;margin:2px 0;font-weight:700;letter-spacing:0.5px">${esc(clinic.receiptPromotionalMessage)}</div>`
+    : "";
+
+  const followUpMessage = showFollowUpMessage && clinic?.followUpMessage
+    ? `<div style="font-size:${tinyPx};text-align:center;margin:3px 0;font-weight:600;font-style:italic">${esc(clinic.followUpMessage)}</div>`
+    : "";
+
+  // ── V3 Verified Badge ──
+  const verifiedBadge = showVerifiedBadge
+    ? `<div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.95)}px;text-align:center;margin:2px 0;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">VERIFIED RECEIPT ✔</div>`
+    : "";
+
+  // ── V3 Patient Since ──
+  const patientSinceLine = showPatientSince
+    ? `<div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.95)}px;text-align:center;margin:2px 0;font-weight:600">Valued Patient Since ${esc(patientCreatedDate)}</div>`
+    : "";
+
+  // ── V3 Promotional Footer ──
+  const promotionalFooter = showPromotionalFooter && clinic?.promotionalTitle
+    ? `<div style="font-size:${Math.round(parseInt(tinyPx, 10) * 1.05)}px;text-align:center;margin:4px 0;font-weight:800;letter-spacing:0.5px;text-transform:uppercase">${esc(clinic.promotionalTitle)}</div>
+       ${clinic.promotionalDescription ? `<div style="font-size:${tinyPx};text-align:center;margin:2px 0;font-weight:600">${esc(clinic.promotionalDescription)}</div>` : ""}`
+    : "";
+
+  // ── Legacy report message (kept for backward compat) ──
   const reportMessage = showReportMessage
-    ? `<div style="font-size:${tinyPx};text-align:center;margin:3px 0;font-weight:600">Please collect report within 7 days or download online using QR verification.</div>`
+    ? `<div style="font-size:${tinyPx};text-align:center;margin:3px 0;font-weight:600">${esc(clinic?.receiptCollectionMessage || "Please collect report within 7 days or download online using QR verification.")}</div>`
     : "";
 
+  // ── Legacy footer branding (kept for backward compat) ──
   const footerBranding = showBrandingFooter
-    ? `<div style="font-size:${Math.round(parseInt(footerPx, 10) * 1.1)}px;font-weight:900;text-align:center;letter-spacing:0.8px;text-transform:uppercase">Thank You for Choosing Care Diagnostics</div>`
+    ? `<div style="font-size:${Math.round(parseInt(footerPx, 10) * 1.1)}px;font-weight:900;text-align:center;letter-spacing:0.8px;text-transform:uppercase">${esc(clinic?.receiptThankYouMessage || "Thank You for Choosing Care Diagnostics")}</div>`
     : "";
 
   const customFooterLine = customFooter
@@ -465,6 +528,16 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
 
     <!-- FOOTER PANEL — dynamic, fills A5 space naturally -->
     <div class="footer-panel no-break" style="padding: ${footerSpacing}; margin-top: ${footerMarginTop}; border-top: ${footerBorderTop} solid #000;">
+      <!-- V3 receipt messages (priority: thank-you → collection → verified → QR msg → promotional msg → follow-up → patient since) -->
+      ${receiptThankYou ? `<div style="margin-bottom:${footerBrandingMargin}">${receiptThankYou}</div>` : ""}
+      ${receiptCollection ? `<div style="margin-top:${footerGeneratedMargin}">${receiptCollection}</div>` : ""}
+      ${verifiedBadge ? `<div style="margin-top:${footerGeneratedMargin}">${verifiedBadge}</div>` : ""}
+      ${receiptQrMessage ? `<div style="margin-top:${footerGeneratedMargin}">${receiptQrMessage}</div>` : ""}
+      ${receiptPromotional ? `<div style="margin-top:${footerGeneratedMargin}">${receiptPromotional}</div>` : ""}
+      ${followUpMessage ? `<div style="margin-top:${footerGeneratedMargin}">${followUpMessage}</div>` : ""}
+      ${patientSinceLine ? `<div style="margin-top:${footerGeneratedMargin}">${patientSinceLine}</div>` : ""}
+      ${promotionalFooter ? `<div style="margin-top:${footerGeneratedMargin}">${promotionalFooter}</div>` : ""}
+      <!-- Legacy fallback blocks -->
       ${footerBranding ? `<div style="margin-bottom:${footerBrandingMargin}">${footerBranding}</div>` : ""}
       ${customFooterLine}
       ${serviceFooter ? `<div style="margin-top:${footerServiceMargin}">${serviceFooter}</div>` : ""}

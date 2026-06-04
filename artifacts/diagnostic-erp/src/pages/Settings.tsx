@@ -114,6 +114,9 @@ const TABS = [
   { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
   { id: "printers", label: "Printers", icon: Printer },
   { id: "billing-print", label: "Billing Print", icon: FileText },
+  { id: "receipt-messages", label: "Receipt Messages", icon: MessageCircle },
+  { id: "footer-services", label: "Footer Services", icon: Layers },
+  { id: "promotional-footer", label: "Promotional Footer", icon: Tag },
   { id: "discount-reasons", label: "Discount Reasons", icon: Tag },
   { id: "backup", label: "Backup", icon: Database },
   { id: "manual", label: "User Manual", icon: FileDown },
@@ -206,6 +209,9 @@ export default function Settings() {
         {tab === "whatsapp" && <WhatsappTab />}
         {tab === "printers" && <PrinterTab />}
         {tab === "billing-print" && <BillingPrintTab />}
+        {tab === "receipt-messages" && <ReceiptMessagesTab />}
+        {tab === "footer-services" && <FooterServicesTab />}
+        {tab === "promotional-footer" && <PromotionalFooterTab />}
         {tab === "discount-reasons" && <DiscountReasonsTab />}
         {tab === "backup" && <BackupTab />}
         {tab === "manual" && <ManualTab />}
@@ -472,6 +478,23 @@ type ClinicSettings = {
   billShowCode?: boolean;
   billShowCategory?: boolean;
   dayCloseAutoPrint?: boolean;
+  // V3: Receipt messages
+  receiptThankYouMessage?: string;
+  receiptCollectionMessage?: string;
+  receiptQrMessage?: string;
+  receiptPromotionalMessage?: string;
+  // V3: Service footer
+  serviceFooter?: string;
+  // V3: Follow-up
+  showFollowUpMessage?: boolean;
+  followUpMessage?: string;
+  // V3: Promotional
+  showPromotionalFooter?: boolean;
+  promotionalTitle?: string;
+  promotionalDescription?: string;
+  // V3: Identity & security
+  showPatientSince?: boolean;
+  showVerifiedBadge?: boolean;
 };
 
 import { SIDEBAR_THEMES as SIDEBAR_THEME_PRESETS, parseCustomHex, buildCustomTheme } from "@/lib/sidebarThemes";
@@ -4871,6 +4894,252 @@ function KioskSettingsTab() {
         <p className="text-blue-700 dark:text-blue-400 text-xs mt-2">
           <strong>Tip:</strong> Use a tablet or touchscreen in landscape mode for best experience. Bills are marked as "paid via UPI" with the UTR reference for easy reconciliation.
         </p>
+      </div>
+    </div>
+  );
+}
+
+function ReceiptMessagesTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: settings, isLoading } = useQuery<ClinicSettings>({
+    queryKey: ["clinic-settings"],
+    queryFn: () => api.get("/api/clinic-settings"),
+  });
+  const [form, setForm] = useState<ClinicSettings | null>(null);
+  const current = form ?? settings ?? null;
+
+  const save = useMutation({
+    mutationFn: (body: ClinicSettings) => api.put("/api/clinic-settings", body),
+    onSuccess: (saved) => {
+      qc.invalidateQueries({ queryKey: ["clinic-settings"] });
+      setForm(saved as ClinicSettings);
+      toast({ title: "Saved", description: "Receipt messages updated successfully." });
+    },
+    onError: (err: unknown) => {
+      toast({ title: "Save failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    },
+  });
+
+  if (isLoading || !current) {
+    return <div className="bg-card border border-card-border rounded-xl p-8 text-center text-muted-foreground">Loading receipt message settings...</div>;
+  }
+
+  const update = (k: keyof ClinicSettings, v: string | boolean) => setForm({ ...current, [k]: v });
+
+  return (
+    <div className="max-w-2xl space-y-4">
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="font-bold text-lg flex items-center gap-2"><MessageCircle size={16} /> Receipt Messages</h2>
+          <p className="text-sm text-muted-foreground">Customize the messages that appear on the printed bill footer. These show only when the Premium A5 format is selected and the corresponding toggle is enabled.</p>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <Label>Thank You Message</Label>
+            <Input value={current.receiptThankYouMessage || ""} onChange={(e) => update("receiptThankYouMessage", e.target.value)} className="mt-1" placeholder="e.g. Thank you for choosing Care Diagnostics" />
+            <p className="text-xs text-muted-foreground mt-1">Shown at the top of the footer when Show Thank You is enabled.</p>
+          </div>
+          <div>
+            <Label>Report Collection Message</Label>
+            <Input value={current.receiptCollectionMessage || ""} onChange={(e) => update("receiptCollectionMessage", e.target.value)} className="mt-1" placeholder="e.g. Please collect your reports within 7 days" />
+            <p className="text-xs text-muted-foreground mt-1">Shown when Show Collection Message is enabled.</p>
+          </div>
+          <div>
+            <Label>QR Code Message</Label>
+            <Input value={current.receiptQrMessage || ""} onChange={(e) => update("receiptQrMessage", e.target.value)} className="mt-1" placeholder="e.g. Scan QR code to verify receipt and download reports" />
+            <p className="text-xs text-muted-foreground mt-1">Shown near the QR code block when Show QR Message is enabled.</p>
+          </div>
+          <div>
+            <Label>Promotional Tagline</Label>
+            <Input value={current.receiptPromotionalMessage || ""} onChange={(e) => update("receiptPromotionalMessage", e.target.value)} className="mt-1" placeholder="e.g. Advanced Diagnostic & Imaging Centre" />
+            <p className="text-xs text-muted-foreground mt-1">Short promotional text shown when Show Promotional Message is enabled.</p>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-2 border-t border-card-border">
+          <Button variant="outline" type="button" onClick={() => setForm(settings ?? null)}>Reset</Button>
+          <Button onClick={() => save.mutate(current)} disabled={save.isPending}>
+            {save.isPending ? "Saving..." : "Save Changes"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FooterServicesTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: settings, isLoading } = useQuery<ClinicSettings>({
+    queryKey: ["clinic-settings"],
+    queryFn: () => api.get("/api/clinic-settings"),
+  });
+  const [form, setForm] = useState<ClinicSettings | null>(null);
+  const current = form ?? settings ?? null;
+
+  const save = useMutation({
+    mutationFn: (body: ClinicSettings) => api.put("/api/clinic-settings", body),
+    onSuccess: (saved) => {
+      qc.invalidateQueries({ queryKey: ["clinic-settings"] });
+      setForm(saved as ClinicSettings);
+      toast({ title: "Saved", description: "Service footer updated successfully." });
+    },
+    onError: (err: unknown) => {
+      toast({ title: "Save failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    },
+  });
+
+  if (isLoading || !current) {
+    return <div className="bg-card border border-card-border rounded-xl p-8 text-center text-muted-foreground">Loading footer service settings...</div>;
+  }
+
+  let services: string[] = [];
+  try {
+    if (current.serviceFooter) services = JSON.parse(current.serviceFooter);
+  } catch { /* ignore */ }
+
+  const updateServices = (svcs: string[]) => {
+    setForm({ ...current, serviceFooter: JSON.stringify(svcs) });
+  };
+
+  return (
+    <div className="max-w-2xl space-y-4">
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="font-bold text-lg flex items-center gap-2"><Layers size={16} /> Footer Service List</h2>
+          <p className="text-sm text-muted-foreground">These services are displayed in the footer of the Premium A5 bill. Stored as a JSON array.</p>
+        </div>
+        <div className="space-y-3">
+          {services.length === 0 && <p className="text-sm text-muted-foreground">No services listed. Add services below.</p>}
+          {services.map((s, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <Input value={s} onChange={(e) => {
+                const next = [...services];
+                next[i] = e.target.value;
+                updateServices(next);
+              }} className="flex-1" placeholder="Service name (e.g. MRI, CT Scan)" />
+              <Button variant="outline" size="sm" onClick={() => {
+                const next = services.filter((_, idx) => idx !== i);
+                updateServices(next);
+              }}><Trash2 size={14} /></Button>
+            </div>
+          ))}
+          <Button variant="outline" size="sm" onClick={() => updateServices([...services, ""])}><Plus size={14} className="mr-1" /> Add Service</Button>
+        </div>
+        <div className="flex justify-end gap-2 pt-2 border-t border-card-border">
+          <Button variant="outline" type="button" onClick={() => setForm(settings ?? null)}>Reset</Button>
+          <Button onClick={() => save.mutate(current)} disabled={save.isPending}>
+            {save.isPending ? "Saving..." : "Save Changes"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PromotionalFooterTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: settings, isLoading } = useQuery<ClinicSettings>({
+    queryKey: ["clinic-settings"],
+    queryFn: () => api.get("/api/clinic-settings"),
+  });
+  const [form, setForm] = useState<ClinicSettings | null>(null);
+  const current = form ?? settings ?? null;
+
+  const save = useMutation({
+    mutationFn: (body: ClinicSettings) => api.put("/api/clinic-settings", body),
+    onSuccess: (saved) => {
+      qc.invalidateQueries({ queryKey: ["clinic-settings"] });
+      setForm(saved as ClinicSettings);
+      toast({ title: "Saved", description: "Promotional footer settings updated successfully." });
+    },
+    onError: (err: unknown) => {
+      toast({ title: "Save failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    },
+  });
+
+  if (isLoading || !current) {
+    return <div className="bg-card border border-card-border rounded-xl p-8 text-center text-muted-foreground">Loading promotional footer settings...</div>;
+  }
+
+  const update = (k: keyof ClinicSettings, v: string | boolean) => setForm({ ...current, [k]: v });
+
+  return (
+    <div className="max-w-2xl space-y-4">
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="font-bold text-lg flex items-center gap-2"><Tag size={16} /> Promotional Footer</h2>
+          <p className="text-sm text-muted-foreground">Display a promotional footer block on the Premium A5 bill. Useful for seasonal offers, health packages, or special announcements.</p>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <Label>Promotional Title</Label>
+            <Input value={current.promotionalTitle || ""} onChange={(e) => update("promotionalTitle", e.target.value)} className="mt-1" placeholder="e.g. Health Checkup Packages Available" />
+          </div>
+          <div>
+            <Label>Promotional Description</Label>
+            <Textarea value={current.promotionalDescription || ""} onChange={(e) => update("promotionalDescription", e.target.value)} className="mt-1" rows={2} placeholder="e.g. Get 20% off on all preventive health packages this month." />
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => update("showPromotionalFooter", !current.showPromotionalFooter)}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors ${current.showPromotionalFooter ? "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-800" : "bg-muted/30 border-card-border"}`}
+            >
+              <span className="text-sm font-medium">Show Promotional Footer</span>
+              <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${current.showPromotionalFooter ? "bg-green-500" : "bg-muted-foreground/40"}`}>
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${current.showPromotionalFooter ? "translate-x-5" : "translate-x-1"}`} />
+              </span>
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => update("showFollowUpMessage", !current.showFollowUpMessage)}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors ${current.showFollowUpMessage ? "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-800" : "bg-muted/30 border-card-border"}`}
+            >
+              <span className="text-sm font-medium">Show Follow-Up Message</span>
+              <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${current.showFollowUpMessage ? "bg-green-500" : "bg-muted-foreground/40"}`}>
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${current.showFollowUpMessage ? "translate-x-5" : "translate-x-1"}`} />
+              </span>
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => update("showPatientSince", !current.showPatientSince)}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors ${current.showPatientSince ? "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-800" : "bg-muted/30 border-card-border"}`}
+            >
+              <span className="text-sm font-medium">Show Patient Since Date</span>
+              <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${current.showPatientSince ? "bg-green-500" : "bg-muted-foreground/40"}`}>
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${current.showPatientSince ? "translate-x-5" : "translate-x-1"}`} />
+              </span>
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => update("showVerifiedBadge", !current.showVerifiedBadge)}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors ${current.showVerifiedBadge ? "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-800" : "bg-muted/30 border-card-border"}`}
+            >
+              <span className="text-sm font-medium">Show Verified Receipt Badge</span>
+              <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${current.showVerifiedBadge ? "bg-green-500" : "bg-muted-foreground/40"}`}>
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${current.showVerifiedBadge ? "translate-x-5" : "translate-x-1"}`} />
+              </span>
+            </button>
+          </div>
+          <div>
+            <Label>Follow-Up Message</Label>
+            <Input value={current.followUpMessage || ""} onChange={(e) => update("followUpMessage", e.target.value)} className="mt-1" placeholder="e.g. For future investigations, please quote your Patient ID" />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-2 border-t border-card-border">
+          <Button variant="outline" type="button" onClick={() => setForm(settings ?? null)}>Reset</Button>
+          <Button onClick={() => save.mutate(current)} disabled={save.isPending}>
+            {save.isPending ? "Saving..." : "Save Changes"}
+          </Button>
+        </div>
       </div>
     </div>
   );

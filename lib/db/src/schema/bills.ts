@@ -26,6 +26,12 @@ export const billsTable = pgTable("bills", {
   cancellationReason: text("cancellation_reason"),
   refundAmount: numeric("refund_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   originalTotal: numeric("original_total", { precision: 10, scale: 2 }).notNull().default("0"),
+
+  // ── V3: Analytics counters (future dashboard) ──
+  qrScanCount: integer("qr_scan_count").notNull().default(0),
+  receiptVerificationCount: integer("receipt_verification_count").notNull().default(0),
+  pdfDownloadCount: integer("pdf_download_count").notNull().default(0),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

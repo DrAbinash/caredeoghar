@@ -95,5 +95,28 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   formFAddressRequired: boolean("form_f_address_required").notNull().default(true),
   // When true, husband/father name is required in the Form F billing desk popup and form.
   formFGuardianRequired: boolean("form_f_guardian_required").notNull().default(true),
+
+  // ── V3: Receipt Message Management ──
+  receiptThankYouMessage: text("receipt_thank_you_message").notNull().default("Thank you for choosing Care Diagnostics."),
+  receiptCollectionMessage: text("receipt_collection_message").notNull().default("Please collect your reports within 7 days."),
+  receiptQrMessage: text("receipt_qr_message").notNull().default("Scan QR code to verify receipt and download reports."),
+  receiptPromotionalMessage: text("receipt_promotional_message").notNull().default("Advanced Diagnostic & Imaging Centre."),
+
+  // ── V3: Service Footer Management ──
+  serviceFooter: text("service_footer").notNull().default("[\"MRI\",\"CT Scan\",\"Ultrasound\",\"Digital X-Ray\",\"Mammography\",\"Pathology\"]"),
+
+  // ── V3: Follow-up / Retention ──
+  showFollowUpMessage: boolean("show_follow_up_message").notNull().default(false),
+  followUpMessage: text("follow_up_message").notNull().default("For future investigations, please quote your Patient ID."),
+
+  // ── V3: Promotional Footer ──
+  showPromotionalFooter: boolean("show_promotional_footer").notNull().default(false),
+  promotionalTitle: text("promotional_title").notNull().default(""),
+  promotionalDescription: text("promotional_description").notNull().default(""),
+
+  // ── V3: Patient Identity & Security ──
+  showPatientSince: boolean("show_patient_since").notNull().default(false),
+  showVerifiedBadge: boolean("show_verified_badge").notNull().default(false),
+
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

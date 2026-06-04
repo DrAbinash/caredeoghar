@@ -56,6 +56,23 @@ export type PrintClinic = {
   billShowCode?: boolean;
   billShowCategory?: boolean;
   qrOnBillEnabled?: boolean;
+  // V3: Receipt messages
+  receiptThankYouMessage?: string;
+  receiptCollectionMessage?: string;
+  receiptQrMessage?: string;
+  receiptPromotionalMessage?: string;
+  // V3: Service footer
+  serviceFooter?: string;
+  // V3: Follow-up
+  showFollowUpMessage?: boolean;
+  followUpMessage?: string;
+  // V3: Promotional
+  showPromotionalFooter?: boolean;
+  promotionalTitle?: string;
+  promotionalDescription?: string;
+  // V3: Identity & security
+  showPatientSince?: boolean;
+  showVerifiedBadge?: boolean;
 } | undefined | null;
 
 function esc(s: string): string {
@@ -109,6 +126,15 @@ export type BuildPrintHtmlOpts = {
   showWatermark?: boolean;
   showPatientInstructions?: boolean;
   showSystemInfo?: boolean;
+  // V3 toggles
+  showReceiptThankYou?: boolean;
+  showReceiptCollection?: boolean;
+  showReceiptQrMessage?: boolean;
+  showReceiptPromotional?: boolean;
+  showVerifiedBadge?: boolean;
+  showFollowUpMessage?: boolean;
+  showPatientSince?: boolean;
+  showPromotionalFooter?: boolean;
   barcodeDataUrl?: string;
   customFooter?: string | null;
   reportCollectionNote?: string | null;
@@ -379,6 +405,15 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
       showWatermark: opts.showWatermark ?? false,
       showPatientInstructions: opts.showPatientInstructions ?? false,
       showSystemInfo: opts.showSystemInfo ?? false,
+      // V3 toggles (default OFF, driven by clinic settings)
+      showReceiptThankYou: opts.showReceiptThankYou ?? opts.clinic?.receiptThankYouMessage !== undefined,
+      showReceiptCollection: opts.showReceiptCollection ?? opts.clinic?.receiptCollectionMessage !== undefined,
+      showReceiptQrMessage: opts.showReceiptQrMessage ?? opts.clinic?.receiptQrMessage !== undefined,
+      showReceiptPromotional: opts.showReceiptPromotional ?? opts.clinic?.receiptPromotionalMessage !== undefined,
+      showVerifiedBadge: opts.showVerifiedBadge ?? opts.clinic?.showVerifiedBadge ?? false,
+      showFollowUpMessage: opts.showFollowUpMessage ?? opts.clinic?.showFollowUpMessage ?? false,
+      showPatientSince: opts.showPatientSince ?? opts.clinic?.showPatientSince ?? false,
+      showPromotionalFooter: opts.showPromotionalFooter ?? opts.clinic?.showPromotionalFooter ?? false,
       barcodeDataUrl: opts.barcodeDataUrl,
       customFooter: opts.customFooter,
       reportCollectionNote: opts.reportCollectionNote,

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, billsTable, patientsTable, clinicSettingsTable } from "@workspace/db";
+import { db, billsTable, patientsTable, clinicSettingsTable, orderTestsTable, testsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
 export const verifyRouter = Router();
@@ -18,7 +18,7 @@ verifyRouter.get("/bill/:billNumber", async (req, res) => {
     return;
   }
 
-  const [bill] = await db
+  const [billRow] = await db
     .select({
       id: billsTable.id,
       billNumber: billsTable.billNumber,
@@ -28,45 +28,87 @@ verifyRouter.get("/bill/:billNumber", async (req, res) => {
       status: billsTable.status,
       createdAt: billsTable.createdAt,
       cancelledAt: billsTable.cancelledAt,
-      patientFirst: patientsTable.firstName,
-      patientLast: patientsTable.lastName,
-      patientCode: patientsTable.patientId,
+      orderId: billsTable.orderId,
+      patientId: billsTable.patientId,
+      qrScanCount: billsTable.qrScanCount,
+      receiptVerificationCount: billsTable.receiptVerificationCount,
+      pdfDownloadCount: billsTable.pdfDownloadCount,
     })
     .from(billsTable)
-    .leftJoin(patientsTable, eq(billsTable.patientId, patientsTable.id))
     .where(eq(billsTable.billNumber, billNumber))
     .limit(1);
 
-  if (!bill) {
+  if (!billRow) {
     res.status(404).type("text/html").send(renderNotFound(billNumber));
     return;
   }
 
+  // Increment both analytics counters in one update
+  await db.update(billsTable)
+    .set({
+      qrScanCount: (billRow.qrScanCount ?? 0) + 1,
+      receiptVerificationCount: (billRow.receiptVerificationCount ?? 0) + 1,
+    })
+    .where(eq(billsTable.id, billRow.id));
+
+  // Get patient details
+  const [patient] = await db
+    .select({
+      firstName: patientsTable.firstName,
+      lastName: patientsTable.lastName,
+      patientId: patientsTable.patientId,
+      dateOfBirth: patientsTable.dateOfBirth,
+      createdAt: patientsTable.createdAt,
+    })
+    .from(patientsTable)
+    .where(eq(patientsTable.id, billRow.patientId))
+    .limit(1);
+
   const [clinic] = await db.select().from(clinicSettingsTable).limit(1);
   const clinicName = clinic?.name ?? "Diagnostic Centre";
+  const logoDataUrl = clinic?.logoDataUrl ?? null;
 
-  const patientName = bill.patientFirst
-    ? `${bill.patientFirst} ${bill.patientLast ?? ""}`.trim()
+  const patientName = patient
+    ? `${patient.firstName ?? ""} ${patient.lastName ?? ""}`.trim()
     : "Unknown";
-  // Force Asia/Kolkata — the production container runs in UTC, and
-  // toLocaleString("en-IN") only sets the LOCALE (number/date format),
-  // not the timezone. Without timeZone the QR scan page showed UTC
-  // (5h30m off) for Indian operators.
-  const issued = bill.createdAt
-    ? new Date(bill.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" })
+  const patientSince = patient?.createdAt
+    ? new Date(patient.createdAt).toLocaleDateString("en-IN", { year: "numeric", month: "short" })
+    : "";
+
+  const issued = billRow.createdAt
+    ? new Date(billRow.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" })
     : "—";
-  const cancelled = !!bill.cancelledAt;
+  const cancelled = !!billRow.cancelledAt;
+
+  // Get tests for this bill
+  const tests = await db
+    .select({
+      name: testsTable.name,
+      code: testsTable.code,
+      category: testsTable.category,
+      price: orderTestsTable.price,
+      status: orderTestsTable.status,
+    })
+    .from(orderTestsTable)
+    .leftJoin(testsTable, eq(orderTestsTable.testId, testsTable.id))
+    .where(eq(orderTestsTable.orderId, billRow.orderId));
+
+  const activeTests = tests.filter((t) => (t.status ?? "active") !== "cancelled");
 
   res.type("text/html").send(renderVerified({
     clinicName,
-    billNumber: bill.billNumber,
+    logoDataUrl,
+    billNumber: billRow.billNumber,
     patientName,
-    patientCode: bill.patientCode ?? "",
+    patientCode: patient?.patientId ?? "",
+    patientSince,
     issued,
-    total: Number(bill.totalAmount),
-    paid: Number(bill.paidAmount),
-    balance: Number(bill.balanceAmount),
-    status: cancelled ? "cancelled" : (bill.status ?? "pending"),
+    total: Number(billRow.totalAmount),
+    paid: Number(billRow.paidAmount),
+    balance: Number(billRow.balanceAmount),
+    status: cancelled ? "cancelled" : (billRow.status ?? "pending"),
+    tests: activeTests,
+    verified: true,
   }));
 });
 
@@ -97,9 +139,11 @@ const SHELL_CSS = `
 `;
 
 function renderVerified(b: {
-  clinicName: string; billNumber: string; patientName: string;
-  patientCode: string; issued: string;
+  clinicName: string; logoDataUrl?: string | null; billNumber: string; patientName: string;
+  patientCode: string; patientSince?: string; issued: string;
   total: number; paid: number; balance: number; status: string;
+  tests?: { name: string | null; code: string | null; category: string | null; price: string | number | null; status: string | null }[];
+  verified?: boolean;
 }) {
   const statusClass =
     b.status === "paid" ? "ok" :
@@ -109,6 +153,9 @@ function renderVerified(b: {
     b.status === "cancelled" ? "❌ Cancelled" :
     b.status === "paid" ? "✅ Verified — Paid" :
     "✅ Verified";
+  const testRows = b.tests && b.tests.length > 0
+    ? b.tests.map((t, i) => `<tr><td style="text-align:left">${i + 1}. ${esc(t.name ?? "Unnamed")}</td><td style="text-align:right">${inr(Number(t.price || 0))}</td></tr>`).join("")
+    : "";
   return `<!doctype html><html lang="en"><head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
@@ -116,6 +163,7 @@ function renderVerified(b: {
     <style>${SHELL_CSS}</style>
   </head><body>
     <div class="wrap"><div class="card">
+      ${b.logoDataUrl ? `<div style="text-align:center;margin-bottom:12px"><img src="${b.logoDataUrl}" alt="logo" style="max-height:48px;max-width:160px;object-fit:contain"/></div>` : ""}
       <span class="badge ${statusClass}">${statusLabel}</span>
       <h1>${esc(b.clinicName)}</h1>
       <div class="muted">This bill was issued by ${esc(b.clinicName)} and is recorded in their system.</div>
@@ -123,12 +171,15 @@ function renderVerified(b: {
         <tr><td>Bill Number</td><td>${esc(b.billNumber)}</td></tr>
         <tr><td>Patient</td><td>${esc(b.patientName)}</td></tr>
         ${b.patientCode ? `<tr><td>Patient ID</td><td>${esc(b.patientCode)}</td></tr>` : ""}
+        ${b.patientSince ? `<tr><td>Patient Since</td><td>${esc(b.patientSince)}</td></tr>` : ""}
         <tr><td>Issued</td><td>${esc(b.issued)}</td></tr>
         <tr><td>Status</td><td style="text-transform:capitalize">${esc(b.status)}</td></tr>
         <tr><td>Paid</td><td>${inr(b.paid)}</td></tr>
         <tr><td>Balance</td><td>${inr(b.balance)}</td></tr>
         <tr class="total"><td>Total Amount</td><td>${inr(b.total)}</td></tr>
       </table>
+      ${testRows ? `<div style="margin-top:18px;font-size:13px;font-weight:700;border-bottom:1px solid #f1f5f9;padding-bottom:6px">Test Summary</div>
+      <table style="margin-top:6px;font-size:13px">${testRows}</table>` : ""}
       <div class="footer">Verified at ${esc(new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }))} IST</div>
     </div></div>
   </body></html>`;

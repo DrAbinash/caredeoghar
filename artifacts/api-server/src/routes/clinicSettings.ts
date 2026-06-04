@@ -74,6 +74,19 @@ async function getOrCreate() {
       formFBillingPrompt: false,
       formFAddressRequired: true,
       formFGuardianRequired: true,
+      // V3 fallbacks
+      receiptThankYouMessage: "Thank you for choosing Care Diagnostics.",
+      receiptCollectionMessage: "Please collect your reports within 7 days.",
+      receiptQrMessage: "Scan QR code to verify receipt and download reports.",
+      receiptPromotionalMessage: "Advanced Diagnostic & Imaging Centre.",
+      serviceFooter: "[\"MRI\",\"CT Scan\",\"Ultrasound\",\"Digital X-Ray\",\"Mammography\",\"Pathology\"]",
+      showFollowUpMessage: false,
+      followUpMessage: "For future investigations, please quote your Patient ID.",
+      showPromotionalFooter: false,
+      promotionalTitle: "",
+      promotionalDescription: "",
+      showPatientSince: false,
+      showVerifiedBadge: false,
       updatedAt: new Date(),
     } as any;
   }
@@ -108,6 +121,23 @@ clinicSettingsRouter.get("/branding", async (_req, res) => {
     formFBillingPrompt: row.formFBillingPrompt ?? false,
     formFAddressRequired: row.formFAddressRequired ?? true,
     formFGuardianRequired: row.formFGuardianRequired ?? true,
+    // V3: Receipt Messages
+    receiptThankYouMessage: row.receiptThankYouMessage ?? "Thank you for choosing Care Diagnostics.",
+    receiptCollectionMessage: row.receiptCollectionMessage ?? "Please collect your reports within 7 days.",
+    receiptQrMessage: row.receiptQrMessage ?? "Scan QR code to verify receipt and download reports.",
+    receiptPromotionalMessage: row.receiptPromotionalMessage ?? "Advanced Diagnostic & Imaging Centre.",
+    // V3: Service Footer
+    serviceFooter: row.serviceFooter ?? "[\"MRI\",\"CT Scan\",\"Ultrasound\",\"Digital X-Ray\",\"Mammography\",\"Pathology\"]",
+    // V3: Follow-up
+    showFollowUpMessage: row.showFollowUpMessage ?? false,
+    followUpMessage: row.followUpMessage ?? "For future investigations, please quote your Patient ID.",
+    // V3: Promotional Footer
+    showPromotionalFooter: row.showPromotionalFooter ?? false,
+    promotionalTitle: row.promotionalTitle ?? "",
+    promotionalDescription: row.promotionalDescription ?? "",
+    // V3: Identity & Security
+    showPatientSince: row.showPatientSince ?? false,
+    showVerifiedBadge: row.showVerifiedBadge ?? false,
   });
 });
 
@@ -133,8 +163,8 @@ clinicSettingsRouter.put("/", async (req, res) => {
     }
     update.sidebarTheme = body.sidebarTheme;
   }
-  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "payuEnabled", "phonepeEnabled", "bharatpeEnabled", "cashfreeEnabled", "iciciEnabled", "upiQrEnabled", "billShowCode", "billShowCategory", "dayCloseAutoPrint", "lanOnlyLogin", "fido2Enabled", "kioskEnabled", "formFBillingPrompt", "formFAddressRequired", "formFGuardianRequired"] as const;
-  const textFields = ["kioskUpiVpa", "kioskUpiName", "kioskWelcomeMessage", "kioskAllowedTestIds", "onlineBookingAllowedTestIds", "onlineBookingAllowedPackageIds", "razorpayKeyId", "payuMerchantKey", "phonepeMerchantId", "bharatpeMerchantId", "cashfreeAppId", "iciciMerchantId", "iciciAggregatorId", "iciciSecretKey", "formFTestIds", "quickTestIds", "footerNote", "commissionDiscountMode", "lanAllowedIps", "billDefaultPaperSize", "name", "tagline", "address", "registeredAddress", "email", "phone", "website", "gstin", "logoDataUrl", "portalHeading", "portalWelcomeMessage", "sidebarTheme"] as const;
+  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "payuEnabled", "phonepeEnabled", "bharatpeEnabled", "cashfreeEnabled", "iciciEnabled", "upiQrEnabled", "billShowCode", "billShowCategory", "dayCloseAutoPrint", "lanOnlyLogin", "fido2Enabled", "kioskEnabled", "formFBillingPrompt", "formFAddressRequired", "formFGuardianRequired", "showFollowUpMessage", "showPromotionalFooter", "showPatientSince", "showVerifiedBadge"] as const;
+  const textFields = ["kioskUpiVpa", "kioskUpiName", "kioskWelcomeMessage", "kioskAllowedTestIds", "onlineBookingAllowedTestIds", "onlineBookingAllowedPackageIds", "razorpayKeyId", "payuMerchantKey", "phonepeMerchantId", "bharatpeMerchantId", "cashfreeAppId", "iciciMerchantId", "iciciAggregatorId", "iciciSecretKey", "formFTestIds", "quickTestIds", "footerNote", "commissionDiscountMode", "lanAllowedIps", "billDefaultPaperSize", "name", "tagline", "address", "registeredAddress", "email", "phone", "website", "gstin", "logoDataUrl", "portalHeading", "portalWelcomeMessage", "sidebarTheme", "receiptThankYouMessage", "receiptCollectionMessage", "receiptQrMessage", "receiptPromotionalMessage", "serviceFooter", "followUpMessage", "promotionalTitle", "promotionalDescription"] as const;
   // NOTE: quickTestIds and formFTestIds are intentionally NOT in boolFields
   // because they store JSON-as-text (e.g. "[null,null,null,null,null,null]").
   // They are listed in textFields above.
