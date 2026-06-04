@@ -293,7 +293,7 @@ onlineBookingsRouter.post("/:id/confirm", async (req: StaffAuthRequest, res): Pr
 });
 
 // POST /api/online-bookings/:id/payment-link
-// Creates a Razorpay payment link for an existing booking and returns the link URL.
+// Creates a payment link for an existing booking using the active gateway.
 onlineBookingsRouter.post("/:id/payment-link", async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   const [booking] = await db.select().from(onlineBookingsTable).where(eq(onlineBookingsTable.id, id)).limit(1);
@@ -301,51 +301,180 @@ onlineBookingsRouter.post("/:id/payment-link", async (req, res): Promise<void> =
 
   const settings = await db.select().from(clinicSettingsTable).limit(1);
   const s = settings[0];
-  const keyId = process.env.RAZORPAY_KEY_ID || (s?.razorpayKeyId ?? "");
-  const keySecret = process.env.RAZORPAY_KEY_SECRET || "";
-  if (!keyId || !keySecret) {
-    res.status(503).json({ error: "Razorpay not configured." });
-    return;
-  }
-
-  const amountPaise = Math.round(Number(booking.totalAmount) * 100);
-  if (!Number.isFinite(amountPaise) || amountPaise <= 0) {
+  const amount = Number(booking.totalAmount);
+  if (!Number.isFinite(amount) || amount <= 0) {
     res.status(400).json({ error: "Invalid booking amount." });
     return;
   }
 
-  const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
   const base = `${req.protocol}://${req.get("host")}`;
-  const callbackUrl = `${base}/?booking=link_success&ref=${encodeURIComponent(booking.bookingRef)}`;
 
-  try {
-    const rpRes = await fetch("https://api.razorpay.com/v1/payment_links", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Basic ${auth}` },
-      body: JSON.stringify({
-        amount: amountPaise,
-        currency: "INR",
-        accept_partial: false,
-        description: `Care Diagnostics booking ${booking.bookingRef}`,
-        customer: {
-          name: booking.name,
-          contact: booking.phone.replace(/[^0-9]/g, "").slice(0, 10),
-          email: booking.email || undefined,
+  // Determine active gateway
+  const bharatpeApiKey = process.env.BHARATPE_API_KEY || "";
+  const bharatpeApiSecret = process.env.BHARATPE_API_SECRET || "";
+  const bharatpeMerchantId = process.env.BHARATPE_MERCHANT_ID || (s?.bharatpeMerchantId ?? "");
+  const iciciMerchantId = process.env.ICICI_MERCHANT_ID || (s?.iciciMerchantId ?? "");
+  const iciciSecretKey = process.env.ICICI_SECRET_KEY || (s?.iciciSecretKey ?? "");
+  const iciciAggregatorId = process.env.ICICI_AGGREGATOR_ID || (s?.iciciAggregatorId ?? "");
+
+  // 1. Try BharatPe
+  if (s?.bharatpeEnabled && bharatpeMerchantId && bharatpeApiKey && bharatpeApiSecret) {
+    const amountPaise = Math.round(amount * 100);
+    const timestamp = String(Date.now());
+    const authPayload = `${bharatpeMerchantId}:${timestamp}`;
+    const authHash = crypto.createHmac("sha256", bharatpeApiSecret).update(authPayload).digest("hex");
+    const authToken = `${bharatpeApiKey}:${authHash}:${timestamp}`;
+    const isStaging = process.env.NODE_ENV !== "production";
+    const bpBase = isStaging ? "https://uat-api.bharatpe.in/api/v1" : "https://api.bharatpe.in/api/v1";
+    const callbackUrl = `${base}/api/public/booking/bharatpe-callback`;
+    const redirectUrl = `${base}/?booking=bharatpe_done&ref=${encodeURIComponent(booking.bookingRef)}`;
+
+    try {
+      const bpRes = await fetch(`${bpBase}/merchant/checkout/init`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-API-KEY": bharatpeApiKey,
+          "X-MERCHANT-ID": bharatpeMerchantId,
+          Authorization: `Bearer ${authToken}`,
         },
-        notify: { sms: true, email: Boolean(booking.email) },
-        reminder_enable: true,
-        callback_url: callbackUrl,
-        callback_method: "get",
-      }),
-    });
-    if (!rpRes.ok) {
-      const err = await rpRes.json().catch(() => ({}));
-      res.status(502).json({ error: "Razorpay error.", details: (err as { error?: { description?: string } }).error?.description });
+        body: JSON.stringify({
+          merchantId: bharatpeMerchantId,
+          merchantTransactionId: booking.bookingRef,
+          amount: amountPaise,
+          currency: "INR",
+          customerName: booking.name.trim(),
+          customerMobile: booking.phone.replace(/\D/g, "").slice(-10),
+          customerEmail: booking.email?.trim() || "",
+          description: `Care Diagnostics booking ${booking.bookingRef}`,
+          callbackUrl,
+          redirectUrl,
+        }),
+      });
+      if (!bpRes.ok) {
+        const errText = await bpRes.text().catch(() => "");
+        res.status(502).json({ error: "BharatPe gateway error.", details: errText });
+        return;
+      }
+      const bpData = (await bpRes.json()) as { success: boolean; code: string; data?: { redirectUrl?: string; transactionId?: string } };
+      if (!bpData.success || !bpData.data?.redirectUrl) {
+        res.status(502).json({ error: "Could not initiate BharatPe payment.", code: bpData.code });
+        return;
+      }
+      res.json({ url: bpData.data.redirectUrl, linkId: bpData.data.transactionId || booking.bookingRef });
+      return;
+    } catch {
+      res.status(502).json({ error: "Could not connect to BharatPe." });
       return;
     }
-    const data = (await rpRes.json()) as { short_url: string; id: string };
-    res.json({ url: data.short_url, linkId: data.id });
-  } catch {
-    res.status(502).json({ error: "Could not connect to Razorpay." });
   }
+
+  // 2. Try ICICI (Orange Pay)
+  if (s?.iciciEnabled && iciciMerchantId && iciciSecretKey) {
+    const txnDate = new Date().toISOString().replace(/[-T:]/g, "").slice(0, 12);
+    const amountStr = amount.toFixed(2);
+    const mobile = booking.phone.replace(/\D/g, "").slice(-10);
+    const hashParams: Record<string, string> = {
+      addlParam1: booking.bookingRef,
+      addlParam2: "care-diagnostics",
+      aggregatorID: iciciAggregatorId,
+      amount: amountStr,
+      currencyCode: "356",
+      customerEmailID: booking.email?.trim() || "care.deoghar@gmail.com",
+      customerMobileNo: mobile,
+      customerName: booking.name.trim(),
+      merchantId: iciciMerchantId,
+      merchantTxnNo: booking.bookingRef,
+      payType: "0",
+      returnURL: `${base}/api/public/booking/icici-callback`,
+      transactionType: "SALE",
+      txnDate,
+    };
+    const sortedKeys = Object.keys(hashParams).sort();
+    const hashStr = sortedKeys.map((k) => `${k}=${hashParams[k]}`).join("~") + `~${iciciSecretKey}`;
+    const secureHash = crypto.createHash("sha256").update(hashStr).digest("hex");
+
+    const payload = {
+      merchantId: iciciMerchantId,
+      aggregatorID: iciciAggregatorId,
+      merchantTxnNo: booking.bookingRef,
+      amount: amountStr,
+      currencyCode: "356",
+      payType: "0",
+      customerEmailID: booking.email?.trim() || "care.deoghar@gmail.com",
+      transactionType: "SALE",
+      returnURL: `${base}/api/public/booking/icici-callback`,
+      txnDate,
+      customerMobileNo: mobile,
+      customerName: booking.name.trim(),
+      addlParam1: booking.bookingRef,
+      addlParam2: "care-diagnostics",
+      secureHash,
+    };
+
+    const iciciUrl = `${process.env.ICICI_BASE_URL || "https://payment1.atomtech.in"}/tsp/pg/api/v2/initiateSale`;
+    try {
+      const iciciRes = await fetch(iciciUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const iciciData = (await iciciRes.json()) as {
+        responseCode?: string; merchantId?: string; merchantTxnNo?: string; redirectURI?: string; tranCtx?: string; respDescription?: string;
+      };
+      if (!iciciRes.ok || !iciciData.tranCtx || iciciData.responseCode !== "R1000") {
+        res.status(502).json({ error: "ICICI gateway error.", details: iciciData.respDescription || iciciData.responseCode });
+        return;
+      }
+      res.json({ url: `${iciciData.redirectURI}?tranCtx=${encodeURIComponent(iciciData.tranCtx)}`, linkId: iciciData.tranCtx });
+      return;
+    } catch {
+      res.status(502).json({ error: "Could not connect to ICICI gateway." });
+      return;
+    }
+  }
+
+  // 3. Fallback to Razorpay
+  const razorpayKeyId = process.env.RAZORPAY_KEY_ID || (s?.razorpayKeyId ?? "");
+  const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET || "";
+  if (razorpayKeyId && razorpayKeySecret) {
+    const amountPaise = Math.round(amount * 100);
+    const auth = Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString("base64");
+    const callbackUrl = `${base}/?booking=link_success&ref=${encodeURIComponent(booking.bookingRef)}`;
+    try {
+      const rpRes = await fetch("https://api.razorpay.com/v1/payment_links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Basic ${auth}` },
+        body: JSON.stringify({
+          amount: amountPaise,
+          currency: "INR",
+          accept_partial: false,
+          description: `Care Diagnostics booking ${booking.bookingRef}`,
+          customer: {
+            name: booking.name,
+            contact: booking.phone.replace(/[^0-9]/g, "").slice(0, 10),
+            email: booking.email || undefined,
+          },
+          notify: { sms: true, email: Boolean(booking.email) },
+          reminder_enable: true,
+          callback_url: callbackUrl,
+          callback_method: "get",
+        }),
+      });
+      if (!rpRes.ok) {
+        const err = await rpRes.json().catch(() => ({}));
+        res.status(502).json({ error: "Razorpay error.", details: (err as { error?: { description?: string } }).error?.description });
+        return;
+      }
+      const data = (await rpRes.json()) as { short_url: string; id: string };
+      res.json({ url: data.short_url, linkId: data.id });
+      return;
+    } catch {
+      res.status(502).json({ error: "Could not connect to Razorpay." });
+      return;
+    }
+  }
+
+  res.status(503).json({ error: "No payment gateway is configured. Enable BharatPe, ICICI (Orange Pay), or Razorpay in Settings." });
 });
