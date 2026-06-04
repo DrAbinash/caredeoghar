@@ -1,8 +1,7 @@
-// Premium A5 Bill Print Template
-// Modern, clean, black-and-white, professional design for diagnostic centers.
-// Optimized for 1-2 test radiology bills.
-// KEY DESIGN GOAL: Fill A5 naturally. No flex:1 spacers. No blank gaps.
-// Instead, use generous padding, larger fonts in sparse mode, and a substantial branding panel.
+// Premium A5 Bill Print Template — V2 Professional Polish
+// Modern, clean, black-and-white, professional diagnostic-center receipt.
+// Optimized for 1-2 test radiology bills. Fills A5 naturally.
+// Print-safe: only black ink, no background colors, no color text.
 
 import { type PrintBillData, type PrintClinic } from "./printBill";
 import { type BillPaperSize } from "./billPrintSettings";
@@ -23,6 +22,11 @@ export type BuildPremiumBillOpts = {
   showReportMessage?: boolean;
   showServiceFooter?: boolean;
   showBrandingFooter?: boolean;
+  showBarcode?: boolean;
+  showWatermark?: boolean;
+  showPatientInstructions?: boolean;
+  showSystemInfo?: boolean;
+  barcodeDataUrl?: string;
   customFooter?: string | null;
   reportCollectionNote?: string | null;
 };
@@ -84,6 +88,9 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
     showQr = true, showAmountInWords = false, showSignatureLine = true,
     showComputerGenerated = true, showReportMessage = true,
     showServiceFooter = true, showBrandingFooter = true,
+    showBarcode = false, showWatermark = false,
+    showPatientInstructions = false, showSystemInfo = false,
+    barcodeDataUrl,
     customFooter,
     reportCollectionNote,
   } = opts;
@@ -98,9 +105,9 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
   const rawDoctor = bill.order?.doctor?.name ?? "";
   const testCount = tests.length;
 
-  // ── Density: sparse = 1-2 tests, normal = 3-6, compact = 6+ ──
+  // ── Density: sparse = 1-2, normal = 3-5, compact = 6+ ──
   const isSparse = testCount <= 2;
-  const isCompact = testCount > 6;
+  const isCompact = testCount > 5;
   const densityClass = isSparse ? "premium-sparse-mode" : isCompact ? "compact-mode" : "normal-mode";
 
   // ── Aggregated payment amounts ──
@@ -117,24 +124,20 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
   const bankAmt = payByMode["bank transfer"] || 0;
 
   // ── Sizing tuned for A5 ──
-  // SPARSE: generous sizes, comfortable spacing, fill the page naturally
-  // NORMAL: moderate
-  // COMPACT: compact, prevent overflow
   const basePx = isSparse ? "14px" : isCompact ? "11px" : "13px";
-  const headerPx = isSparse ? "15px" : isCompact ? "11px" : "13px";
-  const clinicNamePx = isSparse ? "22px" : isCompact ? "16px" : "18px";
-  const titlePx = isSparse ? "18px" : isCompact ? "14px" : "16px";
-  const patientPx = isSparse ? "15px" : isCompact ? "12px" : "14px";
-  const patientNamePx = isSparse ? "17px" : isCompact ? "13px" : "15px";
-  const tablePx = isSparse ? "14px" : isCompact ? "10px" : "12px";
-  const totalPx = isSparse ? "14px" : isCompact ? "11px" : "13px";
-  const bigTotalPx = isSparse ? "16px" : isCompact ? "13px" : "15px";
+  const headerPx = isSparse ? "11px" : isCompact ? "10px" : "11px";
+  const clinicNamePx = isSparse ? "17px" : isCompact ? "14px" : "16px";
+  const titlePx = isSparse ? "15px" : isCompact ? "13px" : "14px";
+  const patientPx = isSparse ? "13px" : isCompact ? "11px" : "12px";
+  const patientNamePx = isSparse ? "18px" : isCompact ? "13px" : "15px";
+  const tablePx = isSparse ? "13px" : isCompact ? "10px" : "11px";
+  const totalPx = isSparse ? "14px" : isCompact ? "11px" : "12px";
+  const bigTotalPx = isSparse ? "16px" : isCompact ? "13px" : "14px";
   const footerPx = isSparse ? "13px" : isCompact ? "10px" : "11px";
   const tinyPx = isSparse ? "11px" : isCompact ? "9px" : "10px";
-  const qrSize = isSparse ? "80px" : isCompact ? "50px" : "65px";
-  const pageMargin = isSparse ? "5mm" : "4mm";
-  const pageMarginBottom = isSparse ? "10mm" : "5mm";
-  const headerPad = isSparse ? "6px 0 8px" : "4px 0 6px";
+  const qrSize = isSparse ? "95px" : isCompact ? "55px" : "72px";
+  const pageMargin = isSparse ? "4mm" : "3mm";
+  const pageMarginBottom = isSparse ? "5mm" : "4mm";
   const sectionGap = isSparse ? "10px" : isCompact ? "4px" : "6px";
   const tableCellPad = isSparse ? "6px 8px" : isCompact ? "3px 5px" : "4px 6px";
   const paymentBoxPad = isSparse ? "8px 0" : "4px 0";
@@ -143,7 +146,7 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
   const pageSizeStr = paperSize === "A5-landscape" ? "A5 landscape" : paperSize === "A5-portrait" ? "A5 portrait" : paperSize === "half-a4" ? "148mm 210mm" : "A4 portrait";
   const pageWidth = paperSize === "A5-landscape" ? "198mm" : paperSize === "A5-portrait" ? "136mm" : paperSize === "half-a4" ? "148mm" : "210mm";
 
-  // ── Billed-by name ──
+  // ── Billed-by name & system info ──
   const billedByName = (() => {
     try {
       if (typeof window === "undefined") return "";
@@ -152,6 +155,10 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
       return JSON.parse(raw).user?.name ?? "";
     } catch { return ""; }
   })();
+
+  const now = new Date();
+  const nowDateStr = now.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  const nowTimeStr = now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
 
   const showCode = clinic?.billShowCode !== false;
   const showCategory = clinic?.billShowCategory !== false;
@@ -164,16 +171,16 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
     const cat = t.test?.category ?? "";
     const codeFont = `font-size:${Math.round(parseInt(tablePx, 10) * 0.9)}px`;
     return `<tr>
-      <td style="padding:${tableCellPad};border:1px solid #ccc;font-size:${tablePx};text-align:center;font-weight:700">${i + 1}</td>
-      ${showCode ? `<td style="padding:${tableCellPad};border:1px solid #ccc;font-family:monospace;${codeFont}">${esc(code)}</td>` : ""}
-      <td style="padding:${tableCellPad};border:1px solid #ccc;font-size:${tablePx};font-weight:600">${esc(name)}</td>
-      ${showCategory ? `<td style="padding:${tableCellPad};border:1px solid #ccc;font-size:${tablePx};color:#333">${esc(cat)}</td>` : ""}
-      <td style="padding:${tableCellPad};border:1px solid #ccc;text-align:right;font-weight:700;font-size:${tablePx}">₹${fmt(t.price)}</td>
+      <td style="padding:${tableCellPad};border:1px solid #000;font-size:${tablePx};text-align:center;font-weight:700">${i + 1}</td>
+      ${showCode ? `<td style="padding:${tableCellPad};border:1px solid #000;font-family:monospace;${codeFont};white-space:nowrap">${esc(code)}</td>` : ""}
+      <td style="padding:${tableCellPad};border:1px solid #000;font-size:${tablePx};font-weight:600;word-wrap:break-word;word-break:break-word;overflow-wrap:anywhere">${esc(name)}</td>
+      ${showCategory ? `<td style="padding:${tableCellPad};border:1px solid #000;font-size:${tablePx};white-space:nowrap">${esc(cat)}</td>` : ""}
+      <td style="padding:${tableCellPad};border:1px solid #000;text-align:right;font-weight:700;font-size:${tablePx}">₹${fmt(t.price)}</td>
     </tr>`;
   }).join("");
 
   const cancelledRow = cancelled.length === 0 ? "" : `
-    <div style="margin-top:4px;font-size:${tinyPx};color:#999">
+    <div style="margin-top:4px;font-size:${tinyPx};color:#555">
       <em>Cancelled: ${esc(cancelled.map((t) => t.displayName ?? t.test?.name ?? "").join(", "))}</em>
     </div>`;
 
@@ -182,77 +189,121 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
     const ref = p.referenceNumber ? ` (${esc(p.referenceNumber)})` : "";
     const dt = p.createdAt ? new Date(p.createdAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Kolkata" }) : "";
     return `<tr>
-      <td style="padding:2px 0;font-size:${tinyPx};text-transform:capitalize">${esc(p.method)}${ref ? `<span style="color:#777;font-size:${Math.round(parseInt(tinyPx, 10) * 0.85)}px">${ref}</span>` : ""}</td>
+      <td style="padding:2px 0;font-size:${tinyPx};text-transform:capitalize">${esc(p.method)}${ref ? `<span style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.85)}px">${ref}</span>` : ""}</td>
       <td style="padding:2px 0;text-align:right;font-weight:700;font-size:${tinyPx}">₹${fmt(p.amount)}</td>
-      ${dt ? `<td style="padding:2px 0;text-align:right;font-size:${Math.round(parseInt(tinyPx, 10) * 0.85)}px;color:#777">${esc(dt)}</td>` : ""}
+      ${dt ? `<td style="padding:2px 0;text-align:right;font-size:${Math.round(parseInt(tinyPx, 10) * 0.85)}px">${esc(dt)}</td>` : ""}
     </tr>`;
   }).join("");
 
   const hasPayDetail = (bill.payments ?? []).length > 0;
-
   const balanceDue = Number(bill.balanceAmount);
   const hasDue = balanceDue > 0;
 
   const balanceRow = hasDue
     ? `<tr>
-      <td style="padding:4px 4px;border-top:2px solid #000;font-weight:900;font-size:${bigTotalPx};color:#c62828">BALANCE DUE</td>
-      <td style="padding:4px 4px;border-top:2px solid #000;text-align:right;font-weight:900;font-size:${bigTotalPx};color:#c62828">₹${fmt(bill.balanceAmount)}</td>
+      <td style="padding:4px 6px;border-top:2px solid #000;font-weight:900;font-size:${bigTotalPx};white-space:nowrap">DUE</td>
+      <td style="padding:4px 6px;border-top:2px solid #000;text-align:right;font-weight:900;font-size:${bigTotalPx};white-space:nowrap">₹${fmt(bill.balanceAmount)}</td>
     </tr>`
     : `<tr>
-      <td style="padding:4px 4px;border-top:2px solid #000;font-weight:900;font-size:${bigTotalPx}">BALANCE DUE</td>
-      <td style="padding:4px 4px;border-top:2px solid #000;text-align:right;font-weight:900;font-size:${bigTotalPx};color:#555">₹0.00</td>
+      <td style="padding:4px 6px;border-top:2px solid #000;font-weight:900;font-size:${bigTotalPx};white-space:nowrap">DUE</td>
+      <td style="padding:4px 6px;border-top:2px solid #000;text-align:right;font-weight:900;font-size:${bigTotalPx};white-space:nowrap">₹0.00</td>
     </tr>`;
 
   // ── Payment mode breakdown rows ──
   const modeBreakdownRows = [
-    cashAmt > 0 ? `<tr><td style="padding:2px 4px;font-size:${tinyPx};color:#444">Cash</td><td style="padding:2px 4px;text-align:right;font-size:${tinyPx};color:#444">₹${fmt(cashAmt)}</td></tr>` : "",
-    upiAmt > 0 ? `<tr><td style="padding:2px 4px;font-size:${tinyPx};color:#444">UPI</td><td style="padding:2px 4px;text-align:right;font-size:${tinyPx};color:#444">₹${fmt(upiAmt)}</td></tr>` : "",
-    cardAmt > 0 ? `<tr><td style="padding:2px 4px;font-size:${tinyPx};color:#444">Card</td><td style="padding:2px 4px;text-align:right;font-size:${tinyPx};color:#444">₹${fmt(cardAmt)}</td></tr>` : "",
-    insAmt > 0 ? `<tr><td style="padding:2px 4px;font-size:${tinyPx};color:#444">Insurance</td><td style="padding:2px 4px;text-align:right;font-size:${tinyPx};color:#444">₹${fmt(insAmt)}</td></tr>` : "",
-    chqAmt > 0 ? `<tr><td style="padding:2px 4px;font-size:${tinyPx};color:#444">Cheque</td><td style="padding:2px 4px;text-align:right;font-size:${tinyPx};color:#444">₹${fmt(chqAmt)}</td></tr>` : "",
-    bankAmt > 0 ? `<tr><td style="padding:2px 4px;font-size:${tinyPx};color:#444">Bank Transfer</td><td style="padding:2px 4px;text-align:right;font-size:${tinyPx};color:#444">₹${fmt(bankAmt)}</td></tr>` : "",
+    cashAmt > 0 ? `<tr><td style="padding:2px 4px;font-size:${tinyPx}">Cash</td><td style="padding:2px 4px;text-align:right;font-size:${tinyPx}">₹${fmt(cashAmt)}</td></tr>` : "",
+    upiAmt > 0 ? `<tr><td style="padding:2px 4px;font-size:${tinyPx}">UPI</td><td style="padding:2px 4px;text-align:right;font-size:${tinyPx}">₹${fmt(upiAmt)}</td></tr>` : "",
+    cardAmt > 0 ? `<tr><td style="padding:2px 4px;font-size:${tinyPx}">Card</td><td style="padding:2px 4px;text-align:right;font-size:${tinyPx}">₹${fmt(cardAmt)}</td></tr>` : "",
+    insAmt > 0 ? `<tr><td style="padding:2px 4px;font-size:${tinyPx}">Insurance</td><td style="padding:2px 4px;text-align:right;font-size:${tinyPx}">₹${fmt(insAmt)}</td></tr>` : "",
+    chqAmt > 0 ? `<tr><td style="padding:2px 4px;font-size:${tinyPx}">Cheque</td><td style="padding:2px 4px;text-align:right;font-size:${tinyPx}">₹${fmt(chqAmt)}</td></tr>` : "",
+    bankAmt > 0 ? `<tr><td style="padding:2px 4px;font-size:${tinyPx}">Bank Transfer</td><td style="padding:2px 4px;text-align:right;font-size:${tinyPx}">₹${fmt(bankAmt)}</td></tr>` : "",
   ].filter(Boolean).join("");
 
-  const amountInWords = showAmountInWords ? `<div style="font-size:${tinyPx};font-style:italic;color:#444;margin:3px 0 6px">${esc(numberToWords(Number(bill.totalAmount)))}</div>` : "";
+  const amountInWords = showAmountInWords ? `<div style="font-size:${tinyPx};font-style:italic;margin:3px 0 6px">${esc(numberToWords(Number(bill.totalAmount)))}</div>` : "";
 
+  // ── Service footer ──
   const serviceFooter = showServiceFooter
-    ? `<div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.95)}px;color:#666;text-align:center;margin:4px 0;letter-spacing:0.3px">MRI · CT SCAN · ULTRASOUND · DIGITAL X-RAY · MAMMOGRAPHY · PATHOLOGY</div>`
+    ? `<div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.95)}px;text-align:center;letter-spacing:0.3px;font-weight:700">MRI · CT SCAN · ULTRASOUND · DIGITAL X-RAY · MAMMOGRAPHY · PATHOLOGY</div>`
     : "";
 
   const reportMessage = showReportMessage
-    ? `<div style="font-size:${tinyPx};color:#666;text-align:center;margin:3px 0">Please collect report within 7 days or download online using QR verification.</div>`
+    ? `<div style="font-size:${tinyPx};text-align:center;margin:3px 0;font-weight:600">Please collect report within 7 days or download online using QR verification.</div>`
     : "";
 
-  const brandingFooter = showBrandingFooter
-    ? `<div style="font-size:${Math.round(parseInt(footerPx, 10) * 1.2)}px;font-weight:900;color:#000;text-align:center;margin:6px 0 4px;letter-spacing:1px;text-transform:uppercase">Thank You for Choosing Care Diagnostics</div>`
+  const footerBranding = showBrandingFooter
+    ? `<div style="font-size:${Math.round(parseInt(footerPx, 10) * 1.1)}px;font-weight:900;text-align:center;letter-spacing:0.8px;text-transform:uppercase">Thank You for Choosing Care Diagnostics</div>`
     : "";
 
   const customFooterLine = customFooter
-    ? `<div style="font-size:${footerPx};font-weight:700;color:#000;text-align:center;margin:3px 0">${esc(customFooter)}</div>`
+    ? `<div style="font-size:${footerPx};font-weight:700;text-align:center;margin:3px 0">${esc(customFooter)}</div>`
     : reportCollectionNote
-    ? `<div style="font-size:${footerPx};font-weight:700;color:#000;text-align:center;margin:3px 0">${esc(reportCollectionNote)}</div>`
+    ? `<div style="font-size:${footerPx};font-weight:700;text-align:center;margin:3px 0">${esc(reportCollectionNote)}</div>`
     : "";
 
   const signatureLine = showSignatureLine
-    ? `<div style="border-bottom:1px solid #000;width:130px;margin-bottom:2px"></div><div style="font-size:${tinyPx};color:#555;font-weight:600">Authorised Signature</div>`
+    ? `<div style="border-bottom:1px solid #000;width:130px;margin-bottom:2px"></div><div style="font-size:${tinyPx};font-weight:600">Authorised Signature</div>`
     : "";
 
   const computerGenerated = showComputerGenerated
-    ? `<div style="font-size:${tinyPx};color:#555;text-align:center;font-weight:600">COMPUTER GENERATED INVOICE. NO SIGNATURE REQUIRED.</div>`
+    ? `<div style="font-size:${tinyPx};text-align:center;font-weight:600">COMPUTER GENERATED INVOICE. NO SIGNATURE REQUIRED.</div>`
     : "";
 
+  // ── QR block ──
   const qrBlock = showQr && qrDataUrl
     ? `<div style="text-align:center">
-      <img src="${qrDataUrl}" alt="QR" style="width:${qrSize};height:${qrSize};display:block;margin:0 auto"/>
-      <div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.95)}px;color:#666;margin-top:2px">Scan to Verify</div>
+      <div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.95)}px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:3px">SCAN TO VERIFY</div>
+      <img src="${qrDataUrl}" alt="QR" style="width:${qrSize};height:${qrSize};display:block;margin:0 auto;border:1px solid #000;padding:2px;background:#fff"/>
+      <div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.95)}px;font-weight:700;margin-top:3px;text-transform:uppercase">Verify Receipt</div>
+      <div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.85)}px;margin-top:1px">Download Report · View Bill Details</div>
+      <div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.85)}px;margin-top:2px;font-weight:600">Receipt Verification Available Online</div>
     </div>`
     : "";
 
-  const copyLabelDiv = copyLabel ? `<div style="text-align:right;font-size:${tinyPx};font-weight:800;color:#555;border:1px dashed #999;display:inline-block;padding:2px 6px;float:right">${esc(copyLabel)}</div>` : "";
+  // ── Barcode block ──
+  const barcodeBlock = showBarcode && barcodeDataUrl
+    ? `<div style="text-align:center;margin-top:4px">
+      <img src="${barcodeDataUrl}" alt="Barcode" style="max-width:120px;height:24px;display:block;margin:0 auto"/>
+      <div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.85)}px;font-family:monospace;margin-top:1px;font-weight:600">${esc(billDigits)}</div>
+    </div>`
+    : "";
+
+  // ── Patient instructions ──
+  const patientInstructions = showPatientInstructions
+    ? `<div style="font-size:${tinyPx};text-align:center;margin:4px 0;font-weight:600">
+      Please preserve this receipt for future reference. Collect reports within 7 days. Scan QR code to download available reports.
+    </div>`
+    : "";
+
+  // ── System info ──
+  const systemInfo = showSystemInfo
+    ? `<div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.85)}px;text-align:center;margin:2px 0">
+      <span style="font-weight:700">Generated On:</span> ${esc(nowDateStr)} ${esc(nowTimeStr)} &nbsp;|&nbsp;
+      <span style="font-weight:700">Printed By:</span> ${esc(billedByName || "System")}
+    </div>`
+    : "";
+
+  // ── Watermark ──
+  const watermarkStyle = showWatermark
+    ? `<div style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;opacity:0.08;font-size:56px;font-weight:900;text-transform:uppercase;letter-spacing:10px;color:#000;text-align:center;display:flex;align-items:center;justify-content:center;transform:rotate(-25deg)">${esc(clinic?.name || "Care Diagnostics")}</div>`
+    : "";
+
+  const copyLabelDiv = copyLabel ? `<div style="text-align:right;font-size:${tinyPx};font-weight:800;border:1px dashed #000;display:inline-block;padding:2px 6px;float:right">${esc(copyLabel)}</div>` : "";
 
   const reprintNotice = reprintBy || reprintReason
-    ? `<div style="text-align:center;font-size:${tinyPx};color:#a16207;border:1px dashed #d97706;padding:2px 4px;margin-bottom:6px;text-transform:uppercase;font-weight:700">DUPLICATE / RE-PRINT${reprintBy ? ` · BY ${esc(reprintBy)}` : ""}${reprintReason ? ` · ${esc(reprintReason)}` : ""}</div>`
+    ? `<div style="text-align:center;font-size:${tinyPx};border:1px dashed #000;padding:2px 4px;margin-bottom:6px;text-transform:uppercase;font-weight:700">DUPLICATE / RE-PRINT${reprintBy ? ` · BY ${esc(reprintBy)}` : ""}${reprintReason ? ` · ${esc(reprintReason)}` : ""}</div>`
     : "";
+
+  // ── Dynamic footer sizing based on density ──
+  const footerSpacing = isSparse ? "16px 0 10px" : isCompact ? "3px 0 2px" : "6px 0 4px";
+  const footerBorderTop = isSparse ? "1.5px" : "1px";
+  const footerMarginTop = isSparse ? "12px" : isCompact ? "2px" : "4px";
+  const footerTaglineSize = isSparse ? "12px" : isCompact ? "9px" : "10px";
+  const footerTaglineMargin = isSparse ? "6px" : isCompact ? "2px" : "4px";
+  const footerServiceMargin = isSparse ? "6px" : isCompact ? "2px" : "4px";
+  const footerBrandingMargin = isSparse ? "8px" : isCompact ? "2px" : "4px";
+  const footerInstructionsMargin = isSparse ? "6px" : isCompact ? "2px" : "4px";
+  const footerGeneratedMargin = isSparse ? "6px" : isCompact ? "2px" : "4px";
+  const footerSystemMargin = isSparse ? "4px" : isCompact ? "1px" : "2px";
 
   // ── Main HTML ──
   const html = `
@@ -276,54 +327,46 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
     padding: 2mm 3mm;
     box-sizing: border-box;
     min-height: 100vh;
+    position: relative;
+    z-index: 1;
   }
-  /* Prevent breaks */
   .no-break { page-break-inside: avoid; }
   .receipt table tr { page-break-inside: avoid; }
-  /* Density mode overrides */
-  .premium-sparse-mode .header-block { padding: 6px 0 10px; }
-  .premium-sparse-mode .title-block { padding: 6px 0; margin-bottom: 8px; }
-  .premium-sparse-mode .patient-block { padding: 6px 0; margin-bottom: 8px; }
-  .premium-sparse-mode .test-table { margin-bottom: 8px; }
-  .premium-sparse-mode .payment-section { padding: 8px 0; margin-bottom: 8px; }
-  .premium-sparse-mode .summary-box { padding: 8px 0; margin-bottom: 8px; }
-  .premium-sparse-mode .footer-panel { padding: 12px 0 8px; margin-top: 6px; border-top: 1.5px solid #000; }
-  .premium-sparse-mode .qr-block { padding: 6px 0; }
-  .normal-mode .footer-panel { padding: 6px 0; margin-top: 4px; border-top: 1px solid #000; }
-  .compact-mode .footer-panel { padding: 3px 0; margin-top: 2px; border-top: 1px solid #000; }
   @media print {
-    body { margin: 0; padding: 0; }
+    body { margin: 0; padding: 0; color: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .receipt { margin: 0; }
+    .receipt * { color: #000 !important; }
   }
 </style>
 </head>
 <body>
+  ${watermarkStyle}
   <div class="receipt ${densityClass}">
     ${reprintNotice}
     ${copyLabelDiv ? `<div style="margin-bottom:4px;overflow:hidden">${copyLabelDiv}</div>` : ""}
 
-    <!-- HEADER -->
-    <div class="header-block no-break" style="padding: ${headerPad}; border-bottom: 2px solid #000;">
+    <!-- HEADER — compact single-row, 20-25% less height -->
+    <div class="header-block no-break" style="padding: 2px 0 4px; border-bottom: 2px solid #000;">
       <table style="width:100%;border-collapse:collapse">
         <tr>
           <td style="vertical-align:top;padding:0;width:50%">
-            ${clinic?.logoDataUrl ? `<img src="${clinic.logoDataUrl}" alt="logo" style="max-height:${isSparse ? "90px" : "60px"};max-width:180px;object-fit:contain;display:block;margin-bottom:4px"/>` : ""}
-            <div style="font-size:${clinicNamePx};font-weight:900;color:#000;letter-spacing:0.5px;text-transform:uppercase">${esc(clinic?.name || "Care Diagnostics")}</div>
-            <div style="font-size:${basePx};color:#333;font-weight:700;line-height:1.3;letter-spacing:0.3px">${esc(clinic?.tagline || "Touching Lives With Care")}</div>
+            ${clinic?.logoDataUrl ? `<img src="${clinic.logoDataUrl}" alt="logo" style="max-height:${isSparse ? "44px" : "36px"};max-width:120px;object-fit:contain;display:block;margin-bottom:1px"/>` : ""}
+            <div style="font-size:${clinicNamePx};font-weight:900;color:#000;letter-spacing:0.5px;text-transform:uppercase;line-height:1.1">${esc(clinic?.name || "Care Diagnostics")}</div>
+            <div style="font-size:${basePx};color:#000;font-weight:700;line-height:1.2;letter-spacing:0.3px">${esc(clinic?.tagline || "Touching Lives With Care")}</div>
           </td>
-          <td style="vertical-align:top;text-align:right;padding:0;font-size:${headerPx};line-height:1.5;color:#000;font-weight:700">
+          <td style="vertical-align:top;text-align:right;padding:0;font-size:${headerPx};line-height:1.35;color:#000;font-weight:700">
             ${clinic?.address ? `<div>${esc(clinic.address.replace(/\s*\n\s*/g, ", ").trim())}</div>` : ""}
             ${clinic?.phone ? `<div>PH: ${esc(clinic.phone)}</div>` : ""}
             ${clinic?.email ? `<div>${esc(clinic.email)}</div>` : ""}
             ${clinic?.website ? `<div>${esc(clinic.website)}</div>` : ""}
-            ${clinic?.gstin ? `<div style="margin-top:2px;font-weight:800">GSTIN: ${esc(clinic.gstin)}</div>` : ""}
+            ${clinic?.gstin ? `<div style="margin-top:1px;font-weight:800">GSTIN: ${esc(clinic.gstin)}</div>` : ""}
           </td>
         </tr>
       </table>
     </div>
 
-    <!-- TITLE -->
-    <div class="title-block no-break" style="border-bottom: 1px solid #000; padding: ${isSparse ? "6px 0" : "4px 0"}; margin-bottom: ${sectionGap};">
+    <!-- TITLE + BILL NO -->
+    <div class="title-block no-break" style="border-bottom: 1px solid #000; padding: ${isSparse ? "5px 0" : "3px 0"}; margin-bottom: ${sectionGap};">
       <table style="width:100%;border-collapse:collapse">
         <tr>
           <td style="padding:0;vertical-align:middle">
@@ -336,21 +379,22 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
       </table>
     </div>
 
-    <!-- PATIENT INFO -->
-    <div class="patient-block no-break" style="margin-bottom: ${sectionGap};">
+    <!-- PATIENT INFO CARD — strong bordered box, name most prominent -->
+    <div class="patient-block no-break" style="margin-bottom: ${sectionGap}; border: 1.5px solid #000; padding: ${isSparse ? "8px 10px" : "5px 8px"};">
       <table style="width:100%;border-collapse:collapse">
         <tr>
-          <td style="vertical-align:top;padding:0;width:50%">
-            <div style="font-size:${patientNamePx};font-weight:900;line-height:1.2;text-transform:uppercase">${esc(`${bill.patient?.firstName ?? ""} ${bill.patient?.lastName ?? ""}`.trim())}</div>
-            <div style="font-size:${patientPx};font-weight:700;color:#333;margin-top:3px">${esc(ageGender)}</div>
-            <div style="font-size:${patientPx};font-weight:700;color:#333;margin-top:3px">
+          <td style="vertical-align:top;padding:0;width:55%">
+            <div style="font-size:${patientNamePx};font-weight:900;line-height:1.2;text-transform:uppercase;color:#000">${esc(`${bill.patient?.firstName ?? ""} ${bill.patient?.lastName ?? ""}`.trim())}</div>
+            <div style="font-size:${patientPx};font-weight:700;margin-top:4px">${esc(ageGender)}</div>
+            <div style="font-size:${patientPx};font-weight:700;margin-top:2px">PH: ${esc(bill.patient?.phone ?? "")}</div>
+            <div style="font-size:${patientPx};font-weight:700;margin-top:2px">
               REF: <strong>${rawDoctor ? esc(rawDoctor.match(/^\s*DR\.?\s*/i) ? rawDoctor.trim().toUpperCase() : "DR. " + rawDoctor.trim().toUpperCase()) : "SELF / WALK-IN"}</strong>
             </div>
           </td>
-          <td style="vertical-align:top;text-align:right;padding:0;font-size:${patientPx};line-height:1.4;white-space:nowrap;color:#000">
+          <td style="vertical-align:top;text-align:right;padding:0;font-size:${patientPx};line-height:1.5;color:#000">
             <div style="font-weight:800">${created.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase()} &nbsp;${created.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }).toUpperCase()}</div>
-            <div style="margin-top:2px">PH: ${esc(bill.patient?.phone ?? "")}</div>
-            <div style="margin-top:2px">ID: ${esc(bill.patient?.patientId ?? "")}</div>
+            <div style="margin-top:3px;font-weight:700">ID: ${esc(bill.patient?.patientId ?? "")}</div>
+            <div style="margin-top:2px;font-weight:700">BILL: ${esc(billDigits)}</div>
           </td>
         </tr>
       </table>
@@ -360,16 +404,16 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
     <div class="test-table no-break" style="margin-bottom: ${sectionGap};">
       <table style="width:100%;border-collapse:collapse;font-size:${tablePx}">
         <thead>
-          <tr style="background:#f5f5f5">
-            <th style="padding:${tableCellPad};border:1px solid #ccc;text-align:center;font-weight:800">#</th>
-            ${showCode ? `<th style="padding:${tableCellPad};border:1px solid #ccc;text-align:left;font-weight:800">CODE</th>` : ""}
-            <th style="padding:${tableCellPad};border:1px solid #ccc;text-align:left;font-weight:800">TEST NAME</th>
-            ${showCategory ? `<th style="padding:${tableCellPad};border:1px solid #ccc;text-align:left;font-weight:800">CATEGORY</th>` : ""}
-            <th style="padding:${tableCellPad};border:1px solid #ccc;text-align:right;font-weight:800">AMOUNT (₹)</th>
+          <tr>
+            <th style="padding:${tableCellPad};border:1px solid #000;text-align:center;font-weight:800">#</th>
+            ${showCode ? `<th style="padding:${tableCellPad};border:1px solid #000;text-align:left;font-weight:800">CODE</th>` : ""}
+            <th style="padding:${tableCellPad};border:1px solid #000;text-align:left;font-weight:800">TEST NAME</th>
+            ${showCategory ? `<th style="padding:${tableCellPad};border:1px solid #000;text-align:left;font-weight:800">CATEGORY</th>` : ""}
+            <th style="padding:${tableCellPad};border:1px solid #000;text-align:right;font-weight:800">AMOUNT (₹)</th>
           </tr>
         </thead>
         <tbody>
-          ${testRows || `<tr><td colspan="${colCount}" style="padding:8px;text-align:center;color:#999;border:1px solid #ccc">No tests on this bill</td></tr>`}
+          ${testRows || `<tr><td colspan="${colCount}" style="padding:8px;text-align:center;border:1px solid #000">No tests on this bill</td></tr>`}
         </tbody>
       </table>
       ${cancelledRow}
@@ -377,58 +421,65 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
 
     ${amountInWords}
 
-    <!-- PAYMENT + SUMMARY -->
+    <!-- PAYMENT + SUMMARY — three-column layout: QR | Details | Summary Box -->
     <div class="payment-section no-break" style="padding: ${paymentBoxPad}; margin-bottom: ${sectionGap};">
       <table style="width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed">
         <colgroup>
-          <col style="width:${qrBlock ? (isSparse ? "100px" : "80px") : "0"}"/>
+          <col style="width:${qrBlock ? (isSparse ? "105px" : "80px") : "0"}"/>
           <col/>
-          <col style="width:${isA5 ? (isSparse ? "185px" : "170px") : "220px"}"/>
+          <col style="width:${isA5 ? (isSparse ? "155px" : "160px") : "220px"}"/>
         </colgroup>
         <tbody>
           <tr>
-            <td style="vertical-align:bottom;padding:0">
-              <div class="qr-block">${qrBlock}</div>
+            <td style="vertical-align:top;padding:0">
+              <div>${qrBlock}${barcodeBlock}</div>
             </td>
             <td style="vertical-align:top;padding:0 8px 0 0;font-size:${tinyPx}">
-              ${hasPayDetail ? `<div style="font-weight:800;border-bottom:1px solid #999;padding-bottom:2px;margin-bottom:3px;font-size:${Math.round(parseInt(tinyPx, 10) * 1.1)}px">PAYMENT DETAILS</div>
+              ${hasPayDetail ? `<div style="font-weight:800;border-bottom:1px solid #000;padding-bottom:2px;margin-bottom:3px;font-size:${Math.round(parseInt(tinyPx, 10) * 1.1)}px">PAYMENT DETAILS</div>
                 <table style="width:100%;border-collapse:collapse"><tbody>${payRows}</tbody></table>
-                ${modeBreakdownRows ? `<div style="font-weight:700;border-top:1px solid #ccc;margin-top:3px;padding-top:3px;font-size:${Math.round(parseInt(tinyPx, 10) * 1.05)}px">TOTAL PAID</div><table style="width:100%;border-collapse:collapse"><tbody>${modeBreakdownRows}</tbody></table>` : ""}` : ""}
+                ${modeBreakdownRows ? `<div style="font-weight:700;border-top:1px solid #000;margin-top:3px;padding-top:3px;font-size:${Math.round(parseInt(tinyPx, 10) * 1.05)}px">TOTAL PAID</div><table style="width:100%;border-collapse:collapse"><tbody>${modeBreakdownRows}</tbody></table>` : ""}` : ""}
             </td>
             <td style="vertical-align:top;padding:0">
-              <table style="width:100%;border-collapse:collapse;font-size:${totalPx};table-layout:fixed">
-                <tbody>
-                  <tr><td style="padding:3px 4px">SUBTOTAL</td><td style="padding:3px 4px;text-align:right;white-space:nowrap">₹${fmt(bill.subtotal)}</td></tr>
-                  ${Number(bill.discount) > 0 ? `<tr><td style="padding:3px 4px">DISCOUNT</td><td style="padding:3px 4px;text-align:right;white-space:nowrap">₹${fmt(bill.discount)}</td></tr>` : ""}
-                  <tr>
-                    <td style="padding:4px 4px;border-top:2px solid #000;font-weight:900;font-size:${bigTotalPx}">TOTAL</td>
-                    <td style="padding:4px 4px;border-top:2px solid #000;text-align:right;font-weight:900;font-size:${bigTotalPx};white-space:nowrap">₹${fmt(bill.totalAmount)}</td>
-                  </tr>
-                  <tr><td style="padding:3px 4px;border-top:1px solid #000;font-weight:800">PAID</td><td style="padding:3px 4px;border-top:1px solid #000;text-align:right;font-weight:800;white-space:nowrap;color:green">₹${fmt(bill.paidAmount)}</td></tr>
-                  ${balanceRow}
-                </tbody>
-              </table>
+              <div style="border:1.5px solid #000;padding:4px 6px;">
+                <table style="width:100%;border-collapse:collapse;font-size:${totalPx};table-layout:fixed">
+                  <tbody>
+                    <tr><td style="padding:3px 4px">SUBTOTAL</td><td style="padding:3px 4px;text-align:right;white-space:nowrap">₹${fmt(bill.subtotal)}</td></tr>
+                    ${Number(bill.discount) > 0 ? `<tr><td style="padding:3px 4px">DISCOUNT</td><td style="padding:3px 4px;text-align:right;white-space:nowrap">₹${fmt(bill.discount)}</td></tr>` : ""}
+                    <tr>
+                      <td style="padding:4px 4px;border-top:2px solid #000;font-weight:900;font-size:${bigTotalPx}">TOTAL</td>
+                      <td style="padding:4px 4px;border-top:2px solid #000;text-align:right;font-weight:900;font-size:${bigTotalPx};white-space:nowrap">₹${fmt(bill.totalAmount)}</td>
+                    </tr>
+                    <tr><td style="padding:3px 4px;border-top:1px solid #000;font-weight:800">PAID</td><td style="padding:3px 4px;border-top:1px solid #000;text-align:right;font-weight:800;white-space:nowrap">₹${fmt(bill.paidAmount)}</td></tr>
+                    ${balanceRow}
+                  </tbody>
+                </table>
+              </div>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
 
-    <!-- FOOTER PANEL — fills the lower A5 area naturally with generous spacing -->
-    <div class="footer-panel no-break">
-      ${brandingFooter}
+    <!-- PATIENT INSTRUCTIONS (optional) -->
+    ${patientInstructions}
+
+    <!-- FOOTER PANEL — dynamic, fills A5 space naturally -->
+    <div class="footer-panel no-break" style="padding: ${footerSpacing}; margin-top: ${footerMarginTop}; border-top: ${footerBorderTop} solid #000;">
+      ${footerBranding ? `<div style="margin-bottom:${footerBrandingMargin}">${footerBranding}</div>` : ""}
       ${customFooterLine}
-      ${serviceFooter}
-      ${reportMessage}
-      ${computerGenerated}
+      ${serviceFooter ? `<div style="margin-top:${footerServiceMargin}">${serviceFooter}</div>` : ""}
+      ${showBrandingFooter ? `<div style="font-size:${footerTaglineSize};font-weight:700;text-align:center;letter-spacing:0.5px;text-transform:uppercase;margin-top:${footerTaglineMargin}">Touching Lives With Care</div>` : ""}
+      ${reportMessage ? `<div style="margin-top:${footerGeneratedMargin}">${reportMessage}</div>` : ""}
+      ${computerGenerated ? `<div style="margin-top:${footerGeneratedMargin}">${computerGenerated}</div>` : ""}
+      ${systemInfo ? `<div style="margin-top:${footerSystemMargin}">${systemInfo}</div>` : ""}
       <table style="width:100%;border-collapse:collapse;margin-top:6px">
         <tr>
           <td style="text-align:left;padding:0;vertical-align:bottom">
             ${signatureLine}
           </td>
-          <td style="text-align:right;padding:0;vertical-align:bottom;font-size:${tinyPx};color:#555">
+          <td style="text-align:right;padding:0;vertical-align:bottom;font-size:${tinyPx}">
             ${billedByName ? `<div style="font-weight:700">Billed By: ${esc(billedByName)}</div>` : ""}
-            <div style="margin-top:1px">${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })} ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}</div>
+            <div style="margin-top:1px">${esc(nowDateStr)} ${esc(nowTimeStr)}</div>
           </td>
         </tr>
       </table>

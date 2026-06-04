@@ -54,6 +54,10 @@ export type BillPrintSettings = {
   showReportMessage: boolean;
   showServiceFooter: boolean;
   showBrandingFooter: boolean;
+  showBarcode: boolean;
+  showWatermark: boolean;
+  showPatientInstructions: boolean;
+  showSystemInfo: boolean;
 
   // Print action
   defaultPrintAction: PrintAction;
@@ -83,6 +87,10 @@ export const GLOBAL_BILL_PRINT_DEFAULTS: BillPrintSettings = {
   showReportMessage: true,
   showServiceFooter: true,
   showBrandingFooter: true,
+  showBarcode: false,
+  showWatermark: false,
+  showPatientInstructions: false,
+  showSystemInfo: false,
   defaultPrintAction: "save-print",
   enablePreview: false,
   directPrintAfterSave: true,

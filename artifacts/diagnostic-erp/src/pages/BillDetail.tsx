@@ -270,6 +270,10 @@ export default function BillDetail({ id }: { id: number }) {
       showReportMessage: settings.showReportMessage,
       showServiceFooter: settings.showServiceFooter,
       showBrandingFooter: settings.showBrandingFooter,
+      showBarcode: settings.showBarcode,
+      showWatermark: settings.showWatermark,
+      showPatientInstructions: settings.showPatientInstructions,
+      showSystemInfo: settings.showSystemInfo,
     });
   };
 

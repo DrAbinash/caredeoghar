@@ -831,6 +831,10 @@ export default function BillingDesk() {
               showReportMessage: settings.showReportMessage,
               showServiceFooter: settings.showServiceFooter,
               showBrandingFooter: settings.showBrandingFooter,
+              showBarcode: settings.showBarcode,
+              showWatermark: settings.showWatermark,
+              showPatientInstructions: settings.showPatientInstructions,
+              showSystemInfo: settings.showSystemInfo,
             });
             if (settings.enablePreview) {
               setPrintPreviewHtml(html);
@@ -2360,6 +2364,10 @@ export default function BillingDesk() {
                           showReportMessage: settings.showReportMessage,
                           showServiceFooter: settings.showServiceFooter,
                           showBrandingFooter: settings.showBrandingFooter,
+                          showBarcode: settings.showBarcode,
+                          showWatermark: settings.showWatermark,
+                          showPatientInstructions: settings.showPatientInstructions,
+                          showSystemInfo: settings.showSystemInfo,
                         });
                         if (settings.enablePreview) {
                           setPrintPreviewHtml(html);

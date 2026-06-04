@@ -105,6 +105,11 @@ export type BuildPrintHtmlOpts = {
   showReportMessage?: boolean;
   showServiceFooter?: boolean;
   showBrandingFooter?: boolean;
+  showBarcode?: boolean;
+  showWatermark?: boolean;
+  showPatientInstructions?: boolean;
+  showSystemInfo?: boolean;
+  barcodeDataUrl?: string;
   customFooter?: string | null;
   reportCollectionNote?: string | null;
 };
@@ -370,6 +375,11 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
       showReportMessage: opts.showReportMessage ?? true,
       showServiceFooter: opts.showServiceFooter ?? true,
       showBrandingFooter: opts.showBrandingFooter ?? true,
+      showBarcode: opts.showBarcode ?? false,
+      showWatermark: opts.showWatermark ?? false,
+      showPatientInstructions: opts.showPatientInstructions ?? false,
+      showSystemInfo: opts.showSystemInfo ?? false,
+      barcodeDataUrl: opts.barcodeDataUrl,
       customFooter: opts.customFooter,
       reportCollectionNote: opts.reportCollectionNote,
     });

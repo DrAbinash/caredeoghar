@@ -2538,6 +2538,10 @@ function BillingPrintTab() {
           <ToggleRow label="Show Report Collection Message" value={settings.showReportMessage} onChange={(v) => update({ showReportMessage: v })} />
           <ToggleRow label="Show Service Footer" value={settings.showServiceFooter} onChange={(v) => update({ showServiceFooter: v })} />
           <ToggleRow label="Show Branding Footer" value={settings.showBrandingFooter} onChange={(v) => update({ showBrandingFooter: v })} />
+          <ToggleRow label="Show Receipt Barcode" value={settings.showBarcode} onChange={(v) => update({ showBarcode: v })} />
+          <ToggleRow label="Show Watermark" value={settings.showWatermark} onChange={(v) => update({ showWatermark: v })} />
+          <ToggleRow label="Show Patient Instructions" value={settings.showPatientInstructions} onChange={(v) => update({ showPatientInstructions: v })} />
+          <ToggleRow label="Show System Information" value={settings.showSystemInfo} onChange={(v) => update({ showSystemInfo: v })} />
         </div>
       </SectionCard>
 
