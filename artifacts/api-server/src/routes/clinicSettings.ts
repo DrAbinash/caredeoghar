@@ -87,6 +87,7 @@ async function getOrCreate() {
       promotionalDescription: "",
       showPatientSince: false,
       showVerifiedBadge: false,
+      showAuditInfoOnPatientCopy: false,
       updatedAt: new Date(),
     } as any;
   }
@@ -138,6 +139,8 @@ clinicSettingsRouter.get("/branding", async (_req, res) => {
     // V3: Identity & Security
     showPatientSince: row.showPatientSince ?? false,
     showVerifiedBadge: row.showVerifiedBadge ?? false,
+    // V3: Print audit
+    showAuditInfoOnPatientCopy: row.showAuditInfoOnPatientCopy ?? false,
   });
 });
 
@@ -163,7 +166,7 @@ clinicSettingsRouter.put("/", async (req, res) => {
     }
     update.sidebarTheme = body.sidebarTheme;
   }
-  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "payuEnabled", "phonepeEnabled", "bharatpeEnabled", "cashfreeEnabled", "iciciEnabled", "upiQrEnabled", "billShowCode", "billShowCategory", "dayCloseAutoPrint", "lanOnlyLogin", "fido2Enabled", "kioskEnabled", "formFBillingPrompt", "formFAddressRequired", "formFGuardianRequired", "showFollowUpMessage", "showPromotionalFooter", "showPatientSince", "showVerifiedBadge"] as const;
+  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "payuEnabled", "phonepeEnabled", "bharatpeEnabled", "cashfreeEnabled", "iciciEnabled", "upiQrEnabled", "billShowCode", "billShowCategory", "dayCloseAutoPrint", "lanOnlyLogin", "fido2Enabled", "kioskEnabled", "formFBillingPrompt", "formFAddressRequired", "formFGuardianRequired", "showFollowUpMessage", "showPromotionalFooter", "showPatientSince", "showVerifiedBadge", "showAuditInfoOnPatientCopy"] as const;
   const textFields = ["kioskUpiVpa", "kioskUpiName", "kioskWelcomeMessage", "kioskAllowedTestIds", "onlineBookingAllowedTestIds", "onlineBookingAllowedPackageIds", "razorpayKeyId", "payuMerchantKey", "phonepeMerchantId", "bharatpeMerchantId", "cashfreeAppId", "iciciMerchantId", "iciciAggregatorId", "iciciSecretKey", "formFTestIds", "quickTestIds", "footerNote", "commissionDiscountMode", "lanAllowedIps", "billDefaultPaperSize", "name", "tagline", "address", "registeredAddress", "email", "phone", "website", "gstin", "logoDataUrl", "portalHeading", "portalWelcomeMessage", "sidebarTheme", "receiptThankYouMessage", "receiptCollectionMessage", "receiptQrMessage", "receiptPromotionalMessage", "serviceFooter", "followUpMessage", "promotionalTitle", "promotionalDescription"] as const;
   // NOTE: quickTestIds and formFTestIds are intentionally NOT in boolFields
   // because they store JSON-as-text (e.g. "[null,null,null,null,null,null]").

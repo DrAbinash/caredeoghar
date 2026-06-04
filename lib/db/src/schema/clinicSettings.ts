@@ -118,5 +118,8 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   showPatientSince: boolean("show_patient_since").notNull().default(false),
   showVerifiedBadge: boolean("show_verified_badge").notNull().default(false),
 
+  // ── V3: Print audit settings ──
+  showAuditInfoOnPatientCopy: boolean("show_audit_info_on_patient_copy").notNull().default(false),
+
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

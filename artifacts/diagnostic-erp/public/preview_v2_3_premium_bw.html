@@ -21,13 +21,36 @@
     min-height: 100vh;
     position: relative;
     z-index: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+  }
+  .main-content.premium-sparse-mode {
+    justify-content: space-between;
+  }
+  .main-content.premium-sparse-mode .header-block { margin-bottom: 10px; }
+  .main-content.premium-sparse-mode .title-block { margin-bottom: 10px; }
+  .main-content.premium-sparse-mode .patient-block { margin-bottom: 10px; }
+  .main-content.premium-sparse-mode .test-table { margin-bottom: 10px; }
+  .main-content.premium-sparse-mode .payment-section { margin-bottom: 10px; }
+  .footer-panel {
+    margin-top: auto;
+    padding-bottom: 10mm;
   }
   .no-break { page-break-inside: avoid; }
   .receipt table tr { page-break-inside: avoid; }
   @media print {
     body { margin: 0; padding: 0; color: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .receipt { margin: 0; }
-    .receipt * { color: #000 !important; }
+    .receipt { margin: 0; display: flex; flex-direction: column; min-height: 100vh; }
+    .main-content { flex: 1; display: flex; flex-direction: column; }
+    .main-content.premium-sparse-mode { justify-content: space-between; }
+    .footer-panel { margin-top: auto; padding-bottom: 10mm; }
+    .receipt * { color: #000 !important; border-color: #000 !important; }
   }
 </style>
 </head>
@@ -37,6 +60,7 @@
     
     
 
+    <div class="main-content premium-sparse-mode">
     <!-- HEADER — compact single-row, 20-25% less height -->
     <div class="header-block no-break" style="padding: 2px 0 4px; border-bottom: 2px solid #000;">
       <table style="width:100%;border-collapse:collapse">
@@ -58,7 +82,7 @@
     </div>
 
     <!-- TITLE + BILL NO -->
-    <div class="title-block no-break" style="border-bottom: 1px solid #000; padding: 5px 0; margin-bottom: 10px;">
+    <div class="title-block no-break" style="border-bottom: 1px solid #000; padding: 5px 0; margin-bottom: 14px;">
       <table style="width:100%;border-collapse:collapse">
         <tr>
           <td style="padding:0;vertical-align:middle">
@@ -72,7 +96,7 @@
     </div>
 
     <!-- PATIENT INFO CARD — strong bordered box, name most prominent -->
-    <div class="patient-block no-break" style="margin-bottom: 10px; border: 1.5px solid #000; padding: 8px 10px;">
+    <div class="patient-block no-break" style="margin-bottom: 14px; border: 1.5px solid #000; padding: 8px 10px;">
       <table style="width:100%;border-collapse:collapse">
         <tr>
           <td style="vertical-align:top;padding:0;width:55%">
@@ -93,7 +117,7 @@
     </div>
 
     <!-- TEST TABLE -->
-    <div class="test-table no-break" style="margin-bottom: 10px;">
+    <div class="test-table no-break" style="margin-bottom: 14px;">
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead>
           <tr>
@@ -120,7 +144,7 @@
     
 
     <!-- PAYMENT + SUMMARY — three-column layout: QR | Details | Summary Box -->
-    <div class="payment-section no-break" style="padding: 8px 0; margin-bottom: 10px;">
+    <div class="payment-section no-break" style="padding: 8px 0; margin-bottom: 14px;">
       <table style="width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed">
         <colgroup>
           <col style="width:105px"/>
@@ -174,8 +198,20 @@
     <!-- PATIENT INSTRUCTIONS (optional) -->
     
 
-    <!-- FOOTER PANEL — dynamic, fills A5 space naturally -->
-    <div class="footer-panel no-break" style="padding: 16px 0 10px; margin-top: 12px; border-top: 1.5px solid #000;">
+    </div><!-- /main-content -->
+
+    <!-- FOOTER PANEL — pinned near bottom with breathing space -->
+    <div class="footer-panel no-break" style="padding: 12px 0 8px; border-top: 1.5px solid #000;">
+      <!-- V3 receipt messages (priority: thank-you → collection → verified → QR msg → promotional msg → follow-up → patient since) -->
+      
+      
+      
+      
+      
+      
+      
+      
+      <!-- Legacy fallback blocks -->
       <div style="margin-bottom:8px"><div style="font-size:14px;font-weight:900;text-align:center;letter-spacing:0.8px;text-transform:uppercase">Thank You for Choosing Care Diagnostics</div></div>
       
       <div style="margin-top:6px"><div style="font-size:10px;text-align:center;letter-spacing:0.3px;font-weight:700">MRI · CT SCAN · ULTRASOUND · DIGITAL X-RAY · MAMMOGRAPHY · PATHOLOGY</div></div>
@@ -190,7 +226,7 @@
           </td>
           <td style="text-align:right;padding:0;vertical-align:bottom;font-size:11px">
             
-            <div style="margin-top:1px">04 Jun 2026 01:05 pm</div>
+            <div style="margin-top:1px">04 Jun 2026 01:46 pm</div>
           </td>
         </tr>
       </table>

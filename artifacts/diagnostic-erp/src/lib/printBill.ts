@@ -73,6 +73,8 @@ export type PrintClinic = {
   // V3: Identity & security
   showPatientSince?: boolean;
   showVerifiedBadge?: boolean;
+  // V3: Print audit
+  showAuditInfoOnPatientCopy?: boolean;
 } | undefined | null;
 
 function esc(s: string): string {
@@ -135,6 +137,7 @@ export type BuildPrintHtmlOpts = {
   showFollowUpMessage?: boolean;
   showPatientSince?: boolean;
   showPromotionalFooter?: boolean;
+  showAuditInfoOnPatientCopy?: boolean;
   barcodeDataUrl?: string;
   customFooter?: string | null;
   reportCollectionNote?: string | null;
@@ -414,6 +417,7 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
       showFollowUpMessage: opts.showFollowUpMessage ?? opts.clinic?.showFollowUpMessage ?? false,
       showPatientSince: opts.showPatientSince ?? opts.clinic?.showPatientSince ?? false,
       showPromotionalFooter: opts.showPromotionalFooter ?? opts.clinic?.showPromotionalFooter ?? false,
+      showAuditInfoOnPatientCopy: opts.showAuditInfoOnPatientCopy ?? opts.clinic?.showAuditInfoOnPatientCopy ?? false,
       barcodeDataUrl: opts.barcodeDataUrl,
       customFooter: opts.customFooter,
       reportCollectionNote: opts.reportCollectionNote,

@@ -35,6 +35,7 @@ export type BuildPremiumBillOpts = {
   showFollowUpMessage?: boolean;
   showPatientSince?: boolean;
   showPromotionalFooter?: boolean;
+  showAuditInfoOnPatientCopy?: boolean;
   barcodeDataUrl?: string;
   customFooter?: string | null;
   reportCollectionNote?: string | null;
@@ -158,9 +159,10 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
   const qrSize = isSparse ? "95px" : isCompact ? "55px" : "72px";
   const pageMargin = isSparse ? "4mm" : "3mm";
   const pageMarginBottom = isSparse ? "5mm" : "4mm";
-  const sectionGap = isSparse ? "10px" : isCompact ? "4px" : "6px";
+  const sectionGap = isSparse ? "14px" : isCompact ? "4px" : "6px";
   const tableCellPad = isSparse ? "6px 8px" : isCompact ? "3px 5px" : "4px 6px";
   const paymentBoxPad = isSparse ? "8px 0" : "4px 0";
+  const sparseGap = isSparse ? "10px" : "0"; // extra gap between major sections in sparse mode
 
   const isA5 = paperSize === "A5-portrait" || paperSize === "A5-landscape";
   const pageSizeStr = paperSize === "A5-landscape" ? "A5 landscape" : paperSize === "A5-portrait" ? "A5 portrait" : paperSize === "half-a4" ? "148mm 210mm" : "A4 portrait";
@@ -347,7 +349,7 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
 
   // ── Watermark ──
   const watermarkStyle = showWatermark
-    ? `<div style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;opacity:0.08;font-size:56px;font-weight:900;text-transform:uppercase;letter-spacing:10px;color:#000;text-align:center;display:flex;align-items:center;justify-content:center;transform:rotate(-25deg)">${esc(clinic?.name || "Care Diagnostics")}</div>`
+    ? `<div style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;opacity:0.05;font-size:56px;font-weight:900;text-transform:uppercase;letter-spacing:10px;color:#000;text-align:center;display:flex;align-items:center;justify-content:center;transform:rotate(-25deg)">${esc(clinic?.name || "Care Diagnostics")}</div>`
     : "";
 
   const copyLabelDiv = copyLabel ? `<div style="text-align:right;font-size:${tinyPx};font-weight:800;border:1px dashed #000;display:inline-block;padding:2px 6px;float:right">${esc(copyLabel)}</div>` : "";
@@ -356,15 +358,19 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
     ? `<div style="text-align:center;font-size:${tinyPx};border:1px dashed #000;padding:2px 4px;margin-bottom:6px;text-transform:uppercase;font-weight:700">DUPLICATE / RE-PRINT${reprintBy ? ` · BY ${esc(reprintBy)}` : ""}${reprintReason ? ` · ${esc(reprintReason)}` : ""}</div>`
     : "";
 
+  // ── Copy type detection ──
+  const copyType = copyLabel?.toLowerCase().includes("patient") ? "patient" : copyLabel?.toLowerCase().includes("office") ? "office" : "other";
+
+  // ── Audit info visibility (Patient Copy hides audit info by default — setting defaults OFF) ──
+  const showAuditInfo = copyType !== "patient" || clinic?.showAuditInfoOnPatientCopy === true;
+
   // ── Dynamic footer sizing based on density ──
-  const footerSpacing = isSparse ? "16px 0 10px" : isCompact ? "3px 0 2px" : "6px 0 4px";
+  const footerSpacing = isSparse ? "12px 0 8px" : isCompact ? "3px 0 2px" : "6px 0 4px";
   const footerBorderTop = isSparse ? "1.5px" : "1px";
-  const footerMarginTop = isSparse ? "12px" : isCompact ? "2px" : "4px";
   const footerTaglineSize = isSparse ? "12px" : isCompact ? "9px" : "10px";
   const footerTaglineMargin = isSparse ? "6px" : isCompact ? "2px" : "4px";
   const footerServiceMargin = isSparse ? "6px" : isCompact ? "2px" : "4px";
   const footerBrandingMargin = isSparse ? "8px" : isCompact ? "2px" : "4px";
-  const footerInstructionsMargin = isSparse ? "6px" : isCompact ? "2px" : "4px";
   const footerGeneratedMargin = isSparse ? "6px" : isCompact ? "2px" : "4px";
   const footerSystemMargin = isSparse ? "4px" : isCompact ? "1px" : "2px";
 
@@ -392,13 +398,36 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
     min-height: 100vh;
     position: relative;
     z-index: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+  }
+  .main-content.premium-sparse-mode {
+    justify-content: space-between;
+  }
+  .main-content.premium-sparse-mode .header-block { margin-bottom: ${sparseGap}; }
+  .main-content.premium-sparse-mode .title-block { margin-bottom: ${sparseGap}; }
+  .main-content.premium-sparse-mode .patient-block { margin-bottom: ${sparseGap}; }
+  .main-content.premium-sparse-mode .test-table { margin-bottom: ${sparseGap}; }
+  .main-content.premium-sparse-mode .payment-section { margin-bottom: ${sparseGap}; }
+  .footer-panel {
+    margin-top: auto;
+    padding-bottom: 10mm;
   }
   .no-break { page-break-inside: avoid; }
   .receipt table tr { page-break-inside: avoid; }
   @media print {
     body { margin: 0; padding: 0; color: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .receipt { margin: 0; }
-    .receipt * { color: #000 !important; }
+    .receipt { margin: 0; display: flex; flex-direction: column; min-height: 100vh; }
+    .main-content { flex: 1; display: flex; flex-direction: column; }
+    .main-content.premium-sparse-mode { justify-content: space-between; }
+    .footer-panel { margin-top: auto; padding-bottom: 10mm; }
+    .receipt * { color: #000 !important; border-color: #000 !important; }
   }
 </style>
 </head>
@@ -408,6 +437,7 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
     ${reprintNotice}
     ${copyLabelDiv ? `<div style="margin-bottom:4px;overflow:hidden">${copyLabelDiv}</div>` : ""}
 
+    <div class="main-content ${densityClass}">
     <!-- HEADER — compact single-row, 20-25% less height -->
     <div class="header-block no-break" style="padding: 2px 0 4px; border-bottom: 2px solid #000;">
       <table style="width:100%;border-collapse:collapse">
@@ -526,8 +556,10 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
     <!-- PATIENT INSTRUCTIONS (optional) -->
     ${patientInstructions}
 
-    <!-- FOOTER PANEL — dynamic, fills A5 space naturally -->
-    <div class="footer-panel no-break" style="padding: ${footerSpacing}; margin-top: ${footerMarginTop}; border-top: ${footerBorderTop} solid #000;">
+    </div><!-- /main-content -->
+
+    <!-- FOOTER PANEL — pinned near bottom with breathing space -->
+    <div class="footer-panel no-break" style="padding: ${footerSpacing}; border-top: ${footerBorderTop} solid #000;">
       <!-- V3 receipt messages (priority: thank-you → collection → verified → QR msg → promotional msg → follow-up → patient since) -->
       ${receiptThankYou ? `<div style="margin-bottom:${footerBrandingMargin}">${receiptThankYou}</div>` : ""}
       ${receiptCollection ? `<div style="margin-top:${footerGeneratedMargin}">${receiptCollection}</div>` : ""}
@@ -544,7 +576,7 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
       ${showBrandingFooter ? `<div style="font-size:${footerTaglineSize};font-weight:700;text-align:center;letter-spacing:0.5px;text-transform:uppercase;margin-top:${footerTaglineMargin}">Touching Lives With Care</div>` : ""}
       ${reportMessage ? `<div style="margin-top:${footerGeneratedMargin}">${reportMessage}</div>` : ""}
       ${computerGenerated ? `<div style="margin-top:${footerGeneratedMargin}">${computerGenerated}</div>` : ""}
-      ${systemInfo ? `<div style="margin-top:${footerSystemMargin}">${systemInfo}</div>` : ""}
+      ${(showAuditInfo && systemInfo) ? `<div style="margin-top:${footerSystemMargin}">${systemInfo}</div>` : ""}
       <table style="width:100%;border-collapse:collapse;margin-top:6px">
         <tr>
           <td style="text-align:left;padding:0;vertical-align:bottom">
@@ -552,7 +584,7 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
           </td>
           <td style="text-align:right;padding:0;vertical-align:bottom;font-size:${tinyPx}">
             ${billedByName ? `<div style="font-weight:700">Billed By: ${esc(billedByName)}</div>` : ""}
-            <div style="margin-top:1px">${esc(nowDateStr)} ${esc(nowTimeStr)}</div>
+            ${showAuditInfo ? `<div style="margin-top:1px">${esc(nowDateStr)} ${esc(nowTimeStr)}</div>` : ""}
           </td>
         </tr>
       </table>

@@ -203,3 +203,21 @@ id = "RlG5nGyvza9bJxkDK6g5Z"
 uri = "file://exports/AI_Architecture_Analysis.md"
 type = "text"
 title = "AI Architecture Analysis Report"
+
+[[outputs]]
+id = "XO9rt3QBPeVTRKnzqjO50"
+uri = "file://screenshots/v3_01_premium_1test.jpg"
+type = "image"
+title = "1. Premium A5 — 1 Test (Sparse Mode)"
+
+[[outputs]]
+id = "_OPKLxnIpeby-rpOHvCy1"
+uri = "file://screenshots/v3_02_premium_2test.jpg"
+type = "image"
+title = "2. Premium A5 — 2 Tests, Discount + UPI"
+
+[[outputs]]
+id = "oo-V0_Az2pr-E6nw-9xkx"
+uri = "file://screenshots/v3_03_premium_bw.jpg"
+type = "image"
+title = "3. Premium A5 — 1 Test, B&W Minimal"
