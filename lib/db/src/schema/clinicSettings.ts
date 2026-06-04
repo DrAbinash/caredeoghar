@@ -121,5 +121,23 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   // ── V3: Print audit settings ──
   showAuditInfoOnPatientCopy: boolean("show_audit_info_on_patient_copy").notNull().default(false),
 
+  // ── V3: Additional footer messages ──
+  showWorkingHours: boolean("show_working_hours").notNull().default(false),
+  workingHoursMessage: text("working_hours_message").notNull().default("Mon-Sat: 8 AM - 8 PM | Sun: 9 AM - 2 PM"),
+  showHomeCollection: boolean("show_home_collection").notNull().default(false),
+  homeCollectionMessage: text("home_collection_message").notNull().default("Home Collection Available. Call us to book."),
+  showEmergency: boolean("show_emergency").notNull().default(false),
+  emergencyMessage: text("emergency_message").notNull().default("24x7 Emergency Services Available"),
+  showReferralProgram: boolean("show_referral_program").notNull().default(false),
+  referralProgramMessage: text("referral_program_message").notNull().default("Refer a friend and get 10% off your next visit."),
+  showHealthPackages: boolean("show_health_packages").notNull().default(false),
+  healthPackagesMessage: text("health_packages_message").notNull().default("Annual Health Checkup packages available at discounted rates."),
+  showAccreditation: boolean("show_accreditation").notNull().default(false),
+  accreditationMessage: text("accreditation_message").notNull().default("NABL Accredited / ISO 9001:2015 Certified"),
+  showWhatsAppBooking: boolean("show_whatsapp_booking").notNull().default(false),
+  whatsAppBookingMessage: text("whatsapp_booking_message").notNull().default("Book appointments on WhatsApp: +91"),
+  showCustomFooterMessage: boolean("show_custom_footer_message").notNull().default(false),
+  customFooterMessage: text("custom_footer_message").notNull().default(""),
+
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

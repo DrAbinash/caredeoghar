@@ -88,6 +88,22 @@ async function getOrCreate() {
       showPatientSince: false,
       showVerifiedBadge: false,
       showAuditInfoOnPatientCopy: false,
+      showWorkingHours: false,
+      workingHoursMessage: "Mon-Sat: 8 AM - 8 PM | Sun: 9 AM - 2 PM",
+      showHomeCollection: false,
+      homeCollectionMessage: "Home Collection Available. Call us to book.",
+      showEmergency: false,
+      emergencyMessage: "24x7 Emergency Services Available",
+      showReferralProgram: false,
+      referralProgramMessage: "Refer a friend and get 10% off your next visit.",
+      showHealthPackages: false,
+      healthPackagesMessage: "Annual Health Checkup packages available at discounted rates.",
+      showAccreditation: false,
+      accreditationMessage: "NABL Accredited / ISO 9001:2015 Certified",
+      showWhatsAppBooking: false,
+      whatsAppBookingMessage: "Book appointments on WhatsApp: +91",
+      showCustomFooterMessage: false,
+      customFooterMessage: "",
       updatedAt: new Date(),
     } as any;
   }
@@ -141,6 +157,23 @@ clinicSettingsRouter.get("/branding", async (_req, res) => {
     showVerifiedBadge: row.showVerifiedBadge ?? false,
     // V3: Print audit
     showAuditInfoOnPatientCopy: row.showAuditInfoOnPatientCopy ?? false,
+    // V3: Additional footer messages
+    showWorkingHours: row.showWorkingHours ?? false,
+    workingHoursMessage: row.workingHoursMessage ?? "Mon-Sat: 8 AM - 8 PM | Sun: 9 AM - 2 PM",
+    showHomeCollection: row.showHomeCollection ?? false,
+    homeCollectionMessage: row.homeCollectionMessage ?? "Home Collection Available. Call us to book.",
+    showEmergency: row.showEmergency ?? false,
+    emergencyMessage: row.emergencyMessage ?? "24x7 Emergency Services Available",
+    showReferralProgram: row.showReferralProgram ?? false,
+    referralProgramMessage: row.referralProgramMessage ?? "Refer a friend and get 10% off your next visit.",
+    showHealthPackages: row.showHealthPackages ?? false,
+    healthPackagesMessage: row.healthPackagesMessage ?? "Annual Health Checkup packages available at discounted rates.",
+    showAccreditation: row.showAccreditation ?? false,
+    accreditationMessage: row.accreditationMessage ?? "NABL Accredited / ISO 9001:2015 Certified",
+    showWhatsAppBooking: row.showWhatsAppBooking ?? false,
+    whatsAppBookingMessage: row.whatsAppBookingMessage ?? "Book appointments on WhatsApp: +91",
+    showCustomFooterMessage: row.showCustomFooterMessage ?? false,
+    customFooterMessage: row.customFooterMessage ?? "",
   });
 });
 
@@ -166,8 +199,8 @@ clinicSettingsRouter.put("/", async (req, res) => {
     }
     update.sidebarTheme = body.sidebarTheme;
   }
-  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "payuEnabled", "phonepeEnabled", "bharatpeEnabled", "cashfreeEnabled", "iciciEnabled", "upiQrEnabled", "billShowCode", "billShowCategory", "dayCloseAutoPrint", "lanOnlyLogin", "fido2Enabled", "kioskEnabled", "formFBillingPrompt", "formFAddressRequired", "formFGuardianRequired", "showFollowUpMessage", "showPromotionalFooter", "showPatientSince", "showVerifiedBadge", "showAuditInfoOnPatientCopy"] as const;
-  const textFields = ["kioskUpiVpa", "kioskUpiName", "kioskWelcomeMessage", "kioskAllowedTestIds", "onlineBookingAllowedTestIds", "onlineBookingAllowedPackageIds", "razorpayKeyId", "payuMerchantKey", "phonepeMerchantId", "bharatpeMerchantId", "cashfreeAppId", "iciciMerchantId", "iciciAggregatorId", "iciciSecretKey", "formFTestIds", "quickTestIds", "footerNote", "commissionDiscountMode", "lanAllowedIps", "billDefaultPaperSize", "name", "tagline", "address", "registeredAddress", "email", "phone", "website", "gstin", "logoDataUrl", "portalHeading", "portalWelcomeMessage", "sidebarTheme", "receiptThankYouMessage", "receiptCollectionMessage", "receiptQrMessage", "receiptPromotionalMessage", "serviceFooter", "followUpMessage", "promotionalTitle", "promotionalDescription"] as const;
+  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "payuEnabled", "phonepeEnabled", "bharatpeEnabled", "cashfreeEnabled", "iciciEnabled", "upiQrEnabled", "billShowCode", "billShowCategory", "dayCloseAutoPrint", "lanOnlyLogin", "fido2Enabled", "kioskEnabled", "formFBillingPrompt", "formFAddressRequired", "formFGuardianRequired", "showFollowUpMessage", "showPromotionalFooter", "showPatientSince", "showVerifiedBadge", "showAuditInfoOnPatientCopy", "showWorkingHours", "showHomeCollection", "showEmergency", "showReferralProgram", "showHealthPackages", "showAccreditation", "showWhatsAppBooking", "showCustomFooterMessage"] as const;
+  const textFields = ["kioskUpiVpa", "kioskUpiName", "kioskWelcomeMessage", "kioskAllowedTestIds", "onlineBookingAllowedTestIds", "onlineBookingAllowedPackageIds", "razorpayKeyId", "payuMerchantKey", "phonepeMerchantId", "bharatpeMerchantId", "cashfreeAppId", "iciciMerchantId", "iciciAggregatorId", "iciciSecretKey", "formFTestIds", "quickTestIds", "footerNote", "commissionDiscountMode", "lanAllowedIps", "billDefaultPaperSize", "name", "tagline", "address", "registeredAddress", "email", "phone", "website", "gstin", "logoDataUrl", "portalHeading", "portalWelcomeMessage", "sidebarTheme", "receiptThankYouMessage", "receiptCollectionMessage", "receiptQrMessage", "receiptPromotionalMessage", "serviceFooter", "followUpMessage", "promotionalTitle", "promotionalDescription", "workingHoursMessage", "homeCollectionMessage", "emergencyMessage", "referralProgramMessage", "healthPackagesMessage", "accreditationMessage", "whatsAppBookingMessage", "customFooterMessage"] as const;
   // NOTE: quickTestIds and formFTestIds are intentionally NOT in boolFields
   // because they store JSON-as-text (e.g. "[null,null,null,null,null,null]").
   // They are listed in textFields above.

@@ -495,6 +495,25 @@ type ClinicSettings = {
   // V3: Identity & security
   showPatientSince?: boolean;
   showVerifiedBadge?: boolean;
+  // V3: Print audit
+  showAuditInfoOnPatientCopy?: boolean;
+  // V3: Additional footer messages
+  showWorkingHours?: boolean;
+  workingHoursMessage?: string;
+  showHomeCollection?: boolean;
+  homeCollectionMessage?: string;
+  showEmergency?: boolean;
+  emergencyMessage?: string;
+  showReferralProgram?: boolean;
+  referralProgramMessage?: string;
+  showHealthPackages?: boolean;
+  healthPackagesMessage?: string;
+  showAccreditation?: boolean;
+  accreditationMessage?: string;
+  showWhatsAppBooking?: boolean;
+  whatsAppBookingMessage?: string;
+  showCustomFooterMessage?: boolean;
+  customFooterMessage?: string;
 };
 
 import { SIDEBAR_THEMES as SIDEBAR_THEME_PRESETS, parseCustomHex, buildCustomTheme } from "@/lib/sidebarThemes";
@@ -4954,6 +4973,93 @@ function ReceiptMessagesTab() {
             <Label>Promotional Tagline</Label>
             <Input value={current.receiptPromotionalMessage || ""} onChange={(e) => update("receiptPromotionalMessage", e.target.value)} className="mt-1" placeholder="e.g. Advanced Diagnostic & Imaging Centre" />
             <p className="text-xs text-muted-foreground mt-1">Short promotional text shown when Show Promotional Message is enabled.</p>
+          </div>
+          {/* V3 Additional Footer Messages */}
+          <div className="pt-4 border-t border-card-border">
+            <h3 className="font-semibold text-sm mb-3">Additional Footer Messages</h3>
+            <p className="text-xs text-muted-foreground mb-3">Toggle on the messages you want to display on the bill footer. Each has an editable text field.</p>
+            <div className="space-y-3">
+              {/* Working Hours */}
+              <div className="flex items-start gap-3">
+                <button type="button" onClick={() => update("showWorkingHours", !current.showWorkingHours)} className={`mt-1 shrink-0 w-10 h-5 rounded-full transition-colors ${current.showWorkingHours ? "bg-green-500" : "bg-muted-foreground/40"}`}>
+                  <span className={`block w-3.5 h-3.5 rounded-full bg-white transition-transform ${current.showWorkingHours ? "translate-x-5" : "translate-x-1"}`} />
+                </button>
+                <div className="flex-1">
+                  <Label className="text-sm font-medium">Working Hours</Label>
+                  <Input value={current.workingHoursMessage || ""} onChange={(e) => update("workingHoursMessage", e.target.value)} className="mt-1" placeholder="Mon-Sat: 8 AM - 8 PM | Sun: 9 AM - 2 PM" />
+                </div>
+              </div>
+              {/* Home Collection */}
+              <div className="flex items-start gap-3">
+                <button type="button" onClick={() => update("showHomeCollection", !current.showHomeCollection)} className={`mt-1 shrink-0 w-10 h-5 rounded-full transition-colors ${current.showHomeCollection ? "bg-green-500" : "bg-muted-foreground/40"}`}>
+                  <span className={`block w-3.5 h-3.5 rounded-full bg-white transition-transform ${current.showHomeCollection ? "translate-x-5" : "translate-x-1"}`} />
+                </button>
+                <div className="flex-1">
+                  <Label className="text-sm font-medium">Home Collection</Label>
+                  <Input value={current.homeCollectionMessage || ""} onChange={(e) => update("homeCollectionMessage", e.target.value)} className="mt-1" placeholder="Home Collection Available. Call us to book." />
+                </div>
+              </div>
+              {/* Emergency */}
+              <div className="flex items-start gap-3">
+                <button type="button" onClick={() => update("showEmergency", !current.showEmergency)} className={`mt-1 shrink-0 w-10 h-5 rounded-full transition-colors ${current.showEmergency ? "bg-green-500" : "bg-muted-foreground/40"}`}>
+                  <span className={`block w-3.5 h-3.5 rounded-full bg-white transition-transform ${current.showEmergency ? "translate-x-5" : "translate-x-1"}`} />
+                </button>
+                <div className="flex-1">
+                  <Label className="text-sm font-medium">Emergency Services</Label>
+                  <Input value={current.emergencyMessage || ""} onChange={(e) => update("emergencyMessage", e.target.value)} className="mt-1" placeholder="24x7 Emergency Services Available" />
+                </div>
+              </div>
+              {/* Referral Program */}
+              <div className="flex items-start gap-3">
+                <button type="button" onClick={() => update("showReferralProgram", !current.showReferralProgram)} className={`mt-1 shrink-0 w-10 h-5 rounded-full transition-colors ${current.showReferralProgram ? "bg-green-500" : "bg-muted-foreground/40"}`}>
+                  <span className={`block w-3.5 h-3.5 rounded-full bg-white transition-transform ${current.showReferralProgram ? "translate-x-5" : "translate-x-1"}`} />
+                </button>
+                <div className="flex-1">
+                  <Label className="text-sm font-medium">Referral Program</Label>
+                  <Input value={current.referralProgramMessage || ""} onChange={(e) => update("referralProgramMessage", e.target.value)} className="mt-1" placeholder="Refer a friend and get 10% off your next visit." />
+                </div>
+              </div>
+              {/* Health Packages */}
+              <div className="flex items-start gap-3">
+                <button type="button" onClick={() => update("showHealthPackages", !current.showHealthPackages)} className={`mt-1 shrink-0 w-10 h-5 rounded-full transition-colors ${current.showHealthPackages ? "bg-green-500" : "bg-muted-foreground/40"}`}>
+                  <span className={`block w-3.5 h-3.5 rounded-full bg-white transition-transform ${current.showHealthPackages ? "translate-x-5" : "translate-x-1"}`} />
+                </button>
+                <div className="flex-1">
+                  <Label className="text-sm font-medium">Health Packages</Label>
+                  <Input value={current.healthPackagesMessage || ""} onChange={(e) => update("healthPackagesMessage", e.target.value)} className="mt-1" placeholder="Annual Health Checkup packages available at discounted rates." />
+                </div>
+              </div>
+              {/* Accreditation */}
+              <div className="flex items-start gap-3">
+                <button type="button" onClick={() => update("showAccreditation", !current.showAccreditation)} className={`mt-1 shrink-0 w-10 h-5 rounded-full transition-colors ${current.showAccreditation ? "bg-green-500" : "bg-muted-foreground/40"}`}>
+                  <span className={`block w-3.5 h-3.5 rounded-full bg-white transition-transform ${current.showAccreditation ? "translate-x-5" : "translate-x-1"}`} />
+                </button>
+                <div className="flex-1">
+                  <Label className="text-sm font-medium">Accreditation</Label>
+                  <Input value={current.accreditationMessage || ""} onChange={(e) => update("accreditationMessage", e.target.value)} className="mt-1" placeholder="NABL Accredited / ISO 9001:2015 Certified" />
+                </div>
+              </div>
+              {/* WhatsApp Booking */}
+              <div className="flex items-start gap-3">
+                <button type="button" onClick={() => update("showWhatsAppBooking", !current.showWhatsAppBooking)} className={`mt-1 shrink-0 w-10 h-5 rounded-full transition-colors ${current.showWhatsAppBooking ? "bg-green-500" : "bg-muted-foreground/40"}`}>
+                  <span className={`block w-3.5 h-3.5 rounded-full bg-white transition-transform ${current.showWhatsAppBooking ? "translate-x-5" : "translate-x-1"}`} />
+                </button>
+                <div className="flex-1">
+                  <Label className="text-sm font-medium">WhatsApp Booking</Label>
+                  <Input value={current.whatsAppBookingMessage || ""} onChange={(e) => update("whatsAppBookingMessage", e.target.value)} className="mt-1" placeholder="Book appointments on WhatsApp: +91" />
+                </div>
+              </div>
+              {/* Custom Message */}
+              <div className="flex items-start gap-3">
+                <button type="button" onClick={() => update("showCustomFooterMessage", !current.showCustomFooterMessage)} className={`mt-1 shrink-0 w-10 h-5 rounded-full transition-colors ${current.showCustomFooterMessage ? "bg-green-500" : "bg-muted-foreground/40"}`}>
+                  <span className={`block w-3.5 h-3.5 rounded-full bg-white transition-transform ${current.showCustomFooterMessage ? "translate-x-5" : "translate-x-1"}`} />
+                </button>
+                <div className="flex-1">
+                  <Label className="text-sm font-medium">Custom Message</Label>
+                  <Textarea value={current.customFooterMessage || ""} onChange={(e) => update("customFooterMessage", e.target.value)} className="mt-1" rows={2} placeholder="Any custom message you want to display on the footer." />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         <div className="flex justify-end gap-2 pt-2 border-t border-card-border">

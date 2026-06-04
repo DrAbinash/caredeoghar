@@ -75,6 +75,23 @@ export type PrintClinic = {
   showVerifiedBadge?: boolean;
   // V3: Print audit
   showAuditInfoOnPatientCopy?: boolean;
+  // V3: Additional footer messages
+  showWorkingHours?: boolean;
+  workingHoursMessage?: string;
+  showHomeCollection?: boolean;
+  homeCollectionMessage?: string;
+  showEmergency?: boolean;
+  emergencyMessage?: string;
+  showReferralProgram?: boolean;
+  referralProgramMessage?: string;
+  showHealthPackages?: boolean;
+  healthPackagesMessage?: string;
+  showAccreditation?: boolean;
+  accreditationMessage?: string;
+  showWhatsAppBooking?: boolean;
+  whatsAppBookingMessage?: string;
+  showCustomFooterMessage?: boolean;
+  customFooterMessage?: string;
 } | undefined | null;
 
 function esc(s: string): string {
@@ -138,6 +155,15 @@ export type BuildPrintHtmlOpts = {
   showPatientSince?: boolean;
   showPromotionalFooter?: boolean;
   showAuditInfoOnPatientCopy?: boolean;
+  // V3 additional footer messages
+  showWorkingHours?: boolean;
+  showHomeCollection?: boolean;
+  showEmergency?: boolean;
+  showReferralProgram?: boolean;
+  showHealthPackages?: boolean;
+  showAccreditation?: boolean;
+  showWhatsAppBooking?: boolean;
+  showCustomFooterMessage?: boolean;
   barcodeDataUrl?: string;
   customFooter?: string | null;
   reportCollectionNote?: string | null;
@@ -418,6 +444,15 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
       showPatientSince: opts.showPatientSince ?? opts.clinic?.showPatientSince ?? false,
       showPromotionalFooter: opts.showPromotionalFooter ?? opts.clinic?.showPromotionalFooter ?? false,
       showAuditInfoOnPatientCopy: opts.showAuditInfoOnPatientCopy ?? opts.clinic?.showAuditInfoOnPatientCopy ?? false,
+      // V3 additional footer messages
+      showWorkingHours: opts.showWorkingHours ?? opts.clinic?.showWorkingHours ?? false,
+      showHomeCollection: opts.showHomeCollection ?? opts.clinic?.showHomeCollection ?? false,
+      showEmergency: opts.showEmergency ?? opts.clinic?.showEmergency ?? false,
+      showReferralProgram: opts.showReferralProgram ?? opts.clinic?.showReferralProgram ?? false,
+      showHealthPackages: opts.showHealthPackages ?? opts.clinic?.showHealthPackages ?? false,
+      showAccreditation: opts.showAccreditation ?? opts.clinic?.showAccreditation ?? false,
+      showWhatsAppBooking: opts.showWhatsAppBooking ?? opts.clinic?.showWhatsAppBooking ?? false,
+      showCustomFooterMessage: opts.showCustomFooterMessage ?? opts.clinic?.showCustomFooterMessage ?? false,
       barcodeDataUrl: opts.barcodeDataUrl,
       customFooter: opts.customFooter,
       reportCollectionNote: opts.reportCollectionNote,

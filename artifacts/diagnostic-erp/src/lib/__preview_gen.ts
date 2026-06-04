@@ -2,7 +2,7 @@
   import { buildBillPrintHtml } from "./printBill.ts";
   import { buildPremiumBillPrintHtml } from "./premiumBillPrint.ts";
 
-  const clinic = {"name":"Care Diagnostics","tagline":"Advanced Diagnostic & Imaging Centre","address":"123 Health Street, Deoghar, Jharkhand 814112","phone":"+91 98765 43210","email":"care@diagnostics.com","website":"www.carediagnostics.com","gstin":"20ABCDE1234F1Z5","logoDataUrl":null,"footerNote":"Thank you for choosing Care Diagnostics","billPrintCopies":1,"qrOnBillEnabled":true,"billShowCode":true,"billShowCategory":true};
+  const clinic = {"name":"Care Diagnostics","tagline":"Advanced Diagnostic & Imaging Centre","address":"123 Health Street, Deoghar, Jharkhand 814112","phone":"+91 98765 43210","email":"care@diagnostics.com","website":"www.carediagnostics.com","gstin":"20ABCDE1234F1Z5","logoDataUrl":null,"footerNote":"Thank you for choosing Care Diagnostics","billPrintCopies":1,"qrOnBillEnabled":true,"billShowCode":true,"billShowCategory":true,"receiptThankYouMessage":"Thank you for choosing Care Diagnostics","receiptCollectionMessage":"Please collect your reports within 7 days","receiptQrMessage":"Scan QR code to verify receipt and download reports","receiptPromotionalMessage":"Advanced Diagnostic & Imaging Centre","serviceFooter":"[\"MRI\",\"CT Scan\",\"Ultrasound\",\"Digital X-Ray\",\"Mammography\",\"Pathology\"]","followUpMessage":"For future investigations, please quote your Patient ID","promotionalTitle":"","promotionalDescription":"","workingHoursMessage":"Mon-Sat: 8 AM - 8 PM | Sun: 9 AM - 2 PM","homeCollectionMessage":"Home Collection Available. Call us to book.","emergencyMessage":"24x7 Emergency Services Available","referralProgramMessage":"Refer a friend and get 10% off your next visit.","healthPackagesMessage":"Annual Health Checkup packages available at discounted rates.","accreditationMessage":"NABL Accredited / ISO 9001:2015 Certified","whatsAppBookingMessage":"Book appointments on WhatsApp: +91 98765 43210","customFooterMessage":""};
   const bill1 = {"billNumber":"2026050001","subtotal":500,"discount":0,"taxAmount":0,"totalAmount":500,"paidAmount":500,"balanceAmount":0,"status":"paid","createdAt":"2026-05-15T10:30:00Z","patient":{"firstName":"Ramesh","lastName":"Kumar","patientId":"CD-2026-001","phone":"+91 98765 12345","gender":"Male","dateOfBirth":"1985-03-15"},"order":{"doctor":{"name":"Dr. S. Sharma"},"tests":[{"price":500,"status":"active","test":{"code":"CBC001","name":"Complete Blood Count (CBC)","category":"Pathology"}}]},"payments":[{"method":"cash","amount":500,"referenceNumber":null,"createdAt":"2026-05-15T10:30:00Z"}],"testTokens":null,"tokenNo":42};
   const bill2 = {"billNumber":"2026050002","subtotal":1200,"discount":200,"taxAmount":0,"totalAmount":1000,"paidAmount":1000,"balanceAmount":0,"status":"paid","createdAt":"2026-05-15T14:20:00Z","patient":{"firstName":"Priya","lastName":"Singh","patientId":"CD-2026-002","phone":"+91 87654 32109","gender":"Female","dateOfBirth":"1992-07-20"},"order":{"doctor":{"name":"Dr. A. Gupta"},"tests":[{"price":800,"status":"active","test":{"code":"USG001","name":"Whole Abdomen USG","category":"Radiology"}},{"price":400,"status":"active","test":{"code":"THY001","name":"Thyroid Function Test","category":"Pathology"}}]},"payments":[{"method":"upi","amount":1000,"referenceNumber":"UPI-1234567890","createdAt":"2026-05-15T14:20:00Z"}],"testTokens":[{"department":"Radiology","roomNumber":"USG-1","tokenNo":15},{"department":"Pathology","roomNumber":"LAB-2","tokenNo":28}],"tokenNo":15};
   const qrDataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -43,6 +43,14 @@
     showWatermark: true,
     showPatientInstructions: true,
     showSystemInfo: true,
+    showWorkingHours: true,
+    showHomeCollection: true,
+    showEmergency: true,
+    showReferralProgram: true,
+    showHealthPackages: true,
+    showAccreditation: true,
+    showWhatsAppBooking: true,
+    showCustomFooterMessage: true,
   });
 
   // Preview 3: Premium A5 V2 format, 2 tests, discount, UPI

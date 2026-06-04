@@ -239,3 +239,9 @@ id = "5zUIZech7q3vn7q-QsZeq"
 uri = "file://screenshots/v3_fixed_3_premium_bw.jpg"
 type = "image"
 title = "3. Premium A5 — 1 Test, B&W Minimal"
+
+[[outputs]]
+id = "cHKB4Dzz0pasmZM28fxpl"
+uri = "file://screenshots/v3_all_footer_messages_1test.jpg"
+type = "image"
+title = "Premium A5 Bill with All 8 New Footer Messages"

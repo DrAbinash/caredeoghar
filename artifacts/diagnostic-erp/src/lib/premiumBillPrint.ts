@@ -36,6 +36,15 @@ export type BuildPremiumBillOpts = {
   showPatientSince?: boolean;
   showPromotionalFooter?: boolean;
   showAuditInfoOnPatientCopy?: boolean;
+  // V3 additional footer messages
+  showWorkingHours?: boolean;
+  showHomeCollection?: boolean;
+  showEmergency?: boolean;
+  showReferralProgram?: boolean;
+  showHealthPackages?: boolean;
+  showAccreditation?: boolean;
+  showWhatsAppBooking?: boolean;
+  showCustomFooterMessage?: boolean;
   barcodeDataUrl?: string;
   customFooter?: string | null;
   reportCollectionNote?: string | null;
@@ -109,6 +118,15 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
     showFollowUpMessage = false,
     showPatientSince = false,
     showPromotionalFooter = false,
+    // V3 additional footer messages
+    showWorkingHours = false,
+    showHomeCollection = false,
+    showEmergency = false,
+    showReferralProgram = false,
+    showHealthPackages = false,
+    showAccreditation = false,
+    showWhatsAppBooking = false,
+    showCustomFooterMessage = false,
     barcodeDataUrl,
     customFooter,
     reportCollectionNote,
@@ -287,6 +305,32 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
   const promotionalFooter = showPromotionalFooter && clinic?.promotionalTitle
     ? `<div style="font-size:${Math.round(parseInt(tinyPx, 10) * 1.05)}px;text-align:center;margin:4px 0;font-weight:800;letter-spacing:0.5px;text-transform:uppercase">${esc(clinic.promotionalTitle)}</div>
        ${clinic.promotionalDescription ? `<div style="font-size:${tinyPx};text-align:center;margin:2px 0;font-weight:600">${esc(clinic.promotionalDescription)}</div>` : ""}`
+    : "";
+
+  // ── V3 Additional footer messages ──
+  const workingHoursMsg = showWorkingHours && clinic?.workingHoursMessage
+    ? `<div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.95)}px;text-align:center;margin:2px 0;font-weight:600">${esc(clinic.workingHoursMessage)}</div>`
+    : "";
+  const homeCollectionMsg = showHomeCollection && clinic?.homeCollectionMessage
+    ? `<div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.95)}px;text-align:center;margin:2px 0;font-weight:600">${esc(clinic.homeCollectionMessage)}</div>`
+    : "";
+  const emergencyMsg = showEmergency && clinic?.emergencyMessage
+    ? `<div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.95)}px;text-align:center;margin:2px 0;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">${esc(clinic.emergencyMessage)}</div>`
+    : "";
+  const referralMsg = showReferralProgram && clinic?.referralProgramMessage
+    ? `<div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.95)}px;text-align:center;margin:2px 0;font-weight:600">${esc(clinic.referralProgramMessage)}</div>`
+    : "";
+  const healthPackagesMsg = showHealthPackages && clinic?.healthPackagesMessage
+    ? `<div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.95)}px;text-align:center;margin:2px 0;font-weight:600">${esc(clinic.healthPackagesMessage)}</div>`
+    : "";
+  const accreditationMsg = showAccreditation && clinic?.accreditationMessage
+    ? `<div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.95)}px;text-align:center;margin:2px 0;font-weight:700">${esc(clinic.accreditationMessage)}</div>`
+    : "";
+  const whatsAppMsg = showWhatsAppBooking && clinic?.whatsAppBookingMessage
+    ? `<div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.95)}px;text-align:center;margin:2px 0;font-weight:600">${esc(clinic.whatsAppBookingMessage)}</div>`
+    : "";
+  const customFooterMsg = showCustomFooterMessage && clinic?.customFooterMessage
+    ? `<div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.95)}px;text-align:center;margin:2px 0;font-weight:600">${esc(clinic.customFooterMessage)}</div>`
     : "";
 
   // ── Legacy report message (kept for backward compat) ──
@@ -552,6 +596,15 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
       ${followUpMessage ? `<div style="margin-top:${footerGeneratedMargin}">${followUpMessage}</div>` : ""}
       ${patientSinceLine ? `<div style="margin-top:${footerGeneratedMargin}">${patientSinceLine}</div>` : ""}
       ${promotionalFooter ? `<div style="margin-top:${footerGeneratedMargin}">${promotionalFooter}</div>` : ""}
+      <!-- V3 Additional footer messages -->
+      ${workingHoursMsg ? `<div style="margin-top:${footerGeneratedMargin}">${workingHoursMsg}</div>` : ""}
+      ${homeCollectionMsg ? `<div style="margin-top:${footerGeneratedMargin}">${homeCollectionMsg}</div>` : ""}
+      ${emergencyMsg ? `<div style="margin-top:${footerGeneratedMargin}">${emergencyMsg}</div>` : ""}
+      ${referralMsg ? `<div style="margin-top:${footerGeneratedMargin}">${referralMsg}</div>` : ""}
+      ${healthPackagesMsg ? `<div style="margin-top:${footerGeneratedMargin}">${healthPackagesMsg}</div>` : ""}
+      ${accreditationMsg ? `<div style="margin-top:${footerGeneratedMargin}">${accreditationMsg}</div>` : ""}
+      ${whatsAppMsg ? `<div style="margin-top:${footerGeneratedMargin}">${whatsAppMsg}</div>` : ""}
+      ${customFooterMsg ? `<div style="margin-top:${footerGeneratedMargin}">${customFooterMsg}</div>` : ""}
       <!-- Legacy fallback blocks -->
       ${footerBranding ? `<div style="margin-bottom:${footerBrandingMargin}">${footerBranding}</div>` : ""}
       ${customFooterLine}
