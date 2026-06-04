@@ -11,6 +11,7 @@ import {
   ChevronDown, Scan, ExternalLink
 } from "lucide-react";
 import OcrCapturePanel from "@/components/OcrCapturePanel";
+import IdCardScanPanel from "@/components/IdCardScanPanel";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -563,6 +564,10 @@ export default function FormF() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // OCR capture panel (new comprehensive capture modal)
   const [ocrPanelOpen, setOcrPanelOpen] = useState(false);
+  // ID card scan editor panel (crop, rotate, adjust)
+  const [scanPanelOpen, setScanPanelOpen] = useState(false);
+  const [scanPanelBase64, setScanPanelBase64] = useState("");
+  const [scanPanelMime, setScanPanelMime] = useState("image/jpeg");
 
   // ── PCPNDT Portal bookmarklet dialog ──
   const [portalOpen, setPortalOpen] = useState(false);
@@ -574,42 +579,45 @@ export default function FormF() {
   async function triggerScanBridge() {
     setScanning(true);
     try {
-      const r = await fetch(`${SCAN_BRIDGE_URL}/scan`, { method: "POST", mode: "cors" });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || !j.ok) {
-        // If WIA device is busy, auto-fallback to latest-scan pickup
-        if (j.code === "WIA_DEVICE_BUSY" || (j.error && /busy|in use/i.test(j.error))) {
+      const r = await api.post<{
+        ok: boolean; imageBase64: string; mimeType: string; filename: string;
+        cacheKey: string; optimized: boolean; error?: string; duplicate?: boolean;
+        code?: string; fallback?: string;
+      }>("/api/form-f/latest-scan-proxy", {
+        bridgeUrl: SCAN_BRIDGE_URL,
+        mode: "direct",
+        maxWidth: fSettings?.maxScanWidth ?? 1200,
+        jpegQuality: fSettings?.jpegQuality ?? 85,
+      });
+      if (!r.ok) {
+        // Auto-fallback to folder-watch on busy/unsupported/no-device
+        if (r.code === "WIA_DEVICE_BUSY" || r.fallback === "folder-watch") {
           toast({
             title: "Scanner is busy",
-            description: "WIA device is in use by another app. Importing the latest scan from the watch folder instead.",
+            description: "WIA device is in use. Switching to folder-watch import.",
           });
           await importLatestScan();
           return;
         }
-        // If driver doesn't support direct WIA scan, prompt user to switch to folder-watch
-        if (j.code === "WIA_UNSUPPORTED_DRIVER" || (j.error && /does not support direct WIA scan/i.test(j.error))) {
+        if (r.code === "WIA_UNSUPPORTED_DRIVER" || r.code === "WIA_NO_DEVICE") {
           toast({
-            title: "Driver not supported",
-            description: "This scanner driver does not support direct WIA scanning. Use folder-watch mode: set BRIDGE_SCAN_VENDOR=folder-watch and SCAN_WATCH_FOLDER to your scanner software's output folder.",
+            title: r.code === "WIA_NO_DEVICE" ? "No scanner found" : "Driver not supported",
+            description: r.error || "Check USB connection or switch to folder-watch mode.",
             variant: "destructive",
           });
           return;
         }
-        // If no scanner found, give clear instructions
-        if (j.code === "WIA_NO_DEVICE" || (j.error && /no WIA devices found/i.test(j.error))) {
-          toast({
-            title: "No scanner found",
-            description: "No WIA scanner detected. Check USB connection and driver installation, or switch to folder-watch mode.",
-            variant: "destructive",
-          });
+        if (r.duplicate) {
+          toast({ title: "Duplicate scan", description: r.error || "Already imported", variant: "destructive" });
           return;
         }
-        throw new Error(j.error || "Scan failed");
+        throw new Error(r.error || "Scan failed");
       }
-      const dataUrl = `data:${j.mimeType ?? "image/jpeg"};base64,${j.imageBase64}`;
-      setIdCardFrontUrl(dataUrl);
-      await runOcrOnImage(j.imageBase64, j.mimeType ?? "image/jpeg");
-      toast({ title: "ID scanned successfully" });
+      // Open the crop panel
+      setScanPanelBase64(r.imageBase64);
+      setScanPanelMime(r.mimeType ?? "image/jpeg");
+      setScanPanelOpen(true);
+      toast({ title: "ID scanned successfully", description: r.optimized ? "Image optimized" : undefined });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not scan";
       toast({
@@ -627,13 +635,28 @@ export default function FormF() {
   async function importLatestScan() {
     setIdCardUploading(true);
     try {
-      const r = await fetch(`${SCAN_BRIDGE_URL}/latest-scan`, { method: "POST", mode: "cors" });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || !j.ok) throw new Error(j.error || "No latest scan found");
-      const dataUrl = `data:${j.mimeType ?? "image/jpeg"};base64,${j.imageBase64}`;
-      setIdCardFrontUrl(dataUrl);
-      await runOcrOnImage(j.imageBase64, j.mimeType ?? "image/jpeg");
-      toast({ title: `Imported: ${j.filename || "latest scan"}` });
+      const r = await api.post<{
+        ok: boolean; imageBase64: string; mimeType: string; filename: string;
+        cacheKey: string; optimized: boolean; error?: string; duplicate?: boolean;
+      }>("/api/form-f/latest-scan-proxy", {
+        bridgeUrl: SCAN_BRIDGE_URL,
+        mode: "watch",
+        maxWidth: fSettings?.maxScanWidth ?? 1200,
+        jpegQuality: fSettings?.jpegQuality ?? 85,
+      });
+      if (!r.ok) {
+        if (r.duplicate) {
+          toast({ title: "Duplicate scan", description: r.error || "Already imported", variant: "destructive" });
+        } else {
+          throw new Error(r.error || "No latest scan found");
+        }
+        return;
+      }
+      // Open the crop panel instead of immediately setting
+      setScanPanelBase64(r.imageBase64);
+      setScanPanelMime(r.mimeType ?? "image/jpeg");
+      setScanPanelOpen(true);
+      toast({ title: `Imported: ${r.filename || "latest scan"}`, description: r.optimized ? "Image optimized" : undefined });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not import";
       toast({
@@ -717,10 +740,15 @@ export default function FormF() {
     staleTime: 60_000,
   });
 
-  // Clinic settings for Form F required-field toggles
+  // Clinic settings for Form F required-field toggles + scanner settings
   const { data: fSettings } = useQuery<{
     formFAddressRequired?: boolean;
     formFGuardianRequired?: boolean;
+    autoCropIdScan?: boolean;
+    autoRotateScan?: boolean;
+    cropPadding?: number;
+    jpegQuality?: number;
+    maxScanWidth?: number;
   }>({
     queryKey: ["clinic-settings-formf"],
     queryFn: () => api.get("/api/clinic-settings"),
@@ -2092,6 +2120,30 @@ export default function FormF() {
           scanBridgeUrl={SCAN_BRIDGE_URL}
           onScanBridgeTrigger={triggerScanBridge}
           scanning={scanning}
+        />
+      )}
+
+      {/* ── ID Card Scan Editor (crop, rotate, adjust) ── */}
+      {scanPanelOpen && scanPanelBase64 && (
+        <IdCardScanPanel
+          imageBase64={scanPanelBase64}
+          mimeType={scanPanelMime}
+          autoCropEnabled={fSettings?.autoCropIdScan !== false}
+          cropPadding={fSettings?.cropPadding ?? 12}
+          jpegQuality={fSettings?.jpegQuality ?? 85}
+          maxWidth={fSettings?.maxScanWidth ?? 1200}
+          onSave={async (result) => {
+            const dataUrl = `data:${result.mimeType};base64,${result.croppedBase64 || result.originalBase64}`;
+            setIdCardFrontUrl(dataUrl);
+            setScanPanelOpen(false);
+            setScanPanelBase64("");
+            await runOcrOnImage(result.croppedBase64 || result.originalBase64, result.mimeType);
+            toast({ title: "ID card saved" });
+          }}
+          onCancel={() => {
+            setScanPanelOpen(false);
+            setScanPanelBase64("");
+          }}
         />
       )}
     </div>

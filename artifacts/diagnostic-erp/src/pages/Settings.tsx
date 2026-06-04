@@ -20,7 +20,7 @@ import {
   Tag, Building2, Image as ImageIcon, Upload, MessageCircle, Printer,
   Search, Globe, Copy, ExternalLink, Check, Network, MapPin, Database,
   RefreshCcw, FileCode, Send, QrCode, Palette, Bot, Inbox, ChevronRight,
-  ArrowLeft, Phone, Layers, AlertTriangle,
+  ArrowLeft, Phone, Layers, AlertTriangle, ScanLine,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -110,6 +110,7 @@ const TABS = [
   { id: "online-booking", label: "Online Booking", icon: CreditCard },
   { id: "kiosk", label: "Self-Reg Kiosk", icon: QrCode },
   { id: "form-f", label: "Form F Tests", icon: FileText },
+  { id: "scanner", label: "Scanner", icon: ScanLine },
   { id: "email", label: "Email Notifications", icon: Mail },
   { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
   { id: "printers", label: "Printers", icon: Printer },
@@ -205,6 +206,7 @@ export default function Settings() {
         {tab === "online-booking" && <OnlineBookingTab />}
         {tab === "kiosk" && <KioskSettingsTab />}
         {tab === "form-f" && <FormFTestsTab />}
+        {tab === "scanner" && <ScannerSettingsTab />}
         {tab === "email" && <EmailTab />}
         {tab === "whatsapp" && <WhatsappTab />}
         {tab === "printers" && <PrinterTab />}
@@ -5244,6 +5246,177 @@ function PromotionalFooterTab() {
           <Button variant="outline" type="button" onClick={() => setForm(settings ?? null)}>Reset</Button>
           <Button onClick={() => save.mutate(current)} disabled={save.isPending}>
             {save.isPending ? "Saving..." : "Save Changes"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// SCANNER SETTINGS TAB
+// ============================================================
+type ScannerSettings = {
+  autoCropIdScan: boolean;
+  autoRotateScan: boolean;
+  archiveImportedScans: boolean;
+  cropPadding: number;
+  jpegQuality: number;
+  maxScanWidth: number;
+};
+
+function ScannerSettingsTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: settings } = useQuery<ScannerSettings & Record<string, unknown>>({
+    queryKey: ["clinic-settings"],
+    queryFn: () => api.get("/api/clinic-settings"),
+  });
+
+  const [autoCrop, setAutoCrop] = useState(true);
+  const [autoRotate, setAutoRotate] = useState(false);
+  const [archive, setArchive] = useState(true);
+  const [padding, setPadding] = useState(12);
+  const [quality, setQuality] = useState(85);
+  const [maxWidth, setMaxWidth] = useState(1200);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!settings) return;
+    setAutoCrop(settings.autoCropIdScan !== false);
+    setAutoRotate(settings.autoRotateScan === true);
+    setArchive(settings.archiveImportedScans !== false);
+    setPadding(Number(settings.cropPadding ?? 12));
+    setQuality(Number(settings.jpegQuality ?? 85));
+    setMaxWidth(Number(settings.maxScanWidth ?? 1200));
+  }, [settings]);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await api.put("/api/clinic-settings", {
+        autoCropIdScan: autoCrop,
+        autoRotateScan: autoRotate,
+        archiveImportedScans: archive,
+        cropPadding: padding,
+        jpegQuality: quality,
+        maxScanWidth: maxWidth,
+      });
+      qc.invalidateQueries({ queryKey: ["clinic-settings"] });
+      toast({ title: "Scanner settings saved" });
+    } catch {
+      toast({ title: "Failed to save", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <div className="bg-card border border-border rounded-xl p-5 space-y-5">
+        <div>
+          <h3 className="font-semibold text-base">ID Card Scanner Settings</h3>
+          <p className="text-sm text-muted-foreground mt-0.5">Configure how scans are imported and processed in Form F.</p>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <input
+              id="autoCrop"
+              type="checkbox"
+              checked={autoCrop}
+              onChange={(e) => setAutoCrop(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+            />
+            <label htmlFor="autoCrop" className="text-sm font-medium">
+              Auto-crop ID cards
+              <p className="text-xs text-muted-foreground font-normal">Automatically detect and crop the card edges when importing scans.</p>
+            </label>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <input
+              id="autoRotate"
+              type="checkbox"
+              checked={autoRotate}
+              onChange={(e) => setAutoRotate(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+            />
+            <label htmlFor="autoRotate" className="text-sm font-medium">
+              Auto-rotate scans
+              <p className="text-xs text-muted-foreground font-normal">Attempt to correct orientation if the scanner saves rotated images.</p>
+            </label>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <input
+              id="archive"
+              type="checkbox"
+              checked={archive}
+              onChange={(e) => setArchive(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+            />
+            <label htmlFor="archive" className="text-sm font-medium">
+              Archive imported scans
+              <p className="text-xs text-muted-foreground font-normal">Move processed files to a processed folder after import.</p>
+            </label>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-1">
+              <label htmlFor="padding" className="text-sm font-medium">Crop Padding (px)</label>
+              <Input
+                id="padding"
+                type="number"
+                min={0}
+                max={100}
+                value={padding}
+                onChange={(e) => setPadding(Math.max(0, Math.min(100, Number(e.target.value))))}
+                className="h-9"
+              />
+              <p className="text-[11px] text-muted-foreground">Extra space around detected card edges.</p>
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="quality" className="text-sm font-medium">JPEG Quality (%)</label>
+              <Input
+                id="quality"
+                type="number"
+                min={30}
+                max={100}
+                value={quality}
+                onChange={(e) => setQuality(Math.max(30, Math.min(100, Number(e.target.value))))}
+                className="h-9"
+              />
+              <p className="text-[11px] text-muted-foreground">Higher = better quality, larger file.</p>
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="maxWidth" className="text-sm font-medium">Max Width (px)</label>
+              <Input
+                id="maxWidth"
+                type="number"
+                min={200}
+                max={5000}
+                value={maxWidth}
+                onChange={(e) => setMaxWidth(Math.max(200, Math.min(5000, Number(e.target.value))))}
+                className="h-9"
+              />
+              <p className="text-[11px] text-muted-foreground">Resize if scanned image is wider than this.</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2 border-t border-card-border">
+          <Button variant="outline" type="button" onClick={() => {
+            if (!settings) return;
+            setAutoCrop(settings.autoCropIdScan !== false);
+            setAutoRotate(settings.autoRotateScan === true);
+            setArchive(settings.archiveImportedScans !== false);
+            setPadding(Number(settings.cropPadding ?? 12));
+            setQuality(Number(settings.jpegQuality ?? 85));
+            setMaxWidth(Number(settings.maxScanWidth ?? 1200));
+          }}>Reset</Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? "Saving..." : "Save Changes"}
           </Button>
         </div>
       </div>

@@ -10,6 +10,10 @@ import { sendTextMessageRaw, resolveNumber, normalizePhone } from "./whatsapp";
 
 const formFRouter = Router();
 
+// ── Duplicate protection cache for latest-scan imports ──
+const importedScanCache = new Map<string, number>(); // key -> timestamp
+const SCAN_BRIDGE_URL = "http://127.0.0.1:8766";
+
 formFRouter.get("/fetch-billing/:search", async (req, res) => {
   try {
     const search = req.params.search.trim();
@@ -680,6 +684,87 @@ Thank you!`;
 // Export Form F data for PCPNDT portal bookmarklet (staff-authenticated)
 // Returns all fields needed to pre-fill the government portal form.
 // ────────────────────────────────────────────────────────────────────
+formFRouter.post("/latest-scan-proxy", requireStaffPermission("/form-f"), async (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const bridgeUrl = String(body.bridgeUrl ?? SCAN_BRIDGE_URL).trim();
+    const mode = String(body.mode ?? "watch").trim(); // "watch" or "direct"
+    const useSharp = typeof req.app?.get === "function" ? req.app.get("useSharp") !== false : true;
+
+    // 1) Fetch from bridge (either /latest-scan or /scan)
+    const endpoint = mode === "direct" ? "scan" : "latest-scan";
+    const r = await fetch(`${bridgeUrl}/${endpoint}`, { method: "POST", mode: "cors" });
+    const j = await r.json().catch(() => ({})) as Record<string, unknown>;
+    if (!r.ok || !j.ok) {
+      res.status(r.status === 404 ? 404 : 502).json({
+        ok: false,
+        error: String(j.error || "Bridge failed"),
+        code: j.code ? String(j.code) : null,
+        fallback: j.fallback ? String(j.fallback) : null,
+      });
+      return;
+    }
+
+    const imageBase64 = String(j.imageBase64 ?? "");
+    const mimeType = String(j.mimeType ?? "image/jpeg");
+    const filename = String(j.filename ?? "scan");
+    const mtimeMs = Number(j.mtimeMs ?? 0);
+    const cacheKey = `${filename}:${mtimeMs}`;
+
+    // 2) Duplicate protection — reject same file/mtime within last 5 minutes
+    const now = Date.now();
+    const lastSeen = importedScanCache.get(cacheKey);
+    if (lastSeen && now - lastSeen < 5 * 60 * 1000) {
+      res.status(409).json({
+        ok: false,
+        error: "This scan was already imported recently. Wait a few minutes or scan a new document.",
+        duplicate: true,
+        cacheKey,
+      });
+      return;
+    }
+    importedScanCache.set(cacheKey, now);
+    // Clean old cache entries (older than 10 min)
+    for (const [k, t] of importedScanCache) {
+      if (now - t > 10 * 60 * 1000) importedScanCache.delete(k);
+    }
+
+    // 3) Image optimization using Sharp if available
+    let optimizedBase64 = imageBase64;
+    let optimizedMime = mimeType;
+    const maxWidth = Number(body.maxWidth ?? 1200);
+    const jpegQuality = Number(body.jpegQuality ?? 85);
+    if (useSharp && !mimeType.includes("pdf")) {
+      try {
+        const sharp = await import("sharp");
+        const inputBuf = Buffer.from(imageBase64, "base64");
+        let pipeline = sharp.default(inputBuf).rotate();
+        if (maxWidth > 0) {
+          pipeline = pipeline.resize({ width: maxWidth, withoutEnlargement: true });
+        }
+        const outBuf = await pipeline.jpeg({ quality: jpegQuality, mozjpeg: true }).toBuffer();
+        optimizedBase64 = outBuf.toString("base64");
+        optimizedMime = "image/jpeg";
+      } catch {
+        // Sharp not available or failed — return raw
+      }
+    }
+
+    res.json({
+      ok: true,
+      imageBase64: optimizedBase64,
+      mimeType: optimizedMime,
+      filename,
+      cacheKey,
+      optimized: optimizedBase64 !== imageBase64,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Internal server error";
+    req.log?.warn?.({ err }, "latest-scan-proxy error");
+    res.status(500).json({ ok: false, error: msg });
+  }
+});
+
 formFRouter.get("/export-for-portal/:billNumber", requireStaffPermission("/form-f"), async (req, res) => {
   try {
     const billNumber = String(req.params.billNumber ?? "").trim();
