@@ -517,6 +517,10 @@ export default function BillingDesk() {
   const [formFPopupAddress, setFormFPopupAddress] = useState("");
   const formFPopupPendingPrintRef = useRef(false);
 
+  // ── Print preview dialog ──
+  const [printPreviewOpen, setPrintPreviewOpen] = useState(false);
+  const [printPreviewHtml, setPrintPreviewHtml] = useState("");
+
   // ── DICOM MWL fields (triggered by configured tests) ───────────────
   const dicomMwlTestIdSet: Set<number> = (() => {
     try { return new Set(JSON.parse(clinic?.dicomMwlTestIds ?? "[]") as number[]); }
@@ -756,91 +760,92 @@ export default function BillingDesk() {
       queryClient.invalidateQueries({ queryKey: ["bill-preview-no"] });
       if (printAfterSaveRef.current) {
         printAfterSaveRef.current = false;
-        // Build the receipt HTML using the SAME template as BillDetail's
-        // re-print so QR, copies, A4/A5 auto-size, B&W, and cancelled-test
-        // listing all behave identically. Clinic settings + printer settings
-        // are already cached by React Query (loaded on mount), so the only
-        // async work here is generating the QR code (~50ms).
         const cachedClinic = queryClient.getQueryData<PrintClinic>([
           "clinic-settings",
         ]);
         const cachedPrinter =
           printerCfgCached ??
           queryClient.getQueryData<PrinterCfg>(["printer-settings"]);
-        void QRCode.toDataURL(buildBillVerifyUrl(lastBillLocal.billNumber), {
-          errorCorrectionLevel: "M",
-          margin: 1,
-          width: 256,
-          color: { dark: "#000000", light: "#ffffff" },
-        })
-          .catch(() => "")
-          .then((qrUrl) => {
-          const clinicForPrint = cachedClinic ?? (clinic as PrintClinic);
-          const isBW = (cachedPrinter as { billPrinterType?: string } | undefined)?.billPrinterType === "bw";
-          const paid = lastBillLocal.payments.reduce((s, p) => s + Number(p.amount || 0), 0);
-          const billForPrint: PrintBillData = {
-            billNumber: lastBillLocal.billNumber,
-            subtotal: lastBillLocal.subtotal,
-            discount: lastBillLocal.discount,
-            taxAmount: 0,
-            totalAmount: lastBillLocal.total,
-            paidAmount: paid,
-            balanceAmount: Math.max(0, lastBillLocal.total - paid),
-            createdAt: new Date().toISOString(),
-            patient: {
-              firstName: lastBillLocal.patient.firstName,
-              lastName: lastBillLocal.patient.lastName,
-              patientId: lastBillLocal.patient.patientId,
-              phone: lastBillLocal.patient.phone ?? null,
-              gender: lastBillLocal.patient.gender ?? null,
-              dateOfBirth: lastBillLocal.patient.dateOfBirth ?? null,
-            },
-            order: {
-              doctor: lastBillLocal.doctorName ? { name: lastBillLocal.doctorName } : null,
-              tests: lastBillLocal.tests.map((t) => ({
-                price: t.price,
-                status: "active",
-                test: { name: t.name, code: t.code ?? "", category: t.category },
-              })),
-            },
-            payments: lastBillLocal.payments.map((p) => ({
-              method: p.mode,
-              amount: Number(p.amount || 0),
-            })),
-            tokenNo: lastBillLocal.tokenNo ?? null,
-            testTokens: lastBillLocal.testTokens ?? null,
-          };
-          const paperSize = getAutoBillPaperSize(lastBillLocal.tests.length, getBillPaperSize());
-          const settings = loadBillPrintSettings();
-          const html = buildBillPrintHtml({
-            bill: billForPrint,
-            clinic: clinicForPrint,
-            paperSize,
-            isBW,
-            qrDataUrl: qrUrl as string,
-            format: settings.defaultFormat,
-            showQr: settings.showQrCode,
-            showAmountInWords: settings.showAmountInWords,
-            showSignatureLine: settings.showSignatureLine,
-            showComputerGenerated: settings.showComputerGenerated,
-            showReportMessage: settings.showReportMessage,
-            showServiceFooter: settings.showServiceFooter,
-            showBrandingFooter: settings.showBrandingFooter,
-          });
-          // Print into a hidden 0×0 iframe — no popup window, no popup-
-          // blocker, no "Preparing receipt…" placeholder. The browser's
-          // native print dialog opens directly with the receipt loaded.
-          printViaIframe(html);
-          // Auto-print the combined per-department token slip on the
-          // configured Token Printer right after the bill. Fires only when
-          // the bill actually generated tokens. Wrapped in a small delay
-          // so it doesn't fight the bill's print dialog for focus.
-          if ((lastBillLocal.testTokens?.length ?? 0) > 0 || lastBillLocal.tokenNo != null) {
-            window.setTimeout(() => {
-              void printToken(lastBillLocal, clinicForPrint as ClinicLite).catch(() => { /* best-effort */ });
-            }, 600);
+        const settings = loadBillPrintSettings();
+        const runPrint = (skipConfirm: boolean) => {
+          if (settings.askBeforePrint && !skipConfirm) {
+            if (!window.confirm("Print receipt now?")) {
+              return;
+            }
           }
-        });
+          void QRCode.toDataURL(buildBillVerifyUrl(lastBillLocal.billNumber), {
+            errorCorrectionLevel: "M",
+            margin: 1,
+            width: 256,
+            color: { dark: "#000000", light: "#ffffff" },
+          })
+            .catch(() => "")
+            .then((qrUrl) => {
+            const clinicForPrint = cachedClinic ?? (clinic as PrintClinic);
+            const isBW = (cachedPrinter as { billPrinterType?: string } | undefined)?.billPrinterType === "bw";
+            const paid = lastBillLocal.payments.reduce((s, p) => s + Number(p.amount || 0), 0);
+            const billForPrint: PrintBillData = {
+              billNumber: lastBillLocal.billNumber,
+              subtotal: lastBillLocal.subtotal,
+              discount: lastBillLocal.discount,
+              taxAmount: 0,
+              totalAmount: lastBillLocal.total,
+              paidAmount: paid,
+              balanceAmount: Math.max(0, lastBillLocal.total - paid),
+              createdAt: new Date().toISOString(),
+              patient: {
+                firstName: lastBillLocal.patient.firstName,
+                lastName: lastBillLocal.patient.lastName,
+                patientId: lastBillLocal.patient.patientId,
+                phone: lastBillLocal.patient.phone ?? null,
+                gender: lastBillLocal.patient.gender ?? null,
+                dateOfBirth: lastBillLocal.patient.dateOfBirth ?? null,
+              },
+              order: {
+                doctor: lastBillLocal.doctorName ? { name: lastBillLocal.doctorName } : null,
+                tests: lastBillLocal.tests.map((t) => ({
+                  price: t.price,
+                  status: "active",
+                  test: { name: t.name, code: t.code ?? "", category: t.category },
+                })),
+              },
+              payments: lastBillLocal.payments.map((p) => ({
+                method: p.mode,
+                amount: Number(p.amount || 0),
+              })),
+              tokenNo: lastBillLocal.tokenNo ?? null,
+              testTokens: lastBillLocal.testTokens ?? null,
+            };
+            const paperSize = getAutoBillPaperSize(lastBillLocal.tests.length, getBillPaperSize());
+            const html = buildBillPrintHtml({
+              bill: billForPrint,
+              clinic: clinicForPrint,
+              paperSize,
+              isBW,
+              qrDataUrl: qrUrl as string,
+              format: settings.defaultFormat,
+              showQr: settings.showQrCode,
+              showAmountInWords: settings.showAmountInWords,
+              showSignatureLine: settings.showSignatureLine,
+              showComputerGenerated: settings.showComputerGenerated,
+              showReportMessage: settings.showReportMessage,
+              showServiceFooter: settings.showServiceFooter,
+              showBrandingFooter: settings.showBrandingFooter,
+            });
+            if (settings.enablePreview) {
+              setPrintPreviewHtml(html);
+              setPrintPreviewOpen(true);
+            } else if (settings.directPrintAfterSave || settings.autoOpenPrintDialog) {
+              printViaIframe(html);
+            }
+            if ((lastBillLocal.testTokens?.length ?? 0) > 0 || lastBillLocal.tokenNo != null) {
+              window.setTimeout(() => {
+                void printToken(lastBillLocal, clinicForPrint as ClinicLite).catch(() => { /* best-effort */ });
+              }, 600);
+            }
+          });
+        };
+        runPrint(false);
       }
       // Auto-reset the desk after a short delay so staff can immediately start
       // the next bill — prevents accidental double entry of the same patient.
@@ -2317,39 +2322,53 @@ export default function BillingDesk() {
                     });
                     toast({ title: "Form F data saved" });
                     setFormFPopupOpen(false);
-                    // If the bill was created with "Save & Print", trigger the print now
                     if (formFPopupPendingPrintRef.current) {
                       printAfterSaveRef.current = true;
                       const cachedClinic = queryClient.getQueryData<PrintClinic>(["clinic-settings"]);
                       const cachedPrinter = printerCfgCached ?? queryClient.getQueryData<PrinterCfg>(["printer-settings"]);
-                      void QRCode.toDataURL(buildBillVerifyUrl(formFPopupBillNumber), {
+                      const lb = lastBill ?? lastBillRef.current;
+                      if (!lb) { window.setTimeout(() => resetAll(), 1500); return; }
+                      const clinicForPrint = cachedClinic ?? (clinic as PrintClinic);
+                      const isBW = (cachedPrinter as { billPrinterType?: string } | undefined)?.billPrinterType === "bw";
+                      const settings = loadBillPrintSettings();
+                      const paid = lb.payments.reduce((s, p) => s + Number(p.amount || 0), 0);
+                      const billForPrint: PrintBillData = {
+                        billNumber: lb.billNumber, subtotal: lb.subtotal,
+                        discount: lb.discount, taxAmount: 0, totalAmount: lb.total,
+                        paidAmount: paid, balanceAmount: Math.max(0, lb.total - paid),
+                        createdAt: new Date().toISOString(),
+                        patient: { firstName: lb.patient.firstName, lastName: lb.patient.lastName, patientId: lb.patient.patientId, phone: lb.patient.phone ?? null, ageValue: lb.patient.ageValue ?? null, ageUnit: lb.patient.ageUnit ?? null },
+                        order: {
+                          doctor: lb.doctorName ? { name: lb.doctorName } : null,
+                          tests: lb.tests.map((t) => ({ price: t.price, status: "active", test: { name: t.name, code: t.code ?? "", category: t.category } })),
+                        },
+                        payments: lb.payments.map((p) => ({ method: p.mode, amount: Number(p.amount || 0) })),
+                        tokenNo: lb.tokenNo ?? null, testTokens: lb.testTokens ?? null,
+                      };
+                      void QRCode.toDataURL(buildBillVerifyUrl(lb.billNumber), {
                         errorCorrectionLevel: "M", margin: 1, width: 256,
                         color: { dark: "#000000", light: "#ffffff" },
                       }).catch(() => "").then((qrUrl) => {
-                        const lb = lastBill ?? lastBillRef.current;
-                        if (!lb) return;
-                        const clinicForPrint = cachedClinic ?? (clinic as PrintClinic);
-                        const isBW = (cachedPrinter as { billPrinterType?: string } | undefined)?.billPrinterType === "bw";
-                        const paid = lb.payments.reduce((s, p) => s + Number(p.amount || 0), 0);
-                        const billForPrint: PrintBillData = {
-                          billNumber: lb.billNumber, subtotal: lb.subtotal,
-                          discount: lb.discount, taxAmount: 0, totalAmount: lb.total,
-                          paidAmount: paid, balanceAmount: Math.max(0, lb.total - paid),
-                          createdAt: new Date().toISOString(),
-                          patient: { firstName: lb.patient.firstName, lastName: lb.patient.lastName, patientId: lb.patient.patientId, phone: lb.patient.phone ?? null, ageValue: lb.patient.ageValue ?? null, ageUnit: lb.patient.ageUnit ?? null },
-                          order: {
-                            doctor: lb.doctorName ? { name: lb.doctorName } : null,
-                            tests: lb.tests.map((t) => ({ price: t.price, status: "active", test: { name: t.name, code: t.code ?? "", category: t.category } })),
-                          },
-                          payments: lb.payments.map((p) => ({ method: p.mode, amount: Number(p.amount || 0) })),
-                          tokenNo: lb.tokenNo ?? null, testTokens: lb.testTokens ?? null,
-                        };
                         const paperSize = getAutoBillPaperSize(lb.tests.length, getBillPaperSize());
-                        const html = buildBillPrintHtml({ bill: billForPrint, clinic: clinicForPrint, paperSize, isBW, qrDataUrl: qrUrl as string });
-                        printViaIframe(html);
+                        const html = buildBillPrintHtml({
+                          bill: billForPrint, clinic: clinicForPrint, paperSize, isBW, qrDataUrl: qrUrl as string,
+                          format: settings.defaultFormat,
+                          showQr: settings.showQrCode,
+                          showAmountInWords: settings.showAmountInWords,
+                          showSignatureLine: settings.showSignatureLine,
+                          showComputerGenerated: settings.showComputerGenerated,
+                          showReportMessage: settings.showReportMessage,
+                          showServiceFooter: settings.showServiceFooter,
+                          showBrandingFooter: settings.showBrandingFooter,
+                        });
+                        if (settings.enablePreview) {
+                          setPrintPreviewHtml(html);
+                          setPrintPreviewOpen(true);
+                        } else if (settings.directPrintAfterSave || settings.autoOpenPrintDialog) {
+                          printViaIframe(html);
+                        }
                       });
                     }
-                    // Reset after a short delay so staff can continue
                     window.setTimeout(() => resetAll(), 1500);
                   } catch (err) {
                     toast({ title: "Failed to save Form F data", variant: "destructive" });
@@ -2370,6 +2389,32 @@ export default function BillingDesk() {
                 Skip
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Print Preview Dialog ── */}
+      <Dialog open={printPreviewOpen} onOpenChange={setPrintPreviewOpen}>
+        <DialogContent className="max-w-3xl h-[80vh] p-0 flex flex-col">
+          <DialogHeader className="px-4 py-3 border-b">
+            <DialogTitle className="flex items-center justify-between">
+              <span>Print Preview</span>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => setPrintPreviewOpen(false)}>
+                  Close
+                </Button>
+                <Button size="sm" onClick={() => { printViaIframe(printPreviewHtml); setPrintPreviewOpen(false); }}>
+                  <Printer size={14} className="mr-1" /> Print
+                </Button>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto p-4 bg-gray-100">
+            <iframe
+              title="Print Preview"
+              srcDoc={printPreviewHtml}
+              style={{ width: "100%", height: "100%", border: "1px solid #ddd", background: "#fff" }}
+            />
           </div>
         </DialogContent>
       </Dialog>
