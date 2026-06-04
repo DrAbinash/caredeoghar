@@ -395,17 +395,8 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
     width: ${pageWidth};
     padding: 2mm 3mm;
     box-sizing: border-box;
-    min-height: 100vh;
     position: relative;
     z-index: 1;
-    display: flex;
-    flex-direction: column;
-  }
-  .main-content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
   }
   .main-content.premium-sparse-mode .header-block { margin-bottom: ${sparseGap}; }
   .main-content.premium-sparse-mode .title-block { margin-bottom: ${sparseGap}; }
@@ -413,18 +404,14 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
   .main-content.premium-sparse-mode .test-table { margin-bottom: ${sparseGap}; }
   .main-content.premium-sparse-mode .payment-section { margin-bottom: ${sparseGap}; }
   .footer-panel {
-    margin-top: auto;
-    padding-bottom: 10mm;
+    margin-top: ${sparseGap};
+    padding-bottom: 4mm;
   }
   .no-break { page-break-inside: avoid; }
   .receipt table tr { page-break-inside: avoid; }
   @media print {
     body { margin: 0; padding: 0; color: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .receipt { margin: 0; display: flex; flex-direction: column; min-height: 100vh; }
-    .main-content { flex: 1; display: flex; flex-direction: column; }
-    .main-content.premium-sparse-mode { justify-content: space-between; }
-    .flex-spacer { flex: 1; min-height: 0; }
-    .footer-panel { margin-top: auto; padding-bottom: 10mm; }
+    .receipt { margin: 0; }
     .receipt * { color: #000 !important; border-color: #000 !important; }
   }
 </style>
@@ -554,10 +541,7 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
     <!-- PATIENT INSTRUCTIONS (optional) -->
     ${patientInstructions}
 
-    <!-- FLEX SPACER: grows to fill remaining space in sparse mode -->
-    <div class="flex-spacer" style="flex:1;min-height:0"></div>
-
-    <!-- FOOTER PANEL — pinned near bottom with breathing space -->
+    <!-- FOOTER PANEL — sits below content with natural spacing -->
     <div class="footer-panel no-break" style="padding: ${footerSpacing}; border-top: ${footerBorderTop} solid #000;">
       <!-- V3 receipt messages (priority: thank-you → collection → verified → QR msg → promotional msg → follow-up → patient since) -->
       ${receiptThankYou ? `<div style="margin-bottom:${footerBrandingMargin}">${receiptThankYou}</div>` : ""}
