@@ -139,5 +139,13 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   showCustomFooterMessage: boolean("show_custom_footer_message").notNull().default(false),
   customFooterMessage: text("custom_footer_message").notNull().default(""),
 
+  // ── Form F Scanner Settings ──
+  autoCropIdScan: boolean("auto_crop_id_scan").notNull().default(true),
+  autoRotateScan: boolean("auto_rotate_scan").notNull().default(false),
+  archiveImportedScans: boolean("archive_imported_scans").notNull().default(true),
+  cropPadding: integer("crop_padding").notNull().default(12),
+  jpegQuality: integer("jpeg_quality").notNull().default(85),
+  maxScanWidth: integer("max_scan_width").notNull().default(1200),
+
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

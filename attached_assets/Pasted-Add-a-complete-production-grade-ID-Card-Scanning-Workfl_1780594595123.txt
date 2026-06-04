@@ -1,0 +1,228 @@
+Add a complete production-grade ID Card Scanning Workflow for Form F and Patient Registration.
+
+GOAL:
+Reception staff should scan an Aadhaar/PAN/Voter ID/Driving Licence on a flatbed scanner and ERP should automatically import, crop, optimize, preview and save the ID card without requiring manual file browsing.
+
+SCANNER WORKFLOW:
+
+1. Remove dependency on WIA direct scan for production use.
+
+- Keep WIA available as an experimental option.
+- Main workflow should use "Import Latest Scan" from scan bridge folder-watch mode.
+
+2. Add scan bridge endpoint:
+   POST /latest-scan
+
+Behavior:
+
+- Read SCAN_WATCH_FOLDER from .env (default C:\Scans)
+- Find newest file by modified timestamp
+- Support:
+  jpg
+  jpeg
+  png
+  tif
+  tiff
+  pdf
+- Return:
+  {
+  ok: true,
+  imageBase64,
+  mimeType,
+  filename,
+  sourcePath
+  }
+
+3. Form F UI:
+   Replace manual upload workflow with:
+
+Buttons:
+
+- Import Latest Scan
+- Use Auto Crop
+- Use Original
+- Crop Again
+- Rotate Left
+- Rotate Right
+- Save Cropped
+- Restore Original
+
+No file picker should appear.
+
+SCANNING FLOW:
+
+Scan document
+↓
+Scanner software saves file into C:\Scans
+↓
+User clicks Import Latest Scan
+↓
+ERP loads latest scan automatically
+↓
+Preview appears
+↓
+Auto crop runs
+↓
+User confirms
+↓
+Cropped image saved into ID card box
+
+AUTO CROP:
+
+4. Add setting:
+   Auto Crop ID Scan
+   Default = ON
+
+5. Browser-side crop engine:
+   Use HTML Canvas first.
+
+Process:
+
+- Load imageBase64
+- Convert to ImageData
+- Detect white / near-white background
+- Find bounding rectangle of non-white region
+- Ignore dust/noise
+- Keep padding of 12px around detected card
+- Export cropped JPEG base64
+
+6. Crop detection requirements:
+
+- Aadhaar card
+- PAN card
+- Driving Licence
+- Voter ID
+- Passport front page
+- Hospital ID cards
+
+Must work if:
+
+- Card is slightly tilted
+- Card not perfectly centered
+- Scanner bed background is white
+
+7. Confidence detection:
+   If crop confidence is low:
+
+- Show warning:
+  "Auto crop may be inaccurate. Please adjust manually."
+- Display manual crop box.
+
+MANUAL CROP:
+
+8. Add drag-and-resize crop rectangle.
+
+- Mobile friendly
+- Touch friendly
+- Mouse friendly
+- User can adjust crop before saving
+
+IMAGE OPTIMIZATION:
+
+9. Before final save:
+
+- Convert to JPEG
+- Quality = 85%
+- Max width = 1200px
+- Preserve readability for OCR
+- Reduce storage size
+
+ROTATION:
+
+10. Add:
+
+- Rotate Left
+- Rotate Right
+- Auto Orientation (optional setting)
+
+ORIGINAL IMAGE PROTECTION:
+
+11. Never destroy original scan.
+    Store:
+
+- originalBase64
+- croppedBase64
+
+Allow:
+
+- Restore Original
+- Compare Original vs Cropped
+
+DUPLICATE PROTECTION:
+
+12. Prevent importing same scan repeatedly.
+    Track:
+
+- filename
+- modified timestamp
+
+If same file imported:
+Show:
+"This scan was already imported."
+
+ARCHIVING:
+
+13. Add ERP setting:
+    Archive Imported Scans
+    Default = ON
+
+After successful save:
+Move file from:
+C:\Scans
+
+to:
+C:\Scans\processed
+
+Create folder automatically if missing.
+
+ERROR HANDLING:
+
+14. If no file exists:
+    Show:
+    "Please scan using Windows Scan / Epson Scan / Canon Scan first, then click Import Latest Scan."
+
+15. If crop fails:
+    Show original image automatically.
+
+SETTINGS PANEL:
+
+Add scanner settings:
+
+- Auto Crop ID Scan (ON/OFF)
+- Auto Rotate Scan (ON/OFF)
+- Archive Imported Scans (ON/OFF)
+- Crop Padding (default 12 px)
+- JPEG Quality (default 85%)
+- Maximum Width (default 1200 px)
+
+FUTURE COMPATIBILITY:
+
+Must work regardless of scanner brand:
+
+- Epson
+- Canon
+- HP
+- Brother
+- Fujitsu
+- Kodak
+- Any scanner saving files to C:\Scans
+
+Do not hardcode scanner model names.
+
+FINAL RESULT:
+
+Reception staff workflow should be:
+
+Scan document
+↓
+Click Import Latest Scan
+↓
+Auto crop
+↓
+Preview
+↓
+Save
+
+No manual file browsing.
+No manual cropping in most cases.
+Professional ID card image stored in ERP.

@@ -104,6 +104,13 @@ async function getOrCreate() {
       whatsAppBookingMessage: "Book appointments on WhatsApp: +91",
       showCustomFooterMessage: false,
       customFooterMessage: "",
+      // Form F scanner fallbacks
+      autoCropIdScan: true,
+      autoRotateScan: false,
+      archiveImportedScans: true,
+      cropPadding: 12,
+      jpegQuality: 85,
+      maxScanWidth: 1200,
       updatedAt: new Date(),
     } as any;
   }
@@ -199,7 +206,7 @@ clinicSettingsRouter.put("/", async (req, res) => {
     }
     update.sidebarTheme = body.sidebarTheme;
   }
-  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "payuEnabled", "phonepeEnabled", "bharatpeEnabled", "cashfreeEnabled", "iciciEnabled", "upiQrEnabled", "billShowCode", "billShowCategory", "dayCloseAutoPrint", "lanOnlyLogin", "fido2Enabled", "kioskEnabled", "formFBillingPrompt", "formFAddressRequired", "formFGuardianRequired", "showFollowUpMessage", "showPromotionalFooter", "showPatientSince", "showVerifiedBadge", "showAuditInfoOnPatientCopy", "showWorkingHours", "showHomeCollection", "showEmergency", "showReferralProgram", "showHealthPackages", "showAccreditation", "showWhatsAppBooking", "showCustomFooterMessage"] as const;
+  const boolFields = ["patientPhotoEnabled", "showTatOnBill", "qrOnBillEnabled", "portalEnabled", "portalAllowAppointmentBooking", "portalAllowProfileEdit", "onlineBookingEnabled", "vipQueueEnabled", "payuEnabled", "phonepeEnabled", "bharatpeEnabled", "cashfreeEnabled", "iciciEnabled", "upiQrEnabled", "billShowCode", "billShowCategory", "dayCloseAutoPrint", "lanOnlyLogin", "fido2Enabled", "kioskEnabled", "formFBillingPrompt", "formFAddressRequired", "formFGuardianRequired", "showFollowUpMessage", "showPromotionalFooter", "showPatientSince", "showVerifiedBadge", "showAuditInfoOnPatientCopy", "showWorkingHours", "showHomeCollection", "showEmergency", "showReferralProgram", "showHealthPackages", "showAccreditation", "showWhatsAppBooking", "showCustomFooterMessage", "autoCropIdScan", "autoRotateScan", "archiveImportedScans"] as const;
   const textFields = ["kioskUpiVpa", "kioskUpiName", "kioskWelcomeMessage", "kioskAllowedTestIds", "onlineBookingAllowedTestIds", "onlineBookingAllowedPackageIds", "razorpayKeyId", "payuMerchantKey", "phonepeMerchantId", "bharatpeMerchantId", "cashfreeAppId", "iciciMerchantId", "iciciAggregatorId", "iciciSecretKey", "formFTestIds", "quickTestIds", "footerNote", "commissionDiscountMode", "lanAllowedIps", "billDefaultPaperSize", "name", "tagline", "address", "registeredAddress", "email", "phone", "website", "gstin", "logoDataUrl", "portalHeading", "portalWelcomeMessage", "sidebarTheme", "receiptThankYouMessage", "receiptCollectionMessage", "receiptQrMessage", "receiptPromotionalMessage", "serviceFooter", "followUpMessage", "promotionalTitle", "promotionalDescription", "workingHoursMessage", "homeCollectionMessage", "emergencyMessage", "referralProgramMessage", "healthPackagesMessage", "accreditationMessage", "whatsAppBookingMessage", "customFooterMessage"] as const;
   // NOTE: quickTestIds and formFTestIds are intentionally NOT in boolFields
   // because they store JSON-as-text (e.g. "[null,null,null,null,null,null]").
@@ -341,6 +348,19 @@ clinicSettingsRouter.put("/", async (req, res) => {
     }
     update.commissionDiscountMode = body.commissionDiscountMode;
   }
+  // Form F scanner integer settings
+  const intFields = ["cropPadding", "jpegQuality", "maxScanWidth"] as const;
+  for (const f of intFields) {
+    if (body[f] !== undefined) {
+      const n = Number(body[f]);
+      if (!Number.isInteger(n) || n < 0 || n > 5000) {
+        res.status(400).json({ error: `${f} must be an integer between 0 and 5000` });
+        return;
+      }
+      update[f] = n;
+    }
+  }
+
   if (typeof update.logoDataUrl === "string" && update.logoDataUrl.length > 2_000_000) {
     res.status(413).json({ error: "Logo too large (max ~1.5MB)" });
     return;
