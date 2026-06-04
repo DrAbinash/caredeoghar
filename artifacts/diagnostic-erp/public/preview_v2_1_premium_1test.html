@@ -30,9 +30,6 @@
     flex-direction: column;
     justify-content: flex-start;
   }
-  .main-content.premium-sparse-mode {
-    justify-content: space-between;
-  }
   .main-content.premium-sparse-mode .header-block { margin-bottom: 10px; }
   .main-content.premium-sparse-mode .title-block { margin-bottom: 10px; }
   .main-content.premium-sparse-mode .patient-block { margin-bottom: 10px; }
@@ -49,6 +46,7 @@
     .receipt { margin: 0; display: flex; flex-direction: column; min-height: 100vh; }
     .main-content { flex: 1; display: flex; flex-direction: column; }
     .main-content.premium-sparse-mode { justify-content: space-between; }
+    .flex-spacer { flex: 1; min-height: 0; }
     .footer-panel { margin-top: auto; padding-bottom: 10mm; }
     .receipt * { color: #000 !important; border-color: #000 !important; }
   }
@@ -200,7 +198,8 @@
       Please preserve this receipt for future reference. Collect reports within 7 days. Scan QR code to download available reports.
     </div>
 
-    </div><!-- /main-content -->
+    <!-- FLEX SPACER: grows to fill remaining space in sparse mode -->
+    <div class="flex-spacer" style="flex:1;min-height:0"></div>
 
     <!-- FOOTER PANEL — pinned near bottom with breathing space -->
     <div class="footer-panel no-break" style="padding: 12px 0 8px; border-top: 1.5px solid #000;">
@@ -221,7 +220,7 @@
       <div style="margin-top:6px"><div style="font-size:11px;text-align:center;margin:3px 0;font-weight:600">Please collect report within 7 days or download online using QR verification.</div></div>
       <div style="margin-top:6px"><div style="font-size:11px;text-align:center;font-weight:600">COMPUTER GENERATED INVOICE. NO SIGNATURE REQUIRED.</div></div>
       <div style="margin-top:4px"><div style="font-size:9px;text-align:center;margin:2px 0">
-      <span style="font-weight:700">Generated On:</span> 04 Jun 2026 01:46 pm &nbsp;|&nbsp;
+      <span style="font-weight:700">Generated On:</span> 04 Jun 2026 01:53 pm &nbsp;|&nbsp;
       <span style="font-weight:700">Printed By:</span> System
     </div></div>
       <table style="width:100%;border-collapse:collapse;margin-top:6px">
@@ -231,7 +230,7 @@
           </td>
           <td style="text-align:right;padding:0;vertical-align:bottom;font-size:11px">
             
-            <div style="margin-top:1px">04 Jun 2026 01:46 pm</div>
+            <div style="margin-top:1px">04 Jun 2026 01:53 pm</div>
           </td>
         </tr>
       </table>

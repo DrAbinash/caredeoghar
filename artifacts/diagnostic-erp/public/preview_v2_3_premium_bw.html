@@ -30,9 +30,6 @@
     flex-direction: column;
     justify-content: flex-start;
   }
-  .main-content.premium-sparse-mode {
-    justify-content: space-between;
-  }
   .main-content.premium-sparse-mode .header-block { margin-bottom: 10px; }
   .main-content.premium-sparse-mode .title-block { margin-bottom: 10px; }
   .main-content.premium-sparse-mode .patient-block { margin-bottom: 10px; }
@@ -49,6 +46,7 @@
     .receipt { margin: 0; display: flex; flex-direction: column; min-height: 100vh; }
     .main-content { flex: 1; display: flex; flex-direction: column; }
     .main-content.premium-sparse-mode { justify-content: space-between; }
+    .flex-spacer { flex: 1; min-height: 0; }
     .footer-panel { margin-top: auto; padding-bottom: 10mm; }
     .receipt * { color: #000 !important; border-color: #000 !important; }
   }
@@ -198,7 +196,8 @@
     <!-- PATIENT INSTRUCTIONS (optional) -->
     
 
-    </div><!-- /main-content -->
+    <!-- FLEX SPACER: grows to fill remaining space in sparse mode -->
+    <div class="flex-spacer" style="flex:1;min-height:0"></div>
 
     <!-- FOOTER PANEL — pinned near bottom with breathing space -->
     <div class="footer-panel no-break" style="padding: 12px 0 8px; border-top: 1.5px solid #000;">
@@ -226,7 +225,7 @@
           </td>
           <td style="text-align:right;padding:0;vertical-align:bottom;font-size:11px">
             
-            <div style="margin-top:1px">04 Jun 2026 01:46 pm</div>
+            <div style="margin-top:1px">04 Jun 2026 01:53 pm</div>
           </td>
         </tr>
       </table>

@@ -407,9 +407,6 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
     flex-direction: column;
     justify-content: flex-start;
   }
-  .main-content.premium-sparse-mode {
-    justify-content: space-between;
-  }
   .main-content.premium-sparse-mode .header-block { margin-bottom: ${sparseGap}; }
   .main-content.premium-sparse-mode .title-block { margin-bottom: ${sparseGap}; }
   .main-content.premium-sparse-mode .patient-block { margin-bottom: ${sparseGap}; }
@@ -426,6 +423,7 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
     .receipt { margin: 0; display: flex; flex-direction: column; min-height: 100vh; }
     .main-content { flex: 1; display: flex; flex-direction: column; }
     .main-content.premium-sparse-mode { justify-content: space-between; }
+    .flex-spacer { flex: 1; min-height: 0; }
     .footer-panel { margin-top: auto; padding-bottom: 10mm; }
     .receipt * { color: #000 !important; border-color: #000 !important; }
   }
@@ -556,7 +554,8 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
     <!-- PATIENT INSTRUCTIONS (optional) -->
     ${patientInstructions}
 
-    </div><!-- /main-content -->
+    <!-- FLEX SPACER: grows to fill remaining space in sparse mode -->
+    <div class="flex-spacer" style="flex:1;min-height:0"></div>
 
     <!-- FOOTER PANEL — pinned near bottom with breathing space -->
     <div class="footer-panel no-break" style="padding: ${footerSpacing}; border-top: ${footerBorderTop} solid #000;">

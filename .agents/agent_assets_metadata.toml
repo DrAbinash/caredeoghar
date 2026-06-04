@@ -221,3 +221,21 @@ id = "oo-V0_Az2pr-E6nw-9xkx"
 uri = "file://screenshots/v3_03_premium_bw.jpg"
 type = "image"
 title = "3. Premium A5 — 1 Test, B&W Minimal"
+
+[[outputs]]
+id = "97JjiYFZFNh7UmrbUjjot"
+uri = "file://screenshots/v3_fixed_1_premium_1test.jpg"
+type = "image"
+title = "1. Premium A5 — 1 Test (Fixed Spacer)"
+
+[[outputs]]
+id = "ZJD4-JstV5DEqaM_iqsCU"
+uri = "file://screenshots/v3_fixed_2_premium_2test.jpg"
+type = "image"
+title = "2. Premium A5 — 2 Tests, Discount + UPI"
+
+[[outputs]]
+id = "5zUIZech7q3vn7q-QsZeq"
+uri = "file://screenshots/v3_fixed_3_premium_bw.jpg"
+type = "image"
+title = "3. Premium A5 — 1 Test, B&W Minimal"
