@@ -157,9 +157,10 @@ export function buildClassicBillPrintHtml(opts: BuildPrintHtmlOpts): string {
     const code = t.test?.code ?? "";
     const name = t.displayName ?? t.test?.name ?? "";
     const cat = t.test?.category ?? "";
+    const codeFontSize = `${Math.round(parseInt(tablePx, 10) * 0.9)}px`;
     return `<tr>
       <td style="padding:4px 5px;border:1px solid #888;font-size:${tablePx};text-align:center">${i + 1}</td>
-      ${showCode ? `<td style="padding:4px 5px;border:1px solid #888;font-family:monospace;font-size:${Math.round(Number(tablePx) * 0.9)}px">${esc(code)}</td>` : ""}
+      ${showCode ? `<td style="padding:4px 5px;border:1px solid #888;font-family:monospace;font-size:${codeFontSize}">${esc(code)}</td>` : ""}
       <td style="padding:4px 5px;border:1px solid #888;font-size:${tablePx}">${esc(name)}</td>
       ${showCategory ? `<td style="padding:4px 5px;border:1px solid #888;font-size:${tablePx};color:#333">${esc(cat)}</td>` : ""}
       <td style="padding:4px 5px;border:1px solid #888;text-align:right;font-weight:700;font-size:${tablePx}">₹${fmt(t.price)}</td>
@@ -175,7 +176,7 @@ export function buildClassicBillPrintHtml(opts: BuildPrintHtmlOpts): string {
   const payRows = (bill.payments ?? []).map((p) => {
     const ref = p.referenceNumber ? ` (${esc(p.referenceNumber)})` : "";
     return `<tr>
-      <td style="padding:1px 0;font-size:${tinyPx};text-transform:capitalize">${esc(p.method)}${ref ? `<span style="color:#777;font-size:${Math.round(Number(tinyPx) * 0.85)}px">${ref}</span>` : ""}</td>
+      <td style="padding:1px 0;font-size:${tinyPx};text-transform:capitalize">${esc(p.method)}${ref ? `<span style="color:#777;font-size:${Math.round(parseInt(tinyPx, 10) * 0.85)}px">${ref}</span>` : ""}</td>
       <td style="padding:1px 0;text-align:right;font-weight:600;font-size:${tinyPx}">₹${fmt(p.amount)}</td>
     </tr>`;
   }).join("");
@@ -279,7 +280,7 @@ export function buildClassicBillPrintHtml(opts: BuildPrintHtmlOpts): string {
             </td>
             <!-- Payment details (middle, if present) -->
             <td style="vertical-align:top;padding:0 8px 0 0;font-size:${tinyPx}">
-              ${hasPayDetail ? `<div style="font-weight:800;border-bottom:1px solid #999;padding-bottom:1px;margin-bottom:2px;font-size:${Math.round(Number(tinyPx) * 1.1)}px">PAYMENT DETAILS</div>
+              ${hasPayDetail ? `<div style="font-weight:800;border-bottom:1px solid #999;padding-bottom:1px;margin-bottom:2px;font-size:${Math.round(parseInt(tinyPx, 10) * 1.1)}px">PAYMENT DETAILS</div>
                 <table style="width:100%;border-collapse:collapse"><tbody>${payRows}</tbody></table>` : ""}
             </td>
             <!-- Totals -->
@@ -294,8 +295,8 @@ export function buildClassicBillPrintHtml(opts: BuildPrintHtmlOpts): string {
                   </tr>
                   <tr><td style="padding:2px 3px;border-top:1px solid #000;font-weight:800">PAID</td><td style="padding:2px 3px;border-top:1px solid #000;text-align:right;font-weight:800;white-space:nowrap;color:green">₹${fmt(bill.paidAmount)}</td></tr>
                   <tr>
-                    <td style="padding:3px 3px;border-top:2px solid #000;font-weight:900;font-size:${Number(totalPx) + 2}px">BALANCE DUE</td>
-                    <td style="padding:3px 3px;border-top:2px solid #000;text-align:right;font-weight:900;white-space:nowrap;color:${Number(bill.balanceAmount) > 0 ? "#c62828" : "green"};font-size:${Number(totalPx) + 2}px">₹${fmt(bill.balanceAmount)}</td>
+                    <td style="padding:3px 3px;border-top:2px solid #000;font-weight:900;font-size:${parseInt(totalPx, 10) + 2}px">BALANCE DUE</td>
+                    <td style="padding:3px 3px;border-top:2px solid #000;text-align:right;font-weight:900;white-space:nowrap;color:${Number(bill.balanceAmount) > 0 ? "#c62828" : "green"};font-size:${parseInt(totalPx, 10) + 2}px">₹${fmt(bill.balanceAmount)}</td>
                   </tr>
                   ${cashAmt > 0 ? `<tr><td style="padding:1px 3px;color:#444;font-size:${tinyPx}">Cash</td><td style="padding:1px 3px;text-align:right;white-space:nowrap;color:#444;font-size:${tinyPx}">₹${fmt(cashAmt)}</td></tr>` : ""}
                   ${upiAmt > 0 ? `<tr><td style="padding:1px 3px;color:#444;font-size:${tinyPx}">UPI</td><td style="padding:1px 3px;text-align:right;white-space:nowrap;color:#444;font-size:${tinyPx}">₹${fmt(upiAmt)}</td></tr>` : ""}

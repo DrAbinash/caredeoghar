@@ -162,7 +162,7 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
     const code = t.test?.code ?? "";
     const name = t.displayName ?? t.test?.name ?? "";
     const cat = t.test?.category ?? "";
-    const codeFont = `font-size:${Math.round(Number(tablePx) * 0.9)}px`;
+    const codeFont = `font-size:${Math.round(parseInt(tablePx, 10) * 0.9)}px`;
     return `<tr>
       <td style="padding:${tableCellPad};border:1px solid #ccc;font-size:${tablePx};text-align:center;font-weight:700">${i + 1}</td>
       ${showCode ? `<td style="padding:${tableCellPad};border:1px solid #ccc;font-family:monospace;${codeFont}">${esc(code)}</td>` : ""}
@@ -182,9 +182,9 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
     const ref = p.referenceNumber ? ` (${esc(p.referenceNumber)})` : "";
     const dt = p.createdAt ? new Date(p.createdAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Kolkata" }) : "";
     return `<tr>
-      <td style="padding:2px 0;font-size:${tinyPx};text-transform:capitalize">${esc(p.method)}${ref ? `<span style="color:#777;font-size:${Math.round(Number(tinyPx) * 0.85)}px">${ref}</span>` : ""}</td>
+      <td style="padding:2px 0;font-size:${tinyPx};text-transform:capitalize">${esc(p.method)}${ref ? `<span style="color:#777;font-size:${Math.round(parseInt(tinyPx, 10) * 0.85)}px">${ref}</span>` : ""}</td>
       <td style="padding:2px 0;text-align:right;font-weight:700;font-size:${tinyPx}">₹${fmt(p.amount)}</td>
-      ${dt ? `<td style="padding:2px 0;text-align:right;font-size:${Math.round(Number(tinyPx) * 0.85)}px;color:#777">${esc(dt)}</td>` : ""}
+      ${dt ? `<td style="padding:2px 0;text-align:right;font-size:${Math.round(parseInt(tinyPx, 10) * 0.85)}px;color:#777">${esc(dt)}</td>` : ""}
     </tr>`;
   }).join("");
 
@@ -216,7 +216,7 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
   const amountInWords = showAmountInWords ? `<div style="font-size:${tinyPx};font-style:italic;color:#444;margin:3px 0 6px">${esc(numberToWords(Number(bill.totalAmount)))}</div>` : "";
 
   const serviceFooter = showServiceFooter
-    ? `<div style="font-size:${Math.round(Number(tinyPx) * 0.95)}px;color:#666;text-align:center;margin:4px 0;letter-spacing:0.3px">MRI · CT SCAN · ULTRASOUND · DIGITAL X-RAY · MAMMOGRAPHY · PATHOLOGY</div>`
+    ? `<div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.95)}px;color:#666;text-align:center;margin:4px 0;letter-spacing:0.3px">MRI · CT SCAN · ULTRASOUND · DIGITAL X-RAY · MAMMOGRAPHY · PATHOLOGY</div>`
     : "";
 
   const reportMessage = showReportMessage
@@ -224,7 +224,7 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
     : "";
 
   const brandingFooter = showBrandingFooter
-    ? `<div style="font-size:${Math.round(Number(footerPx) * 1.2)}px;font-weight:900;color:#000;text-align:center;margin:6px 0 4px;letter-spacing:1px;text-transform:uppercase">Thank You for Choosing Care Diagnostics</div>`
+    ? `<div style="font-size:${Math.round(parseInt(footerPx, 10) * 1.2)}px;font-weight:900;color:#000;text-align:center;margin:6px 0 4px;letter-spacing:1px;text-transform:uppercase">Thank You for Choosing Care Diagnostics</div>`
     : "";
 
   const customFooterLine = customFooter
@@ -244,7 +244,7 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
   const qrBlock = showQr && qrDataUrl
     ? `<div style="text-align:center">
       <img src="${qrDataUrl}" alt="QR" style="width:${qrSize};height:${qrSize};display:block;margin:0 auto"/>
-      <div style="font-size:${Math.round(Number(tinyPx) * 0.95)}px;color:#666;margin-top:2px">Scan to Verify</div>
+      <div style="font-size:${Math.round(parseInt(tinyPx, 10) * 0.95)}px;color:#666;margin-top:2px">Scan to Verify</div>
     </div>`
     : "";
 
@@ -391,9 +391,9 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
               <div class="qr-block">${qrBlock}</div>
             </td>
             <td style="vertical-align:top;padding:0 8px 0 0;font-size:${tinyPx}">
-              ${hasPayDetail ? `<div style="font-weight:800;border-bottom:1px solid #999;padding-bottom:2px;margin-bottom:3px;font-size:${Math.round(Number(tinyPx) * 1.1)}px">PAYMENT DETAILS</div>
+              ${hasPayDetail ? `<div style="font-weight:800;border-bottom:1px solid #999;padding-bottom:2px;margin-bottom:3px;font-size:${Math.round(parseInt(tinyPx, 10) * 1.1)}px">PAYMENT DETAILS</div>
                 <table style="width:100%;border-collapse:collapse"><tbody>${payRows}</tbody></table>
-                ${modeBreakdownRows ? `<div style="font-weight:700;border-top:1px solid #ccc;margin-top:3px;padding-top:3px;font-size:${Math.round(Number(tinyPx) * 1.05)}px">TOTAL PAID</div><table style="width:100%;border-collapse:collapse"><tbody>${modeBreakdownRows}</tbody></table>` : ""}` : ""}
+                ${modeBreakdownRows ? `<div style="font-weight:700;border-top:1px solid #ccc;margin-top:3px;padding-top:3px;font-size:${Math.round(parseInt(tinyPx, 10) * 1.05)}px">TOTAL PAID</div><table style="width:100%;border-collapse:collapse"><tbody>${modeBreakdownRows}</tbody></table>` : ""}` : ""}
             </td>
             <td style="vertical-align:top;padding:0">
               <table style="width:100%;border-collapse:collapse;font-size:${totalPx};table-layout:fixed">
