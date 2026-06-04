@@ -436,19 +436,20 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
     ${isBW ? "filter: grayscale(1) contrast(1.35); -webkit-print-color-adjust: exact; print-color-adjust: exact;" : ""}
   }
   .receipt {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
     width: ${pageWidth};
     padding: 2mm 3mm;
     box-sizing: border-box;
     position: relative;
     z-index: 1;
   }
-  .main-content.premium-sparse-mode .header-block { margin-bottom: ${sparseGap}; }
-  .main-content.premium-sparse-mode .title-block { margin-bottom: ${sparseGap}; }
-  .main-content.premium-sparse-mode .patient-block { margin-bottom: ${sparseGap}; }
-  .main-content.premium-sparse-mode .test-table { margin-bottom: ${sparseGap}; }
-  .main-content.premium-sparse-mode .payment-section { margin-bottom: ${sparseGap}; }
+  .main-content {
+    flex-shrink: 0;
+  }
   .footer-panel {
-    margin-top: ${sparseGap};
+    margin-top: auto;
     padding-bottom: 4mm;
   }
   .no-break { page-break-inside: avoid; }
@@ -584,49 +585,49 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
 
     <!-- PATIENT INSTRUCTIONS (optional) -->
     ${patientInstructions}
-
-    <!-- FOOTER PANEL — sits below content with natural spacing -->
-    <div class="footer-panel no-break" style="padding: ${footerSpacing}; border-top: ${footerBorderTop} solid #000;">
-      <!-- V3 receipt messages (priority: thank-you → collection → verified → QR msg → promotional msg → follow-up → patient since) -->
-      ${receiptThankYou ? `<div style="margin-bottom:${footerBrandingMargin}">${receiptThankYou}</div>` : ""}
-      ${receiptCollection ? `<div style="margin-top:${footerGeneratedMargin}">${receiptCollection}</div>` : ""}
-      ${verifiedBadge ? `<div style="margin-top:${footerGeneratedMargin}">${verifiedBadge}</div>` : ""}
-      ${receiptQrMessage ? `<div style="margin-top:${footerGeneratedMargin}">${receiptQrMessage}</div>` : ""}
-      ${receiptPromotional ? `<div style="margin-top:${footerGeneratedMargin}">${receiptPromotional}</div>` : ""}
-      ${followUpMessage ? `<div style="margin-top:${footerGeneratedMargin}">${followUpMessage}</div>` : ""}
-      ${patientSinceLine ? `<div style="margin-top:${footerGeneratedMargin}">${patientSinceLine}</div>` : ""}
-      ${promotionalFooter ? `<div style="margin-top:${footerGeneratedMargin}">${promotionalFooter}</div>` : ""}
-      <!-- V3 Additional footer messages -->
-      ${workingHoursMsg ? `<div style="margin-top:${footerGeneratedMargin}">${workingHoursMsg}</div>` : ""}
-      ${homeCollectionMsg ? `<div style="margin-top:${footerGeneratedMargin}">${homeCollectionMsg}</div>` : ""}
-      ${emergencyMsg ? `<div style="margin-top:${footerGeneratedMargin}">${emergencyMsg}</div>` : ""}
-      ${referralMsg ? `<div style="margin-top:${footerGeneratedMargin}">${referralMsg}</div>` : ""}
-      ${healthPackagesMsg ? `<div style="margin-top:${footerGeneratedMargin}">${healthPackagesMsg}</div>` : ""}
-      ${accreditationMsg ? `<div style="margin-top:${footerGeneratedMargin}">${accreditationMsg}</div>` : ""}
-      ${whatsAppMsg ? `<div style="margin-top:${footerGeneratedMargin}">${whatsAppMsg}</div>` : ""}
-      ${customFooterMsg ? `<div style="margin-top:${footerGeneratedMargin}">${customFooterMsg}</div>` : ""}
-      <!-- Legacy fallback blocks -->
-      ${footerBranding ? `<div style="margin-bottom:${footerBrandingMargin}">${footerBranding}</div>` : ""}
-      ${customFooterLine}
-      ${serviceFooter ? `<div style="margin-top:${footerServiceMargin}">${serviceFooter}</div>` : ""}
-      ${showBrandingFooter ? `<div style="font-size:${footerTaglineSize};font-weight:700;text-align:center;letter-spacing:0.5px;text-transform:uppercase;margin-top:${footerTaglineMargin}">Touching Lives With Care</div>` : ""}
-      ${reportMessage ? `<div style="margin-top:${footerGeneratedMargin}">${reportMessage}</div>` : ""}
-      ${computerGenerated ? `<div style="margin-top:${footerGeneratedMargin}">${computerGenerated}</div>` : ""}
-      ${(showAuditInfo && systemInfo) ? `<div style="margin-top:${footerSystemMargin}">${systemInfo}</div>` : ""}
-      <table style="width:100%;border-collapse:collapse;margin-top:6px">
-        <tr>
-          <td style="text-align:left;padding:0;vertical-align:bottom">
-            ${signatureLine}
-          </td>
-          <td style="text-align:right;padding:0;vertical-align:bottom;font-size:${tinyPx}">
-            ${billedByName ? `<div style="font-weight:700">Billed By: ${esc(billedByName)}</div>` : ""}
-            ${showAuditInfo ? `<div style="margin-top:1px">${esc(nowDateStr)} ${esc(nowTimeStr)}</div>` : ""}
-          </td>
-        </tr>
-      </table>
-    </div>
   </div>
-</body>
+
+  <!-- FOOTER PANEL — pinned to bottom via margin-top:auto -->
+  <div class="footer-panel no-break" style="padding: ${footerSpacing}; border-top: ${footerBorderTop} solid #000;">
+    <!-- V3 receipt messages (priority: thank-you → collection → verified → QR msg → promotional msg → follow-up → patient since) -->
+    ${receiptThankYou ? `<div style="margin-bottom:${footerBrandingMargin}">${receiptThankYou}</div>` : ""}
+    ${receiptCollection ? `<div style="margin-top:${footerGeneratedMargin}">${receiptCollection}</div>` : ""}
+    ${verifiedBadge ? `<div style="margin-top:${footerGeneratedMargin}">${verifiedBadge}</div>` : ""}
+    ${receiptQrMessage ? `<div style="margin-top:${footerGeneratedMargin}">${receiptQrMessage}</div>` : ""}
+    ${receiptPromotional ? `<div style="margin-top:${footerGeneratedMargin}">${receiptPromotional}</div>` : ""}
+    ${followUpMessage ? `<div style="margin-top:${footerGeneratedMargin}">${followUpMessage}</div>` : ""}
+    ${patientSinceLine ? `<div style="margin-top:${footerGeneratedMargin}">${patientSinceLine}</div>` : ""}
+    ${promotionalFooter ? `<div style="margin-top:${footerGeneratedMargin}">${promotionalFooter}</div>` : ""}
+    <!-- V3 Additional footer messages -->
+    ${workingHoursMsg ? `<div style="margin-top:${footerGeneratedMargin}">${workingHoursMsg}</div>` : ""}
+    ${homeCollectionMsg ? `<div style="margin-top:${footerGeneratedMargin}">${homeCollectionMsg}</div>` : ""}
+    ${emergencyMsg ? `<div style="margin-top:${footerGeneratedMargin}">${emergencyMsg}</div>` : ""}
+    ${referralMsg ? `<div style="margin-top:${footerGeneratedMargin}">${referralMsg}</div>` : ""}
+    ${healthPackagesMsg ? `<div style="margin-top:${footerGeneratedMargin}">${healthPackagesMsg}</div>` : ""}
+    ${accreditationMsg ? `<div style="margin-top:${footerGeneratedMargin}">${accreditationMsg}</div>` : ""}
+    ${whatsAppMsg ? `<div style="margin-top:${footerGeneratedMargin}">${whatsAppMsg}</div>` : ""}
+    ${customFooterMsg ? `<div style="margin-top:${footerGeneratedMargin}">${customFooterMsg}</div>` : ""}
+    <!-- Legacy fallback blocks -->
+    ${footerBranding ? `<div style="margin-bottom:${footerBrandingMargin}">${footerBranding}</div>` : ""}
+    ${customFooterLine}
+    ${serviceFooter ? `<div style="margin-top:${footerServiceMargin}">${serviceFooter}</div>` : ""}
+    ${showBrandingFooter ? `<div style="font-size:${footerTaglineSize};font-weight:700;text-align:center;letter-spacing:0.5px;text-transform:uppercase;margin-top:${footerTaglineMargin}">Touching Lives With Care</div>` : ""}
+    ${reportMessage ? `<div style="margin-top:${footerGeneratedMargin}">${reportMessage}</div>` : ""}
+    ${computerGenerated ? `<div style="margin-top:${footerGeneratedMargin}">${computerGenerated}</div>` : ""}
+    ${(showAuditInfo && systemInfo) ? `<div style="margin-top:${footerSystemMargin}">${systemInfo}</div>` : ""}
+    <table style="width:100%;border-collapse:collapse;margin-top:6px">
+      <tr>
+        <td style="text-align:left;padding:0;vertical-align:bottom">
+          ${signatureLine}
+        </td>
+        <td style="text-align:right;padding:0;vertical-align:bottom;font-size:${tinyPx}">
+          ${billedByName ? `<div style="font-weight:700">Billed By: ${esc(billedByName)}</div>` : ""}
+          ${showAuditInfo ? `<div style="margin-top:1px">${esc(nowDateStr)} ${esc(nowTimeStr)}</div>` : ""}
+        </td>
+      </tr>
+    </table>
+  </div>
+</div>
 </html>
 `;
 

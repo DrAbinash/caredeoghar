@@ -15,19 +15,20 @@
     
   }
   .receipt {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
     width: 136mm;
     padding: 2mm 3mm;
     box-sizing: border-box;
     position: relative;
     z-index: 1;
   }
-  .main-content.premium-sparse-mode .header-block { margin-bottom: 10px; }
-  .main-content.premium-sparse-mode .title-block { margin-bottom: 10px; }
-  .main-content.premium-sparse-mode .patient-block { margin-bottom: 10px; }
-  .main-content.premium-sparse-mode .test-table { margin-bottom: 10px; }
-  .main-content.premium-sparse-mode .payment-section { margin-bottom: 10px; }
+  .main-content {
+    flex-shrink: 0;
+  }
   .footer-panel {
-    margin-top: 10px;
+    margin-top: auto;
     padding-bottom: 4mm;
   }
   .no-break { page-break-inside: avoid; }
@@ -190,50 +191,50 @@
     <div style="font-size:11px;text-align:center;margin:4px 0;font-weight:600">
       Please preserve this receipt for future reference. Collect reports within 7 days. Scan QR code to download available reports.
     </div>
+  </div>
 
-    <!-- FOOTER PANEL — sits below content with natural spacing -->
-    <div class="footer-panel no-break" style="padding: 12px 0 8px; border-top: 1.5px solid #000;">
-      <!-- V3 receipt messages (priority: thank-you → collection → verified → QR msg → promotional msg → follow-up → patient since) -->
-      <div style="margin-bottom:8px"><div style="font-size:14px;font-weight:900;text-align:center;letter-spacing:0.8px;text-transform:uppercase">Thank you for choosing Care Diagnostics</div></div>
-      <div style="margin-top:6px"><div style="font-size:11px;text-align:center;margin:3px 0;font-weight:600">Please collect your reports within 7 days</div></div>
-      
-      <div style="margin-top:6px"><div style="font-size:10px;text-align:center;margin:2px 0;font-weight:600">Scan QR code to verify receipt and download reports</div></div>
-      <div style="margin-top:6px"><div style="font-size:10px;text-align:center;margin:2px 0;font-weight:700;letter-spacing:0.5px">Advanced Diagnostic &amp; Imaging Centre</div></div>
-      
-      
-      
-      <!-- V3 Additional footer messages -->
-      
-      
-      
-      
-      
-      
-      
-      
-      <!-- Legacy fallback blocks -->
-      <div style="margin-bottom:8px"><div style="font-size:14px;font-weight:900;text-align:center;letter-spacing:0.8px;text-transform:uppercase">Thank you for choosing Care Diagnostics</div></div>
-      
-      <div style="margin-top:6px"><div style="font-size:10px;text-align:center;letter-spacing:0.3px;font-weight:700">MRI · CT SCAN · ULTRASOUND · DIGITAL X-RAY · MAMMOGRAPHY · PATHOLOGY</div></div>
-      <div style="font-size:12px;font-weight:700;text-align:center;letter-spacing:0.5px;text-transform:uppercase;margin-top:6px">Touching Lives With Care</div>
-      <div style="margin-top:6px"><div style="font-size:11px;text-align:center;margin:3px 0;font-weight:600">Please collect your reports within 7 days</div></div>
-      <div style="margin-top:6px"><div style="font-size:11px;text-align:center;font-weight:600">COMPUTER GENERATED INVOICE. NO SIGNATURE REQUIRED.</div></div>
-      <div style="margin-top:4px"><div style="font-size:9px;text-align:center;margin:2px 0">
-      <span style="font-weight:700">Generated On:</span> 04 Jun 2026 02:14 pm &nbsp;|&nbsp;
+  <!-- FOOTER PANEL — pinned to bottom via margin-top:auto -->
+  <div class="footer-panel no-break" style="padding: 12px 0 8px; border-top: 1.5px solid #000;">
+    <!-- V3 receipt messages (priority: thank-you → collection → verified → QR msg → promotional msg → follow-up → patient since) -->
+    <div style="margin-bottom:8px"><div style="font-size:14px;font-weight:900;text-align:center;letter-spacing:0.8px;text-transform:uppercase">Thank you for choosing Care Diagnostics</div></div>
+    <div style="margin-top:6px"><div style="font-size:11px;text-align:center;margin:3px 0;font-weight:600">Please collect your reports within 7 days</div></div>
+    
+    <div style="margin-top:6px"><div style="font-size:10px;text-align:center;margin:2px 0;font-weight:600">Scan QR code to verify receipt and download reports</div></div>
+    <div style="margin-top:6px"><div style="font-size:10px;text-align:center;margin:2px 0;font-weight:700;letter-spacing:0.5px">Advanced Diagnostic &amp; Imaging Centre</div></div>
+    
+    
+    
+    <!-- V3 Additional footer messages -->
+    
+    
+    
+    
+    
+    
+    
+    
+    <!-- Legacy fallback blocks -->
+    <div style="margin-bottom:8px"><div style="font-size:14px;font-weight:900;text-align:center;letter-spacing:0.8px;text-transform:uppercase">Thank you for choosing Care Diagnostics</div></div>
+    
+    <div style="margin-top:6px"><div style="font-size:10px;text-align:center;letter-spacing:0.3px;font-weight:700">MRI · CT SCAN · ULTRASOUND · DIGITAL X-RAY · MAMMOGRAPHY · PATHOLOGY</div></div>
+    <div style="font-size:12px;font-weight:700;text-align:center;letter-spacing:0.5px;text-transform:uppercase;margin-top:6px">Touching Lives With Care</div>
+    <div style="margin-top:6px"><div style="font-size:11px;text-align:center;margin:3px 0;font-weight:600">Please collect your reports within 7 days</div></div>
+    <div style="margin-top:6px"><div style="font-size:11px;text-align:center;font-weight:600">COMPUTER GENERATED INVOICE. NO SIGNATURE REQUIRED.</div></div>
+    <div style="margin-top:4px"><div style="font-size:9px;text-align:center;margin:2px 0">
+      <span style="font-weight:700">Generated On:</span> 04 Jun 2026 02:34 pm &nbsp;|&nbsp;
       <span style="font-weight:700">Printed By:</span> System
     </div></div>
-      <table style="width:100%;border-collapse:collapse;margin-top:6px">
-        <tr>
-          <td style="text-align:left;padding:0;vertical-align:bottom">
-            <div style="border-bottom:1px solid #000;width:130px;margin-bottom:2px"></div><div style="font-size:11px;font-weight:600">Authorised Signature</div>
-          </td>
-          <td style="text-align:right;padding:0;vertical-align:bottom;font-size:11px">
-            
-            <div style="margin-top:1px">04 Jun 2026 02:14 pm</div>
-          </td>
-        </tr>
-      </table>
-    </div>
+    <table style="width:100%;border-collapse:collapse;margin-top:6px">
+      <tr>
+        <td style="text-align:left;padding:0;vertical-align:bottom">
+          <div style="border-bottom:1px solid #000;width:130px;margin-bottom:2px"></div><div style="font-size:11px;font-weight:600">Authorised Signature</div>
+        </td>
+        <td style="text-align:right;padding:0;vertical-align:bottom;font-size:11px">
+          
+          <div style="margin-top:1px">04 Jun 2026 02:34 pm</div>
+        </td>
+      </tr>
+    </table>
   </div>
-</body>
+</div>
 </html>
