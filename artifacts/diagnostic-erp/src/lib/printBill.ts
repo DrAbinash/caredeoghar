@@ -84,6 +84,9 @@ function fmt(n: number | string): string {
   return Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+import { type BillFormat, type BillPaperSize } from "./billPrintSettings";
+import { buildPremiumBillPrintHtml } from "./premiumBillPrint";
+
 export type BuildPrintHtmlOpts = {
   bill: PrintBillData;
   clinic: PrintClinic;
@@ -92,9 +95,21 @@ export type BuildPrintHtmlOpts = {
   qrDataUrl: string;
   reprintBy?: string;
   reprintReason?: string;
+  // Extended format support (new fields — backward compatible)
+  format?: BillFormat;
+  copyLabel?: string;
+  showQr?: boolean;
+  showAmountInWords?: boolean;
+  showSignatureLine?: boolean;
+  showComputerGenerated?: boolean;
+  showReportMessage?: boolean;
+  showServiceFooter?: boolean;
+  showBrandingFooter?: boolean;
+  customFooter?: string | null;
+  reportCollectionNote?: string | null;
 };
 
-export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
+export function buildClassicBillPrintHtml(opts: BuildPrintHtmlOpts): string {
   const { bill, clinic, paperSize, isBW, qrDataUrl, reprintBy, reprintReason } = opts;
   const copies = Math.max(1, Math.min(2, Number(clinic?.billPrintCopies ?? 1) || 1));
   const showCode = clinic?.billShowCode !== false;
@@ -329,6 +344,37 @@ export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
   ${isA5 ? ".receipt { min-height: 100vh; display: flex; flex-direction: column; }" : ""}
   table { width: 100%; }
 </style></head><body>${pages}</body></html>`;
+}
+
+// ── Wrapper that dispatches to classic or premium format ──
+// Backward compatible: if format is not specified, uses classic (existing behavior).
+export function buildBillPrintHtml(opts: BuildPrintHtmlOpts): string {
+  const { format = "classic" } = opts;
+  if (format === "premium-a5") {
+    // Map old paperSize to new BillPaperSize
+    const paperSize: BillPaperSize = opts.paperSize === "A5" ? "A5-portrait" : "A4";
+    return buildPremiumBillPrintHtml({
+      bill: opts.bill,
+      clinic: opts.clinic,
+      paperSize,
+      isBW: opts.isBW,
+      qrDataUrl: opts.qrDataUrl,
+      reprintBy: opts.reprintBy,
+      reprintReason: opts.reprintReason,
+      copyLabel: opts.copyLabel,
+      showQr: opts.showQr ?? (opts.clinic?.qrOnBillEnabled !== false),
+      showAmountInWords: opts.showAmountInWords ?? false,
+      showSignatureLine: opts.showSignatureLine ?? true,
+      showComputerGenerated: opts.showComputerGenerated ?? true,
+      showReportMessage: opts.showReportMessage ?? true,
+      showServiceFooter: opts.showServiceFooter ?? true,
+      showBrandingFooter: opts.showBrandingFooter ?? true,
+      customFooter: opts.customFooter,
+      reportCollectionNote: opts.reportCollectionNote,
+    });
+  }
+  // Classic format
+  return buildClassicBillPrintHtml(opts);
 }
 
 export function printViaIframe(html: string): void {
