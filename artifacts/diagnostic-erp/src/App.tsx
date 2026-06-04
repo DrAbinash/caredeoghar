@@ -100,6 +100,7 @@ const FormF           = lazy(() => import("@/pages/FormF"));
 const Website         = lazy(() => import("@/pages/Website"));
 const WhatsAppChatbot = lazy(() => import("@/pages/WhatsAppChatbot"));
 const Portal          = lazy(() => import("@/pages/Portal"));
+const VerifyReceipt   = lazy(() => import("@/pages/VerifyReceipt"));
 const Display         = lazy(() => import("@/pages/Display"));
 const OnlineBookings  = lazy(() => import("@/pages/OnlineBookings"));
 const DicomStudyWorklist    = lazy(() => import("@/pages/DicomStudyWorklist"));
@@ -198,6 +199,7 @@ function Router() {
         <Route path="/portal/:rest*" component={Portal} />
         <Route path="/teleradiology" component={TeleradiologyPortal} />
         <Route path="/teleradiology/:rest*" component={TeleradiologyPortal} />
+        <Route path="/verify-receipt/:billId" component={VerifyReceipt} />
         <Route path="/display" component={Display} />
         <Route path="/kiosk" component={Kiosk} />
         <Route>

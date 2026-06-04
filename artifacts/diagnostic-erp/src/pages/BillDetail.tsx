@@ -29,6 +29,10 @@ import {
   type PrintBillData,
   type PrintClinic,
 } from "@/lib/printBill";
+import {
+  loadBillPrintSettings,
+  type BillPrintSettings,
+} from "@/lib/billPrintSettings";
 
 type PaymentForm = {
   amount: number;
@@ -249,6 +253,7 @@ export default function BillDetail({ id }: { id: number }) {
   // case where the tab itself was opened by a target="_blank" link.
   const buildHtmlForCurrent = (opts: { reprintBy?: string; reprintReason?: string } = {}): string | null => {
     if (!bill) return null;
+    const settings = loadBillPrintSettings();
     return buildBillPrintHtml({
       bill: bill as PrintBillData,
       clinic: clinic as PrintClinic,
@@ -257,6 +262,14 @@ export default function BillDetail({ id }: { id: number }) {
       qrDataUrl: billQrDataUrl,
       reprintBy: opts.reprintBy,
       reprintReason: opts.reprintReason,
+      format: settings.defaultFormat,
+      showQr: settings.showQrCode,
+      showAmountInWords: settings.showAmountInWords,
+      showSignatureLine: settings.showSignatureLine,
+      showComputerGenerated: settings.showComputerGenerated,
+      showReportMessage: settings.showReportMessage,
+      showServiceFooter: settings.showServiceFooter,
+      showBrandingFooter: settings.showBrandingFooter,
     });
   };
 

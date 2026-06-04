@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetchApi";
 import PageHeader from "@/components/PageHeader";
@@ -113,6 +113,7 @@ const TABS = [
   { id: "email", label: "Email Notifications", icon: Mail },
   { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
   { id: "printers", label: "Printers", icon: Printer },
+  { id: "billing-print", label: "Billing Print", icon: FileText },
   { id: "discount-reasons", label: "Discount Reasons", icon: Tag },
   { id: "backup", label: "Backup", icon: Database },
   { id: "manual", label: "User Manual", icon: FileDown },
@@ -204,6 +205,7 @@ export default function Settings() {
         {tab === "email" && <EmailTab />}
         {tab === "whatsapp" && <WhatsappTab />}
         {tab === "printers" && <PrinterTab />}
+        {tab === "billing-print" && <BillingPrintTab />}
         {tab === "discount-reasons" && <DiscountReasonsTab />}
         {tab === "backup" && <BackupTab />}
         {tab === "manual" && <ManualTab />}
@@ -2399,6 +2401,175 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
     >
       <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${checked ? "translate-x-5" : "translate-x-0"}`} />
     </button>
+  );
+}
+
+function BillingPrintTab() {
+  const [settings, setSettings] = useState<import("@/lib/billPrintSettings").BillPrintSettings | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    import("@/lib/billPrintSettings").then((m) => {
+      setSettings(m.loadBillPrintSettings());
+      setLoading(false);
+    });
+  }, []);
+
+  const update = useCallback((patch: Partial<import("@/lib/billPrintSettings").BillPrintSettings>) => {
+    setSettings((prev) => (prev ? { ...prev, ...patch } : prev));
+  }, []);
+
+  const save = () => {
+    if (!settings) return;
+    import("@/lib/billPrintSettings").then((m) => {
+      m.saveBillPrintSettings(settings);
+    });
+  };
+
+  const reset = () => {
+    import("@/lib/billPrintSettings").then((m) => {
+      setSettings(m.loadBillPrintSettings());
+    });
+  };
+
+  if (loading || !settings) return <div className="bg-card border border-card-border rounded-xl p-8 text-center text-muted-foreground">Loading billing print settings…</div>;
+
+  const SectionCard = ({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) => (
+    <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+      <div>
+        <h2 className="font-bold text-lg flex items-center gap-2">{title}</h2>
+        {subtitle && <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>}
+      </div>
+      {children}
+    </div>
+  );
+
+  const SelectCard = ({ label, options, value, onChange }: { label: string; options: { id: string; label: string }[]; value: string; onChange: (v: string) => void }) => (
+    <div>
+      <p className="text-sm font-medium mb-2">{label}</p>
+      <div className="grid grid-cols-2 gap-3">
+        {options.map((opt) => {
+          const active = value === opt.id;
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => onChange(opt.id)}
+              className={`px-4 py-3 rounded-lg border text-sm font-medium transition-colors ${active ? "bg-blue-50 border-blue-400 text-blue-700 dark:bg-blue-950/30 dark:border-blue-700 dark:text-blue-300" : "bg-muted/30 border-card-border text-muted-foreground hover:bg-muted/50"}`}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const ToggleRow = ({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) => (
+    <button
+      type="button"
+      onClick={() => onChange(!value)}
+      className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors ${value ? "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-800" : "bg-muted/30 border-card-border"}`}
+    >
+      <span className="text-sm font-medium">{label}</span>
+      <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${value ? "bg-green-500" : "bg-muted-foreground/40"}`}>
+        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${value ? "translate-x-5" : "translate-x-1"}`} />
+      </span>
+    </button>
+  );
+
+  const billFormats: { id: string; label: string }[] = [
+    { id: "classic", label: "Classic Current Format" },
+    { id: "premium-a5", label: "Premium A5 Format" },
+  ];
+  const billPaperSizes: { id: string; label: string }[] = [
+    { id: "A5-portrait", label: "A5 Portrait" },
+    { id: "A5-landscape", label: "A5 Landscape" },
+    { id: "half-a4", label: "Half A4" },
+    { id: "A4", label: "A4" },
+  ];
+  const billCopyTypes: { id: string; label: string }[] = [
+    { id: "patient", label: "Patient Copy" },
+    { id: "office", label: "Office Copy" },
+    { id: "both", label: "Both Copies" },
+  ];
+  const printActions: { id: string; label: string }[] = [
+    { id: "save-print", label: "Save & Print" },
+    { id: "save-preview", label: "Save & Preview" },
+    { id: "save-only", label: "Save Only" },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <SectionCard title="Bill Format" subtitle="Choose the default bill layout and enable/disable formats.">
+        <SelectCard
+          label="Default Bill Format"
+          options={billFormats}
+          value={settings.defaultFormat}
+          onChange={(v) => update({ defaultFormat: v as any })}
+        />
+        <div className="grid grid-cols-2 gap-3">
+          <ToggleRow label="Enable Classic Format" value={settings.classicEnabled} onChange={(v) => update({ classicEnabled: v })} />
+          <ToggleRow label="Enable Premium A5 Format" value={settings.premiumA5Enabled} onChange={(v) => update({ premiumA5Enabled: v })} />
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Paper & Copy" subtitle="Configure default paper size and copy type.">
+        <SelectCard
+          label="Default Paper Size"
+          options={billPaperSizes}
+          value={settings.defaultPaperSize}
+          onChange={(v) => update({ defaultPaperSize: v as any })}
+        />
+        <SelectCard
+          label="Default Copy Type"
+          options={billCopyTypes}
+          value={settings.defaultCopyType}
+          onChange={(v) => update({ defaultCopyType: v as any })}
+        />
+      </SectionCard>
+
+      <SectionCard title="Bill Display" subtitle="Control what appears on the printed bill.">
+        <div className="grid grid-cols-2 gap-3">
+          <ToggleRow label="Show QR Code" value={settings.showQrCode} onChange={(v) => update({ showQrCode: v })} />
+          <ToggleRow label="Show Amount in Words" value={settings.showAmountInWords} onChange={(v) => update({ showAmountInWords: v })} />
+          <ToggleRow label="Show Signature Line" value={settings.showSignatureLine} onChange={(v) => update({ showSignatureLine: v })} />
+          <ToggleRow label="Show Computer Generated Note" value={settings.showComputerGenerated} onChange={(v) => update({ showComputerGenerated: v })} />
+          <ToggleRow label="Show Report Collection Message" value={settings.showReportMessage} onChange={(v) => update({ showReportMessage: v })} />
+          <ToggleRow label="Show Service Footer" value={settings.showServiceFooter} onChange={(v) => update({ showServiceFooter: v })} />
+          <ToggleRow label="Show Branding Footer" value={settings.showBrandingFooter} onChange={(v) => update({ showBrandingFooter: v })} />
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Print Action" subtitle="Default action when saving a bill.">
+        <SelectCard
+          label="Default Print Button Action"
+          options={printActions}
+          value={settings.defaultPrintAction}
+          onChange={(v) => update({ defaultPrintAction: v as any })}
+        />
+      </SectionCard>
+
+      <SectionCard title="Preview & Speed" subtitle="Configure how fast the billing workflow should be.">
+        <div className="grid grid-cols-2 gap-3">
+          <ToggleRow label="Enable Print Preview" value={settings.enablePreview} onChange={(v) => update({ enablePreview: v })} />
+          <ToggleRow label="Direct Print After Save" value={settings.directPrintAfterSave} onChange={(v) => update({ directPrintAfterSave: v })} />
+          <ToggleRow label="Auto Open Print Dialog" value={settings.autoOpenPrintDialog} onChange={(v) => update({ autoOpenPrintDialog: v })} />
+          <ToggleRow label="Ask Before Printing" value={settings.askBeforePrint} onChange={(v) => update({ askBeforePrint: v })} />
+          <ToggleRow label="Auto Download PDF" value={settings.autoDownloadPdf} onChange={(v) => update({ autoDownloadPdf: v })} />
+          <ToggleRow label="Fast Billing Mode" value={settings.fastBillingMode} onChange={(v) => update({ fastBillingMode: v })} />
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Admin Lock" subtitle="When ON, users cannot override these settings.">
+        <ToggleRow label="Admin Can Force Global Print Settings" value={settings.adminLock} onChange={(v) => update({ adminLock: v })} />
+      </SectionCard>
+
+      <div className="flex justify-end gap-2 pt-2">
+        <Button variant="outline" onClick={reset}>Reset</Button>
+        <Button onClick={save}>Save Settings</Button>
+      </div>
+    </div>
   );
 }
 

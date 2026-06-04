@@ -11,6 +11,10 @@ import {
   type PrintBillData,
   type PrintClinic,
 } from "@/lib/printBill";
+import {
+  loadBillPrintSettings,
+  type BillPrintSettings,
+} from "@/lib/billPrintSettings";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -807,12 +811,21 @@ export default function BillingDesk() {
             testTokens: lastBillLocal.testTokens ?? null,
           };
           const paperSize = getAutoBillPaperSize(lastBillLocal.tests.length, getBillPaperSize());
+          const settings = loadBillPrintSettings();
           const html = buildBillPrintHtml({
             bill: billForPrint,
             clinic: clinicForPrint,
             paperSize,
             isBW,
             qrDataUrl: qrUrl as string,
+            format: settings.defaultFormat,
+            showQr: settings.showQrCode,
+            showAmountInWords: settings.showAmountInWords,
+            showSignatureLine: settings.showSignatureLine,
+            showComputerGenerated: settings.showComputerGenerated,
+            showReportMessage: settings.showReportMessage,
+            showServiceFooter: settings.showServiceFooter,
+            showBrandingFooter: settings.showBrandingFooter,
           });
           // Print into a hidden 0×0 iframe — no popup window, no popup-
           // blocker, no "Preparing receipt…" placeholder. The browser's
