@@ -68,7 +68,7 @@ export const radiologyPersonalTemplatesTable = pgTable(
   "radiology_personal_templates",
   {
     id: serial("id").primaryKey(),
-    staffId: integer("staff_id").notNull().references(() => staffTable.id, { onDelete: "cascade" }),
+    staffId: integer("staff_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
     folder: text("folder").notNull().default("General"), // Brain, Spine, Chest, Abdomen, Pelvis, MSK, Obstetric, General
     templateName: text("template_name").notNull(),
     modality: text("modality"),
@@ -100,7 +100,7 @@ export const radiologyTemplatePacksTable = pgTable(
   "radiology_template_packs",
   {
     id: serial("id").primaryKey(),
-    staffId: integer("staff_id").notNull().references(() => staffTable.id, { onDelete: "cascade" }),
+    staffId: integer("staff_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
     packName: text("pack_name").notNull(),
     description: text("description"),
     modality: text("modality"),
@@ -149,7 +149,7 @@ export const radiologistProfilesTable = pgTable(
   "radiologist_profiles",
   {
     id: serial("id").primaryKey(),
-    staffId: integer("staff_id").notNull().references(() => staffTable.id, { onDelete: "cascade" }).unique(),
+    staffId: integer("staff_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }).unique(),
     profileName: text("profile_name").notNull().default("Default"),
     // Default template preferences
     defaultMasterGroup: text("default_master_group").default("DR_SUGANDHA_MASTER"),
@@ -181,7 +181,7 @@ export const radiologyTemplateUsageTable = pgTable(
   "radiology_template_usage",
   {
     id: serial("id").primaryKey(),
-    staffId: integer("staff_id").notNull().references(() => staffTable.id, { onDelete: "cascade" }),
+    staffId: integer("staff_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
     templateId: integer("template_id").notNull(),
     templateSource: text("template_source").notNull(), // "master" or "personal"
     templateName: text("template_name").notNull(),
@@ -205,7 +205,7 @@ export const radiologyTemplateFavoritesTable = pgTable(
   "radiology_template_favorites",
   {
     id: serial("id").primaryKey(),
-    staffId: integer("staff_id").notNull().references(() => staffTable.id, { onDelete: "cascade" }),
+    staffId: integer("staff_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
     templateId: integer("template_id").notNull(),
     templateSource: text("template_source").notNull(), // "master" or "personal"
     folder: text("folder").default("Favorites"),
@@ -223,7 +223,7 @@ export const radiologyTemplateComparisonTable = pgTable(
   "radiology_template_comparison",
   {
     id: serial("id").primaryKey(),
-    staffId: integer("staff_id").notNull().references(() => staffTable.id, { onDelete: "cascade" }),
+    staffId: integer("staff_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
     personalTemplateId: integer("personal_template_id").notNull().references(() => radiologyPersonalTemplatesTable.id, { onDelete: "cascade" }),
     masterTemplateId: integer("master_template_id").notNull().references(() => radiologyMasterTemplatesTable.id, { onDelete: "cascade" }),
     personalSnapshot: text("personal_snapshot").notNull(),
@@ -236,5 +236,5 @@ export const radiologyTemplateComparisonTable = pgTable(
   })
 );
 
-// Import staffTable for foreign key references
-import { staffTable } from "./staff";
+// Import usersTable for foreign key references
+import { usersTable } from "./users";

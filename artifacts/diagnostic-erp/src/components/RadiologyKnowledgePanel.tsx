@@ -1002,7 +1002,7 @@ function UsageAnalyticsPanel() {
 
   const { data: myAnalytics = [] } = useQuery<TemplateUsage[]>({
     queryKey: ["radiology-analytics-me", range],
-    queryFn: () => api.get(`/api/radiology/knowledge/analytics/me?range=${range}`),
+    queryFn: () => api.get(`/api/radiology/knowledge/analytics/usage?range=${range}`),
     enabled: true,
   });
 

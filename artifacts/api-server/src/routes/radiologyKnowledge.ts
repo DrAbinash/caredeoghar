@@ -13,7 +13,6 @@ import {
   radiologyTemplateUsageTable,
   radiologyTemplateFavoritesTable,
   radiologyTemplateComparisonTable,
-  staffTable,
 } from "@workspace/db/schema";
 import { and, asc, desc, eq, gte, ilike, or, sql } from "drizzle-orm";
 import { type StaffAuthRequest } from "../middleware/requireStaffAuth.js";
@@ -22,7 +21,7 @@ export const radiologyKnowledgeRouter: IRouter = Router();
 
 // Auth helper: req.staffSession is the staff info attached by requireStaffAuth
 function getStaffId(req: StaffAuthRequest): number | undefined {
-  return req.staffSession?.id;
+  return req.staffSession?.subjectId;
 }
 function getStaffRole(req: StaffAuthRequest): string | undefined {
   return req.staffSession?.role;
@@ -113,7 +112,7 @@ radiologyKnowledgeRouter.get("/master-templates/:id", async (req: StaffAuthReque
 // POST /api/radiology/master-templates
 // Create new master template (super-admin only)
 radiologyKnowledgeRouter.post("/master-templates", async (req: StaffAuthRequest, res) => {
-  if (!getStaffId(req) || !["admin", "super-admin"].includes(getStaffRole(req)?.toLowerCase() ?? "")) {
+  if (!getStaffId(req) || !isAdmin(req)) {
     res.status(403).json({ error: "Only admin/super-admin can create master templates" });
     return;
   }
@@ -152,7 +151,7 @@ radiologyKnowledgeRouter.post("/master-templates", async (req: StaffAuthRequest,
 // PATCH /api/radiology/master-templates/:id
 // Update master template (super-admin only). Creates new version.
 radiologyKnowledgeRouter.patch("/master-templates/:id", async (req: StaffAuthRequest, res) => {
-  if (!getStaffId(req) || !["admin", "super-admin"].includes(getStaffRole(req)?.toLowerCase() ?? "")) {
+  if (!getStaffId(req) || !isAdmin(req)) {
     res.status(403).json({ error: "Only admin/super-admin can edit master templates" });
     return;
   }
@@ -201,7 +200,7 @@ radiologyKnowledgeRouter.patch("/master-templates/:id", async (req: StaffAuthReq
 // DELETE /api/radiology/master-templates/:id
 // Soft delete (super-admin only)
 radiologyKnowledgeRouter.delete("/master-templates/:id", async (req: StaffAuthRequest, res) => {
-  if (!getStaffId(req) || !["admin", "super-admin"].includes(getStaffRole(req)?.toLowerCase() ?? "")) {
+  if (!getStaffId(req) || !isAdmin(req)) {
     res.status(403).json({ error: "Only admin/super-admin can delete master templates" });
     return;
   }
@@ -229,7 +228,7 @@ radiologyKnowledgeRouter.get("/master-templates/:id/versions", async (req, res) 
 // POST /api/radiology/master-templates/:id/restore
 // Restore a specific version
 radiologyKnowledgeRouter.post("/master-templates/:id/restore", async (req: StaffAuthRequest, res) => {
-  if (!getStaffId(req) || !["admin", "super-admin"].includes(getStaffRole(req)?.toLowerCase() ?? "")) {
+  if (!getStaffId(req) || !isAdmin(req)) {
     res.status(403).json({ error: "Only admin/super-admin can restore versions" });
     return;
   }
@@ -497,7 +496,7 @@ radiologyKnowledgeRouter.get("/knowledge-base/:id", async (req, res) => {
 
 // POST /api/radiology/knowledge-base (admin only)
 radiologyKnowledgeRouter.post("/knowledge-base", async (req: StaffAuthRequest, res) => {
-  if (!getStaffId(req) || !["admin", "super-admin"].includes(getStaffRole(req)?.toLowerCase() ?? "")) {
+  if (!getStaffId(req) || !isAdmin(req)) {
     res.status(403).json({ error: "Only admin/super-admin can add knowledge articles" });
     return;
   }
@@ -517,7 +516,7 @@ radiologyKnowledgeRouter.post("/knowledge-base", async (req: StaffAuthRequest, r
 
 // PATCH /api/radiology/knowledge-base/:id (admin only)
 radiologyKnowledgeRouter.patch("/knowledge-base/:id", async (req: StaffAuthRequest, res) => {
-  if (!getStaffId(req) || !["admin", "super-admin"].includes(getStaffRole(req)?.toLowerCase() ?? "")) {
+  if (!getStaffId(req) || !isAdmin(req)) {
     res.status(403).json({ error: "Only admin/super-admin can edit knowledge articles" });
     return;
   }
@@ -720,7 +719,8 @@ radiologyKnowledgeRouter.post("/compare", async (req: StaffAuthRequest, res) => 
 // GET /api/radiology/analytics/usage
 radiologyKnowledgeRouter.get("/analytics/usage", async (req: StaffAuthRequest, res) => {
   if (!getStaffId(req)) { res.status(401).json({ error: "Auth required" }); return; }
-  const days = Math.min(Number(req.query.days || 30), 365);
+  const rangeStr = String(req.query.range || "");
+  const days = rangeStr === "7d" ? 7 : rangeStr === "90d" ? 90 : Math.min(Number(req.query.days || 30), 365);
   const since = new Date();
   since.setDate(since.getDate() - days);
 
@@ -775,11 +775,12 @@ radiologyKnowledgeRouter.get("/analytics/usage", async (req: StaffAuthRequest, r
 // GET /api/radiology/analytics/global
 // Global analytics (admin only)
 radiologyKnowledgeRouter.get("/analytics/global", async (req: StaffAuthRequest, res) => {
-  if (!getStaffId(req) || !["admin", "super-admin"].includes(getStaffRole(req)?.toLowerCase() ?? "")) {
+  if (!getStaffId(req) || !isAdmin(req)) {
     res.status(403).json({ error: "Admin access required" });
     return;
   }
-  const days = Math.min(Number(req.query.days || 30), 365);
+  const rangeStr = String(req.query.range || "");
+  const days = rangeStr === "7d" ? 7 : rangeStr === "90d" ? 90 : Math.min(Number(req.query.days || 30), 365);
   const since = new Date();
   since.setDate(since.getDate() - days);
 

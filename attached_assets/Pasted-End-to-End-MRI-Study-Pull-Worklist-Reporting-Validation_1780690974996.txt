@@ -1,0 +1,111 @@
+End-to-End MRI Study Pull → Worklist → Reporting Validation
+
+Before adding Ollama or any new features, validate the real MRI workflow.
+
+Goal:
+ERP should pull/receive one MRI study, create/update radiology worklist, open reporting workspace, load appropriate template, and proceed up to report generation.
+
+Do not add new features unless required to fix a broken workflow.
+
+Test flow:
+
+1. MRI / PACS Study Pull
+
+- Pull one real MRI study from Conquest PACS or the configured MRI DICOM source.
+- Use existing DICOM Query/Retrieve or DICOM Agent.
+- Confirm C-FIND / C-MOVE works.
+- Confirm study is received in PACS/local storage.
+- Confirm patient name, patient ID, accession/study UID, modality, study date are read correctly.
+
+2. Worklist Creation
+
+- Confirm the MRI study appears in Radiology Worklist.
+- Confirm fields:
+  - Patient name
+  - Age/Sex
+  - Patient ID
+  - Modality = MR/MRI
+  - Study description/test name
+  - Accession number if available
+  - Study received status
+  - Report status = Pending
+
+3. Open Images
+
+- From worklist, click Open Images.
+- Verify image opens in configured viewer:
+  - Weasis if configured
+  - OHIF if configured
+  - fallback PACS viewer if not
+- Confirm study UID passed correctly.
+
+4. Open Reporting Workspace
+
+- From same worklist row, click Open Report.
+- Confirm it opens "RadiologyReportUnified.tsx".
+- Confirm patient demographics auto-fill.
+- Confirm study details auto-fill.
+
+5. Enable Reporting Productivity Features
+   Enable from Settings → Radiology:
+
+- Master Templates
+- Quick Add Buttons
+- Smart Format Builder
+- Report Assembler
+- QA Guard
+- Finalization Dashboard
+- Knowledge Platform
+
+6. Template Loading
+
+- If study is MRI Brain, load Dr Sugandha MRI Brain template.
+- If study is MRI LS Spine, load Dr Sugandha MRI LS Spine template.
+- If trauma/neurosurgical case, test Dr Abinash template.
+- Confirm template text inserts into report editor.
+
+7. Report Generation
+   Proceed up to draft report generation:
+
+- Insert master template
+- Use Quick Add finding
+- Use Smart Format if applicable
+- Run QA Guard
+- Show impression preview
+- Show finalization dashboard
+
+Do not finalize actual patient report unless explicitly confirmed.
+
+8. Save Draft
+
+- Save as draft only.
+- Confirm draft status updates in worklist.
+- Confirm no duplicate worklist entry created.
+
+9. Failure Handling
+   If any step fails, stop and report:
+
+- Step failed
+- Error message
+- Console error
+- API error
+- DICOM error
+- File/log involved
+- Suggested fix
+
+10. Final Report Required
+    After testing, provide:
+
+- MRI study pulled: Yes/No
+- Worklist entry created: Yes/No
+- Images opened: Yes/No
+- Reporting page opened: Yes/No
+- Template inserted: Yes/No
+- Draft saved: Yes/No
+- QA Guard worked: Yes/No
+- Any errors
+- Screenshots or route confirmations
+- Whether the workflow is ready for Ollama Phase 5
+
+Important:
+Do not start Ollama integration until this full MRI workflow passes.
