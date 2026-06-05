@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import { api } from "@/lib/fetchApi";
@@ -16,10 +16,17 @@ import {
 import ReportPrintSettingsDialog from "@/components/ReportPrintSettingsDialog";
 import RadiologyProductivityPanel from "@/components/RadiologyProductivityPanel";
 import {
+  runQualityCheck, detectConflicts, suggestSmartImpression, classifyPriority,
+  PRIORITY_META,
+  type QualityCheck, type Conflict, type Priority,
+} from "@/lib/radiologyIntelligenceEngine";
+import {
   ArrowLeft, ExternalLink, MonitorPlay, Save, CheckCircle2, AlertTriangle,
   RefreshCw, FileText, Sparkles, ChevronDown, ChevronUp, Download, Settings2,
   ClipboardPaste, RotateCcw, X, ThumbsUp, ThumbsDown,
   Zap, Star, History, Plus, HelpCircle, Keyboard, Command,
+  Brain, ShieldCheck, BarChart3, Lightbulb, GitCompare,
+  Volume2, VolumeX,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -166,6 +173,17 @@ function statusColor(s: string): string {
   }
 }
 
+// Phase 2D: Priority badge sub-component
+function PriorityBadge({ findings, impression }: { findings: string; impression: string }) {
+  const priority = classifyPriority(findings, impression);
+  const meta = PRIORITY_META[priority];
+  return (
+    <Badge className={`text-[10px] h-4 px-1 ${meta.bg} ${meta.color}`} title={`Auto-classified: ${meta.label}`}>
+      {meta.label}
+    </Badge>
+  );
+}
+
 // ─── Normal templates (built-in) ────────────────────────────────────────────
 
 const NORMAL_TEMPLATES: Record<string, NormalTemplate[]> = {
@@ -228,6 +246,20 @@ export default function RadiologyReportUnified() {
   const ffPreviousReport = isFeatureEnabled("radiologyPreviousReports") || isFeatureEnabled("showPreviousReportPanel");
   const ffFavorites = isFeatureEnabled("radiologyFavorites") || isFeatureEnabled("showFavoritesLibrary");
 
+  // ── Phase 2D Intelligence flags ──
+  const ffStructuredFindings = isFeatureEnabled("radiologyStructuredFindings");
+  const ffImpressionSync = isFeatureEnabled("radiologyImpressionSync");
+  const ffConflictDetection = isFeatureEnabled("radiologyConflictDetection");
+  const ffQualityChecker = isFeatureEnabled("radiologyQualityChecker");
+  const ffSmartImpression = isFeatureEnabled("radiologySmartImpression");
+  const ffMeasurementLibrary = isFeatureEnabled("radiologyMeasurementLibrary");
+  const ffPriorityEngine = isFeatureEnabled("radiologyPriorityEngine");
+  const ffComparison = isFeatureEnabled("radiologyComparison");
+  const ffFavoritesPack = isFeatureEnabled("radiologyFavoritesPack");
+  const ffKnowledgeBase = isFeatureEnabled("radiologyKnowledgeBase");
+  const ffVersionHistory = isFeatureEnabled("radiologyVersionHistory");
+  const ffAnalytics = isFeatureEnabled("radiologyAnalytics");
+
   // ── Panel visibility (local toggles, independent of flags) ──
   const [showQuickAddPanel, setShowQuickAddPanel] = useState(false);
   const [showSmartFormatPanel, setShowSmartFormatPanel] = useState(false);
@@ -240,6 +272,17 @@ export default function RadiologyReportUnified() {
       return typeof window !== "undefined" && window.localStorage.getItem("radiologyTutorialSeen") !== "1";
     } catch { return false; }
   });
+
+  // Phase 2D intelligence panel visibility
+  const [showQualityPanel, setShowQualityPanel] = useState(false);
+  const [showConflictPanel, setShowConflictPanel] = useState(false);
+  const [showSmartImpPanel, setShowSmartImpPanel] = useState(false);
+  const [showMeasurementLibPanel, setShowMeasurementLibPanel] = useState(false);
+  const [showKnowledgePanel, setShowKnowledgePanel] = useState(false);
+  const [showComparisonPanel, setShowComparisonPanel] = useState(false);
+  const [showFavPackPanel, setShowFavPackPanel] = useState(false);
+  const [showVersionPanel, setShowVersionPanel] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
   // ── Queries ──
   const { data: entry, isLoading: entryLoading } = useQuery<WorklistEntry>({
@@ -591,6 +634,10 @@ export default function RadiologyReportUnified() {
                 <Badge className={`text-[10px] h-4 px-1 ${statusColor(entry.status)}`}>
                   {STATUS_LABELS[entry.status] || entry.status}
                 </Badge>
+                {/* Phase 2D: Priority Engine badge */}
+                {ffPriorityEngine && (
+                  <PriorityBadge findings={reportBody} impression={impression} />
+                )}
               </div>
             </div>
           </div>
@@ -695,6 +742,80 @@ export default function RadiologyReportUnified() {
                 <Star className="h-3.5 w-3.5" /> Favorites
               </Button>
             )}
+            {/* Phase 2D: Quality Checker — feature-flagged */}
+            {ffQualityChecker && (
+              <Button
+                size="sm"
+                variant={showQualityPanel ? "default" : "outline"}
+                className="h-7 text-xs gap-1"
+                onClick={() => setShowQualityPanel((v) => !v)}
+                title="Quality Checker (Ctrl+Shift+Q)"
+              >
+                <ShieldCheck className="h-3.5 w-3.5" /> Quality
+              </Button>
+            )}
+            {/* Phase 2D: Conflict Detection — feature-flagged */}
+            {ffConflictDetection && (
+              <Button
+                size="sm"
+                variant={showConflictPanel ? "default" : "outline"}
+                className="h-7 text-xs gap-1"
+                onClick={() => setShowConflictPanel((v) => !v)}
+                title="Conflict Detection"
+              >
+                <AlertTriangle className="h-3.5 w-3.5" /> Conflicts
+              </Button>
+            )}
+            {/* Phase 2D: Smart Impression — feature-flagged */}
+            {ffSmartImpression && (
+              <Button
+                size="sm"
+                variant={showSmartImpPanel ? "default" : "outline"}
+                className="h-7 text-xs gap-1"
+                onClick={() => setShowSmartImpPanel((v) => !v)}
+                disabled={isFinal}
+                title="Smart Impression Suggestion"
+              >
+                <Lightbulb className="h-3.5 w-3.5" /> Smart
+              </Button>
+            )}
+            {/* Phase 2D: Measurement Library — feature-flagged */}
+            {ffMeasurementLibrary && (
+              <Button
+                size="sm"
+                variant={showMeasurementLibPanel ? "default" : "outline"}
+                className="h-7 text-xs gap-1"
+                onClick={() => setShowMeasurementLibPanel((v) => !v)}
+                disabled={isFinal}
+                title="Measurement Library (Ctrl+Shift+M)"
+              >
+                <BarChart3 className="h-3.5 w-3.5" /> Measure
+              </Button>
+            )}
+            {/* Phase 2D: Knowledge Base — feature-flagged */}
+            {ffKnowledgeBase && (
+              <Button
+                size="sm"
+                variant={showKnowledgePanel ? "default" : "outline"}
+                className="h-7 text-xs gap-1"
+                onClick={() => setShowKnowledgePanel((v) => !v)}
+                title="Knowledge Base"
+              >
+                <Brain className="h-3.5 w-3.5" /> KB
+              </Button>
+            )}
+            {/* Phase 2D: Comparison — feature-flagged */}
+            {ffComparison && (
+              <Button
+                size="sm"
+                variant={showComparisonPanel ? "default" : "outline"}
+                className="h-7 text-xs gap-1"
+                onClick={() => setShowComparisonPanel((v) => !v)}
+                title="Previous Report Comparison"
+              >
+                <GitCompare className="h-3.5 w-3.5" /> Compare
+              </Button>
+            )}
             {/* Help button */}
             <Button
               size="sm"
@@ -743,6 +864,34 @@ export default function RadiologyReportUnified() {
             </Button>
             <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setPrintSettingsOpen(true)}>
               <Settings2 className="h-3.5 w-3.5" />
+            </Button>
+
+            {/* TTS Readout */}
+            <Button
+              size="sm"
+              variant={isSpeaking ? "destructive" : "outline"}
+              className="h-7 text-xs gap-1"
+              onClick={() => {
+                if (isSpeaking) {
+                  window.speechSynthesis?.cancel();
+                  setIsSpeaking(false);
+                } else {
+                  const text = [reportTitle, reportBody, "Impression:", impression].filter(Boolean).join(".\n");
+                  if (!text.trim()) return;
+                  const utterance = new SpeechSynthesisUtterance(text);
+                  utterance.lang = "en-IN";
+                  utterance.rate = 1.0;
+                  utterance.pitch = 1.0;
+                  utterance.onend = () => setIsSpeaking(false);
+                  utterance.onerror = () => setIsSpeaking(false);
+                  window.speechSynthesis?.speak(utterance);
+                  setIsSpeaking(true);
+                }
+              }}
+              title={isSpeaking ? "Stop reading" : "Read report aloud (en-IN)"}
+            >
+              {isSpeaking ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+              {isSpeaking ? "Stop" : "Read"}
             </Button>
 
             {/* Save / Finalize */}
@@ -1010,6 +1159,57 @@ export default function RadiologyReportUnified() {
               />
             </div>
           )}
+
+          {/* Phase 2D: Quality Checker panel */}
+          {ffQualityChecker && showQualityPanel && (
+            <QualityPanel findings={reportBody} impression={impression} />
+          )}
+
+          {/* Phase 2D: Conflict Detection panel */}
+          {ffConflictDetection && showConflictPanel && (
+            <ConflictPanel findings={reportBody} />
+          )}
+
+          {/* Phase 2D: Smart Impression panel */}
+          {ffSmartImpression && showSmartImpPanel && (
+            <SmartImpressionPanel findings={reportBody} currentImpression={impression} onApply={setImpression} />
+          )}
+
+          {/* Phase 2D: Measurement Library panel */}
+          {ffMeasurementLibrary && showMeasurementLibPanel && (
+            <MeasurementLibraryPanel onInsert={(text) => {
+              const ta = textareaRef.current;
+              if (ta) {
+                const start = ta.selectionStart;
+                const end = ta.selectionEnd;
+                const before = reportBody.slice(0, start);
+                const after = reportBody.slice(end);
+                const newText = before + text + (after.startsWith("\n") || after === "" ? "" : "\n") + after;
+                setReportBody(newText);
+                setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + text.length; ta.focus(); }, 0);
+              } else {
+                setReportBody((prev) => prev + "\n" + text);
+              }
+            }} />
+          )}
+
+          {/* Phase 2D: Knowledge Base panel */}
+          {ffKnowledgeBase && showKnowledgePanel && (
+            <KnowledgeBasePanel onInsert={(text) => {
+              const ta = textareaRef.current;
+              if (ta) {
+                const start = ta.selectionStart;
+                const end = ta.selectionEnd;
+                const before = reportBody.slice(0, start);
+                const after = reportBody.slice(end);
+                const newText = before + text + (after.startsWith("\n") || after === "" ? "" : "\n") + after;
+                setReportBody(newText);
+                setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + text.length; ta.focus(); }, 0);
+              } else {
+                setReportBody((prev) => prev + "\n" + text);
+              }
+            }} />
+          )}
         </div>
 
         {/* Center: Report Editor */}
@@ -1260,6 +1460,177 @@ export default function RadiologyReportUnified() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Phase 2D: Intelligence Panel Sub-components ──
+
+function QualityPanel({ findings, impression }: { findings: string; impression: string }) {
+  const qc = runQualityCheck(findings, impression);
+  return (
+    <div className="shrink-0 border-t p-3 space-y-2">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+        <ShieldCheck className="h-3 w-3" /> Quality ({qc.score}/100)
+      </h3>
+      <div className="space-y-1">
+        {qc.checks.map((c) => (
+          <div key={c.id} className={`flex items-center justify-between text-xs px-2 py-1 rounded border ${c.pass ? "bg-green-50 border-green-200" : "bg-amber-50 border-amber-200"}`}>
+            <span className={c.pass ? "text-green-700" : "text-amber-700"}>{c.label}</span>
+            {c.pass ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertTriangle className="h-3 w-3 text-amber-600" />}
+          </div>
+        ))}
+      </div>
+      {qc.warnings.length > 0 && (
+        <div className="space-y-1">
+          {qc.warnings.map((w, i) => (
+            <p key={i} className="text-[10px] text-amber-600">⚠ {w}</p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConflictPanel({ findings }: { findings: string }) {
+  const conflicts = detectConflicts(findings);
+  if (conflicts.length === 0) {
+    return (
+      <div className="shrink-0 border-t p-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+          <AlertTriangle className="h-3 w-3" /> Conflicts
+        </h3>
+        <p className="text-[10px] text-green-600 mt-1">No conflicts detected.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="shrink-0 border-t p-3 space-y-2">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+        <AlertTriangle className="h-3 w-3 text-red-500" /> Conflicts ({conflicts.length})
+      </h3>
+      {conflicts.map((c, i) => (
+        <div key={i} className="text-xs bg-red-50 border border-red-200 rounded px-2 py-1.5">
+          <p className="font-medium text-red-700">{c.message}</p>
+          <p className="text-[10px] text-red-500 mt-0.5">{c.resolution}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SmartImpressionPanel({ findings, currentImpression, onApply }: { findings: string; currentImpression: string; onApply: (s: string) => void }) {
+  const suggestion = suggestSmartImpression(findings);
+  if (!suggestion) return null;
+  const alreadyApplied = currentImpression.toLowerCase().includes(suggestion.toLowerCase());
+  return (
+    <div className="shrink-0 border-t p-3 space-y-2">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+        <Lightbulb className="h-3 w-3" /> Smart Impression
+      </h3>
+      <div className="text-xs bg-blue-50 border border-blue-200 rounded px-2 py-1.5">
+        <p className="text-blue-800">{suggestion}</p>
+      </div>
+      {!alreadyApplied && (
+        <Button size="sm" variant="outline" className="h-6 text-xs w-full" onClick={() => onApply(suggestion)}>
+          <ThumbsUp className="h-3 w-3 mr-1" /> Apply to Impression
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function MeasurementLibraryPanel({ onInsert }: { onInsert: (text: string) => void }) {
+  const [query, setQuery] = useState("");
+  const templates = useMemo(() => {
+    const all = [
+      { id: "bpd", label: "BPD", template: "BPD: ___ mm" },
+      { id: "hc", label: "HC", template: "HC: ___ mm" },
+      { id: "ac", label: "AC", template: "AC: ___ mm" },
+      { id: "fl", label: "FL", template: "FL: ___ mm" },
+      { id: "crl", label: "CRL", template: "CRL: ___ mm" },
+      { id: "efw", label: "EFW", template: "EFW: ___ g" },
+      { id: "ga", label: "GA", template: "GA: ___ weeks" },
+      { id: "edd", label: "EDD", template: "EDD: ___" },
+      { id: "fhr", label: "FHR", template: "FHR: ___ bpm" },
+      { id: "canal", label: "Cervical Canal", template: "Cervical canal diameter: ___ mm" },
+      { id: "lesion", label: "Lesion Size", template: "Lesion size: ___ x ___ mm" },
+      { id: "liver", label: "Liver Size", template: "Liver size: ___ mm" },
+      { id: "prostate", label: "Prostate Volume", template: "Prostate volume: ___ cc" },
+    ];
+    if (!query.trim()) return all;
+    return all.filter((t) => t.label.toLowerCase().includes(query.toLowerCase()));
+  }, [query]);
+  return (
+    <div className="shrink-0 border-t p-3 space-y-2">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+        <BarChart3 className="h-3 w-3" /> Measurements
+      </h3>
+      <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search..." className="text-xs h-6" />
+      <div className="space-y-1 max-h-48 overflow-y-auto">
+        {templates.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => onInsert(t.template)}
+            className="w-full text-left text-xs rounded-md border bg-background px-2 py-1.5 hover:bg-blue-50 hover:border-blue-200 transition-colors"
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function KnowledgeBasePanel({ onInsert }: { onInsert: (text: string) => void }) {
+  const [query, setQuery] = useState("");
+  const [tag, setTag] = useState<string>("All");
+  const entries = useMemo(() => {
+    const all = [
+      { title: "Fatty Liver Grading", body: "Grade I: increased echotexture. Grade II: impaired vessel definition + mild attenuation. Grade III: marked attenuation.", tags: ["USG", "Abdomen"] },
+      { title: "Fazekas Scale", body: "Grade 0: none. Grade 1: punctate. Grade 2: early confluent. Grade 3: confluent.", tags: ["MRI Brain", "Neuro"] },
+      { title: "Disc Bulge vs Protrusion", body: "Bulge: >50% circumference. Protrusion: <50% circumference. Extrusion: lost connection to parent disc.", tags: ["MRI Spine", "MSK"] },
+      { title: "Canal Stenosis Grading", body: "Mild: <1/3 narrowing. Moderate: 1/3-2/3. Severe: >2/3 or obliteration.", tags: ["MRI Spine", "MSK"] },
+      { title: "Hydronephrosis Grading", body: "Grade 1: pelvis only. Grade 2: pelvis + calyces. Grade 3: parenchymal thinning.", tags: ["USG", "KUB"] },
+      { title: "Placental Grading", body: "Grade 0: homogeneous. Grade 1: few calcifications. Grade 2: basal plate calcifications. Grade 3: complete calcifications.", tags: ["USG", "Obstetric"] },
+      { title: "BPD Measurement", body: "Measure from outer to inner table of parietal bone, perpendicular to midline falx.", tags: ["USG", "Obstetric"] },
+      { title: "Liver Size Normal", body: "Cranio-caudal: 130-170 mm. Transverse: 200-220 mm. Antero-posterior: 100-130 mm.", tags: ["USG", "Abdomen"] },
+    ];
+    let filtered = all;
+    if (tag !== "All") filtered = filtered.filter((e) => e.tags.includes(tag));
+    if (query.trim()) filtered = filtered.filter((e) => e.title.toLowerCase().includes(query.toLowerCase()) || e.body.toLowerCase().includes(query.toLowerCase()));
+    return filtered;
+  }, [query, tag]);
+  const tags = ["All", "USG", "MRI Brain", "MRI Spine", "Abdomen", "KUB", "Obstetric", "Neuro", "MSK"];
+  return (
+    <div className="shrink-0 border-t p-3 space-y-2">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+        <Brain className="h-3 w-3" /> Knowledge Base
+      </h3>
+      <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search..." className="text-xs h-6" />
+      <div className="flex flex-wrap gap-1">
+        {tags.map((t: string) => (
+          <button
+            key={t}
+            onClick={() => setTag(t)}
+            className={`text-[10px] px-1.5 py-0.5 rounded border ${tag === t ? "bg-primary text-primary-foreground" : "bg-muted"}`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+      <div className="space-y-1 max-h-48 overflow-y-auto">
+        {entries.map((e: { title: string; body: string; tags: string[] }, i: number) => (
+          <div key={i} className="text-xs border rounded px-2 py-1.5 bg-background">
+            <p className="font-medium">{e.title}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{e.body}</p>
+            <div className="flex gap-1 mt-1">
+              <button onClick={() => onInsert(e.body)} className="text-[10px] text-blue-600 hover:underline">Insert</button>
+            </div>
+          </div>
+        ))}
+        {entries.length === 0 && <p className="text-[10px] text-muted-foreground">No results.</p>}
+      </div>
     </div>
   );
 }

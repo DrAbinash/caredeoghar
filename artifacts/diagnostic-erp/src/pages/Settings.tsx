@@ -20,7 +20,7 @@ import {
   Tag, Building2, Image as ImageIcon, Upload, MessageCircle, Printer,
   Search, Globe, Copy, ExternalLink, Check, Network, MapPin, Database,
   RefreshCcw, FileCode, Send, QrCode, Palette, Bot, Inbox, ChevronRight,
-  ArrowLeft, Phone, Layers, AlertTriangle, ScanLine, Receipt, Keyboard,
+  ArrowLeft, Phone, Layers, AlertTriangle, ScanLine, Receipt, Keyboard, Brain,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -4789,6 +4789,20 @@ function RadiologySettingsTab() {
   const [measurements, setMeasurements] = useState(() => isFeatureEnabled("radiologyMeasurements"));
   const [aiAssistant, setAiAssistant] = useState(() => isFeatureEnabled("radiologyAiAssistant") !== false);
 
+  // Phase 2D intelligence flags
+  const [structuredFindings, setStructuredFindings] = useState(() => isFeatureEnabled("radiologyStructuredFindings"));
+  const [impressionSync, setImpressionSync] = useState(() => isFeatureEnabled("radiologyImpressionSync"));
+  const [conflictDetection, setConflictDetection] = useState(() => isFeatureEnabled("radiologyConflictDetection"));
+  const [qualityChecker, setQualityChecker] = useState(() => isFeatureEnabled("radiologyQualityChecker"));
+  const [smartImpression, setSmartImpression] = useState(() => isFeatureEnabled("radiologySmartImpression"));
+  const [measurementLibrary, setMeasurementLibrary] = useState(() => isFeatureEnabled("radiologyMeasurementLibrary"));
+  const [priorityEngine, setPriorityEngine] = useState(() => isFeatureEnabled("radiologyPriorityEngine"));
+  const [comparison, setComparison] = useState(() => isFeatureEnabled("radiologyComparison"));
+  const [favoritesPack, setFavoritesPack] = useState(() => isFeatureEnabled("radiologyFavoritesPack"));
+  const [knowledgeBase, setKnowledgeBase] = useState(() => isFeatureEnabled("radiologyKnowledgeBase"));
+  const [versionHistory, setVersionHistory] = useState(() => isFeatureEnabled("radiologyVersionHistory"));
+  const [analytics, setAnalytics] = useState(() => isFeatureEnabled("radiologyAnalytics"));
+
   const toggles = [
     { id: "radiologyQuickAdd", label: "Quick Add Buttons", desc: "Alt+1-6 shortcut buttons for instant insertion of common findings", value: quickAdd, set: setQuickAdd },
     { id: "radiologySmartFormat", label: "Smart Format Templates", desc: "Shift+Alt+1-5 shortcuts for full study templates", value: smartFormat, set: setSmartFormat },
@@ -4797,6 +4811,21 @@ function RadiologySettingsTab() {
     { id: "radiologyMacros", label: "Macro Engine", desc: "Type /fl1, /faz1, /disc etc. to expand into full text", value: macros, set: setMacros },
     { id: "radiologyMeasurements", label: "Measurements Panel", desc: "Visual measurement and annotation tools", value: measurements, set: setMeasurements },
     { id: "radiologyAiAssistant", label: "AI Draft Assistant", desc: "Gemini-powered impression generation (disabled for sensitive reporting)", value: aiAssistant, set: setAiAssistant },
+  ];
+
+  const intelligenceToggles = [
+    { id: "radiologyStructuredFindings", label: "Structured Findings", desc: "Insert paired findings + impression blocks", value: structuredFindings, set: setStructuredFindings },
+    { id: "radiologyImpressionSync", label: "Impression Auto-Sync", desc: "Auto-suggest impressions as you type findings", value: impressionSync, set: setImpressionSync },
+    { id: "radiologyConflictDetection", label: "Conflict Detection", desc: "Warn when contradictory findings are present", value: conflictDetection, set: setConflictDetection },
+    { id: "radiologyQualityChecker", label: "Quality Checker", desc: "Pre-finalize checks: placeholders, duplicates, missing impression", value: qualityChecker, set: setQualityChecker },
+    { id: "radiologySmartImpression", label: "Smart Impression", desc: "Combine multiple findings into coherent impression", value: smartImpression, set: setSmartImpression },
+    { id: "radiologyMeasurementLibrary", label: "Measurement Library", desc: "One-click measurement templates (canal, lesion, BPD, etc.)", value: measurementLibrary, set: setMeasurementLibrary },
+    { id: "radiologyPriorityEngine", label: "Priority Engine", desc: "Auto-classify: NORMAL / MINOR / SIGNIFICANT / CRITICAL", value: priorityEngine, set: setPriorityEngine },
+    { id: "radiologyComparison", label: "Previous Report Comparison", desc: "Auto-detect changes vs prior study", value: comparison, set: setComparison },
+    { id: "radiologyFavoritesPack", label: "Favorites Report Packs", desc: "Save entire report (findings + impression) for reuse", value: favoritesPack, set: setFavoritesPack },
+    { id: "radiologyKnowledgeBase", label: "Knowledge Base", desc: "Searchable teaching library with tags", value: knowledgeBase, set: setKnowledgeBase },
+    { id: "radiologyVersionHistory", label: "Version History", desc: "Track edits, timestamps, and restore drafts", value: versionHistory, set: setVersionHistory },
+    { id: "radiologyAnalytics", label: "Reporting Analytics", desc: "Per-radiologist stats and template usage", value: analytics, set: setAnalytics },
   ];
 
   return (
@@ -4808,6 +4837,32 @@ function RadiologySettingsTab() {
         </div>
         <div className="space-y-2">
           {toggles.map((t) => (
+            <label key={t.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20 cursor-pointer">
+              <div className="pr-4">
+                <div className="text-sm font-medium">{t.label}</div>
+                <div className="text-[11px] text-muted-foreground">{t.desc}</div>
+              </div>
+              <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${t.value ? "bg-primary" : "bg-muted-foreground/40"}`}>
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${t.value ? "translate-x-5" : "translate-x-1"}`} />
+              </span>
+              <input type="checkbox" className="sr-only" checked={t.value} onChange={() => {
+                const next = !t.value;
+                t.set(next);
+                setFeatureFlag(t.id, next);
+              }} />
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Phase 2D Intelligence Layer */}
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="font-bold text-lg flex items-center gap-2"><Brain size={16} /> Radiology Intelligence Layer</h2>
+          <p className="text-sm text-muted-foreground mt-1">Advanced client-side tools for quality, structure, and efficiency. All run locally with no external API calls.</p>
+        </div>
+        <div className="space-y-2">
+          {intelligenceToggles.map((t) => (
             <label key={t.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20 cursor-pointer">
               <div className="pr-4">
                 <div className="text-sm font-medium">{t.label}</div>
