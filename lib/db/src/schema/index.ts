@@ -108,3 +108,4 @@ export * from "./rolePermissions";
 export * from "./uploadFiles";
 export * from "./radiologySnippets";
 export * from "./radiologyKnowledge";
+export * from "./radiologySmartFindings";

@@ -16,6 +16,7 @@ import {
 import ReportPrintSettingsDialog from "@/components/ReportPrintSettingsDialog";
 import RadiologyProductivityPanel from "@/components/RadiologyProductivityPanel";
 import RadiologyKnowledgePanel from "@/components/RadiologyKnowledgePanel";
+import RadiologySmartFindingsPanel from "@/components/RadiologySmartFindingsPanel";
 import {
   runQualityCheck, detectConflicts, suggestSmartImpression, classifyPriority,
   PRIORITY_META,
@@ -38,7 +39,7 @@ import {
   RefreshCw, FileText, Sparkles, ChevronDown, ChevronUp, Download, Settings2,
   ClipboardPaste, RotateCcw, X, ThumbsUp, ThumbsDown,
   Zap, Star, History, Plus, HelpCircle, Keyboard, Command,
-  Brain, ShieldCheck, BarChart3, Lightbulb, GitCompare,
+  Brain, ShieldCheck, BarChart3, Lightbulb, GitCompare, Construction,
   Volume2, VolumeX, BookOpen, Ruler, Layers,
   FolderOpen, UserCircle,
 } from "lucide-react";
@@ -292,6 +293,12 @@ export default function RadiologyReportUnified() {
   const ffSignOffProfiles = isFeatureEnabled("radiologySignOffProfiles");
   const ffTemplateAnalytics = isFeatureEnabled("radiologyTemplateAnalytics");
 
+  // Phase 5: Structured Smart Reporting Engine flags
+  const ffSmartFindings = isFeatureEnabled("radiologySmartFindings_v2");
+  const ffImpressionRules = isFeatureEnabled("radiologyImpressionRules");
+  const ffFavoriteFindingSets = isFeatureEnabled("radiologyFavoriteFindingSets");
+  const ffSmartAnalytics = isFeatureEnabled("radiologySmartAnalytics");
+
   // ── Panel visibility (local toggles, independent of flags) ──
   const [showQuickAddPanel, setShowQuickAddPanel] = useState(false);
   const [showSmartFormatPanel, setShowSmartFormatPanel] = useState(false);
@@ -332,6 +339,10 @@ export default function RadiologyReportUnified() {
   const [showKnowledgeVersionsPanel, setShowKnowledgeVersionsPanel] = useState(false);
   const [showKnowledgeAnalyticsPanel, setShowKnowledgeAnalyticsPanel] = useState(false);
   const [knowledgePanel, setKnowledgePanel] = useState<string | null>(null);
+
+  // Phase 5: Smart Findings panel visibility
+  const [showSmartFindingsPanel, setShowSmartFindingsPanel] = useState(false);
+  const [smartFindingsPanel, setSmartFindingsPanel] = useState<string | null>(null);
 
   // ── Queries ──
   const { data: entry, isLoading: entryLoading } = useQuery<WorklistEntry>({
@@ -1017,6 +1028,19 @@ export default function RadiologyReportUnified() {
                 )}
               </>
             )}
+            {/* Phase 5: Smart Findings button */}
+            {ffSmartFindings && (
+              <Button
+                size="sm"
+                variant={smartFindingsPanel !== null ? "default" : "outline"}
+                className="h-7 text-xs gap-1"
+                onClick={() => setSmartFindingsPanel((p) => p !== null ? null : "smart")}
+                disabled={isFinal}
+                title="Smart Findings"
+              >
+                <Construction className="h-3.5 w-3.5" /> Smart Findings
+              </Button>
+            )}
             {/* Help button */}
             <Button
               size="sm"
@@ -1498,6 +1522,37 @@ export default function RadiologyReportUnified() {
             />
           )}
         </div>
+
+        {/* Phase 5: Smart Findings Panel */}
+        {ffSmartFindings && smartFindingsPanel !== null && (
+          <div className="w-80 border-l bg-background flex flex-col overflow-hidden">
+            <RadiologySmartFindingsPanel
+              worklistId={id}
+              modality={entry?.modality ?? ""}
+              studyDescription={entry?.studyDescription}
+              onApplyFindings={(text) => {
+                const ta = textareaRef.current;
+                if (ta) {
+                  const start = ta.selectionStart;
+                  const end = ta.selectionEnd;
+                  const before = reportBody.slice(0, start);
+                  const after = reportBody.slice(end);
+                  const newText = before + text + (after.startsWith("\n") || after === "" ? "" : "\n") + after;
+                  setReportBody(newText);
+                  setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + text.length; ta.focus(); }, 0);
+                } else {
+                  setReportBody((prev) => prev + "\n" + text);
+                }
+              }}
+              onApplyImpression={(text) => {
+                setImpression((prev) => {
+                  if (prev) return prev + "\n" + text;
+                  return text;
+                });
+              }}
+            />
+          </div>
+        )}
 
         {/* Center: Report Editor */}
         <div className="flex-1 flex flex-col overflow-hidden min-w-0">

@@ -21,7 +21,7 @@ import {
   Search, Globe, Copy, ExternalLink, Check, Network, MapPin, Database,
   RefreshCcw, FileCode, Send, QrCode, Palette, Bot, Inbox, ChevronRight,
   ArrowLeft, Phone, Layers, AlertTriangle, ScanLine, Receipt, Keyboard, Brain,
-  Sparkles,
+  Sparkles, Construction,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -4821,6 +4821,11 @@ function RadiologySettingsTab() {
   const [knowledgeBase_v2, setKnowledgeBase_v2] = useState(() => isFeatureEnabled("radiologyKnowledgeBase_v2"));
   const [signOffProfiles, setSignOffProfiles] = useState(() => isFeatureEnabled("radiologySignOffProfiles"));
   const [templateAnalytics, setTemplateAnalytics] = useState(() => isFeatureEnabled("radiologyTemplateAnalytics"));
+  // Phase 5: Structured Smart Reporting Engine
+  const [smartFindings_v2, setSmartFindings_v2] = useState(() => isFeatureEnabled("radiologySmartFindings_v2"));
+  const [impressionRules, setImpressionRules] = useState(() => isFeatureEnabled("radiologyImpressionRules"));
+  const [favoriteFindingSets, setFavoriteFindingSets] = useState(() => isFeatureEnabled("radiologyFavoriteFindingSets"));
+  const [smartAnalytics, setSmartAnalytics] = useState(() => isFeatureEnabled("radiologySmartAnalytics"));
 
   const toggles = [
     { id: "radiologyQuickAdd", label: "Quick Add Buttons", desc: "Alt+1-6 shortcut buttons for instant insertion of common findings", value: quickAdd, set: setQuickAdd },
@@ -4865,6 +4870,13 @@ function RadiologySettingsTab() {
     { id: "radiologyKnowledgeBase_v2", label: "Knowledge Base v2", desc: "Searchable DB-backed articles with classification systems", value: knowledgeBase_v2, set: setKnowledgeBase_v2 },
     { id: "radiologySignOffProfiles", label: "Sign-Off Profiles", desc: "Per-radiologist default settings and preferences", value: signOffProfiles, set: setSignOffProfiles },
     { id: "radiologyTemplateAnalytics", label: "Template Analytics", desc: "Usage tracking and per-radiologist template statistics", value: templateAnalytics, set: setTemplateAnalytics },
+  ];
+
+  const smartReportingToggles = [
+    { id: "radiologySmartFindings_v2", label: "Smart Findings v2", desc: "Structured, deterministic findings builder for MRI Brain, Cervical/Lumbar Spine, USG Abdomen", value: smartFindings_v2, set: setSmartFindings_v2 },
+    { id: "radiologyImpressionRules", label: "Impression Rules", desc: "Admin-editable rule-based impression generator", value: impressionRules, set: setImpressionRules },
+    { id: "radiologyFavoriteFindingSets", label: "Favorite Finding Sets", desc: "Save and reuse common structured findings per user", value: favoriteFindingSets, set: setFavoriteFindingSets },
+    { id: "radiologySmartAnalytics", label: "Smart Reporting Analytics", desc: "Track smart findings usage, report time, and builder statistics", value: smartAnalytics, set: setSmartAnalytics },
   ];
 
   return (
@@ -4928,6 +4940,32 @@ function RadiologySettingsTab() {
         </div>
         <div className="space-y-2">
           {knowledgePlatformToggles.map((t) => (
+            <label key={t.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20 cursor-pointer">
+              <div className="pr-4">
+                <div className="text-sm font-medium">{t.label}</div>
+                <div className="text-[11px] text-muted-foreground">{t.desc}</div>
+              </div>
+              <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${t.value ? "bg-primary" : "bg-muted-foreground/40"}`}>
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${t.value ? "translate-x-5" : "translate-x-1"}`} />
+              </span>
+              <input type="checkbox" className="sr-only" checked={t.value} onChange={() => {
+                const next = !t.value;
+                t.set(next);
+                setFeatureFlag(t.id, next);
+              }} />
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Phase 5: Structured Smart Reporting Engine */}
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="font-bold text-lg flex items-center gap-2"><Construction size={16} /> Structured Smart Reporting</h2>
+          <p className="text-sm text-muted-foreground mt-1">Deterministic, rules-based text generation for MRI Brain, Cervical/Lumbar Spine, and USG Abdomen. All generated text is editable and auditable. No AI.</p>
+        </div>
+        <div className="space-y-2">
+          {smartReportingToggles.map((t) => (
             <label key={t.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20 cursor-pointer">
               <div className="pr-4">
                 <div className="text-sm font-medium">{t.label}</div>

@@ -83,6 +83,7 @@ import { structuredReportTemplatesRouter } from "./structuredReportTemplates";
 import { floorsRouter, roomsRouter, modalitiesRouter } from "./locations";
 import { aiReportingRouter } from "./aiReporting";
 import { radiologyKnowledgeRouter } from "./radiologyKnowledge";
+import { radiologySmartFindingsRouter } from "./radiologySmartFindings";
 import { aiPromptTemplatesRouter } from "./aiPromptTemplates";
 import { aiModelRoutesRouter } from "./aiModelRoutes";
 import { radiologySnippetsRouter } from "./radiologySnippets";
@@ -422,6 +423,13 @@ router.use(
   "/radiology/knowledge",
   requireStaffAuth,
   radiologyKnowledgeRouter,
+);
+
+// Phase 5: Structured Smart Reporting Engine — Deterministic rules-based text generation
+router.use(
+  "/radiology/smart",
+  requireStaffAuth,
+  radiologySmartFindingsRouter,
 );
 
 // Clinical report & compliance routes — /reports permission.

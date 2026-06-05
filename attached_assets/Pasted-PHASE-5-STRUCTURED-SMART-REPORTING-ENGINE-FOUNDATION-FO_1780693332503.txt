@@ -1,0 +1,376 @@
+PHASE 5 – STRUCTURED SMART REPORTING ENGINE (FOUNDATION FOR FUTURE AI)
+
+Objective:
+Build a deterministic, rules-based reporting engine that generates radiology findings and impressions from structured selections. This is NOT AI. It must be auditable, editable, explainable, and production-safe. Future AI modules will use this structured layer as their grounding source.
+
+====================================================
+1. NEW MODULE: SMART FINDINGS
+====================================================
+
+Add a new toolbar button in Radiology Report page:
+
+Smart Findings
+
+When clicked, open a side panel/drawer.
+
+The panel should generate findings text dynamically from structured selections.
+
+All generated text remains fully editable.
+
+====================================================
+2. MRI BRAIN STRUCTURED BUILDER
+====================================================
+
+Create sections:
+
+A. White Matter Disease
+
+Options:
+- Normal
+- Chronic Microangiopathic Changes
+- Fazekas Grade 1
+- Fazekas Grade 2
+- Fazekas Grade 3
+
+Auto-generate standardized findings.
+
+----------------------------------------------------
+
+B. Infarct
+
+Options:
+- Acute
+- Subacute
+- Chronic
+- Lacunar
+
+Location:
+- MCA Territory
+- ACA Territory
+- PCA Territory
+- Basal Ganglia
+- Thalamus
+- Brainstem
+- Cerebellum
+- Custom Location
+
+Side:
+- Right
+- Left
+- Bilateral
+
+Generate complete findings paragraph.
+
+----------------------------------------------------
+
+C. Hemorrhage
+
+Type:
+- EDH
+- SDH
+- SAH
+- IPH
+- IVH
+
+Inputs:
+- Location
+- Side
+- Thickness (mm)
+- Midline Shift (mm)
+
+Generate:
+Findings
++
+Impression
+
+----------------------------------------------------
+
+D. Brain Atrophy
+
+Options:
+- Mild
+- Moderate
+- Severe
+
+Generate standard wording.
+
+----------------------------------------------------
+
+E. Hydrocephalus
+
+Options:
+- None
+- Mild
+- Moderate
+- Severe
+
+Generate standardized findings.
+
+====================================================
+3. MRI CERVICAL SPINE BUILDER
+====================================================
+
+Levels:
+
+C2-C3
+C3-C4
+C4-C5
+C5-C6
+C6-C7
+C7-T1
+
+Selectable Findings:
+
+- Disc Desiccation
+- Reduced Disc Height
+- Diffuse Disc Bulge
+- Posterocentral Protrusion
+- Posterolateral Protrusion
+- Disc Osteophyte Complex
+- Facet Arthropathy
+- Ligamentum Flavum Hypertrophy
+- Cord Compression
+- Foraminal Narrowing
+
+Generate structured findings.
+
+----------------------------------------------------
+
+Canal Diameter Entry
+
+Allow AP canal diameter input.
+
+Auto classification:
+
+>10 mm = No Significant Stenosis
+8–10 mm = Mild Stenosis
+5–8 mm = Moderate Stenosis
+<5 mm = Severe Stenosis
+
+Auto-generate wording.
+
+====================================================
+4. MRI LUMBOSACRAL SPINE BUILDER
+====================================================
+
+Levels:
+
+L1-L2
+L2-L3
+L3-L4
+L4-L5
+L5-S1
+
+Options:
+
+- Disc Desiccation
+- Diffuse Bulge
+- Protrusion
+- Extrusion
+- Annular Tear
+- Nerve Root Compression
+- Facet Hypertrophy
+- Ligamentum Flavum Hypertrophy
+- Canal Stenosis
+- Foraminal Stenosis
+
+Generate complete findings.
+
+----------------------------------------------------
+
+Canal Diameter Logic
+
+Input AP diameter.
+
+Auto severity:
+
+>10 mm = No Significant Stenosis
+8–10 mm = Mild
+5–8 mm = Moderate
+<5 mm = Severe
+
+====================================================
+5. USG SMART BUILDER
+====================================================
+
+A. Fatty Liver
+
+Grade:
+- Normal
+- Grade 1
+- Grade 2
+- Grade 3
+
+Auto findings.
+
+----------------------------------------------------
+
+B. Gall Bladder
+
+- Normal
+- Sludge
+- Single Calculus
+- Multiple Calculi
+- Wall Thickening
+
+Generate report text.
+
+----------------------------------------------------
+
+C. Kidney
+
+- Normal
+- Calculus
+- Hydronephrosis
+- Cortical Thinning
+
+Generate findings + impression.
+
+----------------------------------------------------
+
+D. Obstetric
+
+Auto calculate:
+
+- Gestational Age
+- EDD
+
+From:
+- CRL
+- BPD
+- HC
+- AC
+- FL
+
+Display references used.
+
+====================================================
+6. RULE-BASED IMPRESSION GENERATOR
+====================================================
+
+Button:
+
+Generate Impression
+
+Rules Engine Examples:
+
+IF:
+Disc Bulge + Nerve Root Compression
+
+THEN:
+"Diffuse disc bulge causing compression upon bilateral exiting nerve roots."
+
+----------------------------------------------------
+
+IF:
+Acute Infarct + MCA Territory
+
+THEN:
+"Acute infarct involving the MCA territory."
+
+----------------------------------------------------
+
+IF:
+EDH
+
+THEN:
+"Extradural hematoma with associated mass effect."
+
+----------------------------------------------------
+
+IF:
+Grade 3 Fatty Liver
+
+THEN:
+"Severe fatty infiltration of liver."
+
+Rules must be editable via admin panel.
+
+====================================================
+7. FAVORITE FINDING SETS
+====================================================
+
+Allow users to save:
+
+- Common MRI Brain
+- Common Cervical Spine
+- Common Lumbar Spine
+- Common USG Abdomen
+
+One-click reuse.
+
+Store per user.
+
+====================================================
+8. REPORTING PRODUCTIVITY ANALYTICS
+====================================================
+
+Track:
+
+- Report Open Time
+- Report Completion Time
+- Template Usage
+- Smart Findings Usage
+- Impression Generator Usage
+
+Admin Dashboard:
+
+- Average MRI Reporting Time
+- Average CT Reporting Time
+- Average USG Reporting Time
+- Most Used Templates
+- Most Used Findings
+- Most Used Impressions
+
+====================================================
+9. MEDICO-LEGAL SAFETY
+====================================================
+
+Every generated paragraph must store:
+
+- Generated Timestamp
+- User ID
+- Rule Version
+
+Audit Log:
+
+- Generated
+- Edited
+- Deleted
+
+Track all modifications.
+
+====================================================
+10. FUTURE AI COMPATIBILITY
+====================================================
+
+Design database schema so future AI can consume:
+
+- Structured Findings
+- Severity
+- Measurements
+- Classification Scores
+
+Future AI Draft Workflow:
+
+Structured Findings
+→ Knowledge Base
+→ AI Draft Generator
+→ Radiologist Review
+→ Final Report
+
+No AI implementation in this phase.
+
+====================================================
+SUCCESS CRITERIA
+====================================================
+
+✓ Existing reporting workflow remains unchanged
+✓ Existing templates continue working
+✓ Existing Smart Format remains functional
+✓ Existing Quick Add remains functional
+✓ Existing Knowledge Base remains functional
+✓ Fully backward compatible
+✓ Production-safe
+✓ Deterministic and auditable
+✓ Ready for future Ollama/OpenAI integration

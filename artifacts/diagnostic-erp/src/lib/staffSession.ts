@@ -200,6 +200,11 @@ const FEATURE_FLAG_DEFAULTS: Record<string, boolean> = {
   radiologyKnowledgeBase_v2: false,
   radiologySignOffProfiles: false,
   radiologyTemplateAnalytics: false,
+  // Phase 5: Structured Smart Reporting Engine (all default OFF)
+  radiologySmartFindings_v2: false,
+  radiologyImpressionRules: false,
+  radiologyFavoriteFindingSets: false,
+  radiologySmartAnalytics: false,
   hideDeprecatedNav: false,
   billingDeskStepped: false,
 };
