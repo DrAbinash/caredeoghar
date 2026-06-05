@@ -1,4 +1,5 @@
 - [Drizzle push hazard](drizzle-push-hazard.md) — blind `drizzle-kit push` on this DB triggers a dangerous unrelated interactive rename; use SQL or push-force carefully.
+- [Schema-drift silent failures](schema-drift-silent-failures.md) — adding columns to `clinicSettings.ts` without running `ALTER TABLE` causes Drizzle `SELECT *` to fail at runtime with a cryptic "Failed query" error. The DB must be kept in sync with the schema.
 - [AI prompt templates](ai-prompt-templates.md) — DB-backed editable radiology prompt presets; name is the resolution key, kept unique case-insensitively.
 - [diagnostic-erp conventions](diagnostic-erp-conventions.md) — frontend/page/auth conventions for the ERP artifact.
 - [Normal report templates](normal-report-templates.md) — pre-built normal templates for common studies; one-click apply from report generator toolbar with inline picker overlay.
