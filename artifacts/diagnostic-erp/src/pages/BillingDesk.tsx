@@ -2126,7 +2126,6 @@ export default function BillingDesk() {
               </div>
             </div>
           </div>
-          <TodayCollectionsPanel />
         </div>
       </div>
       {/* ── Quick Test slot picker dialog ── */}
