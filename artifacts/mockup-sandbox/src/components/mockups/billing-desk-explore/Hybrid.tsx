@@ -11,28 +11,28 @@ import {
 const STEPS = [
   { id: 1, title: "Patient", icon: User, subtitle: "Search or register" },
   { id: 2, title: "Doctor", icon: Stethoscope, subtitle: "Referral" },
-  { id: 3, title: "Tests", icon: FlaskConical, subtitle: "Add tests" },
-  { id: 4, title: "Packages", icon: Package, subtitle: "Add packages" },
-  { id: 5, title: "Summary", icon: Receipt, subtitle: "Bill & pay" },
+  { id: 3, title: "Tests & Packages", icon: FlaskConical, subtitle: "Add tests & packages" },
+  { id: 4, title: "Summary", icon: Receipt, subtitle: "Bill & pay" },
 ];
 
 export function Hybrid() {
   const [currentStep, setCurrentStep] = useState(1);
-  const [stepCompleted, setStepCompleted] = useState<Set<number>>(new Set([1, 2, 3]));
+  const [stepCompleted, setStepCompleted] = useState<Set<number>>(new Set([1, 2, 3, 4]));
   const [patientSearch, setPatientSearch] = useState("");
-  const [selectedPatient] = useState<{ firstName: string; lastName: string; patientId: string; gender: string; phone: string; bloodGroup: string; dateOfBirth: string; ageValue: number; ageUnit: string } | null>({
+  const [selectedPatient, setSelectedPatient] = useState<{ firstName: string; lastName: string; patientId: string; gender: string; phone: string; bloodGroup: string; dateOfBirth: string; ageValue: number; ageUnit: string } | null>({
     firstName: "Ramesh", lastName: "Kumar", patientId: "CD-240615", gender: "male", phone: "+91 98765 43210", bloodGroup: "O+", dateOfBirth: "1985-03-12", ageValue: 41, ageUnit: "years"
   });
-  const [selectedTests] = useState([
+  const [selectedTests, setSelectedTests] = useState([
     { id: 1, name: "CBC (Complete Blood Count)", code: "CBC", price: 450, category: "Pathology" },
     { id: 2, name: "Lipid Profile", code: "LIPID", price: 1200, category: "Pathology" },
     { id: 3, name: "X-ray Chest PA", code: "XR-CHEST", price: 800, category: "Radiology" },
     { id: 4, name: "USG Whole Abdomen", code: "USG-ABD", price: 1500, category: "Radiology" },
   ]);
-  const [doctorId] = useState(1);
-  const [doctorName] = useState("Dr. Priya Sharma");
-  const [doctorSpecialty] = useState("Cardiology");
-  const [doctorBills] = useState(124);
+  const [doctorId, setDoctorId] = useState(1);
+  const [doctorName, setDoctorName] = useState("Dr. Priya Sharma");
+  const [doctorSpecialty, setDoctorSpecialty] = useState("Cardiology");
+  const [doctorBills, setDoctorBills] = useState(124);
+  const [autoAdvance, setAutoAdvance] = useState(true);
   const [subtotal] = useState(3950);
   const [discount] = useState(395);
   const [total] = useState(3555);
@@ -48,7 +48,7 @@ export function Hybrid() {
   const [testSearch, setTestSearch] = useState("");
   const [categoryFilter] = useState("all");
   const [packageSearch, setPackageSearch] = useState("");
-  const [selectedPackages] = useState<string[]>(["Basic Health Check"]);
+  const [selectedPackages, setSelectedPackages] = useState<string[]>(["Basic Health Check"]);
   const contentRef = useRef<HTMLDivElement>(null);
 
   const inr = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
@@ -75,6 +75,16 @@ export function Hybrid() {
     }
   };
 
+  const advanceStep = () => {
+    if (currentStep < STEPS.length && autoAdvance) {
+      setTimeout(() => {
+        setStepCompleted((prev) => new Set([...prev, currentStep]));
+        setCurrentStep((prev) => prev + 1);
+        setTimeout(() => contentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+      }, 300);
+    }
+  };
+
   const StepHeader = ({ step, title, subtitle }: { step: number; title: string; subtitle: string }) => (
     <div className="flex items-center gap-3 mb-6">
       <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
@@ -95,11 +105,29 @@ export function Hybrid() {
     </div>
   );
 
-  const QuickAddButton = ({ label }: { label: string }) => (
-    <button className="h-8 px-3 text-[11px] font-bold bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-colors shadow-sm flex items-center gap-1">
+  const QuickAddButton = ({ label, onClick }: { label: string; onClick?: () => void }) => (
+    <button
+      onClick={onClick}
+      className="h-8 px-3 text-[11px] font-bold bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-colors shadow-sm flex items-center gap-1"
+    >
       <Plus size={10} /> {label}
     </button>
   );
+
+  const addTest = (name: string, code: string, price: number, category: string) => {
+    setSelectedTests((prev) => {
+      if (prev.find((t) => t.code === code)) return prev;
+      return [...prev, { id: Date.now(), name, code, price, category }];
+    });
+  };
+
+  const addPackage = (pkg: string) => {
+    setSelectedPackages((prev) => {
+      if (prev.includes(pkg)) return prev;
+      return [...prev, pkg];
+    });
+    advanceStep();
+  };
 
   const PaymentModeBtn = ({ mode, label, icon: Icon }: { mode: string; label: string; icon: any }) => (
     <button
@@ -174,7 +202,7 @@ export function Hybrid() {
               );
             })}
           </div>
-          {/* Step summary */}
+          {/* Step summary + auto-advance toggle */}
           <div className="text-right flex items-center gap-3">
             {selectedPatient && (
               <span className="text-xs text-gray-500 truncate max-w-[150px]">{selectedPatient.firstName} {selectedPatient.lastName}</span>
@@ -183,6 +211,13 @@ export function Hybrid() {
               <span className="text-xs text-gray-500">{selectedTests.length} tests</span>
             )}
             <span className="text-sm font-bold text-violet-700">{inr(total)}</span>
+            <button
+              onClick={() => setAutoAdvance(!autoAdvance)}
+              className={`flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-md transition-colors ${autoAdvance ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}
+              title="Auto-advance to next step on selection"
+            >
+              <Zap size={10} /> Auto-advance {autoAdvance ? "ON" : "OFF"}
+            </button>
           </div>
         </div>
       </div>
@@ -274,7 +309,13 @@ export function Hybrid() {
                         </select>
                       </div>
                     </div>
-                    <button className="w-full h-9 bg-violet-600 hover:bg-violet-700 text-white rounded-md text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
+                    <button
+                      onClick={() => {
+                        setSelectedPatient({ firstName: "Ramesh", lastName: "Kumar", patientId: "CD-240615", gender: "male", phone: "+91 98765 43210", bloodGroup: "O+", dateOfBirth: "1985-03-12", ageValue: 41, ageUnit: "years" });
+                        advanceStep();
+                      }}
+                      className="w-full h-9 bg-violet-600 hover:bg-violet-700 text-white rounded-md text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                    >
                       <UserPlus size={12} /> Register & Select
                     </button>
                   </div>
@@ -397,7 +438,15 @@ export function Hybrid() {
                       </div>
                       <CheckCircle2 size={14} className="text-teal-600" />
                     </div>
-                    <div className="flex-1 p-3 border border-gray-200 rounded-md flex items-center gap-2 hover:bg-gray-50 cursor-pointer">
+                    <div
+                      onClick={() => {
+                        setDoctorName("Dr. Amit Mishra");
+                        setDoctorSpecialty("Orthopedics");
+                        setDoctorBills(89);
+                        advanceStep();
+                      }}
+                      className="flex-1 p-3 border border-gray-200 rounded-md flex items-center gap-2 hover:bg-gray-50 cursor-pointer"
+                    >
                       <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 text-xs font-bold">AM</div>
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-bold text-gray-900">Dr. Amit Mishra</div>
@@ -471,8 +520,21 @@ export function Hybrid() {
                   {quickAddOpen && (
                     <div className="flex flex-wrap gap-1.5 p-2 bg-emerald-50/50 rounded-md border border-emerald-100">
                       <span className="text-[10px] font-bold text-emerald-700 uppercase w-full mb-1">Quick Add</span>
-                      {["CBC", "LFT", "KFT", "Sugar", "Thyroid", "Lipid", "Urine R/E", "X-ray Chest", "USG Abdomen", "ECG"].map((t) => (
-                        <QuickAddButton key={t} label={t} />
+                      {(
+                        [
+                          ["CBC", "CBC", 450, "Pathology"] as const,
+                          ["LFT", "LFT", 1200, "Pathology"] as const,
+                          ["KFT", "KFT", 800, "Pathology"] as const,
+                          ["Sugar", "SUG", 350, "Pathology"] as const,
+                          ["Thyroid", "THY", 1800, "Pathology"] as const,
+                          ["Lipid", "LIPID", 1200, "Pathology"] as const,
+                          ["Urine R/E", "URINE", 300, "Pathology"] as const,
+                          ["X-ray Chest", "XR-CHEST", 800, "Radiology"] as const,
+                          ["USG Abdomen", "USG-ABD", 1500, "Radiology"] as const,
+                          ["ECG", "ECG", 400, "Cardiology"] as const,
+                        ] as [string, string, number, string][]
+                      ).map(([name, code, price, category]) => (
+                        <QuickAddButton key={name} label={name} onClick={() => addTest(name, code, price, category)} />
                       ))}
                     </div>
                   )}
@@ -498,7 +560,7 @@ export function Hybrid() {
                       </div>
                     ))}
                     {/* Unselected */}
-                    <div className="flex items-center p-2.5 border border-gray-200 rounded-md hover:bg-gray-50 cursor-pointer">
+                    <div onClick={() => addTest("Liver Function Test", "LFT", 1200, "Pathology")} className="flex items-center p-2.5 border border-gray-200 rounded-md hover:bg-gray-50 cursor-pointer">
                       <div className="flex items-center gap-2 flex-1">
                         <div className="w-4 h-4 rounded border border-gray-300" />
                         <span className="text-sm text-gray-600">Liver Function Test</span>
@@ -507,7 +569,7 @@ export function Hybrid() {
                       <span className="text-sm font-bold text-gray-400">₹1,200</span>
                       <Plus size={14} className="text-gray-400 ml-2" />
                     </div>
-                    <div className="flex items-center p-2.5 border border-gray-200 rounded-md hover:bg-gray-50 cursor-pointer">
+                    <div onClick={() => addTest("Thyroid Profile", "THY", 1800, "Pathology")} className="flex items-center p-2.5 border border-gray-200 rounded-md hover:bg-gray-50 cursor-pointer">
                       <div className="flex items-center gap-2 flex-1">
                         <div className="w-4 h-4 rounded border border-gray-300" />
                         <span className="text-sm text-gray-600">Thyroid Profile</span>
@@ -520,24 +582,8 @@ export function Hybrid() {
                 </div>
               </Card>
 
-              {/* Navigation */}
-              <div className="flex justify-between mt-6">
-                <button onClick={prevStep} className="h-10 px-4 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors">
-                  <ChevronLeft size={16} /> Back
-                </button>
-                <button onClick={nextStep} className="h-10 px-6 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-bold flex items-center gap-2 transition-colors">
-                  Next: Packages <ChevronRight size={16} />
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ═══════════════ STEP 4: PACKAGES ═══════════════ */}
-          {currentStep === 4 && (
-            <div className="animate-in fade-in duration-300">
-              <StepHeader step={4} title="Packages" subtitle="Add test bundles" />
-
-              <Card>
+              {/* Packages — same step */}
+              <Card className="mb-4">
                 <div className="h-1 bg-rose-500" />
                 <div className="h-10 px-4 flex items-center justify-between border-b border-gray-200 bg-gray-50">
                   <div className="flex items-center gap-2">
@@ -553,11 +599,15 @@ export function Hybrid() {
                   </div>
                   <div className="flex gap-2 flex-wrap pt-1">
                     {["Basic Health Check", "Complete Wellness", "Diabetes Panel", "Cardiac Profile", "Women's Health"].map((pkg, i) => {
-                      const added = i === 0;
+                      const added = selectedPackages.includes(pkg);
                       return (
-                        <button key={i} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-bold transition-colors shadow-sm ${
-                          added ? "border-primary/40 bg-primary/10 text-primary cursor-default" : "border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700"
-                        }`}>
+                        <button
+                          key={i}
+                          onClick={() => !added && addPackage(pkg)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-bold transition-colors shadow-sm ${
+                            added ? "border-primary/40 bg-primary/10 text-primary cursor-default" : "border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700"
+                          }`}
+                        >
                           <Package size={10} />
                           <span>{pkg}</span>
                           <span className="opacity-60 text-[10px]">{5 + i} tests</span>
@@ -596,10 +646,10 @@ export function Hybrid() {
             </div>
           )}
 
-          {/* ═══════════════ STEP 5: SUMMARY ═══════════════ */}
-          {currentStep === 5 && (
+          {/* ═══════════════ STEP 4: SUMMARY ═══════════════ */}
+          {currentStep === 4 && (
             <div className="animate-in fade-in duration-300">
-              <StepHeader step={5} title="Bill Summary" subtitle="Review and collect payment" />
+              <StepHeader step={4} title="Bill Summary" subtitle="Review and collect payment" />
 
               {/* Selected Tests Summary */}
               <Card className="mb-4">
