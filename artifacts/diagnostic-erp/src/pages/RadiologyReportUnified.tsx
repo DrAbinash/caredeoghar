@@ -21,12 +21,24 @@ import {
   type QualityCheck, type Conflict, type Priority,
 } from "@/lib/radiologyIntelligenceEngine";
 import {
+  ALL_MASTER_TEMPLATES, findMasterTemplateById, findMasterVariant, assembleReport,
+  type MasterTemplate, type MasterTemplateVariant, type AssembledReport,
+} from "@/lib/radiologyMasterTemplates";
+import {
+  ALL_MEASUREMENT_TEMPLATES, MEASUREMENT_CATEGORIES, findMeasurementById,
+  type MeasurementTemplate,
+} from "@/lib/radiologyMeasurementLibrary";
+import {
+  ONE_CLICK_REPORTS, searchOneClickReports, findOneClickReport, runQAGuard, detectCriticalFindings, detectFindingsFromText,
+  type OneClickReport, type QAGuardResult, type CriticalFinding, type DetectedFinding,
+} from "@/lib/radiologyReportAssembler";
+import {
   ArrowLeft, ExternalLink, MonitorPlay, Save, CheckCircle2, AlertTriangle,
   RefreshCw, FileText, Sparkles, ChevronDown, ChevronUp, Download, Settings2,
   ClipboardPaste, RotateCcw, X, ThumbsUp, ThumbsDown,
   Zap, Star, History, Plus, HelpCircle, Keyboard, Command,
   Brain, ShieldCheck, BarChart3, Lightbulb, GitCompare,
-  Volume2, VolumeX,
+  Volume2, VolumeX, BookOpen, Ruler, Layers,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -260,6 +272,15 @@ export default function RadiologyReportUnified() {
   const ffVersionHistory = isFeatureEnabled("radiologyVersionHistory");
   const ffAnalytics = isFeatureEnabled("radiologyAnalytics");
 
+  // ── Phase 3: Premium Workstation flags ──
+  const ffMasterLibrary = isFeatureEnabled("radiologyMasterLibrary");
+  const ffOneClickReports = isFeatureEnabled("radiologyOneClickReports");
+  const ffAdvancedMeasurements = isFeatureEnabled("radiologyAdvancedMeasurements");
+  const ffAiHooks = isFeatureEnabled("radiologyAiHooks");
+  const ffReportAssembler = isFeatureEnabled("radiologyReportAssembler");
+  const ffQAGuard = isFeatureEnabled("radiologyQAGuard");
+  const ffFinalizationDashboard = isFeatureEnabled("radiologyFinalizationDashboard");
+
   // ── Panel visibility (local toggles, independent of flags) ──
   const [showQuickAddPanel, setShowQuickAddPanel] = useState(false);
   const [showSmartFormatPanel, setShowSmartFormatPanel] = useState(false);
@@ -283,6 +304,13 @@ export default function RadiologyReportUnified() {
   const [showFavPackPanel, setShowFavPackPanel] = useState(false);
   const [showVersionPanel, setShowVersionPanel] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+
+  // Phase 3: Premium Workstation panel visibility
+  const [showMasterPanel, setShowMasterPanel] = useState(false);
+  const [showAdvancedMeasurementPanel, setShowAdvancedMeasurementPanel] = useState(false);
+  const [showOneClickPanel, setShowOneClickPanel] = useState(false);
+  const [showQAGuardPanel, setShowQAGuardPanel] = useState(false);
+  const [showFinalizationPanel, setShowFinalizationPanel] = useState(false);
 
   // ── Queries ──
   const { data: entry, isLoading: entryLoading } = useQuery<WorklistEntry>({
@@ -816,6 +844,83 @@ export default function RadiologyReportUnified() {
                 <GitCompare className="h-3.5 w-3.5" /> Compare
               </Button>
             )}
+            {/* Phase 3: Master Library — feature-flagged */}
+            {ffMasterLibrary && (
+              <Button
+                size="sm"
+                variant={showMasterPanel ? "default" : "outline"}
+                className="h-7 text-xs gap-1"
+                onClick={() => setShowMasterPanel((v) => !v)}
+                disabled={isFinal}
+                title="Master Template Library"
+              >
+                <BookOpen className="h-3.5 w-3.5" /> Library
+              </Button>
+            )}
+            {/* Phase 3: Advanced Measurements — feature-flagged */}
+            {ffAdvancedMeasurements && (
+              <Button
+                size="sm"
+                variant={showAdvancedMeasurementPanel ? "default" : "outline"}
+                className="h-7 text-xs gap-1"
+                onClick={() => setShowAdvancedMeasurementPanel((v) => !v)}
+                disabled={isFinal}
+                title="Advanced Measurement Library"
+              >
+                <Ruler className="h-3.5 w-3.5" /> Measure
+              </Button>
+            )}
+            {/* Phase 3: AI Hooks — feature-flagged */}
+            {ffAiHooks && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1 border-dashed"
+                onClick={() => toast({ title: "AI Infrastructure Ready", description: "Voice dictation, AI drafting, and AI comparison coming soon." })}
+                title="AI-Ready Infrastructure"
+              >
+                <Layers className="h-3.5 w-3.5" /> AI
+              </Button>
+            )}
+            {/* Phase 3: One-Click Reports — feature-flagged */}
+            {ffOneClickReports && (
+              <Button
+                size="sm"
+                variant={showOneClickPanel ? "default" : "outline"}
+                className="h-7 text-xs gap-1"
+                onClick={() => setShowOneClickPanel((v) => !v)}
+                disabled={isFinal}
+                title="One-Click Complete Reports"
+              >
+                <Zap className="h-3.5 w-3.5" /> Reports
+              </Button>
+            )}
+            {/* Phase 3: QA Guard — feature-flagged */}
+            {ffQAGuard && (
+              <Button
+                size="sm"
+                variant={showQAGuardPanel ? "default" : "outline"}
+                className="h-7 text-xs gap-1"
+                onClick={() => setShowQAGuardPanel((v) => !v)}
+                disabled={isFinal}
+                title="QA Guard"
+              >
+                <ShieldCheck className="h-3.5 w-3.5" /> QA
+              </Button>
+            )}
+            {/* Phase 3: Finalization Dashboard — feature-flagged */}
+            {ffFinalizationDashboard && (
+              <Button
+                size="sm"
+                variant={showFinalizationPanel ? "default" : "outline"}
+                className="h-7 text-xs gap-1"
+                onClick={() => setShowFinalizationPanel((v) => !v)}
+                disabled={isFinal}
+                title="Finalization Dashboard"
+              >
+                <BarChart3 className="h-3.5 w-3.5" /> Finalize
+              </Button>
+            )}
             {/* Help button */}
             <Button
               size="sm"
@@ -934,7 +1039,7 @@ export default function RadiologyReportUnified() {
       {/* ── Main body (3 columns) ────────────────────────────────────────── */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Measurements + Normal templates + Productivity panels */}
-        <div className={`${(showMeasurements && ffMeasurementPanel) || showNormalPicker || (showQuickAddPanel && ffQuickAdd) || (showSmartFormatPanel && ffSmartFormat) || (showMacroPanel && ffMacros) || (showPrevReportPanel && ffPreviousReport) || (showFavPanel && ffFavorites) ? "w-64" : "w-0"} border-r bg-muted/20 flex flex-col overflow-hidden transition-all duration-200`}>
+        <div className={`${(showMeasurements && ffMeasurementPanel) || showNormalPicker || (showQuickAddPanel && ffQuickAdd) || (showSmartFormatPanel && ffSmartFormat) || (showMacroPanel && ffMacros) || (showPrevReportPanel && ffPreviousReport) || (showFavPanel && ffFavorites) || (showMasterPanel && ffMasterLibrary) || (showAdvancedMeasurementPanel && ffAdvancedMeasurements) || (showOneClickPanel && ffOneClickReports) || (showQAGuardPanel && ffQAGuard) || (showFinalizationPanel && ffFinalizationDashboard) ? "w-64" : "w-0"} border-r bg-muted/20 flex flex-col overflow-hidden transition-all duration-200`}>
           {/* Normal templates picker */}
           {showNormalPicker && (
             <div className="shrink-0 border-b p-3">
@@ -1209,6 +1314,68 @@ export default function RadiologyReportUnified() {
                 setReportBody((prev) => prev + "\n" + text);
               }
             }} />
+          )}
+
+          {/* Phase 3: Master Library panel */}
+          {ffMasterLibrary && showMasterPanel && (
+            <MasterLibraryPanel
+              modality={entry.modality}
+              studyDescription={entry.studyDescription}
+              onApplyVariant={(title, findings, impression) => {
+                setReportTitle(title);
+                setReportBody(findings);
+                setImpression(impression);
+                setShowMasterPanel(false);
+                toast({ title: "Master template applied" });
+              }}
+            />
+          )}
+
+          {/* Phase 3: Advanced Measurement Library panel */}
+          {ffAdvancedMeasurements && showAdvancedMeasurementPanel && (
+            <AdvancedMeasurementLibraryPanel
+              onInsert={(text) => {
+                const ta = textareaRef.current;
+                if (ta) {
+                  const start = ta.selectionStart;
+                  const end = ta.selectionEnd;
+                  const before = reportBody.slice(0, start);
+                  const after = reportBody.slice(end);
+                  const newText = before + text + (after.startsWith("\n") || after === "" ? "" : "\n") + after;
+                  setReportBody(newText);
+                  setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + text.length; ta.focus(); }, 0);
+                } else {
+                  setReportBody((prev) => prev + "\n" + text);
+                }
+              }}
+            />
+          )}
+          {/* Phase 3: One-Click Reports panel */}
+          {ffOneClickReports && showOneClickPanel && (
+            <OneClickReportsPanel
+              modality={entry.modality}
+              studyDescription={entry.studyDescription}
+              onApply={(title, findings, impression) => {
+                setReportTitle(title);
+                setReportBody(findings);
+                setImpression(impression);
+                setShowOneClickPanel(false);
+                toast({ title: "Report applied" });
+              }}
+            />
+          )}
+          {/* Phase 3: QA Guard panel */}
+          {ffQAGuard && showQAGuardPanel && (
+            <QAGuardPanel findings={reportBody} impression={impression} />
+          )}
+          {/* Phase 3: Finalization Dashboard panel */}
+          {ffFinalizationDashboard && showFinalizationPanel && (
+            <FinalizationDashboard
+              findings={reportBody}
+              impression={impression}
+              reportTitle={reportTitle}
+              onClose={() => setShowFinalizationPanel(false)}
+            />
           )}
         </div>
 
@@ -1630,6 +1797,352 @@ function KnowledgeBasePanel({ onInsert }: { onInsert: (text: string) => void }) 
           </div>
         ))}
         {entries.length === 0 && <p className="text-[10px] text-muted-foreground">No results.</p>}
+      </div>
+    </div>
+  );
+}
+
+// ── Phase 3: Master Library Panel ──
+function MasterLibraryPanel({
+  modality,
+  studyDescription,
+  onApplyVariant,
+}: {
+  modality: string;
+  studyDescription: string | null;
+  onApplyVariant: (title: string, findings: string, impression: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+
+  const matchedTemplates = useMemo(() => {
+    if (!query.trim()) return ALL_MASTER_TEMPLATES;
+    return ALL_MASTER_TEMPLATES.filter(
+      (t) =>
+        t.label.toLowerCase().includes(query.toLowerCase()) ||
+        t.category.toLowerCase().includes(query.toLowerCase()) ||
+        t.bodyPart.toLowerCase().includes(query.toLowerCase()) ||
+        t.title.toLowerCase().includes(query.toLowerCase())
+    );
+  }, [query]);
+
+  const currentTemplate = selectedTemplate ? findMasterTemplateById(selectedTemplate) : null;
+
+  return (
+    <div className="flex-1 overflow-y-auto border-t p-3 space-y-2">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+        <BookOpen className="h-3 w-3" /> Master Library
+      </h3>
+      <p className="text-[10px] text-muted-foreground">Locked Dr. Sugandha templates. View, use, or clone.</p>
+      <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search templates..." className="text-xs h-6" />
+      <div className="space-y-1 max-h-48 overflow-y-auto">
+        {matchedTemplates.map((t) => (
+          <div key={t.id}>
+            <button
+              onClick={() => setSelectedTemplate(selectedTemplate === t.id ? null : t.id)}
+              className={`w-full text-left text-xs rounded-md border px-2 py-1.5 transition-colors ${
+                selectedTemplate === t.id ? "bg-blue-50 border-blue-200" : "bg-background hover:bg-blue-50 hover:border-blue-200"
+              }`}
+            >
+              <span className="font-medium">{t.label}</span>
+              <span className="text-[10px] text-muted-foreground ml-1">({t.category})</span>
+            </button>
+            {selectedTemplate === t.id && t.variants && (
+              <div className="ml-2 mt-1 space-y-1 border-l-2 border-blue-200 pl-2">
+                {t.variants.map((v) => (
+                  <button
+                    key={v.id}
+                    onClick={() => onApplyVariant(t.title, v.findings, v.impression)}
+                    className="w-full text-left text-[10px] rounded-md border bg-background px-2 py-1 hover:bg-green-50 hover:border-green-200 transition-colors"
+                  >
+                    <span className="font-medium">{v.label}</span>
+                    {v.priority === "CRITICAL" && (
+                      <span className="ml-1 text-[9px] text-red-600 font-semibold">CRITICAL</span>
+                    )}
+                    {v.priority === "SIGNIFICANT" && (
+                      <span className="ml-1 text-[9px] text-orange-600 font-semibold">SIGNIFICANT</span>
+                    )}
+                    <span className="text-[9px] text-muted-foreground block">{v.triggerKeywords.slice(0, 3).join(", ")}</span>
+                  </button>
+                ))}
+                <button
+                  onClick={() => onApplyVariant(t.title, t.findings, t.impression)}
+                  className="w-full text-left text-[10px] rounded-md border bg-background px-2 py-1 hover:bg-green-50 hover:border-green-200 transition-colors"
+                >
+                  <span className="font-medium">Master Default</span>
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+        {matchedTemplates.length === 0 && <p className="text-[10px] text-muted-foreground">No templates found.</p>}
+      </div>
+    </div>
+  );
+}
+
+// ── Phase 3: Advanced Measurement Library Panel ──
+function AdvancedMeasurementLibraryPanel({ onInsert }: { onInsert: (text: string) => void }) {
+  const [query, setQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+
+  const filtered = useMemo(() => {
+    let list = ALL_MEASUREMENT_TEMPLATES;
+    if (selectedCategory !== "all") {
+      const cat = MEASUREMENT_CATEGORIES.find((c) => c.id === selectedCategory);
+      if (cat) {
+        list = cat.templates;
+      }
+    }
+    if (!query.trim()) return list;
+    return list.filter(
+      (m) =>
+        m.label.toLowerCase().includes(query.toLowerCase()) ||
+        m.category.toLowerCase().includes(query.toLowerCase()) ||
+        m.bodyPart.toLowerCase().includes(query.toLowerCase())
+    );
+  }, [query, selectedCategory]);
+
+  return (
+    <div className="flex-1 overflow-y-auto border-t p-3 space-y-2">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+        <Ruler className="h-3 w-3" /> Measurement Library
+      </h3>
+      <p className="text-[10px] text-muted-foreground">One-click measurement templates with normal ranges.</p>
+      <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search measurements..." className="text-xs h-6" />
+      <div className="flex flex-wrap gap-1">
+        <button
+          onClick={() => setSelectedCategory("all")}
+          className={`text-[10px] px-1.5 py-0.5 rounded border ${selectedCategory === "all" ? "bg-primary text-primary-foreground" : "bg-muted"}`}
+        >
+          All
+        </button>
+        {MEASUREMENT_CATEGORIES.map((c) => (
+          <button
+            key={c.id}
+            onClick={() => setSelectedCategory(c.id)}
+            className={`text-[10px] px-1.5 py-0.5 rounded border ${selectedCategory === c.id ? "bg-primary text-primary-foreground" : "bg-muted"}`}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+      <div className="space-y-1 max-h-48 overflow-y-auto">
+        {filtered.map((m) => (
+          <button
+            key={m.id}
+            onClick={() => onInsert(m.insertText)}
+            className="w-full text-left text-xs rounded-md border bg-background px-2 py-1.5 hover:bg-blue-50 hover:border-blue-200 transition-colors"
+            title={`Normal range: ${m.normalRange ?? "N/A"}`}
+          >
+            <span className="font-medium">{m.label}</span>
+            {m.normalRange && (
+              <span className="text-[10px] text-muted-foreground ml-1">({m.normalRange})</span>
+            )}
+            <span className="text-[9px] text-green-600 ml-1 opacity-0 group-hover:opacity-100">Insert →</span>
+          </button>
+        ))}
+        {filtered.length === 0 && <p className="text-[10px] text-muted-foreground">No measurements found.</p>}
+      </div>
+    </div>
+  );
+}
+
+// ── Phase 3 Chunk 2: One-Click Reports Panel ──
+function OneClickReportsPanel({
+  modality,
+  studyDescription,
+  onApply,
+}: {
+  modality: string;
+  studyDescription: string | null;
+  onApply: (title: string, findings: string, impression: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [selectedModality, setSelectedModality] = useState<string | null>(modality);
+
+  const filtered = useMemo(() => {
+    let list = ONE_CLICK_REPORTS;
+    if (selectedModality) {
+      list = list.filter((r) => r.modality === selectedModality);
+    }
+    if (!query.trim()) return list;
+    return list.filter(
+      (r) =>
+        r.label.toLowerCase().includes(query.toLowerCase()) ||
+        r.bodyPart.toLowerCase().includes(query.toLowerCase()) ||
+        r.title.toLowerCase().includes(query.toLowerCase())
+    );
+  }, [query, selectedModality]);
+
+  return (
+    <div className="flex-1 overflow-y-auto border-t p-3 space-y-2">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+        <Zap className="h-3 w-3" /> One-Click Reports
+      </h3>
+      <p className="text-[10px] text-muted-foreground">Pre-built complete reports. Click to apply directly.</p>
+      <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search reports..." className="text-xs h-6" />
+      <div className="flex flex-wrap gap-1">
+        <button
+          onClick={() => setSelectedModality(null)}
+          className={`text-[10px] px-1.5 py-0.5 rounded border ${selectedModality === null ? "bg-primary text-primary-foreground" : "bg-muted"}`}
+        >
+          All
+        </button>
+        {["MR", "US", "CT", "XR"].map((m) => (
+          <button
+            key={m}
+            onClick={() => setSelectedModality(m)}
+            className={`text-[10px] px-1.5 py-0.5 rounded border ${selectedModality === m ? "bg-primary text-primary-foreground" : "bg-muted"}`}
+          >
+            {m}
+          </button>
+        ))}
+      </div>
+      <div className="space-y-1 max-h-48 overflow-y-auto">
+        {filtered.map((r) => (
+          <button
+            key={r.id}
+            onClick={() => onApply(r.title, r.findings, r.impression)}
+            className={`w-full text-left text-xs rounded-md border bg-background px-2 py-1.5 hover:bg-blue-50 hover:border-blue-200 transition-colors ${
+              r.priority === "CRITICAL" ? "border-red-200" : r.priority === "SIGNIFICANT" ? "border-orange-200" : ""
+            }`}
+          >
+            <span className="font-medium">{r.label}</span>
+            {r.priority === "CRITICAL" && <span className="ml-1 text-[9px] text-red-600 font-semibold">CRITICAL</span>}
+            {r.priority === "SIGNIFICANT" && <span className="ml-1 text-[9px] text-orange-600 font-semibold">SIGNIFICANT</span>}
+            <span className="text-[10px] text-muted-foreground ml-1">({r.modality} — {r.bodyPart})</span>
+          </button>
+        ))}
+        {filtered.length === 0 && <p className="text-[10px] text-muted-foreground">No reports found.</p>}
+      </div>
+    </div>
+  );
+}
+
+// ── Phase 3 Chunk 2: QA Guard Panel ──
+function QAGuardPanel({ findings, impression }: { findings: string; impression: string }) {
+  const qa = runQAGuard(findings, impression);
+  const criticals = detectCriticalFindings(findings);
+  return (
+    <div className="flex-1 overflow-y-auto border-t p-3 space-y-2">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+        <ShieldCheck className="h-3 w-3" /> QA Guard
+      </h3>
+      <div className="flex items-center gap-2">
+        <span className={`text-lg font-bold ${qa.score >= 85 ? "text-green-600" : qa.score >= 60 ? "text-amber-600" : "text-red-600"}`}>
+          {qa.score}
+        </span>
+        <span className="text-xs text-muted-foreground">/100</span>
+        {qa.passed ? (
+          <Badge className="bg-green-100 text-green-700 text-[10px]">PASS</Badge>
+        ) : qa.canOverride ? (
+          <Badge className="bg-amber-100 text-amber-700 text-[10px]">CAN OVERRIDE</Badge>
+        ) : (
+          <Badge className="bg-red-100 text-red-700 text-[10px]">BLOCK</Badge>
+        )}
+      </div>
+      <div className="space-y-1">
+        {qa.checks.map((c) => (
+          <div key={c.id} className={`flex items-center justify-between text-xs px-2 py-1 rounded border ${c.pass ? "bg-green-50 border-green-200" : "bg-amber-50 border-amber-200"}`}>
+            <span className={c.pass ? "text-green-700" : "text-amber-700"}>{c.label}</span>
+            {c.pass ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertTriangle className="h-3 w-3 text-amber-600" />}
+          </div>
+        ))}
+      </div>
+      {criticals.length > 0 && (
+        <div className="space-y-1">
+          {criticals.map((c, i) => (
+            <div key={i} className="text-xs bg-red-50 border border-red-200 rounded px-2 py-1.5">
+              <p className="font-semibold text-red-700">⚠ {c.label}</p>
+              <p className="text-[10px] text-red-500">{c.message}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      {qa.criticalAlerts.length > 0 && (
+        <div className="space-y-1">
+          {qa.criticalAlerts.map((w, i) => (
+            <p key={i} className="text-[10px] text-amber-600">⚠ {w}</p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Phase 3 Chunk 2: Finalization Dashboard ──
+function FinalizationDashboard({
+  findings,
+  impression,
+  reportTitle,
+  onClose,
+}: {
+  findings: string;
+  impression: string;
+  reportTitle: string;
+  onClose: () => void;
+}) {
+  const qa = runQAGuard(findings, impression);
+  const criticals = detectCriticalFindings(findings);
+  const detected = detectFindingsFromText(findings);
+  const [confirmed, setConfirmed] = useState(false);
+
+  return (
+    <div className="flex-1 overflow-y-auto border-t p-3 space-y-3">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+        <BarChart3 className="h-3 w-3" /> Finalization Dashboard
+      </h3>
+      <div className={`rounded-lg border p-2 ${qa.score >= 85 ? "bg-green-50 border-green-200" : qa.score >= 60 ? "bg-amber-50 border-amber-200" : "bg-red-50 border-red-200"}`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className={`text-lg font-bold ${qa.score >= 85 ? "text-green-600" : qa.score >= 60 ? "text-amber-600" : "text-red-600"}`}>{qa.score}</span>
+            <span className="text-xs text-muted-foreground">/100</span>
+          </div>
+          <Badge className={`text-[10px] ${qa.score >= 85 ? "bg-green-100 text-green-700" : qa.score >= 60 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"}`}>
+            {qa.score >= 85 ? "READY" : qa.score >= 60 ? "REVIEW" : "BLOCKED"}
+          </Badge>
+        </div>
+        <p className="text-[10px] mt-1">
+          {qa.score >= 85 ? "All checks passed. Report ready for finalization." : qa.score >= 60 ? "Some issues found. Review warnings before finalizing." : "Critical issues detected. Resolve before finalizing."}
+        </p>
+      </div>
+      <div className="space-y-1">
+        <p className="text-[10px] font-semibold text-muted-foreground">Detected Findings</p>
+        {detected.map((d, i) => (
+          <div key={i} className={`text-xs rounded px-2 py-1 border ${d.priority === "CRITICAL" ? "bg-red-50 border-red-200 text-red-700" : d.priority === "SIGNIFICANT" ? "bg-orange-50 border-orange-200 text-orange-700" : "bg-blue-50 border-blue-200 text-blue-700"}`}>
+            {d.label} — {d.priority}
+          </div>
+        ))}
+        {detected.length === 0 && <p className="text-[10px] text-muted-foreground">No specific findings detected.</p>}
+      </div>
+      {criticals.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-[10px] font-semibold text-red-600">Critical Findings</p>
+          {criticals.map((c, i) => (
+            <div key={i} className="text-xs bg-red-50 border border-red-200 rounded px-2 py-1.5">
+              <p className="font-semibold text-red-700">{c.label}</p>
+              <p className="text-[10px] text-red-500">{c.message}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="space-y-1">
+        <p className="text-[10px] font-semibold text-muted-foreground">Checks</p>
+        {qa.checks.map((c) => (
+          <div key={c.id} className={`text-[10px] px-2 py-1 rounded border ${c.pass ? "bg-green-50 border-green-200 text-green-700" : "bg-amber-50 border-amber-200 text-amber-700"}`}>
+            {c.pass ? "✓" : "✗"} {c.label} {c.message ? `— ${c.message}` : ""}
+          </div>
+        ))}
+      </div>
+      <label className="flex items-center gap-2 text-xs cursor-pointer">
+        <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="rounded border-gray-300" />
+        <span className="text-muted-foreground">I have reviewed this report and confirm it is accurate.</span>
+      </label>
+      <div className="flex gap-2">
+        <Button size="sm" className="text-xs w-full" disabled={!qa.canOverride || !confirmed} onClick={onClose}>
+          <CheckCircle2 className="h-3 w-3 mr-1" /> Close
+        </Button>
       </div>
     </div>
   );

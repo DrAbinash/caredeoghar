@@ -21,6 +21,7 @@ import {
   Search, Globe, Copy, ExternalLink, Check, Network, MapPin, Database,
   RefreshCcw, FileCode, Send, QrCode, Palette, Bot, Inbox, ChevronRight,
   ArrowLeft, Phone, Layers, AlertTriangle, ScanLine, Receipt, Keyboard, Brain,
+  Sparkles,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -4803,6 +4804,16 @@ function RadiologySettingsTab() {
   const [versionHistory, setVersionHistory] = useState(() => isFeatureEnabled("radiologyVersionHistory"));
   const [analytics, setAnalytics] = useState(() => isFeatureEnabled("radiologyAnalytics"));
 
+  // Phase 3: Premium Radiology Workstation flags
+  const [masterLibrary, setMasterLibrary] = useState(() => isFeatureEnabled("radiologyMasterLibrary"));
+  const [oneClickReports, setOneClickReports] = useState(() => isFeatureEnabled("radiologyOneClickReports"));
+  const [advancedMeasurements, setAdvancedMeasurements] = useState(() => isFeatureEnabled("radiologyAdvancedMeasurements"));
+  const [aiHooks, setAiHooks] = useState(() => isFeatureEnabled("radiologyAiHooks"));
+  // Chunk 2
+  const [reportAssembler, setReportAssembler] = useState(() => isFeatureEnabled("radiologyReportAssembler"));
+  const [qaGuard, setQAGuard] = useState(() => isFeatureEnabled("radiologyQAGuard"));
+  const [finalizationDashboard, setFinalizationDashboard] = useState(() => isFeatureEnabled("radiologyFinalizationDashboard"));
+
   const toggles = [
     { id: "radiologyQuickAdd", label: "Quick Add Buttons", desc: "Alt+1-6 shortcut buttons for instant insertion of common findings", value: quickAdd, set: setQuickAdd },
     { id: "radiologySmartFormat", label: "Smart Format Templates", desc: "Shift+Alt+1-5 shortcuts for full study templates", value: smartFormat, set: setSmartFormat },
@@ -4828,6 +4839,16 @@ function RadiologySettingsTab() {
     { id: "radiologyAnalytics", label: "Reporting Analytics", desc: "Per-radiologist stats and template usage", value: analytics, set: setAnalytics },
   ];
 
+  const advancedToggles = [
+    { id: "radiologyMasterLibrary", label: "Master Template Library", desc: "Locked Dr. Sugandha master templates with one-click variants", value: masterLibrary, set: setMasterLibrary },
+    { id: "radiologyOneClickReports", label: "One-Click Complete Reports", desc: "Instant full report generation from master variants", value: oneClickReports, set: setOneClickReports },
+    { id: "radiologyAdvancedMeasurements", label: "Advanced Measurement Library", desc: "One-click measurement templates with normal ranges", value: advancedMeasurements, set: setAdvancedMeasurements },
+    { id: "radiologyAiHooks", label: "AI-Ready Infrastructure", desc: "Future hooks for voice dictation, AI drafting, and AI comparison", value: aiHooks, set: setAiHooks },
+    { id: "radiologyReportAssembler", label: "Report Assembler", desc: "Multi-template selection with auto-combination and deduplication", value: reportAssembler, set: setReportAssembler },
+    { id: "radiologyQAGuard", label: "QA Guard", desc: "Comprehensive pre-finalize checks with score and warnings", value: qaGuard, set: setQAGuard },
+    { id: "radiologyFinalizationDashboard", label: "Finalization Dashboard", desc: "Final checkpoint before signing with quality score and alerts", value: finalizationDashboard, set: setFinalizationDashboard },
+  ];
+
   return (
     <div className="max-w-2xl space-y-6">
       <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
@@ -4837,6 +4858,32 @@ function RadiologySettingsTab() {
         </div>
         <div className="space-y-2">
           {toggles.map((t) => (
+            <label key={t.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20 cursor-pointer">
+              <div className="pr-4">
+                <div className="text-sm font-medium">{t.label}</div>
+                <div className="text-[11px] text-muted-foreground">{t.desc}</div>
+              </div>
+              <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${t.value ? "bg-primary" : "bg-muted-foreground/40"}`}>
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${t.value ? "translate-x-5" : "translate-x-1"}`} />
+              </span>
+              <input type="checkbox" className="sr-only" checked={t.value} onChange={() => {
+                const next = !t.value;
+                t.set(next);
+                setFeatureFlag(t.id, next);
+              }} />
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Phase 3: Advanced Productivity */}
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="font-bold text-lg flex items-center gap-2"><Sparkles size={16} /> Advanced Productivity</h2>
+          <p className="text-sm text-muted-foreground mt-1">Premium workstation features: master templates, one-click reports, advanced measurements, and AI-ready infrastructure.</p>
+        </div>
+        <div className="space-y-2">
+          {advancedToggles.map((t) => (
             <label key={t.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20 cursor-pointer">
               <div className="pr-4">
                 <div className="text-sm font-medium">{t.label}</div>

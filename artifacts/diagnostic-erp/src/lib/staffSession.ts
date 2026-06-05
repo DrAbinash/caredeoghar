@@ -182,6 +182,15 @@ const FEATURE_FLAG_DEFAULTS: Record<string, boolean> = {
   radiologyKnowledgeBase: false,
   radiologyVersionHistory: false,
   radiologyAnalytics: false,
+  // Phase 3: Premium Radiology Workstation flags (all default OFF)
+  radiologyMasterLibrary: false,
+  radiologyOneClickReports: false,
+  radiologyAdvancedMeasurements: false,
+  radiologyAiHooks: false,
+  // Phase 3 Chunk 2: Report Assembler, QA Guard, Finalization Dashboard
+  radiologyReportAssembler: false,
+  radiologyQAGuard: false,
+  radiologyFinalizationDashboard: false,
   hideDeprecatedNav: false,
   billingDeskStepped: false,
 };
