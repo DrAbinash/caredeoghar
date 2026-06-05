@@ -33,6 +33,7 @@ export function errorHandler(
   logger.error({
     message: err.message,
     stack: err.stack,
+    cause: (err as any).cause ?? null,
     status,
     url: _req.originalUrl,
     method: _req.method,
@@ -47,6 +48,7 @@ export function errorHandler(
   if (!isProd) {
     response.detail = err.message;
     response.stack = err.stack;
+    response.cause = (err as any).cause?.message ?? (err as any).cause ?? null;
   }
 
   res.status(status).json(response);

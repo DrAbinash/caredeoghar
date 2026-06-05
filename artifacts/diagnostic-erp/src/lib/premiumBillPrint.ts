@@ -393,7 +393,7 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
 
   // ── Watermark ──
   const watermarkStyle = showWatermark
-    ? `<div style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;opacity:0.05;font-size:56px;font-weight:900;text-transform:uppercase;letter-spacing:10px;color:#000;text-align:center;display:flex;align-items:center;justify-content:center;transform:rotate(-25deg)">${esc(clinic?.name || "Care Diagnostics")}</div>`
+    ? `<div style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;opacity:0.06;font-size:56px;font-weight:900;text-transform:uppercase;letter-spacing:10px;color:#000;text-align:center;display:flex;align-items:center;justify-content:center;transform:rotate(-25deg)">${esc(clinic?.name || "Care Diagnostics")}</div>`
     : "";
 
   const copyLabelDiv = copyLabel ? `<div style="text-align:right;font-size:${tinyPx};font-weight:800;border:1px dashed #000;display:inline-block;padding:2px 6px;float:right">${esc(copyLabel)}</div>` : "";
@@ -438,7 +438,7 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
   .receipt {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    min-height: 100vh;
     width: ${pageWidth};
     padding: 2mm 3mm;
     box-sizing: border-box;
@@ -446,7 +446,21 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
     z-index: 1;
   }
   .main-content {
-    flex-shrink: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .main-content.premium-sparse-mode {
+    gap: 10px;
+    justify-content: space-between;
+  }
+  .main-content.normal-mode {
+    gap: 6px;
+    justify-content: flex-start;
+  }
+  .main-content.compact-mode {
+    gap: 4px;
+    justify-content: flex-start;
   }
   .footer-panel {
     margin-top: auto;
@@ -454,10 +468,18 @@ export function buildPremiumBillPrintHtml(opts: BuildPremiumBillOpts): string {
   }
   .no-break { page-break-inside: avoid; }
   .receipt table tr { page-break-inside: avoid; }
+  .page-break { page-break-before: always; }
+  .header-repeat { display: none; }
   @media print {
     body { margin: 0; padding: 0; color: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .receipt { margin: 0; }
-    .receipt * { color: #000 !important; border-color: #000 !important; }
+    .receipt * { color: #000 !important; border-color: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .receipt * { background: transparent !important; }
+    .receipt td { color: #000 !important; }
+    .receipt th { color: #000 !important; }
+    .receipt div { color: #000 !important; }
+    .receipt span { color: #000 !important; }
+    .receipt img { color: #000 !important; }
   }
 </style>
 </head>
