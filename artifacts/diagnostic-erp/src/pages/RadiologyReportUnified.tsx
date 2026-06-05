@@ -15,6 +15,7 @@ import {
 } from "@/lib/reportPdfGenerator";
 import ReportPrintSettingsDialog from "@/components/ReportPrintSettingsDialog";
 import RadiologyProductivityPanel from "@/components/RadiologyProductivityPanel";
+import RadiologyKnowledgePanel from "@/components/RadiologyKnowledgePanel";
 import {
   runQualityCheck, detectConflicts, suggestSmartImpression, classifyPriority,
   PRIORITY_META,
@@ -39,6 +40,7 @@ import {
   Zap, Star, History, Plus, HelpCircle, Keyboard, Command,
   Brain, ShieldCheck, BarChart3, Lightbulb, GitCompare,
   Volume2, VolumeX, BookOpen, Ruler, Layers,
+  FolderOpen, UserCircle,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -281,6 +283,15 @@ export default function RadiologyReportUnified() {
   const ffQAGuard = isFeatureEnabled("radiologyQAGuard");
   const ffFinalizationDashboard = isFeatureEnabled("radiologyFinalizationDashboard");
 
+  // Phase 4: Knowledge Platform flags
+  const ffKnowledgePlatform = isFeatureEnabled("radiologyKnowledgePlatform");
+  const ffMasterTemplates = isFeatureEnabled("radiologyMasterTemplates");
+  const ffPersonalLibrary = isFeatureEnabled("radiologyPersonalLibrary");
+  const ffTemplatePacks = isFeatureEnabled("radiologyTemplatePacks");
+  const ffKnowledgeBase_v2 = isFeatureEnabled("radiologyKnowledgeBase_v2");
+  const ffSignOffProfiles = isFeatureEnabled("radiologySignOffProfiles");
+  const ffTemplateAnalytics = isFeatureEnabled("radiologyTemplateAnalytics");
+
   // ── Panel visibility (local toggles, independent of flags) ──
   const [showQuickAddPanel, setShowQuickAddPanel] = useState(false);
   const [showSmartFormatPanel, setShowSmartFormatPanel] = useState(false);
@@ -311,6 +322,16 @@ export default function RadiologyReportUnified() {
   const [showOneClickPanel, setShowOneClickPanel] = useState(false);
   const [showQAGuardPanel, setShowQAGuardPanel] = useState(false);
   const [showFinalizationPanel, setShowFinalizationPanel] = useState(false);
+
+  // Phase 4: Knowledge Platform panel visibility
+  const [showKnowledgeMasterPanel, setShowKnowledgeMasterPanel] = useState(false);
+  const [showKnowledgePersonalPanel, setShowKnowledgePersonalPanel] = useState(false);
+  const [showKnowledgePacksPanel, setShowKnowledgePacksPanel] = useState(false);
+  const [showKnowledgeBasePanel, setShowKnowledgeBasePanel] = useState(false);
+  const [showKnowledgeProfilePanel, setShowKnowledgeProfilePanel] = useState(false);
+  const [showKnowledgeVersionsPanel, setShowKnowledgeVersionsPanel] = useState(false);
+  const [showKnowledgeAnalyticsPanel, setShowKnowledgeAnalyticsPanel] = useState(false);
+  const [knowledgePanel, setKnowledgePanel] = useState<string | null>(null);
 
   // ── Queries ──
   const { data: entry, isLoading: entryLoading } = useQuery<WorklistEntry>({
@@ -921,6 +942,81 @@ export default function RadiologyReportUnified() {
                 <BarChart3 className="h-3.5 w-3.5" /> Finalize
               </Button>
             )}
+            {/* Phase 4: Knowledge Platform — master toggle shows all sub-buttons */}
+            {ffKnowledgePlatform && (
+              <>
+                {ffMasterTemplates && (
+                  <Button
+                    size="sm"
+                    variant={knowledgePanel === "master" ? "default" : "outline"}
+                    className="h-7 text-xs gap-1"
+                    onClick={() => setKnowledgePanel((p) => p === "master" ? null : "master")}
+                    disabled={isFinal}
+                    title="Master Template Library"
+                  >
+                    <BookOpen className="h-3.5 w-3.5" /> Masters
+                  </Button>
+                )}
+                {ffPersonalLibrary && (
+                  <Button
+                    size="sm"
+                    variant={knowledgePanel === "personal" ? "default" : "outline"}
+                    className="h-7 text-xs gap-1"
+                    onClick={() => setKnowledgePanel((p) => p === "personal" ? null : "personal")}
+                    disabled={isFinal}
+                    title="Personal Library"
+                  >
+                    <FolderOpen className="h-3.5 w-3.5" /> Personal
+                  </Button>
+                )}
+                {ffTemplatePacks && (
+                  <Button
+                    size="sm"
+                    variant={knowledgePanel === "packs" ? "default" : "outline"}
+                    className="h-7 text-xs gap-1"
+                    onClick={() => setKnowledgePanel((p) => p === "packs" ? null : "packs")}
+                    disabled={isFinal}
+                    title="Template Packs"
+                  >
+                    <Layers className="h-3.5 w-3.5" /> Packs
+                  </Button>
+                )}
+                {ffKnowledgeBase_v2 && (
+                  <Button
+                    size="sm"
+                    variant={knowledgePanel === "knowledge" ? "default" : "outline"}
+                    className="h-7 text-xs gap-1"
+                    onClick={() => setKnowledgePanel((p) => p === "knowledge" ? null : "knowledge")}
+                    disabled={isFinal}
+                    title="Knowledge Base"
+                  >
+                    <Brain className="h-3.5 w-3.5" /> KB
+                  </Button>
+                )}
+                {ffSignOffProfiles && (
+                  <Button
+                    size="sm"
+                    variant={knowledgePanel === "profile" ? "default" : "outline"}
+                    className="h-7 text-xs gap-1"
+                    onClick={() => setKnowledgePanel((p) => p === "profile" ? null : "profile")}
+                    title="Sign-Off Profile"
+                  >
+                    <UserCircle className="h-3.5 w-3.5" /> Profile
+                  </Button>
+                )}
+                {ffTemplateAnalytics && (
+                  <Button
+                    size="sm"
+                    variant={knowledgePanel === "analytics" ? "default" : "outline"}
+                    className="h-7 text-xs gap-1"
+                    onClick={() => setKnowledgePanel((p) => p === "analytics" ? null : "analytics")}
+                    title="Usage Analytics"
+                  >
+                    <BarChart3 className="h-3.5 w-3.5" /> Analytics
+                  </Button>
+                )}
+              </>
+            )}
             {/* Help button */}
             <Button
               size="sm"
@@ -1039,7 +1135,7 @@ export default function RadiologyReportUnified() {
       {/* ── Main body (3 columns) ────────────────────────────────────────── */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Measurements + Normal templates + Productivity panels */}
-        <div className={`${(showMeasurements && ffMeasurementPanel) || showNormalPicker || (showQuickAddPanel && ffQuickAdd) || (showSmartFormatPanel && ffSmartFormat) || (showMacroPanel && ffMacros) || (showPrevReportPanel && ffPreviousReport) || (showFavPanel && ffFavorites) || (showMasterPanel && ffMasterLibrary) || (showAdvancedMeasurementPanel && ffAdvancedMeasurements) || (showOneClickPanel && ffOneClickReports) || (showQAGuardPanel && ffQAGuard) || (showFinalizationPanel && ffFinalizationDashboard) ? "w-64" : "w-0"} border-r bg-muted/20 flex flex-col overflow-hidden transition-all duration-200`}>
+        <div className={`${(showMeasurements && ffMeasurementPanel) || showNormalPicker || (showQuickAddPanel && ffQuickAdd) || (showSmartFormatPanel && ffSmartFormat) || (showMacroPanel && ffMacros) || (showPrevReportPanel && ffPreviousReport) || (showFavPanel && ffFavorites) || (showMasterPanel && ffMasterLibrary) || (showAdvancedMeasurementPanel && ffAdvancedMeasurements) || (showOneClickPanel && ffOneClickReports) || (showQAGuardPanel && ffQAGuard) || (showFinalizationPanel && ffFinalizationDashboard) || (knowledgePanel && ffKnowledgePlatform) ? "w-64" : "w-0"} border-r bg-muted/20 flex flex-col overflow-hidden transition-all duration-200`}>
           {/* Normal templates picker */}
           {showNormalPicker && (
             <div className="shrink-0 border-b p-3">
@@ -1375,6 +1471,30 @@ export default function RadiologyReportUnified() {
               impression={impression}
               reportTitle={reportTitle}
               onClose={() => setShowFinalizationPanel(false)}
+            />
+          )}
+          {/* Phase 4: Knowledge Platform panels */}
+          {ffKnowledgePlatform && knowledgePanel && (
+            <RadiologyKnowledgePanel
+              activePanel={knowledgePanel}
+              onInsert={(text) => {
+                const ta = textareaRef.current;
+                if (ta) {
+                  const start = ta.selectionStart;
+                  const end = ta.selectionEnd;
+                  const before = reportBody.slice(0, start);
+                  const after = reportBody.slice(end);
+                  const newText = before + text + (after.startsWith("\n") || after === "" ? "" : "\n") + after;
+                  setReportBody(newText);
+                  setTimeout(() => {
+                    ta.selectionStart = ta.selectionEnd = start + text.length;
+                    ta.focus();
+                  }, 0);
+                } else {
+                  setReportBody((prev) => prev + "\n" + text);
+                }
+              }}
+              selectedText={typeof window !== "undefined" ? (window.getSelection()?.toString() ?? "") : ""}
             />
           )}
         </div>
