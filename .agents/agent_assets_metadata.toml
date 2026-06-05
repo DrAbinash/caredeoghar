@@ -257,3 +257,9 @@ id = "Jx3kUDKAJRC1C4_b_z1YX"
 uri = "file://RADIOLOGY_ACTION_PLAN.md"
 type = "text"
 title = "Radiology Action Plan"
+
+[[outputs]]
+id = "nt2WveHHiXvo1qc5m-dcY"
+uri = "file://RADIOLOGY_AUDIT_REPORT.md"
+type = "text"
+title = "Radiology Module Audit Report"
