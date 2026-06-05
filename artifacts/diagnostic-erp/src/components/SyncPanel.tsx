@@ -20,58 +20,46 @@ export function SyncPanel() {
     : "Never";
 
   return (
-    <div className="rounded-lg border border-border bg-card p-3 space-y-2.5 text-sm">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+    <div className="space-y-1 text-[11px]">
+      {/* Row 1: status + sync button */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
           {isOnline ? (
-            <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
+            <CheckCircle2 size={11} className="text-emerald-500 shrink-0" />
           ) : (
-            <CloudOff size={14} className="text-slate-400 shrink-0" />
+            <CloudOff size={11} className="text-slate-400 shrink-0" />
           )}
-          <span className="font-medium">
-            {isOnline ? "Cloud connected" : "Offline mode"}
+          <span className={isOnline ? "text-emerald-300" : "text-slate-400"}>
+            {isOnline ? "Cloud connected" : "Offline"}
           </span>
+          {pendingCount > 0 && !isOnline && (
+            <span className="text-amber-300">({pendingCount} queued)</span>
+          )}
         </div>
-        <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-          <Clock size={11} />
-          Last sync: {lastSyncText}
-        </span>
+        <button
+          onClick={handleSync}
+          disabled={!isOnline || isSyncing || justTriggered}
+          className={cn(
+            "flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-semibold transition-colors",
+            !isOnline || isSyncing || justTriggered
+              ? "bg-white/10 text-white/40 cursor-not-allowed"
+              : "bg-white/15 text-white hover:bg-white/25 active:bg-white/20"
+          )}
+        >
+          <RefreshCw size={10} className={cn(isSyncing && "animate-spin")} />
+          {isSyncing ? "Syncing" : justTriggered ? "Requested" : "Sync now"}
+        </button>
       </div>
 
-      {!isOnline && pendingCount > 0 && (
-        <div className="flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-2.5 py-2 text-xs">
-          <AlertTriangle size={13} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-          <div className="space-y-0.5">
-            <p className="font-medium text-amber-800 dark:text-amber-200">
-              {pendingCount} change{pendingCount === 1 ? "" : "s"} queued locally
-            </p>
-            <p className="text-amber-700 dark:text-amber-300/80">
-              Bills, orders, and tests will sync automatically when you reconnect.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {lastError && (
-        <div className="flex items-start gap-2 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-2.5 py-2 text-xs text-red-700 dark:text-red-300">
-          <WifiOff size={13} className="shrink-0 mt-0.5" />
-          <span className="font-medium">Sync failed:</span> {lastError}
-        </div>
-      )}
-
-      <button
-        onClick={handleSync}
-        disabled={!isOnline || isSyncing || justTriggered}
-        className={cn(
-          "w-full flex items-center justify-center gap-2 rounded-md px-3 py-2 text-xs font-semibold transition-colors",
-          !isOnline || isSyncing || justTriggered
-            ? "bg-muted text-muted-foreground cursor-not-allowed"
-            : "bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80"
+      {/* Row 2: last sync + error */}
+      <div className="flex items-center justify-between">
+        <span className="text-white/40">
+          Last sync: {lastSyncText}
+        </span>
+        {lastError && (
+          <span className="text-red-300 truncate" title={lastError}>Sync failed</span>
         )}
-      >
-        <RefreshCw size={13} className={cn(isSyncing && "animate-spin")} />
-        {isSyncing ? "Syncing…" : justTriggered ? "Sync requested" : "Sync now"}
-      </button>
+      </div>
     </div>
   );
 }

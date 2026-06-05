@@ -896,20 +896,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        {/* Footer */}
-        <div className={cn("py-3 border-t flex items-center relative z-10", sidebarCollapsed ? "px-1 justify-center" : "px-4 justify-between")} style={{ borderColor: "rgba(255,255,255,0.1)" }}>
-          {!sidebarCollapsed && <span className="text-xs text-sidebar-foreground/40">v1.0.0</span>}
+        {/* Footer — compact, just sync panel + palette when logged out */}
+        <div className={cn("py-2 border-t flex items-center relative z-10", sidebarCollapsed ? "px-1 justify-center" : "px-3 justify-between")} style={{ borderColor: "rgba(255,255,255,0.1)" }}>
+          {!sidebarCollapsed && (
+            <span className="text-[10px] text-sidebar-foreground/30">v1.0.0</span>
+          )}
           <div className="flex items-center gap-1">
-            {/* Palette button shown in footer only when no session (profile block has it when logged in) */}
             {!session && (
               <div className="relative" ref={themePickerRef}>
                 <button
                   onClick={() => setThemePickerOpen((o) => !o)}
-                  className="p-2 rounded-md text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+                  className="p-1.5 rounded-md text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
                   title="My sidebar theme"
                   aria-label="Pick my sidebar theme"
                 >
-                  <Palette size={16} />
+                  <Palette size={14} />
                 </button>
                 {themePickerOpen && (
                   <div
@@ -941,14 +942,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 )}
               </div>
             )}
-            {scannerActive && (
-              <div title="Scanner active" className="flex items-center gap-1.5 rounded-md bg-emerald-500/20 text-emerald-200 px-2 py-1 text-[10px] font-medium">
-                <ScanLine size={10} />
-                <span className="hidden xl:inline">Scanner</span>
-              </div>
-            )}
-            <FullscreenToggle />
-            <ThemeToggle />
           </div>
         </div>
       </aside>
@@ -1050,8 +1043,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Main */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Top bar (mobile/tablet) */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+        {/* Top bar (mobile) */}
         <header className={cn(!isMobile && "hidden", "sticky top-0 z-10 flex items-center gap-3 px-4 py-3 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80")}>
           <button
             onClick={() => setSidebarOpen(true)}
@@ -1083,6 +1076,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <ThemeToggle />
           </div>
         </header>
+
+        {/* Desktop top-right control bar — pinned to top-right of main area */}
+        {!isMobile && (
+          <div className="absolute top-2 right-3 z-20 flex items-center gap-1">
+            {scannerActive && (
+              <div title="Scanner active" className="flex items-center gap-1 rounded-md bg-emerald-100 text-emerald-700 px-1.5 py-0.5 text-[10px] font-medium">
+                <ScanLine size={10} />
+                <span className="hidden lg:inline">Scanner</span>
+              </div>
+            )}
+            <FullscreenToggle />
+            <ThemeToggle />
+            <span className="text-[10px] text-muted-foreground ml-1 hidden xl:inline">v1.0.0</span>
+          </div>
+        )}
 
         {/* Offline indicator — shown when the browser loses network connectivity.
             Data is still visible from the service-worker cache; writes are blocked. */}

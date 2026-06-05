@@ -1163,37 +1163,27 @@ export default function BillingDesk() {
   return (
     <div className="h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-900/20">
 
-      {/* ── TOP BAR ── */}
-      <div className="flex-shrink-0 bg-card border-b border-card-border px-3 sm:px-6 py-2 sm:py-3 flex flex-wrap items-center gap-x-4 gap-y-2 shadow-sm">
-        <div className="flex items-center gap-2">
-          <Receipt size={18} className="text-primary" />
-          <span className="font-bold text-base">Billing Desk</span>
+      {/* ── TOP BAR — compact single row ── */}
+      <div className="flex-shrink-0 bg-card border-b border-card-border px-3 sm:px-4 py-1.5 sm:py-2 flex items-center gap-3 shadow-sm">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Receipt size={16} className="text-primary flex-shrink-0" />
+          <span className="font-bold text-sm truncate">Billing Desk</span>
+          <span className="hidden sm:inline text-xs text-slate-900 dark:text-slate-900">· {today()}</span>
         </div>
-        <div className="hidden sm:flex items-center gap-1.5 text-sm text-slate-900 dark:text-slate-900">
-          <CalendarDays size={13} />
-          <span>{today()}</span>
-        </div>
-        <div className="flex items-center gap-1.5 text-xs sm:text-sm">
-          <Hash size={13} className="text-slate-900 dark:text-slate-900" />
-          <span className="font-mono text-primary font-extrabold">
-            {previewBillNo?.next ?? "—"}
-          </span>
-          <span className="hidden sm:inline text-xs text-slate-900 dark:text-slate-900">(next bill no.)</span>
-        </div>
-        <div className="ml-auto flex items-center gap-2 w-full sm:w-auto order-last sm:order-none">
-          <div className="flex-1 sm:flex-none"><BillSearchBox /></div>
+        <div className="ml-auto flex items-center gap-1.5">
+          <div className="w-32 sm:w-48"><BillSearchBox /></div>
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="ghost" size="sm" className="text-slate-900 dark:text-slate-900 hover:text-foreground flex-shrink-0">
-                <Receipt size={13} className="mr-1" /> <span className="hidden xs:inline sm:inline">Recent</span>
+              <Button variant="ghost" size="sm" className="h-7 px-2 text-slate-900 dark:text-slate-900 hover:text-foreground flex-shrink-0">
+                <Receipt size={12} className="mr-1" /> <span className="hidden sm:inline text-xs">Recent</span>
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="p-0 w-80">
+            <PopoverContent align="end" className="p-0 w-[420px]">
               <RecentBillsPanel />
             </PopoverContent>
           </Popover>
-          <Button variant="ghost" size="sm" onClick={resetAll} className="text-slate-900 dark:text-slate-900 hover:text-foreground flex-shrink-0">
-            <RefreshCcw size={13} className="mr-1" /> <span className="hidden xs:inline sm:inline">New Bill</span>
+          <Button variant="ghost" size="sm" onClick={resetAll} className="h-7 px-2 text-slate-900 dark:text-slate-900 hover:text-foreground flex-shrink-0">
+            <RefreshCcw size={12} className="mr-1" /> <span className="hidden sm:inline text-xs">New</span>
           </Button>
         </div>
       </div>
@@ -1953,7 +1943,7 @@ export default function BillingDesk() {
                     </button>
                   )}
                 </div>
-                <div className="p-2.5 space-y-1.5 max-h-[26vh] overflow-y-auto">
+                <div className="p-2.5 space-y-1.5 max-h-[32vh] overflow-y-auto">
                   {suggestion && suggestion.discount > 0 && (
                     <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 rounded-lg px-3 py-2 flex items-center gap-2 text-xs">
                       <Zap size={11} className="text-green-600 flex-shrink-0" />
@@ -2088,13 +2078,6 @@ export default function BillingDesk() {
                   >
                     {lastBill ? <><CheckCircle2 size={18} className="mr-2" />Bill Saved ✓</> : generateMut.isPending ? <><Printer size={18} className="mr-2 animate-spin" />Saving…</> : <><Printer size={18} className="mr-2" />Save &amp; Print</>}
                   </Button>
-                  {!lastBill && (
-                    <div className="text-center text-[10px] text-slate-900 dark:text-slate-900 select-none">
-                      <kbd className="px-1 py-0.5 rounded border border-card-border font-mono text-[9px]">Ctrl+P</kbd> Save &amp; Print &nbsp;·&nbsp;
-                      <kbd className="px-1 py-0.5 rounded border border-card-border font-mono text-[9px]">F2</kbd> Patient &nbsp;·&nbsp;
-                      <kbd className="px-1 py-0.5 rounded border border-card-border font-mono text-[9px]">F4</kbd> Payment
-                    </div>
-                  )}
                   <div className="grid grid-cols-3 gap-1.5">
                     <Button variant="outline" onClick={resetAll} disabled={generateMut.isPending} className="h-8 text-[11px] px-2">
                       <RefreshCcw size={13} className="mr-1" /> Reset
@@ -2635,7 +2618,7 @@ function RecentBillsPanel() {
   const [, navigate] = useLocation();
   const { data, isLoading, isError } = useQuery<{ bills: RecentBill[] }>({
     queryKey: ["recent-bills-today"],
-    queryFn: () => api.get<{ bills: RecentBill[] }>("/api/bills?limit=8&page=1"),
+    queryFn: () => api.get<{ bills: RecentBill[] }>("/api/bills?limit=20&page=1"),
     staleTime: 15_000,
     refetchOnWindowFocus: true,
   });
@@ -2650,7 +2633,7 @@ function RecentBillsPanel() {
         <span>Today's Recent Bills</span>
         <span className="ml-auto text-xs font-bold text-slate-900 dark:text-slate-900">{bills.length}</span>
       </div>
-      <div className="divide-y divide-card-border max-h-64 overflow-y-auto" aria-live="polite">
+      <div className="divide-y divide-card-border max-h-[480px] overflow-y-auto" aria-live="polite">
         {isLoading ? (
           <div className="px-4 py-6 text-xs text-slate-900 dark:text-slate-900 text-center">Loading…</div>
         ) : isError ? (
