@@ -263,3 +263,9 @@ id = "nt2WveHHiXvo1qc5m-dcY"
 uri = "file://RADIOLOGY_AUDIT_REPORT.md"
 type = "text"
 title = "Radiology Module Audit Report"
+
+[[outputs]]
+id = "6J_0ld5SepqeealDbnYAA"
+uri = "file://RADIOLOGY_IMPLEMENTATION_ROADMAP.md"
+type = "text"
+title = "Radiology Implementation Roadmap"
