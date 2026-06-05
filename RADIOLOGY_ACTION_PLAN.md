@@ -1,195 +1,112 @@
-# Radiology Module — Action Plan: From Bloat to Useful
+# Radiology Action Plan — Care Diagnostics ERP
 
-## What the User Actually Needs
-
-- **All modalities**: X-ray, CT, MRI, USG, Doppler, Echo, Fetal
-- **PACS**: Conquest + Weasis running, DICOM puller from Windows PC working
-- **Pain point**: USG reports take too long to type with all measurements
-- **Real workflow**: Book → Scan → Report → Deliver
-
-## Current State: The Problem
-
-The radiology module has **425+ items** but the core workflow is **broken or disconnected**:
-
-1. **Billing Desk** creates a bill → study may or may not appear in worklist
-2. **Worklist** is not the first thing the radiologist sees — it loads from a separate menu
-3. **USG Measurements** auto-extract from DICOM (good), but the radiologist must manually navigate to them
-4. **Report Writing** is a textarea — no auto-fill from measurements, no keyboard shortcuts
-5. **Report Delivery** is not integrated — the radiologist doesn't know if patient got the report
-6. **PACS Viewer** (Weasis) is separate from the ERP — the radiologist clicks between two apps
-
-### What Actually Wastes Time in a Real USG Clinic:
-
-1. **Typing measurements** — BPD, HC, AC, FL, FHR, EFW, GA, AFI, Placenta position, Liquor volume
-2. **Writing the same text** — "Liver shows normal echotexture, no focal lesion..."
-3. **Typing findings** — "Uterus is anteverted, normal size..."
-4. **Copy-pasting** from the ultrasound machine display
-5. **Re-typing** the same normal findings every time
-6. **Formatting** — making it look professional for patients
-
-### The Real Solution: One-Click Normal Reports
-
-The fastest radiologist workflow is:
-1. **See the patient** in the worklist
-2. **Click "Normal"** → Report auto-fills with a normal template
-3. **Edit only the abnormal parts** (or add measurements)
-4. **Click "Done"** → Report is finalized and delivered
-5. **Total time**: 10 seconds for a normal scan, 30 seconds for a complex one
-
-## Step-by-Step Implementation Plan
-
-### Phase 1: Fix the Core Worklist (Week 1)
-**Goal**: Make the radiology worklist the first and only thing the radiologist needs.
-
-**Current**: Worklist is at `/radiology/worklist` → separate menu, needs to be opened
-**Target**: Worklist appears on the **Dashboard** or as a **pinned sidebar** for radiologist role
-
-**Tasks**:
-1.1. **Auto-populate worklist from billing** — when a bill is created with a radiology test, the study must appear in the worklist with status "PENDING" immediately
-1.2. **Worklist dashboard card** — radiologist sees a card on their daily summary showing "12 USG pending, 3 in progress"
-1.3. **One-click "Start Reporting"** — from the worklist, one click opens the reporting page
-1.4. **Auto-fill demographics** — patient name, age, sex, doctor, bill number — no re-typing
-
-**Why this matters**: The radiologist shouldn't have to navigate menus. The patient should appear in front of them.
+**Created:** 2026-06-05
+**Goal:** Fix the core pain point: *USG reports take too long to type with measurements*
+**Status:** Phase 1 complete (OHIF + Unified Report). Phases 2-4 in progress.
 
 ---
 
-### Phase 2: USG Measurement Auto-Insert (Week 1-2)
-**Goal**: Stop typing measurements. Extract from DICOM and insert into the report.
+## Phase 1: Fix Viewer & Build Unified Page (COMPLETE)
 
-**Current**: Measurements extract from DICOM but sit in a separate review page. The radiologist must copy-paste.
-**Target**: Measurements auto-insert into the report template.
+| Task | Status | Files Changed |
+|------|--------|--------------|
+| Seed PACS viewer defaults (idempotent migration) | Done | `lib/db/drizzle/0004_seed_pacs_viewer_defaults.sql` |
+| Build `RadiologyReportUnified.tsx` — single page for all modalities | Done | `artifacts/diagnostic-erp/src/pages/RadiologyReportUnified.tsx` |
+| Fix measurement API endpoint (`/api/usg-extraction/study/:uid`) | Done | `artifacts/diagnostic-erp/src/pages/RadiologyReportUnified.tsx` |
+| Add route `/radiology/unified-report/:worklistId` | Done | `artifacts/diagnostic-erp/src/App.tsx` |
+| Consolidate sidebar from 40+ items to 18 | Done | `artifacts/diagnostic-erp/src/components/Layout.tsx` |
+| Update inventory with deprecated items marked | Done | `RADIOLOGY_MODULE_INVENTORY.md` |
 
-**Tasks**:
-2.1. **One-click "Fill from Measurements"** — in the USG report page, a button fills the template with extracted measurements
-2.2. **Smart template matching** — if the DICOM says "Growth Scan", the system picks "OB_GROWTH" template
-2.3. **Measurement inline editing** — in the report, the radiologist can edit measurements inline (not in a separate page)
-2.4. **Confidence flags** — low-confidence measurements are highlighted but still inserted
-
-**Why this matters**: A USG report has 20+ measurements. Auto-inserting them saves 2-3 minutes per report.
-
----
-
-### Phase 3: Normal Template Shortcuts (Week 2)
-**Goal**: 80% of reports are normal. Make them one-click.
-
-**Current**: 13 templates exist but they are complex. The radiologist still types most of the text.
-**Target**: Every template has a "Normal" button that pre-fills normal findings.
-
-**Tasks**:
-3.1. **"Normal" button per template** — "OB_GROWTH" → "Normal" button → fills "Biometry is appropriate for gestational age, AFI is normal, placenta is anterior, liquor is adequate..."
-3.2. **Keyboard shortcuts** — F1 = Normal, F2 = Insert Measurements, F3 = Finalize
-3.3. **Quick findings** — common phrases as buttons: "Normal", "No abnormality detected", "FHR is normal", "AFI is adequate"
-3.4. **Impression templates** — "Normal study", "Grossly normal study", "No significant abnormality detected"
-
-**Why this matters**: Most scans are normal. A normal USG report should take 10 seconds.
+**Outcome:** Staff can now open the unified report page, see embedded OHIF, measurements, and AI draft in one place.
 
 ---
 
-### Phase 4: Report Delivery Integration (Week 2-3)
-**Goal**: When the radiologist clicks "Done", the patient gets the report.
+## Phase 2: Real-Time Measurement Extraction (NEXT)
 
-**Current**: Report is finalized but delivery is manual (separate page, manual send).
-**Target**: Auto-delivery on finalization.
+**Goal:** Make measurements actually flow from DICOM → DB → Unified Report without manual typing.
 
-**Tasks**:
-4.1. **Auto-delivery on finalize** — "Send to patient" checkbox (default on) → sends WhatsApp/email on finalize
-4.2. **Delivery status in worklist** — the worklist shows ✓ for delivered, ✗ for not delivered
-4.3. **Patient portal auto-update** — report appears immediately in the patient portal
-4.4. **Print & hand** — option to print directly for walk-in patients
+| # | Task | Priority | Est. Effort | Notes |
+|---|------|----------|-------------|-------|
+| 2.1 | **Test `usgExtractor.ts` end-to-end** — verify it actually reads DICOM SR and populates `usg_measurements` table | High | 2h | Check if extraction is triggered automatically when studies arrive |
+| 2.2 | **Fix measurement polling** — unified page should auto-refresh measurements when new data arrives | High | 1h | Add `refetchInterval` or SSE to `useQuery` for measurements |
+| 2.3 | **Add measurement approval flow** — extracted measurements need radiologist approval before inserting into report | High | 2h | Use existing `/api/usg-extraction/measurements/:id/approve` endpoint |
+| 2.4 | **Test auto-insert with real DICOM** — verify clicking a measurement row inserts the correct text | Medium | 1h | Ensure `insertMeasurement(m)` produces readable text |
+| 2.5 | **Handle missing measurements gracefully** — show helpful message when no measurements exist for a study | Low | 30m | "No measurements extracted yet. Run extraction manually?" |
 
-**Why this matters**: The radiologist shouldn't have to think about delivery. The patient should get it automatically.
-
----
-
-### Phase 5: PACS + ERP Unified (Week 3)
-**Goal**: Don't make the radiologist switch between ERP and Weasis.
-
-**Current**: PACS is at `/pacs`, Weasis is separate. The radiologist must open two apps.
-**Target**: DICOM viewer is embedded in the report page.
-
-**Tasks**:
-5.1. **Inline PACS viewer** — in the report page, a small window shows the DICOM image
-5.2. **Weasis launch** — "Open in Weasis" button for detailed viewing
-5.3. **Key image capture** — in the report page, capture a key image to include in the report
-5.4. **Mobile viewer** — patients can view images on mobile
-
-**Why this matters**: The radiologist writes the report while looking at the image. Switching apps wastes time.
+**Acceptance:** A radiologist can open a USG study, see extracted measurements, approve them, and click-to-insert into the report without typing.
 
 ---
 
-### Phase 6: AI That Actually Helps (Week 3-4)
-**Goal**: AI should speed up the report, not add a dashboard.
+## Phase 3: Template & AI Draft Polish (NEXT)
 
-**Current**: AI is on separate pages (AI Reporting, AI Prompt Templates, AI Model Routing).
-**Target**: AI is inline in the report page.
+**Goal:** Make normal templates and AI drafts actually usable in the unified report.
 
-**Tasks**:
-6.1. **Inline AI draft** — in the report page, "AI Draft" button fills the report with AI suggestions
-6.2. **Voice dictation** — the radiologist speaks, text appears
-6.3. **AI suggestions** — "Did you mean: Normal study?" — one click to accept
-6.4. **Smart macros** — radiologist types ".liver" → "Liver shows normal echotexture..."
+| # | Task | Priority | Est. Effort | Notes |
+|---|------|----------|-------------|-------|
+| 3.1 | **Test normal template insertion** — verify one-click normal template inserts text into the report textarea | High | 1h | Check if `NormalReportTemplates.tsx` works with unified page |
+| 3.2 | **Test AI draft generation** — verify `/api/internal/radiology/ai-draft` returns a useful draft | High | 2h | Check Gemini prompt quality; add modality-specific context |
+| 3.3 | **Add "Insert AI Draft" button** — unified page should have a button to insert AI draft into the report textarea | High | 1h | Reuse existing `aiDraftJson` from worklist entry |
+| 3.4 | **Add AI draft feedback** — thumbs up/down on AI draft quality for learning loop | Medium | 1h | Use existing `/api/radiology/pacs-worklist/:id/ai-feedback` |
+| 3.5 | **Improve AI draft for USG** — add measurement context to the AI prompt so draft includes measurements | Medium | 2h | Pass `usg_measurements` JSON to the AI draft endpoint |
+| 3.6 | **Add "AI Draft — Requires Radiologist Review" label** | High | 30m | Safety requirement per `ai-safety-label` memory |
 
-**Why this matters**: AI should be invisible. The radiologist doesn't want to go to an "AI Dashboard".
-
----
-
-### What to Remove/Deprioritize
-
-These are **not useful for daily work** and should be hidden or moved to admin:
-- AI Audit Log
-- AI Quality Scores
-- AI Prompt Effectiveness
-- RAG Vector Store
-- AI Search & Retrieval
-- Anomaly Alerts
-- Feedback Loop Analytics
-- Training Data Export
-- Report Diff Viewer
-- Peer Review Assignments
-- Billing Suggestions
-- Provider Health Monitor
-- Template Versions
-- Quality Gates (keep as auto-check, don't show UI)
-- AI Inference Settings
-- AI Model Routing
-- AI DICOM Findings
-- Storage Lifecycle
-- Archive Lifecycle
-- Watchdog
-- RIS Monitoring
-- Enterprise Analytics
-- DICOM Agent Dashboard
-
-These should be **admin-only** or **removed from the sidebar**.
+**Acceptance:** A radiologist can click "Normal Template" or "Generate AI Draft" and have usable text in the report within 3 seconds.
 
 ---
 
-## Implementation Order
+## Phase 4: Workflow & Navigation Polish (NEXT)
 
-**Week 1**: Phase 1 (Worklist) + Phase 2 (Measurement Auto-Insert)
-**Week 2**: Phase 3 (Normal Templates) + Phase 4 (Delivery)
-**Week 3**: Phase 5 (PACS Unified) + Phase 6 (AI Inline)
-**Week 4**: Testing + Cleanup + Remove bloat
+**Goal:** Make the worklist → report → finalize flow smooth and fast.
 
----
+| # | Task | Priority | Est. Effort | Notes |
+|---|------|----------|-------------|-------|
+| 4.1 | **Update worklist navigation** — clicking "Report" on a worklist row should open `/radiology/unified-report/:id` | High | 30m | Check `RadiologyWorklist.tsx` navigation |
+| 4.2 | **Add "Save Draft" button** — save report text without finalizing | High | 1h | Use existing report draft table or create new endpoint |
+| 4.3 | **Add "Finalize" button** — lock the report with hash and signature | High | 1h | Use existing `/api/usg-reports/:id/finalize` |
+| 4.4 | **Add status indicators** — worklist should show "Draft Saved", "Finalized", "AI Draft Ready" | Medium | 1h | Update worklist row badges |
+| 4.5 | **Add keyboard shortcuts** — Ctrl+S for save, Ctrl+Enter for finalize | Low | 30m | Add `useEffect` keyboard listener |
+| 4.6 | **Test print from unified page** — verify PDF generation works | Medium | 1h | Reuse `generateReportPDF` from `reportPdfGenerator.ts` |
+| 4.7 | **Add "Back to Worklist" button** with unsaved changes warning | Medium | 30m | Check `isDirty` state before navigation |
 
-## How to Proceed
-
-**Option A**: Share screenshots of the current pages (Billing Desk, Worklist, USG Reporting, PACS Viewer)
-**Option B**: I implement Phase 1 directly (auto-populate worklist from billing)
-**Option C**: We start with a clean "USG Reporting" page redesign — one page that does everything
-
-**My recommendation**: Start with **Option C** — redesign the USG Reporting page to be a single-page workflow:
-1. Patient info auto-filled (from billing)
-2. DICOM image visible (from Conquest)
-3. Measurements extracted and inserted (from DICOM)
-4. Normal template buttons (one-click)
-5. Text editor with macros
-6. Finalize button (auto-delivers)
-
-This is the page the radiologist will spend 90% of their time on. Make it fast.
+**Acceptance:** A radiologist can pick a study from the worklist, write/insert a report, save, and finalize — all in under 2 minutes.
 
 ---
 
-*End of Action Plan*
+## Phase 5: Echo & Fetal Integration (FUTURE)
+
+**Goal:** Bring echo and fetal measurements into the unified report.
+
+| # | Task | Priority | Est. Effort | Notes |
+|---|------|----------|-------------|-------|
+| 5.1 | **Add echo measurement panel** — show 2D, Doppler, valve measurements in unified page when modality = ECHO | Medium | 3h | Extend `DicomMeasurement` type or add `EchoMeasurement` |
+| 5.2 | **Add fetal measurement panel** — show BPD, HC, AC, FL, CRL, EFW, GA in unified page when modality = FETAL | Medium | 3h | Reuse `fetal_usg_level4` table |
+| 5.3 | **Add modality-specific normal templates** — echo normal template, fetal normal template | Medium | 2h | Extend `normal-templates` to be modality-aware |
+| 5.4 | **Add modality-specific AI prompts** — echo AI draft, fetal AI draft | Low | 3h | Use `ai_prompt_templates` with modality filter |
+
+---
+
+## Quick Wins (Can Do Immediately)
+
+1. **Verify worklist navigates to unified report** — check `RadiologyWorklist.tsx` line ~450 for `navigate()` calls
+2. **Add `ownerOnly` to deprecated AI pages** — so they don't clutter non-owner views
+3. **Test `usg-extraction` endpoint manually** — `curl /api/usg-extraction/stats` to verify it's running
+4. **Check `pacs_settings` table has data** — verify OHIF defaults are seeded
+
+---
+
+## Files to Monitor
+
+```
+artifacts/diagnostic-erp/src/pages/RadiologyReportUnified.tsx    # Unified page
+artifacts/diagnostic-erp/src/pages/RadiologyWorklist.tsx         # Worklist navigation
+artifacts/diagnostic-erp/src/components/Layout.tsx               # Sidebar
+artifacts/api-server/src/routes/usgExtraction.ts               # Measurement API
+artifacts/api-server/src/routes/internal-radiology.ts          # AI draft
+artifacts/api-server/src/lib/usgExtractor.ts                   # Extraction engine
+lib/db/src/schema/usgMeasurements.ts                         # Measurement schema
+lib/db/src/schema/pacsSettings.ts                            # PACS settings
+```
+
+---
+
+*Last Updated: 2026-06-05*
