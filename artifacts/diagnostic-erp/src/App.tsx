@@ -121,6 +121,7 @@ const ReportDelivery  = lazy(() => import("@/pages/ReportDelivery"));
 const Kiosk           = lazy(() => import("@/pages/Kiosk"));
 const NotFound        = lazy(() => import("@/pages/not-found"));
 const RadiologyCommandCenter = lazy(() => import("@/pages/RadiologyCommandCenter"));
+const RadiologyAdvancedTools = lazy(() => import("@/pages/RadiologyAdvancedTools"));
 const AcquisitionGateway     = lazy(() => import("@/pages/AcquisitionGateway"));
 const MwlManager             = lazy(() => import("@/pages/MwlManager"));
 const AiPipelineManager      = lazy(() => import("@/pages/AiPipelineManager"));
@@ -291,7 +292,6 @@ function Router() {
       <Route path="/radiology/quality-gates" component={ReportQualityGates} />
       <Route path="/radiology/critical-findings" component={CriticalFindings} />
       <Route path="/radiology/provider-health" component={ProviderHealthMonitor} />
-      <Route path="/radiology/command-center" component={CommandCenter} />
       <Route path="/radiology/voice-dictation" component={VoiceDictation} />
       <Route path="/radiology/patient-communication" component={PatientCommunication} />
       <Route path="/radiology/normal-templates" component={NormalReportTemplates} />
@@ -301,6 +301,7 @@ function Router() {
               <Route path="/radiology/hl7-settings" component={Hl7Settings} />
               {/* Phase 12: Real Radiology Workflow & DICOM Operations */}
               <Route path="/radiology/command-center" component={RadiologyCommandCenter} />
+              <Route path="/radiology/advanced-tools" component={RadiologyAdvancedTools} />
               <Route path="/radiology/acquisition-gateway" component={AcquisitionGateway} />
               <Route path="/radiology/mwl-manager" component={MwlManager} />
               <Route path="/radiology/ai-pipeline" component={AiPipelineManager} />

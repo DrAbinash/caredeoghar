@@ -145,6 +145,45 @@ export function firstPermissionedPath(session: StaffSession | null, candidates: 
 // Returns the longest path in `candidates` that is a prefix of `pathname`.
 // Used by the route guard so that e.g. "/orders/123/edit" resolves to "/orders"
 // rather than the first candidate that happens to match.
+// Feature flags for rollout-safe feature toggling.
+// Each flag is stored in localStorage so it can be toggled per-browser for testing.
+// New workflow features default to OFF. Existing workflow is unaffected.
+//
+// Toggle in browser console: localStorage.setItem("featureFlags", JSON.stringify({ showUnifiedReporting: true }))
+//
+const FEATURE_FLAG_DEFAULTS: Record<string, boolean> = {
+  showUnifiedReporting: false,
+  showMeasurementPanel: false,
+  showAiDraftPanel: false,
+  showRadiologyMacros: false,
+  showPreviousReportPanel: false,
+  showFavoritesLibrary: false,
+  showQuickAddButtons: false,
+  hideDeprecatedNav: false,
+};
+
+export function getFeatureFlags(): Record<string, boolean> {
+  try {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem("featureFlags") : null;
+    const parsed = raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+    return { ...FEATURE_FLAG_DEFAULTS, ...parsed };
+  } catch {
+    return { ...FEATURE_FLAG_DEFAULTS };
+  }
+}
+
+export function isFeatureEnabled(flag: string): boolean {
+  return getFeatureFlags()[flag] ?? FEATURE_FLAG_DEFAULTS[flag] ?? false;
+}
+
+export function setFeatureFlag(flag: string, value: boolean): void {
+  try {
+    const current = getFeatureFlags();
+    current[flag] = value;
+    window.localStorage.setItem("featureFlags", JSON.stringify(current));
+  } catch { /* ignore */ }
+}
+
 export function longestMatchingNavPath(pathname: string, candidates: readonly string[]): string | null {
   let best: string | null = null;
   for (const p of candidates) {

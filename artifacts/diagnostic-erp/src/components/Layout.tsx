@@ -96,7 +96,7 @@ import { api } from "@/lib/fetchApi";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { SyncPanel, SyncBadge } from "@/components/SyncPanel";
-import { readStaffSession, clearStaffSession, canAccess, FULL_ACCESS_ROLES } from "@/lib/staffSession";
+import { readStaffSession, clearStaffSession, canAccess, FULL_ACCESS_ROLES, isFeatureEnabled } from "@/lib/staffSession";
 import { useUserTheme, clearUserTheme } from "@/lib/userTheme";
 import {
   getStoredUsbKey,
@@ -115,7 +115,7 @@ import {
 } from "@/lib/usbKey";
 import { SIDEBAR_THEMES, DEFAULT_THEME, resolveTheme } from "@/lib/sidebarThemes";
 
-type NavLeaf = { path: string; icon: typeof Zap; label: string; ownerOnly?: boolean };
+type NavLeaf = { path: string; icon: typeof Zap; label: string; ownerOnly?: boolean; featureFlag?: string };
 type NavGroup = { id: string; icon: typeof Zap; label: string; children: NavLeaf[] };
 type NavEntry = NavLeaf | NavGroup;
 
@@ -149,28 +149,28 @@ const navItems: NavEntry[] = [
     icon: Radio,
     label: "Radiology & Imaging",
     children: [
-      { path: "/radiology/worklist",              icon: ScanSearch,   label: "Worklist Hub" },
-      { path: "/radiology/reporting-workspace",   icon: FilePen,      label: "Reporting Workspace" },
-      { path: "/pacs",                            icon: Monitor,      label: "PACS Viewer" },
-      { path: "/radiology/normal-templates",       icon: ClipboardCheck, label: "Normal Templates" },
-      { path: "/radiology/ai-reporting-settings", icon: BrainCircuit, label: "AI Reporting" },
-      { path: "/radiology/dicom-qr",              icon: Search,       label: "DICOM Query/Retrieve" },
-      { path: "/radiology/mwl-dashboard",         icon: ListChecks,   label: "MWL Dashboard" },
-      { path: "/teleradiology",                   icon: Globe,        label: "Teleradiology" },
-      { path: "/echo",                            icon: Heart,        label: "Echo Cardiology" },
-      { path: "/fetal-usg",                       icon: Baby,         label: "Fetal USG" },
-      { path: "/fetal-echo",                      icon: Baby,         label: "Fetal Echo" },
-      { path: "/radiology/voice-dictation",       icon: Mic,          label: "Voice Dictation" },
-      { path: "/radiology/critical-findings",    icon: AlertCircle,  label: "Critical Findings" },
-      { path: "/radiology/ai-extraction-review",  icon: Microscope,   label: "AI Extraction Review" },
-      { path: "/radiology/pacs-settings",         icon: Settings2,    label: "PACS Settings",         ownerOnly: true },
-      { path: "/radiology/modality-management",   icon: Monitor,      label: "Modality Management",   ownerOnly: true },
-      { path: "/radiology/dicom-agent-dashboard", icon: Server,       label: "DICOM Agent",           ownerOnly: true },
-      { path: "/radiology/watchdog",              icon: ShieldAlert,  label: "Watchdog",              ownerOnly: true },
+      { path: "/radiology/worklist",            icon: ScanSearch,     label: "Worklist Hub" },
+      { path: "/radiology/reporting-workspace", icon: FilePen,        label: "Reporting Workspace" },
+      { path: "/pacs",                        icon: Monitor,        label: "PACS Viewer" },
+      { path: "/radiology/normal-templates",   icon: ClipboardCheck, label: "Normal Templates" },
+      { path: "/radiology/critical-findings",   icon: AlertCircle,    label: "Critical Findings" },
+      { path: "/radiology/dicom-qr",            icon: Search,         label: "DICOM Query/Retrieve" },
+      { path: "/radiology/mwl-dashboard",       icon: ListChecks,     label: "MWL Dashboard" },
+      { path: "/teleradiology",               icon: Globe,          label: "Teleradiology" },
+      { path: "/echo",                        icon: Heart,          label: "Echo Cardiology" },
+      { path: "/fetal-usg",                   icon: Baby,           label: "Fetal USG" },
+      { path: "/fetal-echo",                  icon: Baby,           label: "Fetal Echo" },
+      { path: "/radiology/voice-dictation",   icon: Mic,            label: "Voice Dictation" },
+      { path: "/radiology/advanced-tools",    icon: Cpu,            label: "Advanced Tools",        ownerOnly: true },
+      // Hidden items kept for gradual rollout / bookmark preservation
+      { path: "/radiology/ai-reporting-settings", icon: BrainCircuit, label: "AI Reporting",          featureFlag: "hideDeprecatedNav" },
+      { path: "/radiology/ai-extraction-review",  icon: Microscope,   label: "AI Extraction Review",  featureFlag: "hideDeprecatedNav" },
+      { path: "/radiology/pacs-settings",         icon: Settings2,    label: "PACS Settings",         ownerOnly: true, featureFlag: "hideDeprecatedNav" },
+      { path: "/radiology/modality-management",   icon: Monitor,      label: "Modality Management",   ownerOnly: true, featureFlag: "hideDeprecatedNav" },
+      { path: "/radiology/dicom-agent-dashboard", icon: Server,       label: "DICOM Agent",           ownerOnly: true, featureFlag: "hideDeprecatedNav" },
+      { path: "/radiology/watchdog",              icon: ShieldAlert,  label: "Watchdog",              ownerOnly: true, featureFlag: "hideDeprecatedNav" },
     ],
   },
-
-  { path: "/usg", icon: Waves, label: "USG / DOPPLER" },
   { path: "/samples", icon: TestTube, label: "Samples" },
   { path: "/scan-station", icon: ScanLine, label: "Scan Station" },
   { path: "/report-delivery", icon: Send, label: "Report Delivery" },
@@ -199,17 +199,26 @@ const navItems: NavEntry[] = [
     icon: Settings2,
     label: "Settings",
     children: [
-      { path: "/settings",          icon: Settings2,      label: "General Settings" },
-      { path: "/settings/radiology", icon: Radio,          label: "Radiology Settings" },
-      { path: "/tests",             icon: FlaskConical,   label: "Test Catalog" },
-      { path: "/outsourced-labs",   icon: Building2,      label: "Outsourced Labs" },
-      { path: "/outsourced-cost-report", icon: IndianRupee, label: "Outsource Costs" },
-      { path: "/packages",          icon: Boxes,          label: "Packages" },
-      { path: "/inventory",         icon: Package,        label: "Inventory" },
-      { path: "/discounts",         icon: Tag,            label: "Discounts" },
-      { path: "/referrals",         icon: Stethoscope,    label: "Doctors" },
-      { path: "/backup-replication",icon: DatabaseBackup, label: "Backup & Replication", ownerOnly: true },
-      { path: "/system-update",     icon: Download,       label: "System Update" },
+      { path: "/settings",                  icon: Settings2,      label: "General Settings" },
+      { path: "/settings/radiology",         icon: Radio,          label: "Radiology Settings" },
+      { path: "/tests",                     icon: FlaskConical,   label: "Test Catalog" },
+      { path: "/outsourced-labs",           icon: Building2,      label: "Outsourced Labs" },
+      { path: "/outsourced-cost-report",    icon: IndianRupee,    label: "Outsource Costs" },
+      { path: "/packages",                  icon: Boxes,          label: "Packages" },
+      { path: "/inventory",                 icon: Package,        label: "Inventory" },
+      { path: "/discounts",                 icon: Tag,            label: "Discounts" },
+      { path: "/referrals",                 icon: Stethoscope,    label: "Doctors" },
+      { path: "/backup-replication",        icon: DatabaseBackup, label: "Backup & Replication", ownerOnly: true },
+      { path: "/system-update",             icon: Download,       label: "System Update" },
+      // Radiology admin items moved from main sidebar
+      { path: "/radiology/pacs-settings",         icon: Server,         label: "PACS & DICOM",        ownerOnly: true },
+      { path: "/dicom-nodes",                     icon: Network,        label: "DICOM Nodes",         ownerOnly: true },
+      { path: "/radiology/modality-management",   icon: Monitor,        label: "Modality Management", ownerOnly: true },
+      { path: "/radiology/dicom-agent-dashboard", icon: Server,         label: "DICOM Agent",         ownerOnly: true },
+      { path: "/radiology/watchdog",              icon: ShieldAlert,    label: "Watchdog",            ownerOnly: true },
+      { path: "/radiology/ai-reporting-settings", icon: BrainCircuit,   label: "AI Reporting",        ownerOnly: true },
+      { path: "/radiology/hl7-settings",          icon: Database,       label: "HL7 Settings",        ownerOnly: true },
+      { path: "/radiology/advanced-tools",        icon: Cpu,            label: "Advanced Radiol Tools", ownerOnly: true },
     ],
   },
 ];
@@ -345,12 +354,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     if (isGroup(n)) {
       const kids = n.children.filter((c) => {
         if (c.ownerOnly && !isOwner) return false;
+        if (c.featureFlag && !isFeatureEnabled(c.featureFlag)) return false;
         return canAccess(session, c.path);
       });
       return kids.length ? [{ ...n, children: kids }] : [];
     }
     // Owner-only items are only visible to admin / super_admin.
     if (n.ownerOnly && !FULL_ACCESS_ROLES.has(session?.user.role ?? "")) return [];
+    if (n.featureFlag && !isFeatureEnabled(n.featureFlag)) return [];
     return canAccess(session, n.path) ? [n] : [];
   });
 
