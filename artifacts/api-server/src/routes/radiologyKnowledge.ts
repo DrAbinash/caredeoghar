@@ -275,6 +275,48 @@ radiologyKnowledgeRouter.post("/master-templates/:id/restore", async (req: Staff
   res.json(updated);
 });
 
+// POST /api/radiology/master-templates/:id/clone
+// Clone a master template to the user's personal library
+radiologyKnowledgeRouter.post("/master-templates/:id/clone", async (req: StaffAuthRequest, res) => {
+  if (!getStaffId(req)) { res.status(401).json({ error: "Auth required" }); return; }
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [master] = await db.select().from(radiologyMasterTemplatesTable).where(eq(radiologyMasterTemplatesTable.id, id));
+  if (!master) { res.status(404).json({ error: "Master template not found" }); return; }
+
+  // Check if already cloned (avoid duplicate key error)
+  const [existing] = await db
+    .select()
+    .from(radiologyPersonalTemplatesTable)
+    .where(and(
+      eq(radiologyPersonalTemplatesTable.staffId, getStaffId(req) as number),
+      eq(radiologyPersonalTemplatesTable.templateName, master.templateName),
+      eq(radiologyPersonalTemplatesTable.isActive, true)
+    ));
+  if (existing) {
+    res.status(409).json({ error: "Already cloned to your personal library", existingId: existing.id });
+    return;
+  }
+
+  const [created] = await db.insert(radiologyPersonalTemplatesTable).values({
+    staffId: getStaffId(req) as number,
+    folder: master.bodyPart || "General",
+    templateName: master.templateName,
+    modality: master.modality,
+    studyType: master.studyType,
+    bodyPart: master.bodyPart,
+    findings: master.findings,
+    impression: master.impression,
+    recommendations: master.recommendations,
+    tags: master.tags,
+    sourceMasterId: master.id,
+  }).returning();
+
+  await logTemplateUsage(getStaffId(req) as number, master.id, "master", master.templateName, "clone", master.modality, master.bodyPart ?? undefined);
+  res.json(created);
+});
+
 // ── PERSONAL TEMPLATES ──
 
 // GET /api/radiology/personal-templates
@@ -541,6 +583,20 @@ radiologyKnowledgeRouter.patch("/knowledge-base/:id", async (req: StaffAuthReque
     .where(eq(radiologyKnowledgeBaseTable.id, id))
     .returning();
   res.json(updated);
+});
+
+// DELETE /api/radiology/knowledge-base/:id (admin only)
+radiologyKnowledgeRouter.delete("/knowledge-base/:id", async (req: StaffAuthRequest, res) => {
+  if (!getStaffId(req) || !isAdmin(req)) {
+    res.status(403).json({ error: "Only admin/super-admin can delete knowledge articles" });
+    return;
+  }
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [existing] = await db.select().from(radiologyKnowledgeBaseTable).where(eq(radiologyKnowledgeBaseTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  await db.update(radiologyKnowledgeBaseTable).set({ isActive: false }).where(eq(radiologyKnowledgeBaseTable.id, id));
+  res.json({ ok: true });
 });
 
 // ── RADIOLOGIST PROFILES ──

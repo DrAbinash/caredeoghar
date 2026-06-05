@@ -20,6 +20,7 @@
     "vitest": "^4.1.5"
   },
   "dependencies": {
-    "docx": "^9.6.1"
+    "docx": "^9.6.1",
+    "playwright": "^1.60.0"
   }
 }
