@@ -269,3 +269,9 @@ id = "6J_0ld5SepqeealDbnYAA"
 uri = "file://RADIOLOGY_IMPLEMENTATION_ROADMAP.md"
 type = "text"
 title = "Radiology Implementation Roadmap"
+
+[[outputs]]
+id = "SD1ZUlvjATGAAsUpE_iI4"
+uri = "file://RADIOLOGY_IMPLEMENTATION_ROADMAP_v2.md"
+type = "text"
+title = "Revised Radiology Implementation Roadmap (v2)"
