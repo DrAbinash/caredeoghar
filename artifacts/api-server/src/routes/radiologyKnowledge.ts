@@ -20,6 +20,21 @@ import { type StaffAuthRequest } from "../middleware/requireStaffAuth.js";
 
 export const radiologyKnowledgeRouter: IRouter = Router();
 
+// Auth helper: req.staffSession is the staff info attached by requireStaffAuth
+function getStaffId(req: StaffAuthRequest): number | undefined {
+  return req.staffSession?.id;
+}
+function getStaffRole(req: StaffAuthRequest): string | undefined {
+  return req.staffSession?.role;
+}
+function getStaffName(req: StaffAuthRequest): string {
+  return req.staffSession?.subjectName ?? "";
+}
+function isAdmin(req: StaffAuthRequest): boolean {
+  const r = getStaffRole(req)?.toLowerCase() ?? "";
+  return r === "admin" || r === "super_admin";
+}
+
 // Helper: log template usage for analytics
 async function logTemplateUsage(
   staffId: number,
@@ -88,8 +103,8 @@ radiologyKnowledgeRouter.get("/master-templates/:id", async (req: StaffAuthReque
   if (!row) { res.status(404).json({ error: "Not found" }); return; }
 
   // Log view
-  if (req.staff?.id) {
-    await logTemplateUsage(req.staff.id, id, "master", row.templateName, "view", row.modality, row.bodyPart);
+  if (getStaffId(req)) {
+    await logTemplateUsage(getStaffId(req) as number, id, "master", row.templateName, "view", row.modality, row.bodyPart ?? undefined);
   }
 
   res.json(row);
@@ -98,7 +113,7 @@ radiologyKnowledgeRouter.get("/master-templates/:id", async (req: StaffAuthReque
 // POST /api/radiology/master-templates
 // Create new master template (super-admin only)
 radiologyKnowledgeRouter.post("/master-templates", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id || !["admin", "super-admin"].includes(req.staff.role?.toLowerCase() ?? "")) {
+  if (!getStaffId(req) || !["admin", "super-admin"].includes(getStaffRole(req)?.toLowerCase() ?? "")) {
     res.status(403).json({ error: "Only admin/super-admin can create master templates" });
     return;
   }
@@ -115,8 +130,8 @@ radiologyKnowledgeRouter.post("/master-templates", async (req: StaffAuthRequest,
     tags: body.tags ?? [],
     version: 1,
     isLocked: true,
-    createdBy: `${req.staff.firstName ?? ""} ${req.staff.lastName ?? ""}`.trim(),
-    modifiedBy: `${req.staff.firstName ?? ""} ${req.staff.lastName ?? ""}`.trim(),
+    createdBy: req.staffSession?.subjectName ?? "",
+    modifiedBy: req.staffSession?.subjectName ?? "",
   }).returning();
 
   // Also create initial version
@@ -128,7 +143,7 @@ radiologyKnowledgeRouter.post("/master-templates", async (req: StaffAuthRequest,
     recommendations: body.recommendations,
     tags: body.tags ?? [],
     changeNotes: "Initial creation",
-    changedBy: `${req.staff.firstName ?? ""} ${req.staff.lastName ?? ""}`.trim(),
+    changedBy: req.staffSession?.subjectName ?? "",
   });
 
   res.status(201).json(inserted);
@@ -137,7 +152,7 @@ radiologyKnowledgeRouter.post("/master-templates", async (req: StaffAuthRequest,
 // PATCH /api/radiology/master-templates/:id
 // Update master template (super-admin only). Creates new version.
 radiologyKnowledgeRouter.patch("/master-templates/:id", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id || !["admin", "super-admin"].includes(req.staff.role?.toLowerCase() ?? "")) {
+  if (!getStaffId(req) || !["admin", "super-admin"].includes(getStaffRole(req)?.toLowerCase() ?? "")) {
     res.status(403).json({ error: "Only admin/super-admin can edit master templates" });
     return;
   }
@@ -149,7 +164,7 @@ radiologyKnowledgeRouter.patch("/master-templates/:id", async (req: StaffAuthReq
 
   const body = req.body;
   const newVersion = (existing.version ?? 1) + 1;
-  const modifiedBy = `${req.staff.firstName ?? ""} ${req.staff.lastName ?? ""}`.trim();
+  const modifiedBy = req.staffSession?.subjectName ?? "";
 
   const [updated] = await db
     .update(radiologyMasterTemplatesTable)
@@ -186,7 +201,7 @@ radiologyKnowledgeRouter.patch("/master-templates/:id", async (req: StaffAuthReq
 // DELETE /api/radiology/master-templates/:id
 // Soft delete (super-admin only)
 radiologyKnowledgeRouter.delete("/master-templates/:id", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id || !["admin", "super-admin"].includes(req.staff.role?.toLowerCase() ?? "")) {
+  if (!getStaffId(req) || !["admin", "super-admin"].includes(getStaffRole(req)?.toLowerCase() ?? "")) {
     res.status(403).json({ error: "Only admin/super-admin can delete master templates" });
     return;
   }
@@ -214,7 +229,7 @@ radiologyKnowledgeRouter.get("/master-templates/:id/versions", async (req, res) 
 // POST /api/radiology/master-templates/:id/restore
 // Restore a specific version
 radiologyKnowledgeRouter.post("/master-templates/:id/restore", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id || !["admin", "super-admin"].includes(req.staff.role?.toLowerCase() ?? "")) {
+  if (!getStaffId(req) || !["admin", "super-admin"].includes(getStaffRole(req)?.toLowerCase() ?? "")) {
     res.status(403).json({ error: "Only admin/super-admin can restore versions" });
     return;
   }
@@ -232,7 +247,7 @@ radiologyKnowledgeRouter.post("/master-templates/:id/restore", async (req: Staff
   if (!existing) { res.status(404).json({ error: "Template not found" }); return; }
 
   const newVersion = (existing.version ?? 1) + 1;
-  const modifiedBy = `${req.staff.firstName ?? ""} ${req.staff.lastName ?? ""}`.trim();
+  const modifiedBy = req.staffSession?.subjectName ?? "";
 
   const [updated] = await db
     .update(radiologyMasterTemplatesTable)
@@ -265,10 +280,10 @@ radiologyKnowledgeRouter.post("/master-templates/:id/restore", async (req: Staff
 
 // GET /api/radiology/personal-templates
 radiologyKnowledgeRouter.get("/personal-templates", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id) { res.status(401).json({ error: "Auth required" }); return; }
+  if (!getStaffId(req)) { res.status(401).json({ error: "Auth required" }); return; }
   const { folder, modality, bodyPart, q } = req.query;
   const conditions = [
-    eq(radiologyPersonalTemplatesTable.staffId, req.staff.id),
+    eq(radiologyPersonalTemplatesTable.staffId, getStaffId(req) as number),
     eq(radiologyPersonalTemplatesTable.isActive, true),
   ];
   if (folder) conditions.push(eq(radiologyPersonalTemplatesTable.folder, folder as string));
@@ -297,10 +312,10 @@ radiologyKnowledgeRouter.get("/personal-templates", async (req: StaffAuthRequest
 // POST /api/radiology/personal-templates
 // Create new personal template (from scratch or clone from master)
 radiologyKnowledgeRouter.post("/personal-templates", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id) { res.status(401).json({ error: "Auth required" }); return; }
+  if (!getStaffId(req)) { res.status(401).json({ error: "Auth required" }); return; }
   const body = req.body;
   const [inserted] = await db.insert(radiologyPersonalTemplatesTable).values({
-    staffId: req.staff.id,
+    staffId: getStaffId(req) as number,
     folder: body.folder ?? "General",
     templateName: body.templateName,
     modality: body.modality,
@@ -316,21 +331,21 @@ radiologyKnowledgeRouter.post("/personal-templates", async (req: StaffAuthReques
   }).returning();
 
   // Log usage
-  await logTemplateUsage(req.staff.id, inserted.id, "personal", body.templateName, "create", body.modality, body.bodyPart);
+  await logTemplateUsage(getStaffId(req) as number, inserted.id, "personal", body.templateName, "create", body.modality, body.bodyPart);
 
   res.status(201).json(inserted);
 });
 
 // PATCH /api/radiology/personal-templates/:id
 radiologyKnowledgeRouter.patch("/personal-templates/:id", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id) { res.status(401).json({ error: "Auth required" }); return; }
+  if (!getStaffId(req)) { res.status(401).json({ error: "Auth required" }); return; }
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const [existing] = await db
     .select()
     .from(radiologyPersonalTemplatesTable)
-    .where(and(eq(radiologyPersonalTemplatesTable.id, id), eq(radiologyPersonalTemplatesTable.staffId, req.staff.id)));
+    .where(and(eq(radiologyPersonalTemplatesTable.id, id), eq(radiologyPersonalTemplatesTable.staffId, getStaffId(req) as number)));
   if (!existing) { res.status(404).json({ error: "Not found or not owned" }); return; }
 
   const body = req.body;
@@ -357,14 +372,14 @@ radiologyKnowledgeRouter.patch("/personal-templates/:id", async (req: StaffAuthR
 
 // DELETE /api/radiology/personal-templates/:id
 radiologyKnowledgeRouter.delete("/personal-templates/:id", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id) { res.status(401).json({ error: "Auth required" }); return; }
+  if (!getStaffId(req)) { res.status(401).json({ error: "Auth required" }); return; }
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const [existing] = await db
     .select()
     .from(radiologyPersonalTemplatesTable)
-    .where(and(eq(radiologyPersonalTemplatesTable.id, id), eq(radiologyPersonalTemplatesTable.staffId, req.staff.id)));
+    .where(and(eq(radiologyPersonalTemplatesTable.id, id), eq(radiologyPersonalTemplatesTable.staffId, getStaffId(req) as number)));
   if (!existing) { res.status(404).json({ error: "Not found or not owned" }); return; }
 
   await db.update(radiologyPersonalTemplatesTable).set({ isActive: false }).where(eq(radiologyPersonalTemplatesTable.id, id));
@@ -375,21 +390,21 @@ radiologyKnowledgeRouter.delete("/personal-templates/:id", async (req: StaffAuth
 
 // GET /api/radiology/template-packs
 radiologyKnowledgeRouter.get("/template-packs", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id) { res.status(401).json({ error: "Auth required" }); return; }
+  if (!getStaffId(req)) { res.status(401).json({ error: "Auth required" }); return; }
   const rows = await db
     .select()
     .from(radiologyTemplatePacksTable)
-    .where(and(eq(radiologyTemplatePacksTable.staffId, req.staff.id), eq(radiologyTemplatePacksTable.isActive, true)))
+    .where(and(eq(radiologyTemplatePacksTable.staffId, getStaffId(req) as number), eq(radiologyTemplatePacksTable.isActive, true)))
     .orderBy(asc(radiologyTemplatePacksTable.packName));
   res.json({ packs: rows });
 });
 
 // POST /api/radiology/template-packs
 radiologyKnowledgeRouter.post("/template-packs", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id) { res.status(401).json({ error: "Auth required" }); return; }
+  if (!getStaffId(req)) { res.status(401).json({ error: "Auth required" }); return; }
   const body = req.body;
   const [inserted] = await db.insert(radiologyTemplatePacksTable).values({
-    staffId: req.staff.id,
+    staffId: getStaffId(req) as number,
     packName: body.packName,
     description: body.description,
     modality: body.modality,
@@ -401,14 +416,14 @@ radiologyKnowledgeRouter.post("/template-packs", async (req: StaffAuthRequest, r
 
 // PATCH /api/radiology/template-packs/:id
 radiologyKnowledgeRouter.patch("/template-packs/:id", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id) { res.status(401).json({ error: "Auth required" }); return; }
+  if (!getStaffId(req)) { res.status(401).json({ error: "Auth required" }); return; }
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const [existing] = await db
     .select()
     .from(radiologyTemplatePacksTable)
-    .where(and(eq(radiologyTemplatePacksTable.id, id), eq(radiologyTemplatePacksTable.staffId, req.staff.id)));
+    .where(and(eq(radiologyTemplatePacksTable.id, id), eq(radiologyTemplatePacksTable.staffId, getStaffId(req) as number)));
   if (!existing) { res.status(404).json({ error: "Not found or not owned" }); return; }
 
   const body = req.body;
@@ -429,14 +444,14 @@ radiologyKnowledgeRouter.patch("/template-packs/:id", async (req: StaffAuthReque
 
 // DELETE /api/radiology/template-packs/:id
 radiologyKnowledgeRouter.delete("/template-packs/:id", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id) { res.status(401).json({ error: "Auth required" }); return; }
+  if (!getStaffId(req)) { res.status(401).json({ error: "Auth required" }); return; }
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const [existing] = await db
     .select()
     .from(radiologyTemplatePacksTable)
-    .where(and(eq(radiologyTemplatePacksTable.id, id), eq(radiologyTemplatePacksTable.staffId, req.staff.id)));
+    .where(and(eq(radiologyTemplatePacksTable.id, id), eq(radiologyTemplatePacksTable.staffId, getStaffId(req) as number)));
   if (!existing) { res.status(404).json({ error: "Not found or not owned" }); return; }
 
   await db.update(radiologyTemplatePacksTable).set({ isActive: false }).where(eq(radiologyTemplatePacksTable.id, id));
@@ -482,7 +497,7 @@ radiologyKnowledgeRouter.get("/knowledge-base/:id", async (req, res) => {
 
 // POST /api/radiology/knowledge-base (admin only)
 radiologyKnowledgeRouter.post("/knowledge-base", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id || !["admin", "super-admin"].includes(req.staff.role?.toLowerCase() ?? "")) {
+  if (!getStaffId(req) || !["admin", "super-admin"].includes(getStaffRole(req)?.toLowerCase() ?? "")) {
     res.status(403).json({ error: "Only admin/super-admin can add knowledge articles" });
     return;
   }
@@ -502,7 +517,7 @@ radiologyKnowledgeRouter.post("/knowledge-base", async (req: StaffAuthRequest, r
 
 // PATCH /api/radiology/knowledge-base/:id (admin only)
 radiologyKnowledgeRouter.patch("/knowledge-base/:id", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id || !["admin", "super-admin"].includes(req.staff.role?.toLowerCase() ?? "")) {
+  if (!getStaffId(req) || !["admin", "super-admin"].includes(getStaffRole(req)?.toLowerCase() ?? "")) {
     res.status(403).json({ error: "Only admin/super-admin can edit knowledge articles" });
     return;
   }
@@ -533,31 +548,33 @@ radiologyKnowledgeRouter.patch("/knowledge-base/:id", async (req: StaffAuthReque
 
 // GET /api/radiology/profiles
 radiologyKnowledgeRouter.get("/profiles", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id) { res.status(401).json({ error: "Auth required" }); return; }
+  if (!getStaffId(req)) { res.status(401).json({ error: "Auth required" }); return; }
   const [row] = await db
     .select()
     .from(radiologistProfilesTable)
-    .where(eq(radiologistProfilesTable.staffId, req.staff.id));
+    .where(eq(radiologistProfilesTable.staffId, getStaffId(req) as number));
   if (!row) {
     // Auto-create default profile
     const [created] = await db.insert(radiologistProfilesTable).values({
-      staffId: req.staff.id,
+      staffId: getStaffId(req) as number,
       profileName: "Default",
     }).returning();
-    return res.json(created);
+    res.json(created);
+    return;
   }
   res.json(row);
+  return;
 });
 
 // PUT /api/radiology/profiles
 radiologyKnowledgeRouter.put("/profiles", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id) { res.status(401).json({ error: "Auth required" }); return; }
+  if (!getStaffId(req)) { res.status(401).json({ error: "Auth required" }); return; }
   const body = req.body;
 
   const [existing] = await db
     .select()
     .from(radiologistProfilesTable)
-    .where(eq(radiologistProfilesTable.staffId, req.staff.id));
+    .where(eq(radiologistProfilesTable.staffId, getStaffId(req) as number));
 
   if (existing) {
     const [updated] = await db
@@ -578,11 +595,12 @@ radiologyKnowledgeRouter.put("/profiles", async (req: StaffAuthRequest, res) => 
       })
       .where(eq(radiologistProfilesTable.id, existing.id))
       .returning();
-    return res.json(updated);
+    res.json(updated);
+    return;
   }
 
   const [created] = await db.insert(radiologistProfilesTable).values({
-    staffId: req.staff.id,
+    staffId: getStaffId(req) as number,
     profileName: body.profileName ?? "Default",
     defaultMasterGroup: body.defaultMasterGroup,
     defaultModality: body.defaultModality,
@@ -603,20 +621,20 @@ radiologyKnowledgeRouter.put("/profiles", async (req: StaffAuthRequest, res) => 
 
 // GET /api/radiology/favorites
 radiologyKnowledgeRouter.get("/favorites", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id) { res.status(401).json({ error: "Auth required" }); return; }
+  if (!getStaffId(req)) { res.status(401).json({ error: "Auth required" }); return; }
   const rows = await db
     .select()
     .from(radiologyTemplateFavoritesTable)
-    .where(eq(radiologyTemplateFavoritesTable.staffId, req.staff.id));
+    .where(eq(radiologyTemplateFavoritesTable.staffId, getStaffId(req) as number));
   res.json({ favorites: rows });
 });
 
 // POST /api/radiology/favorites
 radiologyKnowledgeRouter.post("/favorites", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id) { res.status(401).json({ error: "Auth required" }); return; }
+  if (!getStaffId(req)) { res.status(401).json({ error: "Auth required" }); return; }
   const body = req.body;
   const [inserted] = await db.insert(radiologyTemplateFavoritesTable).values({
-    staffId: req.staff.id,
+    staffId: getStaffId(req) as number,
     templateId: body.templateId,
     templateSource: body.templateSource,
     folder: body.folder ?? "Favorites",
@@ -626,14 +644,14 @@ radiologyKnowledgeRouter.post("/favorites", async (req: StaffAuthRequest, res) =
 
 // DELETE /api/radiology/favorites/:id
 radiologyKnowledgeRouter.delete("/favorites/:id", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id) { res.status(401).json({ error: "Auth required" }); return; }
+  if (!getStaffId(req)) { res.status(401).json({ error: "Auth required" }); return; }
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const [existing] = await db
     .select()
     .from(radiologyTemplateFavoritesTable)
-    .where(and(eq(radiologyTemplateFavoritesTable.id, id), eq(radiologyTemplateFavoritesTable.staffId, req.staff.id)));
+    .where(and(eq(radiologyTemplateFavoritesTable.id, id), eq(radiologyTemplateFavoritesTable.staffId, getStaffId(req) as number)));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
 
   await db.delete(radiologyTemplateFavoritesTable).where(eq(radiologyTemplateFavoritesTable.id, id));
@@ -645,7 +663,7 @@ radiologyKnowledgeRouter.delete("/favorites/:id", async (req: StaffAuthRequest, 
 // POST /api/radiology/compare
 // Compare personal template with master template
 radiologyKnowledgeRouter.post("/compare", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id) { res.status(401).json({ error: "Auth required" }); return; }
+  if (!getStaffId(req)) { res.status(401).json({ error: "Auth required" }); return; }
   const { personalTemplateId, masterTemplateId } = req.body;
   if (!Number.isFinite(personalTemplateId) || !Number.isFinite(masterTemplateId)) {
     res.status(400).json({ error: "Invalid template IDs" });
@@ -657,7 +675,7 @@ radiologyKnowledgeRouter.post("/compare", async (req: StaffAuthRequest, res) => 
     .from(radiologyPersonalTemplatesTable)
     .where(and(
       eq(radiologyPersonalTemplatesTable.id, personalTemplateId),
-      eq(radiologyPersonalTemplatesTable.staffId, req.staff.id)
+      eq(radiologyPersonalTemplatesTable.staffId, getStaffId(req) as number)
     ));
   if (!personal) { res.status(404).json({ error: "Personal template not found" }); return; }
 
@@ -686,7 +704,7 @@ radiologyKnowledgeRouter.post("/compare", async (req: StaffAuthRequest, res) => 
   }
 
   const [inserted] = await db.insert(radiologyTemplateComparisonTable).values({
-    staffId: req.staff.id,
+    staffId: getStaffId(req) as number,
     personalTemplateId,
     masterTemplateId,
     personalSnapshot: JSON.stringify(personal),
@@ -701,7 +719,7 @@ radiologyKnowledgeRouter.post("/compare", async (req: StaffAuthRequest, res) => 
 
 // GET /api/radiology/analytics/usage
 radiologyKnowledgeRouter.get("/analytics/usage", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id) { res.status(401).json({ error: "Auth required" }); return; }
+  if (!getStaffId(req)) { res.status(401).json({ error: "Auth required" }); return; }
   const days = Math.min(Number(req.query.days || 30), 365);
   const since = new Date();
   since.setDate(since.getDate() - days);
@@ -716,7 +734,7 @@ radiologyKnowledgeRouter.get("/analytics/usage", async (req: StaffAuthRequest, r
     })
     .from(radiologyTemplateUsageTable)
     .where(and(
-      eq(radiologyTemplateUsageTable.staffId, req.staff.id),
+      eq(radiologyTemplateUsageTable.staffId, getStaffId(req) as number),
       gte(radiologyTemplateUsageTable.createdAt, since)
     ))
     .groupBy(radiologyTemplateUsageTable.templateId, radiologyTemplateUsageTable.templateSource, radiologyTemplateUsageTable.templateName)
@@ -731,7 +749,7 @@ radiologyKnowledgeRouter.get("/analytics/usage", async (req: StaffAuthRequest, r
     })
     .from(radiologyTemplateUsageTable)
     .where(and(
-      eq(radiologyTemplateUsageTable.staffId, req.staff.id),
+      eq(radiologyTemplateUsageTable.staffId, getStaffId(req) as number),
       gte(radiologyTemplateUsageTable.createdAt, since)
     ))
     .groupBy(radiologyTemplateUsageTable.modality)
@@ -745,7 +763,7 @@ radiologyKnowledgeRouter.get("/analytics/usage", async (req: StaffAuthRequest, r
     })
     .from(radiologyTemplateUsageTable)
     .where(and(
-      eq(radiologyTemplateUsageTable.staffId, req.staff.id),
+      eq(radiologyTemplateUsageTable.staffId, getStaffId(req) as number),
       gte(radiologyTemplateUsageTable.createdAt, since)
     ))
     .groupBy(radiologyTemplateUsageTable.action)
@@ -757,7 +775,7 @@ radiologyKnowledgeRouter.get("/analytics/usage", async (req: StaffAuthRequest, r
 // GET /api/radiology/analytics/global
 // Global analytics (admin only)
 radiologyKnowledgeRouter.get("/analytics/global", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id || !["admin", "super-admin"].includes(req.staff.role?.toLowerCase() ?? "")) {
+  if (!getStaffId(req) || !["admin", "super-admin"].includes(getStaffRole(req)?.toLowerCase() ?? "")) {
     res.status(403).json({ error: "Admin access required" });
     return;
   }
@@ -797,7 +815,7 @@ radiologyKnowledgeRouter.get("/analytics/global", async (req: StaffAuthRequest, 
 // POST /api/radiology/seed-master-templates
 // Seed initial master templates (admin only, idempotent)
 radiologyKnowledgeRouter.post("/seed-master-templates", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id || !["admin", "super-admin"].includes(req.staff.role?.toLowerCase() ?? "")) {
+  if (!getStaffId(req) || !["admin", "super-admin"].includes(getStaffRole(req)?.toLowerCase() ?? "")) {
     res.status(403).json({ error: "Only admin/super-admin can seed templates" });
     return;
   }
@@ -1090,7 +1108,7 @@ radiologyKnowledgeRouter.post("/seed-master-templates", async (req: StaffAuthReq
 
 // POST /api/radiology/seed-knowledge-base
 radiologyKnowledgeRouter.post("/seed-knowledge-base", async (req: StaffAuthRequest, res) => {
-  if (!req.staff?.id || !["admin", "super-admin"].includes(req.staff.role?.toLowerCase() ?? "")) {
+  if (!getStaffId(req) || !["admin", "super-admin"].includes(getStaffRole(req)?.toLowerCase() ?? "")) {
     res.status(403).json({ error: "Only admin/super-admin can seed knowledge base" });
     return;
   }

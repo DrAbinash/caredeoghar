@@ -4813,6 +4813,14 @@ function RadiologySettingsTab() {
   const [reportAssembler, setReportAssembler] = useState(() => isFeatureEnabled("radiologyReportAssembler"));
   const [qaGuard, setQAGuard] = useState(() => isFeatureEnabled("radiologyQAGuard"));
   const [finalizationDashboard, setFinalizationDashboard] = useState(() => isFeatureEnabled("radiologyFinalizationDashboard"));
+  // Phase 4: Knowledge Platform
+  const [knowledgePlatform, setKnowledgePlatform] = useState(() => isFeatureEnabled("radiologyKnowledgePlatform"));
+  const [masterTemplates, setMasterTemplates] = useState(() => isFeatureEnabled("radiologyMasterTemplates"));
+  const [personalLibrary, setPersonalLibrary] = useState(() => isFeatureEnabled("radiologyPersonalLibrary"));
+  const [templatePacks, setTemplatePacks] = useState(() => isFeatureEnabled("radiologyTemplatePacks"));
+  const [knowledgeBase_v2, setKnowledgeBase_v2] = useState(() => isFeatureEnabled("radiologyKnowledgeBase_v2"));
+  const [signOffProfiles, setSignOffProfiles] = useState(() => isFeatureEnabled("radiologySignOffProfiles"));
+  const [templateAnalytics, setTemplateAnalytics] = useState(() => isFeatureEnabled("radiologyTemplateAnalytics"));
 
   const toggles = [
     { id: "radiologyQuickAdd", label: "Quick Add Buttons", desc: "Alt+1-6 shortcut buttons for instant insertion of common findings", value: quickAdd, set: setQuickAdd },
@@ -4847,6 +4855,16 @@ function RadiologySettingsTab() {
     { id: "radiologyReportAssembler", label: "Report Assembler", desc: "Multi-template selection with auto-combination and deduplication", value: reportAssembler, set: setReportAssembler },
     { id: "radiologyQAGuard", label: "QA Guard", desc: "Comprehensive pre-finalize checks with score and warnings", value: qaGuard, set: setQAGuard },
     { id: "radiologyFinalizationDashboard", label: "Finalization Dashboard", desc: "Final checkpoint before signing with quality score and alerts", value: finalizationDashboard, set: setFinalizationDashboard },
+  ];
+
+  const knowledgePlatformToggles = [
+    { id: "radiologyKnowledgePlatform", label: "Knowledge Platform", desc: "Enable all Phase 4 knowledge features", value: knowledgePlatform, set: setKnowledgePlatform },
+    { id: "radiologyMasterTemplates", label: "Master Templates", desc: "DB-backed master templates with version control (Dr. Sugandha / Dr. Abinash / Care / Hope)", value: masterTemplates, set: setMasterTemplates },
+    { id: "radiologyPersonalLibrary", label: "Personal Template Library", desc: "Save, edit, and organize your own templates with folders", value: personalLibrary, set: setPersonalLibrary },
+    { id: "radiologyTemplatePacks", label: "Template Packs", desc: "Create and apply reusable multi-template packs", value: templatePacks, set: setTemplatePacks },
+    { id: "radiologyKnowledgeBase_v2", label: "Knowledge Base v2", desc: "Searchable DB-backed articles with classification systems", value: knowledgeBase_v2, set: setKnowledgeBase_v2 },
+    { id: "radiologySignOffProfiles", label: "Sign-Off Profiles", desc: "Per-radiologist default settings and preferences", value: signOffProfiles, set: setSignOffProfiles },
+    { id: "radiologyTemplateAnalytics", label: "Template Analytics", desc: "Usage tracking and per-radiologist template statistics", value: templateAnalytics, set: setTemplateAnalytics },
   ];
 
   return (
@@ -4884,6 +4902,32 @@ function RadiologySettingsTab() {
         </div>
         <div className="space-y-2">
           {advancedToggles.map((t) => (
+            <label key={t.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20 cursor-pointer">
+              <div className="pr-4">
+                <div className="text-sm font-medium">{t.label}</div>
+                <div className="text-[11px] text-muted-foreground">{t.desc}</div>
+              </div>
+              <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${t.value ? "bg-primary" : "bg-muted-foreground/40"}`}>
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${t.value ? "translate-x-5" : "translate-x-1"}`} />
+              </span>
+              <input type="checkbox" className="sr-only" checked={t.value} onChange={() => {
+                const next = !t.value;
+                t.set(next);
+                setFeatureFlag(t.id, next);
+              }} />
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Phase 4: Radiology Knowledge Platform */}
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="font-bold text-lg flex items-center gap-2"><BookOpen size={16} /> Radiology Knowledge Platform</h2>
+          <p className="text-sm text-muted-foreground mt-1">Database-backed master templates, personal libraries, knowledge articles, version control, and analytics.</p>
+        </div>
+        <div className="space-y-2">
+          {knowledgePlatformToggles.map((t) => (
             <label key={t.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20 cursor-pointer">
               <div className="pr-4">
                 <div className="text-sm font-medium">{t.label}</div>

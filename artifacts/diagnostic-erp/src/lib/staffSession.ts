@@ -179,6 +179,7 @@ const FEATURE_FLAG_DEFAULTS: Record<string, boolean> = {
   radiologyPriorityEngine: false,
   radiologyComparison: false,
   radiologyFavoritesPack: false,
+  // Phase 2D: Intelligence Layer
   radiologyKnowledgeBase: false,
   radiologyVersionHistory: false,
   radiologyAnalytics: false,
@@ -196,7 +197,7 @@ const FEATURE_FLAG_DEFAULTS: Record<string, boolean> = {
   radiologyMasterTemplates: false,
   radiologyPersonalLibrary: false,
   radiologyTemplatePacks: false,
-  radiologyKnowledgeBase: false,
+  radiologyKnowledgeBase_v2: false,
   radiologySignOffProfiles: false,
   radiologyTemplateAnalytics: false,
   hideDeprecatedNav: false,
