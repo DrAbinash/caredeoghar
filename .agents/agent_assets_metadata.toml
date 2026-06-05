@@ -251,3 +251,9 @@ id = "ee85RHb7ROEsIyEeB611j"
 uri = "file://RADIOLOGY_MODULE_INVENTORY.md"
 type = "text"
 title = "Radiology Module Inventory — Complete"
+
+[[outputs]]
+id = "Jx3kUDKAJRC1C4_b_z1YX"
+uri = "file://RADIOLOGY_ACTION_PLAN.md"
+type = "text"
+title = "Radiology Action Plan"
