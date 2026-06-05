@@ -159,6 +159,7 @@ const FEATURE_FLAG_DEFAULTS: Record<string, boolean> = {
   showPreviousReportPanel: false,
   showFavoritesLibrary: false,
   showQuickAddButtons: false,
+  showSmartFormatBuilder: false,
   hideDeprecatedNav: false,
 };
 

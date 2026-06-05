@@ -287,6 +287,57 @@ patientReportsRouter.get("/:id", async (req, res) => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// Previous reports for a patient (radiology)
+// ────────────────────────────────────────────────────────────────────────────
+
+patientReportsRouter.get("/patient/:patientId", async (req, res) => {
+  const patientId = Number(req.params.patientId);
+  if (!patientId) {
+    res.status(400).json({ error: "patientId is required" });
+    return;
+  }
+  const { type } = req.query as Record<string, string | undefined>;
+  const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+  const offset = Math.max(Number(req.query.offset) || 0, 0);
+
+  const conds = [eq(patientReportsTable.patientId, patientId)];
+  conds.push(eq(patientReportsTable.type, type || "radiology"));
+
+  const rows = await db
+    .select({
+      r: patientReportsTable,
+      patientFirstName: patientsTable.firstName,
+      patientLastName: patientsTable.lastName,
+      testName: testsTable.name,
+      testCode: testsTable.code,
+    })
+    .from(patientReportsTable)
+    .leftJoin(patientsTable, eq(patientReportsTable.patientId, patientsTable.id))
+    .leftJoin(testsTable, eq(patientReportsTable.testId, testsTable.id))
+    .where(and(...conds))
+    .orderBy(desc(patientReportsTable.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  const [{ total = 0 }] = await db
+    .select({ total: sql<number>`COUNT(*)::int` })
+    .from(patientReportsTable)
+    .where(and(...conds));
+
+  res.json({
+    items: rows.map((row) => ({
+      ...row.r,
+      patientName: [row.patientFirstName, row.patientLastName].filter(Boolean).join(" "),
+      testName: row.testName,
+      testCode: row.testCode,
+    })),
+    total,
+    limit,
+    offset,
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // Report-number generator (RPT-YYYYMMDD-NNN)
 // ────────────────────────────────────────────────────────────────────────────
 function todayStamp(): string {

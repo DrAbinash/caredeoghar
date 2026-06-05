@@ -268,11 +268,11 @@ export const studyTatMetricsTable = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
   },
   (t) => ({
-    studyIdx: index("tat_study_idx").on(t.studyId),
-    modalityIdx: index("tat_modality_idx").on(t.modality),
-    delayedIdx: index("tat_delayed_idx").on(t.isDelayed),
-    radiologistIdx: index("tat_radiologist_idx").on(t.radiologistId),
-    slaIdx: index("tat_sla_idx").on(t.slaBreached),
+    studyIdx: index("study_tat_metrics_study_idx").on(t.studyId),
+    modalityIdx: index("study_tat_metrics_modality_idx").on(t.modality),
+    delayedIdx: index("study_tat_metrics_delayed_idx").on(t.isDelayed),
+    radiologistIdx: index("study_tat_metrics_radiologist_idx").on(t.radiologistId),
+    slaIdx: index("study_tat_metrics_sla_idx").on(t.slaBreached),
   }),
 );
 export type StudyTatMetric = typeof studyTatMetricsTable.$inferSelect;

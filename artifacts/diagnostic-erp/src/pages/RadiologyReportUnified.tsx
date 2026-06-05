@@ -9,10 +9,12 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { readStaffSession, isFeatureEnabled } from "@/lib/staffSession";
+import { detectStudyContext } from "@/lib/radiologyQuickAddData";
 import {
   generateReportPDF, loadPrintSettings, savePrintSettings, type PrintSettings,
 } from "@/lib/reportPdfGenerator";
 import ReportPrintSettingsDialog from "@/components/ReportPrintSettingsDialog";
+import RadiologyProductivityPanel from "@/components/RadiologyProductivityPanel";
 import {
   ArrowLeft, ExternalLink, MonitorPlay, Save, CheckCircle2, AlertTriangle,
   RefreshCw, FileText, Sparkles, ChevronDown, ChevronUp, Download, Settings2,
@@ -221,12 +223,14 @@ export default function RadiologyReportUnified() {
   const ffMeasurementPanel = isFeatureEnabled("showMeasurementPanel");
   const ffAiDraftPanel = isFeatureEnabled("showAiDraftPanel");
   const ffQuickAdd = isFeatureEnabled("showQuickAddButtons");
+  const ffSmartFormat = isFeatureEnabled("showSmartFormatBuilder");
   const ffMacros = isFeatureEnabled("showRadiologyMacros");
   const ffPreviousReport = isFeatureEnabled("showPreviousReportPanel");
   const ffFavorites = isFeatureEnabled("showFavoritesLibrary");
 
   // ── Panel visibility (local toggles, independent of flags) ──
   const [showQuickAddPanel, setShowQuickAddPanel] = useState(false);
+  const [showSmartFormatPanel, setShowSmartFormatPanel] = useState(false);
   const [showMacroPanel, setShowMacroPanel] = useState(false);
   const [showPrevReportPanel, setShowPrevReportPanel] = useState(false);
   const [showFavPanel, setShowFavPanel] = useState(false);
@@ -275,6 +279,86 @@ export default function RadiologyReportUnified() {
       } catch { /* ignore */ }
     }
   }, [entry]);
+
+  // ── Keyboard shortcuts for productivity panels ──
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (entry?.status === "REPORT_FINAL" || entry?.status === "DELIVERED") return;
+      const ta = document.activeElement as HTMLTextAreaElement | null;
+      if (!ta || ta.tagName !== "TEXTAREA") return;
+
+      // Quick Add: Alt+1 through Alt+6
+      if (e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        const digit = e.key;
+        if (digit >= "1" && digit <= "6") {
+          e.preventDefault();
+          const ctx = detectStudyContext(entry?.modality || "", entry?.studyDescription, entry?.studyDescription, entry?.studyDescription);
+          const btn = ctx?.buttons[Number(digit) - 1];
+          if (btn) {
+            const start = ta.selectionStart;
+            const end = ta.selectionEnd;
+            const before = reportBody.slice(0, start);
+            const after = reportBody.slice(end);
+            const newText = before + btn.text + (after.startsWith("\n") || after === "" ? "" : "\n") + after;
+            setReportBody(newText);
+            if (btn.impression) setImpression((prev) => (prev ? prev + "\n" + btn.impression! : btn.impression!));
+            setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + btn.text.length; ta.focus(); }, 0);
+            toast({ title: `Quick Add: ${btn.label}`, description: btn.shortcut });
+          }
+        }
+      }
+
+      // Smart Format: Shift+Alt+1 through Shift+Alt+6
+      if (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        const digit = e.key;
+        if (digit >= "1" && digit <= "6") {
+          e.preventDefault();
+          const ctx = detectStudyContext(entry?.modality || "", entry?.studyDescription, entry?.studyDescription, entry?.studyDescription);
+          const fmt = ctx?.smartFormats?.[Number(digit) - 1];
+          if (fmt) {
+            const start = ta.selectionStart;
+            const end = ta.selectionEnd;
+            const before = reportBody.slice(0, start);
+            const after = reportBody.slice(end);
+            const newText = before + fmt.findings + (after.startsWith("\n") || after === "" ? "" : "\n") + after;
+            setReportBody(newText);
+            if (fmt.impression) setImpression((prev) => (prev ? prev + "\n" + fmt.impression! : fmt.impression!));
+            if (fmt.title) setReportTitle(fmt.title);
+            setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + fmt.findings.length; ta.focus(); }, 0);
+            toast({ title: `Smart Format: ${fmt.label}`, description: fmt.shortcut });
+          }
+        }
+      }
+
+      // Macro autocomplete: when user types Space / Enter / Tab after a "/word" in the body textarea
+      const isMacroTrigger = (e.key === " " || e.key === "Enter" || e.key === "Tab") && ta === textareaRef.current;
+      if (isMacroTrigger && ffMacros && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        const start = ta.selectionStart;
+        const text = reportBody.slice(0, start);
+        const match = text.match(/\/(\w+)$/);
+        if (match) {
+          const macroKey = match[1].toLowerCase();
+          const ctx = detectStudyContext(entry?.modality || "", entry?.studyDescription, entry?.studyDescription, entry?.studyDescription);
+          const allMacros = [...(ctx?.smartFormats?.map((f) => ({ shortcut: f.id.toLowerCase(), expansion: f.findings })) ?? []), ...(ctx?.buttons?.map((b) => ({ shortcut: b.label.toLowerCase().replace(/\s/g, "_"), expansion: b.text })) ?? [])];
+          const macro = allMacros.find((m) => m.shortcut === macroKey) || (ctx ? null : null);
+          if (macro) {
+            e.preventDefault();
+            const before = reportBody.slice(0, start - macroKey.length - 1);
+            const after = reportBody.slice(start);
+            const newText = before + macro.expansion + (e.key === " " ? " " : "") + (after.startsWith("\n") || after === "" ? "" : "\n") + after;
+            setReportBody(newText);
+            setTimeout(() => {
+              ta.selectionStart = ta.selectionEnd = before.length + macro.expansion.length + (e.key === " " ? 1 : 0);
+              ta.focus();
+            }, 0);
+            toast({ title: `Macro expanded: /${macroKey}` });
+          }
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [entry, reportBody, impression, reportTitle, toast, ffMacros, textareaRef, setReportBody, setImpression, setReportTitle]);
 
   // ── Mutations ──
   const saveDraftMutation = useMutation({
@@ -549,9 +633,22 @@ export default function RadiologyReportUnified() {
                 className="h-7 text-xs gap-1"
                 onClick={() => setShowQuickAddPanel((v) => !v)}
                 disabled={isFinal}
-                title="Quick Add Phrases"
+                title="Quick Add Phrases (Alt+1-6)"
               >
                 <Plus className="h-3.5 w-3.5" /> Quick
+              </Button>
+            )}
+            {/* Smart Format — feature-flagged */}
+            {ffSmartFormat && (
+              <Button
+                size="sm"
+                variant={showSmartFormatPanel ? "default" : "outline"}
+                className="h-7 text-xs gap-1"
+                onClick={() => setShowSmartFormatPanel((v) => !v)}
+                disabled={isFinal}
+                title="Smart Format Builder (Shift+Alt+1-6)"
+              >
+                <Sparkles className="h-3.5 w-3.5" /> Formats
               </Button>
             )}
             {/* Macros — feature-flagged */}
@@ -671,8 +768,8 @@ export default function RadiologyReportUnified() {
 
       {/* ── Main body (3 columns) ────────────────────────────────────────── */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left: Measurements + Normal templates */}
-        <div className={`${(showMeasurements && ffMeasurementPanel) || showNormalPicker || (showQuickAddPanel && ffQuickAdd) || (showMacroPanel && ffMacros) || (showPrevReportPanel && ffPreviousReport) || (showFavPanel && ffFavorites) ? "w-64" : "w-0"} border-r bg-muted/20 flex flex-col overflow-hidden transition-all duration-200`}>
+        {/* Left: Measurements + Normal templates + Productivity panels */}
+        <div className={`${(showMeasurements && ffMeasurementPanel) || showNormalPicker || (showQuickAddPanel && ffQuickAdd) || (showSmartFormatPanel && ffSmartFormat) || (showMacroPanel && ffMacros) || (showPrevReportPanel && ffPreviousReport) || (showFavPanel && ffFavorites) ? "w-64" : "w-0"} border-r bg-muted/20 flex flex-col overflow-hidden transition-all duration-200`}>
           {/* Normal templates picker */}
           {showNormalPicker && (
             <div className="shrink-0 border-b p-3">
@@ -728,116 +825,173 @@ export default function RadiologyReportUnified() {
             </div>
           )}
 
-          {/* Quick Add panel — placeholder */}
+          {/* Quick Add panel — real */}
           {ffQuickAdd && showQuickAddPanel && (
-            <div className="flex-1 overflow-y-auto p-3 border-t">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1">
-                <Plus className="h-3 w-3" /> Quick Add
-              </h3>
-              <p className="text-[10px] text-muted-foreground mb-2">
-                Click a phrase to insert at cursor.
-              </p>
-              <div className="space-y-1">
-                {[
-                  { label: "Normal", text: "Normal in size, shape, and echotexture." },
-                  { label: "No lesion", text: "No focal lesion seen." },
-                  { label: "Adequate", text: "Adequate visualization." },
-                  { label: "Not visualized", text: "Not adequately visualized." },
-                  { label: "Enlarged", text: "Enlarged in size." },
-                  { label: "Atrophy", text: "Atrophic changes noted." },
-                  { label: "No calc", text: "No calcification." },
-                  { label: "No fluid", text: "No free fluid." },
-                  { label: "Correlate", text: "Please correlate clinically." },
-                  { label: "Follow-up", text: "Follow-up advised." },
-                ].map((p) => (
-                  <button
-                    key={p.label}
-                    onClick={() => {
-                      const ta = textareaRef.current;
-                      if (ta) {
-                        const start = ta.selectionStart;
-                        const end = ta.selectionEnd;
-                        const before = reportBody.slice(0, start);
-                        const after = reportBody.slice(end);
-                        const newText = before + p.text + (after.startsWith("\n") || after === "" ? "" : "\n") + after;
-                        setReportBody(newText);
-                        setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + p.text.length; ta.focus(); }, 0);
-                      } else {
-                        setReportBody((prev) => prev + "\n" + p.text);
-                      }
-                    }}
-                    className="w-full text-left text-xs rounded-md border bg-background px-2 py-1.5 hover:bg-blue-50 hover:border-blue-200 transition-colors"
-                    disabled={isFinal}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
+            <div className="flex-1 overflow-y-auto border-t">
+              <RadiologyProductivityPanel
+                mode="quick_add"
+                modality={entry.modality}
+                studyDescription={entry.studyDescription}
+                testName={entry.studyDescription}
+                bodyPart={entry.studyDescription}
+                isFinal={isFinal}
+                reportBody={reportBody}
+                impression={impression}
+                onInsertBody={(text) => {
+                  const ta = textareaRef.current;
+                  if (ta) {
+                    const start = ta.selectionStart;
+                    const end = ta.selectionEnd;
+                    const before = reportBody.slice(0, start);
+                    const after = reportBody.slice(end);
+                    const newText = before + text + (after.startsWith("\n") || after === "" ? "" : "\n") + after;
+                    setReportBody(newText);
+                    setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + text.length; ta.focus(); }, 0);
+                  } else {
+                    setReportBody((prev) => prev + "\n" + text);
+                  }
+                }}
+                onInsertImpression={(text) => {
+                  setImpression((prev) => (prev ? prev + "\n" + text : text));
+                }}
+                onSetBody={setReportBody}
+                onSetImpression={setImpression}
+              />
             </div>
           )}
 
-          {/* Macros panel — placeholder */}
+          {/* Smart Format panel — real */}
+          {ffSmartFormat && showSmartFormatPanel && (
+            <div className="flex-1 overflow-y-auto border-t">
+              <RadiologyProductivityPanel
+                mode="smart_format"
+                modality={entry.modality}
+                studyDescription={entry.studyDescription}
+                testName={entry.studyDescription}
+                bodyPart={entry.studyDescription}
+                isFinal={isFinal}
+                reportBody={reportBody}
+                impression={impression}
+                onInsertBody={(text) => {
+                  const ta = textareaRef.current;
+                  if (ta) {
+                    const start = ta.selectionStart;
+                    const end = ta.selectionEnd;
+                    const before = reportBody.slice(0, start);
+                    const after = reportBody.slice(end);
+                    const newText = before + text + (after.startsWith("\n") || after === "" ? "" : "\n") + after;
+                    setReportBody(newText);
+                    setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + text.length; ta.focus(); }, 0);
+                  } else {
+                    setReportBody((prev) => prev + "\n" + text);
+                  }
+                }}
+                onInsertImpression={(text) => {
+                  setImpression((prev) => (prev ? prev + "\n" + text : text));
+                }}
+                onSetBody={setReportBody}
+                onSetImpression={setImpression}
+              />
+            </div>
+          )}
+
+          {/* Macros panel — real */}
           {ffMacros && showMacroPanel && (
-            <div className="flex-1 overflow-y-auto p-3 border-t">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1">
-                <Zap className="h-3 w-3" /> Macros
-              </h3>
-              <p className="text-[10px] text-muted-foreground mb-2">
-                Structured template macros with placeholders.
-              </p>
-              <div className="space-y-1">
-                {[
-                  { label: "Normal Abdomen", macro: "LIVER: {{liver_status}}. GALLBLADDER: {{gb_status}}. PANCREAS: {{pancreas_status}}. SPLEEN: {{spleen_status}}. KIDNEYS: {{kidney_status}}. BLADDER: {{bladder_status}}." },
-                  { label: "Normal Pelvis", macro: "UTERUS: {{uterus_status}}. RIGHT OVARY: {{ro_status}}. LEFT OVARY: {{lo_status}}. ENDOMETRIUM: {{endo_status}}." },
-                  { label: "Obstetric", macro: "BPD: {{bpd}}. HC: {{hc}}. AC: {{ac}}. FL: {{fl}}. CRL: {{crl}}. EFW: {{efw}}. GA: {{ga}}. FHR: {{fhr}}. LIQUOR: {{liquor}}. PLACENTA: {{placenta}}." },
-                  { label: "Doppler", macro: "AORTA: {{aorta}}. IVC: {{ivc}}. PORTAL VEIN: {{pv}}. HEPATIC ARTERY: {{ha}}. RENAL ARTERIES: {{renal}}." },
-                ].map((m) => (
-                  <button
-                    key={m.label}
-                    onClick={() => {
-                      setReportBody((prev) => prev + "\n\n" + m.macro);
-                      toast({ title: `Inserted macro: ${m.label}` });
-                    }}
-                    className="w-full text-left text-xs rounded-md border bg-background px-2 py-1.5 hover:bg-purple-50 hover:border-purple-200 transition-colors"
-                    disabled={isFinal}
-                  >
-                    <span className="font-medium">{m.label}</span>
-                    <span className="text-[10px] text-muted-foreground ml-1">(placeholder)</span>
-                  </button>
-                ))}
-              </div>
+            <div className="flex-1 overflow-y-auto border-t">
+              <RadiologyProductivityPanel
+                mode="macros"
+                modality={entry.modality}
+                studyDescription={entry.studyDescription}
+                testName={entry.studyDescription}
+                bodyPart={entry.studyDescription}
+                isFinal={isFinal}
+                reportBody={reportBody}
+                impression={impression}
+                onInsertBody={(text) => {
+                  const ta = textareaRef.current;
+                  if (ta) {
+                    const start = ta.selectionStart;
+                    const end = ta.selectionEnd;
+                    const before = reportBody.slice(0, start);
+                    const after = reportBody.slice(end);
+                    const newText = before + text + (after.startsWith("\n") || after === "" ? "" : "\n") + after;
+                    setReportBody(newText);
+                    setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + text.length; ta.focus(); }, 0);
+                  } else {
+                    setReportBody((prev) => prev + "\n" + text);
+                  }
+                }}
+                onInsertImpression={(text) => {
+                  setImpression((prev) => (prev ? prev + "\n" + text : text));
+                }}
+                onSetBody={setReportBody}
+                onSetImpression={setImpression}
+              />
             </div>
           )}
 
-          {/* Previous Reports panel — placeholder */}
+          {/* Previous Reports panel — real */}
           {ffPreviousReport && showPrevReportPanel && (
-            <div className="flex-1 overflow-y-auto p-3 border-t">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1">
-                <History className="h-3 w-3" /> Previous Reports
-              </h3>
-              <div className="space-y-1">
-                <div className="text-[10px] text-muted-foreground bg-muted/50 rounded p-2">
-                  <p className="font-medium text-xs">Placeholder</p>
-                  <p>Prior radiology reports for this patient will appear here.</p>
-                  <p className="mt-1">Planned: API endpoint <code>/api/patient-reports/patient/:id</code></p>
-                </div>
-              </div>
+            <div className="flex-1 overflow-y-auto border-t">
+              <RadiologyProductivityPanel
+                mode="previous"
+                modality={entry.modality}
+                patientId={entry.patientId}
+                isFinal={isFinal}
+                reportBody={reportBody}
+                impression={impression}
+                onInsertBody={(text) => {
+                  const ta = textareaRef.current;
+                  if (ta) {
+                    const start = ta.selectionStart;
+                    const end = ta.selectionEnd;
+                    const before = reportBody.slice(0, start);
+                    const after = reportBody.slice(end);
+                    const newText = before + text + (after.startsWith("\n") || after === "" ? "" : "\n") + after;
+                    setReportBody(newText);
+                    setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + text.length; ta.focus(); }, 0);
+                  } else {
+                    setReportBody((prev) => prev + "\n" + text);
+                  }
+                }}
+                onInsertImpression={(text) => {
+                  setImpression((prev) => (prev ? prev + "\n" + text : text));
+                }}
+                onSetBody={setReportBody}
+                onSetImpression={setImpression}
+              />
             </div>
           )}
 
-          {/* Favorites panel — placeholder */}
+          {/* Favorites panel — real */}
           {ffFavorites && showFavPanel && (
-            <div className="flex-1 overflow-y-auto p-3 border-t">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1">
-                <Star className="h-3 w-3" /> Favorites
-              </h3>
-              <div className="space-y-1">
-                <div className="text-[10px] text-muted-foreground bg-muted/50 rounded p-2">
-                  <p className="font-medium text-xs">Placeholder</p>
-                  <p>Starred / favorite templates and snippets will appear here.</p>
-                  <p className="mt-1">Planned: per-user favorites table + star toggle on templates</p>
-                </div>
-              </div>
+            <div className="flex-1 overflow-y-auto border-t">
+              <RadiologyProductivityPanel
+                mode="favorites"
+                modality={entry.modality}
+                isFinal={isFinal}
+                reportBody={reportBody}
+                impression={impression}
+                onInsertBody={(text) => {
+                  const ta = textareaRef.current;
+                  if (ta) {
+                    const start = ta.selectionStart;
+                    const end = ta.selectionEnd;
+                    const before = reportBody.slice(0, start);
+                    const after = reportBody.slice(end);
+                    const newText = before + text + (after.startsWith("\n") || after === "" ? "" : "\n") + after;
+                    setReportBody(newText);
+                    setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + text.length; ta.focus(); }, 0);
+                  } else {
+                    setReportBody((prev) => prev + "\n" + text);
+                  }
+                }}
+                onInsertImpression={(text) => {
+                  setImpression((prev) => (prev ? prev + "\n" + text : text));
+                }}
+                onSetBody={setReportBody}
+                onSetImpression={setImpression}
+              />
             </div>
           )}
         </div>

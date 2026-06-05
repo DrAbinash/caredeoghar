@@ -84,6 +84,7 @@ import { floorsRouter, roomsRouter, modalitiesRouter } from "./locations";
 import { aiReportingRouter } from "./aiReporting";
 import { aiPromptTemplatesRouter } from "./aiPromptTemplates";
 import { aiModelRoutesRouter } from "./aiModelRoutes";
+import { radiologySnippetsRouter } from "./radiologySnippets";
 import { bankingRouter, bankingWebhookRouter } from "./banking";
 import { syncRouter } from "./sync";
 import { usgExtractionRouter } from "./usgExtraction";
@@ -406,6 +407,13 @@ router.use(
   "/radiology/structured-report-templates",
   requireStaffAuth,
   structuredReportTemplatesRouter,
+);
+
+// Radiology Snippets — Quick Add, Smart Format, Favorites, Macros
+router.use(
+  "/radiology/snippets",
+  requireStaffAuth,
+  radiologySnippetsRouter,
 );
 
 // Clinical report & compliance routes — /reports permission.
