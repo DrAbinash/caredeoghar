@@ -2451,6 +2451,8 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
 function BillingPrintTab() {
   const [settings, setSettings] = useState<import("@/lib/billPrintSettings").BillPrintSettings | null>(null);
   const [loading, setLoading] = useState(true);
+  const [saved, setSaved] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     import("@/lib/billPrintSettings").then((m) => {
@@ -2461,18 +2463,24 @@ function BillingPrintTab() {
 
   const update = useCallback((patch: Partial<import("@/lib/billPrintSettings").BillPrintSettings>) => {
     setSettings((prev) => (prev ? { ...prev, ...patch } : prev));
+    setSaved(false);
   }, []);
 
   const save = () => {
     if (!settings) return;
     import("@/lib/billPrintSettings").then((m) => {
       m.saveBillPrintSettings(settings);
+      toast({ title: "Saved", description: "Billing print settings saved." });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     });
   };
 
   const reset = () => {
     import("@/lib/billPrintSettings").then((m) => {
       setSettings(m.loadBillPrintSettings());
+      toast({ title: "Reset", description: "Billing print settings reset to defaults." });
+      setSaved(false);
     });
   };
 
@@ -2615,7 +2623,13 @@ function BillingPrintTab() {
 
       <div className="flex justify-end gap-2 pt-2">
         <Button variant="outline" onClick={reset}>Reset</Button>
-        <Button onClick={save}>Save Settings</Button>
+        <Button onClick={save} className={saved ? "bg-green-600 hover:bg-green-700" : ""}>
+          {saved ? (
+            <span className="flex items-center gap-1.5"><Check size={16} /> Saved</span>
+          ) : (
+            "Save Settings"
+          )}
+        </Button>
       </div>
     </div>
   );
