@@ -779,7 +779,7 @@ export default function RadiologyWorklist() {
                               <Button
                                 size="sm"
                                 className="h-7 px-2 text-xs"
-                                onClick={() => navigate(`/radiology/reporting-workspace/${entry.id}`)}
+                                onClick={() => navigate(`/radiology/unified-report/${entry.id}`)}
                                 title="Open Reporting Workspace"
                               >
                                 <FileEdit className="h-3 w-3 mr-1" />
