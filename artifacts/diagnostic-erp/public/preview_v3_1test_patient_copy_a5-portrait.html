@@ -50,15 +50,11 @@
   .page-break { page-break-before: always; }
   .header-repeat { display: none; }
   @media print {
-    body { margin: 0; padding: 0; color: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    html, body { margin: 0; padding: 0; color: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .receipt { margin: 0; }
-    .receipt * { color: #000 !important; border-color: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .receipt * { background: transparent !important; }
-    .receipt td { color: #000 !important; }
-    .receipt th { color: #000 !important; }
-    .receipt div { color: #000 !important; }
-    .receipt span { color: #000 !important; }
-    .receipt img { color: #000 !important; }
+    .receipt * { color: #000 !important; border-color: #000 !important; background: transparent !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .receipt *::before, .receipt *::after { background: transparent !important; border-color: #000 !important; }
+    img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
 </style>
 </head>
