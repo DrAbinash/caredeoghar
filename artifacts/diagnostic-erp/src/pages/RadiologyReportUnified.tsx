@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { readStaffSession } from "@/lib/staffSession";
+import { readStaffSession, isFeatureEnabled } from "@/lib/staffSession";
 import {
   generateReportPDF, loadPrintSettings, savePrintSettings, type PrintSettings,
 } from "@/lib/reportPdfGenerator";
@@ -17,6 +17,7 @@ import {
   ArrowLeft, ExternalLink, MonitorPlay, Save, CheckCircle2, AlertTriangle,
   RefreshCw, FileText, Sparkles, ChevronDown, ChevronUp, Download, Settings2,
   ClipboardPaste, RotateCcw, X, ThumbsUp, ThumbsDown,
+  Zap, Star, History, Plus,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -215,6 +216,20 @@ export default function RadiologyReportUnified() {
   const [printSettingsOpen, setPrintSettingsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
+
+  // ── Feature flags ──
+  const ffMeasurementPanel = isFeatureEnabled("showMeasurementPanel");
+  const ffAiDraftPanel = isFeatureEnabled("showAiDraftPanel");
+  const ffQuickAdd = isFeatureEnabled("showQuickAddButtons");
+  const ffMacros = isFeatureEnabled("showRadiologyMacros");
+  const ffPreviousReport = isFeatureEnabled("showPreviousReportPanel");
+  const ffFavorites = isFeatureEnabled("showFavoritesLibrary");
+
+  // ── Panel visibility (local toggles, independent of flags) ──
+  const [showQuickAddPanel, setShowQuickAddPanel] = useState(false);
+  const [showMacroPanel, setShowMacroPanel] = useState(false);
+  const [showPrevReportPanel, setShowPrevReportPanel] = useState(false);
+  const [showFavPanel, setShowFavPanel] = useState(false);
 
   // ── Queries ──
   const { data: entry, isLoading: entryLoading } = useQuery<WorklistEntry>({
@@ -500,28 +515,83 @@ export default function RadiologyReportUnified() {
             >
               <MonitorPlay className="h-3.5 w-3.5" /> Images
             </Button>
-            {/* Measurements toggle */}
-            <Button
-              size="sm"
-              variant={showMeasurements ? "default" : "outline"}
-              className="h-7 text-xs gap-1"
-              onClick={() => setShowMeasurements((v) => !v)}
-              disabled={measurements.length === 0}
-            >
-              <ClipboardPaste className="h-3.5 w-3.5" /> Measurements
-              {measurements.length > 0 && (
-                <Badge className="text-[9px] h-3.5 px-1 bg-primary-foreground text-primary ml-0.5">{measurements.length}</Badge>
-              )}
-            </Button>
-            {/* AI toggle */}
-            <Button
-              size="sm"
-              variant={showAiDraft ? "default" : "outline"}
-              className="h-7 text-xs gap-1"
-              onClick={() => setShowAiDraft((v) => !v)}
-            >
-              <Sparkles className="h-3.5 w-3.5" /> AI
-            </Button>
+            {/* Measurements toggle — feature-flagged */}
+            {ffMeasurementPanel && (
+              <Button
+                size="sm"
+                variant={showMeasurements ? "default" : "outline"}
+                className="h-7 text-xs gap-1"
+                onClick={() => setShowMeasurements((v) => !v)}
+                disabled={measurements.length === 0}
+              >
+                <ClipboardPaste className="h-3.5 w-3.5" /> Measurements
+                {measurements.length > 0 && (
+                  <Badge className="text-[9px] h-3.5 px-1 bg-primary-foreground text-primary ml-0.5">{measurements.length}</Badge>
+                )}
+              </Button>
+            )}
+            {/* AI toggle — feature-flagged */}
+            {ffAiDraftPanel && (
+              <Button
+                size="sm"
+                variant={showAiDraft ? "default" : "outline"}
+                className="h-7 text-xs gap-1"
+                onClick={() => setShowAiDraft((v) => !v)}
+              >
+                <Sparkles className="h-3.5 w-3.5" /> AI
+              </Button>
+            )}
+            {/* Quick Add — feature-flagged */}
+            {ffQuickAdd && (
+              <Button
+                size="sm"
+                variant={showQuickAddPanel ? "default" : "outline"}
+                className="h-7 text-xs gap-1"
+                onClick={() => setShowQuickAddPanel((v) => !v)}
+                disabled={isFinal}
+                title="Quick Add Phrases"
+              >
+                <Plus className="h-3.5 w-3.5" /> Quick
+              </Button>
+            )}
+            {/* Macros — feature-flagged */}
+            {ffMacros && (
+              <Button
+                size="sm"
+                variant={showMacroPanel ? "default" : "outline"}
+                className="h-7 text-xs gap-1"
+                onClick={() => setShowMacroPanel((v) => !v)}
+                disabled={isFinal}
+                title="Radiology Macros"
+              >
+                <Zap className="h-3.5 w-3.5" /> Macros
+              </Button>
+            )}
+            {/* Previous Reports — feature-flagged */}
+            {ffPreviousReport && (
+              <Button
+                size="sm"
+                variant={showPrevReportPanel ? "default" : "outline"}
+                className="h-7 text-xs gap-1"
+                onClick={() => setShowPrevReportPanel((v) => !v)}
+                title="Previous Reports"
+              >
+                <History className="h-3.5 w-3.5" /> Prior
+              </Button>
+            )}
+            {/* Favorites — feature-flagged */}
+            {ffFavorites && (
+              <Button
+                size="sm"
+                variant={showFavPanel ? "default" : "outline"}
+                className="h-7 text-xs gap-1"
+                onClick={() => setShowFavPanel((v) => !v)}
+                disabled={isFinal}
+                title="Favorite Templates"
+              >
+                <Star className="h-3.5 w-3.5" /> Favorites
+              </Button>
+            )}
             {/* Normal button */}
             <Button
               size="sm"
@@ -602,7 +672,7 @@ export default function RadiologyReportUnified() {
       {/* ── Main body (3 columns) ────────────────────────────────────────── */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Measurements + Normal templates */}
-        <div className={`${showMeasurements || showNormalPicker ? "w-64" : "w-0"} border-r bg-muted/20 flex flex-col overflow-hidden transition-all duration-200`}>
+        <div className={`${(showMeasurements && ffMeasurementPanel) || showNormalPicker || (showQuickAddPanel && ffQuickAdd) || (showMacroPanel && ffMacros) || (showPrevReportPanel && ffPreviousReport) || (showFavPanel && ffFavorites) ? "w-64" : "w-0"} border-r bg-muted/20 flex flex-col overflow-hidden transition-all duration-200`}>
           {/* Normal templates picker */}
           {showNormalPicker && (
             <div className="shrink-0 border-b p-3">
@@ -626,8 +696,8 @@ export default function RadiologyReportUnified() {
             </div>
           )}
 
-          {/* Approved measurements */}
-          {showMeasurements && (
+          {/* Approved measurements — feature-flagged */}
+          {ffMeasurementPanel && showMeasurements && (
             <div className="flex-1 overflow-y-auto p-3">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1">
                 <ClipboardPaste className="h-3 w-3" /> Approved Measurements
@@ -657,12 +727,125 @@ export default function RadiologyReportUnified() {
               )}
             </div>
           )}
+
+          {/* Quick Add panel — placeholder */}
+          {ffQuickAdd && showQuickAddPanel && (
+            <div className="flex-1 overflow-y-auto p-3 border-t">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1">
+                <Plus className="h-3 w-3" /> Quick Add
+              </h3>
+              <p className="text-[10px] text-muted-foreground mb-2">
+                Click a phrase to insert at cursor.
+              </p>
+              <div className="space-y-1">
+                {[
+                  { label: "Normal", text: "Normal in size, shape, and echotexture." },
+                  { label: "No lesion", text: "No focal lesion seen." },
+                  { label: "Adequate", text: "Adequate visualization." },
+                  { label: "Not visualized", text: "Not adequately visualized." },
+                  { label: "Enlarged", text: "Enlarged in size." },
+                  { label: "Atrophy", text: "Atrophic changes noted." },
+                  { label: "No calc", text: "No calcification." },
+                  { label: "No fluid", text: "No free fluid." },
+                  { label: "Correlate", text: "Please correlate clinically." },
+                  { label: "Follow-up", text: "Follow-up advised." },
+                ].map((p) => (
+                  <button
+                    key={p.label}
+                    onClick={() => {
+                      const ta = textareaRef.current;
+                      if (ta) {
+                        const start = ta.selectionStart;
+                        const end = ta.selectionEnd;
+                        const before = reportBody.slice(0, start);
+                        const after = reportBody.slice(end);
+                        const newText = before + p.text + (after.startsWith("\n") || after === "" ? "" : "\n") + after;
+                        setReportBody(newText);
+                        setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + p.text.length; ta.focus(); }, 0);
+                      } else {
+                        setReportBody((prev) => prev + "\n" + p.text);
+                      }
+                    }}
+                    className="w-full text-left text-xs rounded-md border bg-background px-2 py-1.5 hover:bg-blue-50 hover:border-blue-200 transition-colors"
+                    disabled={isFinal}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Macros panel — placeholder */}
+          {ffMacros && showMacroPanel && (
+            <div className="flex-1 overflow-y-auto p-3 border-t">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1">
+                <Zap className="h-3 w-3" /> Macros
+              </h3>
+              <p className="text-[10px] text-muted-foreground mb-2">
+                Structured template macros with placeholders.
+              </p>
+              <div className="space-y-1">
+                {[
+                  { label: "Normal Abdomen", macro: "LIVER: {{liver_status}}. GALLBLADDER: {{gb_status}}. PANCREAS: {{pancreas_status}}. SPLEEN: {{spleen_status}}. KIDNEYS: {{kidney_status}}. BLADDER: {{bladder_status}}." },
+                  { label: "Normal Pelvis", macro: "UTERUS: {{uterus_status}}. RIGHT OVARY: {{ro_status}}. LEFT OVARY: {{lo_status}}. ENDOMETRIUM: {{endo_status}}." },
+                  { label: "Obstetric", macro: "BPD: {{bpd}}. HC: {{hc}}. AC: {{ac}}. FL: {{fl}}. CRL: {{crl}}. EFW: {{efw}}. GA: {{ga}}. FHR: {{fhr}}. LIQUOR: {{liquor}}. PLACENTA: {{placenta}}." },
+                  { label: "Doppler", macro: "AORTA: {{aorta}}. IVC: {{ivc}}. PORTAL VEIN: {{pv}}. HEPATIC ARTERY: {{ha}}. RENAL ARTERIES: {{renal}}." },
+                ].map((m) => (
+                  <button
+                    key={m.label}
+                    onClick={() => {
+                      setReportBody((prev) => prev + "\n\n" + m.macro);
+                      toast({ title: `Inserted macro: ${m.label}` });
+                    }}
+                    className="w-full text-left text-xs rounded-md border bg-background px-2 py-1.5 hover:bg-purple-50 hover:border-purple-200 transition-colors"
+                    disabled={isFinal}
+                  >
+                    <span className="font-medium">{m.label}</span>
+                    <span className="text-[10px] text-muted-foreground ml-1">(placeholder)</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Previous Reports panel — placeholder */}
+          {ffPreviousReport && showPrevReportPanel && (
+            <div className="flex-1 overflow-y-auto p-3 border-t">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1">
+                <History className="h-3 w-3" /> Previous Reports
+              </h3>
+              <div className="space-y-1">
+                <div className="text-[10px] text-muted-foreground bg-muted/50 rounded p-2">
+                  <p className="font-medium text-xs">Placeholder</p>
+                  <p>Prior radiology reports for this patient will appear here.</p>
+                  <p className="mt-1">Planned: API endpoint <code>/api/patient-reports/patient/:id</code></p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Favorites panel — placeholder */}
+          {ffFavorites && showFavPanel && (
+            <div className="flex-1 overflow-y-auto p-3 border-t">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1">
+                <Star className="h-3 w-3" /> Favorites
+              </h3>
+              <div className="space-y-1">
+                <div className="text-[10px] text-muted-foreground bg-muted/50 rounded p-2">
+                  <p className="font-medium text-xs">Placeholder</p>
+                  <p>Starred / favorite templates and snippets will appear here.</p>
+                  <p className="mt-1">Planned: per-user favorites table + star toggle on templates</p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Center: Report Editor */}
         <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-          {/* AI Draft input (collapsible) */}
-          {showAiDraft && (
+          {/* AI Draft input — feature-flagged */}
+          {ffAiDraftPanel && showAiDraft && (
             <div className="shrink-0 border-b p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-semibold flex items-center gap-1">
