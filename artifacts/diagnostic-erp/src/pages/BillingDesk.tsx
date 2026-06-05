@@ -2065,45 +2065,44 @@ export default function BillingDesk() {
               <div className="flex-shrink-0 bg-card p-3 space-y-2 border-b border-card-border lg:rounded-b-xl">
                 {/* ── Action buttons — always visible ── */}
                 <div className="space-y-2 pt-1">
-                  <Button
-                    onClick={() => {
-                      if (generatingRef.current || !!lastBillRef.current) return;
-                      generatingRef.current = true;
-                      printAfterSaveRef.current = true;
-                      generateMut.mutate();
-                    }}
-                    disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || !!lastBill || (discountAmt > 0 && !discountReason) || (needsFormF && !clinic?.formFBillingPrompt && ((clinic?.formFGuardianRequired !== false && !husbandName.trim()) || (clinic?.formFAddressRequired !== false && !patientAddress.trim()))) || (needsDicom && !dicomFieldsComplete)}
-                    className={`w-full h-12 text-lg font-bold border-0 shadow-lg disabled:shadow-none ${lastBill ? "bg-green-600 text-white disabled:bg-green-600 disabled:text-white disabled:opacity-80" : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white disabled:from-muted disabled:to-muted disabled:text-slate-900 dark:text-slate-900"}`}
-                    title={lastBill ? `Bill ${lastBill.billNumber} already saved — click Reset to start a new bill` : discountAmt > 0 && !discountReason ? "Select a discount reason before generating bill" : needsFormF && !clinic?.formFBillingPrompt && ((clinic?.formFGuardianRequired !== false && !husbandName.trim()) || (clinic?.formFAddressRequired !== false && !patientAddress.trim())) ? "Fill required Form F fields (Husband Name & Address)" : needsDicom && !dicomFieldsComplete ? "Fill all 4 DICOM Worklist fields before generating bill" : undefined}
-                  >
-                    {lastBill ? <><CheckCircle2 size={18} className="mr-2" />Bill Saved ✓</> : generateMut.isPending ? <><Printer size={18} className="mr-2 animate-spin" />Saving…</> : <><Printer size={18} className="mr-2" />Save &amp; Print</>}
-                  </Button>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    <Button variant="outline" onClick={resetAll} disabled={generateMut.isPending} className="h-8 text-[11px] px-2">
-                      <RefreshCcw size={13} className="mr-1" /> Reset
-                    </Button>
+                  <div className="flex gap-1.5">
                     <Button
-                      variant="outline"
-                      onClick={async () => {
-                        if (!lastBill) return;
-                        await printBarcode(lastBill);
+                      onClick={() => {
+                        if (generatingRef.current || !!lastBillRef.current) return;
+                        generatingRef.current = true;
+                        printAfterSaveRef.current = true;
+                        generateMut.mutate();
                       }}
-                      disabled={!lastBill}
-                      className="h-8 text-[11px] px-2"
+                      disabled={!selectedPatient || selectedTests.length === 0 || generateMut.isPending || !!lastBill || (discountAmt > 0 && !discountReason) || (needsFormF && !clinic?.formFBillingPrompt && ((clinic?.formFGuardianRequired !== false && !husbandName.trim()) || (clinic?.formFAddressRequired !== false && !patientAddress.trim()))) || (needsDicom && !dicomFieldsComplete)}
+                      className={`flex-1 h-12 text-lg font-bold border-0 shadow-lg disabled:shadow-none ${lastBill ? "bg-green-600 text-white disabled:bg-green-600 disabled:text-white disabled:opacity-80" : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white disabled:from-muted disabled:to-muted disabled:text-slate-900 dark:text-slate-900"}`}
+                      title={lastBill ? `Bill ${lastBill.billNumber} already saved — click New to start a new bill` : discountAmt > 0 && !discountReason ? "Select a discount reason before generating bill" : needsFormF && !clinic?.formFBillingPrompt && ((clinic?.formFGuardianRequired !== false && !husbandName.trim()) || (clinic?.formFAddressRequired !== false && !patientAddress.trim())) ? "Fill required Form F fields (Husband Name & Address)" : needsDicom && !dicomFieldsComplete ? "Fill all 4 DICOM Worklist fields before generating bill" : undefined}
                     >
-                      Barcode
+                      {lastBill ? <><CheckCircle2 size={18} className="mr-2" />Bill Saved ✓</> : generateMut.isPending ? <><Printer size={18} className="mr-2 animate-spin" />Saving…</> : <><Printer size={18} className="mr-2" />Save &amp; Print</>}
                     </Button>
-                    <Button
-                      variant="outline"
-                      onClick={async () => {
-                        if (!lastBill) return;
-                        await printToken(lastBill, clinic);
-                      }}
-                      disabled={!lastBill || !lastBill.tokenNo}
-                      className="h-8 text-[11px] px-2"
-                    >
-                      Token
-                    </Button>
+                    <div className="flex gap-1.5 flex-1">
+                      <Button
+                        variant="outline"
+                        onClick={async () => {
+                          if (!lastBill) return;
+                          await printBarcode(lastBill);
+                        }}
+                        disabled={!lastBill}
+                        className="flex-1 h-12 text-[11px] px-2"
+                      >
+                        Barcode
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={async () => {
+                          if (!lastBill) return;
+                          await printToken(lastBill, clinic);
+                        }}
+                        disabled={!lastBill || !lastBill.tokenNo}
+                        className="flex-1 h-12 text-[11px] px-2"
+                      >
+                        Token
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -899,7 +899,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {/* Footer — compact, just sync panel + palette when logged out */}
         <div className={cn("py-2 border-t flex items-center relative z-10", sidebarCollapsed ? "px-1 justify-center" : "px-3 justify-between")} style={{ borderColor: "rgba(255,255,255,0.1)" }}>
           {!sidebarCollapsed && (
-            <span className="text-[10px] text-sidebar-foreground/30">v1.0.0</span>
+            <span className="text-[10px] text-sidebar-foreground/30">Care Diagnostics</span>
           )}
           <div className="flex items-center gap-1">
             {!session && (
@@ -1077,9 +1077,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        {/* Desktop top-right control bar — pinned to top-right of main area */}
+        {/* Desktop top-right control bar — in normal flow, no absolute positioning */}
         {!isMobile && (
-          <div className="absolute top-2 right-3 z-20 flex items-center gap-1">
+          <div className="flex items-center justify-end gap-1 px-3 py-1 border-b border-border/40 bg-card/50">
             {scannerActive && (
               <div title="Scanner active" className="flex items-center gap-1 rounded-md bg-emerald-100 text-emerald-700 px-1.5 py-0.5 text-[10px] font-medium">
                 <ScanLine size={10} />
@@ -1088,7 +1088,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             )}
             <FullscreenToggle />
             <ThemeToggle />
-            <span className="text-[10px] text-muted-foreground ml-1 hidden xl:inline">v1.0.0</span>
           </div>
         )}
 
