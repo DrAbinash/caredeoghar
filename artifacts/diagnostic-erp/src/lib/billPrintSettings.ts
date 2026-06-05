@@ -180,9 +180,9 @@ export function loadBillPrintSettings(global: Partial<BillPrintSettings> = {}): 
   const role = getUserRole();
   const defaults = mergeDefaults(GLOBAL_BILL_PRINT_DEFAULTS, role);
   const merged = { ...defaults, ...global };
-  if (!userId) return merged;
+  const key = userId ? LS_KEY(userId) : "diagnosticErp:billPrintSettings";
   try {
-    const raw = window.localStorage.getItem(LS_KEY(userId));
+    const raw = window.localStorage.getItem(key);
     if (!raw) return merged;
     const parsed = JSON.parse(raw);
     // If adminLock is on globally, ignore local overrides
@@ -195,11 +195,11 @@ export function loadBillPrintSettings(global: Partial<BillPrintSettings> = {}): 
 
 export function saveBillPrintSettings(settings: Partial<BillPrintSettings>): void {
   const userId = getUserId();
-  if (!userId) return;
+  const key = userId ? LS_KEY(userId) : "diagnosticErp:billPrintSettings";
   try {
     const existing = loadBillPrintSettings();
     const merged = { ...existing, ...settings };
-    window.localStorage.setItem(LS_KEY(userId), JSON.stringify(merged));
+    window.localStorage.setItem(key, JSON.stringify(merged));
   } catch {
     // ignore
   }
