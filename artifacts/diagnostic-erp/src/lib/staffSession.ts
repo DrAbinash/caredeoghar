@@ -191,6 +191,14 @@ const FEATURE_FLAG_DEFAULTS: Record<string, boolean> = {
   radiologyReportAssembler: false,
   radiologyQAGuard: false,
   radiologyFinalizationDashboard: false,
+  // Phase 4: Radiology Knowledge Platform
+  radiologyKnowledgePlatform: false,
+  radiologyMasterTemplates: false,
+  radiologyPersonalLibrary: false,
+  radiologyTemplatePacks: false,
+  radiologyKnowledgeBase: false,
+  radiologySignOffProfiles: false,
+  radiologyTemplateAnalytics: false,
   hideDeprecatedNav: false,
   billingDeskStepped: false,
 };

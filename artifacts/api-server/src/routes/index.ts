@@ -82,6 +82,7 @@ import { radiologyReportGeneratorRouter } from "./radiology-report-generator";
 import { structuredReportTemplatesRouter } from "./structuredReportTemplates";
 import { floorsRouter, roomsRouter, modalitiesRouter } from "./locations";
 import { aiReportingRouter } from "./aiReporting";
+import { radiologyKnowledgeRouter } from "./radiologyKnowledge";
 import { aiPromptTemplatesRouter } from "./aiPromptTemplates";
 import { aiModelRoutesRouter } from "./aiModelRoutes";
 import { radiologySnippetsRouter } from "./radiologySnippets";
@@ -414,6 +415,13 @@ router.use(
   "/radiology/snippets",
   requireStaffAuth,
   radiologySnippetsRouter,
+);
+
+// Phase 4: Radiology Knowledge Platform — Master Templates, Personal Library, Knowledge Base
+router.use(
+  "/radiology/knowledge",
+  requireStaffAuth,
+  radiologyKnowledgeRouter,
 );
 
 // Clinical report & compliance routes — /reports permission.

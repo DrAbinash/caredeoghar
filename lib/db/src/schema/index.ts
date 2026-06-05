@@ -107,3 +107,4 @@ export * from "./auditLogs";
 export * from "./rolePermissions";
 export * from "./uploadFiles";
 export * from "./radiologySnippets";
+export * from "./radiologyKnowledge";
