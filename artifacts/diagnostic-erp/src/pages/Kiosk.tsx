@@ -12,7 +12,13 @@ type KioskConfig = {
   upiVpa: string;
   upiName: string;
   welcomeMessage: string;
+  paymentGateway: string;
+  razorpayEnabled: boolean;
+  payuEnabled: boolean;
+  iciciEnabled: boolean;
 };
+
+type PaymentMode = "upi" | "icici";
 
 type TestItem = {
   id: number;
@@ -78,14 +84,17 @@ export default function Kiosk() {
   const [activeCategory, setActiveCategory] = useState<string>("");
 
   // Step 4 — payment
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>("upi");
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
   const [utr, setUtr] = useState("");
   const [utrError, setUtrError] = useState("");
+  const [iciciSessionRef, setIciciSessionRef] = useState("");
+  const [iciciPaying, setIciciPaying] = useState(false);
 
   // Step 5 — result
   const [result, setResult] = useState<ConfirmResult | null>(null);
 
-  // Load config + tests on mount
+  // Load config + tests on mount; also check URL for ICICI callback
   useEffect(() => {
     async function load() {
       setLoading(true);
@@ -100,6 +109,11 @@ export default function Kiosk() {
         setTests(td.tests ?? []);
         const cats = [...new Set((td.tests ?? []).map(t => t.category || "General"))];
         if (cats.length > 0) setActiveCategory(cats[0]!);
+        if (cfg.paymentGateway === "icici" && cfg.iciciEnabled) {
+          setPaymentMode("icici");
+        } else if (cfg.paymentGateway === "upi" && cfg.upiVpa) {
+          setPaymentMode("upi");
+        }
       } catch {
         setError("Failed to load kiosk data. Please ask staff for assistance.");
       } finally {
@@ -109,27 +123,46 @@ export default function Kiosk() {
     load();
   }, []);
 
+  // Handle ICICI callback on mount (after redirect back)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const success = params.get("success");
+    const failed = params.get("failed");
+    const ref = params.get("ref");
+    const gateway = params.get("gateway");
+    if (gateway === "icici" && ref) {
+      if (success) {
+        setIciciSessionRef(ref);
+        completeIciciRegistration(ref);
+      } else if (failed) {
+        setError("Payment was not completed. Please try again.");
+        setIciciPaying(false);
+      }
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
   const selectedTests = tests.filter(t => selectedIds.has(t.id));
   const subtotal = selectedTests.reduce((s, t) => s + t.price, 0);
   const grouped = groupByCategory(tests);
   const categories = Object.keys(grouped).sort();
 
-  // Generate UPI QR code when entering payment step
+  // Generate UPI QR code when entering payment step (UPI mode)
   useEffect(() => {
-    if (step !== 4 || !config?.upiVpa) return;
+    if (step !== 4 || !config?.upiVpa || paymentMode !== "upi") return;
     const ref = `KIOSK${Date.now()}`;
     const patName = encodeURIComponent((firstName + " " + lastName).trim().slice(0, 40));
     const upiLink = `upi://pay?pa=${encodeURIComponent(config.upiVpa)}&pn=${patName}&am=${subtotal.toFixed(2)}&tn=${ref}&cu=INR`;
     QRCode.toDataURL(upiLink, { width: 280, margin: 2, color: { dark: "#1a1a2e", light: "#ffffff" } })
       .then(setQrDataUrl)
       .catch(() => setQrDataUrl(""));
-  }, [step, config, firstName, lastName, subtotal]);
+  }, [step, config, paymentMode, firstName, lastName, subtotal]);
 
   const resetAll = useCallback(() => {
     setStep(0);
     setFirstName(""); setLastName(""); setPhone(""); setGender("male"); setDob("");
     setSelectedIds(new Set()); setUtr(""); setUtrError(""); setResult(null); setQrDataUrl("");
-    setError("");
+    setIciciSessionRef(""); setIciciPaying(false); setError("");
   }, []);
 
   // ── Validation ────────────────────────────────────────────────────────────
@@ -149,7 +182,74 @@ export default function Kiosk() {
     setUtrError(""); return true;
   }
 
-  // ── Submit registration ───────────────────────────────────────────────────
+  // ── ICICI payment flow ───────────────────────────────────────────────────
+  async function initiateIciciPayment() {
+    setSubmitting(true);
+    setError("");
+    try {
+      const res = await fetch("/api/kiosk/icici-initiate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          phone: phone.trim(),
+          testIds: [...selectedIds],
+          totalAmount: subtotal,
+        }),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({ error: "Payment initiation failed." })) as { error?: string };
+        setError(e.error ?? "Payment initiation failed. Please try again.");
+        return;
+      }
+      const data = await res.json() as { sessionRef: string; redirectUrl: string };
+      setIciciSessionRef(data.sessionRef);
+      setIciciPaying(true);
+      window.location.href = data.redirectUrl;
+    } catch {
+      setError("Network error. Please check connection and try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function completeIciciRegistration(ref: string) {
+    setSubmitting(true);
+    setError("");
+    try {
+      const res = await fetch("/api/kiosk/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          phone: phone.trim(),
+          gender,
+          dateOfBirth: dob,
+          paymentLinkId: ref,
+          gateway: "icici",
+        }),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({ error: "Registration failed. Please see staff." })) as { error?: string };
+        setError(e.error ?? "Registration failed. Please see staff.");
+        setIciciPaying(false);
+        return;
+      }
+      const data = await res.json() as ConfirmResult;
+      setResult(data);
+      setStep(5);
+      setIciciPaying(false);
+    } catch {
+      setError("Network error. Please check connection and try again.");
+      setIciciPaying(false);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // ── Submit registration (UPI fallback) ────────────────────────────────────
   async function handleConfirm() {
     if (!validateUtr()) return;
     setSubmitting(true);
@@ -467,6 +567,8 @@ export default function Kiosk() {
   // ── Step 4: Payment ───────────────────────────────────────────────────────
   if (step === 4) {
     const hasUpi = !!config?.upiVpa;
+    const hasIcici = config?.iciciEnabled ?? false;
+    const showModeToggle = hasUpi && hasIcici;
     return (
       <div className="kiosk-root kiosk-no-print">
         {printReceipt}
@@ -481,42 +583,74 @@ export default function Kiosk() {
               <span className="kiosk-pay-label">Amount to Pay</span>
               <span className="kiosk-pay-amount">{fmt(subtotal)}</span>
             </div>
-            {hasUpi ? (
-              <div className="kiosk-qr-block">
-                {qrDataUrl ? (
-                  <>
-                    <img src={qrDataUrl} alt="UPI QR Code" className="kiosk-qr-img" />
-                    <p className="kiosk-qr-instructions">
-                      Scan with <strong>Google Pay, PhonePe, Paytm</strong> or any UPI app to pay {fmt(subtotal)}.
-                    </p>
-                    <p className="kiosk-qr-vpa">UPI ID: <strong>{config.upiVpa}</strong></p>
-                  </>
-                ) : (
-                  <div className="kiosk-center" style={{ padding: "24px" }}>
-                    <div className="kiosk-spinner" />
-                    <p className="kiosk-muted">Generating QR…</p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="kiosk-no-upi-notice">
-                <p>Please pay <strong>{fmt(subtotal)}</strong> at the counter and get your UTR / reference number.</p>
+
+            {/* Gateway mode toggle when both available */}
+            {showModeToggle && (
+              <div className="kiosk-mode-toggle">
+                <button className={`kiosk-mode-btn${paymentMode === "upi" ? " kiosk-mode-active" : ""}`}
+                  onClick={() => setPaymentMode("upi")}>UPI QR</button>
+                <button className={`kiosk-mode-btn${paymentMode === "icici" ? " kiosk-mode-active" : ""}`}
+                  onClick={() => setPaymentMode("icici")}>ICICI Card</button>
               </div>
             )}
-            <div className="kiosk-utr-section">
-              <label className="kiosk-label">
-                {hasUpi ? "Enter UPI Transaction ID (shown in your payment app after paying)" : "Enter Receipt / Reference Number *"}
-              </label>
-              <input className="kiosk-input kiosk-input-lg" placeholder={hasUpi ? "e.g. 412345678901" : "Reference number"}
-                value={utr} onChange={e => { setUtr(e.target.value); setUtrError(""); }} />
-              {utrError && <p className="kiosk-error-msg">{utrError}</p>}
-              {error && <p className="kiosk-error-msg">{error}</p>}
-            </div>
-            <div className="kiosk-action-row">
-              <button className="kiosk-btn-primary kiosk-btn-lg" onClick={handleConfirm} disabled={submitting}>
-                {submitting ? "Registering…" : "Confirm & Complete Registration"}
-              </button>
-            </div>
+
+            {/* UPI QR mode */}
+            {paymentMode === "upi" && (
+              <>
+                {hasUpi ? (
+                  <div className="kiosk-qr-block">
+                    {qrDataUrl ? (
+                      <>
+                        <img src={qrDataUrl} alt="UPI QR Code" className="kiosk-qr-img" />
+                        <p className="kiosk-qr-instructions">
+                          Scan with <strong>Google Pay, PhonePe, Paytm</strong> or any UPI app to pay {fmt(subtotal)}.
+                        </p>
+                        <p className="kiosk-qr-vpa">UPI ID: <strong>{config.upiVpa}</strong></p>
+                      </>
+                    ) : (
+                      <div className="kiosk-center" style={{ padding: "24px" }}>
+                        <div className="kiosk-spinner" />
+                        <p className="kiosk-muted">Generating QR…</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="kiosk-no-upi-notice">
+                    <p>Please pay <strong>{fmt(subtotal)}</strong> at the counter and get your UTR / reference number.</p>
+                  </div>
+                )}
+                <div className="kiosk-utr-section">
+                  <label className="kiosk-label">
+                    {hasUpi ? "Enter UPI Transaction ID (shown in your payment app after paying)" : "Enter Receipt / Reference Number *"}
+                  </label>
+                  <input className="kiosk-input kiosk-input-lg" placeholder={hasUpi ? "e.g. 412345678901" : "Reference number"}
+                    value={utr} onChange={e => { setUtr(e.target.value); setUtrError(""); }} />
+                  {utrError && <p className="kiosk-error-msg">{utrError}</p>}
+                  {error && <p className="kiosk-error-msg">{error}</p>}
+                </div>
+                <div className="kiosk-action-row">
+                  <button className="kiosk-btn-primary kiosk-btn-lg" onClick={handleConfirm} disabled={submitting}>
+                    {submitting ? "Registering…" : "Confirm & Complete Registration"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ICICI Card mode */}
+            {paymentMode === "icici" && (
+              <div className="kiosk-icici-block">
+                <div className="kiosk-center" style={{ padding: "24px" }}>
+                  <p className="kiosk-muted">Pay securely using ICICI Orange Pay.</p>
+                  <p className="kiosk-muted">Supports Debit Card, Credit Card, UPI, Net Banking.</p>
+                </div>
+                {error && <p className="kiosk-error-msg">{error}</p>}
+                <div className="kiosk-action-row">
+                  <button className="kiosk-btn-primary kiosk-btn-lg" onClick={initiateIciciPayment} disabled={submitting || iciciPaying}>
+                    {submitting || iciciPaying ? "Redirecting to Payment…" : "Pay Now with ICICI"}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

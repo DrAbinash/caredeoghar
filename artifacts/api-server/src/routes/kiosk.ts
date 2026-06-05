@@ -1,5 +1,6 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
+import crypto from "crypto";
 import { db, pool } from "@workspace/db";
 import {
   clinicSettingsTable, testsTable, patientsTable, ordersTable,
@@ -9,6 +10,7 @@ import { eq, sql, and, inArray } from "drizzle-orm";
 import { generateTokenForBill } from "./tokens";
 import { generateTestTokensForOrder } from "./test-tokens";
 import { z } from "zod/v4";
+import { logger } from "../lib/logger";
 
 export const kioskRouter = Router();
 
@@ -27,6 +29,26 @@ const paymentLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many payment requests. Please try again later." },
 });
+
+// ── ICICI Helpers ─────────────────────────────────────────────────────────────
+
+const ICICI_UAT_BASE = "https://pgpayuat.icicibank.com";
+const ICICI_PROD_BASE = "https://pguat.icicibank.com";
+
+function getIciciBase() {
+  return process.env.NODE_ENV === "production" ? ICICI_PROD_BASE : ICICI_UAT_BASE;
+}
+
+function generateIciciSecureHash(params: Record<string, string>, secretKey: string): string {
+  const keys = Object.keys(params).sort();
+  const hashText = keys.map((k) => params[k]).join("");
+  return crypto.createHmac("sha256", secretKey).update(hashText).digest("hex");
+}
+
+function formatTxnDate(d = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -195,6 +217,13 @@ async function createPatientBillAndTokens(params: {
   };
 }
 
+function getKioskBase(req: { headers: Record<string, string | string[] | undefined> }): string {
+  const domains = process.env.REPLIT_DOMAINS;
+  if (domains) return `https://${domains.split(",")[0]}`;
+  const host = String(req.headers["host"] || "localhost");
+  return `${host.startsWith("localhost") || host.startsWith("127.0.0") || host.startsWith("192.168.") ? "http" : "https"}://${host}`;
+}
+
 // ── GET /api/kiosk/config ─────────────────────────────────────────────────────
 kioskRouter.get("/config", async (_req, res): Promise<void> => {
   const s = await getKioskSettings();
@@ -207,8 +236,11 @@ kioskRouter.get("/config", async (_req, res): Promise<void> => {
   const keySecret = process.env.RAZORPAY_KEY_SECRET ?? "";
   const payuKey = s.payuMerchantKey ?? "";
   const payuSalt = process.env.PAYU_MERCHANT_SALT ?? "";
+  const iciciMerchantId = process.env.ICICI_MERCHANT_ID || (s.iciciMerchantId ?? "");
+  const iciciSecretKey = process.env.ICICI_SECRET_KEY || (s.iciciSecretKey ?? "");
   res.json({
     enabled: (settings["kioskEnabled"] as boolean | null) ?? false,
+    paymentGateway: (settings["kioskPaymentGateway"] as string | null) ?? "upi",
     upiVpa: (settings["kioskUpiVpa"] as string | null) ?? "",
     upiName: (settings["kioskUpiName"] as string | null) ?? "",
     welcomeMessage: (settings["kioskWelcomeMessage"] as string | null) ?? "",
@@ -219,6 +251,7 @@ kioskRouter.get("/config", async (_req, res): Promise<void> => {
     phone: s.phone ?? "",
     razorpayEnabled: Boolean(keyId && keySecret),
     payuEnabled: Boolean(s.payuEnabled && payuKey && payuSalt),
+    iciciEnabled: Boolean(s.iciciEnabled && iciciMerchantId && iciciSecretKey),
   });
 });
 
@@ -422,17 +455,112 @@ kioskRouter.post("/register", registerLimiter, async (req, res): Promise<void> =
   const resolvedDob = dateOfBirth || `${new Date().getFullYear() - age}-01-01`;
 
   if (paymentLinkId) {
-    // ── RAZORPAY MODE ─────────────────────────────────────────────────────────
+    // ── GATEWAY-AWARE MODE (Razorpay or ICICI) ──────────────────────────────────
+    const client = await pool.connect();
+    let sessionTestIds: number[] = [];
+    let sessionAmountPaise = 0;
+    let sessionGateway: string = "razorpay";
+    let sessionStatus: string = "";
+    let sessionRazorpayId: string | null = null;
+    let sessionIciciRef: string | null = null;
+    try {
+      const r = await client.query<{
+        test_ids: string; amount_paise: number; status: string;
+        gateway: string; razorpay_payment_id: string | null; icici_provider_ref_id: string | null;
+      }>(
+        `SELECT test_ids, amount_paise, status, gateway, razorpay_payment_id, icici_provider_ref_id
+         FROM kiosk_payment_sessions WHERE payment_link_id = $1`,
+        [paymentLinkId],
+      );
+      if (r.rowCount === 0) {
+        res.status(404).json({ error: "Session not found. Please restart registration." });
+        return;
+      }
+      const session = r.rows[0]!;
+      sessionStatus = session.status;
+      sessionGateway = session.gateway || "razorpay";
+      sessionTestIds = JSON.parse(session.test_ids) as number[];
+      sessionAmountPaise = session.amount_paise;
+      sessionRazorpayId = session.razorpay_payment_id;
+      sessionIciciRef = session.icici_provider_ref_id;
+    } finally {
+      client.release();
+    }
+
+    if (sessionStatus === "completed") {
+      res.status(409).json({ error: "This payment has already been registered. Please see staff." });
+      return;
+    }
+
+    if (sessionGateway === "icici") {
+      // ── ICICI MODE ── verify server-side status
+      const settings = await getKioskSettings();
+      const s = settings as Record<string, unknown>;
+      const iciciMerchantId = process.env.ICICI_MERCHANT_ID || (s["iciciMerchantId"] as string | undefined) || "";
+      const iciciAggregatorId = process.env.ICICI_AGGREGATOR_ID || (s["iciciAggregatorId"] as string | undefined) || "";
+      const iciciSecretKey = process.env.ICICI_SECRET_KEY || (s["iciciSecretKey"] as string | undefined) || "";
+      let verified = false;
+      if (iciciSecretKey && iciciMerchantId) {
+        try {
+          const statusHashParams: Record<string, string> = {
+            aggregatorID: iciciAggregatorId,
+            merchantId: iciciMerchantId,
+            merchantTxnNo: paymentLinkId,
+            originalTxnNo: paymentLinkId,
+            transactionType: "STATUS",
+          };
+          const statusHash = generateIciciSecureHash(statusHashParams, iciciSecretKey);
+          const statusRes = await fetch(`${getIciciBase()}/tsp/pg/api/command`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({
+              merchantId: iciciMerchantId,
+              aggregatorID: iciciAggregatorId,
+              merchantTxnNo: paymentLinkId,
+              originalTxnNo: paymentLinkId,
+              transactionType: "STATUS",
+              secureHash: statusHash,
+            }),
+          });
+          const statusData = (await statusRes.json()) as {
+            txnStatus?: string; txnResponseCode?: string; responseCode?: string;
+          };
+          verified = statusData.txnStatus === "SUC" || statusData.txnResponseCode === "0000" || statusData.responseCode === "000";
+        } catch { /* fall through */ }
+      }
+      if (!verified) {
+        res.status(402).json({ error: "Payment verification failed. Please complete the payment and try again." });
+        return;
+      }
+      {
+        const c2 = await pool.connect();
+        try {
+          await c2.query(
+            `UPDATE kiosk_payment_sessions SET status = 'completed', icici_provider_ref_id = $2 WHERE payment_link_id = $1`,
+            [paymentLinkId, sessionIciciRef ?? ""],
+          );
+        } finally { c2.release(); }
+      }
+      const result = await createPatientBillAndTokens({
+        firstName, lastName, phone, gender,
+        dateOfBirth: resolvedDob,
+        testIds: sessionTestIds,
+        paymentMethod: "icici",
+        paymentReference: paymentLinkId,
+        paymentAmount: sessionAmountPaise / 100,
+      });
+      res.status(201).json(result);
+      return;
+    }
+
+    // ── RAZORPAY MODE ──
     const s = await getKioskSettings();
     const keyId = process.env.RAZORPAY_KEY_ID || (s?.razorpayKeyId ?? "");
     const keySecret = process.env.RAZORPAY_KEY_SECRET ?? "";
-
     if (!keyId || !keySecret) {
       res.status(503).json({ error: "Payment gateway not configured." });
       return;
     }
-
-    // 1. Verify payment with Razorpay
     let amountPaisePaid = 0;
     try {
       const rpRes = await fetch(`https://api.razorpay.com/v1/payment_links/${encodeURIComponent(paymentLinkId)}`, {
@@ -452,39 +580,19 @@ kioskRouter.post("/register", registerLimiter, async (req, res): Promise<void> =
       res.status(502).json({ error: "Could not verify payment. Please ask staff for assistance." });
       return;
     }
-
-    // 2. Look up the pending session to get authoritative test IDs and amount
-    const client = await pool.connect();
-    let sessionTestIds: number[] = [];
-    let sessionAmountPaise = 0;
-    try {
-      const r = await client.query<{ test_ids: string; amount_paise: number; status: string }>(
-        `SELECT test_ids, amount_paise, status FROM kiosk_payment_sessions WHERE payment_link_id = $1`,
-        [paymentLinkId],
-      );
-      if (r.rowCount === 0) {
-        res.status(404).json({ error: "Session not found. Please restart registration." });
-        return;
-      }
-      const session = r.rows[0]!;
-      if (session.status === "completed") {
-        res.status(409).json({ error: "This payment has already been registered. Please see staff." });
-        return;
-      }
-      sessionTestIds = JSON.parse(session.test_ids) as number[];
-      sessionAmountPaise = session.amount_paise;
-
-      // Mark session completed immediately to prevent double-registration
-      await client.query(`UPDATE kiosk_payment_sessions SET status = 'completed', razorpay_payment_id = $2 WHERE payment_link_id = $1`, [paymentLinkId, razorpayPaymentId ?? ""]);
-    } finally {
-      client.release();
-    }
-
     if (amountPaisePaid < sessionAmountPaise) {
       res.status(402).json({ error: "Payment amount does not match. Please ask staff for assistance." });
       return;
     }
-
+    {
+      const c2 = await pool.connect();
+      try {
+        await c2.query(
+          `UPDATE kiosk_payment_sessions SET status = 'completed', razorpay_payment_id = $2 WHERE payment_link_id = $1`,
+          [paymentLinkId, razorpayPaymentId ?? ""],
+        );
+      } finally { c2.release(); }
+    }
     const result = await createPatientBillAndTokens({
       firstName, lastName, phone, gender,
       dateOfBirth: resolvedDob,
@@ -529,4 +637,294 @@ kioskRouter.post("/register", registerLimiter, async (req, res): Promise<void> =
     paymentAmount: subtotal,
   });
   res.status(201).json(result);
+});
+
+// ── POST /api/kiosk/icici-initiate ────────────────────────────────────────────────────────
+kioskRouter.post("/icici-initiate", paymentLimiter, async (req, res): Promise<void> => {
+  const settings = await getKioskSettings();
+  const s = settings as Record<string, unknown>;
+  if (!s["kioskEnabled"] || !s["iciciEnabled"]) {
+    res.status(403).json({ error: "ICICI kiosk payments not enabled." });
+    return;
+  }
+
+  const merchantId = process.env.ICICI_MERCHANT_ID || (s["iciciMerchantId"] as string | undefined) || "";
+  const aggregatorId = process.env.ICICI_AGGREGATOR_ID || (s["iciciAggregatorId"] as string | undefined) || "";
+  const secretKey = process.env.ICICI_SECRET_KEY || (s["iciciSecretKey"] as string | undefined) || "";
+  if (!merchantId || !secretKey) {
+    res.status(503).json({ error: "ICICI payment gateway not configured. Please contact staff." });
+    return;
+  }
+
+  const body = req.body as {
+    firstName: string; lastName: string; phone: string; email?: string;
+    testIds: number[]; totalAmount: number;
+  };
+  const { firstName, lastName, phone, email = "", testIds, totalAmount } = body;
+
+  if (!firstName?.trim() || !phone?.trim()) {
+    res.status(400).json({ error: "Name and phone are required." });
+    return;
+  }
+  if (!Array.isArray(testIds) || testIds.length === 0) {
+    res.status(400).json({ error: "Please select at least one test." });
+    return;
+  }
+  const amount = Number(totalAmount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    res.status(400).json({ error: "Invalid total amount." });
+    return;
+  }
+
+  // Validate amount against DB
+  const tests = await db
+    .select({ id: testsTable.id, price: testsTable.price })
+    .from(testsTable)
+    .where(and(eq(testsTable.isActive, true), inArray(testsTable.id, testIds)));
+  if (tests.length !== testIds.length) {
+    res.status(400).json({ error: "One or more selected tests are no longer available." });
+    return;
+  }
+  const dbSubtotal = tests.reduce((acc, t) => acc + Number(t.price), 0);
+  if (Math.abs(dbSubtotal - amount) > 1) {
+    res.status(400).json({ error: "Total mismatch — please restart and try again." });
+    return;
+  }
+
+  const sessionRef = `KIOSK${Date.now()}${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+  const base = getKioskBase(req);
+  const returnUrl = `${base}/api/kiosk/icici-callback`;
+  const txnDate = formatTxnDate();
+  const amountStr = amount.toFixed(2);
+  const mobile = phone.replace(/\D/g, "").slice(-10);
+  const patientName = `${firstName} ${lastName}`.trim();
+  const addlParam1 = sessionRef;
+  const addlParam2 = "kiosk";
+
+  const hashParams: Record<string, string> = {
+    addlParam1,
+    addlParam2,
+    aggregatorID: aggregatorId,
+    amount: amountStr,
+    currencyCode: "356",
+    customerEmailID: email.trim() || "care.deoghar@gmail.com",
+    customerMobileNo: mobile,
+    customerName: patientName,
+    merchantId,
+    merchantTxnNo: sessionRef,
+    payType: "0",
+    returnURL: returnUrl,
+    transactionType: "SALE",
+    txnDate,
+  };
+  const secureHash = generateIciciSecureHash(hashParams, secretKey);
+
+  const payload = {
+    merchantId,
+    aggregatorID: aggregatorId,
+    merchantTxnNo: sessionRef,
+    amount: amountStr,
+    currencyCode: "356",
+    payType: "0",
+    customerEmailID: email.trim() || "care.deoghar@gmail.com",
+    transactionType: "SALE",
+    returnURL: returnUrl,
+    txnDate,
+    customerMobileNo: mobile,
+    customerName: patientName,
+    addlParam1,
+    addlParam2,
+    secureHash,
+  };
+
+  try {
+    const iciciUrl = `${getIciciBase()}/tsp/pg/api/v2/initiateSale`;
+    logger.info({ iciciUrl, merchantId, aggregatorId, sessionRef }, "Kiosk ICICI initiateSale request");
+    const iciciRes = await fetch(iciciUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const iciciData = (await iciciRes.json()) as {
+      responseCode?: string;
+      merchantId?: string;
+      merchantTxnNo?: string;
+      redirectURI?: string;
+      tranCtx?: string;
+      secureHash?: string;
+      respDescription?: string;
+    };
+    logger.info({ status: iciciRes.status, responseCode: iciciData.responseCode, respDescription: iciciData.respDescription }, "Kiosk ICICI initiateSale response");
+    if (!iciciRes.ok || !iciciData.tranCtx || iciciData.responseCode !== "R1000") {
+      res.status(502).json({ error: "Could not initiate ICICI payment. Please try again.", details: iciciData.respDescription || iciciData.responseCode });
+      return;
+    }
+
+    const redirectTo = `${iciciData.redirectURI}?tranCtx=${encodeURIComponent(iciciData.tranCtx)}`;
+    const amountPaise = Math.round(amount * 100);
+
+    // Persist session
+    const client = await pool.connect();
+    try {
+      await client.query(
+        `INSERT INTO kiosk_payment_sessions (payment_link_id, session_ref, test_ids, amount_paise, patient_name, patient_details, status, gateway, icici_transaction_id, icici_provider_ref_id, created_at, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 'pending', 'icici', $7, $8, NOW(), NOW() + INTERVAL '30 minutes')`,
+        [sessionRef, sessionRef, JSON.stringify(testIds), amountPaise, patientName,
+         JSON.stringify({ firstName, lastName, phone, email }), sessionRef, iciciData.tranCtx],
+      );
+    } finally {
+      client.release();
+    }
+
+    res.json({ sessionRef, redirectUrl: redirectTo, tranCtx: iciciData.tranCtx });
+  } catch (err) {
+    logger.error({ err, merchantId, sessionRef }, "Kiosk ICICI initiateSale exception");
+    res.status(502).json({ error: "Could not connect to ICICI payment gateway. Please try again." });
+  }
+});
+
+// ── ICICI callback handler (shared GET + POST) ──────────────────────────────────
+
+async function handleKioskIciciCallback(req: any, res: any, queryOrBody: Record<string, string>): Promise<void> {
+  const base = getKioskBase(req);
+  const erpBase = `${base}/erp`;
+
+  logger.info({ keys: Object.keys(queryOrBody), queryOrBody }, "Kiosk ICICI callback received");
+
+  const { merchantTxnNo, responseCode, respDescription, txnID, status } = queryOrBody;
+  if (!merchantTxnNo) {
+    res.redirect(`${erpBase}/kiosk?failed=1&reason=missing_txn_id`);
+    return;
+  }
+
+  const client = await pool.connect();
+  let session: { session_ref: string; test_ids: string; amount_paise: number; patient_name: string; patient_details: string; status: string } | null = null;
+  try {
+    const r = await client.query<{ session_ref: string; test_ids: string; amount_paise: number; patient_name: string; patient_details: string; status: string }>(
+      `SELECT session_ref, test_ids, amount_paise, patient_name, patient_details, status FROM kiosk_payment_sessions WHERE payment_link_id = $1`,
+      [merchantTxnNo],
+    );
+    if (r.rowCount === 0) {
+      session = null;
+    } else {
+      session = r.rows[0]!;
+    }
+  } catch { /* fall through */ }
+
+  if (!session) {
+    client.release();
+    res.redirect(`${erpBase}/kiosk?failed=1&reason=session_not_found`);
+    return;
+  }
+
+  // Already completed
+  if (session.status === "completed") {
+    client.release();
+    res.redirect(`${erpBase}/kiosk?success=1&ref=${encodeURIComponent(session.session_ref)}&gateway=icici`);
+    return;
+  }
+
+  const settings = await getKioskSettings();
+  const s = settings as Record<string, unknown>;
+  const iciciMerchantId = process.env.ICICI_MERCHANT_ID || (s["iciciMerchantId"] as string | undefined) || "";
+  const iciciAggregatorId = process.env.ICICI_AGGREGATOR_ID || (s["iciciAggregatorId"] as string | undefined) || "";
+  const iciciSecretKey = process.env.ICICI_SECRET_KEY || (s["iciciSecretKey"] as string | undefined) || "";
+
+  // Server-side status verification
+  if (iciciSecretKey && iciciMerchantId) {
+    try {
+      const statusHashParams: Record<string, string> = {
+        aggregatorID: iciciAggregatorId,
+        merchantId: iciciMerchantId,
+        merchantTxnNo,
+        originalTxnNo: merchantTxnNo,
+        transactionType: "STATUS",
+      };
+      const statusHash = generateIciciSecureHash(statusHashParams, iciciSecretKey);
+      const statusRes = await fetch(`${getIciciBase()}/tsp/pg/api/command`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          merchantId: iciciMerchantId,
+          aggregatorID: iciciAggregatorId,
+          merchantTxnNo,
+          originalTxnNo: merchantTxnNo,
+          transactionType: "STATUS",
+          secureHash: statusHash,
+        }),
+      });
+      const statusData = (await statusRes.json()) as {
+        txnStatus?: string;
+        txnResponseCode?: string;
+        responseCode?: string;
+        respDescription?: string;
+      };
+      if (statusData.txnStatus === "SUC" || statusData.txnResponseCode === "0000" || statusData.responseCode === "000") {
+        await client.query(
+          `UPDATE kiosk_payment_sessions SET status = 'completed', icici_provider_ref_id = $2 WHERE payment_link_id = $1`,
+          [merchantTxnNo, txnID || ""],
+        );
+        client.release();
+        res.redirect(`${erpBase}/kiosk?success=1&ref=${encodeURIComponent(session.session_ref)}&gateway=icici`);
+        return;
+      }
+    } catch { /* fall through */ }
+  }
+
+  // Defensive success-by-code
+  const successCodes = ["0000", "000", "success", "SUCCESS", "SUC", "TXN_SUCCESS"];
+  const isSuccessByCode = successCodes.includes(responseCode) || successCodes.includes(status);
+  if (isSuccessByCode) {
+    await client.query(
+      `UPDATE kiosk_payment_sessions SET status = 'completed', icici_provider_ref_id = $2 WHERE payment_link_id = $1`,
+      [merchantTxnNo, txnID || ""],
+    );
+    client.release();
+    res.redirect(`${erpBase}/kiosk?success=1&ref=${encodeURIComponent(session.session_ref)}&gateway=icici`);
+    return;
+  }
+
+  // Mark failed
+  await client.query(
+    `UPDATE kiosk_payment_sessions SET status = 'failed' WHERE payment_link_id = $1`,
+    [merchantTxnNo],
+  );
+  client.release();
+  res.redirect(`${erpBase}/kiosk?failed=1&reason=${encodeURIComponent(respDescription || "Payment not completed")}`);
+}
+
+kioskRouter.get("/icici-callback", async (req, res): Promise<void> => {
+  const merged = { ...(req.query as Record<string, string>), ...(req.body as Record<string, string>) };
+  await handleKioskIciciCallback(req, res, merged);
+});
+
+kioskRouter.post("/icici-callback", async (req, res): Promise<void> => {
+  const merged = { ...(req.query as Record<string, string>), ...(req.body as Record<string, string>) };
+  await handleKioskIciciCallback(req, res, merged);
+});
+
+// ── GET /api/kiosk/icici-status/:sessionRef ──────────────────────────────────────────
+kioskRouter.get("/icici-status/:sessionRef", async (req, res): Promise<void> => {
+  const { sessionRef } = req.params;
+  if (!sessionRef || sessionRef.length > 60) {
+    res.status(400).json({ error: "Invalid session reference" });
+    return;
+  }
+
+  const client = await pool.connect();
+  try {
+    const r = await client.query<{ status: string; icici_transaction_id: string | null; icici_provider_ref_id: string | null }>(
+      `SELECT status, icici_transaction_id, icici_provider_ref_id FROM kiosk_payment_sessions WHERE session_ref = $1`,
+      [sessionRef],
+    );
+    if (r.rowCount === 0) {
+      res.status(404).json({ error: "Session not found" });
+      return;
+    }
+    const row = r.rows[0]!;
+    const completed = row.status === "completed";
+    res.json({ status: row.status, completed, sessionRef: row.icici_transaction_id, providerRef: row.icici_provider_ref_id });
+  } finally {
+    client.release();
+  }
 });

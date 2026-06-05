@@ -163,6 +163,7 @@ async function runStartupMigrations(): Promise<void> {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS kiosk_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS kiosk_payment_gateway TEXT NOT NULL DEFAULT 'upi';
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS kiosk_upi_vpa TEXT NOT NULL DEFAULT '';
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS kiosk_upi_name TEXT NOT NULL DEFAULT '';
       ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS kiosk_welcome_message TEXT NOT NULL DEFAULT '';
@@ -245,11 +246,19 @@ async function runStartupMigrations(): Promise<void> {
         test_ids TEXT NOT NULL,
         amount_paise INTEGER NOT NULL,
         patient_name TEXT NOT NULL,
+        patient_details TEXT NOT NULL DEFAULT '{}',
         status TEXT NOT NULL DEFAULT 'pending',
+        gateway TEXT NOT NULL DEFAULT 'razorpay',
         razorpay_payment_id TEXT,
+        icici_transaction_id TEXT,
+        icici_provider_ref_id TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 minutes'
       );
+      ALTER TABLE kiosk_payment_sessions ADD COLUMN IF NOT EXISTS patient_details TEXT NOT NULL DEFAULT '{}';
+      ALTER TABLE kiosk_payment_sessions ADD COLUMN IF NOT EXISTS gateway TEXT NOT NULL DEFAULT 'razorpay';
+      ALTER TABLE kiosk_payment_sessions ADD COLUMN IF NOT EXISTS icici_transaction_id TEXT;
+      ALTER TABLE kiosk_payment_sessions ADD COLUMN IF NOT EXISTS icici_provider_ref_id TEXT;
       -- Voluson USG / expanded DICOM import columns
       ALTER TABLE dicom_modalities ADD COLUMN IF NOT EXISTS watch_folder_path TEXT;
       ALTER TABLE dicom_modalities ADD COLUMN IF NOT EXISTS c_store_port INTEGER;

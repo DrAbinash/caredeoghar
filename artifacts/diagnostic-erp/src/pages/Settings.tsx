@@ -4777,6 +4777,7 @@ type KioskSettings = {
   kioskUpiName: string;
   kioskWelcomeMessage: string;
   kioskAllowedTestIds: string;
+  kioskPaymentGateway: string;
 };
 
 function KioskSettingsTab() {
@@ -4791,6 +4792,7 @@ function KioskSettingsTab() {
   const [upiVpa, setUpiVpa] = useState("");
   const [upiName, setUpiName] = useState("");
   const [welcomeMsg, setWelcomeMsg] = useState("");
+  const [kioskPaymentGateway, setKioskPaymentGateway] = useState<string>("upi");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -4799,6 +4801,7 @@ function KioskSettingsTab() {
     setUpiVpa(settings.kioskUpiVpa ?? "");
     setUpiName(settings.kioskUpiName ?? "");
     setWelcomeMsg(settings.kioskWelcomeMessage ?? "");
+    setKioskPaymentGateway(settings.kioskPaymentGateway ?? "upi");
   }, [settings]);
 
   async function handleSave() {
@@ -4809,6 +4812,7 @@ function KioskSettingsTab() {
         kioskUpiVpa: upiVpa.trim(),
         kioskUpiName: upiName.trim(),
         kioskWelcomeMessage: welcomeMsg.trim(),
+        kioskPaymentGateway,
       });
       qc.invalidateQueries({ queryKey: ["clinic-settings"] });
       toast({ title: "Kiosk settings saved" });
@@ -4828,7 +4832,7 @@ function KioskSettingsTab() {
           <div>
             <h3 className="font-semibold text-base">Self-Registration Kiosk</h3>
             <p className="text-sm text-muted-foreground mt-0.5">
-              A touch-friendly screen where patients self-register, select tests, pay via UPI QR code, and get a bill + queue token automatically.
+              A touch-friendly screen where patients self-register, select tests, pay via their preferred gateway, and get a bill + queue token automatically.
             </p>
           </div>
           <label className="flex items-center gap-2 cursor-pointer">
@@ -4852,6 +4856,22 @@ function KioskSettingsTab() {
           <a href={kioskUrl} target="_blank" rel="noopener noreferrer">
             <Button variant="outline" size="sm"><ExternalLink size={13} className="mr-1" />Open</Button>
           </a>
+        </div>
+
+        {/* Payment Gateway */}
+        <div>
+          <Label className="text-xs">Default Payment Gateway</Label>
+          <select
+            className="mt-1 block w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            value={kioskPaymentGateway}
+            onChange={e => setKioskPaymentGateway(e.target.value)}
+          >
+            <option value="upi">UPI QR Code</option>
+            <option value="icici">ICICI Orange Pay (Card / UPI / Net Banking)</option>
+          </select>
+          <p className="text-xs text-muted-foreground mt-1">
+            Choose which payment method appears first. Both are available if ICICI credentials are configured.
+          </p>
         </div>
 
         {/* UPI Settings */}
@@ -4907,13 +4927,12 @@ function KioskSettingsTab() {
           <li>Patient opens the kiosk URL on a touchscreen and taps <strong>Start Self-Registration</strong>.</li>
           <li>They fill in their name, mobile number, and gender.</li>
           <li>They select the tests they need from the test catalogue.</li>
-          <li>A UPI QR code is shown for the total amount — they scan and pay using any UPI app.</li>
-          <li>After paying, they enter the UPI Transaction ID shown in their payment app.</li>
+          <li>They choose a payment method (UPI QR or ICICI Orange Pay) and pay the total amount.</li>
           <li>The system automatically creates a patient record, order, bill, and queue token.</li>
           <li>A confirmation screen appears with their token number and an option to print the receipt.</li>
         </ol>
         <p className="text-blue-700 dark:text-blue-400 text-xs mt-2">
-          <strong>Tip:</strong> Use a tablet or touchscreen in landscape mode for best experience. Bills are marked as "paid via UPI" with the UTR reference for easy reconciliation.
+          <strong>Tip:</strong> Use a tablet or touchscreen in landscape mode for best experience. ICICI payments support Card, UPI, Net Banking, and Wallet.
         </p>
       </div>
     </div>
