@@ -245,3 +245,9 @@ id = "cHKB4Dzz0pasmZM28fxpl"
 uri = "file://screenshots/v3_all_footer_messages_1test.jpg"
 type = "image"
 title = "Premium A5 Bill with All 8 New Footer Messages"
+
+[[outputs]]
+id = "ee85RHb7ROEsIyEeB611j"
+uri = "file://RADIOLOGY_MODULE_INVENTORY.md"
+type = "text"
+title = "Radiology Module Inventory — Complete"
