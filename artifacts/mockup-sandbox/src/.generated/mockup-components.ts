@@ -2,6 +2,8 @@
 type ModuleMap = Record<string, () => Promise<Record<string, unknown>>>;
 export const modules: ModuleMap = {
   "./components/mockups/billing-desk-explore/Current.tsx": () => import("../components/mockups/billing-desk-explore/Current.tsx"),
+  "./components/mockups/billing-desk-explore/Hybrid.tsx": () => import("../components/mockups/billing-desk-explore/Hybrid.tsx"),
+  "./components/mockups/billing-desk-explore/Justified.tsx": () => import("../components/mockups/billing-desk-explore/Justified.tsx"),
   "./components/mockups/billing-desk-explore/VariantA.tsx": () => import("../components/mockups/billing-desk-explore/VariantA.tsx"),
   "./components/mockups/billing-desk-explore/VariantB.tsx": () => import("../components/mockups/billing-desk-explore/VariantB.tsx"),
   "./components/mockups/billing-desk-explore/VariantC.tsx": () => import("../components/mockups/billing-desk-explore/VariantC.tsx"),
