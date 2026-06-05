@@ -20,7 +20,7 @@ import {
   Tag, Building2, Image as ImageIcon, Upload, MessageCircle, Printer,
   Search, Globe, Copy, ExternalLink, Check, Network, MapPin, Database,
   RefreshCcw, FileCode, Send, QrCode, Palette, Bot, Inbox, ChevronRight,
-  ArrowLeft, Phone, Layers, AlertTriangle, ScanLine,
+  ArrowLeft, Phone, Layers, AlertTriangle, ScanLine, Receipt,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -520,7 +520,7 @@ type ClinicSettings = {
 
 import { SIDEBAR_THEMES as SIDEBAR_THEME_PRESETS, parseCustomHex, buildCustomTheme } from "@/lib/sidebarThemes";
 import { useUserTheme } from "@/lib/userTheme";
-import { readStaffSession } from "@/lib/staffSession";
+import { readStaffSession, isFeatureEnabled, setFeatureFlag } from "@/lib/staffSession";
 import { getBillPrintLayout, setBillPrintLayout, BILL_LAYOUTS, type BillLayout } from "@/lib/billPrintLayout";
 
 function ThemeGrid({
@@ -656,6 +656,41 @@ function SidebarBehaviourCard() {
   );
 }
 
+function BillingDeskLayoutCard() {
+  const [stepped, setStepped] = useState(() => isFeatureEnabled("billingDeskStepped"));
+  const toggle = () => {
+    const next = !stepped;
+    setStepped(next);
+    setFeatureFlag("billingDeskStepped", next);
+  };
+  return (
+    <div className="bg-card border border-card-border rounded-xl p-5 space-y-3">
+      <div>
+        <h2 className="font-bold text-lg flex items-center gap-2"><Receipt size={16} /> Billing Desk Layout</h2>
+        <p className="text-sm text-muted-foreground">Personal preference for this device — not synced across staff accounts.</p>
+      </div>
+      <div>
+        <p className="text-sm font-medium mb-1">Stepped Wizard Layout</p>
+        <button
+          type="button"
+          onClick={toggle}
+          className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors ${stepped ? "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-800" : "bg-muted/30 border-card-border"}`}
+        >
+          <span className="text-sm font-medium">{stepped ? "Stepped Wizard (5-step)" : "Unified Single Page (default)"}</span>
+          <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${stepped ? "bg-green-500" : "bg-muted-foreground/40"}`}>
+            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${stepped ? "translate-x-5" : "translate-x-1"}`} />
+          </span>
+        </button>
+        <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
+          {stepped
+            ? "Stepped wizard: 5 sequential steps (Patient → Doctor → Tests → Packages → Summary). Best for training new staff."
+            : "Unified page: everything on one screen — patient, tests, doctor, payment, and print. Best for fast billing."}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function AppearanceTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -775,6 +810,9 @@ function AppearanceTab() {
 
       {/* Sidebar behaviour (localStorage, per-device) */}
       <SidebarBehaviourCard />
+
+      {/* Billing desk layout toggle */}
+      <BillingDeskLayoutCard />
 
       {/* Clinic-wide default (admin only) */}
       {isAdmin && (

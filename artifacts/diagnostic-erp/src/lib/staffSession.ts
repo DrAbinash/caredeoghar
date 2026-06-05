@@ -161,6 +161,7 @@ const FEATURE_FLAG_DEFAULTS: Record<string, boolean> = {
   showQuickAddButtons: false,
   showSmartFormatBuilder: false,
   hideDeprecatedNav: false,
+  billingDeskStepped: false,
 };
 
 export function getFeatureFlags(): Record<string, boolean> {
