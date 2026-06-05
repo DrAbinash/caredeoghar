@@ -19,7 +19,7 @@ import {
   ArrowLeft, ExternalLink, MonitorPlay, Save, CheckCircle2, AlertTriangle,
   RefreshCw, FileText, Sparkles, ChevronDown, ChevronUp, Download, Settings2,
   ClipboardPaste, RotateCcw, X, ThumbsUp, ThumbsDown,
-  Zap, Star, History, Plus,
+  Zap, Star, History, Plus, HelpCircle, Keyboard, Command,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -219,14 +219,14 @@ export default function RadiologyReportUnified() {
   const [saving, setSaving] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
 
-  // ── Feature flags ──
-  const ffMeasurementPanel = isFeatureEnabled("showMeasurementPanel");
-  const ffAiDraftPanel = isFeatureEnabled("showAiDraftPanel");
-  const ffQuickAdd = isFeatureEnabled("showQuickAddButtons");
-  const ffSmartFormat = isFeatureEnabled("showSmartFormatBuilder");
-  const ffMacros = isFeatureEnabled("showRadiologyMacros");
-  const ffPreviousReport = isFeatureEnabled("showPreviousReportPanel");
-  const ffFavorites = isFeatureEnabled("showFavoritesLibrary");
+  // ── Feature flags ── (Phase 2C: check new names first, then legacy names)
+  const ffMeasurementPanel = isFeatureEnabled("radiologyMeasurements") || isFeatureEnabled("showMeasurementPanel");
+  const ffAiDraftPanel = isFeatureEnabled("radiologyAiAssistant") || isFeatureEnabled("showAiDraftPanel");
+  const ffQuickAdd = isFeatureEnabled("radiologyQuickAdd") || isFeatureEnabled("showQuickAddButtons");
+  const ffSmartFormat = isFeatureEnabled("radiologySmartFormat") || isFeatureEnabled("showSmartFormatBuilder");
+  const ffMacros = isFeatureEnabled("radiologyMacros") || isFeatureEnabled("showRadiologyMacros");
+  const ffPreviousReport = isFeatureEnabled("radiologyPreviousReports") || isFeatureEnabled("showPreviousReportPanel");
+  const ffFavorites = isFeatureEnabled("radiologyFavorites") || isFeatureEnabled("showFavoritesLibrary");
 
   // ── Panel visibility (local toggles, independent of flags) ──
   const [showQuickAddPanel, setShowQuickAddPanel] = useState(false);
@@ -234,6 +234,12 @@ export default function RadiologyReportUnified() {
   const [showMacroPanel, setShowMacroPanel] = useState(false);
   const [showPrevReportPanel, setShowPrevReportPanel] = useState(false);
   const [showFavPanel, setShowFavPanel] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(() => {
+    try {
+      return typeof window !== "undefined" && window.localStorage.getItem("radiologyTutorialSeen") !== "1";
+    } catch { return false; }
+  });
 
   // ── Queries ──
   const { data: entry, isLoading: entryLoading } = useQuery<WorklistEntry>({
@@ -689,6 +695,16 @@ export default function RadiologyReportUnified() {
                 <Star className="h-3.5 w-3.5" /> Favorites
               </Button>
             )}
+            {/* Help button */}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 p-0 text-muted-foreground"
+              onClick={() => setShowHelp(true)}
+              title="Help & Keyboard Shortcuts"
+            >
+              <HelpCircle className="h-4 w-4" />
+            </Button>
             {/* Normal button */}
             <Button
               size="sm"
@@ -1160,6 +1176,90 @@ export default function RadiologyReportUnified() {
         settings={printSettings}
         onChange={(s) => { setPrintSettings(s); savePrintSettings(s); }}
       />
+
+      {/* ── Help Center Dialog ── */}
+      {showHelp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowHelp(false)}>
+          <div className="bg-card border border-card-border rounded-xl shadow-2xl max-w-lg w-full mx-4 p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-lg flex items-center gap-2"><HelpCircle size={18} /> Help Center</h2>
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setShowHelp(false)}><X size={14} /></Button>
+            </div>
+            <p className="text-sm text-muted-foreground">Radiologist productivity tools and keyboard shortcuts. Enable or disable features in <strong>Settings → Radiology</strong>.</p>
+            <div className="space-y-3">
+              <div className="bg-muted/30 rounded-lg p-3">
+                <h3 className="text-sm font-semibold flex items-center gap-2 mb-2"><Keyboard size={14} /> Keyboard Shortcuts</h3>
+                <div className="grid gap-1 text-xs">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Quick Add Buttons</span><span className="font-mono bg-muted px-1 rounded">Alt + 1-6</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Smart Format Templates</span><span className="font-mono bg-muted px-1 rounded">Shift + Alt + 1-8</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Macro Expansion</span><span className="font-mono bg-muted px-1 rounded">/shortcut + Space</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Favorites Panel</span><span className="font-mono bg-muted px-1 rounded">Ctrl + Shift + F</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Previous Reports</span><span className="font-mono bg-muted px-1 rounded">Ctrl + Shift + P</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Measurements Panel</span><span className="font-mono bg-muted px-1 rounded">Ctrl + Shift + M</span></div>
+                </div>
+              </div>
+              <div className="bg-muted/30 rounded-lg p-3">
+                <h3 className="text-sm font-semibold flex items-center gap-2 mb-2"><Command size={14} /> Macro Examples</h3>
+                <div className="grid gap-1 text-xs">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Fatty Liver Grade I</span><span className="font-mono bg-muted px-1 rounded">/fl1</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Fazekas Grade I</span><span className="font-mono bg-muted px-1 rounded">/faz1</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Disc Desiccation</span><span className="font-mono bg-muted px-1 rounded">/disc</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Broad Disc Bulge</span><span className="font-mono bg-muted px-1 rounded">/bulge</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Normal Study</span><span className="font-mono bg-muted px-1 rounded">/normal</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Clinical Correlation</span><span className="font-mono bg-muted px-1 rounded">/clinical</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Compare to Previous</span><span className="font-mono bg-muted px-1 rounded">/compare</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Follow-up</span><span className="font-mono bg-muted px-1 rounded">/fup</span></div>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end pt-2 border-t border-card-border">
+              <Button variant="outline" size="sm" onClick={() => setShowHelp(false)}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── First-run Tutorial Overlay ── */}
+      {showTutorial && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowTutorial(false)}>
+          <div className="bg-card border border-card-border rounded-xl shadow-2xl max-w-md w-full mx-4 p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-lg flex items-center gap-2"><Sparkles size={18} className="text-amber-500" /> Welcome to Radiology</h2>
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setShowTutorial(false)}><X size={14} /></Button>
+            </div>
+            <p className="text-sm text-muted-foreground">New radiologist productivity tools are available. Here’s a quick guide:</p>
+            <div className="space-y-2 text-sm">
+              <div className="flex gap-3">
+                <div className="bg-primary/10 rounded-full h-6 w-6 flex items-center justify-center text-xs font-bold shrink-0">1</div>
+                <p><strong>Quick Add</strong> — Click buttons to insert common findings for each study type.</p>
+              </div>
+              <div className="flex gap-3">
+                <div className="bg-primary/10 rounded-full h-6 w-6 flex items-center justify-center text-xs font-bold shrink-0">2</div>
+                <p><strong>Smart Formats</strong> — Insert full study templates with Shift+Alt shortcuts.</p>
+              </div>
+              <div className="flex gap-3">
+                <div className="bg-primary/10 rounded-full h-6 w-6 flex items-center justify-center text-xs font-bold shrink-0">3</div>
+                <p><strong>Macros</strong> — Type /shortcut (e.g., /fl1, /faz1) then press Space to expand.</p>
+              </div>
+              <div className="flex gap-3">
+                <div className="bg-primary/10 rounded-full h-6 w-6 flex items-center justify-center text-xs font-bold shrink-0">4</div>
+                <p><strong>Settings</strong> — Enable or disable features in Settings → Radiology.</p>
+              </div>
+              <div className="flex gap-3">
+                <div className="bg-primary/10 rounded-full h-6 w-6 flex items-center justify-center text-xs font-bold shrink-0">5</div>
+                <p><strong>Help</strong> — Click the ? button anytime for shortcuts and macro reference.</p>
+              </div>
+            </div>
+            <div className="flex justify-between pt-2 border-t border-card-border">
+              <Button variant="ghost" size="sm" onClick={() => setShowTutorial(false)}>Dismiss</Button>
+              <Button size="sm" onClick={() => {
+                try { window.localStorage.setItem("radiologyTutorialSeen", "1"); } catch { /* ignore */ }
+                setShowTutorial(false);
+              }}>Got it</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

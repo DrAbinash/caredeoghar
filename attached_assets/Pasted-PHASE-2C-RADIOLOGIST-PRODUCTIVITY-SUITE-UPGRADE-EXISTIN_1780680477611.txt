@@ -1,0 +1,276 @@
+PHASE 2C — RADIOLOGIST PRODUCTIVITY SUITE (UPGRADE EXISTING IMPLEMENTATION)
+
+IMPORTANT
+
+Do NOT create a second productivity system.
+
+Use the existing:
+
+- Quick Add Buttons
+- Smart Format Builder
+- Previous Report Panel
+- Favorites Library
+- Macro Engine
+
+and upgrade them into the final production version.
+
+====================================================
+
+1. MODALITY-AWARE QUICK ADD BUTTONS
+   ====================================================
+
+Replace generic quick phrases with modality-aware smart buttons.
+
+Auto-detect study type from:
+
+- Modality
+- Procedure name
+- Worklist entry
+
+Examples:
+
+USG ABDOMEN
+
+Button 1 → Fatty Liver Grade I
+Button 2 → Fatty Liver Grade II
+Button 3 → GB Calculus
+Button 4 → Prostatomegaly
+Button 5 → Acute Appendicitis
+Button 6 → Renal Calculus
+
+MRI BRAIN
+
+Button 1 → Fazekas Grade I
+Button 2 → Senile Changes
+Button 3 → Hydrocephalus
+Button 4 → Acute Infarct
+Button 5 → Chronic Ischemic Changes
+Button 6 → Empty Sella
+
+MRI LS SPINE
+
+Button 1 → Disc Desiccation
+Button 2 → Disc Bulge
+Button 3 → Disc Protrusion
+Button 4 → Facet Joint Hypertrophy
+Button 5 → Ligamentum Flavum Hypertrophy
+Button 6 → Canal Stenosis
+
+MRI CERVICAL
+
+Button 1 → Disc Desiccation
+Button 2 → Disc Osteophyte Complex
+Button 3 → Canal Narrowing
+Button 4 → Cord Compression
+Button 5 → Facet Arthropathy
+Button 6 → Loss of Lordosis
+
+CT BRAIN
+
+Button 1 → Acute Hemorrhage
+Button 2 → Chronic Infarct
+Button 3 → Age Related Atrophy
+Button 4 → Hydrocephalus
+Button 5 → Fracture
+Button 6 → Normal Study
+
+Allow unlimited user-defined buttons.
+
+Each radiologist may:
+
+- Add
+- Edit
+- Delete
+- Reorder
+- Share presets
+
+====================================================
+2. SMART FORMAT BUILDER 2.0
+
+Create a second row called:
+
+FORMAT BUTTONS
+
+Examples:
+
+MRI Brain Normal
+MRI Brain Senile Changes
+MRI Brain Hydrocephalus
+MRI Brain Infarct
+MRI Brain Pituitary
+MRI Brain Trauma
+
+MRI Cervical Trauma
+MRI Cervical Degenerative
+MRI Cervical Myelopathy
+
+MRI LS Degenerative
+MRI LS Trauma
+MRI LS Canal Stenosis
+
+USG Abdomen Normal
+USG Abdomen Fatty Liver
+USG Abdomen Renal Calculus
+
+User can select multiple formats simultaneously.
+
+Examples:
+
+MRI Brain Hydrocephalus
++
+MRI Brain Pituitary
+
+Result:
+Single merged report.
+
+Duplicate sentences automatically removed.
+
+Common findings automatically consolidated.
+
+====================================================
+3. MULTI-STUDY REPORT MERGE ENGINE
+
+Allow combination of studies.
+
+Examples:
+
+MRI Brain
++
+MRI Cervical Spine
+
+Output title:
+
+MRI BRAIN WITH MRI CERVICAL SPINE
+
+Sections automatically merged.
+
+No duplicated normal findings.
+
+Impression automatically combined.
+
+Additional examples:
+
+MRI Brain + MR Angiography
+
+MRI Cervical + Screening Whole Spine
+
+USG Abdomen + Pelvis
+
+USG Abdomen + KUB
+
+====================================================
+4. RADIOLOGIST FAVORITES LIBRARY
+
+Allow saving:
+
+- Entire reports
+- Findings blocks
+- Impressions
+- Templates
+- Measurements
+
+Categories:
+
+MRI
+CT
+USG
+X-Ray
+Mammography
+Doppler
+Echo
+
+Searchable.
+
+Personal and Shared folders.
+
+====================================================
+5. MACRO ENGINE
+
+Expand current macros.
+
+Examples:
+
+/fl1
+/faz1
+/faz2
+/disc
+/bulge
+/normal
+/noacute
+/fup
+/compare
+
+Allow custom user macros.
+
+====================================================
+6. REMOVE BROWSER-CONSOLE DEPENDENCY
+
+Create:
+
+Settings
+→ Radiology
+→ Productivity Tools
+
+Visible toggles:
+
+Quick Add Buttons
+Smart Format Builder
+Previous Reports
+Favorites Library
+Macro Engine
+Measurements Panel
+AI Draft Assistant
+
+Enable/Disable from UI.
+
+No console commands required.
+
+====================================================
+7. FIRST RUN TUTORIAL
+
+Show guided tour.
+
+Step 1 Quick Add
+Step 2 Format Builder
+Step 3 Previous Reports
+Step 4 Favorites
+Step 5 Macros
+
+Options:
+
+Skip
+Don't show again
+Start Tour
+
+====================================================
+8. HELP CENTER
+
+Add Help (?) button.
+
+Show:
+
+Keyboard shortcuts
+
+Alt+1-6
+Ctrl+Shift+F
+Ctrl+Shift+P
+Ctrl+Space
+
+Macro examples
+
+Video/GIF placeholders
+
+====================================================
+9. SAFETY
+
+No breaking changes.
+
+No route deletions.
+
+No workflow changes.
+
+No database data loss.
+
+All existing productivity features must continue working.
+
+Upgrade existing implementation only.

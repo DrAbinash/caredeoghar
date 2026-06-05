@@ -20,7 +20,7 @@ import {
   Tag, Building2, Image as ImageIcon, Upload, MessageCircle, Printer,
   Search, Globe, Copy, ExternalLink, Check, Network, MapPin, Database,
   RefreshCcw, FileCode, Send, QrCode, Palette, Bot, Inbox, ChevronRight,
-  ArrowLeft, Phone, Layers, AlertTriangle, ScanLine, Receipt,
+  ArrowLeft, Phone, Layers, AlertTriangle, ScanLine, Receipt, Keyboard,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -120,6 +120,7 @@ const TABS = [
   { id: "promotional-footer", label: "Promotional Footer", icon: Tag },
   { id: "discount-reasons", label: "Discount Reasons", icon: Tag },
   { id: "backup", label: "Backup", icon: Database },
+  { id: "radiology", label: "Radiology", icon: ScanLine },
   { id: "manual", label: "User Manual", icon: FileDown },
   { id: "security", label: "Security", icon: ShieldCheck },
   { id: "password", label: "Change Password", icon: KeyRound },
@@ -216,6 +217,7 @@ export default function Settings() {
         {tab === "promotional-footer" && <PromotionalFooterTab />}
         {tab === "discount-reasons" && <DiscountReasonsTab />}
         {tab === "backup" && <BackupTab />}
+        {tab === "radiology" && <RadiologySettingsTab />}
         {tab === "manual" && <ManualTab />}
         {tab === "security" && <SecurityTab />}
         {tab === "password" && <ChangePasswordTab />}
@@ -4771,6 +4773,92 @@ function ReportTemplatesTab() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ============================================================
+// RADIOLOGY SETTINGS TAB — Productivity Tools
+// ============================================================
+function RadiologySettingsTab() {
+  const [quickAdd, setQuickAdd] = useState(() => isFeatureEnabled("radiologyQuickAdd"));
+  const [smartFormat, setSmartFormat] = useState(() => isFeatureEnabled("radiologySmartFormat"));
+  const [previousReports, setPreviousReports] = useState(() => isFeatureEnabled("radiologyPreviousReports"));
+  const [favorites, setFavorites] = useState(() => isFeatureEnabled("radiologyFavorites"));
+  const [macros, setMacros] = useState(() => isFeatureEnabled("radiologyMacros"));
+  const [measurements, setMeasurements] = useState(() => isFeatureEnabled("radiologyMeasurements"));
+  const [aiAssistant, setAiAssistant] = useState(() => isFeatureEnabled("radiologyAiAssistant") !== false);
+
+  const toggles = [
+    { id: "radiologyQuickAdd", label: "Quick Add Buttons", desc: "Alt+1-6 shortcut buttons for instant insertion of common findings", value: quickAdd, set: setQuickAdd },
+    { id: "radiologySmartFormat", label: "Smart Format Templates", desc: "Shift+Alt+1-5 shortcuts for full study templates", value: smartFormat, set: setSmartFormat },
+    { id: "radiologyPreviousReports", label: "Previous Reports Lookup", desc: "Compare and reference prior patient imaging", value: previousReports, set: setPreviousReports },
+    { id: "radiologyFavorites", label: "Favorites & Templates", desc: "Personal and shared saved findings", value: favorites, set: setFavorites },
+    { id: "radiologyMacros", label: "Macro Engine", desc: "Type /fl1, /faz1, /disc etc. to expand into full text", value: macros, set: setMacros },
+    { id: "radiologyMeasurements", label: "Measurements Panel", desc: "Visual measurement and annotation tools", value: measurements, set: setMeasurements },
+    { id: "radiologyAiAssistant", label: "AI Draft Assistant", desc: "Gemini-powered impression generation (disabled for sensitive reporting)", value: aiAssistant, set: setAiAssistant },
+  ];
+
+  return (
+    <div className="max-w-2xl space-y-6">
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="font-bold text-lg flex items-center gap-2"><ScanLine size={16} /> Radiology Productivity Tools</h2>
+          <p className="text-sm text-muted-foreground mt-1">Enable or disable productivity features in the Radiology Report workspace. All are local to this device and stored in browser preferences.</p>
+        </div>
+        <div className="space-y-2">
+          {toggles.map((t) => (
+            <label key={t.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20 cursor-pointer">
+              <div className="pr-4">
+                <div className="text-sm font-medium">{t.label}</div>
+                <div className="text-[11px] text-muted-foreground">{t.desc}</div>
+              </div>
+              <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${t.value ? "bg-primary" : "bg-muted-foreground/40"}`}>
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${t.value ? "translate-x-5" : "translate-x-1"}`} />
+              </span>
+              <input type="checkbox" className="sr-only" checked={t.value} onChange={() => {
+                const next = !t.value;
+                t.set(next);
+                setFeatureFlag(t.id, next);
+              }} />
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Keyboard shortcuts reference */}
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="font-bold text-lg flex items-center gap-2"><Keyboard size={16} /> Keyboard Shortcuts</h2>
+          <p className="text-sm text-muted-foreground mt-1">Quick reference for the radiologist workspace.</p>
+        </div>
+        <div className="grid gap-2 text-sm">
+          <div className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20">
+            <span className="font-medium">Quick Add Buttons</span>
+            <span className="font-mono text-xs text-muted-foreground">Alt + 1-6</span>
+          </div>
+          <div className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20">
+            <span className="font-medium">Smart Format Templates</span>
+            <span className="font-mono text-xs text-muted-foreground">Shift + Alt + 1-5</span>
+          </div>
+          <div className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20">
+            <span className="font-medium">Macro Expansion</span>
+            <span className="font-mono text-xs text-muted-foreground">/shortcut + Space</span>
+          </div>
+          <div className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20">
+            <span className="font-medium">Favorites Panel</span>
+            <span className="font-mono text-xs text-muted-foreground">Ctrl + Shift + F</span>
+          </div>
+          <div className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20">
+            <span className="font-medium">Previous Reports</span>
+            <span className="font-mono text-xs text-muted-foreground">Ctrl + Shift + P</span>
+          </div>
+          <div className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20">
+            <span className="font-medium">Measurements Panel</span>
+            <span className="font-mono text-xs text-muted-foreground">Ctrl + Shift + M</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -153,6 +153,7 @@ export function firstPermissionedPath(session: StaffSession | null, candidates: 
 //
 const FEATURE_FLAG_DEFAULTS: Record<string, boolean> = {
   showUnifiedReporting: false,
+  // Phase 2B radiology feature flags (legacy names, kept for backward compatibility)
   showMeasurementPanel: false,
   showAiDraftPanel: false,
   showRadiologyMacros: false,
@@ -160,6 +161,14 @@ const FEATURE_FLAG_DEFAULTS: Record<string, boolean> = {
   showFavoritesLibrary: false,
   showQuickAddButtons: false,
   showSmartFormatBuilder: false,
+  // Phase 2C radiology feature flags (new names, aligned with Settings UI)
+  radiologyMeasurements: false,
+  radiologyAiAssistant: false,
+  radiologyMacros: false,
+  radiologyPreviousReports: false,
+  radiologyFavorites: false,
+  radiologyQuickAdd: false,
+  radiologySmartFormat: false,
   hideDeprecatedNav: false,
   billingDeskStepped: false,
 };
