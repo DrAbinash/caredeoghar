@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import QRCode from "qrcode";
 import { api } from "@/lib/fetchApi";
 import { incrementPendingSyncCount } from "@/hooks/useSyncStatus";
-import { readStaffSession } from "@/lib/staffSession";
+import { readStaffSession, isFeatureEnabled } from "@/lib/staffSession";
 import { getAutoBillPaperSize, getBillPaperSize } from "@/lib/billPrintLayout";
 import {
   buildBillPrintHtml,
@@ -62,6 +62,9 @@ import {
   ExternalLink,
   AlertTriangle,
   Pencil,
+  Check,
+  ChevronRight,
+  ChevronLeft,
 } from "lucide-react";
 
 // ──────────────────────────────────────────────────────
@@ -369,6 +372,40 @@ export default function BillingDesk() {
   const [notes, setNotes] = useState("");
 
   // ── New patient form visibility ──────────────────────
+  // ── Layout mode (unified / stepped) ─────────────────
+  const [layoutMode] = useState<"unified" | "stepped" | "compact">(() => {
+    const stored = typeof window !== "undefined" ? localStorage.getItem("billingDeskLayout") : null;
+    return (stored as "unified" | "stepped" | "compact") || "unified";
+  });
+  const isStepped = layoutMode === "stepped";
+  const isCompact = layoutMode === "compact";
+  const autoAdvance = isStepped && isFeatureEnabled("billingDeskAutoAdvance");
+  const showQuickTestsSetting = isFeatureEnabled("billingDeskQuickTests") !== false;
+  const showPackagesSetting = isFeatureEnabled("billingDeskShowPackages") !== false;
+  const [currentStep, setCurrentStep] = useState(1);
+  const [stepCompleted, setStepCompleted] = useState<Set<number>>(new Set());
+  const stepContentRef = useRef<HTMLDivElement>(null);
+
+  const advanceStep = useCallback(() => {
+    if (isStepped && autoAdvance && currentStep < 4) {
+      window.setTimeout(() => {
+        setStepCompleted((prev) => new Set([...prev, currentStep]));
+        setCurrentStep((prev) => prev + 1);
+        window.setTimeout(() => stepContentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+      }, 300);
+    }
+  }, [isStepped, autoAdvance, currentStep]);
+
+  const goToStep = (step: number) => {
+    if (step <= currentStep || stepCompleted.has(step - 1)) {
+      setCurrentStep(step);
+      window.setTimeout(() => stepContentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    }
+  };
+
+  const stepperActive = (step: number) => step === currentStep;
+  const stepperDone   = (step: number) => stepCompleted.has(step);
+
   // ── Test selection ─────────────────────────────────
   const [testSearch, setTestSearch]   = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -1163,30 +1200,68 @@ export default function BillingDesk() {
   return (
     <div className="h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-900/20">
 
-      {/* ── TOP BAR — compact single row ── */}
-      <div className="flex-shrink-0 bg-card border-b border-card-border px-3 sm:px-4 py-1.5 sm:py-2 flex items-center gap-3 shadow-sm">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <Receipt size={16} className="text-primary flex-shrink-0" />
-          <span className="font-bold text-sm truncate">Billing Desk</span>
-          <span className="hidden sm:inline text-xs text-slate-900 dark:text-slate-900">· {today()}</span>
-        </div>
-        <div className="ml-auto flex items-center gap-1.5">
-          <div className="w-32 sm:w-48"><BillSearchBox /></div>
+      {/* ── TOP BAR — single ultra-compact row ── */}
+      <div className="flex-shrink-0 bg-card border-b border-card-border px-2 sm:px-3 py-1 flex items-center gap-2 shadow-sm">
+        <Receipt size={14} className="text-primary flex-shrink-0" />
+        <span className="hidden sm:inline text-[11px] text-muted-foreground flex-shrink-0">· {today()}</span>
+        <div className="flex-1 min-w-0" />
+        <div className="flex items-center gap-1">
+          <div className="w-40 sm:w-56 lg:w-72"><BillSearchBox /></div>
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-7 px-2 text-slate-900 dark:text-slate-900 hover:text-foreground flex-shrink-0">
-                <Receipt size={12} className="mr-1" /> <span className="hidden sm:inline text-xs">Recent</span>
+              <Button variant="ghost" size="sm" className="h-6 px-1.5 text-muted-foreground hover:text-foreground flex-shrink-0">
+                <Receipt size={11} />
+                <span className="hidden md:inline text-[11px] ml-1">Recent</span>
               </Button>
             </PopoverTrigger>
             <PopoverContent align="end" className="p-0 w-[420px]">
               <RecentBillsPanel />
             </PopoverContent>
           </Popover>
-          <Button variant="ghost" size="sm" onClick={resetAll} className="h-7 px-2 text-slate-900 dark:text-slate-900 hover:text-foreground flex-shrink-0">
-            <RefreshCcw size={12} className="mr-1" /> <span className="hidden sm:inline text-xs">New</span>
+          <Button variant="ghost" size="sm" onClick={resetAll} className="h-6 px-1.5 text-muted-foreground hover:text-foreground flex-shrink-0">
+            <RefreshCcw size={11} />
+            <span className="hidden md:inline text-[11px] ml-1">New</span>
           </Button>
         </div>
       </div>
+
+      {/* ── STEPPER BAR (stepped wizard only) ── */}
+      {isStepped && (
+        <div className="flex-shrink-0 bg-card border-b border-card-border px-3 py-2">
+          <div className="flex items-center gap-2 max-w-3xl mx-auto">
+            {[
+              { id: 1, label: "Patient", icon: User },
+              { id: 2, label: "Doctor", icon: Stethoscope },
+              { id: 3, label: "Tests", icon: FlaskConical },
+              { id: 4, label: "Summary", icon: Receipt },
+            ].map((s, idx) => (
+              <div key={s.id} className="flex items-center flex-1">
+                <button
+                  type="button"
+                  onClick={() => goToStep(s.id)}
+                  className={`flex items-center gap-2 flex-1 justify-center px-2 py-1.5 rounded-lg border text-[11px] font-bold transition-colors ${
+                    stepperActive(s.id)
+                      ? "bg-primary/10 border-primary/30 text-primary"
+                      : stepperDone(s.id)
+                      ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-950/20 dark:border-green-800 dark:text-green-400"
+                      : "bg-muted/30 border-card-border text-muted-foreground"
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                    stepperActive(s.id) ? "bg-primary text-white" : stepperDone(s.id) ? "bg-green-500 text-white" : "bg-muted-foreground/20 text-muted-foreground"
+                  }`}>
+                    {stepperDone(s.id) ? <Check size={10} /> : s.id}
+                  </div>
+                  <span className="hidden sm:inline">{s.label}</span>
+                </button>
+                {idx < 3 && (
+                  <div className={`w-4 h-px mx-1 ${stepperDone(s.id) ? "bg-green-400" : "bg-card-border"}`} />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── MAIN LAYOUT ── */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
@@ -1195,9 +1270,10 @@ export default function BillingDesk() {
             LEFT COLUMN — Patient + Doctor + Notes
         ══════════════════════════════════════════════ */}
         <div className="w-full lg:w-[65%] lg:border-r border-card-border flex flex-col lg:overflow-hidden min-h-0">
-          <div className="lg:flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
+          <div ref={stepContentRef} className="lg:flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
 
-            {/* ── Patient Section — Search ── */}
+            {/* ── STEP 1: Patient Section ── */}
+            {(!isStepped || currentStep === 1) && (
             <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm">
               <div className="px-4 py-2 h-10 border-b border-card-border flex items-center justify-between bg-blue-800 dark:bg-blue-900 border-l-[4px] border-l-blue-950">
                 <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-white">
@@ -1284,6 +1360,7 @@ export default function BillingDesk() {
                 )}
               </div>
             </div>
+            )}
 
             {/* ── Duplicate bill warning ── */}
             {recentPatientBill && (

@@ -656,36 +656,114 @@ function SidebarBehaviourCard() {
   );
 }
 
+type BillingLayout = "unified" | "stepped" | "compact";
+
 function BillingDeskLayoutCard() {
-  const [stepped, setStepped] = useState(() => isFeatureEnabled("billingDeskStepped"));
-  const toggle = () => {
-    const next = !stepped;
-    setStepped(next);
-    setFeatureFlag("billingDeskStepped", next);
+  const [layout, setLayout] = useState<BillingLayout>(() => {
+    const stored = typeof window !== "undefined" ? localStorage.getItem("billingDeskLayout") : null;
+    return (stored as BillingLayout) || "unified";
+  });
+  const [autoAdvance, setAutoAdvance] = useState(() => isFeatureEnabled("billingDeskAutoAdvance"));
+  const [showQuickTests, setShowQuickTests] = useState(() => isFeatureEnabled("billingDeskQuickTests") !== false);
+  const [showPackages, setShowPackages] = useState(() => isFeatureEnabled("billingDeskShowPackages") !== false);
+
+  const saveLayout = (next: BillingLayout) => {
+    setLayout(next);
+    localStorage.setItem("billingDeskLayout", next);
+    setFeatureFlag("billingDeskStepped", next === "stepped");
   };
+
+  const toggleAutoAdvance = () => {
+    const next = !autoAdvance;
+    setAutoAdvance(next);
+    setFeatureFlag("billingDeskAutoAdvance", next);
+  };
+
+  const toggleQuickTests = () => {
+    const next = !showQuickTests;
+    setShowQuickTests(next);
+    setFeatureFlag("billingDeskQuickTests", next);
+  };
+
+  const toggleShowPackages = () => {
+    const next = !showPackages;
+    setShowPackages(next);
+    setFeatureFlag("billingDeskShowPackages", next);
+  };
+
+  const layouts: { id: BillingLayout; label: string; desc: string }[] = [
+    { id: "unified", label: "Unified Single Page", desc: "Everything on one screen — patient, tests, doctor, payment, and print. Best for fast billing." },
+    { id: "stepped", label: "Stepped Wizard", desc: "4 sequential steps (Patient → Doctor → Tests & Packages → Summary). Best for training new staff." },
+    { id: "compact", label: "Compact", desc: "Dense layout with minimal spacing. Best for small screens." },
+  ];
+
   return (
-    <div className="bg-card border border-card-border rounded-xl p-5 space-y-3">
+    <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
       <div>
         <h2 className="font-bold text-lg flex items-center gap-2"><Receipt size={16} /> Billing Desk Layout</h2>
         <p className="text-sm text-muted-foreground">Personal preference for this device — not synced across staff accounts.</p>
       </div>
-      <div>
-        <p className="text-sm font-medium mb-1">Stepped Wizard Layout</p>
-        <button
-          type="button"
-          onClick={toggle}
-          className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors ${stepped ? "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-800" : "bg-muted/30 border-card-border"}`}
-        >
-          <span className="text-sm font-medium">{stepped ? "Stepped Wizard (5-step)" : "Unified Single Page (default)"}</span>
-          <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${stepped ? "bg-green-500" : "bg-muted-foreground/40"}`}>
-            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${stepped ? "translate-x-5" : "translate-x-1"}`} />
+
+      {/* Layout selector */}
+      <div className="space-y-2">
+        <p className="text-sm font-medium">Layout Style</p>
+        <div className="space-y-2">
+          {layouts.map((l) => (
+            <button
+              key={l.id}
+              type="button"
+              onClick={() => saveLayout(l.id)}
+              className={`w-full text-left px-4 py-3 rounded-lg border transition-colors flex items-start gap-3 ${
+                layout === l.id
+                  ? "bg-primary/5 border-primary/30 dark:bg-primary/10 dark:border-primary/20"
+                  : "bg-muted/30 border-card-border hover:bg-muted/50"
+              }`}
+            >
+              <div className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                layout === l.id ? "border-primary" : "border-muted-foreground/40"
+              }`}>
+                {layout === l.id && <div className="w-2 h-2 rounded-full bg-primary" />}
+              </div>
+              <div>
+                <div className="text-sm font-bold">{l.label}</div>
+                <div className="text-[11px] text-muted-foreground">{l.desc}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Flow options — only relevant when stepped wizard is active */}
+      {layout === "stepped" && (
+        <div className="space-y-2 pt-2 border-t border-card-border">
+          <p className="text-sm font-medium">Wizard Options</p>
+          <label className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20 cursor-pointer">
+            <span className="text-sm">Auto-advance to next step</span>
+            <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${autoAdvance ? "bg-primary" : "bg-muted-foreground/40"}`}>
+              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${autoAdvance ? "translate-x-5" : "translate-x-1"}`} />
+            </span>
+            <input type="checkbox" className="sr-only" checked={autoAdvance} onChange={toggleAutoAdvance} />
+          </label>
+        </div>
+      )}
+
+      {/* Universal options */}
+      <div className="space-y-2 pt-2 border-t border-card-border">
+        <p className="text-sm font-medium">Show / Hide Sections</p>
+        <label className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20 cursor-pointer">
+          <span className="text-sm">Quick Test Slots</span>
+          <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${showQuickTests ? "bg-primary" : "bg-muted-foreground/40"}`}>
+            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${showQuickTests ? "translate-x-5" : "translate-x-1"}`} />
           </span>
-        </button>
-        <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
-          {stepped
-            ? "Stepped wizard: 5 sequential steps (Patient → Doctor → Tests → Packages → Summary). Best for training new staff."
-            : "Unified page: everything on one screen — patient, tests, doctor, payment, and print. Best for fast billing."}
-        </p>
+          <input type="checkbox" className="sr-only" checked={showQuickTests} onChange={toggleQuickTests} />
+        </label>
+        <label className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20 cursor-pointer">
+          <span className="text-sm">Package Section</span>
+          <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${showPackages ? "bg-primary" : "bg-muted-foreground/40"}`}>
+            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${showPackages ? "translate-x-5" : "translate-x-1"}`} />
+          </span>
+          <input type="checkbox" className="sr-only" checked={showPackages} onChange={toggleShowPackages} />
+        </label>
       </div>
     </div>
   );

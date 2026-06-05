@@ -1035,13 +1035,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </span>
           </div>
           <div className="ml-auto flex items-center gap-1">
-            {session && (
-              <button onClick={onLogout} title="Sign out" className="p-2 rounded-md text-foreground hover:bg-muted transition-colors">
-                <LogOut size={16} />
-              </button>
-            )}
             {scannerActive && (
-              <div title="Scanner active" className="flex items-center gap-1 rounded-md bg-emerald-100 text-emerald-700 px-1.5 py-0.5 text-[10px] font-medium">
+              <div title="Scanner active" className="flex items-center justify-center rounded-full bg-emerald-500 text-white w-5 h-5">
                 <ScanLine size={10} />
               </div>
             )}
@@ -1050,13 +1045,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        {/* Desktop top-right control bar — in normal flow, no absolute positioning */}
+        {/* Desktop top-right control bar — thin strip, compact icons */}
         {!isMobile && (
-          <div className="flex items-center justify-end gap-1 px-3 py-1 border-b border-border/40 bg-card/50">
+          <div className="flex items-center justify-end gap-1 px-3 py-0.5 border-b border-border/40 bg-card/50">
             {scannerActive && (
-              <div title="Scanner active" className="flex items-center gap-1 rounded-md bg-emerald-100 text-emerald-700 px-1.5 py-0.5 text-[10px] font-medium">
-                <ScanLine size={10} />
-                <span className="hidden lg:inline">Scanner</span>
+              <div title="Scanner active" className="flex items-center justify-center rounded-full bg-emerald-500 text-white w-4 h-4 mr-1">
+                <ScanLine size={9} />
               </div>
             )}
             <FullscreenToggle />
