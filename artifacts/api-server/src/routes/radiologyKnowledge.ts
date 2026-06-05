@@ -815,13 +815,16 @@ radiologyKnowledgeRouter.get("/analytics/global", async (req: StaffAuthRequest, 
 // POST /api/radiology/seed-master-templates
 // Seed initial master templates (admin only, idempotent)
 radiologyKnowledgeRouter.post("/seed-master-templates", async (req: StaffAuthRequest, res) => {
-  if (!getStaffId(req) || !["admin", "super-admin"].includes(getStaffRole(req)?.toLowerCase() ?? "")) {
+  if (!getStaffId(req) || !isAdmin(req)) {
     res.status(403).json({ error: "Only admin/super-admin can seed templates" });
     return;
   }
 
   const seedTemplates = [
-    // DR SUGANDHA MASTER - MRI Brain
+    // ──────────────────────────────────────────────────────────
+    // DR SUGANDHA MASTER TEMPLATES (20 templates)
+    // ──────────────────────────────────────────────────────────
+    // MRI Brain
     {
       groupName: "DR_SUGANDHA_MASTER",
       templateName: "MRI Brain Normal",
@@ -879,7 +882,7 @@ radiologyKnowledgeRouter.post("/seed-master-templates", async (req: StaffAuthReq
     },
     {
       groupName: "DR_SUGANDHA_MASTER",
-      templateName: "MRI Pituitary Empty Sella",
+      templateName: "MRI Pituitary / Empty Sella",
       modality: "MR",
       studyType: "MRI Pituitary",
       bodyPart: "PITUITARY",
@@ -888,7 +891,40 @@ radiologyKnowledgeRouter.post("/seed-master-templates", async (req: StaffAuthReq
       recommendations: "Routine follow-up. Endocrine evaluation if clinically indicated.",
       tags: ["empty sella", "pituitary", "mri"],
     },
-    // DR SUGANDHA MASTER - Spine
+    {
+      groupName: "DR_SUGANDHA_MASTER",
+      templateName: "MRI Brain + MRA",
+      modality: "MR",
+      studyType: "MRI Brain + MRA",
+      bodyPart: "BRAIN",
+      findings: "BRAIN PARENCHYMA: Normal signal.\nNo acute infarct or hemorrhage.\nMRA: No significant stenosis or aneurysm in the circle of Willis.\nFlow voids: Normal.",
+      impression: "Normal MRI brain and MRA. No significant intracranial vascular abnormality.",
+      recommendations: "No follow-up required.",
+      tags: ["normal", "brain", "mri", "mra", "vascular"],
+    },
+    {
+      groupName: "DR_SUGANDHA_MASTER",
+      templateName: "MRI Brain + Cervical Screening",
+      modality: "MR",
+      studyType: "MRI Brain + Cervical Spine",
+      bodyPart: "BRAIN",
+      findings: "BRAIN: Normal signal. No focal lesion.\nCERVICAL SPINE: No disc bulge. No canal stenosis. Cord normal.\nNo cord compression.",
+      impression: "Normal MRI brain and cervical spine.",
+      recommendations: "No follow-up required.",
+      tags: ["normal", "brain", "cervical", "mri", "screening"],
+    },
+    // Cervical Spine
+    {
+      groupName: "DR_SUGANDHA_MASTER",
+      templateName: "MRI Cervical Spine Normal",
+      modality: "MR",
+      studyType: "MRI Cervical Spine",
+      bodyPart: "CERVICAL SPINE",
+      findings: "CERVICAL SPINE: Normal alignment and curvature.\nDiscs: Normal height and signal. No herniation.\nCORD: Normal signal. No compression.\nNo soft tissue abnormality.",
+      impression: "Normal MRI cervical spine.",
+      recommendations: "No follow-up required.",
+      tags: ["normal", "cervical", "mri"],
+    },
     {
       groupName: "DR_SUGANDHA_MASTER",
       templateName: "MRI Cervical Spondylosis",
@@ -910,6 +946,18 @@ radiologyKnowledgeRouter.post("/seed-master-templates", async (req: StaffAuthReq
       impression: "Cervical spine fracture at C___ with spinal cord contusion/edema.",
       recommendations: "URGENT: Immediate neurosurgical evaluation and immobilization.",
       tags: ["trauma", "cervical", "mri", "critical", "fracture"],
+    },
+    // LS Spine
+    {
+      groupName: "DR_SUGANDHA_MASTER",
+      templateName: "MRI LS Spine Normal",
+      modality: "MR",
+      studyType: "MRI LS Spine",
+      bodyPart: "LS SPINE",
+      findings: "LS SPINE: Normal alignment.\nDiscs: Normal height and signal.\nNo disc herniation.\nSpinal canal: Normal.\nNeural foramina: Patent.\nCONUS: Normal.",
+      impression: "Normal MRI LS spine.",
+      recommendations: "No follow-up required.",
+      tags: ["normal", "lumbar", "mri"],
     },
     {
       groupName: "DR_SUGANDHA_MASTER",
@@ -933,7 +981,19 @@ radiologyKnowledgeRouter.post("/seed-master-templates", async (req: StaffAuthReq
       recommendations: "Surgical evaluation recommended. Clinical correlation.",
       tags: ["stenosis", "lumbar", "mri", "severe"],
     },
-    // DR SUGANDHA MASTER - USG
+    // Whole Spine
+    {
+      groupName: "DR_SUGANDHA_MASTER",
+      templateName: "Whole Spine Screening",
+      modality: "MR",
+      studyType: "MRI Whole Spine",
+      bodyPart: "SPINE",
+      findings: "CERVICAL SPINE: Normal alignment. No disc herniation.\nTHORACIC SPINE: Normal.\nLUMBAR SPINE: No disc bulge. No canal stenosis.\nCONUS: Normal.\nNo syrinx.",
+      impression: "Normal MRI whole spine screening.",
+      recommendations: "No follow-up required.",
+      tags: ["normal", "spine", "mri", "screening"],
+    },
+    // USG Abdomen
     {
       groupName: "DR_SUGANDHA_MASTER",
       templateName: "USG Abdomen Normal",
@@ -958,19 +1018,54 @@ radiologyKnowledgeRouter.post("/seed-master-templates", async (req: StaffAuthReq
     },
     {
       groupName: "DR_SUGANDHA_MASTER",
-      templateName: "USG Renal Calculus",
+      templateName: "USG GB Calculus",
       modality: "US",
       studyType: "USG Abdomen",
       bodyPart: "ABDOMEN",
-      findings: "KIDNEYS: Echogenic focus with posterior acoustic shadowing in the ___ kidney, measuring ___ mm. No hydronephrosis.",
+      findings: "GALLBLADDER: Well distended. Single/multiple echogenic foci with posterior acoustic shadowing in the GB lumen, largest measuring ___ mm.\nGB WALL: Normal thickness.\nNo pericholecystic fluid.",
+      impression: "Gallbladder calculus.",
+      recommendations: "Clinical correlation. Surgical evaluation if symptomatic.",
+      tags: ["gb calculus", "abdomen", "usg", "gallbladder"],
+    },
+    {
+      groupName: "DR_SUGANDHA_MASTER",
+      templateName: "USG KUB Calculus",
+      modality: "US",
+      studyType: "USG KUB",
+      bodyPart: "ABDOMEN",
+      findings: "KIDNEYS: Echogenic focus with posterior acoustic shadowing in the ___ kidney, measuring ___ mm. No hydronephrosis.\nURETER: No dilatation.\nBLADDER: Normal. No calculus.",
       impression: "Renal calculus in the ___ kidney.",
       recommendations: "Clinical correlation. Hydration. Repeat ultrasound if symptomatic.",
-      tags: ["renal calculus", "abdomen", "usg", "kidney"],
+      tags: ["renal calculus", "kub", "usg", "kidney"],
     },
-    // DR ABINASH MASTER - Neurosurgery
+    {
+      groupName: "DR_SUGANDHA_MASTER",
+      templateName: "USG Prostatomegaly",
+      modality: "US",
+      studyType: "USG KUB/Prostate",
+      bodyPart: "PELVIS",
+      findings: "PROSTATE: Enlarged, size ___ cc (vol = L x W x H x 0.52). Homogeneous echotexture.\nNo focal hypoechoic lesion.\nNo calcification.\nPOST-VOID RESIDUAL: ___ ml.",
+      impression: "Prostatomegaly. Post-void residual urine ___ ml.",
+      recommendations: "Clinical correlation. Urology evaluation if symptomatic.",
+      tags: ["prostate", "usg", "prostatomegaly", "kub"],
+    },
+    // ──────────────────────────────────────────────────────────
+    // DR ABINASH MASTER TEMPLATES (15 templates)
+    // ──────────────────────────────────────────────────────────
     {
       groupName: "DR_ABINASH_MASTER",
-      templateName: "Brain Trauma EDH",
+      templateName: "CT/MRI Head Injury",
+      modality: "CT",
+      studyType: "CT Brain",
+      bodyPart: "BRAIN",
+      findings: "CT BRAIN: No acute intracranial hemorrhage. No skull fracture. No midline shift.\nVentricular system: Normal.\nCerebral parenchyma: Normal.\nNo mass lesion.",
+      impression: "Normal CT brain. No acute intracranial abnormality.",
+      recommendations: "Clinical correlation. Observation if indicated.",
+      tags: ["normal", "head injury", "brain", "ct", "trauma"],
+    },
+    {
+      groupName: "DR_ABINASH_MASTER",
+      templateName: "EDH",
       modality: "CT",
       studyType: "CT Brain",
       bodyPart: "BRAIN",
@@ -981,7 +1076,7 @@ radiologyKnowledgeRouter.post("/seed-master-templates", async (req: StaffAuthReq
     },
     {
       groupName: "DR_ABINASH_MASTER",
-      templateName: "Brain Trauma SDH",
+      templateName: "SDH",
       modality: "CT",
       studyType: "CT Brain",
       bodyPart: "BRAIN",
@@ -992,7 +1087,7 @@ radiologyKnowledgeRouter.post("/seed-master-templates", async (req: StaffAuthReq
     },
     {
       groupName: "DR_ABINASH_MASTER",
-      templateName: "Brain Trauma SAH",
+      templateName: "SAH",
       modality: "CT",
       studyType: "CT Brain",
       bodyPart: "BRAIN",
@@ -1003,29 +1098,62 @@ radiologyKnowledgeRouter.post("/seed-master-templates", async (req: StaffAuthReq
     },
     {
       groupName: "DR_ABINASH_MASTER",
-      templateName: "Spine Trauma Fracture",
+      templateName: "Cerebral Contusion",
       modality: "CT",
-      studyType: "CT Spine",
-      bodyPart: "SPINE",
-      findings: "CT SPINE: Compression fracture of ___ vertebral body with ___% loss of anterior height.\nRetropulsion: Present/Absent.\nPosterior elements: Intact/Fractured.\nSPINAL CANAL: Compromised/Normal.",
-      impression: "Compression fracture of ___ vertebral body with ___% height loss. Posterior elements intact/compromised.",
-      recommendations: "Orthopedic/neurosurgical evaluation. Consider MRI for ligamentous injury.",
-      tags: ["fracture", "spine", "ct", "trauma", "neurosurgery"],
+      studyType: "CT Brain",
+      bodyPart: "BRAIN",
+      findings: "CT BRAIN: Heterogeneous hyperdense area in the ___ lobe, suggestive of cerebral contusion.\nSurrounding edema: Present.\nNo significant mass effect.\nNo midline shift.",
+      impression: "Cerebral contusion in the ___ lobe.",
+      recommendations: "Neurosurgical evaluation. Observation and follow-up CT.",
+      tags: ["contusion", "brain", "ct", "trauma", "neurosurgery"],
     },
     {
       groupName: "DR_ABINASH_MASTER",
-      templateName: "Spine Cord Compression",
-      modality: "MR",
-      studyType: "MRI Spine",
-      bodyPart: "SPINE",
-      findings: "SPINE: ___ level — disc herniation/extrusion with severe canal stenosis.\nSPINAL CORD: T2 hyperintense signal at ___ level.\nCORD: Compressed/Decompressed.\nPRE/POST contrast: Enhancement pattern.",
-      impression: "Spinal cord compression at ___ level with signal changes. Surgical decompression recommended.",
-      recommendations: "URGENT: Surgical decompression recommended. Steroids if acute.",
-      tags: ["cord compression", "spine", "mri", "critical", "neurosurgery"],
+      templateName: "Acute Infarct",
+      modality: "CT",
+      studyType: "CT Brain",
+      bodyPart: "BRAIN",
+      findings: "CT BRAIN: Hypodense area in the ___ territory, suggestive of acute infarct.\nNo hemorrhagic transformation.\nSulcal effacement: Present.",
+      impression: "Acute infarct in the ___ territory.",
+      recommendations: "URGENT: Immediate medical management. Neurology referral.",
+      tags: ["acute", "infarct", "brain", "ct", "critical"],
     },
     {
       groupName: "DR_ABINASH_MASTER",
-      templateName: "Post-operative Craniotomy",
+      templateName: "Intracranial Hemorrhage",
+      modality: "CT",
+      studyType: "CT Brain",
+      bodyPart: "BRAIN",
+      findings: "CT BRAIN: Hyperdense area in the ___ region, consistent with intraparenchymal hemorrhage.\nVolume: ___ ml.\nMass effect: Present.\nMidline shift: ___ mm.",
+      impression: "Intracranial hemorrhage in the ___ region. Volume ___ ml.",
+      recommendations: "URGENT: Neurosurgical evaluation. BP control.",
+      tags: ["hemorrhage", "brain", "ct", "critical", "neurosurgery"],
+    },
+    {
+      groupName: "DR_ABINASH_MASTER",
+      templateName: "Hydrocephalus",
+      modality: "CT",
+      studyType: "CT Brain",
+      bodyPart: "BRAIN",
+      findings: "CT BRAIN: Dilated lateral and third ventricles.\nTemporal horns prominent.\nTransependymal CSF seepage: Present.\nNo acute hemorrhage.\nNo mass lesion.",
+      impression: "Hydrocephalus.",
+      recommendations: "Neurosurgical evaluation for shunt consideration.",
+      tags: ["hydrocephalus", "brain", "ct", "neurosurgery"],
+    },
+    {
+      groupName: "DR_ABINASH_MASTER",
+      templateName: "Brain Tumor / SOL",
+      modality: "CT",
+      studyType: "CT Brain",
+      bodyPart: "BRAIN",
+      findings: "CT BRAIN: Hypodense / hyperdense / mixed density lesion in the ___ region, size ___ x ___ mm.\nMass effect: Present.\nEdema: Present.\nMidline shift: ___ mm.\nContrast enhancement: Homogeneous / Heterogeneous / Ring.",
+      impression: "Space-occupying lesion in the ___ region. Differential: glioma / metastasis / abscess.",
+      recommendations: "MRI with contrast. Neurosurgical evaluation. Biopsy.",
+      tags: ["tumor", "brain", "ct", "sol", "neurosurgery"],
+    },
+    {
+      groupName: "DR_ABINASH_MASTER",
+      templateName: "Post-operative Brain",
       modality: "CT",
       studyType: "CT Brain",
       bodyPart: "BRAIN",
@@ -1034,7 +1162,64 @@ radiologyKnowledgeRouter.post("/seed-master-templates", async (req: StaffAuthReq
       recommendations: "Routine post-operative follow-up. Clinical correlation.",
       tags: ["post-op", "brain", "ct", "neurosurgery"],
     },
-    // CARE DIAGNOSTICS MASTER
+    {
+      groupName: "DR_ABINASH_MASTER",
+      templateName: "Cervical Trauma",
+      modality: "CT",
+      studyType: "CT Cervical Spine",
+      bodyPart: "CERVICAL SPINE",
+      findings: "CT CERVICAL SPINE: Fracture of C___ vertebral body.\nRetropulsion: Present/Absent.\nPosterior elements: Intact/Fractured.\nSpinal canal: Compromised/Normal.",
+      impression: "Cervical spine fracture at C___.",
+      recommendations: "Orthopedic/neurosurgical evaluation. Immobilization.",
+      tags: ["trauma", "cervical", "ct", "fracture", "neurosurgery"],
+    },
+    {
+      groupName: "DR_ABINASH_MASTER",
+      templateName: "Cord Compression",
+      modality: "MR",
+      studyType: "MRI Spine",
+      bodyPart: "SPINE",
+      findings: "SPINE: ___ level — disc herniation/extrusion with severe canal stenosis.\nSPINAL CORD: T2 hyperintense signal at ___ level.\nCORD: Compressed.\nPRE/POST contrast: Enhancement pattern.",
+      impression: "Spinal cord compression at ___ level with signal changes. Surgical decompression recommended.",
+      recommendations: "URGENT: Surgical decompression recommended.",
+      tags: ["cord compression", "spine", "mri", "critical", "neurosurgery"],
+    },
+    {
+      groupName: "DR_ABINASH_MASTER",
+      templateName: "Spine Fracture",
+      modality: "CT",
+      studyType: "CT Spine",
+      bodyPart: "SPINE",
+      findings: "CT SPINE: Compression fracture of ___ vertebral body with ___% loss of anterior height.\nRetropulsion: Present/Absent.\nPosterior elements: Intact/Fractured.\nSPINAL CANAL: Compromised/Normal.",
+      impression: "Compression fracture of ___ vertebral body.",
+      recommendations: "Orthopedic/neurosurgical evaluation.",
+      tags: ["fracture", "spine", "ct", "trauma", "neurosurgery"],
+    },
+    {
+      groupName: "DR_ABINASH_MASTER",
+      templateName: "Lumbar Canal Stenosis",
+      modality: "CT",
+      studyType: "CT LS Spine",
+      bodyPart: "LS SPINE",
+      findings: "CT LS SPINE: L___: Severe canal stenosis (AP diameter ___ mm).\nDisc bulge with facet hypertrophy.\nNeural foramina: Severely narrowed.\nLigamentum flavum: Thickened.",
+      impression: "Severe lumbar canal stenosis at L___.",
+      recommendations: "Surgical evaluation recommended.",
+      tags: ["stenosis", "lumbar", "ct", "neurosurgery"],
+    },
+    {
+      groupName: "DR_ABINASH_MASTER",
+      templateName: "Whole Spine Trauma Screening",
+      modality: "CT",
+      studyType: "CT Whole Spine",
+      bodyPart: "SPINE",
+      findings: "CERVICAL SPINE: No fracture. No dislocation.\nTHORACIC SPINE: No fracture.\nLUMBAR SPINE: No fracture. No subluxation.\nSPINAL CANAL: Normal.\nNo cord compression.",
+      impression: "Whole spine trauma screening: No acute fracture or dislocation.",
+      recommendations: "Clinical correlation. Repeat if symptomatic.",
+      tags: ["trauma", "spine", "ct", "screening", "neurosurgery"],
+    },
+    // ──────────────────────────────────────────────────────────
+    // CARE DIAGNOSTICS MASTER (2 templates)
+    // ──────────────────────────────────────────────────────────
     {
       groupName: "CARE_DIAGNOSTICS_MASTER",
       templateName: "General Reporting Normal",
@@ -1057,7 +1242,9 @@ radiologyKnowledgeRouter.post("/seed-master-templates", async (req: StaffAuthReq
       recommendations: "Clinical correlation and further investigation as indicated.",
       tags: ["clinical correlation", "general"],
     },
-    // HOPE HOSPITAL MASTER
+    // ──────────────────────────────────────────────────────────
+    // HOPE HOSPITAL MASTER (2 templates)
+    // ──────────────────────────────────────────────────────────
     {
       groupName: "HOPE_HOSPITAL_MASTER",
       templateName: "Trauma Screening",
@@ -1108,16 +1295,19 @@ radiologyKnowledgeRouter.post("/seed-master-templates", async (req: StaffAuthReq
 
 // POST /api/radiology/seed-knowledge-base
 radiologyKnowledgeRouter.post("/seed-knowledge-base", async (req: StaffAuthRequest, res) => {
-  if (!getStaffId(req) || !["admin", "super-admin"].includes(getStaffRole(req)?.toLowerCase() ?? "")) {
+  if (!getStaffId(req) || !isAdmin(req)) {
     res.status(403).json({ error: "Only admin/super-admin can seed knowledge base" });
     return;
   }
 
   const seedArticles = [
+    // ──────────────────────────────────────────────────────────
+    // KNOWLEDGE BASE ARTICLES (11 articles)
+    // ──────────────────────────────────────────────────────────
     {
       category: "Brain",
-      title: "Fazekas Scale for White Matter Hyperintensities",
-      content: "The Fazekas scale is used to quantify white matter hyperintensities on MRI.\n\nGrade 0: No lesions\nGrade 1: Single punctate lesions or ≤5 punctate lesions in the deep white matter\nGrade 2: Beginning confluence of lesions (punctate and early confluent)\nGrade 3: Large confluent lesions\n\nGrades 1-2 are common with aging. Grade 3 suggests significant small vessel disease.",
+      title: "Fazekas grading",
+      content: "Fazekas scale for white matter hyperintensities on MRI.\n\nGrade 0: No lesions.\nGrade 1: Single punctate or ≤5 punctate lesions in the deep white matter\nGrade 2: Beginning confluence of lesions (punctate and early confluent)\nGrade 3: Large confluent lesions\n\nGrades 1-2 are common with aging. Grade 3 suggests significant small vessel disease.",
       classificationSystem: "Fazekas",
       classificationGrades: ["Grade 0", "Grade 1", "Grade 2", "Grade 3"],
       measurementReferences: [],
@@ -1173,6 +1363,66 @@ radiologyKnowledgeRouter.post("/seed-knowledge-base", async (req: StaffAuthReque
       measurementReferences: ["Pfirrmann: Assess signal intensity on T2W", "Meyerding: Measure slip percentage on lateral X-ray"],
       reportingTips: ["Always mention grade in the impression", "Meyerding: measure from posterior vertebral line"],
       tags: ["spine", "classification", "pfirrmann", "meyerding", "disc degeneration", "spondylolisthesis"],
+    },
+    {
+      category: "Spine",
+      title: "Cervical canal stenosis grading",
+      content: "Cervical canal stenosis grading on MRI/CT.\n\nMild: AP diameter > 10 mm.\nModerate: AP diameter 7-10 mm.\nSevere: AP diameter < 7 mm.\n\nNormal AP diameter: 15-20 mm.\nPavlov ratio < 0.8 suggests stenosis.\n\nAlways report the AP diameter and the most stenotic level.",
+      classificationSystem: "Canal Stenosis",
+      classificationGrades: ["Mild > 10 mm", "Moderate 7-10 mm", "Severe < 7 mm"],
+      measurementReferences: ["Normal AP diameter: 15-20 mm", "Pavlov ratio < 0.8 = stenosis"],
+      reportingTips: ["Report AP diameter at each level", "Report the most stenotic level", "Mention cord signal if present"],
+      tags: ["spine", "cervical", "stenosis", "canal", "mri", "ct"],
+    },
+    {
+      category: "Spine",
+      title: "Lumbar canal stenosis grading",
+      content: "Lumbar canal stenosis grading on MRI/CT.\n\nMild: AP diameter > 12 mm.\nModerate: AP diameter 10-12 mm.\nSevere: AP diameter < 10 mm.\n\nNormal AP diameter: > 15 mm.\nLateral recess stenosis: < 3 mm.\nForaminal stenosis: obliteration of perineural fat.\n\nAlways report the AP diameter and neural foramina status.",
+      classificationSystem: "Canal Stenosis",
+      classificationGrades: ["Mild > 12 mm", "Moderate 10-12 mm", "Severe < 10 mm"],
+      measurementReferences: ["Normal AP diameter: > 15 mm", "Lateral recess stenosis: < 3 mm"],
+      reportingTips: ["Report AP diameter at each level", "Report foraminal and lateral recess status", "Mention conus and cauda equina"],
+      tags: ["spine", "lumbar", "stenosis", "canal", "mri", "ct"],
+    },
+    {
+      category: "Obstetric",
+      title: "Obstetric biometry reference",
+      content: "Obstetric biometry reference ranges for ultrasound reporting.\n\nCRL: 45-84 mm (11-14 weeks) for NT scan.\nBPD: 31 mm at 14 weeks, 92 mm at 40 weeks.\nHC: 110 mm at 14 weeks, 330 mm at 40 weeks.\nAC: 80 mm at 14 weeks, 350 mm at 40 weeks.\nFL: 15 mm at 14 weeks, 78 mm at 40 weeks.\nAFI: 8-18 cm (normal), < 5 cm (oligohydramnios), > 24 cm (polyhydramnios).\nPlacental thickness: 2-4 cm.",
+      classificationSystem: "Biometry",
+      classificationGrades: [],
+      measurementReferences: ["CRL: 45-84 mm (11-14 weeks)", "BPD: 31 mm at 14 weeks, 92 mm at 40 weeks", "AFI: 8-18 cm normal"],
+      reportingTips: ["Compare with gestational age", "Report all standard measurements", "Note any discordance"],
+      tags: ["obstetric", "usg", "biometry", "reference"],
+    },
+    {
+      category: "Prostate",
+      title: "Prostate volume formula",
+      content: "Prostate volume calculation and reporting.\n\nFormula: Volume = L x W x H x 0.52 (ellipsoid formula).\n\nNormal: < 20 cc.\nMild enlargement: 20-30 cc.\nModerate: 30-40 cc.\nSevere: > 40 cc.\n\nPost-void residual: < 50 ml normal.\nPSA density: PSA / volume.\n\nAlways report the calculated volume and post-void residual.",
+      classificationSystem: "Volume",
+      classificationGrades: ["Normal < 20 cc", "Mild 20-30 cc", "Moderate 30-40 cc", "Severe > 40 cc"],
+      measurementReferences: ["Volume = L x W x H x 0.52", "Post-void residual: < 50 ml normal"],
+      reportingTips: ["Report calculated volume", "Report post-void residual", "Note homogeneous vs heterogeneous"],
+      tags: ["prostate", "usg", "volume", "formula"],
+    },
+    {
+      category: "Abdomen",
+      title: "GB calculus reporting phrases",
+      content: "Gallbladder calculus reporting phrases.\n\nGB: Well distended / Contracted.\nCalculus: Single / Multiple echogenic foci with posterior acoustic shadowing.\nLargest: ___ mm.\nWall: Normal thickness (< 3 mm) / Thickened.\nPericholecystic fluid: Present / Absent.\nMurphy sign: Positive / Negative (clinical).\n\nImpression: Gallbladder calculus. / Cholelithiasis.",
+      classificationSystem: "GB",
+      classificationGrades: [],
+      measurementReferences: ["Normal wall < 3 mm", "Largest calculus size"],
+      reportingTips: ["Always report wall thickness", "Report largest calculus size", "Note pericholecystic fluid"],
+      tags: ["gallbladder", "usg", "calculus", "reporting"],
+    },
+    {
+      category: "Abdomen",
+      title: "Fatty liver grading phrases",
+      content: "Fatty liver (hepatic steatosis) grading on ultrasound.\n\nGrade 0: Normal echotexture.\nGrade 1: Mild diffuse increase in echotexture with slightly impaired intrahepatic vessel definition.\nGrade 2: Moderate diffuse increase in echotexture with impaired intrahepatic vessel definition and slightly increased attenuation.\nGrade 3: Marked diffuse increase in echotexture with poor visualization of intrahepatic vessels and marked attenuation.\n\nImpression: Grade I/II/III fatty liver.",
+      classificationSystem: "Fatty Liver",
+      classificationGrades: ["Grade 0 (Normal)", "Grade 1 (Mild)", "Grade 2 (Moderate)", "Grade 3 (Severe)"],
+      measurementReferences: [],
+      reportingTips: ["Always grade the fatty liver", "Compare with spleen echotexture", "Note if focal fatty sparing"],
+      tags: ["liver", "usg", "fatty liver", "steatosis", "grading"],
     },
   ];
 
