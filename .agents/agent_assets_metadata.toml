@@ -310,3 +310,9 @@ id = "Ju5c8_xsefiPv33V3xxc6"
 uri = "file://RE_AUDIT_PRODUCTION_JUNE_2026.md"
 type = "text"
 title = "Re-Audit: Production After Redeployment"
+
+[[outputs]]
+id = "PpYOHcNh73lRpiq6IUjQI"
+uri = "file://RADIOLOGY_PACS_EVIDENCE_AUDIT_JUNE_2026.md"
+type = "text"
+title = "Radiology PACS Evidence Audit Report"
