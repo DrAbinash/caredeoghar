@@ -3,7 +3,7 @@
  * Send a case to multiple AI providers and compare findings side-by-side.
  * AI Draft – Requires Radiologist Review
  */
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/fetchApi";
 import {
-  Bot, Sparkles, Copy, Check, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Trophy,
+  Bot, Sparkles, Copy, Check, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Trophy, Wifi, WifiOff, HelpCircle,
 } from "lucide-react";
 import AIConfidenceBadge, { parseConfidenceFromText } from "./AIConfidenceBadge";
 import { isFeatureEnabled } from "@/lib/staffSession";
@@ -159,6 +159,45 @@ function ProviderCard({
   );
 }
 
+type OllamaStatus = "loading" | "not_configured" | "connected" | "disconnected";
+
+interface OllamaStatusResponse {
+  configured: boolean;
+  urlValid: boolean;
+  urlError: string | null;
+  baseUrl: string | null;
+  model: string | null;
+}
+
+function OllamaStatusBadge({ status }: { status: OllamaStatus }) {
+  if (status === "loading") {
+    return (
+      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground animate-pulse">
+        <HelpCircle size={9} /> checking…
+      </span>
+    );
+  }
+  if (status === "not_configured") {
+    return (
+      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+        <HelpCircle size={9} /> not configured
+      </span>
+    );
+  }
+  if (status === "connected") {
+    return (
+      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400">
+        <Wifi size={9} /> connected
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400">
+      <WifiOff size={9} /> disconnected
+    </span>
+  );
+}
+
 export default function MultiAIReviewPanel({ modality, bodyPart, findingsText, impressionText, onUseResult }: Props) {
   const { toast } = useToast();
   const [selectedProviders, setSelectedProviders] = useState<string[]>(["gemini"]);
@@ -166,6 +205,26 @@ export default function MultiAIReviewPanel({ modality, bodyPart, findingsText, i
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<AIProviderResult[]>([]);
   const [winnerProvider, setWinnerProvider] = useState<string | null>(null);
+  const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus>("loading");
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get<OllamaStatusResponse>("/api/radiology-ollama/status")
+      .then((data) => {
+        if (cancelled) return;
+        if (!data.configured) {
+          setOllamaStatus("not_configured");
+        } else if (data.urlValid) {
+          setOllamaStatus("connected");
+        } else {
+          setOllamaStatus("disconnected");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setOllamaStatus("disconnected");
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const toggleProvider = (id: string) => {
     setSelectedProviders((prev) =>
@@ -254,18 +313,20 @@ export default function MultiAIReviewPanel({ modality, bodyPart, findingsText, i
       {/* Provider selection */}
       <div className="space-y-1">
         <Label className="text-[10px] uppercase text-muted-foreground">Providers</Label>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
           {PROVIDERS.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => toggleProvider(p.id)}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition ${
-                selectedProviders.includes(p.id) ? p.color + " border-transparent" : "bg-muted text-muted-foreground border-card-border"
-              }`}
-            >
-              {selectedProviders.includes(p.id) && <CheckCircle size={11} />}
-              {p.label}
-            </button>
+            <div key={p.id} className="flex items-center gap-1">
+              <button
+                onClick={() => toggleProvider(p.id)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition ${
+                  selectedProviders.includes(p.id) ? p.color + " border-transparent" : "bg-muted text-muted-foreground border-card-border"
+                }`}
+              >
+                {selectedProviders.includes(p.id) && <CheckCircle size={11} />}
+                {p.label}
+              </button>
+              {p.id === "ollama" && <OllamaStatusBadge status={ollamaStatus} />}
+            </div>
           ))}
         </div>
         <p className="text-[10px] text-muted-foreground">
