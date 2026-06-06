@@ -40,6 +40,7 @@ interface Props {
 const PROVIDERS = [
   { id: "gemini", label: "Gemini", color: "bg-blue-100 text-blue-700" },
   { id: "ollama", label: "Ollama (Local)", color: "bg-green-100 text-green-700" },
+  { id: "openrouter", label: "OpenRouter (GPT-4o-mini)", color: "bg-purple-100 text-purple-700" },
 ];
 
 function ConfidenceBar({ pct }: { pct: number }) {
@@ -221,6 +222,10 @@ export default function MultiAIReviewPanel({ modality, bodyPart, findingsText, i
             </button>
           ))}
         </div>
+        <p className="text-[10px] text-muted-foreground">
+          OpenRouter requires <code>OPENROUTER_API_KEY</code>. Ollama requires local setup in Settings.
+          When <strong>Local-only mode</strong> is ON, only Ollama is called regardless of selection.
+        </p>
       </div>
 
       {/* Case context input */}

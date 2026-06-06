@@ -57,6 +57,57 @@ interface ConsistencyIssue {
   severity: "warning" | "error" | "info";
 }
 
+// ── Phase 10C: Generate Teaching Case from report — inline button component ──
+function GenerateTeachingCaseButton({
+  modality, bodyPart, findingsText, impressionText,
+}: { modality?: string; bodyPart?: string; findingsText?: string; impressionText?: string }) {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<{ title: string; diagnosis: string } | null>(null);
+
+  const handleGenerate = async () => {
+    if (!findingsText?.trim()) return;
+    setLoading(true);
+    try {
+      const resp = await fetch("/api/teaching-cases/generate-from-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modality, bodyPart, findings: findingsText, impression: impressionText }),
+      });
+      const data = await resp.json() as { teachingCase?: { title?: string; diagnosis?: string }; error?: string };
+      if (!resp.ok) throw new Error(data.error ?? "Failed");
+      setResult({
+        title: data.teachingCase?.title ?? "Teaching Case Draft",
+        diagnosis: data.teachingCase?.diagnosis ?? "",
+      });
+      toast({ title: "Teaching case created", description: "AI Draft — Requires Radiologist Review before publishing." });
+    } catch (err: unknown) {
+      toast({ title: "Could not generate teaching case", description: err instanceof Error ? err.message : "Error", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <Button size="sm" variant="outline" className="w-full text-xs" disabled={loading} onClick={handleGenerate}>
+        <Sparkles size={12} className="mr-1.5 text-primary" />
+        {loading ? "Generating teaching case..." : "Generate Teaching Case from This Report"}
+      </Button>
+      {result && (
+        <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-[11px] space-y-0.5">
+          <div className="text-amber-700 font-medium flex items-center gap-1">
+            <AlertTriangle size={10} /> AI Draft — Requires Radiologist Review
+          </div>
+          <div className="font-medium">{result.title}</div>
+          {result.diagnosis && <div className="text-muted-foreground">Diagnosis: {result.diagnosis}</div>}
+          <a href="/erp/teaching-cases" className="text-primary text-[10px] underline">View in Teaching Files →</a>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface FollowUpSuggestion {
   category: string;
   recommendation: string;
@@ -564,6 +615,18 @@ export default function RadiologyCopilotPanel({
                     <ArrowRight size={12} className="mr-1" /> Use This Impression
                   </Button>
                 )}
+              </div>
+            )}
+            {/* Phase 10C: Generate Teaching Case from this report */}
+            {isFeatureEnabled("teachingGenerator") && findingsText?.trim() && (
+              <div className="border-t border-border pt-3 mt-1">
+                <p className="text-[10px] font-medium text-muted-foreground uppercase mb-2">Teaching Case Generator</p>
+                <GenerateTeachingCaseButton
+                  modality={dicomMeta?.modality ?? undefined}
+                  bodyPart={dicomMeta?.bodyPart ?? undefined}
+                  findingsText={findingsText}
+                  impressionText={impressionText}
+                />
               </div>
             )}
             {/* Phase 10C: Multi-AI review — gated by multiAIImageReview flag */}

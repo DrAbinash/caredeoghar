@@ -311,6 +311,18 @@ Provide a concise independent assessment:
 
 Format as plain text with bullets. Note: "AI Draft – Requires Radiologist Review"`;
 
+  // ── ollamaLocalOnly enforcement ─────────────────────────────────────────────
+  // When the clinic is in local-only mode (Ollama on-prem), cloud providers
+  // (Gemini, OpenRouter) must not be called even if the client requests them.
+  const clinicRow = await db
+    .select({ ollamaLocalOnly: clinicSettingsTable.ollamaLocalOnly })
+    .from(clinicSettingsTable)
+    .limit(1);
+  const localOnly = clinicRow[0]?.ollamaLocalOnly ?? false;
+  const activeProviders = localOnly
+    ? requestedProviders.filter((p) => p === "ollama")
+    : requestedProviders;
+
   const t0 = Date.now();
   interface ProviderResult {
     provider: string;
@@ -326,7 +338,7 @@ Format as plain text with bullets. Note: "AI Draft – Requires Radiologist Revi
   const results: ProviderResult[] = [];
 
   // ── Gemini ─────────────────────────────────────────────────────────────────
-  if (requestedProviders.includes("gemini")) {
+  if (activeProviders.includes("gemini")) {
     const geminiConfigured =
       !!process.env.AI_INTEGRATIONS_GEMINI_BASE_URL &&
       !!process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
@@ -366,8 +378,65 @@ Format as plain text with bullets. Note: "AI Draft – Requires Radiologist Revi
     }
   }
 
+  // ── OpenRouter (routes to GPT-4o, Claude, etc.) ───────────────────────────
+  // Uses an OpenAI-compatible endpoint. Skipped gracefully when key is absent.
+  if (activeProviders.includes("openrouter")) {
+    const openRouterKey = process.env.OPENROUTER_API_KEY;
+    if (openRouterKey) {
+      const pt = Date.now();
+      try {
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), 45000);
+        const orResp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          signal: ac.signal,
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${openRouterKey}`,
+            "HTTP-Referer": "https://care-diagnostics.replit.app",
+            "X-Title": "Care Diagnostics ERP",
+          },
+          body: JSON.stringify({
+            model: "openai/gpt-4o-mini",
+            messages: [
+              { role: "system", content: "You are a radiology AI assistant providing independent review. Always end with: AI Draft – Requires Radiologist Review" },
+              { role: "user", content: reviewPrompt },
+            ],
+            max_tokens: 1024,
+          }),
+        });
+        clearTimeout(timer);
+        const orJson = await orResp.json() as { choices?: Array<{ message?: { content?: string } }> };
+        const raw = orJson.choices?.[0]?.message?.content ?? "";
+        const processingMs = Date.now() - pt;
+        const differentials = (raw.match(/(?:\d+\.|-).*(?:diagnosis|diagnos|consider).*/gi) ?? [])
+          .slice(0, 5).map((s) => s.replace(/^\d+\.\s*|-\s*/, "").trim());
+        results.push({
+          provider: "OpenRouter (GPT-4o-mini)",
+          model: "openai/gpt-4o-mini",
+          findings: raw,
+          differentials,
+          missedFindings: [],
+          confidence: scoreConfidence(raw, 3),
+          processingMs,
+        });
+      } catch (err: unknown) {
+        results.push({
+          provider: "OpenRouter",
+          model: "openai/gpt-4o-mini",
+          findings: "",
+          differentials: [],
+          missedFindings: [],
+          confidence: 0,
+          processingMs: Date.now() - pt,
+          error: err instanceof Error ? err.message : "OpenRouter unavailable",
+        });
+      }
+    }
+  }
+
   // ── Ollama ─────────────────────────────────────────────────────────────────
-  if (requestedProviders.includes("ollama")) {
+  if (activeProviders.includes("ollama")) {
     const config = await getOllamaConfig();
     if (config) {
       const pt = Date.now();
@@ -409,6 +478,7 @@ Format as plain text with bullets. Note: "AI Draft – Requires Radiologist Revi
     successfulProviders: results.filter((r) => !r.error).length,
     totalProcessingMs: Date.now() - t0,
     caseContext: { modality, bodyPart },
+    localOnlyMode: localOnly,
     auditTimestamp: new Date().toISOString(),
     note: "AI Draft – Requires Radiologist Review",
   });

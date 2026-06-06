@@ -107,20 +107,7 @@ export default function TeachingCaseCollections() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {collections.map((col: Collection) => (
-          <div key={col.id} className="bg-card border border-card-border rounded-xl p-5 hover:shadow-md transition cursor-pointer" onClick={() => navigate(`/teaching-collections/${col.id}`)}>
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-2">
-                <Folder size={20} className="text-primary" />
-                <h3 className="font-semibold">{col.name}</h3>
-              </div>
-              {col.isPublic ? <Unlock size={14} className="text-muted-foreground" /> : <Lock size={14} className="text-muted-foreground" />}
-            </div>
-            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{col.description || "No description"}</p>
-            <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1"><BookOpen size={12} /> {col.caseCount} cases</span>
-              <span className="flex items-center gap-1"><Eye size={12} /> {col.createdByName}</span>
-            </div>
-          </div>
+          <CollectionCard key={col.id} col={col} onNavigate={() => navigate(`/teaching-collections/${col.id}`)} />
         ))}
         {collections.length === 0 && !showNew && (
           <div className="col-span-full text-center py-12 text-muted-foreground">
@@ -129,6 +116,137 @@ export default function TeachingCaseCollections() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+interface CollectionCardProps { col: Collection; onNavigate: () => void; }
+
+function CollectionCard({ col, onNavigate }: CollectionCardProps) {
+  const { toast } = useToast();
+  const [quiz, setQuiz] = useState<Record<string, unknown> | null>(null);
+  const [journalClub, setJournalClub] = useState<Record<string, unknown> | null>(null);
+  const [generatingQuiz, setGeneratingQuiz] = useState(false);
+  const [generatingJournal, setGeneratingJournal] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  const handleGenerateQuiz = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setGeneratingQuiz(true);
+    try {
+      const r = await api.post<{ quiz: Record<string, unknown>; aiGenerated: boolean }>(`/api/teaching-cases/collections/${col.id}/generate-quiz`, {});
+      setQuiz(r.quiz);
+      setExpanded(true);
+      toast({ title: "Quiz generated", description: "AI Draft — Requires Faculty Review" });
+    } catch {
+      toast({ title: "Quiz generation failed", variant: "destructive" });
+    } finally {
+      setGeneratingQuiz(false);
+    }
+  };
+
+  const handleGenerateJournalClub = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setGeneratingJournal(true);
+    try {
+      const r = await api.post<{ journalClub: Record<string, unknown>; aiGenerated: boolean }>(`/api/teaching-cases/collections/${col.id}/generate-journal-club`, {});
+      setJournalClub(r.journalClub);
+      setExpanded(true);
+      toast({ title: "Journal club guide generated", description: "AI Draft — Requires Faculty Review" });
+    } catch {
+      toast({ title: "Journal club generation failed", variant: "destructive" });
+    } finally {
+      setGeneratingJournal(false);
+    }
+  };
+
+  return (
+    <div className="bg-card border border-card-border rounded-xl overflow-hidden hover:shadow-md transition">
+      <div className="p-5 cursor-pointer" onClick={onNavigate}>
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-2">
+            <Folder size={20} className="text-primary" />
+            <h3 className="font-semibold">{col.name}</h3>
+          </div>
+          {col.isPublic ? <Unlock size={14} className="text-muted-foreground" /> : <Lock size={14} className="text-muted-foreground" />}
+        </div>
+        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{col.description || "No description"}</p>
+        <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1"><BookOpen size={12} /> {col.caseCount} cases</span>
+          <span className="flex items-center gap-1"><Eye size={12} /> {col.createdByName}</span>
+        </div>
+      </div>
+
+      {/* Case of Month AI Generation Buttons */}
+      <div className="border-t border-border px-4 py-3 flex flex-wrap gap-2 bg-muted/20">
+        <Button
+          size="sm"
+          variant="outline"
+          className="text-xs h-7"
+          disabled={generatingQuiz}
+          onClick={handleGenerateQuiz}
+        >
+          <GraduationCap size={12} className="mr-1.5" />
+          {generatingQuiz ? "Generating..." : "Generate Quiz"}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="text-xs h-7"
+          disabled={generatingJournal}
+          onClick={handleGenerateJournalClub}
+        >
+          <Star size={12} className="mr-1.5" />
+          {generatingJournal ? "Generating..." : "Journal Club Guide"}
+        </Button>
+      </div>
+
+      {/* Generated outputs */}
+      {expanded && (quiz || journalClub) && (
+        <div className="border-t border-border p-4 space-y-4 text-xs bg-muted/10">
+          <div className="text-[10px] text-amber-600 font-medium flex items-center gap-1">
+            ⚠ AI Draft — Requires Faculty Review before use
+          </div>
+          {quiz && (
+            <div className="space-y-2">
+              <div className="font-semibold text-[11px] uppercase text-muted-foreground">Quiz</div>
+              {(quiz.questions as Array<Record<string, unknown>> | undefined)?.map((q, i) => (
+                <div key={i} className="border rounded p-2 space-y-1">
+                  <p className="font-medium">{i + 1}. {String(q.question ?? "")}</p>
+                  <ul className="space-y-0.5 ml-3">
+                    {(q.options as string[] | undefined)?.map((opt, j) => (
+                      <li key={j} className="text-muted-foreground">{opt}</li>
+                    ))}
+                  </ul>
+                  {q.answer != null && <p className="text-green-700 font-medium">Answer: {String(q.answer)}</p>}
+                </div>
+              )) ?? <pre className="whitespace-pre-wrap text-[11px]">{JSON.stringify(quiz, null, 2)}</pre>}
+            </div>
+          )}
+          {journalClub && (
+            <div className="space-y-2">
+              <div className="font-semibold text-[11px] uppercase text-muted-foreground">Journal Club Guide</div>
+              {journalClub.overview != null && <p>{String(journalClub.overview)}</p>}
+              {(journalClub.discussionPoints as string[] | undefined)?.length ? (
+                <ul className="list-disc ml-4 space-y-0.5">
+                  {(journalClub.discussionPoints as string[]).map((pt, i) => <li key={i}>{pt}</li>)}
+                </ul>
+              ) : null}
+              {(journalClub.slideOutline as string[] | undefined)?.length ? (
+                <div>
+                  <div className="font-medium mb-0.5">Slide Outline</div>
+                  <ol className="list-decimal ml-4 space-y-0.5">
+                    {(journalClub.slideOutline as string[]).map((s, i) => <li key={i}>{s}</li>)}
+                  </ol>
+                </div>
+              ) : null}
+            </div>
+          )}
+          <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => setExpanded(false)}>
+            Collapse
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
