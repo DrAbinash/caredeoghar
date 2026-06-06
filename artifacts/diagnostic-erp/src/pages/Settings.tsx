@@ -4801,7 +4801,7 @@ function OllamaSettingsCard() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.patch("/api/clinic-settings", {
+      await api.put("/api/clinic-settings", {
         ollamaBaseUrl: baseUrl.trim() || null,
         ollamaModel: model.trim() || "llama3",
         ollamaLocalOnly: localOnly,
