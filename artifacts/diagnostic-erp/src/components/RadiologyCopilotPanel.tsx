@@ -130,6 +130,7 @@ interface Props {
   patientId?: number;
   currentOrderId?: number;
   studyId?: number;
+  studyInstanceUid?: string | null;
   findingsText?: string;
   impressionText?: string;
   onImpressionSuggestion?: (text: string) => void;
@@ -139,6 +140,7 @@ export default function RadiologyCopilotPanel({
   patientId,
   currentOrderId,
   studyId,
+  studyInstanceUid: studyInstanceUidProp,
   findingsText,
   impressionText,
   onImpressionSuggestion,
@@ -940,7 +942,7 @@ export default function RadiologyCopilotPanel({
               <div className="border-t border-border pt-3 mt-2">
                 <p className="text-[10px] font-medium text-muted-foreground uppercase mb-2">Annotations</p>
                 <ImageAnnotationToolbar
-                  studyInstanceUid={dicomMeta?.studyInstanceUid}
+                  studyInstanceUid={studyInstanceUidProp ?? dicomMeta?.studyInstanceUid}
                   orderId={currentOrderId}
                   patientId={patientId}
                   studyId={studyId}

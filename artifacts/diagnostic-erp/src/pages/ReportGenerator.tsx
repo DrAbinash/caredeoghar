@@ -44,6 +44,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { useToast } from "@/hooks/use-toast";
 import { Mic, MicOff, Sparkles, Image as ImageIcon, GraduationCap, BookOpen } from "lucide-react";
 import RadiologyCopilotPanel from "@/components/RadiologyCopilotPanel";
+import ImageAnnotationToolbar from "@/components/ImageAnnotationToolbar";
 import RadiologyMemoryPanel from "@/components/RadiologyMemoryPanel";
 import LesionTrackerPanel from "@/components/LesionTrackerPanel";
 import MeasurementAssistantPanel from "@/components/MeasurementAssistantPanel";
@@ -365,13 +366,8 @@ export default function ReportGenerator() {
 
   // ── Teaching case dialog ──
   const [saveTeachingCaseOpen, setSaveTeachingCaseOpen] = useState(false);
-  const [teachingTitle, setTeachingTitle] = useState("");
-  const [teachingTags, setTeachingTags] = useState("");
   const [teachingNotes, setTeachingNotes] = useState("");
-  const [teachingIsInteresting, setTeachingIsInteresting] = useState(false);
-  const [teachingIsRare, setTeachingIsRare] = useState(false);
-  const [teachingIsResearch, setTeachingIsResearch] = useState(false);
-  const [teachingDifficulty, setTeachingDifficulty] = useState<"beginner" | "intermediate" | "advanced" | "expert">("intermediate");
+  const [savingTeachingCase, setSavingTeachingCase] = useState(false);
   const [findingForm, setFindingForm] = useState<Partial<AbnormalFinding>>({ severity: "moderate", isActive: true });
 
   const loadTemplates = async () => {
@@ -444,12 +440,19 @@ export default function ReportGenerator() {
     }
   }, [qc, toast]);
 
+  // DICOM study UID — passed via URL param by the PACS worklist when opening a report
+  const [studyInstanceUid, setStudyInstanceUid] = useState<string | null>(null);
+
   // URL param auto-load (for ReportDelivery "View" links)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const orderIdParam = params.get("orderId");
     if (orderIdParam) {
       setOrderId(Number(orderIdParam));
+    }
+    const studyUidParam = params.get("studyInstanceUid");
+    if (studyUidParam) {
+      setStudyInstanceUid(studyUidParam);
     }
   }, [location]);
 
@@ -673,57 +676,48 @@ export default function ReportGenerator() {
     setUploadDialogOpen(false);
   };
 
-  // ── Save as teaching case ──
+  // ── Save as teaching case via AI generation from report content ──
+  // Calls POST /api/teaching-cases/generate-from-report which applies PHI
+  // redaction and lets Gemini generate title, diagnosis, pearls, MCQs, etc.
   const saveTeachingCase = async () => {
     if (!order) return;
-    if (!teachingTitle.trim()) {
-      toast({ title: "Title is required", variant: "destructive" });
+    const allRemarks = findings.map((f) => f.remarks).filter(Boolean).join("\n\n");
+    if (!allRemarks.trim()) {
+      toast({ title: "Enter findings first before generating a teaching case", variant: "destructive" });
       return;
     }
-    const body = {
-      title: teachingTitle.trim(),
-      description: teachingNotes.trim(),
-      tags: teachingTags.split(",").map((t) => t.trim()).filter(Boolean),
-      bodyPart: (order.tests?.[0]?.test as any)?.department ?? order.tests?.[0]?.test?.category ?? "Unknown",
-      modality: order.tests?.[0]?.test?.code ?? "Unknown",
-      diagnosis: findings.map((f) => f.testName + ": " + f.parameters.map((p) => p.name + "=" + p.result).join(", ")).join(" | "),
-      impression: "See report findings",
-      discussionPoints: "",
-      teachingNotes: teachingNotes.trim(),
-      differentialDiagnosis: "",
-      learningPoints: "",
-      examPearls: "",
-      difficulty: teachingDifficulty,
-      isInteresting: teachingIsInteresting,
-      isRare: teachingIsRare,
-      isResearch: teachingIsResearch,
-      isAICase: false,
-      isDicomLinked: false,
-      dicomStudyUid: null,
-      dicomSeriesUids: null,
-      pacsUrl: null,
-      images: [],
-    };
-    const r = await fetch("/teaching-cases", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({}));
-      toast({ title: "Could not save teaching case", description: err.error ?? r.statusText, variant: "destructive" });
-      return;
+    setSavingTeachingCase(true);
+    try {
+      const r = await fetch("/api/teaching-cases/generate-from-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          modality: order.tests?.[0]?.test?.code ?? "",
+          testName: order.tests?.[0]?.test?.name ?? "",
+          bodyPart: (order.tests?.[0]?.test as any)?.department ?? order.tests?.[0]?.test?.category ?? "",
+          clinicalHistory: teachingNotes.trim() || undefined,
+          findings: allRemarks,
+          impression: allRemarks,
+          category: "general",
+        }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        toast({ title: "Could not generate teaching case", description: (err as any).error ?? r.statusText, variant: "destructive" });
+        return;
+      }
+      const created = await r.json();
+      toast({
+        title: "Teaching case created",
+        description: created.case?.title
+          ? `"${created.case.title}" — AI Draft, requires review`
+          : "AI Draft — Requires Radiologist Review before publishing",
+      });
+      setSaveTeachingCaseOpen(false);
+      setTeachingNotes("");
+    } finally {
+      setSavingTeachingCase(false);
     }
-    const created = await r.json();
-    toast({ title: "Teaching case saved", description: created.data?.title ?? teachingTitle });
-    setSaveTeachingCaseOpen(false);
-    setTeachingTitle("");
-    setTeachingTags("");
-    setTeachingNotes("");
-    setTeachingIsInteresting(false);
-    setTeachingIsRare(false);
-    setTeachingIsResearch(false);
-    setTeachingDifficulty("intermediate");
   };
 
   const deleteTemplate = async (id: number) => {
@@ -1055,20 +1049,22 @@ export default function ReportGenerator() {
                 </Button>
               </div>
 
-              {/* Save as Teaching Case */}
-              <div className="bg-card border border-card-border rounded-xl p-4 shadow-sm space-y-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Teaching Files</h3>
-                <p className="text-xs text-muted-foreground">Save this anonymized case for teaching and research.</p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                  disabled={!order}
-                  onClick={() => setSaveTeachingCaseOpen(true)}
-                >
-                  <GraduationCap size={13} className="mr-1.5" /> Save as Teaching Case
-                </Button>
-              </div>
+              {/* Save as Teaching Case — gated by teachingGenerator flag */}
+              {isFeatureEnabled("teachingGenerator") && (
+                <div className="bg-card border border-card-border rounded-xl p-4 shadow-sm space-y-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Teaching Files</h3>
+                  <p className="text-xs text-muted-foreground">Save this anonymized case for teaching and research.</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                    disabled={!order}
+                    onClick={() => setSaveTeachingCaseOpen(true)}
+                  >
+                    <GraduationCap size={13} className="mr-1.5" /> Save as Teaching Case
+                  </Button>
+                </div>
+              )}
 
               {/* Voice */}
               <div className="bg-card border border-card-border rounded-xl p-4 shadow-sm space-y-2">
@@ -1111,11 +1107,25 @@ export default function ReportGenerator() {
                 )}
               </div>
 
+              {/* Phase 10C: Inline Image Annotation Toolbar — shown when a DICOM study UID is available */}
+              {isFeatureEnabled("imageAnnotations") && studyInstanceUid && (
+                <div className="bg-card border border-card-border rounded-xl p-4 shadow-sm space-y-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Image Annotations</h3>
+                  <ImageAnnotationToolbar
+                    studyInstanceUid={studyInstanceUid}
+                    orderId={orderId ?? undefined}
+                    patientId={patientId ?? undefined}
+                  />
+                </div>
+              )}
+
               {/* Radiology Copilot */}
               <RadiologyCopilotPanel
                 patientId={patientId ?? undefined}
                 currentOrderId={orderId ?? undefined}
+                studyInstanceUid={studyInstanceUid}
                 findingsText={findings.map((f) => f.remarks).filter(Boolean).join("\n")}
+                impressionText={findings[0]?.remarks ?? ""}
                 onImpressionSuggestion={(text) => {
                   // Insert the suggested impression into the first findings remarks
                   if (findings.length > 0) {
@@ -1676,62 +1686,38 @@ export default function ReportGenerator() {
       <Dialog open={saveTeachingCaseOpen} onOpenChange={setSaveTeachingCaseOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Save as Teaching Case</DialogTitle>
+            <DialogTitle>Generate Teaching Case from Report</DialogTitle>
             <DialogDescription>
-              This anonymizes the patient and saves the case for teaching. You can add notes, tags, and learning points.
+              AI will anonymize the patient data, generate a title, diagnosis, clinical pearls, and MCQs from the current report findings. The case is saved as a draft for radiologist review before publishing.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            <div>
-              <Label className="text-xs">Title</Label>
-              <Input value={teachingTitle} onChange={(e) => setTeachingTitle(e.target.value)} placeholder="e.g., Rare Liver Hemangioma with Atypical Features" className="mt-1 text-xs" />
+            <div className="flex items-start gap-2 rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2 text-[11px] text-yellow-800">
+              <Sparkles size={13} className="mt-0.5 flex-shrink-0" />
+              <span>AI Draft — Requires Radiologist Review before publishing. PHI is automatically redacted.</span>
             </div>
             <div>
-              <Label className="text-xs">Tags (comma separated)</Label>
-              <Input value={teachingTags} onChange={(e) => setTeachingTags(e.target.value)} placeholder="liver, hemangioma, atypical, USG" className="mt-1 text-xs" />
+              <Label className="text-xs">Clinical History / Context (optional)</Label>
+              <Textarea
+                value={teachingNotes}
+                onChange={(e) => setTeachingNotes(e.target.value)}
+                placeholder="Relevant clinical history, indication, or context that helps the AI generate better teaching content..."
+                className="mt-1 text-xs min-h-[80px]"
+              />
             </div>
-            <div>
-              <Label className="text-xs">Notes / Discussion</Label>
-              <Textarea value={teachingNotes} onChange={(e) => setTeachingNotes(e.target.value)} placeholder="Why this case is interesting, learning points, differential diagnosis..." className="mt-1 text-xs min-h-[80px]" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Difficulty</Label>
-                <Select value={teachingDifficulty} onValueChange={(v) => setTeachingDifficulty(v as any)}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="beginner">Beginner</SelectItem>
-                    <SelectItem value="intermediate">Intermediate</SelectItem>
-                    <SelectItem value="advanced">Advanced</SelectItem>
-                    <SelectItem value="expert">Expert</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Case Type</Label>
-                <div className="flex flex-col gap-1 mt-1">
-                  <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                    <input type="checkbox" checked={teachingIsInteresting} onChange={(e) => setTeachingIsInteresting(e.target.checked)} className="accent-primary" />
-                    Interesting
-                  </label>
-                  <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                    <input type="checkbox" checked={teachingIsRare} onChange={(e) => setTeachingIsRare(e.target.checked)} className="accent-primary" />
-                    Rare
-                  </label>
-                  <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                    <input type="checkbox" checked={teachingIsResearch} onChange={(e) => setTeachingIsResearch(e.target.checked)} className="accent-primary" />
-                    Research
-                  </label>
-                </div>
-              </div>
-            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Current report findings will be used automatically. You can refine the title, add tags, and publish from the Teaching Files page.
+            </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSaveTeachingCaseOpen(false)}>Cancel</Button>
-            <Button onClick={saveTeachingCase}><GraduationCap size={13} className="mr-1.5" /> Save Teaching Case</Button>
+            <Button onClick={saveTeachingCase} disabled={savingTeachingCase}>
+              <GraduationCap size={13} className="mr-1.5" />
+              {savingTeachingCase ? "Generating…" : "Generate Teaching Case"}
+            </Button>
           </DialogFooter>
           <div className="mt-2 pt-2 border-t text-center">
-            <Button variant="ghost" size="sm" className="text-xs" onClick={() => window.location.href = "./teaching-cases"}>
+            <Button variant="ghost" size="sm" className="text-xs" onClick={() => window.location.href = "/erp/teaching-cases"}>
               <BookOpen size={13} className="mr-1.5" /> Go to Teaching Files
             </Button>
           </div>
