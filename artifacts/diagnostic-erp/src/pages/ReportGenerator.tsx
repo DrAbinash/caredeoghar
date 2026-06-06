@@ -44,6 +44,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { useToast } from "@/hooks/use-toast";
 import { Mic, MicOff, Sparkles, Image as ImageIcon, GraduationCap, BookOpen } from "lucide-react";
 import RadiologyCopilotPanel from "@/components/RadiologyCopilotPanel";
+import RadiologyMemoryPanel from "@/components/RadiologyMemoryPanel";
 import {
   Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from "@/components/ui/command";
@@ -1116,6 +1117,21 @@ export default function ReportGenerator() {
                   // Insert the suggested impression into the first findings remarks
                   if (findings.length > 0) {
                     updateRemarks(0, findings[0].remarks + "\n\nIMPRESSION: " + text);
+                  }
+                }}
+              />
+
+              {/* Phase 9: Radiology Memory + Context Engine */}
+              <RadiologyMemoryPanel
+                patientId={patientId ?? undefined}
+                orderId={orderId ?? undefined}
+                modality={findings[0]?.testCode ?? (order?.tests?.[0]?.test?.code ?? "")}
+                bodyPart={(order?.tests?.[0]?.test as any)?.department ?? order?.tests?.[0]?.test?.category ?? ""}
+                findingsText={findings.map((f) => f.remarks).filter(Boolean).join("\n")}
+                impressionText={findings[0]?.remarks || ""}
+                onSuggestionInsert={(text) => {
+                  if (findings.length > 0) {
+                    updateRemarks(0, findings[0].remarks + "\n" + text);
                   }
                 }}
               />

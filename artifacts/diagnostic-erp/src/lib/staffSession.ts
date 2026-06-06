@@ -236,6 +236,16 @@ const FEATURE_FLAG_DEFAULTS: Record<string, boolean> = {
   radiologyTeachingCollections: false,
   radiologyTeachingPresentation: false,
   radiologyTeachingResearch: false,
+  // Phase 9: Radiology Memory + Context Engine (all default OFF)
+  radiologyMemoryEngine: false,
+  radiologyStyleLearning: false,
+  radiologyImpressionMemory: false,
+  radiologyMeasurementMemory: false,
+  radiologyDecisionMemory: false,
+  radiologyFeedbackLoop: false,
+  radiologyCaseMemory: false,
+  radiologyAnalyticsMemory: false,
+  radiologyMacroEngine: false,
   hideDeprecatedNav: false,
   billingDeskStepped: false,
 };

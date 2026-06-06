@@ -111,3 +111,4 @@ export * from "./uploadFiles";
 export * from "./radiologySnippets";
 export * from "./radiologyKnowledge";
 export * from "./radiologySmartFindings";
+export * from "./radiologyMemory";

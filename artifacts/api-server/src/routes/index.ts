@@ -90,6 +90,7 @@ import { aiModelRoutesRouter } from "./aiModelRoutes";
 import { aiComparisonRouter } from "./aiComparison";
 import { teachingCasesRouter } from "./teachingCases";
 import { radiologyCopilotRouter } from "./radiologyCopilot";
+import { radiologyMemoryRouter } from "./radiologyMemory";
 import { radiologySnippetsRouter } from "./radiologySnippets";
 import { bankingRouter, bankingWebhookRouter } from "./banking";
 import { syncRouter } from "./sync";
@@ -460,6 +461,9 @@ router.use("/teaching-cases", requireStaffAuth, teachingCasesRouter);
 
 // Phase 8: Radiology Copilot — Prior Study, Measurements, Smart Impression, Consistency, Follow-up
 router.use("/radiology-copilot", requireStaffAuth, radiologyCopilotRouter);
+
+// Phase 9: Radiology Memory + Context Engine
+router.use("/radiology-memory", requireStaffAuth, radiologyMemoryRouter);
 
 // AI endpoints — each sub-route applies its own requireStaffPermission matching
 // the data domain it accesses (patients PHI, billing records, or radiology
