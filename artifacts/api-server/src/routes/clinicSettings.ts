@@ -111,6 +111,11 @@ async function getOrCreate() {
       cropPadding: 12,
       jpegQuality: 85,
       maxScanWidth: 1200,
+      // Ollama fallbacks
+      ollamaBaseUrl: null,
+      ollamaModel: null,
+      ollamaLocalOnly: false,
+      ollamaKnownModels: "[]",
       updatedAt: new Date(),
     } as any;
   }
@@ -243,6 +248,20 @@ clinicSettingsRouter.put("/", async (req, res) => {
       res.status(400).json({ error: "ollamaModel must be a string or null" }); return;
     }
     update.ollamaModel = typeof body.ollamaModel === "string" ? body.ollamaModel.trim() || null : null;
+  }
+  if (body.ollamaKnownModels !== undefined) {
+    if (typeof body.ollamaKnownModels !== "string") {
+      res.status(400).json({ error: "ollamaKnownModels must be a JSON string" }); return;
+    }
+    try {
+      const parsed = JSON.parse(body.ollamaKnownModels);
+      if (!Array.isArray(parsed) || !parsed.every((m) => typeof m === "string")) {
+        res.status(400).json({ error: "ollamaKnownModels must be a JSON array of strings" }); return;
+      }
+    } catch {
+      res.status(400).json({ error: "ollamaKnownModels must be valid JSON" }); return;
+    }
+    update.ollamaKnownModels = body.ollamaKnownModels;
   }
 
   const portalTextFields = ["portalHeading", "portalWelcomeMessage"] as const;

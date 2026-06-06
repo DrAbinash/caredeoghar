@@ -152,6 +152,9 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   ollamaBaseUrl: text("ollama_base_url"),
   ollamaModel: text("ollama_model"),
   ollamaLocalOnly: boolean("ollama_local_only").notNull().default(false),
+  // Cached list of models pulled on the Ollama instance — synced server-side
+  // so every clinic workstation shows the dropdown without needing to "Test Connection".
+  ollamaKnownModels: text("ollama_known_models").notNull().default("[]"),
 
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

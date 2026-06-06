@@ -4801,11 +4801,22 @@ function OllamaSettingsCard() {
   });
 
   useEffect(() => {
-    api.get<{ ollamaBaseUrl?: string | null; ollamaModel?: string | null; ollamaLocalOnly?: boolean }>("/api/clinic-settings")
+    api.get<{ ollamaBaseUrl?: string | null; ollamaModel?: string | null; ollamaLocalOnly?: boolean; ollamaKnownModels?: string }>("/api/clinic-settings")
       .then((d) => {
         setBaseUrl(d.ollamaBaseUrl ?? "");
         setModel(d.ollamaModel ?? "llama3");
         setLocalOnly(d.ollamaLocalOnly ?? false);
+        // Seed availableModels from DB so every workstation gets the dropdown
+        // without needing to run "Test Connection" individually.
+        if (d.ollamaKnownModels) {
+          try {
+            const parsed = JSON.parse(d.ollamaKnownModels);
+            if (Array.isArray(parsed) && parsed.length > 0 && parsed.every((m) => typeof m === "string")) {
+              setAvailableModels(parsed);
+              try { localStorage.setItem(OLLAMA_MODELS_KEY, d.ollamaKnownModels); } catch { /* ignore */ }
+            }
+          } catch { /* ignore */ }
+        }
       })
       .catch(() => {});
   }, []);
@@ -4841,7 +4852,10 @@ function OllamaSettingsCard() {
         const pulledModels = resp.models ?? [];
         if (pulledModels.length > 0) {
           setAvailableModels(pulledModels);
-          try { localStorage.setItem(OLLAMA_MODELS_KEY, JSON.stringify(pulledModels)); } catch { /* ignore */ }
+          const modelsJson = JSON.stringify(pulledModels);
+          try { localStorage.setItem(OLLAMA_MODELS_KEY, modelsJson); } catch { /* ignore */ }
+          // Persist to DB so all other workstations see the dropdown immediately.
+          api.put("/api/clinic-settings", { ollamaKnownModels: modelsJson }).catch(() => {});
         }
         const detail = [
           resp.modelFound ? `Model "${resp.model}" found` : `Model "${resp.model}" not in list (${pulledModels.slice(0, 3).join(", ")})`,
