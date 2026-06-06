@@ -147,56 +147,48 @@ export default function MultiAIReviewPanel({ modality, bodyPart, findingsText, i
     setRunning(true);
     setResults([]);
 
-    const providerResults: AIProviderResult[] = [];
+    try {
+      // Fan out to all selected providers via the backend multi-review endpoint.
+      // The backend computes deterministic confidence scores (not random) based on
+      // response length, structure, and uncertainty language.
+      const resp = await api.post<{
+        results: Array<AIProviderResult & { processingMs?: number; error?: string }>;
+        successfulProviders: number;
+        totalProcessingMs: number;
+        note: string;
+      }>("/api/radiology-ollama/multi-review", {
+        modality: modality ?? "",
+        bodyPart: bodyPart ?? "",
+        findingsText: findingsText ?? "",
+        clinicalHistory: caseContext,
+        providers: selectedProviders,
+      });
 
-    for (const provider of selectedProviders) {
-      try {
-        if (provider === "gemini") {
-          const resp = await api.post<{ findings: string }>("/api/ai/radiology-findings", {
-            modality: modality ?? "",
-            testName: bodyPart ?? "",
-            clinicalHistory: caseContext,
-          });
-          providerResults.push({
-            provider: "Gemini",
-            model: "gemini-2.0-flash",
-            findings: resp.findings,
-            differentials: extractDifferentials(resp.findings),
-            missedFindings: [],
-            confidence: 75 + Math.floor(Math.random() * 20),
-          });
-        } else if (provider === "ollama") {
-          const resp = await api.post<{ findings: string; model: string }>("/api/radiology-ollama/findings", {
-            modality: modality ?? "",
-            testName: bodyPart ?? "",
-            clinicalHistory: caseContext,
-          });
-          providerResults.push({
-            provider: "Ollama (Local)",
-            model: resp.model,
-            findings: resp.findings,
-            differentials: extractDifferentials(resp.findings),
-            missedFindings: [],
-            confidence: 65 + Math.floor(Math.random() * 20),
-          });
-        }
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Failed";
-        providerResults.push({
-          provider: provider === "gemini" ? "Gemini" : "Ollama",
-          model: "—",
-          findings: `Error: ${msg}`,
-          differentials: [],
-          missedFindings: [],
-          confidence: 0,
+      const providerResults: AIProviderResult[] = (resp.results ?? []).map((r) => ({
+        provider: r.provider,
+        model: r.model,
+        findings: r.findings || (r.error ? `Error: ${r.error}` : "No response"),
+        differentials: r.differentials ?? extractDifferentials(r.findings ?? ""),
+        missedFindings: r.missedFindings ?? [],
+        confidence: r.confidence ?? 0,
+        rawResponse: r.findings,
+      }));
+
+      setResults(providerResults);
+      const successful = providerResults.filter((r) => r.confidence > 0).length;
+      if (successful > 0) {
+        toast({
+          title: `${successful} AI review${successful > 1 ? "s" : ""} complete`,
+          description: "AI Draft — Requires Radiologist Review",
         });
+      } else {
+        toast({ title: "No providers responded", description: "Check that Gemini/Ollama are configured in Settings.", variant: "destructive" });
       }
-    }
-
-    setResults(providerResults);
-    setRunning(false);
-    if (providerResults.length > 0) {
-      toast({ title: `${providerResults.length} AI review${providerResults.length > 1 ? "s" : ""} complete`, description: "AI Draft — Requires Radiologist Review" });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Request failed";
+      toast({ title: "Multi-AI review failed", description: msg, variant: "destructive" });
+    } finally {
+      setRunning(false);
     }
   };
 

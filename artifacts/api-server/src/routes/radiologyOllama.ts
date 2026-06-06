@@ -246,6 +246,174 @@ Note: "AI Draft – Requires Radiologist Review"`;
   }
 });
 
+// ── Deterministic confidence scoring ─────────────────────────────────────────
+// Replaces random confidence values. Uses response length, structural markers,
+// and uncertainty language as proxies for model output quality.
+function scoreConfidence(text: string, providerCalibration = 0): number {
+  let score = 70; // baseline
+
+  // Length bonus: more detailed responses are generally better
+  if (text.length > 600) score += 10;
+  else if (text.length > 300) score += 5;
+
+  // Structure bonus: bullet/numbered lists = organised findings
+  const bulletLines = (text.match(/(?:^|\n)\s*[-•*\d]\s*/g) ?? []).length;
+  if (bulletLines >= 6) score += 8;
+  else if (bulletLines >= 3) score += 4;
+
+  // Uncertainty penalty: uncertainty language reduces confidence
+  const uncertainWords = [
+    "may", "might", "possible", "possibly", "probable", "probably",
+    "cannot exclude", "could be", "suggestive", "uncertain", "unclear",
+  ];
+  let uncertainCount = 0;
+  const lower = text.toLowerCase();
+  for (const w of uncertainWords) {
+    if (lower.includes(w)) uncertainCount++;
+  }
+  score -= uncertainCount * 2;
+
+  // Provider calibration offset (passed in from caller context)
+  score += providerCalibration;
+
+  return Math.max(40, Math.min(95, Math.round(score)));
+}
+
+// ── POST /multi-review — fan out to Gemini + Ollama in parallel ──────────────
+// Returns structured per-provider results with deterministic confidence scores
+// and audit metadata. Providers not configured are skipped gracefully.
+radiologyOllamaRouter.post("/multi-review", async (req, res): Promise<void> => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const modality = String(b.modality ?? "").trim();
+  const bodyPart = String(b.bodyPart ?? "").trim();
+  const findingsText = String(b.findingsText ?? "").trim();
+  const clinicalHistory = String(b.clinicalHistory ?? "").trim();
+  const requestedProviders = Array.isArray(b.providers)
+    ? (b.providers as string[])
+    : ["gemini", "ollama"];
+
+  if (!findingsText && !clinicalHistory) {
+    res.status(400).json({ error: "findingsText or clinicalHistory required" });
+    return;
+  }
+
+  const studyLabel = [modality, bodyPart].filter(Boolean).join(" ") || "Radiology Study";
+  const reviewPrompt = `You are a radiology AI assistant performing an independent review.
+
+Study: ${studyLabel}
+${clinicalHistory ? `Clinical History: ${clinicalHistory}` : ""}
+${findingsText ? `\nFindings to Review:\n${findingsText}` : ""}
+
+Provide a concise independent assessment:
+1. Additional findings or nuances you observe (bullet points per system)
+2. Top 3 differential diagnoses with brief reasoning
+3. Any potential missed findings based on the clinical context
+
+Format as plain text with bullets. Note: "AI Draft – Requires Radiologist Review"`;
+
+  const t0 = Date.now();
+  interface ProviderResult {
+    provider: string;
+    model: string;
+    findings: string;
+    differentials: string[];
+    missedFindings: string[];
+    confidence: number;
+    processingMs: number;
+    error?: string;
+  }
+
+  const results: ProviderResult[] = [];
+
+  // ── Gemini ─────────────────────────────────────────────────────────────────
+  if (requestedProviders.includes("gemini")) {
+    const geminiConfigured =
+      !!process.env.AI_INTEGRATIONS_GEMINI_BASE_URL &&
+      !!process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+    if (geminiConfigured) {
+      const pt = Date.now();
+      try {
+        const { geminiGenerate } = await import("@workspace/integrations-gemini-ai");
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), 45000);
+        const raw = await geminiGenerate(reviewPrompt, { maxTokens: 1024 });
+        clearTimeout(timer);
+        const processingMs = Date.now() - pt;
+        // Extract differentials (lines starting with numbered items or keywords)
+        const differentials = (raw.match(/(?:\d+\.|-).*(?:diagnosis|diagnos|consider|ddx).*/gi) ?? [])
+          .slice(0, 5).map((s) => s.replace(/^\d+\.\s*|-\s*/, "").trim());
+        results.push({
+          provider: "Gemini",
+          model: "gemini-2.0-flash",
+          findings: raw,
+          differentials,
+          missedFindings: [],
+          confidence: scoreConfidence(raw, 5), // slight positive calibration for Gemini
+          processingMs,
+        });
+      } catch (err: unknown) {
+        results.push({
+          provider: "Gemini",
+          model: "gemini-2.0-flash",
+          findings: "",
+          differentials: [],
+          missedFindings: [],
+          confidence: 0,
+          processingMs: Date.now() - pt,
+          error: err instanceof Error ? err.message : "Gemini unavailable",
+        });
+      }
+    }
+  }
+
+  // ── Ollama ─────────────────────────────────────────────────────────────────
+  if (requestedProviders.includes("ollama")) {
+    const config = await getOllamaConfig();
+    if (config) {
+      const pt = Date.now();
+      try {
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), 60000);
+        const raw = await ollamaGenerate(config.baseUrl, config.model, reviewPrompt, ac.signal);
+        clearTimeout(timer);
+        const processingMs = Date.now() - pt;
+        const differentials = (raw.match(/(?:\d+\.|-).*(?:diagnosis|diagnos|consider).*/gi) ?? [])
+          .slice(0, 5).map((s) => s.replace(/^\d+\.\s*|-\s*/, "").trim());
+        results.push({
+          provider: "Ollama (Local)",
+          model: config.model,
+          findings: raw,
+          differentials,
+          missedFindings: [],
+          confidence: scoreConfidence(raw, -5), // slight negative calibration for local models
+          processingMs,
+        });
+      } catch (err: unknown) {
+        results.push({
+          provider: "Ollama (Local)",
+          model: config.model,
+          findings: "",
+          differentials: [],
+          missedFindings: [],
+          confidence: 0,
+          processingMs: Date.now() - pt,
+          error: err instanceof Error ? err.message : "Ollama unavailable",
+        });
+      }
+    }
+  }
+
+  res.json({
+    results,
+    totalProviders: results.length,
+    successfulProviders: results.filter((r) => !r.error).length,
+    totalProcessingMs: Date.now() - t0,
+    caseContext: { modality, bodyPart },
+    auditTimestamp: new Date().toISOString(),
+    note: "AI Draft – Requires Radiologist Review",
+  });
+});
+
 // ── POST /differential — generate differential diagnosis via Ollama ──────────
 radiologyOllamaRouter.post("/differential", async (req, res): Promise<void> => {
   const config = await getOllamaConfig();

@@ -321,6 +321,191 @@ teachingCasesRouter.put("/collections/:id", async (req, res): Promise<void> => {
   res.json({ success: true });
 });
 
+// ─── CASE OF MONTH: GENERATE QUIZ ────────────────────────────────────────────
+// POST /api/teaching-cases/collections/:id/generate-quiz
+// Uses Gemini to generate MCQ-style resident quiz from the collection's cases.
+teachingCasesRouter.post("/collections/:id/generate-quiz", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  if (!isOwner(sReq)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const collectionId = Number(req.params.id);
+  const [collection] = await db
+    .select().from(teachingCaseCollectionsTable)
+    .where(eq(teachingCaseCollectionsTable.id, collectionId));
+  if (!collection) { res.status(404).json({ error: "Collection not found." }); return; }
+
+  const caseIds: number[] = JSON.parse(collection.caseIdsJson ?? "[]");
+  if (caseIds.length === 0) { res.status(400).json({ error: "Collection has no cases. Add cases before generating a quiz." }); return; }
+
+  const cases = await db
+    .select({ id: teachingCasesTable.id, title: teachingCasesTable.title, diagnosis: teachingCasesTable.diagnosis, findings: teachingCasesTable.findings, modality: teachingCasesTable.modality })
+    .from(teachingCasesTable)
+    .where(sql`${teachingCasesTable.id} IN (${sql.join(caseIds.map((id) => sql`${id}`), sql`, `)})`);
+
+  const geminiConfigured = !!process.env.AI_INTEGRATIONS_GEMINI_BASE_URL && !!process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+  if (!geminiConfigured) {
+    // Return a structural stub when AI is not configured
+    res.json({
+      quiz: {
+        title: `${collection.name} — Resident Quiz`,
+        generatedAt: new Date().toISOString(),
+        questions: cases.map((c, i) => ({
+          number: i + 1,
+          caseTitle: c.title,
+          caseId: c.id,
+          question: `What is the most likely diagnosis for Case ${i + 1}: ${c.title}?`,
+          options: ["A. [Configure Gemini to auto-generate options]", "B. —", "C. —", "D. —"],
+          answer: c.diagnosis ? `A. ${c.diagnosis}` : "A. [To be filled by faculty]",
+          explanation: "AI not configured — add explanation manually.",
+        })),
+      },
+      aiGenerated: false,
+      note: "AI Draft — Requires Faculty Review before distributing to residents.",
+    });
+    return;
+  }
+
+  try {
+    const { geminiGenerate } = await import("@workspace/integrations-gemini-ai");
+    const caseSummaries = cases.map((c, i) =>
+      `Case ${i + 1}: ${c.title} (${c.modality ?? "Unknown modality"})\nDiagnosis: ${c.diagnosis ?? "Unknown"}\nFindings snippet: ${(c.findings ?? "").slice(0, 200)}`
+    ).join("\n\n");
+
+    const prompt = `You are a radiology education expert creating a resident quiz for a Case of the Month session.
+
+Collection: ${collection.name}
+${collection.description ? `Description: ${collection.description}` : ""}
+
+Cases:
+${caseSummaries}
+
+Generate a JSON array of quiz questions — one per case — with this structure:
+[{
+  "number": 1,
+  "caseTitle": "...",
+  "question": "A clinically relevant MCQ question testing key radiology concepts",
+  "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
+  "answer": "A. ... — brief explanation",
+  "learningPoint": "one key teaching point"
+}]
+
+Return ONLY the JSON array. AI Draft — Requires Faculty Review.`;
+
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 45000);
+    const raw = await geminiGenerate(prompt, { maxTokens: 2048 });
+    clearTimeout(timer);
+
+    const match = raw.match(/\[[\s\S]*\]/);
+    const questions = match ? JSON.parse(match[0]) as object[] : [];
+
+    res.json({
+      quiz: {
+        title: `${collection.name} — Resident Quiz`,
+        generatedAt: new Date().toISOString(),
+        questions,
+      },
+      caseCount: cases.length,
+      aiGenerated: true,
+      note: "AI Draft — Requires Faculty Review before distributing to residents.",
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "AI generation failed";
+    res.status(502).json({ error: `Quiz generation failed: ${msg}` });
+  }
+});
+
+// ─── CASE OF MONTH: GENERATE JOURNAL CLUB ────────────────────────────────────
+// POST /api/teaching-cases/collections/:id/generate-journal-club
+// Generates structured journal club discussion guide from the collection.
+teachingCasesRouter.post("/collections/:id/generate-journal-club", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  if (!isOwner(sReq)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
+
+  const collectionId = Number(req.params.id);
+  const [collection] = await db
+    .select().from(teachingCaseCollectionsTable)
+    .where(eq(teachingCaseCollectionsTable.id, collectionId));
+  if (!collection) { res.status(404).json({ error: "Collection not found." }); return; }
+
+  const caseIds: number[] = JSON.parse(collection.caseIdsJson ?? "[]");
+  if (caseIds.length === 0) { res.status(400).json({ error: "Collection has no cases. Add cases before generating a journal club guide." }); return; }
+
+  const cases = await db
+    .select({ id: teachingCasesTable.id, title: teachingCasesTable.title, diagnosis: teachingCasesTable.diagnosis, findings: teachingCasesTable.findings, impression: teachingCasesTable.impression, modality: teachingCasesTable.modality, category: teachingCasesTable.category })
+    .from(teachingCasesTable)
+    .where(sql`${teachingCasesTable.id} IN (${sql.join(caseIds.map((id) => sql`${id}`), sql`, `)})`);
+
+  const geminiConfigured = !!process.env.AI_INTEGRATIONS_GEMINI_BASE_URL && !!process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+  if (!geminiConfigured) {
+    res.json({
+      journalClub: {
+        title: `${collection.name} — Journal Club Guide`,
+        generatedAt: new Date().toISOString(),
+        overview: "Configure Gemini AI to auto-generate the discussion guide.",
+        discussionPoints: cases.map((c) => ({ caseTitle: c.title, points: ["Add discussion points manually."] })),
+        slides: [{ slide: 1, title: "Introduction", content: "Collection: " + collection.name }],
+      },
+      aiGenerated: false,
+      note: "AI Draft — Requires Faculty Review.",
+    });
+    return;
+  }
+
+  try {
+    const { geminiGenerate } = await import("@workspace/integrations-gemini-ai");
+    const caseSummaries = cases.map((c, i) =>
+      `Case ${i + 1}: ${c.title} (${c.modality ?? "?"}, Category: ${c.category ?? "general"})\nDiagnosis: ${c.diagnosis ?? "?"}\nImpression: ${(c.impression ?? "").slice(0, 150)}`
+    ).join("\n\n");
+
+    const prompt = `You are a radiology faculty member preparing a journal club session.
+
+Collection: ${collection.name}
+${collection.description ? `Description: ${collection.description}` : ""}
+
+Cases:
+${caseSummaries}
+
+Generate a JSON object for a journal club discussion guide:
+{
+  "overview": "2-3 sentence session overview",
+  "theme": "common theme or learning objective",
+  "discussionPoints": [
+    { "caseTitle": "...", "points": ["discussion point 1", "point 2", "point 3"] }
+  ],
+  "slides": [
+    { "slide": 1, "title": "Introduction", "content": "brief slide content" },
+    { "slide": 2, ... }
+  ],
+  "references": ["relevant radiology guideline or textbook reference 1", "reference 2"]
+}
+
+Return ONLY the JSON object. AI Draft — Requires Faculty Review.`;
+
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 45000);
+    const raw = await geminiGenerate(prompt, { maxTokens: 2048 });
+    clearTimeout(timer);
+
+    const match = raw.match(/\{[\s\S]*\}/);
+    const guide = match ? JSON.parse(match[0]) as object : { overview: raw };
+
+    res.json({
+      journalClub: {
+        title: `${collection.name} — Journal Club Guide`,
+        generatedAt: new Date().toISOString(),
+        ...guide,
+      },
+      caseCount: cases.length,
+      aiGenerated: true,
+      note: "AI Draft — Requires Faculty Review before the session.",
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "AI generation failed";
+    res.status(502).json({ error: `Journal club generation failed: ${msg}` });
+  }
+});
+
 // ─── FAVORITES ───────────────────────────────────────────────────────────────
 teachingCasesRouter.get("/favorites", async (req, res): Promise<void> => {
   const sReq = req as StaffAuthRequest;
@@ -344,13 +529,67 @@ teachingCasesRouter.get("/favorites", async (req, res): Promise<void> => {
 });
 
 // ─── RESEARCH CASES ────────────────────────────────────────────────────────────
+// ─── RESEARCH DATABASE — filtered, paginated, with CSV export ──────────────
 teachingCasesRouter.get("/research", async (req, res): Promise<void> => {
+  const {
+    modality, category, difficulty, researchStatus,
+    isAnonymized, q,
+    page = "1", pageSize = "20",
+    exportFormat,
+  } = req.query as Record<string, string | undefined>;
+
+  const conditions = [eq(teachingCasesTable.isResearchCandidate, true)];
+  if (modality) conditions.push(eq(teachingCasesTable.modality, modality));
+  if (category) conditions.push(eq(teachingCasesTable.category, category));
+  if (difficulty) conditions.push(eq(teachingCasesTable.difficulty, difficulty));
+  if (researchStatus) conditions.push(eq(teachingCasesTable.researchStatus, researchStatus));
+  if (isAnonymized !== undefined) conditions.push(eq(teachingCasesTable.isAnonymized, isAnonymized === "true"));
+  if (q?.trim()) {
+    const term = `%${q.trim().toLowerCase()}%`;
+    conditions.push(sql`(
+      lower(${teachingCasesTable.title}) LIKE ${term} OR
+      lower(coalesce(${teachingCasesTable.diagnosis}, '')) LIKE ${term} OR
+      lower(coalesce(${teachingCasesTable.findings}, '')) LIKE ${term}
+    )`);
+  }
+
+  const whereClause = and(...conditions);
+  const pageSizeN = Math.min(Math.max(Number(pageSize) || 20, 1), 100);
+  const pageN = Math.max(Number(page) || 1, 1);
+  const offset = (pageN - 1) * pageSizeN;
+
+  const [totalRow] = await db.select({ count: count() }).from(teachingCasesTable).where(whereClause);
+  const total = totalRow?.count ?? 0;
+
   const rows = await db
     .select().from(teachingCasesTable)
-    .where(eq(teachingCasesTable.isResearchCandidate, true))
-    .orderBy(desc(teachingCasesTable.createdAt));
+    .where(whereClause)
+    .orderBy(desc(teachingCasesTable.createdAt))
+    .limit(pageSizeN)
+    .offset(offset);
 
-  res.json({ cases: rows });
+  // CSV export
+  if (exportFormat === "csv") {
+    const cols = ["id", "title", "diagnosis", "modality", "bodyPart", "category", "difficulty", "researchStatus", "isAnonymized", "createdAt"] as const;
+    const header = cols.join(",");
+    const csvRows = rows.map((r) =>
+      cols.map((c) => {
+        const v = r[c];
+        if (v == null) return "";
+        const s = String(v);
+        return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
+      }).join(",")
+    );
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="research-cases-${Date.now()}.csv"`);
+    res.send([header, ...csvRows].join("\n"));
+    return;
+  }
+
+  res.json({
+    cases: rows,
+    pagination: { page: pageN, pageSize: pageSizeN, total, totalPages: Math.ceil(total / pageSizeN) },
+  });
 });
 
 // ─── ANALYTICS ───────────────────────────────────────────────────────────────
