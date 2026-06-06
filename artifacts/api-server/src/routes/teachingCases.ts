@@ -290,7 +290,7 @@ teachingCasesRouter.post("/collections", async (req, res): Promise<void> => {
   if (!isOwner(sReq)) { res.status(403).json({ error: "Insufficient permissions." }); return; }
 
   const userId = getUserId(sReq)!;
-  const { name, description, isShared } = req.body as { name?: string; description?: string; isShared?: boolean };
+  const { name, description, isShared, caseIds } = req.body as { name?: string; description?: string; isShared?: boolean; caseIds?: number[] };
   if (!name?.trim()) { res.status(400).json({ error: "Name is required." }); return; }
 
   const [newCol] = await db.insert(teachingCaseCollectionsTable).values({
@@ -299,7 +299,7 @@ teachingCasesRouter.post("/collections", async (req, res): Promise<void> => {
     ownerId: userId,
     ownerName: getUserName(sReq),
     isShared: isShared ?? false,
-    caseIdsJson: "[]",
+    caseIdsJson: JSON.stringify(Array.isArray(caseIds) ? caseIds : []),
   }).returning();
 
   res.json({ collection: newCol });
@@ -505,33 +505,109 @@ teachingCasesRouter.post("/generate-from-report", async (req, res): Promise<void
     return;
   }
 
-  // Build a concise teaching summary from the report fields
-  const title = [modality, testName ?? bodyPart, diagnosis ?? "Interesting Case"]
-    .filter(Boolean).join(" — ");
-
-  // Combine clinical history + findings into the findings field; impression stays separate
+  // ── Anonymous report text (no patient names, IDs, or MRNs) ─────────────────
+  const studyLabel = [modality, testName ?? bodyPart].filter(Boolean).join(" ") || "Radiology Study";
   const combinedFindings = [
     clinicalHistory ? `Clinical History: ${clinicalHistory}` : null,
     findings ? `Findings:\n${findings}` : null,
   ].filter(Boolean).join("\n\n");
 
+  // ── Gemini: generate structured teaching content ───────────────────────────
+  let aiTitle = [modality, testName ?? bodyPart, diagnosis ?? "Interesting Case"].filter(Boolean).join(" — ");
+  let aiPearls = "";
+  let aiPitfalls = "";
+  let aiMcq = "";
+  let aiDiagnosis = diagnosis ?? "";
+
+  const geminiConfigured =
+    !!process.env.AI_INTEGRATIONS_GEMINI_BASE_URL &&
+    !!process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+
+  if (geminiConfigured) {
+    try {
+      const { geminiGenerate } = await import("@workspace/integrations-gemini-ai");
+      const prompt = `You are an expert radiology educator creating a teaching case for trainees.
+
+Study: ${studyLabel}
+${combinedFindings ? `\n${combinedFindings}` : ""}
+${impression ? `\nImpression: ${impression}` : ""}
+
+Generate a JSON object with these exact fields:
+{
+  "title": "concise descriptive title (no patient names or IDs)",
+  "diagnosis": "primary diagnosis in 3-5 words",
+  "clinicalPearls": "3-5 concise clinical pearls as a numbered list",
+  "pitfalls": "2-3 common mistakes or pitfalls as a numbered list",
+  "mcqQuestion": "a single multiple-choice question testing a key concept",
+  "mcqOptions": ["A. option", "B. option", "C. option", "D. option"],
+  "mcqAnswer": "correct option letter and brief explanation"
+}
+
+Return ONLY the JSON object. No preamble. Note: AI Draft – Requires Radiologist Review`;
+
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 30000);
+      const rawAi = await geminiGenerate(prompt, { maxTokens: 1024 });
+      clearTimeout(timer);
+
+      // Extract JSON from the response
+      const match = rawAi.match(/\{[\s\S]*\}/);
+      if (match) {
+        const parsed = JSON.parse(match[0]) as {
+          title?: string;
+          diagnosis?: string;
+          clinicalPearls?: string;
+          pitfalls?: string;
+          mcqQuestion?: string;
+          mcqOptions?: string[];
+          mcqAnswer?: string;
+        };
+        if (parsed.title) aiTitle = parsed.title;
+        if (parsed.diagnosis) aiDiagnosis = parsed.diagnosis;
+        if (parsed.clinicalPearls) aiPearls = parsed.clinicalPearls;
+        if (parsed.pitfalls) aiPitfalls = parsed.pitfalls;
+        if (parsed.mcqQuestion) {
+          const opts = (parsed.mcqOptions ?? []).join("\n");
+          aiMcq = `${parsed.mcqQuestion}\n${opts}\n\nAnswer: ${parsed.mcqAnswer ?? ""}`;
+        }
+      }
+    } catch (_aiErr) {
+      // AI generation is best-effort; fall through to save draft without AI content
+    }
+  }
+
+  // ── Build enhanced findings with AI teaching content ───────────────────────
+  const enhancedFindings = [
+    combinedFindings || null,
+    aiPearls ? `\n--- AI Teaching Pearls (Draft — Requires Review) ---\n${aiPearls}` : null,
+    aiPitfalls ? `\n--- AI Pitfalls (Draft — Requires Review) ---\n${aiPitfalls}` : null,
+    aiMcq ? `\n--- AI MCQ (Draft — Requires Review) ---\n${aiMcq}` : null,
+  ].filter(Boolean).join("\n");
+
   const [newCase] = await db.insert(teachingCasesTable).values({
-    title,
+    title: aiTitle,
     category: String(category),
     modality: modality ? String(modality) : null,
     bodyPart: bodyPart ? String(bodyPart) : null,
-    diagnosis: diagnosis ? String(diagnosis) : null,
-    findings: combinedFindings || null,
+    diagnosis: aiDiagnosis || null,
+    findings: enhancedFindings || null,
     impression: impression ? String(impression) : null,
     difficulty: "intermediate",
     status: "draft",
     isResearchCandidate: false,
-    isAnonymized: false,
+    isAnonymized: true,  // patient identifiers are not stored in this endpoint
     createdById: userId ?? 0,
     createdByName: userName ?? null,
   }).returning();
 
-  res.json({ case: newCase, message: "Teaching case draft created from report. AI Draft — Requires Radiologist Review before publishing." });
+  const aiGenerated = geminiConfigured && (aiPearls || aiPitfalls || aiMcq);
+  res.json({
+    case: newCase,
+    aiGenerated,
+    message: aiGenerated
+      ? "Teaching case created with AI-generated pearls, pitfalls, and MCQ. AI Draft — Requires Radiologist Review before publishing."
+      : "Teaching case draft created from report. AI is not configured — add pearls and MCQs manually before publishing.",
+  });
 });
 
 teachingCasesRouter.post("/measurements", async (req, res): Promise<void> => {

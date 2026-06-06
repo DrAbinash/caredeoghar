@@ -4823,7 +4823,7 @@ function OllamaSettingsCard() {
     try {
       const resp = await api.post<{ ok: boolean; model: string; models?: string[]; modelFound?: boolean; latencyMs?: number; error?: string }>(
         "/api/radiology-ollama/test",
-        { baseUrl: baseUrl.trim(), model: model.trim() || "llama3" }
+        { baseUrl: baseUrl.trim(), model: model.trim() || "llama3", allowLocal: localOnly }
       );
       if (resp.ok) {
         const detail = [

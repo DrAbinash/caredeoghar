@@ -19,9 +19,13 @@ import { type StaffAuthRequest } from "../middleware/requireStaffAuth";
 export const radiologyOllamaRouter = Router();
 
 // ── SSRF guard ──────────────────────────────────────────────────────────────
-// Blocks private IPv4 ranges, loopback, link-local, and IPv6 equivalents.
-// We parse the URL here (no DNS lookup) and refuse any hostname that is
-// obviously internal. This is defence-in-depth on top of network controls.
+// By default, private/loopback/link-local addresses are blocked to prevent
+// SSRF. When the admin has explicitly enabled "Local / LAN mode" in clinic
+// settings (ollamaLocalOnly = true), private-range hosts are permitted —
+// because that is the intended use case for a workstation-local Ollama instance.
+//
+// The /test endpoint accepts an `allowLocal` boolean from the request body so
+// the Settings page can honour the toggle during a connection test.
 const PRIVATE_RANGES: RegExp[] = [
   /^localhost$/i,
   /^127\.\d+\.\d+\.\d+$/,
@@ -34,7 +38,7 @@ const PRIVATE_RANGES: RegExp[] = [
   /^0\.0\.0\.0$/,
 ];
 
-function validateOllamaUrl(raw: string): { ok: true; url: URL } | { ok: false; reason: string } {
+function validateOllamaUrl(raw: string, allowLocal = false): { ok: true; url: URL } | { ok: false; reason: string } {
   let u: URL;
   try {
     u = new URL(raw);
@@ -44,10 +48,15 @@ function validateOllamaUrl(raw: string): { ok: true; url: URL } | { ok: false; r
   if (u.protocol !== "http:" && u.protocol !== "https:") {
     return { ok: false, reason: "Only http:// and https:// are allowed" };
   }
-  const host = u.hostname;
-  for (const re of PRIVATE_RANGES) {
-    if (re.test(host)) {
-      return { ok: false, reason: `Private/loopback addresses are not permitted as Ollama targets (${host})` };
+  if (!allowLocal) {
+    const host = u.hostname;
+    for (const re of PRIVATE_RANGES) {
+      if (re.test(host)) {
+        return {
+          ok: false,
+          reason: `Private/loopback addresses require "Local / LAN mode" to be enabled in Settings → Radiology → Ollama (${host})`,
+        };
+      }
     }
   }
   return { ok: true, url: u };
@@ -68,13 +77,14 @@ async function getOllamaConfig(): Promise<{ baseUrl: string; model: string; loca
   const row = rows[0];
   if (!row?.ollamaBaseUrl) return null;
 
-  const validated = validateOllamaUrl(row.ollamaBaseUrl);
+  const localOnly = row.ollamaLocalOnly ?? false;
+  const validated = validateOllamaUrl(row.ollamaBaseUrl, localOnly);
   if (!validated.ok) return null; // silently skip misconfigured URLs
 
   return {
     baseUrl: validated.url.origin,
     model: row.ollamaModel ?? "llama3",
-    localOnly: row.ollamaLocalOnly ?? false,
+    localOnly,
   };
 }
 
@@ -125,19 +135,21 @@ radiologyOllamaRouter.get("/status", async (_req, res): Promise<void> => {
   });
 });
 
-// ── POST /test — caller supplies baseUrl+model, no DB lookup ────────────────
+// ── POST /test — caller supplies baseUrl+model+allowLocal, no DB lookup ─────
 // Validates the URL through the SSRF guard before making any network request.
+// allowLocal should be set to true when the user has enabled Local/LAN mode.
 radiologyOllamaRouter.post("/test", async (req, res): Promise<void> => {
   const b = (req.body ?? {}) as Record<string, unknown>;
   const rawUrl = b.baseUrl ? String(b.baseUrl).trim() : "";
   const model = b.model ? String(b.model).trim() : "llama3";
+  const allowLocal = Boolean(b.allowLocal ?? false);
 
   if (!rawUrl) {
     res.status(400).json({ ok: false, error: "baseUrl required" });
     return;
   }
 
-  const guard = validateOllamaUrl(rawUrl);
+  const guard = validateOllamaUrl(rawUrl, allowLocal);
   if (!guard.ok) {
     res.status(400).json({ ok: false, error: guard.reason });
     return;
