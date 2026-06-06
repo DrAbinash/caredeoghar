@@ -1,0 +1,348 @@
+PHASE 10 – RADIOLOGY CONSOLIDATION (NOT NEW DEVELOPMENT)
+
+CRITICAL INSTRUCTION
+
+STOP BUILDING NEW RADIOLOGY PAGES.
+
+STOP BUILDING NEW DASHBOARDS.
+
+STOP BUILDING NEW REPORTING ROUTES.
+
+STOP BUILDING NEW AI MODULES.
+
+STOP BUILDING NEW COPILOTS.
+
+STOP BUILDING NEW WORKSTATIONS.
+
+We have already built a very large radiology ecosystem.
+
+The problem is no longer missing features.
+
+The problem is fragmentation.
+
+====================================================
+STEP 1 – AUDIT BEFORE CODING
+====================================================
+
+You have already identified:
+
+RadiologyReportingWorkspace
+RadiologyReportUnified
+RadiologyReportGenerator
+RadiologyReportEditor
+RadiologyWorklist
+
+and multiple side panels.
+
+Before writing ANY code:
+
+Create a comparison table showing:
+
+1. Route
+2. Component
+3. Features
+4. Missing features
+5. Recommendation
+
+Determine which SINGLE page is closest to becoming the final reporting workstation.
+
+Most likely candidate:
+
+RadiologyReportingWorkspace
+
+but verify objectively.
+
+====================================================
+STEP 2 – CHOOSE ONE REPORTING PAGE
+====================================================
+
+After audit:
+
+KEEP ONLY ONE PRIMARY REPORTING PAGE.
+
+Preferred target:
+
+RadiologyReportingWorkspace
+
+All future reporting improvements must happen inside this page.
+
+DO NOT create:
+
+/radiology/reporting-workstation
+
+DO NOT create:
+
+RadiologyUnifiedWorkstation.tsx
+
+DO NOT create:
+
+RadiologyWorkstation.tsx
+
+DO NOT create:
+
+new dashboard routes.
+
+The goal is consolidation, not expansion.
+
+====================================================
+STEP 3 – CREATE SINGLE RADIOLOGIST WORKFLOW
+====================================================
+
+Dr. Sugandha must be able to:
+
+1. Open study
+2. Review images
+3. Insert template
+4. Dictate findings
+5. Compare prior studies
+6. Review measurements
+7. Run AI review
+8. Save teaching case
+9. Print report
+10. Finalize report
+11. Upload report
+
+WITHOUT LEAVING THE SAME PAGE.
+
+====================================================
+STEP 4 – LEFT PANEL
+====================================================
+
+Inside existing reporting page keep:
+
+- EmbeddedWadoViewer
+- Weasis Launch
+- PACS Launch
+- Study Information
+- Patient Demographics
+- Series Browser
+- Thumbnail Browser
+- Key Images
+
+Do not create another viewer.
+
+Reuse existing viewer code.
+
+====================================================
+STEP 5 – CENTER PANEL
+====================================================
+
+Center remains report editor.
+
+Required sections:
+
+Technique
+
+Findings
+
+Impression
+
+Recommendations
+
+Features:
+
+- Voice dictation
+- Auto save
+- Macro expansion
+- Template insertion
+- Smart autocomplete
+- Structured reporting
+
+Reuse existing editor functionality.
+
+====================================================
+STEP 6 – RIGHT PANEL
+====================================================
+
+Create ONLY FIVE TABS.
+
+No more.
+
+Tab 1
+TEMPLATES
+
+Use existing:
+- Smart Findings
+- Template Library
+- Macro Engine
+
+User sees:
+- MRI Brain
+- MRI Stroke
+- MRI Hemorrhage
+- MRI Cervical Spine
+- MRI Lumbar Spine
+- MRI Whole Spine
+- CT Brain
+- CT Chest
+- CT Abdomen
+- USG Abdomen
+- USG Pelvis
+- Obstetric USG
+
+====================================================
+
+Tab 2
+PRIOR REPORTS
+
+Use existing:
+- Prior comparison
+- Report history
+- Memory engine
+
+Features:
+- Timeline
+- Side-by-side comparison
+- Copy previous findings
+- Copy previous impression
+- Interval change review
+
+====================================================
+
+Tab 3
+AI REVIEW
+
+Reuse existing Copilot.
+
+User sees only:
+
+- Possible missed findings
+- Differential diagnosis
+- Quality warnings
+- Suggested follow-up
+- Confidence score
+
+Hide:
+- AI routing
+- Model selection
+- Prompt chains
+- Provider settings
+
+====================================================
+
+Tab 4
+MEASUREMENTS
+
+Reuse existing:
+
+RadiologyMemoryPanel
+
+Features:
+
+- Previous measurements
+- Growth trends
+- Lesion tracking
+- Spinal canal tracking
+- Follow-up measurements
+
+Classifications:
+
+- BI-RADS
+- TI-RADS
+- PI-RADS
+- LI-RADS
+- Lung-RADS
+
+====================================================
+
+Tab 5
+TEACHING
+
+Reuse existing teaching logic.
+
+One button:
+
+SAVE AS TEACHING CASE
+
+Automatically:
+
+- Remove identifiers
+- Save key images
+- Save report
+- Save diagnosis
+- Save tags
+- Save modality
+- Save body part
+
+====================================================
+STEP 7 – BOTTOM ACTION BAR
+====================================================
+
+Always visible.
+
+Buttons:
+
+Save Draft
+Preview
+Print
+AI Review
+Finalize
+Upload
+Send To ERP
+
+====================================================
+STEP 8 – HIDE COMPLEXITY
+====================================================
+
+The following should remain functional but become backend-only:
+
+- Prompt Manager
+- AI Routing
+- Memory Engine
+- Analytics
+- DICOM Metadata
+- Brain Intelligence
+- Spine Intelligence
+- Tumor Follow-up
+- Organ Intelligence
+- Knowledge Base
+
+Do NOT delete code.
+
+Do NOT remove APIs.
+
+Do NOT remove database tables.
+
+Simply hide them from routine reporting workflow.
+
+====================================================
+STEP 9 – SUCCESS TEST
+====================================================
+
+Demonstrate that Dr. Sugandha can:
+
+Open MRI Brain study
+
+Review images
+
+Insert MRI Brain template
+
+Write findings
+
+Compare prior report
+
+Run AI review
+
+Review measurements
+
+Print report
+
+Finalize report
+
+Upload report
+
+from ONE SCREEN ONLY.
+
+====================================================
+STEP 10 – NO FEATURE CREEP
+====================================================
+
+Do not build any additional modules.
+
+Do not build any additional routes.
+
+Do not build any additional dashboards.
+
+Do not build any additional AI pages.
+
+Focus entirely on consolidating existing functionality into a single usable radiologist workflow.

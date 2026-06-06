@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import PageHeader from "@/components/PageHeader";
 import VoiceDictationButton from "@/components/VoiceDictationButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,14 +14,14 @@ import { readStaffSession } from "@/lib/staffSession";
 import { api } from "@/lib/fetchApi";
 import {
   ArrowLeft, ExternalLink, Sparkles, Save, CheckCircle2, AlertTriangle,
-  Printer, FileText, RefreshCw, ChevronDown, ChevronUp, LayoutTemplate,
-  Mic, Star, ClipboardList, Image as ImageIcon, Plus, Trash2, Eye,
-  Download, Share2, AlertCircle, Settings, Workflow, Layout,
-  User, Clock, Search, Filter, ChevronRight, BarChart3, Shield,
-  X, Send, Zap, BookOpen, Stethoscope, Upload, MonitorPlay,
+  Printer, RefreshCw, Star, ClipboardList, Plus, Trash2, Eye,
+  Share2, AlertCircle, X, Send, Zap, BookOpen, MonitorPlay,
+  LayoutTemplate, BarChart3, Monitor,
 } from "lucide-react";
-
 import EmbeddedWadoViewer from "@/components/EmbeddedWadoViewer";
+import RadiologyCopilotPanel from "@/components/RadiologyCopilotPanel";
+import RadiologyMemoryPanel from "@/components/RadiologyMemoryPanel";
+import MeasurementAssistantPanel from "@/components/MeasurementAssistantPanel";
 
 // ════════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -102,15 +101,7 @@ type StylePreferences = {
   includeMeasurements: boolean;
 };
 
-const GUIDED_STEPS = [
-  "Clinical History",
-  "Technique",
-  "Anatomy Checklist",
-  "Positive Findings",
-  "Normal Confirmation",
-  "Impression",
-  "Final QA",
-];
+type RightTab = "templates" | "prior" | "ai" | "measurements" | "teaching";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; locked: boolean }> = {
   DRAFT: { label: "Draft", color: "bg-yellow-100 text-yellow-800 border-yellow-300", locked: false },
@@ -247,15 +238,11 @@ export default function RadiologyReportingWorkspace({ studyId }: { studyId?: num
   const session = readStaffSession();
   const previewRef = useRef<HTMLDivElement>(null);
 
-  // ── Layout state ───────────────────────────────────────────────────────────
-  const [showPatientPanel, setShowPatientPanel] = useState(true);
-  const [showAiPanel, setShowAiPanel] = useState(true);
-  const [showViewer, setShowViewer] = useState(false);
-  const [guidedMode, setGuidedMode] = useState(false);
-  const [guidedStep, setGuidedStep] = useState(0);
+  // ── Layout ────────────────────────────────────────────────────────────────
+  const [rightTab, setRightTab] = useState<RightTab>("templates");
   const [previewMode, setPreviewMode] = useState(false);
 
-  // ── Data state ───────────────────────────────────────────────────────────
+  // ── Template selection ────────────────────────────────────────────────────
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const [templateSearch, setTemplateSearch] = useState("");
   const [modalityFilter, setModalityFilter] = useState<string>("");
@@ -268,30 +255,21 @@ export default function RadiologyReportingWorkspace({ studyId }: { studyId?: num
   const [recommendation, setRecommendation] = useState("");
   const [rawFindings, setRawFindings] = useState("");
   const [useStructured, setUseStructured] = useState(true);
+  const [imageRefs] = useState<ImageReference[]>([]);
 
-  // ── AI state ─────────────────────────────────────────────────────────────
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiPanelOpen, setAiPanelOpen] = useState(true);
-  const [aiOutput, setAiOutput] = useState("");
-  const [aiAction, setAiAction] = useState("");
-
-  // ── Lifecycle ────────────────────────────────────────────────────────────
-  const [reportStatus, setReportStatus] = useState<string>("DRAFT");
+  // ── Report meta ───────────────────────────────────────────────────────────
   const [isCritical, setIsCritical] = useState(false);
   const [criticalNote, setCriticalNote] = useState("");
+  const [reportStatus, setReportStatus] = useState<string>("DRAFT");
 
-  // ── Image references ─────────────────────────────────────────────────────
-  const [imageRefs, setImageRefs] = useState<ImageReference[]>([]);
-  const [newImgSeries, setNewImgSeries] = useState("");
-  const [newImgNumber, setNewImgNumber] = useState("");
-  const [newImgDesc, setNewImgDesc] = useState("");
+  // ── AI ────────────────────────────────────────────────────────────────────
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiOutput, setAiOutput] = useState("");
 
-  // ── Preferences ──────────────────────────────────────────────────────────
+  // ── Style ─────────────────────────────────────────────────────────────────
   const [headingCase, setHeadingCase] = useState<"all_caps" | "title_case">("all_caps");
   const [sectionSpacing, setSectionSpacing] = useState<"spaced" | "compact">("spaced");
   const [impressionStyle, setImpressionStyle] = useState<"bulleted" | "numbered" | "plain">("bulleted");
-
-  // ── Style preferences ────────────────────────────────────────────────────
   const [stylePrefs, setStylePrefs] = useState<StylePreferences>({
     impressionStyle: "concise",
     terminologyLevel: "standard",
@@ -300,40 +278,41 @@ export default function RadiologyReportingWorkspace({ studyId }: { studyId?: num
     includeMeasurements: false,
   });
 
-  // ── Loading ──────────────────────────────────────────────────────────────
+  // ── Loading ───────────────────────────────────────────────────────────────
   const [saving, setSaving] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
+  const [teachingNotes, setTeachingNotes] = useState("");
+  const [savingTeaching, setSavingTeaching] = useState(false);
 
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
   // DATA FETCHING
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
 
-  // Load worklist entry
   const { data: entry, isLoading: entryLoading } = useQuery<WorklistEntry>({
     queryKey: ["workspace-entry", studyId],
     queryFn: () => api.get<WorklistEntry>(`/api/internal/radiology/worklist/${studyId}`),
     enabled: !!studyId,
   });
 
-  // Load structured templates
   const { data: templates = [] } = useQuery<StructuredTemplate[]>({
     queryKey: ["structured-templates"],
     queryFn: () => api.get<StructuredTemplate[]>("/api/radiology/structured-report-templates"),
   });
 
-  // Load normal snippets
   const { data: normalSnippets = [] } = useQuery<NormalSnippet[]>({
     queryKey: ["normal-snippets", entry?.modality, entry?.studyDescription],
-    queryFn: () => api.get<NormalSnippet[]>(
-      `/api/radiology/report-generator/normal-snippets?modality=${entry?.modality || ""}&bodyPart=${entry?.studyDescription || ""}`
-    ),
+    queryFn: () =>
+      api.get<NormalSnippet[]>(
+        `/api/radiology/report-generator/normal-snippets?modality=${entry?.modality || ""}&bodyPart=${entry?.studyDescription || ""}`
+      ),
     enabled: !!entry,
   });
 
   // Load style preferences
   useEffect(() => {
     if (!session) return;
-    api.get<StylePreferences>("/api/radiology/report-generator/style-preferences")
+    api
+      .get<StylePreferences>("/api/radiology/report-generator/style-preferences")
       .then((p) => setStylePrefs(p))
       .catch(() => { /* ignore */ });
   }, [session]);
@@ -344,21 +323,17 @@ export default function RadiologyReportingWorkspace({ studyId }: { studyId?: num
     const modalityMap: Record<string, string> = { "X-RAY": "X-RAY", USG: "USG", MRI: "MRI", CT: "CT" };
     const mod = modalityMap[entry.modality] || entry.modality;
     const bodyPart = (entry.studyDescription || "").toUpperCase();
-
-    // Try exact match first
     let match = templates.find((t) => t.modality === mod && bodyPart.includes(t.bodyPart));
-    if (!match) {
-      // Fallback by modality only
-      match = templates.find((t) => t.modality === mod);
-    }
-    if (match && match.id !== selectedTemplateId) {
-      setSelectedTemplateId(match.id);
-    }
+    if (!match) match = templates.find((t) => t.modality === mod);
+    if (match && match.id !== selectedTemplateId) setSelectedTemplateId(match.id);
   }, [entry, templates, selectedTemplateId]);
 
-  // Load template content when selected
-  const selectedTemplate = useMemo(() => templates.find((t) => t.id === selectedTemplateId) ?? null, [templates, selectedTemplateId]);
+  const selectedTemplate = useMemo(
+    () => templates.find((t) => t.id === selectedTemplateId) ?? null,
+    [templates, selectedTemplateId]
+  );
 
+  // Load template content when selected
   useEffect(() => {
     if (!selectedTemplate) return;
     const sections = parseSectionsJson(selectedTemplate.sectionsJson);
@@ -389,20 +364,23 @@ export default function RadiologyReportingWorkspace({ studyId }: { studyId?: num
   // Set status from entry
   useEffect(() => {
     if (!entry) return;
-    const s = entry.status === "REPORT_FINAL" ? "FINAL" : entry.status === "AI_DRAFT_READY" ? "DRAFT" : "DRAFT";
-    setReportStatus(s);
+    setReportStatus(entry.status === "REPORT_FINAL" ? "FINAL" : "DRAFT");
   }, [entry?.status]);
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // FILTERED TEMPLATES
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
+  // MEMOS
+  // ══════════════════════════════════════════════════════════════════════════
 
   const filteredTemplates = useMemo(() => {
     let rows = templates;
     if (modalityFilter) rows = rows.filter((t) => t.modality === modalityFilter);
     if (templateSearch.trim()) {
       const q = templateSearch.toLowerCase();
-      rows = rows.filter((t) => t.templateName.toLowerCase().includes(q) || t.bodyPart.toLowerCase().includes(q));
+      rows = rows.filter(
+        (t) =>
+          t.templateName.toLowerCase().includes(q) ||
+          t.bodyPart.toLowerCase().includes(q)
+      );
     }
     return rows;
   }, [templates, modalityFilter, templateSearch]);
@@ -412,9 +390,51 @@ export default function RadiologyReportingWorkspace({ studyId }: { studyId?: num
     return Array.from(set).sort();
   }, [templates]);
 
-  // ═══════════════════════════════════════════════════════════════════════════
+  const isLocked = STATUS_CONFIG[reportStatus]?.locked ?? false;
+
+  const previewHtml = useMemo(
+    () =>
+      buildPreviewHtml({
+        patientName: entry?.patientName || "",
+        age: entry?.age || "",
+        sex: entry?.sex || "",
+        accessionNumber: entry?.accessionNumber || "",
+        referringDoctor: entry?.referringDoctor || "",
+        studyDate: entry?.studyDate || "",
+        studyName:
+          selectedTemplate?.templateName || entry?.studyDescription || "Radiology Report",
+        technique,
+        clinicalHistory,
+        findingsMap,
+        rawFindings,
+        useStructured,
+        impression,
+        recommendation,
+        imageRefs,
+        headingCase,
+        sectionSpacing,
+        impressionStyle,
+      }),
+    [
+      entry,
+      selectedTemplate,
+      technique,
+      clinicalHistory,
+      findingsMap,
+      rawFindings,
+      useStructured,
+      impression,
+      recommendation,
+      imageRefs,
+      headingCase,
+      sectionSpacing,
+      impressionStyle,
+    ]
+  );
+
+  // ══════════════════════════════════════════════════════════════════════════
   // ACTIONS
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
 
   function openWeasis() {
     if (!entry?.studyInstanceUID) {
@@ -425,7 +445,6 @@ export default function RadiologyReportingWorkspace({ studyId }: { studyId?: num
   }
 
   function applyMacro(macro: TemplateMacro) {
-    if (!selectedTemplate) return;
     const ctx: Record<string, string> = {
       patient_name: entry?.patientName || "",
       age: entry?.age || "",
@@ -462,28 +481,12 @@ export default function RadiologyReportingWorkspace({ studyId }: { studyId?: num
     setImpression((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function addImageRef() {
-    if (!newImgDesc.trim()) return;
-    setImageRefs((prev) => [...prev, { seriesNumber: newImgSeries, imageNumber: newImgNumber, description: newImgDesc }]);
-    setNewImgSeries("");
-    setNewImgNumber("");
-    setNewImgDesc("");
-  }
-
-  function removeImageRef(index: number) {
-    setImageRefs((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  // ── AI Actions ───────────────────────────────────────────────────────────
-
   const aiImpressionMutation = useMutation({
     mutationFn: async () => {
       if (!entry) throw new Error("No study loaded");
       setAiLoading(true);
-      setAiAction("Generate Impression");
-      // Call the existing AI reporting endpoint
       const res = await api.post<{ aiResponse: string }>("/api/ai-reporting/query", {
-        promptText: `As a radiologist, generate a numbered, clinically relevant impression from these findings. Be concise. Findings:\n${rawFindings || JSON.stringify(findingsMap)}\n\nClinical History: ${clinicalHistory}\n\nModality: ${entry.modality}\n\nStyle: ${stylePrefs.impressionStyle}`,
+        promptText: `As a radiologist, generate a numbered, clinically relevant impression from these findings. Be concise.\n\nFindings:\n${rawFindings || JSON.stringify(findingsMap)}\n\nClinical History: ${clinicalHistory}\nModality: ${entry.modality}\nStyle: ${stylePrefs.impressionStyle}`,
         studyInstanceUID: entry.studyInstanceUID,
         accessionNumber: entry.accessionNumber,
         patientId: entry.patientId ?? undefined,
@@ -496,11 +499,15 @@ export default function RadiologyReportingWorkspace({ studyId }: { studyId?: num
     onSuccess: (text) => {
       setAiOutput(text);
       setAiLoading(false);
-      toast({ title: "AI Impression Generated", description: "Review and insert if appropriate." });
+      toast({ title: "AI Draft Generated", description: "Review before inserting." });
     },
     onError: (err) => {
       setAiLoading(false);
-      toast({ title: "AI Error", description: err instanceof Error ? err.message : "Failed", variant: "destructive" });
+      toast({
+        title: "AI Error",
+        description: err instanceof Error ? err.message : "Failed",
+        variant: "destructive",
+      });
     },
   });
 
@@ -515,12 +522,10 @@ export default function RadiologyReportingWorkspace({ studyId }: { studyId?: num
     toast({ title: "Inserted into impression" });
   }
 
-  // ── Save / Finalize ──────────────────────────────────────────────────────
-
   async function saveDraft() {
     setSaving(true);
     try {
-      const payload = {
+      await api.post("/api/radiology/report-generator/save-draft", {
         studyId: entry?.studyId ?? null,
         worklistId: entry?.id ?? null,
         patientId: entry?.patientId ?? null,
@@ -532,11 +537,14 @@ export default function RadiologyReportingWorkspace({ studyId }: { studyId?: num
         findingsSections: useStructured ? findingsMap : null,
         impression: impression.filter(Boolean),
         recommendation: recommendation || null,
-      };
-      await api.post("/api/radiology/report-generator/save-draft", payload);
+      });
       toast({ title: "Draft Saved" });
     } catch (err) {
-      toast({ title: "Save Failed", description: err instanceof Error ? err.message : "Error", variant: "destructive" });
+      toast({
+        title: "Save Failed",
+        description: err instanceof Error ? err.message : "Error",
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }
@@ -546,7 +554,6 @@ export default function RadiologyReportingWorkspace({ studyId }: { studyId?: num
     if (!entry) return;
     setFinalizing(true);
     try {
-      // 1. Save patient report
       const html = buildPreviewHtml({
         patientName: entry.patientName || "",
         age: entry.age || "",
@@ -575,7 +582,8 @@ export default function RadiologyReportingWorkspace({ studyId }: { studyId?: num
           testId: null,
           studyId: entry.studyId ?? null,
           type: "radiology",
-          title: selectedTemplate?.templateName || entry.studyDescription || "Radiology Report",
+          title:
+            selectedTemplate?.templateName || entry.studyDescription || "Radiology Report",
           body: html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(),
           impression: impression.join("\n"),
           parameters: JSON.stringify({
@@ -591,7 +599,6 @@ export default function RadiologyReportingWorkspace({ studyId }: { studyId?: num
         reportId = report.id;
       }
 
-      // 2. Update worklist status
       await api.post("/api/internal/radiology/report-status", {
         accessionNumber: entry.accessionNumber,
         studyInstanceUID: entry.studyInstanceUID,
@@ -601,158 +608,174 @@ export default function RadiologyReportingWorkspace({ studyId }: { studyId?: num
         actor: session?.user.name ?? "staff",
       });
 
-      // 3. Log lifecycle
       await api.post("/api/radiology/report-generator/log-action", {
         studyId: entry.studyId || entry.id,
         action: "FINALIZED",
         newValue: "FINAL",
-        details: JSON.stringify({ template: selectedTemplate?.templateName, critical: isCritical }),
+        details: JSON.stringify({
+          template: selectedTemplate?.templateName,
+          critical: isCritical,
+        }),
       });
 
       setReportStatus("FINAL");
-      toast({ title: "Report Finalized", description: reportId ? `Report ID: ${reportId}` : "Worklist updated." });
+      toast({
+        title: "Report Finalized",
+        description: reportId ? `Report ID: ${reportId}` : "Worklist updated.",
+      });
       void qc.invalidateQueries({ queryKey: ["workspace-entry", studyId] });
       void qc.invalidateQueries({ queryKey: ["radiology-worklist"] });
     } catch (err) {
-      toast({ title: "Finalize Failed", description: err instanceof Error ? err.message : "Error", variant: "destructive" });
+      toast({
+        title: "Finalize Failed",
+        description: err instanceof Error ? err.message : "Error",
+        variant: "destructive",
+      });
     } finally {
       setFinalizing(false);
     }
   }
 
-  // ── Print ──────────────────────────────────────────────────────────────
-
   function printReport() {
     if (!previewRef.current) return;
     const w = window.open("", "_blank");
     if (!w) return;
-    w.document.write(`<html><head><title>Radiology Report</title></head><body>${previewRef.current.innerHTML}</body></html>`);
+    w.document.write(
+      `<html><head><title>Radiology Report</title></head><body>${previewRef.current.innerHTML}</body></html>`
+    );
     w.document.close();
     w.focus();
     setTimeout(() => { w.print(); w.close(); }, 250);
   }
 
-  // ── Share ────────────────────────────────────────────────────────────────
-
   async function shareWhatsApp() {
-    if (!entry?.patientId) { toast({ title: "No patient linked", variant: "destructive" }); return; }
+    if (!entry?.patientId) {
+      toast({ title: "No patient linked", variant: "destructive" });
+      return;
+    }
     try {
       await api.post("/api/whatsapp/send-report", {
         patientId: entry.patientId,
         reportType: "radiology",
         message: `Your radiology report for ${entry.studyDescription || "study"} (Acc: ${entry.accessionNumber}) is ready.`,
       });
-      toast({ title: "WhatsApp sent" });
+      toast({ title: "Report sent" });
     } catch (err) {
-      toast({ title: "Failed", description: err instanceof Error ? err.message : "Error", variant: "destructive" });
+      toast({
+        title: "Failed",
+        description: err instanceof Error ? err.message : "Error",
+        variant: "destructive",
+      });
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // RENDER
-  // ═══════════════════════════════════════════════════════════════════════════
+  async function saveTeachingCase() {
+    if (!rawFindings.trim()) {
+      toast({ title: "Enter findings first", variant: "destructive" });
+      return;
+    }
+    setSavingTeaching(true);
+    try {
+      await api.post("/api/teaching-cases/generate-from-report", {
+        patientId: entry?.patientId ?? null,
+        studyId: entry?.studyId ?? null,
+        worklistId: entry?.id ?? null,
+        modality: entry?.modality ?? "",
+        bodyPart: entry?.studyDescription ?? "",
+        findings: rawFindings,
+        impression: impression.filter(Boolean).join("\n"),
+        clinicalHistory,
+        notes: teachingNotes,
+      });
+      toast({ title: "Saved as Teaching Case", description: "Patient identifiers removed." });
+      setTeachingNotes("");
+    } catch (err) {
+      toast({
+        title: "Failed to save",
+        description: err instanceof Error ? err.message : "Error",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingTeaching(false);
+    }
+  }
 
-  const isLocked = STATUS_CONFIG[reportStatus]?.locked ?? false;
-  const previewHtml = useMemo(() => {
-    return buildPreviewHtml({
-      patientName: entry?.patientName || "",
-      age: entry?.age || "",
-      sex: entry?.sex || "",
-      accessionNumber: entry?.accessionNumber || "",
-      referringDoctor: entry?.referringDoctor || "",
-      studyDate: entry?.studyDate || "",
-      studyName: selectedTemplate?.templateName || entry?.studyDescription || "Radiology Report",
-      technique,
-      clinicalHistory,
-      findingsMap,
-      rawFindings,
-      useStructured,
-      impression,
-      recommendation,
-      imageRefs,
-      headingCase,
-      sectionSpacing,
-      impressionStyle,
-    });
-  }, [entry, selectedTemplate, technique, clinicalHistory, findingsMap, rawFindings, useStructured, impression, recommendation, imageRefs, headingCase, sectionSpacing, impressionStyle]);
+  // ══════════════════════════════════════════════════════════════════════════
+  // INNER COMPONENTS
+  // ══════════════════════════════════════════════════════════════════════════
 
-  // ── Patient / Study Panel ──────────────────────────────────────────────────
-  function PatientPanel() {
-    if (!showPatientPanel) return null;
+  function TemplatesTab() {
+    const macros = selectedTemplate ? parseMacrosJson(selectedTemplate.macrosJson) : [];
     return (
-      <div className="flex flex-col gap-3 p-3 border-r bg-muted/20 overflow-y-auto min-w-[260px] max-w-[280px]">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-muted-foreground">Patient / Study</h3>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setShowPatientPanel(false)}><X size={14} /></Button>
-        </div>
-
-        {entryLoading && <div className="text-xs text-muted-foreground">Loading...</div>}
-        {!entryLoading && !entry && (
-          <div className="text-xs text-muted-foreground">No study selected. Select from worklist.</div>
-        )}
-        {entry && (
-          <div className="flex flex-col gap-2 text-sm">
-            <div className="rounded-md border bg-white p-2.5 flex flex-col gap-1">
-              <div className="font-semibold text-base">{entry.patientName}</div>
-              <div className="text-muted-foreground text-xs">{[entry.age, entry.sex].filter(Boolean).join(" / ")}</div>
-              <Badge variant="outline" className="w-fit mt-1 font-mono text-xs">{entry.modality}</Badge>
-              <div className="text-xs text-muted-foreground mt-1">{entry.studyDescription || "—"}</div>
-            </div>
-            <div className="grid grid-cols-2 gap-1 text-xs">
-              <span className="text-muted-foreground">Accession:</span>
-              <span className="font-mono">{entry.accessionNumber}</span>
-              <span className="text-muted-foreground">Ref. Doctor:</span>
-              <span>{entry.referringDoctor || "—"}</span>
-              <span className="text-muted-foreground">Date:</span>
-              <span>{entry.studyDate || "—"}</span>
-              <span className="text-muted-foreground">Status:</span>
-              <Badge className={`w-fit text-[10px] ${STATUS_CONFIG[reportStatus]?.color || "bg-gray-100"}`}>
-                {STATUS_CONFIG[reportStatus]?.label || reportStatus}
-              </Badge>
-            </div>
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1 mt-1" onClick={openWeasis} disabled={!entry.studyInstanceUID}>
-              <ExternalLink size={12} /> Open in Weasis
-            </Button>
-          </div>
-        )}
-
-        <hr className="border-border" />
-
-        {/* Template Selector */}
-        <h3 className="text-sm font-semibold text-muted-foreground">Templates</h3>
+      <div className="flex flex-col gap-2 p-2">
+        {/* Modality filter */}
         <div className="flex flex-wrap gap-1">
-          <Button size="sm" variant={modalityFilter === "" ? "default" : "outline"} className="h-6 text-[10px] px-2" onClick={() => setModalityFilter("")}>All</Button>
+          <button
+            onClick={() => setModalityFilter("")}
+            className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${
+              modalityFilter === ""
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-white hover:bg-muted/50"
+            }`}
+          >
+            All
+          </button>
           {modalities.map((m) => (
-            <Button key={m} size="sm" variant={modalityFilter === m ? "default" : "outline"} className="h-6 text-[10px] px-2" onClick={() => setModalityFilter(m === modalityFilter ? "" : m)}>{m}</Button>
+            <button
+              key={m}
+              onClick={() => setModalityFilter(m === modalityFilter ? "" : m)}
+              className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${
+                modalityFilter === m
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-white hover:bg-muted/50"
+              }`}
+            >
+              {m}
+            </button>
           ))}
         </div>
+
+        {/* Search */}
         <Input
           placeholder="Search templates..."
           value={templateSearch}
           onChange={(e) => setTemplateSearch(e.target.value)}
           className="h-7 text-xs"
         />
-        <div className="flex flex-col gap-1 max-h-[240px] overflow-y-auto">
+
+        {/* Template list */}
+        <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto">
           {filteredTemplates.map((t) => (
             <button
               key={t.id}
               onClick={() => setSelectedTemplateId(t.id)}
               className={`text-left text-xs px-2 py-1.5 rounded border transition-colors ${
-                selectedTemplateId === t.id ? "bg-primary text-primary-foreground border-primary" : "bg-white hover:bg-muted/50"
+                selectedTemplateId === t.id
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-white hover:bg-muted/50"
               }`}
             >
               <div className="font-medium">{t.templateName}</div>
-              <div className="text-[10px] opacity-80">{t.bodyPart} • {t.modality}</div>
+              <div className="text-[10px] opacity-70">{t.bodyPart} · {t.modality}</div>
             </button>
           ))}
-          {filteredTemplates.length === 0 && <div className="text-xs text-muted-foreground text-center py-2">No templates</div>}
+          {filteredTemplates.length === 0 && (
+            <div className="text-xs text-muted-foreground text-center py-2">No templates found</div>
+          )}
         </div>
 
-        {/* Normal Snippets */}
+        {selectedTemplate && (
+          <div className="text-[10px] text-muted-foreground border rounded px-2 py-1 bg-muted/20">
+            Active: <span className="font-medium text-foreground">{selectedTemplate.templateName}</span>
+          </div>
+        )}
+
+        {/* Normal snippets */}
         {normalSnippets.length > 0 && (
           <>
-            <hr className="border-border" />
-            <h3 className="text-sm font-semibold text-muted-foreground">Normal Shortcuts</h3>
+            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide pt-1">
+              Normal Shortcuts
+            </div>
             <div className="flex flex-col gap-1">
               {normalSnippets.map((s) => (
                 <Button
@@ -763,462 +786,774 @@ export default function RadiologyReportingWorkspace({ studyId }: { studyId?: num
                   onClick={() => applyNormalSnippet(s)}
                   disabled={isLocked}
                 >
-                  <Star size={10} className="mr-1 text-amber-500" /> {s.label}
+                  <Star size={10} className="mr-1 text-amber-500 shrink-0" /> {s.label}
                 </Button>
               ))}
             </div>
           </>
         )}
 
-        {/* Image References */}
-        <hr className="border-border" />
-        <h3 className="text-sm font-semibold text-muted-foreground">Key Images</h3>
-        <div className="flex flex-col gap-1.5">
-          {imageRefs.map((img, idx) => (
-            <div key={idx} className="flex items-center gap-1 text-xs bg-white border rounded p-1.5">
-              <ImageIcon size={12} className="text-muted-foreground shrink-0" />
-              <span className="truncate flex-1">S{img.seriesNumber} I{img.imageNumber}: {img.description}</span>
-              <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => removeImageRef(idx)} disabled={isLocked}><Trash2 size={10} /></Button>
+        {/* Macros */}
+        {macros.length > 0 && (
+          <>
+            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide pt-1">
+              Macros
             </div>
-          ))}
-          {!isLocked && (
             <div className="flex flex-col gap-1">
-              <div className="flex gap-1">
-                <Input placeholder="Series" value={newImgSeries} onChange={(e) => setNewImgSeries(e.target.value)} className="h-6 text-xs" />
-                <Input placeholder="Image" value={newImgNumber} onChange={(e) => setNewImgNumber(e.target.value)} className="h-6 text-xs" />
-              </div>
-              <Input placeholder="Description" value={newImgDesc} onChange={(e) => setNewImgDesc(e.target.value)} className="h-6 text-xs" />
-              <Button size="sm" variant="outline" className="h-6 text-xs" onClick={addImageRef} disabled={!newImgDesc.trim()}>
-                <Plus size={10} className="mr-1" /> Add
-              </Button>
+              {macros.map((m) => (
+                <Button
+                  key={m.key}
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-[11px] justify-start px-2"
+                  onClick={() => applyMacro(m)}
+                  disabled={isLocked}
+                >
+                  <Zap size={10} className="mr-1 text-blue-500 shrink-0" /> {m.label}
+                </Button>
+              ))}
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
     );
   }
 
-  // ── Editor Panel ─────────────────────────────────────────────────────────
-  function EditorPanel() {
-    const macros = selectedTemplate ? parseMacrosJson(selectedTemplate.macrosJson) : [];
+  // ══════════════════════════════════════════════════════════════════════════
+  // RENDER
+  // ══════════════════════════════════════════════════════════════════════════
 
-    return (
-      <div className="flex flex-col gap-3 p-3 overflow-y-auto min-w-0">
-        {/* Toolbar */}
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => navigate("/radiology/worklist")}>
-            <ArrowLeft size={12} /> Worklist
-          </Button>
-          {!showPatientPanel && (
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setShowPatientPanel(true)}>
-              <LayoutTemplate size={12} /> Patient
-            </Button>
+  const RIGHT_TABS = [
+    { id: "templates", label: "Templates", icon: <LayoutTemplate size={11} /> },
+    { id: "prior", label: "Prior", icon: <ClipboardList size={11} /> },
+    { id: "ai", label: "AI", icon: <Sparkles size={11} /> },
+    { id: "measurements", label: "Measure", icon: <BarChart3 size={11} /> },
+    { id: "teaching", label: "Teaching", icon: <BookOpen size={11} /> },
+  ];
+
+  return (
+    <div className="flex flex-col" style={{ height: "calc(100vh - 48px)" }}>
+
+      {/* ── Compact header ─────────────────────────────────────────────────── */}
+      <div className="shrink-0 flex items-center gap-3 px-3 py-2 border-b bg-white">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 text-xs shrink-0"
+          onClick={() => navigate("/radiology/worklist")}
+        >
+          <ArrowLeft size={13} /> Worklist
+        </Button>
+        <div className="flex-1 min-w-0">
+          <span className="font-semibold text-sm">Radiology Reporting Workspace</span>
+          {entry && (
+            <span className="text-xs text-muted-foreground ml-2">
+              {entry.patientName} · {entry.accessionNumber}
+            </span>
           )}
-          {!showAiPanel && (
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setShowAiPanel(true)}>
-              <Sparkles size={12} /> AI
-            </Button>
-          )}
-          <div className="flex items-center gap-1.5 ml-auto">
-            <Switch id="structured" checked={useStructured} onCheckedChange={setUseStructured} disabled={isLocked} />
-            <Label htmlFor="structured" className="text-xs cursor-pointer">Structured</Label>
+        </div>
+        <Badge
+          className={`shrink-0 text-[10px] ${STATUS_CONFIG[reportStatus]?.color || ""}`}
+        >
+          {STATUS_CONFIG[reportStatus]?.label || reportStatus}
+        </Badge>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Switch
+            id="structured"
+            checked={useStructured}
+            onCheckedChange={setUseStructured}
+            disabled={isLocked}
+          />
+          <Label htmlFor="structured" className="text-xs cursor-pointer select-none">
+            Structured
+          </Label>
+        </div>
+      </div>
+
+      {/* ── 3-column body ──────────────────────────────────────────────────── */}
+      <div className="flex flex-1 overflow-hidden">
+
+        {/* ── LEFT 35%: Study info + DICOM viewer ───────────────────────── */}
+        <div
+          className="flex flex-col border-r bg-muted/5 overflow-hidden shrink-0"
+          style={{ width: "35%", minWidth: 280, maxWidth: 460 }}
+        >
+          {/* Study info */}
+          <div className="shrink-0 p-3 border-b">
+            {entryLoading && (
+              <div className="text-xs text-muted-foreground py-2">Loading study...</div>
+            )}
+            {!entryLoading && !entry && (
+              <div className="text-xs text-muted-foreground py-2">
+                No study loaded. Open from worklist.
+              </div>
+            )}
+            {entry && (
+              <div className="flex flex-col gap-2">
+                <div>
+                  <div className="font-semibold text-sm">{entry.patientName}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {[entry.age, entry.sex].filter(Boolean).join(" / ")}
+                  </div>
+                </div>
+                <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+                  <span className="text-muted-foreground">Accession</span>
+                  <span className="font-mono truncate">{entry.accessionNumber}</span>
+                  <span className="text-muted-foreground">Modality</span>
+                  <Badge variant="outline" className="w-fit text-[10px] py-0 h-4">
+                    {entry.modality}
+                  </Badge>
+                  <span className="text-muted-foreground">Study</span>
+                  <span className="truncate">{entry.studyDescription || "—"}</span>
+                  <span className="text-muted-foreground">Ref. Dr</span>
+                  <span className="truncate">{entry.referringDoctor || "—"}</span>
+                  <span className="text-muted-foreground">Date</span>
+                  <span>{entry.studyDate || "—"}</span>
+                </div>
+                {/* Viewer launch buttons */}
+                <div className="flex gap-1.5 flex-wrap pt-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs gap-1"
+                    onClick={openWeasis}
+                    disabled={!entry.studyInstanceUID}
+                  >
+                    <MonitorPlay size={12} /> Weasis
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs gap-1"
+                    onClick={() =>
+                      entry.studyInstanceUID &&
+                      window.open(`/radiology/viewer/${entry.studyInstanceUID}`, "_blank")
+                    }
+                    disabled={!entry.studyInstanceUID}
+                  >
+                    <Monitor size={12} /> OHIF
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs gap-1"
+                    onClick={() =>
+                      entry.studyInstanceUID &&
+                      window.open(
+                        `/api/radiology/studies/${entry.studyInstanceUID}/weasis-launch-redirect`,
+                        "_blank"
+                      )
+                    }
+                    disabled={!entry.studyInstanceUID}
+                  >
+                    <ExternalLink size={12} /> PACS
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
-          <div className="flex items-center gap-1.5">
-            <Switch id="guided" checked={guidedMode} onCheckedChange={setGuidedMode} />
-            <Label htmlFor="guided" className="text-xs cursor-pointer">Guided</Label>
+
+          {/* DICOM image viewer */}
+          <div className="flex-1 overflow-hidden">
+            {entry?.studyInstanceUID ? (
+              <EmbeddedWadoViewer
+                studyInstanceUID={entry.studyInstanceUID}
+                accessionNumber={entry.accessionNumber}
+              />
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center gap-3 p-4 text-center">
+                <MonitorPlay size={40} className="text-muted-foreground/20" />
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">No DICOM study linked</p>
+                  <p className="text-xs text-muted-foreground/70 mt-1">
+                    Open images in Weasis or OHIF using the buttons above.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
-          <Badge className={`${STATUS_CONFIG[reportStatus]?.color || ""} text-[10px]`}>{STATUS_CONFIG[reportStatus]?.label || reportStatus}</Badge>
         </div>
 
-        {/* Guided step indicator */}
-        {guidedMode && (
-          <div className="flex items-center gap-1 text-[10px] overflow-x-auto">
-            {GUIDED_STEPS.map((step, i) => (
-              <button
-                key={step}
-                onClick={() => setGuidedStep(i)}
-                className={`px-2 py-1 rounded border whitespace-nowrap ${
-                  i === guidedStep ? "bg-primary text-primary-foreground border-primary" : i < guidedStep ? "bg-green-50 border-green-200 text-green-700" : "bg-white border-gray-200 text-gray-500"
-                }`}
-              >
-                {i + 1}. {step}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* ── CENTER 45%: Report editor + action bar ────────────────────── */}
+        <div className="flex flex-col flex-1 overflow-hidden min-w-0">
 
-        {/* Lock banner */}
-        {isLocked && (
-          <div className="flex items-center gap-2 p-2 rounded bg-green-50 border border-green-200 text-green-800 text-xs font-medium">
-            <CheckCircle2 size={14} /> This report is finalized. Editing is disabled.
-          </div>
-        )}
+          {/* Scrollable editor area */}
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
 
-        {/* Clinical History */}
-        {(!guidedMode || guidedStep === 0) && (
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs font-semibold">Clinical History</Label>
-              <VoiceDictationButton onInsert={(t) => setClinicalHistory((p) => p + t)} targetField="clinical_history" className="h-6 text-[10px]" />
-            </div>
-            <Textarea
-              value={clinicalHistory}
-              onChange={(e) => setClinicalHistory(e.target.value)}
-              placeholder="Enter clinical history..."
-              className="min-h-[60px] text-sm"
-              disabled={isLocked}
-            />
-          </div>
-        )}
-
-        {/* Technique */}
-        {(!guidedMode || guidedStep === 1) && (
-          <div className="flex flex-col gap-1.5">
-            <Label className="text-xs font-semibold">Technique</Label>
-            <Textarea
-              value={technique}
-              onChange={(e) => setTechnique(e.target.value)}
-              placeholder="Describe technique..."
-              className="min-h-[50px] text-sm"
-              disabled={isLocked}
-            />
-          </div>
-        )}
-
-        {/* Findings */}
-        {(!guidedMode || guidedStep >= 2 && guidedStep <= 4) && (
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs font-semibold">Findings</Label>
-              <div className="flex gap-1">
-                {macros.length > 0 && (
-                  <div className="flex gap-1 flex-wrap">
-                    {macros.slice(0, 4).map((m) => (
-                      <Button key={m.key} size="sm" variant="outline" className="h-5 text-[10px] px-1.5" onClick={() => applyMacro(m)} disabled={isLocked}>
-                        <Zap size={10} className="mr-0.5" /> {m.label}
-                      </Button>
-                    ))}
-                  </div>
-                )}
-                <VoiceDictationButton onInsert={(t) => setRawFindings((p) => p + t)} targetField="findings" className="h-5 text-[10px]" />
+            {/* Finalized banner */}
+            {isLocked && (
+              <div className="flex items-center gap-2 p-2 rounded-md bg-green-50 border border-green-200 text-green-800 text-xs font-medium shrink-0">
+                <CheckCircle2 size={14} /> Report is finalized. Editing is disabled.
               </div>
+            )}
+
+            {/* Clinical History */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold">Clinical History</Label>
+                <VoiceDictationButton
+                  onInsert={(t) => setClinicalHistory((p) => p + t)}
+                  targetField="clinical_history"
+                  className="h-6 text-[10px]"
+                />
+              </div>
+              <Textarea
+                value={clinicalHistory}
+                onChange={(e) => setClinicalHistory(e.target.value)}
+                placeholder="Enter clinical history..."
+                className="min-h-[56px] text-sm resize-none"
+                disabled={isLocked}
+              />
             </div>
 
-            {useStructured ? (
-              <div className="flex flex-col gap-2">
-                {Object.entries(findingsMap).map(([label, item]) => (
-                  <div key={label} className="flex flex-col gap-1 border rounded-md p-2.5 bg-white">
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id={`norm-${label}`}
-                        checked={item.normal}
-                        onCheckedChange={(checked) => {
-                          setFindingsMap((prev) => ({
-                            ...prev,
-                            [label]: { ...prev[label], normal: checked === true },
-                          }));
-                        }}
-                        disabled={isLocked}
-                      />
-                      <Label htmlFor={`norm-${label}`} className="text-xs font-semibold cursor-pointer">{label}</Label>
-                      <span className="text-[10px] text-muted-foreground ml-auto">{item.normal ? "Normal" : "Abnormal"}</span>
+            {/* Technique */}
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs font-semibold">Technique</Label>
+              <Textarea
+                value={technique}
+                onChange={(e) => setTechnique(e.target.value)}
+                placeholder="Describe technique used..."
+                className="min-h-[44px] text-sm resize-none"
+                disabled={isLocked}
+              />
+            </div>
+
+            {/* Findings */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold">Findings / Observation</Label>
+                <div className="flex items-center gap-1">
+                  {selectedTemplate &&
+                    parseMacrosJson(selectedTemplate.macrosJson)
+                      .slice(0, 3)
+                      .map((m) => (
+                        <Button
+                          key={m.key}
+                          size="sm"
+                          variant="outline"
+                          className="h-5 text-[9px] px-1.5"
+                          onClick={() => applyMacro(m)}
+                          disabled={isLocked}
+                        >
+                          <Zap size={9} className="mr-0.5" /> {m.label}
+                        </Button>
+                      ))}
+                  <VoiceDictationButton
+                    onInsert={(t) => setRawFindings((p) => p + t)}
+                    targetField="findings"
+                    className="h-5 text-[10px]"
+                  />
+                </div>
+              </div>
+
+              {useStructured ? (
+                <div className="flex flex-col gap-2">
+                  {Object.entries(findingsMap).map(([label, item]) => (
+                    <div key={label} className="flex flex-col gap-1 border rounded-md p-2.5 bg-white">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id={`norm-${label}`}
+                          checked={item.normal}
+                          onCheckedChange={(checked) =>
+                            setFindingsMap((prev) => ({
+                              ...prev,
+                              [label]: { ...prev[label], normal: checked === true },
+                            }))
+                          }
+                          disabled={isLocked}
+                        />
+                        <Label
+                          htmlFor={`norm-${label}`}
+                          className="text-xs font-semibold cursor-pointer"
+                        >
+                          {label}
+                        </Label>
+                        <span className="text-[10px] text-muted-foreground ml-auto">
+                          {item.normal ? "Normal" : "Abnormal"}
+                        </span>
+                      </div>
+                      {!item.normal && (
+                        <Textarea
+                          value={item.text}
+                          onChange={(e) =>
+                            setFindingsMap((prev) => ({
+                              ...prev,
+                              [label]: { ...prev[label], text: e.target.value },
+                            }))
+                          }
+                          placeholder="Describe finding..."
+                          className="min-h-[48px] text-xs mt-1 resize-none"
+                          disabled={isLocked}
+                        />
+                      )}
+                      {item.normal && (
+                        <div className="text-xs text-muted-foreground pl-6 truncate">{item.text}</div>
+                      )}
                     </div>
-                    {!item.normal && (
-                      <Textarea
-                        value={item.text}
-                        onChange={(e) => setFindingsMap((prev) => ({ ...prev, [label]: { ...prev[label], text: e.target.value } }))}
-                        placeholder="Describe finding..."
-                        className="min-h-[50px] text-xs mt-1"
-                        disabled={isLocked}
-                      />
-                    )}
-                    {item.normal && (
-                      <div className="text-xs text-muted-foreground pl-6">{item.text}</div>
+                  ))}
+                  {Object.keys(findingsMap).length === 0 && (
+                    <div className="text-xs text-muted-foreground text-center py-6 border rounded-md bg-muted/20">
+                      Select a template from the{" "}
+                      <button
+                        className="underline font-medium text-foreground"
+                        onClick={() => setRightTab("templates")}
+                      >
+                        Templates
+                      </button>{" "}
+                      tab to load structured findings.
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Textarea
+                  value={rawFindings}
+                  onChange={(e) => setRawFindings(e.target.value)}
+                  placeholder="Enter free-text findings..."
+                  className="min-h-[180px] text-sm font-mono resize-y"
+                  disabled={isLocked}
+                />
+              )}
+            </div>
+
+            {/* Impression */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold">Impression</Label>
+                <div className="flex gap-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 text-[10px] gap-1"
+                    onClick={() => {
+                      aiImpressionMutation.mutate();
+                      setRightTab("ai");
+                    }}
+                    disabled={aiLoading || isLocked}
+                  >
+                    {aiLoading ? (
+                      <RefreshCw size={10} className="animate-spin" />
+                    ) : (
+                      <Sparkles size={10} />
+                    )}{" "}
+                    AI
+                  </Button>
+                  <VoiceDictationButton
+                    onInsert={(t) => setImpression((p) => [...p, t])}
+                    targetField="impression"
+                    className="h-6 text-[10px]"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {impression.map((line, i) => (
+                  <div key={i} className="flex items-start gap-1.5">
+                    <span className="text-xs text-muted-foreground mt-2 shrink-0">{i + 1}.</span>
+                    <Textarea
+                      value={line}
+                      onChange={(e) => updateImpression(i, e.target.value)}
+                      placeholder={`Impression point ${i + 1}`}
+                      className="min-h-[40px] text-sm flex-1 resize-none"
+                      disabled={isLocked}
+                    />
+                    {!isLocked && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 mt-0.5 shrink-0"
+                        onClick={() => removeImpression(i)}
+                      >
+                        <Trash2 size={12} />
+                      </Button>
                     )}
                   </div>
                 ))}
+                {!isLocked && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs w-fit"
+                    onClick={addImpressionLine}
+                  >
+                    <Plus size={12} className="mr-1" /> Add Point
+                  </Button>
+                )}
               </div>
-            ) : (
-              <Textarea
-                value={rawFindings}
-                onChange={(e) => setRawFindings(e.target.value)}
-                placeholder="Enter free-text findings..."
-                className="min-h-[200px] text-sm font-mono"
-                disabled={isLocked}
-              />
-            )}
-          </div>
-        )}
 
-        {/* Impression */}
-        {(!guidedMode || guidedStep === 5) && (
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs font-semibold">Impression</Label>
-              <div className="flex gap-1">
-                <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1" onClick={() => aiImpressionMutation.mutate()} disabled={aiLoading || isLocked}>
-                  {aiLoading ? <RefreshCw size={10} className="animate-spin" /> : <Sparkles size={10} />} AI
-                </Button>
-                <VoiceDictationButton onInsert={(t) => setImpression((p) => [...p, t])} targetField="impression" className="h-6 text-[10px]" />
-              </div>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              {impression.map((line, i) => (
-                <div key={i} className="flex items-start gap-1.5">
-                  <span className="text-xs text-muted-foreground mt-2 shrink-0">{i + 1}.</span>
-                  <Textarea
-                    value={line}
-                    onChange={(e) => updateImpression(i, e.target.value)}
-                    placeholder={`Impression point ${i + 1}`}
-                    className="min-h-[40px] text-sm flex-1"
-                    disabled={isLocked}
-                  />
-                  {!isLocked && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7 mt-0.5 shrink-0" onClick={() => removeImpression(i)}>
-                      <Trash2 size={12} />
+              {/* AI output panel */}
+              {aiOutput && (
+                <div className="flex flex-col gap-1.5 border rounded-md p-2.5 bg-amber-50/70 border-amber-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-amber-800 flex items-center gap-1">
+                      <Sparkles size={11} /> AI Draft — Requires Radiologist Review
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-5 text-[10px] px-1"
+                      onClick={() => setAiOutput("")}
+                    >
+                      <X size={10} />
                     </Button>
-                  )}
+                  </div>
+                  <div className="text-xs whitespace-pre-wrap max-h-[120px] overflow-y-auto border rounded p-1.5 bg-white/80">
+                    {aiOutput}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 text-[11px] w-fit"
+                    onClick={insertAiOutput}
+                    disabled={isLocked}
+                  >
+                    <Send size={10} className="mr-1" /> Insert into Impression
+                  </Button>
                 </div>
-              ))}
-              {!isLocked && (
-                <Button size="sm" variant="outline" className="h-7 text-xs w-fit" onClick={addImpressionLine}>
-                  <Plus size={12} className="mr-1" /> Add Point
-                </Button>
               )}
             </div>
-          </div>
-        )}
 
-        {/* Recommendation */}
-        {(!guidedMode || guidedStep === 5) && (
-          <div className="flex flex-col gap-1.5">
-            <Label className="text-xs font-semibold">Recommendation</Label>
-            <Textarea
-              value={recommendation}
-              onChange={(e) => setRecommendation(e.target.value)}
-              placeholder="Enter recommendation..."
-              className="min-h-[50px] text-sm"
-              disabled={isLocked}
-            />
-          </div>
-        )}
-
-        {/* Critical Alert */}
-        {(!guidedMode || guidedStep === 6) && (
-          <div className="flex flex-col gap-2 border rounded-md p-3 bg-red-50/50">
-            <div className="flex items-center gap-2">
-              <Switch id="critical" checked={isCritical} onCheckedChange={setIsCritical} disabled={isLocked} />
-              <Label htmlFor="critical" className="text-sm font-semibold text-red-700 flex items-center gap-1">
-                <AlertTriangle size={14} /> Mark Critical
-              </Label>
-            </div>
-            {isCritical && (
+            {/* Recommendation */}
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs font-semibold">Recommendation</Label>
               <Textarea
-                value={criticalNote}
-                onChange={(e) => setCriticalNote(e.target.value)}
-                placeholder="Critical finding details (e.g. intracranial bleed, acute infarct, PE, pneumothorax, bowel perforation, cord compression)..."
-                className="min-h-[50px] text-sm"
+                value={recommendation}
+                onChange={(e) => setRecommendation(e.target.value)}
+                placeholder="Recommendation..."
+                className="min-h-[44px] text-sm resize-none"
                 disabled={isLocked}
               />
-            )}
-          </div>
-        )}
+            </div>
 
-        {/* Action buttons */}
-        <div className="flex flex-wrap items-center gap-2 pt-2">
-          {!isLocked && (
-            <>
-              <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={saveDraft} disabled={saving}>
-                {saving ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />} Save Draft
-              </Button>
-              <Button size="sm" className="h-8 text-xs gap-1" onClick={finalizeReport} disabled={finalizing}>
-                {finalizing ? <RefreshCw size={12} className="animate-spin" /> : <CheckCircle2 size={12} />} Finalize
-              </Button>
-            </>
-          )}
-          <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={() => setPreviewMode((v) => !v)}>
-            <Eye size={12} /> {previewMode ? "Hide Preview" : "Preview"}
-          </Button>
-          <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={printReport}>
-            <Printer size={12} /> Print
-          </Button>
-          <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={shareWhatsApp} disabled={!entry?.patientId}>
-            <Share2 size={12} /> WhatsApp
-          </Button>
-        </div>
-
-        {/* Preview */}
-        {previewMode && (
-          <div className="border rounded-md p-3 bg-white">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-semibold">Report Preview</h3>
-              <div className="flex gap-1">
-                <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => setHeadingCase((c) => c === "all_caps" ? "title_case" : "all_caps")}>
-                  {headingCase === "all_caps" ? "ALL CAPS" : "Title Case"}
-                </Button>
-                <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => setSectionSpacing((s) => s === "spaced" ? "compact" : "spaced")}>
-                  {sectionSpacing === "spaced" ? "Spaced" : "Compact"}
-                </Button>
-                <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => setImpressionStyle((s) => s === "bulleted" ? "numbered" : s === "numbered" ? "plain" : "bulleted")}>
-                  {impressionStyle === "bulleted" ? "• Bullets" : impressionStyle === "numbered" ? "1. Numbered" : "Plain"}
-                </Button>
+            {/* Critical finding */}
+            <div className="flex flex-col gap-2 border rounded-md p-3 bg-red-50/40 border-red-100">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="critical"
+                  checked={isCritical}
+                  onCheckedChange={setIsCritical}
+                  disabled={isLocked}
+                />
+                <Label
+                  htmlFor="critical"
+                  className="text-sm font-semibold text-red-700 flex items-center gap-1 cursor-pointer"
+                >
+                  <AlertTriangle size={13} /> Mark Critical Finding
+                </Label>
               </div>
+              {isCritical && (
+                <Textarea
+                  value={criticalNote}
+                  onChange={(e) => setCriticalNote(e.target.value)}
+                  placeholder="Describe critical finding (e.g. acute infarct, cord compression, tension pneumothorax)..."
+                  className="min-h-[50px] text-sm resize-none"
+                  disabled={isLocked}
+                />
+              )}
             </div>
-            <div ref={previewRef} className="border rounded p-3 bg-white" dangerouslySetInnerHTML={{ __html: previewHtml }} />
-          </div>
-        )}
-      </div>
-    );
-  }
 
-  // ── AI / Helper Panel ──────────────────────────────────────────────────────
-  function AiPanel() {
-    if (!showAiPanel) return null;
-    return (
-      <div className="flex flex-col gap-3 p-3 border-l bg-muted/20 overflow-y-auto min-w-[260px] max-w-[300px]">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-1">
-            <Sparkles size={14} /> AI Assistant
-          </h3>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setShowAiPanel(false)}><X size={14} /></Button>
-        </div>
-
-        {/* AI Action Buttons */}
-        <div className="flex flex-col gap-1.5">
-          <Button size="sm" variant="outline" className="h-7 text-[11px] justify-start" onClick={() => aiImpressionMutation.mutate()} disabled={aiLoading || isLocked}>
-            <Sparkles size={12} className="mr-1" /> Generate Impression
-          </Button>
-          <Button size="sm" variant="outline" className="h-7 text-[11px] justify-start" disabled={isLocked}>
-            <Zap size={12} className="mr-1" /> Improve Findings
-          </Button>
-          <Button size="sm" variant="outline" className="h-7 text-[11px] justify-start" disabled={isLocked}>
-            <Shield size={12} className="mr-1" /> Check Report
-          </Button>
-          <Button size="sm" variant="outline" className="h-7 text-[11px] justify-start" disabled={isLocked}>
-            <Stethoscope size={12} className="mr-1" /> Suggest Differential
-          </Button>
-          <Button size="sm" variant="outline" className="h-7 text-[11px] justify-start" disabled={isLocked}>
-            <BookOpen size={12} className="mr-1" /> Suggest Follow-up
-          </Button>
-          <Button size="sm" variant="outline" className="h-7 text-[11px] justify-start" disabled={isLocked}>
-            <User size={12} className="mr-1" /> Explain to Patient
-          </Button>
-        </div>
-
-        {/* Style Preferences */}
-        <div className="flex flex-col gap-1.5 border rounded-md p-2 bg-white">
-          <h4 className="text-[11px] font-semibold text-muted-foreground">AI Style</h4>
-          <select
-            className="h-6 text-[11px] border rounded px-1"
-            value={stylePrefs.impressionStyle}
-            onChange={(e) => setStylePrefs((p) => ({ ...p, impressionStyle: e.target.value as StylePreferences["impressionStyle"] }))}
-          >
-            <option value="concise">Concise</option>
-            <option value="detailed">Detailed</option>
-            <option value="academic">Academic</option>
-            <option value="diagnostic">Care Diagnostics</option>
-          </select>
-          <div className="flex items-center gap-1.5">
-            <Checkbox id="diff" checked={stylePrefs.includeDifferential} onCheckedChange={(c) => setStylePrefs((p) => ({ ...p, includeDifferential: c === true }))} />
-            <Label htmlFor="diff" className="text-[11px] cursor-pointer">Include Differential</Label>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Checkbox id="meas" checked={stylePrefs.includeMeasurements} onCheckedChange={(c) => setStylePrefs((p) => ({ ...p, includeMeasurements: c === true }))} />
-            <Label htmlFor="meas" className="text-[11px] cursor-pointer">Include Measurements</Label>
-          </div>
-          <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => {
-            api.put("/api/radiology/report-generator/style-preferences", stylePrefs).then(() => toast({ title: "Style saved" }));
-          }}>
-            <Save size={10} className="mr-1" /> Save Style
-          </Button>
-        </div>
-
-        {/* AI Output */}
-        {aiOutput && (
-          <div className="flex flex-col gap-1.5 border rounded-md p-2 bg-white">
-            <div className="flex items-center justify-between">
-              <h4 className="text-[11px] font-semibold">AI Output ({aiAction})</h4>
-              <Button size="sm" variant="ghost" className="h-5 text-[10px]" onClick={() => setAiOutput("")}><X size={10} /></Button>
-            </div>
-            <div className="text-xs whitespace-pre-wrap max-h-[200px] overflow-y-auto border rounded p-1.5 bg-muted/30">{aiOutput}</div>
-            <Button size="sm" variant="outline" className="h-6 text-[11px]" onClick={insertAiOutput} disabled={isLocked}>
-              <Send size={10} className="mr-1" /> Insert into Report
-            </Button>
-          </div>
-        )}
-
-        {/* Guideline Recommendations */}
-        <div className="flex flex-col gap-1.5">
-          <h4 className="text-[11px] font-semibold text-muted-foreground">Guideline Helpers</h4>
-          {[
-            { key: "fleischner", label: "Fleischner Lung Nodule" },
-            { key: "tirads", label: "TI-RADS Thyroid" },
-            { key: "birads", label: "BI-RADS Breast" },
-            { key: "bosniak", label: "Bosniak Renal Cyst" },
-            { key: "lirads", label: "LI-RADS Liver" },
-            { key: "pirads", label: "PI-RADS Prostate" },
-            { key: "adrenal", label: "Adrenal Incidentaloma" },
-            { key: "aaa", label: "AAA Follow-up" },
-          ].map((g) => (
-            <Button key={g.key} size="sm" variant="outline" className="h-6 text-[10px] justify-start px-2" disabled={isLocked}>
-              <BookOpen size={10} className="mr-1" /> {g.label}
-            </Button>
-          ))}
-        </div>
-
-        {/* QA Warnings */}
-        <div className="flex flex-col gap-1.5 border rounded-md p-2 bg-amber-50/50">
-          <h4 className="text-[11px] font-semibold text-amber-700 flex items-center gap-1">
-            <AlertCircle size={10} /> QA Check
-          </h4>
-          <div className="text-[10px] text-muted-foreground space-y-0.5">
-            {!impression.some((i) => i.toLowerCase().includes("normal")) && impression.length > 0 && <div className="text-green-600">✓ Impression present</div>}
-            {impression.length === 0 && <div className="text-red-500">⚠ Missing impression</div>}
-            {rawFindings && !impression.some((i) => rawFindings.toLowerCase().includes(i.toLowerCase().split(" ")[0] || "")) && impression.length > 0 && (
-              <div className="text-amber-600">⚠ Findings-impression mismatch</div>
+            {/* Report preview */}
+            {previewMode && (
+              <div className="border rounded-md bg-white">
+                <div className="flex items-center justify-between px-3 py-2 border-b flex-wrap gap-2">
+                  <h3 className="text-sm font-semibold">Report Preview</h3>
+                  <div className="flex gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 text-[10px]"
+                      onClick={() =>
+                        setHeadingCase((c) => (c === "all_caps" ? "title_case" : "all_caps"))
+                      }
+                    >
+                      {headingCase === "all_caps" ? "ALL CAPS" : "Title Case"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 text-[10px]"
+                      onClick={() =>
+                        setSectionSpacing((s) => (s === "spaced" ? "compact" : "spaced"))
+                      }
+                    >
+                      {sectionSpacing}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 text-[10px]"
+                      onClick={() =>
+                        setImpressionStyle((s) =>
+                          s === "bulleted" ? "numbered" : s === "numbered" ? "plain" : "bulleted"
+                        )
+                      }
+                    >
+                      {impressionStyle}
+                    </Button>
+                  </div>
+                </div>
+                <div
+                  ref={previewRef}
+                  className="p-4"
+                  dangerouslySetInnerHTML={{ __html: previewHtml }}
+                />
+              </div>
             )}
-            <div className="text-green-600">✓ No left-right mismatch detected</div>
-            <div className="text-green-600">✓ No contrast mismatch detected</div>
+          </div>
+
+          {/* ── Sticky bottom action bar ─────────────────────────────────── */}
+          <div className="shrink-0 border-t bg-white px-3 py-2 flex items-center gap-2 flex-wrap">
+            {!isLocked && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs gap-1.5"
+                onClick={saveDraft}
+                disabled={saving}
+              >
+                {saving ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />}
+                Save Draft
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs gap-1.5"
+              onClick={() => setPreviewMode((v) => !v)}
+            >
+              <Eye size={12} /> {previewMode ? "Hide Preview" : "Preview"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs gap-1.5"
+              onClick={printReport}
+            >
+              <Printer size={12} /> Print
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs gap-1.5"
+              onClick={() => {
+                aiImpressionMutation.mutate();
+                setRightTab("ai");
+              }}
+              disabled={aiLoading || isLocked}
+            >
+              <Sparkles size={12} /> AI Review
+            </Button>
+            {!isLocked && (
+              <Button
+                size="sm"
+                className="h-8 text-xs gap-1.5 bg-green-600 hover:bg-green-700 text-white"
+                onClick={finalizeReport}
+                disabled={finalizing}
+              >
+                {finalizing ? (
+                  <RefreshCw size={12} className="animate-spin" />
+                ) : (
+                  <CheckCircle2 size={12} />
+                )}{" "}
+                Finalize
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs gap-1.5"
+              onClick={shareWhatsApp}
+              disabled={!entry?.patientId}
+            >
+              <Share2 size={12} /> Send Report
+            </Button>
+            {entry?.patientId && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 text-xs gap-1.5 ml-auto text-muted-foreground"
+                onClick={() => navigate(`/patients/${entry.patientId}`)}
+              >
+                <ExternalLink size={12} /> View in ERP
+              </Button>
+            )}
           </div>
         </div>
-      </div>
-    );
-  }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // MAIN RENDER
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  return (
-    <div className="flex flex-col h-[calc(100vh-48px)]">
-      <PageHeader
-        title="Radiology Reporting Workspace"
-        subtitle={entry ? `${entry.patientName} • ${entry.accessionNumber}` : "Select a study from worklist"}
-        actions={
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setShowViewer((v) => !v)}>
-              <MonitorPlay size={12} /> {showViewer ? "Hide Viewer" : "Show DICOM"}
-            </Button>
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => navigate("/radiology/worklist")}>
-              <ArrowLeft size={12} /> Back to Worklist
-            </Button>
+        {/* ── RIGHT 20%: 5-tab assistant panel ──────────────────────────── */}
+        <div
+          className="flex flex-col border-l overflow-hidden shrink-0"
+          style={{ width: "20%", minWidth: 200, maxWidth: 280 }}
+        >
+          {/* Tab header */}
+          <div className="shrink-0 flex border-b bg-muted/10">
+            {RIGHT_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setRightTab(tab.id as RightTab)}
+                className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 text-[9px] font-medium border-b-2 transition-colors ${
+                  rightTab === tab.id
+                    ? "border-primary text-primary bg-white"
+                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-white/50"
+                }`}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
           </div>
-        }
-      />
 
-      <div className="flex flex-1 overflow-hidden">
-        <PatientPanel />
-        <div className="flex-1 overflow-y-auto min-w-0 flex flex-col gap-2">
-          {showViewer && entry?.studyInstanceUID && (
-            <div className="shrink-0">
-              <EmbeddedWadoViewer studyInstanceUID={entry.studyInstanceUID} accessionNumber={entry.accessionNumber} />
-            </div>
-          )}
-          <div className="flex-1 min-h-0">
-            <EditorPanel />
+          {/* Tab content */}
+          <div className="flex-1 overflow-y-auto">
+
+            {/* Tab 1: Templates */}
+            {rightTab === "templates" && <TemplatesTab />}
+
+            {/* Tab 2: Prior Reports */}
+            {rightTab === "prior" && (
+              <RadiologyCopilotPanel
+                key="prior"
+                patientId={entry?.patientId ?? undefined}
+                currentOrderId={entry?.id ?? undefined}
+                studyId={entry?.studyId ?? undefined}
+                studyInstanceUid={entry?.studyInstanceUID ?? null}
+                findingsText={rawFindings}
+                impressionText={impression.join("\n")}
+                onImpressionSuggestion={(text) => {
+                  setImpression([text]);
+                  toast({ title: "Prior impression applied" });
+                }}
+                initialTab="prior"
+              />
+            )}
+
+            {/* Tab 3: AI Review */}
+            {rightTab === "ai" && (
+              <div className="flex flex-col">
+                <RadiologyCopilotPanel
+                  key="ai"
+                  patientId={entry?.patientId ?? undefined}
+                  currentOrderId={entry?.id ?? undefined}
+                  studyId={entry?.studyId ?? undefined}
+                  studyInstanceUid={entry?.studyInstanceUID ?? null}
+                  findingsText={rawFindings}
+                  impressionText={impression.join("\n")}
+                  onImpressionSuggestion={(text) => {
+                    setImpression([text]);
+                    toast({ title: "AI impression applied" });
+                  }}
+                  initialTab="impression"
+                />
+                {/* QA panel */}
+                <div className="mx-2 mb-2 border rounded-md p-2 bg-amber-50/60 border-amber-100 shrink-0">
+                  <div className="text-[10px] font-semibold text-amber-700 flex items-center gap-1 mb-1.5">
+                    <AlertCircle size={10} /> QA Check
+                  </div>
+                  <div className="space-y-0.5 text-[10px]">
+                    {impression.length === 0 ? (
+                      <div className="text-red-500">⚠ Missing impression</div>
+                    ) : (
+                      <div className="text-green-600">✓ Impression present</div>
+                    )}
+                    {!technique ? (
+                      <div className="text-amber-600">⚠ Technique not filled</div>
+                    ) : (
+                      <div className="text-green-600">✓ Technique present</div>
+                    )}
+                    {!clinicalHistory ? (
+                      <div className="text-amber-600">⚠ Clinical history missing</div>
+                    ) : (
+                      <div className="text-green-600">✓ Clinical history present</div>
+                    )}
+                    <div className="text-green-600">✓ No left-right conflict detected</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Tab 4: Measurements */}
+            {rightTab === "measurements" && (
+              <div className="flex flex-col">
+                <MeasurementAssistantPanel
+                  patientId={entry?.patientId ?? undefined}
+                  studyId={entry?.studyId ?? undefined}
+                  orderId={entry?.id ?? undefined}
+                  modality={entry?.modality ?? undefined}
+                  bodyPart={entry?.studyDescription ?? undefined}
+                />
+                {entry?.patientId && (
+                  <div className="border-t">
+                    <RadiologyMemoryPanel
+                      patientId={entry.patientId}
+                      orderId={entry.id}
+                      modality={entry.modality}
+                      bodyPart={entry.studyDescription ?? undefined}
+                      findingsText={rawFindings}
+                      impressionText={impression.join("\n")}
+                      onSuggestionInsert={(text) =>
+                        setRawFindings((p) => (p ? p + "\n" + text : text))
+                      }
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tab 5: Teaching Case */}
+            {rightTab === "teaching" && (
+              <div className="flex flex-col gap-3 p-3">
+                <div className="flex items-center gap-1.5">
+                  <BookOpen size={14} className="text-indigo-600 shrink-0" />
+                  <span className="text-sm font-semibold">Save as Teaching Case</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Saves this report as a teaching case with patient identifiers removed automatically.
+                </p>
+
+                <div className="flex flex-col gap-1 text-[11px] border rounded-md p-2 bg-muted/20">
+                  <div className="font-medium mb-0.5">Will be saved:</div>
+                  <div>
+                    · Modality:{" "}
+                    <span className="font-medium">{entry?.modality || "—"}</span>
+                  </div>
+                  <div>
+                    · Study:{" "}
+                    <span className="font-medium">{entry?.studyDescription || "—"}</span>
+                  </div>
+                  <div>· Findings &amp; Impression</div>
+                  <div>· Auto-generated tags</div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-semibold">Teaching Notes (Optional)</Label>
+                  <Textarea
+                    value={teachingNotes}
+                    onChange={(e) => setTeachingNotes(e.target.value)}
+                    placeholder="Key teaching points, pearls, pitfalls..."
+                    className="min-h-[80px] text-xs resize-none"
+                  />
+                </div>
+
+                <Button
+                  size="sm"
+                  className="h-8 gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white"
+                  onClick={saveTeachingCase}
+                  disabled={savingTeaching || !rawFindings.trim()}
+                >
+                  {savingTeaching ? (
+                    <RefreshCw size={12} className="animate-spin" />
+                  ) : (
+                    <BookOpen size={12} />
+                  )}
+                  {savingTeaching ? "Saving..." : "Save as Teaching Case"}
+                </Button>
+                {!rawFindings.trim() && (
+                  <p className="text-[10px] text-muted-foreground">
+                    Enter findings first before saving.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
-        <AiPanel />
       </div>
     </div>
   );

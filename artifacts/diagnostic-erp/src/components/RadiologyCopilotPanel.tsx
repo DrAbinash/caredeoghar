@@ -134,6 +134,7 @@ interface Props {
   findingsText?: string;
   impressionText?: string;
   onImpressionSuggestion?: (text: string) => void;
+  initialTab?: "prior" | "impression" | "consistency" | "followup" | "dicom" | "compare" | "changes" | "organ";
 }
 
 export default function RadiologyCopilotPanel({
@@ -144,9 +145,10 @@ export default function RadiologyCopilotPanel({
   findingsText,
   impressionText,
   onImpressionSuggestion,
+  initialTab,
 }: Props) {
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"prior" | "impression" | "consistency" | "followup" | "dicom" | "compare" | "changes" | "organ">("prior");
+  const [activeTab, setActiveTab] = useState<"prior" | "impression" | "consistency" | "followup" | "dicom" | "compare" | "changes" | "organ">(initialTab ?? "prior");
   const [priorStudies, setPriorStudies] = useState<PriorStudy[]>([]);
   const [loadingPrior, setLoadingPrior] = useState(false);
   const [expandedStudy, setExpandedStudy] = useState<number | null>(null);
