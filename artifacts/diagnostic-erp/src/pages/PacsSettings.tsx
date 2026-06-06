@@ -676,6 +676,31 @@ export default function PacsSettings() {
             </div>
           )}
 
+          {/* Load Defaults + Verification Panel */}
+          <div className="rounded-xl border bg-card p-5 space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-sm">Viewer Settings Status</h3>
+              {isAdmin && (
+                <Button
+                  size="sm"
+                  variant="default"
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    api.post("/api/radiology/pacs-settings/load-defaults", {})
+                      .then(() => {
+                        qc.invalidateQueries({ queryKey: ["pacs-settings"] });
+                        toast({ title: "Loaded 12 default viewer settings" });
+                      })
+                      .catch(() => toast({ title: "Failed to load defaults", variant: "destructive" }));
+                  }}
+                >
+                  <Plus size={13} className="mr-1" />Load Clinic Viewer Defaults
+                </Button>
+              )}
+            </div>
+            <ViewerSettingsVerificationPanel viewerMap={viewerMap} />
+          </div>
+
           {/* Viewer Mode */}
           <div className="rounded-xl border bg-card p-5 space-y-5">
             <h3 className="font-semibold text-sm">Viewer Mode</h3>
@@ -957,6 +982,76 @@ type PacsHealth = {
   pulledToday: Record<string, number>;
 };
 
+function ViewerSettingsVerificationPanel({
+  viewerMap,
+}: {
+  viewerMap: Record<string, string>;
+}) {
+  const REQUIRED_KEYS = [
+    { key: "ohif_base_url", label: "OHIF Base URL" },
+    { key: "dicom_web_base_url", label: "DICOMweb Base URL" },
+    { key: "ohif_study_url_template", label: "OHIF Study URL Template" },
+    { key: "wado_uri_base_url", label: "WADO-URI Base URL" },
+    { key: "weasis_manifest_url_template", label: "Weasis Manifest Template" },
+    { key: "pacs_ip", label: "PACS IP" },
+    { key: "pacs_port", label: "PACS Port" },
+    { key: "pacs_ae_title", label: "PACS AE Title" },
+    { key: "viewer_mode", label: "Viewer Mode" },
+    { key: "default_viewer", label: "Default Viewer" },
+    { key: "ohif_enabled", label: "OHIF Enabled" },
+    { key: "weasis_enabled", label: "Weasis Enabled" },
+  ];
+
+  const configured = REQUIRED_KEYS.filter((k) => (viewerMap[k.key] ?? "").trim().length > 0);
+  const missing = REQUIRED_KEYS.filter((k) => (viewerMap[k.key] ?? "").trim().length === 0);
+
+  const sampleUID = "1.2.3.4.5.TEST";
+  const ohifBase = (viewerMap["ohif_base_url"] ?? "").replace(/\/$/, "");
+  const ohifPreview = ohifBase
+    ? (viewerMap["ohif_study_url_template"] ?? "").replace(/\{OHIF_BASE_URL\}/g, ohifBase).replace(/\{studyInstanceUID\}/g, sampleUID)
+    : null;
+  const weasisPreview = viewerMap["weasis_manifest_url_template"]
+    ? (viewerMap["weasis_manifest_url_template"] ?? "").replace(/\{studyInstanceUID\}/g, sampleUID)
+    : null;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-4 text-sm">
+        <span className={`font-semibold ${configured.length === REQUIRED_KEYS.length ? "text-green-600" : "text-amber-600"}`}>
+          {configured.length} / {REQUIRED_KEYS.length} configured
+        </span>
+        {missing.length > 0 && (
+          <span className="text-xs text-muted-foreground">Missing: {missing.map((m) => m.label).join(", ")}</span>
+        )}
+      </div>
+      {(configured.length === REQUIRED_KEYS.length) && (
+        <div className="rounded-lg border bg-green-50 dark:bg-green-950/20 p-3 space-y-2 text-sm">
+          <p className="font-semibold text-green-800 dark:text-green-200">All viewer settings are configured.</p>
+          {ohifPreview && (
+            <p className="text-xs text-muted-foreground font-mono truncate" title={ohifPreview}>OHIF sample: {ohifPreview}</p>
+          )}
+          {weasisPreview && (
+            <p className="text-xs text-muted-foreground font-mono truncate" title={weasisPreview}>Weasis sample: {weasisPreview}</p>
+          )}
+        </div>
+      )}
+      {missing.length > 0 && (
+        <div className="rounded-lg border bg-red-50 dark:bg-red-950/20 p-3 space-y-2 text-sm">
+          <p className="font-semibold text-red-800 dark:text-red-200">Missing viewer settings</p>
+          <ul className="text-xs text-red-700 dark:text-red-400 list-disc list-inside">
+            {missing.map((m) => (
+              <li key={m.key}>{m.label}</li>
+            ))}
+          </ul>
+          <p className="text-xs text-muted-foreground">
+            Click <strong>Load Clinic Viewer Defaults</strong> above to populate all 12 required settings.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ConnectionTestsTab({
   viewerMap,
   modalities,
@@ -980,13 +1075,20 @@ function ConnectionTestsTab({
         {},
       );
       const ok = res.ok !== false;
+      const modality = modalities.find((m) => m.id === id);
+      const ip = modality?.ipAddress ?? "";
+      const isPrivateIp = /^(127\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)/.test(ip);
+      const errorMsg = res.error ?? "C-ECHO failed";
+      const friendlyMsg = !ok && isPrivateIp && errorMsg.includes("blocked")
+        ? `${errorMsg} — The ERP server is cloud-hosted and cannot reach your clinic's LAN. This is expected. The viewer URLs will still work when opened on a PC inside the clinic.`
+        : errorMsg;
       setEchoResults((prev) => ({
         ...prev,
         [id]: {
           status: ok ? "ok" : "fail",
           message: ok
             ? (res.latencyMs !== undefined ? `${res.latencyMs} ms` : "Reachable")
-            : (res.error ?? "C-ECHO failed"),
+            : friendlyMsg,
         },
       }));
       if (ok) toast({ title: "C-ECHO OK" });

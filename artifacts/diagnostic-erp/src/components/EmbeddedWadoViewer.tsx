@@ -276,7 +276,7 @@ function ViewerContent({ studyInstanceUID, accessionNumber }: {
             ) : (
               <div className="text-white/50 text-sm flex flex-col items-center gap-2">
                 <Layers className="h-8 w-8" />
-                {dicomWebBase ? "Select a series to load images" : "Configure DICOMweb base URL in PACS Settings"}
+                {dicomWebBase ? "Select a series to load images" : "DICOMweb base URL not configured. Go to PACS / DICOM Settings → Viewer Settings and click Load Clinic Viewer Defaults."}
               </div>
             )}
           </div>
