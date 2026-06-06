@@ -5,3 +5,4 @@
 - [Normal report templates](normal-report-templates.md) — pre-built normal templates for common studies; one-click apply from report generator toolbar with inline picker overlay.
 - [AI safety label](ai-safety-label.md) — every AI-assisted output must show "AI Draft – Requires Radiologist Review" and never auto-finalize/sign reports.
 - [Phase 10B/10C radiology platform](phase-10-radiology.md) — Organ Intelligence (Spine/Brain/Tumor) + AI Research Platform (Annotations, Ollama, Teaching Generator, Multi-AI). Route pattern, teachingCasesTable schema quirks.
+- [Post-merge CI push](post-merge-ci-push.md) — drizzle-kit push/pushSchema both hang in non-TTY CI due to Ink TUI; use generateDrizzleJson+generateMigration with per-statement try/catch instead.
