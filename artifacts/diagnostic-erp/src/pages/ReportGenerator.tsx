@@ -45,6 +45,9 @@ import { useToast } from "@/hooks/use-toast";
 import { Mic, MicOff, Sparkles, Image as ImageIcon, GraduationCap, BookOpen } from "lucide-react";
 import RadiologyCopilotPanel from "@/components/RadiologyCopilotPanel";
 import RadiologyMemoryPanel from "@/components/RadiologyMemoryPanel";
+import LesionTrackerPanel from "@/components/LesionTrackerPanel";
+import MeasurementAssistantPanel from "@/components/MeasurementAssistantPanel";
+import { isFeatureEnabled } from "@/lib/staffSession";
 import {
   Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from "@/components/ui/command";
@@ -1135,6 +1138,26 @@ export default function ReportGenerator() {
                   }
                 }}
               />
+
+              {/* Phase 10A: Lesion Tracker — gated by master + lesionTracking flags */}
+              {isFeatureEnabled("dicomImageIntelligence") && isFeatureEnabled("lesionTracking") && patientId && (
+                <LesionTrackerPanel
+                  patientId={patientId}
+                  orderId={orderId ?? undefined}
+                  modality={findings[0]?.testCode ?? (order?.tests?.[0]?.test?.code ?? "")}
+                  bodyPart={(order?.tests?.[0]?.test as any)?.department ?? order?.tests?.[0]?.test?.category ?? ""}
+                />
+              )}
+
+              {/* Phase 10A: Measurement Assistant — gated by master + measurementAssistant flags */}
+              {isFeatureEnabled("dicomImageIntelligence") && isFeatureEnabled("measurementAssistant") && patientId && (
+                <MeasurementAssistantPanel
+                  patientId={patientId}
+                  orderId={orderId ?? undefined}
+                  modality={findings[0]?.testCode ?? (order?.tests?.[0]?.test?.code ?? "")}
+                  bodyPart={(order?.tests?.[0]?.test as any)?.department ?? order?.tests?.[0]?.test?.category ?? ""}
+                />
+              )}
             </div>
 
             {/* ── Right Panel: Report Preview + Findings Editor ── */}

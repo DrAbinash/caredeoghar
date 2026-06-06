@@ -2,10 +2,11 @@
  * Phase 8: Radiology Copilot Panel
  * Prior Study Auto-Fetch, Smart Impression, Consistency Checker, Follow-up Suggestions
  */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { isFeatureEnabled } from "@/lib/staffSession";
 import {
   History,
   Brain,
@@ -224,6 +225,37 @@ export default function RadiologyCopilotPanel({
       .finally(() => setLoadingDicomMeta(false));
   }, [studyId]);
 
+  // Feature-flag gating for Phase 10A tabs
+  const phase10Master = useMemo(() => isFeatureEnabled("dicomImageIntelligence"), []);
+  const changeDetectionEnabled = useMemo(() => phase10Master && isFeatureEnabled("changeDetection"), [phase10Master]);
+
+  // Auto-compare: when a prior study impression is known, pre-fill and offer one-click compare
+  const autoCompare = useCallback(async (priorStudyId: number) => {
+    if (!findingsText?.trim()) return;
+    setLoadingComparison(true);
+    setActiveTab("compare");
+    try {
+      const r = await fetch("/api/radiology-copilot/structured-comparison", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentFindings: findingsText, priorStudyId }),
+      });
+      const data = await r.json();
+      if (r.ok) {
+        setComparisonResult(data);
+        if (data.resolvedPriorStudy) {
+          setPriorFindingsInput(`[Auto-fetched from study ${data.resolvedPriorStudy.accessionNumber}]`);
+        }
+      } else {
+        toast({ title: data.error ?? "Could not auto-compare", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Could not run auto-comparison", variant: "destructive" });
+    } finally {
+      setLoadingComparison(false);
+    }
+  }, [findingsText, toast]);
+
   // Phase 10A: run structured comparison
   const runComparison = useCallback(async () => {
     if (!findingsText?.trim() || !priorFindingsInput.trim()) {
@@ -270,15 +302,19 @@ export default function RadiologyCopilotPanel({
     }
   }, [findingsText, changesPriorInput, toast]);
 
-  const tabs = [
-    { id: "prior" as const, label: "Prior", icon: History },
-    { id: "impression" as const, label: "Impression", icon: Brain },
-    { id: "compare" as const, label: "Compare", icon: GitCompare },
-    { id: "changes" as const, label: "Changes", icon: Zap },
-    { id: "consistency" as const, label: "Consistency", icon: CheckCircle },
-    { id: "followup" as const, label: "Follow-up", icon: Clock },
-    { id: "dicom" as const, label: "DICOM", icon: Database },
-  ];
+  const tabs = useMemo(() => {
+    const all = [
+      { id: "prior" as const, label: "Prior", icon: History },
+      { id: "impression" as const, label: "Impression", icon: Brain },
+      // Phase 10A tabs — only shown when flags are ON
+      ...(phase10Master ? [{ id: "compare" as const, label: "Compare", icon: GitCompare }] : []),
+      ...(changeDetectionEnabled ? [{ id: "changes" as const, label: "Changes", icon: Zap }] : []),
+      { id: "consistency" as const, label: "Consistency", icon: CheckCircle },
+      { id: "followup" as const, label: "Follow-up", icon: Clock },
+      { id: "dicom" as const, label: "DICOM", icon: Database },
+    ];
+    return all;
+  }, [phase10Master, changeDetectionEnabled]);
 
   return (
     <div className="bg-card border border-card-border rounded-xl shadow-sm overflow-hidden">
@@ -362,6 +398,19 @@ export default function RadiologyCopilotPanel({
                               </span>
                             )}
                           </div>
+                        )}
+                        {/* Phase 10A: Auto-compare button — only shown when flag is on */}
+                        {phase10Master && findingsText?.trim() && study.impression && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="w-full text-[10px] h-7 mt-1"
+                            onClick={() => autoCompare(study.id)}
+                            disabled={loadingComparison}
+                          >
+                            <GitCompare size={10} className="mr-1" />
+                            {loadingComparison ? "Comparing..." : "Auto-Compare with this Study"}
+                          </Button>
                         )}
                       </div>
                     )}

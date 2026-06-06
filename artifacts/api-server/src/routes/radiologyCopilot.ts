@@ -517,17 +517,71 @@ radiologyCopilotRouter.get("/productivity", async (req, res): Promise<void> => {
 // ══════════════════════════════════════════════════════════════════════════════
 
 radiologyCopilotRouter.post("/structured-comparison", async (req, res) => {
-  const { currentFindings, priorFindings, currentImpression, priorImpression, modality, bodyPart } = req.body as {
+  const {
+    currentFindings,
+    priorFindings: priorFindingsRaw,
+    priorStudyId,
+    currentImpression,
+    priorImpression,
+    modality,
+    bodyPart,
+  } = req.body as {
     currentFindings?: string;
     priorFindings?: string;
+    priorStudyId?: number;
     currentImpression?: string;
     priorImpression?: string;
     modality?: string;
     bodyPart?: string;
   };
 
-  if (!currentFindings?.trim() || !priorFindings?.trim()) {
-    return res.status(400).json({ error: "currentFindings and priorFindings are required" });
+  if (!currentFindings?.trim()) {
+    return res.status(400).json({ error: "currentFindings is required" });
+  }
+
+  // If a priorStudyId is supplied, resolve the prior study's report text from DB
+  let priorFindings = priorFindingsRaw ?? "";
+  let resolvedPriorStudy: { accessionNumber: string; studyDate: string | null; modality: string } | null = null;
+
+  if (priorStudyId && !priorFindings.trim()) {
+    const [priorStudy] = await db
+      .select({
+        accessionNumber: radiologyStudiesTable.accessionNumber,
+        studyDate: radiologyStudiesTable.studyDate,
+        modality: radiologyStudiesTable.modality,
+      })
+      .from(radiologyStudiesTable)
+      .where(eq(radiologyStudiesTable.id, priorStudyId))
+      .limit(1);
+
+    if (priorStudy) {
+      resolvedPriorStudy = priorStudy;
+      // Fetch the report for this study (studyId = FK → radiology_studies; body = narrative text)
+      const [report] = await db
+        .select({ findingsText: patientReportsTable.body, impressionText: patientReportsTable.impression })
+        .from(patientReportsTable)
+        .where(eq(patientReportsTable.studyId, priorStudyId))
+        .orderBy(desc(patientReportsTable.createdAt))
+        .limit(1);
+      if (report) {
+        // reportData may be JSON (structured report) or plain text
+        try {
+          const parsed = JSON.parse(report.findingsText ?? "");
+          if (Array.isArray(parsed)) {
+            priorFindings = parsed.map((f: { remarks?: string }) => f.remarks ?? "").filter(Boolean).join("\n");
+          } else if (typeof parsed === "object" && parsed !== null) {
+            priorFindings = Object.values(parsed).join("\n");
+          }
+        } catch {
+          priorFindings = report.findingsText ?? "";
+        }
+        if (!priorFindings && report.impressionText) priorFindings = report.impressionText;
+      }
+    }
+  }
+
+  if (!priorFindings.trim()) {
+    return res.status(400).json({ error: "priorFindings is required (or supply a priorStudyId with an existing report)" });
   }
 
   // Deterministic structural comparison — no AI required
@@ -682,6 +736,7 @@ radiologyCopilotRouter.post("/structured-comparison", async (req, res) => {
     overallTrend,
     counts,
     totalParameters: comparison.length,
+    resolvedPriorStudy: resolvedPriorStudy ?? null,
     note: "AI Draft – Requires Radiologist Review. Structural comparison only — not a clinical diagnosis.",
   });
 });
