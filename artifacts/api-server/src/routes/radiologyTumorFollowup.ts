@@ -91,11 +91,22 @@ radiologyTumorFollowupRouter.get("/timeline", async (req, res): Promise<void> =>
 });
 
 // ── Update an entry (e.g. fix response status) ───────────────────────────────
+// Tumor followup measurements are shared clinical data for any authorized radiologist;
+// they have no per-creator column. Access is limited to authenticated staff via
+// the requireStaffAuth middleware already applied to this router.
 radiologyTumorFollowupRouter.patch("/:id", async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   const b = (req.body ?? {}) as Record<string, unknown>;
 
   const toNum = (v: unknown) => v != null && v !== "" ? String(v) : null;
+
+  // Verify record exists before updating
+  const existing = await db
+    .select({ id: radiologyTumorFollowupsTable.id })
+    .from(radiologyTumorFollowupsTable)
+    .where(eq(radiologyTumorFollowupsTable.id, id))
+    .limit(1);
+  if (!existing[0]) { res.status(404).json({ error: "entry not found" }); return; }
 
   const updates: Partial<typeof radiologyTumorFollowupsTable.$inferInsert> = {};
   if (b.responseStatus !== undefined) updates.responseStatus = String(b.responseStatus);
@@ -116,8 +127,18 @@ radiologyTumorFollowupRouter.patch("/:id", async (req, res): Promise<void> => {
 
 // ── Delete an entry ───────────────────────────────────────────────────────────
 radiologyTumorFollowupRouter.delete("/:id", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+
+  // Verify record exists before deleting
+  const existing = await db
+    .select({ id: radiologyTumorFollowupsTable.id })
+    .from(radiologyTumorFollowupsTable)
+    .where(eq(radiologyTumorFollowupsTable.id, id))
+    .limit(1);
+  if (!existing[0]) { res.status(404).json({ error: "entry not found" }); return; }
+
   await db
     .delete(radiologyTumorFollowupsTable)
-    .where(eq(radiologyTumorFollowupsTable.id, Number(req.params.id)));
+    .where(eq(radiologyTumorFollowupsTable.id, id));
   res.json({ ok: true });
 });

@@ -295,7 +295,9 @@ teachingCasesRouter.post("/collections/:id/generate-quiz", async (req, res): Pro
     .where(eq(teachingCaseCollectionsTable.id, collectionId));
   if (!collection) { res.status(404).json({ error: "Collection not found." }); return; }
 
-  const caseIds: number[] = JSON.parse(collection.caseIdsJson ?? "[]");
+  let caseIds: number[] = [];
+  try { caseIds = JSON.parse(collection.caseIdsJson ?? "[]"); } catch { caseIds = []; }
+  if (!Array.isArray(caseIds)) caseIds = [];
   if (caseIds.length === 0) { res.status(400).json({ error: "Collection has no cases. Add cases before generating a quiz." }); return; }
 
   const cases = await db
@@ -389,7 +391,9 @@ teachingCasesRouter.post("/collections/:id/generate-journal-club", async (req, r
     .where(eq(teachingCaseCollectionsTable.id, collectionId));
   if (!collection) { res.status(404).json({ error: "Collection not found." }); return; }
 
-  const caseIds: number[] = JSON.parse(collection.caseIdsJson ?? "[]");
+  let caseIds: number[] = [];
+  try { caseIds = JSON.parse(collection.caseIdsJson ?? "[]"); } catch { caseIds = []; }
+  if (!Array.isArray(caseIds)) caseIds = [];
   if (caseIds.length === 0) { res.status(400).json({ error: "Collection has no cases. Add cases before generating a journal club guide." }); return; }
 
   const cases = await db

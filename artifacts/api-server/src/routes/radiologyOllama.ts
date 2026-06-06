@@ -78,9 +78,10 @@ async function getOllamaConfig(): Promise<{ baseUrl: string; model: string; loca
   if (!row?.ollamaBaseUrl) return null;
 
   const localOnly = row.ollamaLocalOnly ?? false;
-  // Admin explicitly configured this URL in Settings — always allow private/LAN hosts.
-  // The localOnly flag controls cloud-provider routing, not URL validation.
-  const validated = validateOllamaUrl(row.ollamaBaseUrl, true);
+  // Use ollamaLocalOnly as the admin's explicit opt-in for private/LAN hosts.
+  // When false, the SSRF guard blocks RFC-1918/loopback targets for public URLs.
+  // When true, the admin has intentionally pointed Ollama at a local network host.
+  const validated = validateOllamaUrl(row.ollamaBaseUrl, localOnly);
   if (!validated.ok) return null; // silently skip misconfigured URLs
 
   return {
