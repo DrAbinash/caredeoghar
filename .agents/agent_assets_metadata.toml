@@ -280,3 +280,9 @@ title = "Revised Radiology Implementation Roadmap (v2)"
 id = "qEX1OkgU2MsbSTcOnAX5X"
 uri = "file://.local/session_plan.md"
 type = "text"
+
+[[outputs]]
+id = "OiCCbTsMR1F40qXejOk_O"
+uri = "file://RADIOLOGY_AUDIT.md"
+type = "text"
+title = "Radiology Master Codebase Audit Report"
