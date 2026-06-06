@@ -132,10 +132,29 @@ async function pruneExpiredSessions() {
 }
 
 async function getSettings() {
-  const rows = await db.select().from(clinicSettingsTable).limit(1);
-  if (rows[0]) return rows[0];
-  const [created] = await db.insert(clinicSettingsTable).values({}).returning();
-  return created;
+  try {
+    const rows = await db.select().from(clinicSettingsTable).limit(1);
+    if (rows[0]) return rows[0];
+    const [created] = await db.insert(clinicSettingsTable).values({}).returning();
+    return created;
+  } catch {
+    // Drizzle schema may be ahead of the production DB (missing columns).
+    // Return safe defaults so the portal UI can still load while migrations catch up.
+    return {
+      portalEnabled: false,
+      fido2Enabled: false,
+      portalHeading: "Care Diagnostics",
+      portalWelcomeMessage: "",
+      name: "Care Diagnostics",
+      tagline: "Diagnostic & Pathology Services",
+      address: "",
+      phone: "",
+      email: "",
+      logoDataUrl: null,
+      portalAllowAppointmentBooking: true,
+      portalAllowProfileEdit: true,
+    } as any;
+  }
 }
 
 async function requirePortalEnabled(res: Response): Promise<boolean> {
