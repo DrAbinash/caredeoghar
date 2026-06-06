@@ -4858,6 +4858,23 @@ function RadiologySettingsTab() {
   const [teachingCollections, setTeachingCollections] = useState(() => isFeatureEnabled("radiologyTeachingCollections"));
   const [teachingPresentation, setTeachingPresentation] = useState(() => isFeatureEnabled("radiologyTeachingPresentation"));
   const [teachingResearch, setTeachingResearch] = useState(() => isFeatureEnabled("radiologyTeachingResearch"));
+  // Phase 10: DICOM Image Intelligence Platform
+  const [dicomImageIntelligence, setDicomImageIntelligence] = useState(() => isFeatureEnabled("dicomImageIntelligence"));
+  const [lesionTracking, setLesionTracking] = useState(() => isFeatureEnabled("lesionTracking"));
+  const [changeDetection, setChangeDetection] = useState(() => isFeatureEnabled("changeDetection"));
+  const [spineIntelligence, setSpineIntelligence] = useState(() => isFeatureEnabled("spineIntelligence"));
+  const [brainIntelligence, setBrainIntelligence] = useState(() => isFeatureEnabled("brainIntelligence"));
+  const [tumorFollowup, setTumorFollowup] = useState(() => isFeatureEnabled("tumorFollowup"));
+  const [imageAnnotations, setImageAnnotations] = useState(() => isFeatureEnabled("imageAnnotations"));
+  const [researchDatabase, setResearchDatabase] = useState(() => isFeatureEnabled("researchDatabase"));
+  const [teachingGenerator, setTeachingGenerator] = useState(() => isFeatureEnabled("teachingGenerator"));
+  const [multiAIImageReview, setMultiAIImageReview] = useState(() => isFeatureEnabled("multiAIImageReview"));
+  const [measurementAssistantFlag, setMeasurementAssistantFlag] = useState(() => isFeatureEnabled("measurementAssistant"));
+  const [aiConfidenceVisualization, setAiConfidenceVisualization] = useState(() => isFeatureEnabled("aiConfidenceVisualization"));
+  const [ollamaLocalModels, setOllamaLocalModels] = useState(() => isFeatureEnabled("ollamaLocalModels"));
+  const [caseOfMonth, setCaseOfMonth] = useState(() => isFeatureEnabled("caseOfMonth"));
+  const [annotationLayer, setAnnotationLayer] = useState(() => isFeatureEnabled("annotationLayer"));
+
   // Phase 9: Radiology Memory + Context Engine
   const [memoryEngine, setMemoryEngine] = useState(() => isFeatureEnabled("radiologyMemoryEngine"));
   const [styleLearning, setStyleLearning] = useState(() => isFeatureEnabled("radiologyStyleLearning"));
@@ -4956,6 +4973,24 @@ function RadiologySettingsTab() {
     { id: "radiologyTeachingCollections", label: "Teaching Collections", desc: "Create and share curated case collections", value: teachingCollections, set: setTeachingCollections },
     { id: "radiologyTeachingPresentation", label: "Presentation Mode", desc: "Generate teaching slides, quizzes, and unknown cases", value: teachingPresentation, set: setTeachingPresentation },
     { id: "radiologyTeachingResearch", label: "Research Mode", desc: "Track research candidates, publications, and conference submissions", value: teachingResearch, set: setTeachingResearch },
+  ];
+
+  const phase10Toggles = [
+    { id: "dicomImageIntelligence", label: "DICOM Image Intelligence (Master Switch)", desc: "Enable the Phase 10 DICOM Image Intelligence Platform. All sub-features still require individual toggles.", value: dicomImageIntelligence, set: setDicomImageIntelligence },
+    { id: "lesionTracking", label: "Lesion Tracker", desc: "Longitudinal lesion monitoring — track lesions across studies with size, signal, and status trends", value: lesionTracking, set: setLesionTracking },
+    { id: "changeDetection", label: "Smart Change Detector", desc: "Automatically detect interval changes: new lesions, growth, regression, haemorrhage evolution, edema, hydrocephalus", value: changeDetection, set: setChangeDetection },
+    { id: "measurementAssistant", label: "Structured Measurement Assistant", desc: "Guided measurement entry for MRI Brain, MRI Spine, Breast, Thyroid, Liver, Kidney, Lung, Pelvis with normal ranges", value: measurementAssistantFlag, set: setMeasurementAssistantFlag },
+    { id: "spineIntelligence", label: "Spine Intelligence (Phase 10B)", desc: "Automated disc grading, canal stenosis classification, neural foraminal narrowing — all OFF until Phase 10B builds", value: spineIntelligence, set: setSpineIntelligence },
+    { id: "brainIntelligence", label: "Brain Intelligence (Phase 10B)", desc: "Fazekas scoring, atrophy grading, lesion load, white matter classification — all OFF until Phase 10B builds", value: brainIntelligence, set: setBrainIntelligence },
+    { id: "tumorFollowup", label: "Tumor Follow-up Engine (Phase 10B)", desc: "RECIST-guided measurement tracking, treatment response assessment, volumetric analysis — all OFF until Phase 10B", value: tumorFollowup, set: setTumorFollowup },
+    { id: "imageAnnotations", label: "Image Annotation Layer (Phase 10B)", desc: "Text annotations on DICOM images with report linking — OFF until Phase 10B builds", value: imageAnnotations, set: setImageAnnotations },
+    { id: "multiAIImageReview", label: "Multi-AI Image Review (Phase 10C)", desc: "Parallel AI review across multiple providers for secondary opinion — OFF until Phase 10C builds", value: multiAIImageReview, set: setMultiAIImageReview },
+    { id: "teachingGenerator", label: "Teaching Case Generator (Phase 10C)", desc: "Auto-generate teaching summaries and exam questions from cases — OFF until Phase 10C builds", value: teachingGenerator, set: setTeachingGenerator },
+    { id: "researchDatabase", label: "Research Database (Phase 10C)", desc: "Case tagging, cohort building, and anonymized research export — OFF until Phase 10C builds", value: researchDatabase, set: setResearchDatabase },
+    { id: "caseOfMonth", label: "Case of the Month (Phase 10C)", desc: "Editorial workflow for selecting and publishing monthly teaching cases — OFF until Phase 10C builds", value: caseOfMonth, set: setCaseOfMonth },
+    { id: "aiConfidenceVisualization", label: "AI Confidence Visualization (Phase 10C)", desc: "Show confidence scores as colour-coded bars on every AI suggestion — OFF until Phase 10C builds", value: aiConfidenceVisualization, set: setAiConfidenceVisualization },
+    { id: "ollamaLocalModels", label: "Ollama Local Models (Phase 10C)", desc: "Run privacy-preserving AI locally via Ollama — OFF until Phase 10C builds", value: ollamaLocalModels, set: setOllamaLocalModels },
+    { id: "annotationLayer", label: "Report Annotation Layer (Phase 10C)", desc: "Highlight text in reports and link annotations to image coordinates — OFF until Phase 10C builds", value: annotationLayer, set: setAnnotationLayer },
   ];
 
   const phase9Toggles = [
@@ -5109,6 +5144,32 @@ function RadiologySettingsTab() {
         </div>
         <div className="space-y-2">
           {phase8Toggles.map((t) => (
+            <label key={t.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20 cursor-pointer">
+              <div className="pr-4">
+                <div className="text-sm font-medium">{t.label}</div>
+                <div className="text-[11px] text-muted-foreground">{t.desc}</div>
+              </div>
+              <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${t.value ? "bg-primary" : "bg-muted-foreground/40"}`}>
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${t.value ? "translate-x-5" : "translate-x-1"}`} />
+              </span>
+              <input type="checkbox" className="sr-only" checked={t.value} onChange={() => {
+                const next = !t.value;
+                t.set(next);
+                setFeatureFlag(t.id, next);
+              }} />
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Phase 10: DICOM Image Intelligence Platform */}
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="font-bold text-lg flex items-center gap-2"><Brain size={16} /> DICOM Image Intelligence Platform (Phase 10)</h2>
+          <p className="text-sm text-muted-foreground mt-1">Lesion Tracker, Change Detector, Measurement Assistant, Organ Intelligence, and AI Research Tools. All OFF by default. Phase 10B/C flags are placeholders — activate only when that phase ships. Radiologist is always final authority.</p>
+        </div>
+        <div className="space-y-2">
+          {phase10Toggles.map((t) => (
             <label key={t.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20 cursor-pointer">
               <div className="pr-4">
                 <div className="text-sm font-medium">{t.label}</div>

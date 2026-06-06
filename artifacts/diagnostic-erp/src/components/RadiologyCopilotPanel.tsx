@@ -21,6 +21,11 @@ import {
   ArrowRight,
   List,
   Database,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Zap,
+  GitCompare,
 } from "lucide-react";
 
 interface PriorStudy {
@@ -82,7 +87,7 @@ export default function RadiologyCopilotPanel({
   onImpressionSuggestion,
 }: Props) {
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"prior" | "impression" | "consistency" | "followup" | "dicom">("prior");
+  const [activeTab, setActiveTab] = useState<"prior" | "impression" | "consistency" | "followup" | "dicom" | "compare" | "changes">("prior");
   const [priorStudies, setPriorStudies] = useState<PriorStudy[]>([]);
   const [loadingPrior, setLoadingPrior] = useState(false);
   const [expandedStudy, setExpandedStudy] = useState<number | null>(null);
@@ -94,6 +99,26 @@ export default function RadiologyCopilotPanel({
   const [loadingFollowUp, setLoadingFollowUp] = useState(false);
   const [dicomMeta, setDicomMeta] = useState<DicomMetadata | null>(null);
   const [loadingDicomMeta, setLoadingDicomMeta] = useState(false);
+
+  // Phase 10A: Structured comparison state
+  const [priorFindingsInput, setPriorFindingsInput] = useState("");
+  const [comparisonResult, setComparisonResult] = useState<null | {
+    comparison: Array<{ parameter: string; status: string; confidence: string; detail: string; priorValue: string | null; currentValue: string | null }>;
+    overallTrend: string;
+    counts: Record<string, number>;
+    totalParameters: number;
+  }>(null);
+  const [loadingComparison, setLoadingComparison] = useState(false);
+
+  // Phase 10A: Change detector state
+  const [changesPriorInput, setChangesPriorInput] = useState("");
+  const [changesResult, setChangesResult] = useState<null | {
+    changes: Array<{ category: string; categoryLabel: string; description: string; severity: string; priorSnippet?: string; currentSnippet?: string }>;
+    totalChanges: number;
+    criticalCount: number;
+    warningCount: number;
+  }>(null);
+  const [loadingChanges, setLoadingChanges] = useState(false);
 
   // Fetch prior studies when patientId changes
   useEffect(() => {
@@ -199,9 +224,57 @@ export default function RadiologyCopilotPanel({
       .finally(() => setLoadingDicomMeta(false));
   }, [studyId]);
 
+  // Phase 10A: run structured comparison
+  const runComparison = useCallback(async () => {
+    if (!findingsText?.trim() || !priorFindingsInput.trim()) {
+      toast({ title: "Enter current findings and paste prior study findings", variant: "destructive" });
+      return;
+    }
+    setLoadingComparison(true);
+    try {
+      const r = await fetch("/api/radiology-copilot/structured-comparison", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentFindings: findingsText, priorFindings: priorFindingsInput }),
+      });
+      const data = await r.json();
+      if (r.ok) setComparisonResult(data);
+      else toast({ title: "Could not run comparison", variant: "destructive" });
+    } catch {
+      toast({ title: "Could not run comparison", variant: "destructive" });
+    } finally {
+      setLoadingComparison(false);
+    }
+  }, [findingsText, priorFindingsInput, toast]);
+
+  // Phase 10A: run change detector
+  const runChangeDetector = useCallback(async () => {
+    if (!findingsText?.trim() || !changesPriorInput.trim()) {
+      toast({ title: "Enter current findings and paste prior study findings", variant: "destructive" });
+      return;
+    }
+    setLoadingChanges(true);
+    try {
+      const r = await fetch("/api/radiology-copilot/change-detector", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentFindings: findingsText, priorFindings: changesPriorInput }),
+      });
+      const data = await r.json();
+      if (r.ok) setChangesResult(data);
+      else toast({ title: "Could not detect changes", variant: "destructive" });
+    } catch {
+      toast({ title: "Could not detect changes", variant: "destructive" });
+    } finally {
+      setLoadingChanges(false);
+    }
+  }, [findingsText, changesPriorInput, toast]);
+
   const tabs = [
-    { id: "prior" as const, label: "Prior Studies", icon: History },
+    { id: "prior" as const, label: "Prior", icon: History },
     { id: "impression" as const, label: "Impression", icon: Brain },
+    { id: "compare" as const, label: "Compare", icon: GitCompare },
+    { id: "changes" as const, label: "Changes", icon: Zap },
     { id: "consistency" as const, label: "Consistency", icon: CheckCircle },
     { id: "followup" as const, label: "Follow-up", icon: Clock },
     { id: "dicom" as const, label: "DICOM", icon: Database },
@@ -425,6 +498,160 @@ export default function RadiologyCopilotPanel({
                 ))}
                 <div className="text-[10px] text-muted-foreground text-center pt-1">
                   AI Draft — Requires Radiologist Review
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "compare" && (
+          <div className="space-y-3">
+            <p className="text-[11px] text-muted-foreground">
+              Paste the prior study findings below, then run a structured comparison against current findings.
+              Each parameter is assessed as Improved / Stable / Progressed / New / Resolved.
+            </p>
+            <Textarea
+              value={priorFindingsInput}
+              onChange={(e) => setPriorFindingsInput(e.target.value)}
+              className="text-xs min-h-[80px] resize-none"
+              placeholder="Paste prior study findings here..."
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full text-xs"
+              disabled={loadingComparison || !findingsText?.trim() || !priorFindingsInput.trim()}
+              onClick={runComparison}
+            >
+              <GitCompare size={13} className="mr-1.5" />
+              {loadingComparison ? "Comparing..." : "Run Structured Comparison"}
+            </Button>
+            {comparisonResult && (
+              <div className="space-y-2">
+                {/* Overall trend badge */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                    comparisonResult.overallTrend === "progressed" ? "bg-red-100 text-red-700"
+                    : comparisonResult.overallTrend === "improved" ? "bg-green-100 text-green-700"
+                    : "bg-blue-100 text-blue-700"
+                  }`}>
+                    Overall: {comparisonResult.overallTrend.charAt(0).toUpperCase() + comparisonResult.overallTrend.slice(1)}
+                  </span>
+                  {Object.entries(comparisonResult.counts).filter(([, v]) => v > 0).map(([k, v]) => (
+                    <span key={k} className="text-[9px] text-muted-foreground">{v} {k}</span>
+                  ))}
+                </div>
+                {/* Per-parameter rows */}
+                {comparisonResult.comparison.map((item, i) => (
+                  <div key={i} className="border border-border rounded-lg p-2 text-[11px] space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{item.parameter}</span>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
+                        item.status === "progressed" ? "bg-red-100 text-red-700"
+                        : item.status === "improved" ? "bg-green-100 text-green-700"
+                        : item.status === "new" ? "bg-orange-100 text-orange-700"
+                        : item.status === "resolved" ? "bg-purple-100 text-purple-700"
+                        : "bg-blue-100 text-blue-700"
+                      }`}>
+                        {item.status === "progressed" ? <TrendingUp size={9} className="inline mr-0.5" />
+                          : item.status === "improved" ? <TrendingDown size={9} className="inline mr-0.5" />
+                          : <Minus size={9} className="inline mr-0.5" />}
+                        {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+                      </span>
+                      <span className={`text-[9px] text-muted-foreground ml-auto ${item.confidence === "low" ? "text-amber-600" : ""}`}>
+                        {item.confidence} confidence
+                      </span>
+                    </div>
+                    <div className="text-muted-foreground leading-relaxed">{item.detail}</div>
+                  </div>
+                ))}
+                <div className="text-[9px] text-amber-600 flex items-center gap-1">
+                  <AlertTriangle size={9} /> AI Draft – Requires Radiologist Review
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "changes" && (
+          <div className="space-y-3">
+            <p className="text-[11px] text-muted-foreground">
+              Paste prior study findings to detect categorized interval changes — new lesions, growth,
+              regression, haemorrhage evolution, infarct evolution, edema, hydrocephalus.
+            </p>
+            <Textarea
+              value={changesPriorInput}
+              onChange={(e) => setChangesPriorInput(e.target.value)}
+              className="text-xs min-h-[80px] resize-none"
+              placeholder="Paste prior study findings here..."
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full text-xs"
+              disabled={loadingChanges || !findingsText?.trim() || !changesPriorInput.trim()}
+              onClick={runChangeDetector}
+            >
+              <Zap size={13} className="mr-1.5" />
+              {loadingChanges ? "Detecting..." : "Detect Interval Changes"}
+            </Button>
+            {changesResult && (
+              <div className="space-y-2">
+                {/* Summary badges */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {changesResult.criticalCount > 0 && (
+                    <span className="text-[9px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">
+                      {changesResult.criticalCount} Critical
+                    </span>
+                  )}
+                  {changesResult.warningCount > 0 && (
+                    <span className="text-[9px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                      {changesResult.warningCount} Warning
+                    </span>
+                  )}
+                  <span className="text-[9px] text-muted-foreground">{changesResult.totalChanges} total changes</span>
+                </div>
+                {changesResult.totalChanges === 0 ? (
+                  <div className="text-center py-3 text-xs text-muted-foreground">No significant interval changes detected by pattern analysis.</div>
+                ) : (
+                  changesResult.changes.map((change, i) => (
+                    <div key={i} className={`border rounded-lg p-2 text-[11px] space-y-1 ${
+                      change.severity === "critical" ? "border-red-200 bg-red-50"
+                      : change.severity === "warning" ? "border-amber-200 bg-amber-50"
+                      : "border-border"
+                    }`}>
+                      <div className="flex items-center gap-1.5">
+                        {change.severity === "critical" ? (
+                          <AlertTriangle size={11} className="text-red-500 flex-shrink-0" />
+                        ) : change.severity === "warning" ? (
+                          <AlertTriangle size={11} className="text-amber-500 flex-shrink-0" />
+                        ) : (
+                          <CheckCircle size={11} className="text-green-500 flex-shrink-0" />
+                        )}
+                        <span className="font-semibold text-[10px]">{change.categoryLabel}</span>
+                      </div>
+                      <p className="text-muted-foreground leading-relaxed">{change.description}</p>
+                      {(change.priorSnippet || change.currentSnippet) && (
+                        <div className="grid grid-cols-2 gap-1 pt-0.5">
+                          {change.priorSnippet && (
+                            <div className="text-[9px]">
+                              <span className="font-medium text-muted-foreground">Prior:</span>
+                              <span className="text-muted-foreground"> {change.priorSnippet.substring(0, 60)}...</span>
+                            </div>
+                          )}
+                          {change.currentSnippet && (
+                            <div className="text-[9px]">
+                              <span className="font-medium">Current:</span>
+                              <span className="text-foreground"> {change.currentSnippet.substring(0, 60)}...</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+                <div className="text-[9px] text-amber-600 flex items-center gap-1">
+                  <AlertTriangle size={9} /> AI Draft – Requires Radiologist Review
                 </div>
               </div>
             )}

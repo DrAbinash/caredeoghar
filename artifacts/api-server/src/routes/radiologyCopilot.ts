@@ -1,7 +1,8 @@
 /**
- * Phase 8: Radiology Copilot — Prior Study Auto-Fetch, Measurement Tracker,
+ * Phase 8 + 10A: Radiology Copilot — Prior Study Auto-Fetch, Measurement Tracker,
  * Smart Impression Builder, Consistency Checker, Follow-up Intelligence,
  * DICOM Metadata Assistant, Productivity Dashboard.
+ * Phase 10A additions: Structured Prior Comparison, Smart Change Detector.
  */
 import { Router } from "express";
 import { db } from "@workspace/db";
@@ -505,5 +506,366 @@ radiologyCopilotRouter.get("/productivity", async (req, res): Promise<void> => {
     byModality: Array.from(byModality.entries()).map(([name, count]) => ({ name, count })),
     byBodyPart: Array.from(byBodyPart.entries()).map(([name, count]) => ({ name, count })),
     dailyCounts: Array.from(dailyCounts.entries()).map(([date, count]) => ({ date, count })).sort((a, b) => a.date.localeCompare(b.date)),
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PHASE 10A: Structured Prior Study Comparison
+// POST /radiology-copilot/structured-comparison
+// Accepts currentFindings + priorFindings and returns structured diff
+// with per-parameter status: improved / stable / progressed / new / resolved
+// ══════════════════════════════════════════════════════════════════════════════
+
+radiologyCopilotRouter.post("/structured-comparison", async (req, res) => {
+  const { currentFindings, priorFindings, currentImpression, priorImpression, modality, bodyPart } = req.body as {
+    currentFindings?: string;
+    priorFindings?: string;
+    currentImpression?: string;
+    priorImpression?: string;
+    modality?: string;
+    bodyPart?: string;
+  };
+
+  if (!currentFindings?.trim() || !priorFindings?.trim()) {
+    return res.status(400).json({ error: "currentFindings and priorFindings are required" });
+  }
+
+  // Deterministic structural comparison — no AI required
+  // Extract key clinical parameters via pattern matching
+  const PARAMETER_PATTERNS: Array<{
+    name: string;
+    patterns: RegExp[];
+    extractValue: (text: string, patterns: RegExp[]) => string | null;
+  }> = [
+    {
+      name: "Lesion Size",
+      patterns: [/(\d+\.?\d*)\s*(?:x\s*\d+\.?\d*)?\s*(?:mm|cm)/gi],
+      extractValue: (text, patterns) => {
+        const m = patterns[0].exec(text);
+        return m ? m[0] : null;
+      },
+    },
+    {
+      name: "Midline Shift",
+      patterns: [/midline\s+shift[^\.\n]*/gi, /midline[^\.\n]*shift/gi],
+      extractValue: (text, patterns) => {
+        for (const p of patterns) { const m = p.exec(text); if (m) return m[0]; }
+        return null;
+      },
+    },
+    {
+      name: "Mass Effect",
+      patterns: [/mass\s+effect[^\.\n]*/gi],
+      extractValue: (text, patterns) => { const m = patterns[0].exec(text); return m ? m[0] : null; },
+    },
+    {
+      name: "Edema",
+      patterns: [/(?:peri-?lesional|perilesional|surrounding|vasogenic)?\s*edema[^\.\n]*/gi, /oedema[^\.\n]*/gi],
+      extractValue: (text, patterns) => {
+        for (const p of patterns) { const m = p.exec(text); if (m) return m[0]; }
+        return null;
+      },
+    },
+    {
+      name: "Enhancement",
+      patterns: [/(?:contrast\s+)?(?:rim|ring|nodular|heterogeneous|homogeneous|post-contrast|post\s+contrast)?\s*enhancement[^\.\n]*/gi],
+      extractValue: (text, patterns) => { const m = patterns[0].exec(text); return m ? m[0] : null; },
+    },
+    {
+      name: "Hydrocephalus",
+      patterns: [/hydrocephalus[^\.\n]*/gi, /ventricular\s+(?:dilation|dilatation|enlargement)[^\.\n]*/gi],
+      extractValue: (text, patterns) => {
+        for (const p of patterns) { const m = p.exec(text); if (m) return m[0]; }
+        return null;
+      },
+    },
+    {
+      name: "Disc Protrusion",
+      patterns: [/disc\s+(?:protrusion|herniation|bulge|prolapse)[^\.\n]*/gi, /IVDP[^\.\n]*/gi],
+      extractValue: (text, patterns) => {
+        for (const p of patterns) { const m = p.exec(text); if (m) return m[0]; }
+        return null;
+      },
+    },
+    {
+      name: "Canal Stenosis",
+      patterns: [/(?:spinal\s+canal|canal)\s*(?:stenosis|narrowing|compromise)[^\.\n]*/gi],
+      extractValue: (text, patterns) => { const m = patterns[0].exec(text); return m ? m[0] : null; },
+    },
+    {
+      name: "Haemorrhage",
+      patterns: [/h[ae]morrhage[^\.\n]*/gi, /bleed(?:ing)?[^\.\n]*/gi],
+      extractValue: (text, patterns) => {
+        for (const p of patterns) { const m = p.exec(text); if (m) return m[0]; }
+        return null;
+      },
+    },
+    {
+      name: "Infarct / Ischemia",
+      patterns: [/infarct[^\.\n]*/gi, /isch[ae]m[^\.\n]*/gi],
+      extractValue: (text, patterns) => {
+        for (const p of patterns) { const m = p.exec(text); if (m) return m[0]; }
+        return null;
+      },
+    },
+  ];
+
+  function categorizeChange(prior: string | null, current: string | null, paramName: string): {
+    status: "improved" | "stable" | "progressed" | "new" | "resolved" | "unchanged";
+    confidence: "high" | "medium" | "low";
+    detail: string;
+  } {
+    if (!prior && !current) return { status: "unchanged", confidence: "high", detail: "Not mentioned in either study" };
+    if (!prior && current) return { status: "new", confidence: "high", detail: `Newly identified: ${current.trim().substring(0, 100)}` };
+    if (prior && !current) return { status: "resolved", confidence: "medium", detail: `Previously: ${prior.trim().substring(0, 100)} — not mentioned in current study` };
+
+    // Both present — try to determine progression
+    const priorText = prior!.toLowerCase();
+    const currentText = current!.toLowerCase();
+
+    // Extract numbers from both
+    const extractMm = (text: string): number | null => {
+      const m = /(\d+\.?\d*)\s*mm/.exec(text);
+      return m ? parseFloat(m[1]) : null;
+    };
+    const priorMm = extractMm(priorText);
+    const currentMm = extractMm(currentText);
+
+    if (priorMm !== null && currentMm !== null) {
+      const pct = ((currentMm - priorMm) / priorMm) * 100;
+      if (pct < -10) return { status: "improved", confidence: "high", detail: `Decreased: ${priorMm}mm → ${currentMm}mm (${Math.abs(pct).toFixed(0)}% reduction)` };
+      if (pct > 10) return { status: "progressed", confidence: "high", detail: `Increased: ${priorMm}mm → ${currentMm}mm (+${pct.toFixed(0)}%)` };
+      return { status: "stable", confidence: "high", detail: `Stable: ${priorMm}mm → ${currentMm}mm` };
+    }
+
+    // Keyword-based assessment
+    const worsening = ["increased", "enlarged", "worsened", "new", "additional", "progressed", "larger"];
+    const improving = ["decreased", "reduced", "smaller", "improved", "resolved", "lesser"];
+    const stable = ["unchanged", "stable", "similar", "no change", "no significant"];
+
+    const hasWorsening = worsening.some((w) => currentText.includes(w));
+    const hasImproving = improving.some((w) => currentText.includes(w));
+    const hasStable = stable.some((w) => currentText.includes(w));
+
+    if (hasImproving) return { status: "improved", confidence: "medium", detail: `${current!.trim().substring(0, 120)}` };
+    if (hasWorsening) return { status: "progressed", confidence: "medium", detail: `${current!.trim().substring(0, 120)}` };
+    if (hasStable) return { status: "stable", confidence: "high", detail: `${current!.trim().substring(0, 120)}` };
+
+    return { status: "stable", confidence: "low", detail: `Prior: ${prior!.trim().substring(0, 60)} / Current: ${current!.trim().substring(0, 60)}` };
+  }
+
+  const comparison = PARAMETER_PATTERNS.map(({ name, patterns, extractValue }) => {
+    // Reset regex lastIndex for each text
+    const getVal = (text: string) => {
+      patterns.forEach((p) => { p.lastIndex = 0; });
+      return extractValue(text, patterns.map((p) => new RegExp(p.source, p.flags)));
+    };
+    const priorVal = getVal(priorFindings);
+    const currentVal = getVal(currentFindings);
+    const change = categorizeChange(priorVal, currentVal, name);
+    return { parameter: name, priorValue: priorVal, currentValue: currentVal, ...change };
+  }).filter((c) => c.status !== "unchanged");
+
+  // Overall summary
+  const counts = { improved: 0, stable: 0, progressed: 0, new: 0, resolved: 0 };
+  for (const c of comparison) {
+    if (c.status in counts) counts[c.status as keyof typeof counts]++;
+  }
+  const overallTrend = counts.progressed > counts.improved
+    ? "progressed"
+    : counts.improved > counts.progressed
+    ? "improved"
+    : "stable";
+
+  return res.json({
+    comparison,
+    overallTrend,
+    counts,
+    totalParameters: comparison.length,
+    note: "AI Draft – Requires Radiologist Review. Structural comparison only — not a clinical diagnosis.",
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PHASE 10A: Smart Change Detector
+// POST /radiology-copilot/change-detector
+// Accepts currentFindings + priorFindings and returns categorized changes
+// ══════════════════════════════════════════════════════════════════════════════
+
+radiologyCopilotRouter.post("/change-detector", async (req, res) => {
+  const { currentFindings, priorFindings, modality } = req.body as {
+    currentFindings?: string;
+    priorFindings?: string;
+    modality?: string;
+  };
+
+  if (!currentFindings?.trim() || !priorFindings?.trim()) {
+    return res.status(400).json({ error: "currentFindings and priorFindings are required" });
+  }
+
+  const current = currentFindings.toLowerCase();
+  const prior = priorFindings.toLowerCase();
+
+  type ChangeCategory = "new_lesion" | "growth" | "regression" | "post_op" | "hemorrhage_evolution" | "infarct_evolution" | "edema_change" | "hydrocephalus_change" | "signal_change" | "other";
+
+  interface DetectedChange {
+    category: ChangeCategory;
+    categoryLabel: string;
+    description: string;
+    severity: "info" | "warning" | "critical";
+    priorSnippet?: string;
+    currentSnippet?: string;
+  }
+
+  const changes: DetectedChange[] = [];
+
+  // Helper: extract sentences containing keyword
+  function extractSentences(text: string, keywords: string[]): string[] {
+    const sentences = text.split(/[.;]/);
+    return sentences.filter((s) => keywords.some((k) => s.includes(k))).map((s) => s.trim()).filter(Boolean);
+  }
+
+  // 1. New lesions
+  const newLesionKeywords = ["new lesion", "newly", "new focus", "additional lesion", "not seen previously", "not identified on prior", "new area", "new discrete"];
+  const newInCurrent = extractSentences(current, newLesionKeywords);
+  if (newInCurrent.length > 0) {
+    changes.push({
+      category: "new_lesion",
+      categoryLabel: "New Lesion",
+      description: newInCurrent[0],
+      severity: "critical",
+      currentSnippet: newInCurrent[0],
+    });
+  }
+
+  // 2. Growth / progression
+  const growthInCurrent = extractSentences(current, ["increased", "enlarged", "larger", "grown", "progressed", "worsened", "extension"]);
+  const growthNotInPrior = growthInCurrent.filter((s) => !extractSentences(prior, ["increased", "enlarged"]).some((ps) => ps.includes(s.substring(0, 20))));
+  if (growthNotInPrior.length > 0) {
+    changes.push({
+      category: "growth",
+      categoryLabel: "Growth / Progression",
+      description: growthNotInPrior[0],
+      severity: "warning",
+      currentSnippet: growthNotInPrior[0],
+    });
+  }
+
+  // 3. Regression / improvement
+  const regressionInCurrent = extractSentences(current, ["decreased", "reduced", "smaller", "improved", "resolved", "regressed", "less prominent"]);
+  if (regressionInCurrent.length > 0) {
+    changes.push({
+      category: "regression",
+      categoryLabel: "Regression / Improvement",
+      description: regressionInCurrent[0],
+      severity: "info",
+      currentSnippet: regressionInCurrent[0],
+    });
+  }
+
+  // 4. Post-operative changes
+  const postOpInCurrent = extractSentences(current, ["post-op", "post op", "post operative", "postoperative", "surgical", "craniotomy", "laminectomy", "operative site"]);
+  const postOpNotInPrior = postOpInCurrent.filter((s) => !extractSentences(prior, ["post-op", "post op", "postoperative", "surgical"]).length);
+  if (postOpNotInPrior.length > 0) {
+    changes.push({
+      category: "post_op",
+      categoryLabel: "Post-Operative Change",
+      description: postOpNotInPrior[0],
+      severity: "info",
+      currentSnippet: postOpNotInPrior[0],
+    });
+  }
+
+  // 5. Haemorrhage evolution
+  const haemInPrior = extractSentences(prior, ["haemorrhage", "hemorrhage", "haematoma", "hematoma", "bleed"]);
+  const haemInCurrent = extractSentences(current, ["haemorrhage", "hemorrhage", "haematoma", "hematoma", "bleed"]);
+  if (haemInPrior.length > 0 && haemInCurrent.length > 0) {
+    changes.push({
+      category: "hemorrhage_evolution",
+      categoryLabel: "Haemorrhage Evolution",
+      description: "Haemorrhage noted in both studies — assess for evolution (acute → subacute → chronic).",
+      severity: "warning",
+      priorSnippet: haemInPrior[0],
+      currentSnippet: haemInCurrent[0],
+    });
+  } else if (haemInCurrent.length > 0 && haemInPrior.length === 0) {
+    changes.push({
+      category: "hemorrhage_evolution",
+      categoryLabel: "New Haemorrhage",
+      description: haemInCurrent[0],
+      severity: "critical",
+      currentSnippet: haemInCurrent[0],
+    });
+  }
+
+  // 6. Infarct evolution
+  const infarctInPrior = extractSentences(prior, ["infarct", "ischaem", "ischemі", "lacunar"]);
+  const infarctInCurrent = extractSentences(current, ["infarct", "ischaem", "ischem", "lacunar", "encepharomalacia", "gliosis"]);
+  if (infarctInPrior.length > 0 && infarctInCurrent.length > 0) {
+    changes.push({
+      category: "infarct_evolution",
+      categoryLabel: "Infarct Evolution",
+      description: "Infarct/ischaemia noted in both studies — assess for maturation and new involvement.",
+      severity: "warning",
+      priorSnippet: infarctInPrior[0],
+      currentSnippet: infarctInCurrent[0],
+    });
+  }
+
+  // 7. Edema change
+  const edemaInPrior = extractSentences(prior, ["edema", "oedema", "vasogenic", "cytotoxic"]);
+  const edemaInCurrent = extractSentences(current, ["edema", "oedema", "vasogenic", "cytotoxic"]);
+  if (edemaInPrior.length > 0 || edemaInCurrent.length > 0) {
+    const edemaChange = edemaInPrior.length > 0 && edemaInCurrent.length === 0 ? "resolved"
+      : edemaInCurrent.length > 0 && edemaInPrior.length === 0 ? "new"
+      : "present in both";
+    changes.push({
+      category: "edema_change",
+      categoryLabel: "Edema Change",
+      description: `Edema ${edemaChange}.${edemaInCurrent.length > 0 ? " Current: " + edemaInCurrent[0] : ""}`,
+      severity: edemaChange === "new" ? "warning" : "info",
+      priorSnippet: edemaInPrior[0],
+      currentSnippet: edemaInCurrent[0],
+    });
+  }
+
+  // 8. Hydrocephalus change
+  const hydroInPrior = extractSentences(prior, ["hydrocephalus", "ventricular dilation", "ventricular dilatation", "ventricular enlargement"]);
+  const hydroInCurrent = extractSentences(current, ["hydrocephalus", "ventricular dilation", "ventricular dilatation", "ventricular enlargement"]);
+  if (hydroInPrior.length > 0 || hydroInCurrent.length > 0) {
+    const hydroChange = hydroInPrior.length > 0 && hydroInCurrent.length === 0 ? "resolved"
+      : hydroInCurrent.length > 0 && hydroInPrior.length === 0 ? "new"
+      : "present in both";
+    changes.push({
+      category: "hydrocephalus_change",
+      categoryLabel: "Hydrocephalus",
+      description: `Hydrocephalus/ventricular change: ${hydroChange}.`,
+      severity: hydroChange === "new" ? "critical" : "info",
+      priorSnippet: hydroInPrior[0],
+      currentSnippet: hydroInCurrent[0],
+    });
+  }
+
+  // 9. Signal change (MRI-specific)
+  if (modality?.toUpperCase().includes("MRI") || modality?.toUpperCase().includes("MR")) {
+    const signalInCurrent = extractSentences(current, ["signal change", "new t2", "new flair", "diffusion restriction", "new dwi", "new restriction"]);
+    if (signalInCurrent.length > 0) {
+      changes.push({
+        category: "signal_change",
+        categoryLabel: "Signal Change",
+        description: signalInCurrent[0],
+        severity: "warning",
+        currentSnippet: signalInCurrent[0],
+      });
+    }
+  }
+
+  return res.json({
+    changes,
+    totalChanges: changes.length,
+    criticalCount: changes.filter((c) => c.severity === "critical").length,
+    warningCount: changes.filter((c) => c.severity === "warning").length,
+    infoCount: changes.filter((c) => c.severity === "info").length,
+    note: "AI Draft – Requires Radiologist Review. Pattern-based detection only — not a clinical diagnosis.",
   });
 });

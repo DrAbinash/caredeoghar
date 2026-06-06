@@ -112,3 +112,4 @@ export * from "./radiologySnippets";
 export * from "./radiologyKnowledge";
 export * from "./radiologySmartFindings";
 export * from "./radiologyMemory";
+export * from "./radiologyLesions";
