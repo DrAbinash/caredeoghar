@@ -298,3 +298,9 @@ id = "DKi7qAEG3uw8bfM7-g9rF"
 uri = "file://RADIOLOGY_REALITY_AUDIT.md"
 type = "text"
 title = "Radiology Reality Audit — End-to-End Workflow Test"
+
+[[outputs]]
+id = "tXcKUWcu5xCUHcD76tv8f"
+uri = "file://PRODUCTION_DEV_CONSISTENCY_AUDIT.md"
+type = "text"
+title = "Production vs Development Consistency Audit"
