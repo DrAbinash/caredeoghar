@@ -110,47 +110,8 @@ teachingCasesRouter.get("/", async (req, res): Promise<void> => {
   res.json({ cases: rows, total, favorites });
 });
 
-// ─── GET DETAIL ──────────────────────────────────────────────────────────────
-teachingCasesRouter.get("/:id", async (req, res): Promise<void> => {
-  const sReq = req as StaffAuthRequest;
-  const userId = getUserId(sReq);
-  const id = Number(req.params.id);
-
-  const [caseRow] = await db.select().from(teachingCasesTable).where(eq(teachingCasesTable.id, id)).limit(1);
-  if (!caseRow) { res.status(404).json({ error: "Not found" }); return; }
-
-  const images = await db
-    .select().from(teachingCaseImagesTable)
-    .where(eq(teachingCaseImagesTable.teachingCaseId, id))
-    .orderBy(teachingCaseImagesTable.sortOrder);
-
-  const notes = await db
-    .select().from(teachingCaseNotesTable)
-    .where(eq(teachingCaseNotesTable.teachingCaseId, id))
-    .orderBy(desc(teachingCaseNotesTable.createdAt));
-
-  const isFav = userId
-    ? (await db.select().from(teachingCaseFavoritesTable)
-        .where(and(eq(teachingCaseFavoritesTable.teachingCaseId, id), eq(teachingCaseFavoritesTable.userId, userId)))
-        .limit(1)).length > 0
-    : false;
-
-  // Increment view count
-  await db.update(teachingCasesTable)
-    .set({ viewCount: sql`${teachingCasesTable.viewCount} + 1` })
-    .where(eq(teachingCasesTable.id, id));
-
-  // Record view
-  if (userId) {
-    await db.insert(teachingCaseViewsTable).values({
-      teachingCaseId: id,
-      userId,
-      userName: getUserName(sReq),
-    }).catch(() => { /* ignore */ });
-  }
-
-  res.json({ case: caseRow, images, notes, isFavorite: isFav });
-});
+// NOTE: GET /:id is declared AFTER all static GET routes to avoid shadowing
+// /collections, /research, /favorites, /analytics, etc.
 
 // ─── CREATE ──────────────────────────────────────────────────────────────────
 teachingCasesRouter.post("/", async (req, res): Promise<void> => {
@@ -752,6 +713,48 @@ function redactPhi(text: string): string {
   out = out.replace(/\b[A-Z]{5}\d{4}[A-Z]\b/g, "[PAN_REDACTED]");
   return out;
 }
+
+// ─── GET DETAIL (must be after all static GET routes to avoid shadowing) ─────
+teachingCasesRouter.get("/:id", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const userId = getUserId(sReq);
+  const id = Number(req.params.id);
+
+  const [caseRow] = await db.select().from(teachingCasesTable).where(eq(teachingCasesTable.id, id)).limit(1);
+  if (!caseRow) { res.status(404).json({ error: "Not found" }); return; }
+
+  const images = await db
+    .select().from(teachingCaseImagesTable)
+    .where(eq(teachingCaseImagesTable.teachingCaseId, id))
+    .orderBy(teachingCaseImagesTable.sortOrder);
+
+  const notes = await db
+    .select().from(teachingCaseNotesTable)
+    .where(eq(teachingCaseNotesTable.teachingCaseId, id))
+    .orderBy(desc(teachingCaseNotesTable.createdAt));
+
+  const isFav = userId
+    ? (await db.select().from(teachingCaseFavoritesTable)
+        .where(and(eq(teachingCaseFavoritesTable.teachingCaseId, id), eq(teachingCaseFavoritesTable.userId, userId)))
+        .limit(1)).length > 0
+    : false;
+
+  // Increment view count
+  await db.update(teachingCasesTable)
+    .set({ viewCount: sql`${teachingCasesTable.viewCount} + 1` })
+    .where(eq(teachingCasesTable.id, id));
+
+  // Record view
+  if (userId) {
+    await db.insert(teachingCaseViewsTable).values({
+      teachingCaseId: id,
+      userId,
+      userName: getUserName(sReq),
+    }).catch(() => { /* ignore */ });
+  }
+
+  res.json({ case: caseRow, images, notes, isFavorite: isFav });
+});
 
 teachingCasesRouter.post("/generate-from-report", async (req, res): Promise<void> => {
   const sReq = req as StaffAuthRequest;

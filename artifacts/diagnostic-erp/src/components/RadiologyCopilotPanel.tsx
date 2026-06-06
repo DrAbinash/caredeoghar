@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { isFeatureEnabled } from "@/lib/staffSession";
+import { api } from "@/lib/fetchApi";
 import {
   History,
   Brain,
@@ -69,16 +70,13 @@ function GenerateTeachingCaseButton({
     if (!findingsText?.trim()) return;
     setLoading(true);
     try {
-      const resp = await fetch("/api/teaching-cases/generate-from-report", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modality, bodyPart, findings: findingsText, impression: impressionText }),
-      });
-      const data = await resp.json() as { teachingCase?: { title?: string; diagnosis?: string }; error?: string };
-      if (!resp.ok) throw new Error(data.error ?? "Failed");
+      const data = await api.post<{ case?: { title?: string; diagnosis?: string }; error?: string }>(
+        "/api/teaching-cases/generate-from-report",
+        { modality, bodyPart, findings: findingsText, impression: impressionText },
+      );
       setResult({
-        title: data.teachingCase?.title ?? "Teaching Case Draft",
-        diagnosis: data.teachingCase?.diagnosis ?? "",
+        title: data.case?.title ?? "Teaching Case Draft",
+        diagnosis: data.case?.diagnosis ?? "",
       });
       toast({ title: "Teaching case created", description: "AI Draft — Requires Radiologist Review before publishing." });
     } catch (err: unknown) {

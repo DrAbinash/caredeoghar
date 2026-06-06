@@ -43,7 +43,7 @@ export default function TeachingCaseCollections() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (body: { name: string; description: string; isPublic: boolean }) => {
+    mutationFn: async (body: { name: string; description: string; isShared: boolean }) => {
       return api.post<{ collection: Collection }>("/teaching-cases/collections", body);
     },
     onSuccess: () => {
@@ -95,7 +95,7 @@ export default function TeachingCaseCollections() {
             Public (visible to all staff)
           </label>
           <div className="flex gap-2">
-            <Button onClick={() => createMutation.mutate({ name, description: desc, isPublic })} disabled={!name.trim() || createMutation.isPending}>
+            <Button onClick={() => createMutation.mutate({ name, description: desc, isShared: isPublic })} disabled={!name.trim() || createMutation.isPending}>
               Create
             </Button>
             <Button variant="outline" onClick={() => setShowNew(false)}>
