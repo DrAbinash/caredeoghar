@@ -286,3 +286,9 @@ id = "OiCCbTsMR1F40qXejOk_O"
 uri = "file://RADIOLOGY_AUDIT.md"
 type = "text"
 title = "Radiology Master Codebase Audit Report"
+
+[[outputs]]
+id = "In_FMBsNswytxdOVJBsLr"
+uri = "file://RADIOLOGY_PRODUCTION_READINESS_AUDIT.md"
+type = "text"
+title = "Radiology Production Readiness Audit"
