@@ -113,3 +113,5 @@ export * from "./radiologyKnowledge";
 export * from "./radiologySmartFindings";
 export * from "./radiologyMemory";
 export * from "./radiologyLesions";
+export * from "./radiologyOrganIntelligence";
+export * from "./radiologyAnnotations";

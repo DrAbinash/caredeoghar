@@ -148,5 +148,10 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   jpegQuality: integer("jpeg_quality").notNull().default(85),
   maxScanWidth: integer("max_scan_width").notNull().default(1200),
 
+  // ── Ollama Local Models (Phase 10C) ──
+  ollamaBaseUrl: text("ollama_base_url"),
+  ollamaModel: text("ollama_model"),
+  ollamaLocalOnly: boolean("ollama_local_only").notNull().default(false),
+
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

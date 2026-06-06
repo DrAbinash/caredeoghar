@@ -482,6 +482,58 @@ teachingCasesRouter.get("/measurements/:patientId", async (req, res): Promise<vo
   res.json({ measurements: rows, grouped });
 });
 
+// ─── GENERATE TEACHING CASE FROM REPORT ──────────────────────────────────────
+// Phase 10C: Teaching Generator — create a draft teaching case from a finalised radiology report
+teachingCasesRouter.post("/generate-from-report", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const userId = getUserId(sReq);
+  const userName = getUserName(sReq);
+  const body = req.body as Record<string, unknown>;
+
+  const {
+    modality, testName, bodyPart,
+    clinicalHistory, findings, impression, diagnosis,
+    category = "general",
+  } = body as {
+    modality?: string; testName?: string;
+    bodyPart?: string; clinicalHistory?: string; findings?: string;
+    impression?: string; diagnosis?: string; category?: string;
+  };
+
+  if (!findings && !impression) {
+    res.status(400).json({ error: "findings or impression required to generate a teaching case" });
+    return;
+  }
+
+  // Build a concise teaching summary from the report fields
+  const title = [modality, testName ?? bodyPart, diagnosis ?? "Interesting Case"]
+    .filter(Boolean).join(" — ");
+
+  // Combine clinical history + findings into the findings field; impression stays separate
+  const combinedFindings = [
+    clinicalHistory ? `Clinical History: ${clinicalHistory}` : null,
+    findings ? `Findings:\n${findings}` : null,
+  ].filter(Boolean).join("\n\n");
+
+  const [newCase] = await db.insert(teachingCasesTable).values({
+    title,
+    category: String(category),
+    modality: modality ? String(modality) : null,
+    bodyPart: bodyPart ? String(bodyPart) : null,
+    diagnosis: diagnosis ? String(diagnosis) : null,
+    findings: combinedFindings || null,
+    impression: impression ? String(impression) : null,
+    difficulty: "intermediate",
+    status: "draft",
+    isResearchCandidate: false,
+    isAnonymized: false,
+    createdById: userId ?? 0,
+    createdByName: userName ?? null,
+  }).returning();
+
+  res.json({ case: newCase, message: "Teaching case draft created from report. AI Draft — Requires Radiologist Review before publishing." });
+});
+
 teachingCasesRouter.post("/measurements", async (req, res): Promise<void> => {
   const sReq = req as StaffAuthRequest;
   const userId = getUserId(sReq);

@@ -4,3 +4,4 @@
 - [diagnostic-erp conventions](diagnostic-erp-conventions.md) — frontend/page/auth conventions for the ERP artifact.
 - [Normal report templates](normal-report-templates.md) — pre-built normal templates for common studies; one-click apply from report generator toolbar with inline picker overlay.
 - [AI safety label](ai-safety-label.md) — every AI-assisted output must show "AI Draft – Requires Radiologist Review" and never auto-finalize/sign reports.
+- [Phase 10B/10C radiology platform](phase-10-radiology.md) — Organ Intelligence (Spine/Brain/Tumor) + AI Research Platform (Annotations, Ollama, Teaching Generator, Multi-AI). Route pattern, teachingCasesTable schema quirks.

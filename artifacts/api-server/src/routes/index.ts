@@ -92,6 +92,11 @@ import { teachingCasesRouter } from "./teachingCases";
 import { radiologyCopilotRouter } from "./radiologyCopilot";
 import { radiologyMemoryRouter } from "./radiologyMemory";
 import { radiologyLesionsRouter } from "./radiologyLesions";
+import { radiologySpineIntelligenceRouter } from "./radiologySpineIntelligence";
+import { radiologyBrainIntelligenceRouter } from "./radiologyBrainIntelligence";
+import { radiologyTumorFollowupRouter } from "./radiologyTumorFollowup";
+import { radiologyAnnotationsRouter } from "./radiologyAnnotations";
+import { radiologyOllamaRouter } from "./radiologyOllama";
 import { radiologySnippetsRouter } from "./radiologySnippets";
 import { bankingRouter, bankingWebhookRouter } from "./banking";
 import { syncRouter } from "./sync";
@@ -468,6 +473,15 @@ router.use("/radiology-memory", requireStaffAuth, radiologyMemoryRouter);
 
 // Phase 10A: Lesion Tracker + Measurement Assistant
 router.use("/radiology-lesions", requireStaffAuth, radiologyLesionsRouter);
+
+// Phase 10B: Organ Intelligence — Spine, Brain, Tumor follow-up
+router.use("/radiology-spine", requireStaffAuth, radiologySpineIntelligenceRouter);
+router.use("/radiology-brain", requireStaffAuth, radiologyBrainIntelligenceRouter);
+router.use("/radiology-tumor", requireStaffAuth, radiologyTumorFollowupRouter);
+
+// Phase 10C: AI Research Platform — Annotations, Ollama local models
+router.use("/radiology-annotations", requireStaffAuth, radiologyAnnotationsRouter);
+router.use("/radiology-ollama", requireStaffAuth, radiologyOllamaRouter);
 
 // AI endpoints — each sub-route applies its own requireStaffPermission matching
 // the data domain it accesses (patients PHI, billing records, or radiology

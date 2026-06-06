@@ -4779,6 +4779,109 @@ function ReportTemplatesTab() {
 }
 
 // ============================================================
+// OLLAMA SETTINGS CARD — Phase 10C Local Model Configuration
+// ============================================================
+function OllamaSettingsCard() {
+  const { toast } = useToast();
+  const [baseUrl, setBaseUrl] = useState("");
+  const [model, setModel] = useState("llama3");
+  const [localOnly, setLocalOnly] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.get<{ settings: { ollamaBaseUrl?: string | null; ollamaModel?: string | null; ollamaLocalOnly?: boolean } }>("/api/clinic-settings")
+      .then((d) => {
+        setBaseUrl(d.settings.ollamaBaseUrl ?? "");
+        setModel(d.settings.ollamaModel ?? "llama3");
+        setLocalOnly(d.settings.ollamaLocalOnly ?? false);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await api.patch("/api/clinic-settings", {
+        ollamaBaseUrl: baseUrl.trim() || null,
+        ollamaModel: model.trim() || "llama3",
+        ollamaLocalOnly: localOnly,
+      });
+      toast({ title: "Ollama settings saved" });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to save";
+      toast({ title: "Save failed", description: msg, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTest = async () => {
+    try {
+      const resp = await api.post<{ ok: boolean; model: string; response?: string; error?: string }>("/api/radiology-ollama/test", {});
+      if (resp.ok) {
+        toast({ title: "Ollama connection OK", description: `Model: ${resp.model}` });
+      } else {
+        toast({ title: "Ollama connection failed", description: resp.error ?? "Unknown error", variant: "destructive" });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed";
+      toast({ title: "Test failed", description: msg, variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+      <div>
+        <h2 className="font-bold text-lg flex items-center gap-2">
+          🦙 Ollama Local Model Configuration (Phase 10C)
+        </h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Run privacy-preserving AI locally using Ollama. Requires the <strong>Ollama Local Models</strong> feature flag to be ON.
+          All AI output is a draft and requires radiologist review.
+        </p>
+      </div>
+      <div className="space-y-3">
+        <div>
+          <Label className="text-sm">Ollama Base URL</Label>
+          <Input
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder="http://localhost:11434"
+            className="mt-1"
+          />
+          <p className="text-[11px] text-muted-foreground mt-1">Leave blank to disable. Use the machine's LAN IP if Ollama runs on a separate workstation.</p>
+        </div>
+        <div>
+          <Label className="text-sm">Model Name</Label>
+          <Input
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder="llama3"
+            className="mt-1"
+          />
+          <p className="text-[11px] text-muted-foreground mt-1">Must be pulled on the Ollama instance (e.g. <code className="font-mono">ollama pull llama3</code>).</p>
+        </div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={localOnly} onChange={(e) => setLocalOnly(e.target.checked)} className="h-4 w-4" />
+          <div>
+            <span className="text-sm font-medium">Local-only mode</span>
+            <p className="text-[11px] text-muted-foreground">Disable cloud AI fallback — use Ollama exclusively. Useful for strict data-residency environments.</p>
+          </div>
+        </label>
+      </div>
+      <div className="flex gap-2">
+        <Button size="sm" onClick={handleSave} disabled={saving}>
+          {saving ? "Saving..." : "Save Ollama Settings"}
+        </Button>
+        <Button size="sm" variant="outline" onClick={handleTest} type="button">
+          Test Connection
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // RADIOLOGY SETTINGS TAB — Productivity Tools
 // ============================================================
 function RadiologySettingsTab() {
@@ -5187,6 +5290,9 @@ function RadiologySettingsTab() {
           ))}
         </div>
       </div>
+
+      {/* Phase 10C: Ollama Local Model Configuration */}
+      <OllamaSettingsCard />
 
       {/* Phase 9: Radiology Memory + Context Engine */}
       <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">

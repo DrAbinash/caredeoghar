@@ -27,7 +27,11 @@ import {
   Minus,
   Zap,
   GitCompare,
+  Layers,
 } from "lucide-react";
+import SpineIntelligencePanel from "./SpineIntelligencePanel";
+import BrainIntelligencePanel from "./BrainIntelligencePanel";
+import TumorFollowupPanel from "./TumorFollowupPanel";
 
 interface PriorStudy {
   id: number;
@@ -88,7 +92,7 @@ export default function RadiologyCopilotPanel({
   onImpressionSuggestion,
 }: Props) {
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"prior" | "impression" | "consistency" | "followup" | "dicom" | "compare" | "changes">("prior");
+  const [activeTab, setActiveTab] = useState<"prior" | "impression" | "consistency" | "followup" | "dicom" | "compare" | "changes" | "organ">("prior");
   const [priorStudies, setPriorStudies] = useState<PriorStudy[]>([]);
   const [loadingPrior, setLoadingPrior] = useState(false);
   const [expandedStudy, setExpandedStudy] = useState<number | null>(null);
@@ -228,6 +232,10 @@ export default function RadiologyCopilotPanel({
   // Feature-flag gating for Phase 10A tabs
   const phase10Master = useMemo(() => isFeatureEnabled("dicomImageIntelligence"), []);
   const changeDetectionEnabled = useMemo(() => phase10Master && isFeatureEnabled("changeDetection"), [phase10Master]);
+  const spineEnabled = useMemo(() => isFeatureEnabled("spineIntelligence"), []);
+  const brainEnabled = useMemo(() => isFeatureEnabled("brainIntelligence"), []);
+  const tumorEnabled = useMemo(() => isFeatureEnabled("tumorFollowup"), []);
+  const organIntelligenceEnabled = spineEnabled || brainEnabled || tumorEnabled;
 
   // ── Auto-run: debounced comparison with most-recent prior study ──────────
   // Fires 2.5s after currentFindings settles, but only once per (findingsText, priorStudies[0].id) pair
@@ -345,9 +353,11 @@ export default function RadiologyCopilotPanel({
       { id: "consistency" as const, label: "Consistency", icon: CheckCircle },
       { id: "followup" as const, label: "Follow-up", icon: Clock },
       { id: "dicom" as const, label: "DICOM", icon: Database },
+      // Phase 10B: Organ Intelligence tab — shown only when ≥1 organ flag is ON
+      ...(organIntelligenceEnabled ? [{ id: "organ" as const, label: "Organ", icon: Layers }] : []),
     ];
     return all;
-  }, [phase10Master, changeDetectionEnabled]);
+  }, [phase10Master, changeDetectionEnabled, organIntelligenceEnabled]);
 
   return (
     <div className="bg-card border border-card-border rounded-xl shadow-sm overflow-hidden">
@@ -828,6 +838,40 @@ export default function RadiologyCopilotPanel({
                 <div className="text-[10px] text-muted-foreground text-center pt-1">
                   AI Draft — Requires Radiologist Review
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+        {/* Phase 10B: Organ Intelligence tab */}
+        {activeTab === "organ" && (
+          <div className="space-y-4">
+            <div className="bg-yellow-50 border border-yellow-200 rounded p-2 text-[11px] text-yellow-800">
+              AI Draft — Requires Radiologist Review. Organ Intelligence panels provide structured data entry for longitudinal follow-up only.
+            </div>
+            {spineEnabled && (
+              <SpineIntelligencePanel
+                patientId={patientId}
+                orderId={currentOrderId}
+                studyId={studyId}
+              />
+            )}
+            {brainEnabled && (
+              <BrainIntelligencePanel
+                patientId={patientId}
+                orderId={currentOrderId}
+                studyId={studyId}
+              />
+            )}
+            {tumorEnabled && (
+              <TumorFollowupPanel
+                patientId={patientId}
+                orderId={currentOrderId}
+                studyId={studyId}
+              />
+            )}
+            {!spineEnabled && !brainEnabled && !tumorEnabled && (
+              <div className="text-center py-6 text-muted-foreground text-xs">
+                Enable Spine Intelligence, Brain Intelligence, or Tumor Follow-up in Settings → Radiology → Phase 10 to activate this tab.
               </div>
             )}
           </div>
