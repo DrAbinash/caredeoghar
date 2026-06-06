@@ -4781,13 +4781,24 @@ function ReportTemplatesTab() {
 // ============================================================
 // OLLAMA SETTINGS CARD — Phase 10C Local Model Configuration
 // ============================================================
+const OLLAMA_MODELS_KEY = "ollama_known_models";
+
 function OllamaSettingsCard() {
   const { toast } = useToast();
   const [baseUrl, setBaseUrl] = useState("");
   const [model, setModel] = useState("llama3");
   const [localOnly, setLocalOnly] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [availableModels, setAvailableModels] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem(OLLAMA_MODELS_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.every((m) => typeof m === "string")) return parsed;
+      }
+    } catch { /* ignore */ }
+    return [];
+  });
 
   useEffect(() => {
     api.get<{ ollamaBaseUrl?: string | null; ollamaModel?: string | null; ollamaLocalOnly?: boolean }>("/api/clinic-settings")
@@ -4828,7 +4839,10 @@ function OllamaSettingsCard() {
       );
       if (resp.ok) {
         const pulledModels = resp.models ?? [];
-        if (pulledModels.length > 0) setAvailableModels(pulledModels);
+        if (pulledModels.length > 0) {
+          setAvailableModels(pulledModels);
+          try { localStorage.setItem(OLLAMA_MODELS_KEY, JSON.stringify(pulledModels)); } catch { /* ignore */ }
+        }
         const detail = [
           resp.modelFound ? `Model "${resp.model}" found` : `Model "${resp.model}" not in list (${pulledModels.slice(0, 3).join(", ")})`,
           resp.latencyMs != null ? `${resp.latencyMs}ms` : null,
