@@ -532,7 +532,7 @@ teachingCasesRouter.get("/favorites", async (req, res): Promise<void> => {
 // ─── RESEARCH DATABASE — filtered, paginated, with CSV export ──────────────
 teachingCasesRouter.get("/research", async (req, res): Promise<void> => {
   const {
-    modality, category, difficulty, researchStatus,
+    modality, bodyPart, category, difficulty, researchStatus,
     isAnonymized, q,
     page = "1", pageSize = "20",
     exportFormat,
@@ -540,6 +540,7 @@ teachingCasesRouter.get("/research", async (req, res): Promise<void> => {
 
   const conditions = [eq(teachingCasesTable.isResearchCandidate, true)];
   if (modality) conditions.push(eq(teachingCasesTable.modality, modality));
+  if (bodyPart) conditions.push(eq(teachingCasesTable.bodyPart, bodyPart));
   if (category) conditions.push(eq(teachingCasesTable.category, category));
   if (difficulty) conditions.push(eq(teachingCasesTable.difficulty, difficulty));
   if (researchStatus) conditions.push(eq(teachingCasesTable.researchStatus, researchStatus));
@@ -723,6 +724,35 @@ teachingCasesRouter.get("/measurements/:patientId", async (req, res): Promise<vo
 
 // ─── GENERATE TEACHING CASE FROM REPORT ──────────────────────────────────────
 // Phase 10C: Teaching Generator — create a draft teaching case from a finalised radiology report
+// ─── PHI DE-IDENTIFICATION ──────────────────────────────────────────────────
+// Regex-based best-effort PHI redaction for teaching-case text.
+// Removes MRN/ID patterns, phone numbers, emails, dates, and address fragments.
+// NOTE: Free-text clinical notes may still contain patient names embedded in
+// prose (e.g. "referred by Dr. Singh regarding Mrs. Sharma"). These require
+// manual review before publishing. The `isAnonymized` flag is set to `true` to
+// indicate that automated redaction was applied, not that PHI is 100% absent.
+function redactPhi(text: string): string {
+  if (!text) return text;
+  let out = text;
+  // MRN / Patient ID patterns
+  out = out.replace(/\b(?:MR[N]?|Patient\s*ID|Pt\.?\s*ID|UHID|IP\s*No|OP\s*No)\s*[:#]?\s*\d[\w-]*/gi, "[ID_REDACTED]");
+  // Phone numbers (Indian + international formats)
+  out = out.replace(/\b(?:\+?91[-.]?)?(?:\(?\d{2,5}\)?[-.]?)?\d{6,10}\b/g, "[PHONE_REDACTED]");
+  // Email addresses
+  out = out.replace(/\b[\w.+-]+@[\w-]+\.[a-z]{2,}\b/gi, "[EMAIL_REDACTED]");
+  // Specific calendar dates (preserve relative dates like "3 months ago")
+  out = out.replace(
+    /\b(?:\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}|\d{4}-\d{2}-\d{2}|(?:\d{1,2}\s+)?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s+\d{1,2},?\s*\d{4})\b/gi,
+    "[DATE_REDACTED]",
+  );
+  // Street address fragments
+  out = out.replace(/\b\d+[A-Z]?\s+[\w\s]{3,30}(?:Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Nagar|Colony|Block|Sector)\b/gi, "[ADDR_REDACTED]");
+  // Aadhaar / PAN / passport patterns
+  out = out.replace(/\b\d{4}\s?\d{4}\s?\d{4}\b/g, "[AADHAAR_REDACTED]");
+  out = out.replace(/\b[A-Z]{5}\d{4}[A-Z]\b/g, "[PAN_REDACTED]");
+  return out;
+}
+
 teachingCasesRouter.post("/generate-from-report", async (req, res): Promise<void> => {
   const sReq = req as StaffAuthRequest;
   const userId = getUserId(sReq);
@@ -744,11 +774,17 @@ teachingCasesRouter.post("/generate-from-report", async (req, res): Promise<void
     return;
   }
 
-  // ── Anonymous report text (no patient names, IDs, or MRNs) ─────────────────
+  // ── PHI redaction before any persistence ────────────────────────────────────
+  // Apply regex-based de-identification to all free-text clinical fields.
+  // Patient names embedded in prose require manual review before publishing.
+  const safeHistory = redactPhi(clinicalHistory ?? "");
+  const safeFindings = redactPhi(findings ?? "");
+  const safeImpression = redactPhi(impression ?? "");
+
   const studyLabel = [modality, testName ?? bodyPart].filter(Boolean).join(" ") || "Radiology Study";
   const combinedFindings = [
-    clinicalHistory ? `Clinical History: ${clinicalHistory}` : null,
-    findings ? `Findings:\n${findings}` : null,
+    safeHistory ? `Clinical History: ${safeHistory}` : null,
+    safeFindings ? `Findings:\n${safeFindings}` : null,
   ].filter(Boolean).join("\n\n");
 
   // ── Gemini: generate structured teaching content ───────────────────────────
