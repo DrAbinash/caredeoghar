@@ -3,6 +3,12 @@
  * Proxies radiology AI requests to a locally configured Ollama instance.
  * Settings stored in clinic_settings.ollamaBaseUrl + ollamaModel.
  * All output is labelled "AI Draft – Requires Radiologist Review".
+ *
+ * Security: SSRF-guarded. Only http:// or https:// URLs whose host is NOT a
+ * private/loopback/link-local address are permitted when the URL comes from
+ * the clinic_settings table. The /test endpoint additionally validates the
+ * caller-supplied baseUrl through the same guard before making any outbound
+ * request.
  */
 import { Router } from "express";
 import { db } from "@workspace/db";
@@ -12,11 +18,48 @@ import { type StaffAuthRequest } from "../middleware/requireStaffAuth";
 
 export const radiologyOllamaRouter = Router();
 
-async function getOllamaConfig(): Promise<{ baseUrl: string; model: string } | null> {
+// ── SSRF guard ──────────────────────────────────────────────────────────────
+// Blocks private IPv4 ranges, loopback, link-local, and IPv6 equivalents.
+// We parse the URL here (no DNS lookup) and refuse any hostname that is
+// obviously internal. This is defence-in-depth on top of network controls.
+const PRIVATE_RANGES: RegExp[] = [
+  /^localhost$/i,
+  /^127\.\d+\.\d+\.\d+$/,
+  /^10\.\d+\.\d+\.\d+$/,
+  /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/,
+  /^192\.168\.\d+\.\d+$/,
+  /^169\.254\.\d+\.\d+$/,  // link-local
+  /^\[?::1\]?$/,            // IPv6 loopback
+  /^\[?fe80::/i,            // IPv6 link-local
+  /^0\.0\.0\.0$/,
+];
+
+function validateOllamaUrl(raw: string): { ok: true; url: URL } | { ok: false; reason: string } {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return { ok: false, reason: "Invalid URL format" };
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") {
+    return { ok: false, reason: "Only http:// and https:// are allowed" };
+  }
+  const host = u.hostname;
+  for (const re of PRIVATE_RANGES) {
+    if (re.test(host)) {
+      return { ok: false, reason: `Private/loopback addresses are not permitted as Ollama targets (${host})` };
+    }
+  }
+  return { ok: true, url: u };
+}
+
+// ── Config helper ───────────────────────────────────────────────────────────
+async function getOllamaConfig(): Promise<{ baseUrl: string; model: string; localOnly: boolean } | null> {
   const rows = await db
     .select({
       ollamaBaseUrl: clinicSettingsTable.ollamaBaseUrl,
       ollamaModel: clinicSettingsTable.ollamaModel,
+      ollamaLocalOnly: clinicSettingsTable.ollamaLocalOnly,
     })
     .from(clinicSettingsTable)
     .orderBy(desc(clinicSettingsTable.id))
@@ -24,12 +67,18 @@ async function getOllamaConfig(): Promise<{ baseUrl: string; model: string } | n
 
   const row = rows[0];
   if (!row?.ollamaBaseUrl) return null;
+
+  const validated = validateOllamaUrl(row.ollamaBaseUrl);
+  if (!validated.ok) return null; // silently skip misconfigured URLs
+
   return {
-    baseUrl: row.ollamaBaseUrl.replace(/\/$/, ""),
+    baseUrl: validated.url.origin,
     model: row.ollamaModel ?? "llama3",
+    localOnly: row.ollamaLocalOnly ?? false,
   };
 }
 
+// ── Ollama generate helper ──────────────────────────────────────────────────
 async function ollamaGenerate(
   baseUrl: string,
   model: string,
@@ -50,40 +99,93 @@ async function ollamaGenerate(
   return (data.response ?? "").trim();
 }
 
-// ── Test connection ───────────────────────────────────────────────────────────
+// ── GET /status — returns config from clinic_settings (no outbound call) ────
+radiologyOllamaRouter.get("/status", async (_req, res): Promise<void> => {
+  const rows = await db
+    .select({
+      ollamaBaseUrl: clinicSettingsTable.ollamaBaseUrl,
+      ollamaModel: clinicSettingsTable.ollamaModel,
+      ollamaLocalOnly: clinicSettingsTable.ollamaLocalOnly,
+    })
+    .from(clinicSettingsTable)
+    .orderBy(desc(clinicSettingsTable.id))
+    .limit(1);
+
+  const row = rows[0];
+  const configured = Boolean(row?.ollamaBaseUrl);
+  const validation = configured ? validateOllamaUrl(row.ollamaBaseUrl!) : null;
+
+  res.json({
+    configured,
+    baseUrl: row?.ollamaBaseUrl ?? null,
+    model: row?.ollamaModel ?? null,
+    localOnly: row?.ollamaLocalOnly ?? false,
+    urlValid: validation?.ok ?? false,
+    urlError: validation?.ok === false ? validation.reason : null,
+  });
+});
+
+// ── POST /test — caller supplies baseUrl+model, no DB lookup ────────────────
+// Validates the URL through the SSRF guard before making any network request.
 radiologyOllamaRouter.post("/test", async (req, res): Promise<void> => {
   const b = (req.body ?? {}) as Record<string, unknown>;
-  const baseUrl = (b.baseUrl ? String(b.baseUrl) : "").replace(/\/$/, "");
-  const model = b.model ? String(b.model) : "llama3";
+  const rawUrl = b.baseUrl ? String(b.baseUrl).trim() : "";
+  const model = b.model ? String(b.model).trim() : "llama3";
 
-  if (!baseUrl) { res.status(400).json({ error: "baseUrl required" }); return; }
+  if (!rawUrl) {
+    res.status(400).json({ ok: false, error: "baseUrl required" });
+    return;
+  }
+
+  const guard = validateOllamaUrl(rawUrl);
+  if (!guard.ok) {
+    res.status(400).json({ ok: false, error: guard.reason });
+    return;
+  }
+
+  const baseUrl = guard.url.origin;
 
   try {
+    const t0 = Date.now();
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 8000);
     const resp = await fetch(`${baseUrl}/api/tags`, { signal: ac.signal });
     clearTimeout(timer);
-    if (!resp.ok) { res.status(502).json({ ok: false, error: `Ollama returned ${resp.status}` }); return; }
+    const latencyMs = Date.now() - t0;
+
+    if (!resp.ok) {
+      res.status(502).json({ ok: false, error: `Ollama returned ${resp.status}` });
+      return;
+    }
+
     const data = await resp.json() as { models?: { name: string }[] };
     const models = (data.models ?? []).map((m) => m.name);
-    res.json({ ok: true, models });
+    const modelFound = models.includes(model);
+
+    res.json({ ok: true, model, models, modelFound, latencyMs });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     res.status(502).json({ ok: false, error: msg });
   }
 });
 
-// ── Generate findings via Ollama ──────────────────────────────────────────────
+// ── POST /findings — generate structured findings via Ollama ─────────────────
 radiologyOllamaRouter.post("/findings", async (req, res): Promise<void> => {
   const config = await getOllamaConfig();
-  if (!config) { res.status(503).json({ error: "Ollama is not configured. Set the base URL in Settings → Radiology." }); return; }
+  if (!config) {
+    res.status(503).json({ error: "Ollama is not configured. Set the base URL in Settings → Radiology." });
+    return;
+  }
 
   const b = (req.body ?? {}) as Record<string, unknown>;
   const modality = String(b.modality ?? "").trim();
   const testName = String(b.testName ?? "").trim();
   const clinicalHistory = String(b.clinicalHistory ?? "").trim();
 
-  if (!modality && !testName) { res.status(400).json({ error: "modality or testName required" }); return; }
+  if (!modality && !testName) {
+    res.status(400).json({ error: "modality or testName required" });
+    return;
+  }
 
   const prompt = `You are a radiology reporting assistant. Generate structured findings for the following study.
 Study: ${testName || modality}
@@ -104,7 +206,7 @@ Note at the end: "AI Draft – Requires Radiologist Review"`;
   }
 });
 
-// ── Generate impression via Ollama ────────────────────────────────────────────
+// ── POST /impression — generate impression from findings via Ollama ───────────
 radiologyOllamaRouter.post("/impression", async (req, res): Promise<void> => {
   const config = await getOllamaConfig();
   if (!config) { res.status(503).json({ error: "Ollama not configured" }); return; }
@@ -132,7 +234,7 @@ Note: "AI Draft – Requires Radiologist Review"`;
   }
 });
 
-// ── Generate differential via Ollama ─────────────────────────────────────────
+// ── POST /differential — generate differential diagnosis via Ollama ──────────
 radiologyOllamaRouter.post("/differential", async (req, res): Promise<void> => {
   const config = await getOllamaConfig();
   if (!config) { res.status(503).json({ error: "Ollama not configured" }); return; }

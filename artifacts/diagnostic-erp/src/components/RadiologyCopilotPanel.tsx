@@ -32,6 +32,9 @@ import {
 import SpineIntelligencePanel from "./SpineIntelligencePanel";
 import BrainIntelligencePanel from "./BrainIntelligencePanel";
 import TumorFollowupPanel from "./TumorFollowupPanel";
+import MultiAIReviewPanel from "./MultiAIReviewPanel";
+import ImageAnnotationToolbar from "./ImageAnnotationToolbar";
+import AIConfidenceBadge from "./AIConfidenceBadge";
 
 interface PriorStudy {
   id: number;
@@ -236,6 +239,9 @@ export default function RadiologyCopilotPanel({
   const brainEnabled = useMemo(() => isFeatureEnabled("brainIntelligence"), []);
   const tumorEnabled = useMemo(() => isFeatureEnabled("tumorFollowup"), []);
   const organIntelligenceEnabled = spineEnabled || brainEnabled || tumorEnabled;
+  const multiAIEnabled = useMemo(() => isFeatureEnabled("multiAIImageReview"), []);
+  const annotationsEnabled = useMemo(() => isFeatureEnabled("imageAnnotations"), []);
+  const aiConfidenceEnabled = useMemo(() => isFeatureEnabled("aiConfidenceVisualization"), []);
 
   // ── Auto-run: debounced comparison with most-recent prior study ──────────
   // Fires 2.5s after currentFindings settles, but only once per (findingsText, priorStudies[0].id) pair
@@ -532,11 +538,23 @@ export default function RadiologyCopilotPanel({
                 <div className="text-[10px] text-amber-600 font-medium flex items-center gap-1">
                   <AlertTriangle size={10} /> AI Draft — Requires Radiologist Review
                 </div>
-                <Textarea
-                  value={suggestedImpression}
-                  onChange={(e) => setSuggestedImpression(e.target.value)}
-                  className="text-xs min-h-[60px]"
-                />
+                {aiConfidenceEnabled ? (
+                  <AIConfidenceBadge
+                    metadata={{ confidence: 75, provider: "gemini", evidenceBullets: ["Based on submitted findings text"], uncertaintyReasons: ["Clinical context not fully known"] }}
+                  >
+                    <Textarea
+                      value={suggestedImpression}
+                      onChange={(e) => setSuggestedImpression(e.target.value)}
+                      className="text-xs min-h-[60px]"
+                    />
+                  </AIConfidenceBadge>
+                ) : (
+                  <Textarea
+                    value={suggestedImpression}
+                    onChange={(e) => setSuggestedImpression(e.target.value)}
+                    className="text-xs min-h-[60px]"
+                  />
+                )}
                 {onImpressionSuggestion && (
                   <Button
                     size="sm"
@@ -546,6 +564,22 @@ export default function RadiologyCopilotPanel({
                     <ArrowRight size={12} className="mr-1" /> Use This Impression
                   </Button>
                 )}
+              </div>
+            )}
+            {/* Phase 10C: Multi-AI review — gated by multiAIImageReview flag */}
+            {multiAIEnabled && (
+              <div className="border-t border-border pt-3 mt-1">
+                <p className="text-[10px] font-medium text-muted-foreground uppercase mb-2">Multi-AI Review</p>
+                <MultiAIReviewPanel
+                  modality={dicomMeta?.modality ?? undefined}
+                  bodyPart={dicomMeta?.bodyPart ?? undefined}
+                  findingsText={findingsText}
+                  impressionText={impressionText}
+                  onUseResult={(r) => {
+                    if (r.findings) setSuggestedImpression(r.findings);
+                    if (r.findings && onImpressionSuggestion) onImpressionSuggestion(r.findings);
+                  }}
+                />
               </div>
             )}
           </div>
@@ -838,6 +872,18 @@ export default function RadiologyCopilotPanel({
                 <div className="text-[10px] text-muted-foreground text-center pt-1">
                   AI Draft — Requires Radiologist Review
                 </div>
+              </div>
+            )}
+            {/* Phase 10C: Image Annotation Toolbar — gated by imageAnnotations flag */}
+            {annotationsEnabled && (
+              <div className="border-t border-border pt-3 mt-2">
+                <p className="text-[10px] font-medium text-muted-foreground uppercase mb-2">Annotations</p>
+                <ImageAnnotationToolbar
+                  studyInstanceUid={dicomMeta?.studyInstanceUid}
+                  orderId={currentOrderId}
+                  patientId={patientId}
+                  studyId={studyId}
+                />
               </div>
             )}
           </div>

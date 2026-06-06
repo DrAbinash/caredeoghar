@@ -4816,10 +4816,21 @@ function OllamaSettingsCard() {
   };
 
   const handleTest = async () => {
+    if (!baseUrl.trim()) {
+      toast({ title: "Enter a base URL first", variant: "destructive" });
+      return;
+    }
     try {
-      const resp = await api.post<{ ok: boolean; model: string; response?: string; error?: string }>("/api/radiology-ollama/test", {});
+      const resp = await api.post<{ ok: boolean; model: string; models?: string[]; modelFound?: boolean; latencyMs?: number; error?: string }>(
+        "/api/radiology-ollama/test",
+        { baseUrl: baseUrl.trim(), model: model.trim() || "llama3" }
+      );
       if (resp.ok) {
-        toast({ title: "Ollama connection OK", description: `Model: ${resp.model}` });
+        const detail = [
+          resp.modelFound ? `Model "${resp.model}" found` : `Model "${resp.model}" not in list (${(resp.models ?? []).slice(0, 3).join(", ")})`,
+          resp.latencyMs != null ? `${resp.latencyMs}ms` : null,
+        ].filter(Boolean).join(" · ");
+        toast({ title: "Ollama connection OK", description: detail });
       } else {
         toast({ title: "Ollama connection failed", description: resp.error ?? "Unknown error", variant: "destructive" });
       }
