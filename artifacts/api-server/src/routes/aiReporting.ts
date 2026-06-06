@@ -34,6 +34,8 @@ import {
   aiVoiceTranscriptionsTable,
   aiPatientCommunicationsTable,
   aiNormalReportTemplatesTable,
+  patientReportsTable,
+  radiologyStudiesTable,
 } from "@workspace/db";
 import { eq, and, desc, gte, lte, sql, inArray } from "drizzle-orm";
 import { type StaffAuthRequest, FULL_ACCESS_ROLES } from "../middleware/requireStaffAuth";
@@ -48,6 +50,8 @@ import {
   getProviderEndpointUrl,
   generateAiResponse,
   resolveTaskRoute,
+  generateAiForTask,
+  getDefaultProviderName,
 } from "@workspace/ai-providers";
 import { radiologyWorklistTable } from "@workspace/db/schema";
 
@@ -597,6 +601,489 @@ router.post("/query", async (req, res): Promise<void> => {
   }
 
   res.json({ aiResponse, provider: providerName, model: model || null, numImages: images.length, anonymized: shouldAnonymize });
+});
+
+/**
+ * POST /api/ai-reporting/draft
+ * Phase 6: Copilot draft generation — reuses existing provider infrastructure
+ * with per-task routing and fallback. Accepts current report body + impression
+ * as context and returns AI-generated draft sections.
+ */
+router.post("/draft", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!globalSettings.enabled) {
+    res.status(403).json({ error: "AI Reporting is disabled. Enable it in Settings." }); return;
+  }
+  if (!canUse(sReq, globalSettings.allowedRoles)) {
+    res.status(403).json({ error: "Insufficient permissions." }); return;
+  }
+
+  const user = sReq.staffSession!;
+  const {
+    worklistId,
+    modality,
+    studyDescription,
+    reportBody,
+    impression,
+    clinicalHistory,
+    provider: providerReq,
+  } = req.body as {
+    worklistId?: number;
+    modality?: string;
+    studyDescription?: string;
+    reportBody?: string;
+    impression?: string;
+    clinicalHistory?: string;
+    provider?: string;
+  };
+
+  // Look up worklist for study metadata
+  let studyInstanceUID: string | undefined;
+  let accessionNumber: string | undefined;
+  let patientId: number | undefined;
+  if (worklistId) {
+    const wl = await db
+      .select({
+        studyInstanceUID: radiologyWorklistTable.studyInstanceUID,
+        accessionNumber: radiologyWorklistTable.accessionNumber,
+        patientId: radiologyWorklistTable.patientId,
+      })
+      .from(radiologyWorklistTable)
+      .where(eq(radiologyWorklistTable.id, worklistId))
+      .limit(1);
+    if (wl[0]) {
+      studyInstanceUID = wl[0].studyInstanceUID ?? undefined;
+      accessionNumber = wl[0].accessionNumber ?? undefined;
+      patientId = wl[0].patientId ?? undefined;
+    }
+  }
+
+  // Resolve provider via task routing
+  const taskRoute = providerReq ? null : await resolveTaskRoute("radiology_draft");
+  const providerName = providerReq ?? taskRoute?.provider ?? globalSettings.defaultProvider;
+  if (!BUILTIN_PROVIDER_NAMES.includes(providerName)) {
+    res.status(400).json({ error: "Invalid provider." }); return;
+  }
+  const provConfig = await loadProviderConfig(providerName);
+  if (!provConfig || !provConfig.isEnabled) {
+    res.status(400).json({ error: `${providerName} provider is disabled or not configured.` }); return;
+  }
+  const model = taskRoute?.model ?? provConfig.defaultModel ?? "";
+
+  // Build prompt: prefer DB-backed template by modality, then fallback
+  let finalPrompt = "";
+  if (modality) {
+    const dbTpl = await db
+      .select({ promptContent: aiPromptTemplatesTable.promptContent, name: aiPromptTemplatesTable.name })
+      .from(aiPromptTemplatesTable)
+      .where(
+        and(
+          eq(aiPromptTemplatesTable.modality, modality),
+          eq(aiPromptTemplatesTable.isActive, true),
+        ),
+      )
+      .orderBy(aiPromptTemplatesTable.id)
+      .limit(1);
+    if (dbTpl[0]?.promptContent) {
+      finalPrompt = dbTpl[0].promptContent;
+    }
+  }
+  if (!finalPrompt && studyDescription) {
+    const dbTpl = await db
+      .select({ promptContent: aiPromptTemplatesTable.promptContent })
+      .from(aiPromptTemplatesTable)
+      .where(
+        and(
+          eq(aiPromptTemplatesTable.name, studyDescription),
+          eq(aiPromptTemplatesTable.isActive, true),
+        ),
+      )
+      .limit(1);
+    if (dbTpl[0]?.promptContent) finalPrompt = dbTpl[0].promptContent;
+  }
+  if (!finalPrompt && modality && AI_PROMPT_TEMPLATES[modality + " " + (studyDescription ?? "")]) {
+    finalPrompt = AI_PROMPT_TEMPLATES[modality + " " + (studyDescription ?? "")];
+  }
+  if (!finalPrompt) {
+    finalPrompt = globalSettings.defaultPrompt || "Provide a detailed radiology report based on the findings provided.";
+  }
+
+  // Append current report context so the AI can refine/continue
+  finalPrompt += "\n\n=== CURRENT REPORT CONTEXT ===";
+  if (reportBody?.trim()) {
+    finalPrompt += `\n\nCurrent Findings:\n${reportBody.trim()}`;
+  }
+  if (impression?.trim()) {
+    finalPrompt += `\n\nCurrent Impression:\n${impression.trim()}`;
+  }
+  if (clinicalHistory?.trim()) {
+    finalPrompt += `\n\nClinical History: ${clinicalHistory.trim()}`;
+  }
+  if (studyDescription?.trim()) {
+    finalPrompt += `\n\nStudy: ${studyDescription.trim()}`;
+  }
+  finalPrompt += "\n\n=== INSTRUCTION ===\n" +
+    "Generate a refined radiology report. Return ONLY two sections:\n" +
+    "FINDINGS: (structured findings)\n" +
+    "IMPRESSION: (concise impression)\n" +
+    "Do not include any other text or explanations.";
+
+  // Fetch images (optional)
+  let images: string[] = [];
+  if (studyInstanceUID) {
+    images = await fetchStudyImages({
+      studyInstanceUID,
+      maxImages: 6,
+      maxWidthPx: 512,
+    });
+  }
+
+  // Call AI with fallback
+  const aiResult = await generateAiForTask("radiology_draft", finalPrompt, images, { model });
+  const success = aiResult.success;
+  const aiResponse = aiResult.text;
+  const errorMsg = aiResult.error;
+
+  // Parse findings + impression from AI response
+  let draftFindings = "";
+  let draftImpression = "";
+  if (success && aiResponse) {
+    const findingsMatch = aiResponse.match(/FINDINGS:?\s*([\s\S]*?)(?=IMPRESSION:|$)/i);
+    const impressionMatch = aiResponse.match(/IMPRESSION:?\s*([\s\S]*?)$/i);
+    draftFindings = findingsMatch?.[1]?.trim() ?? aiResponse.trim();
+    draftImpression = impressionMatch?.[1]?.trim() ?? "";
+  }
+
+  // Save draft to DB
+  let draftId: number | null = null;
+  if (success) {
+    const inserted = await db.insert(aiReportingDraftsTable)
+      .values({
+        studyInstanceUID: studyInstanceUID ?? null,
+        accessionNumber: accessionNumber ?? null,
+        patientId: patientId ?? null,
+        userId: user.subjectId,
+        userName: user.subjectName,
+        provider: providerName,
+        model: model || null,
+        promptText: finalPrompt.substring(0, 2000),
+        templateName: null,
+        aiResponse: aiResponse.substring(0, 4000),
+        draftText: draftFindings.substring(0, 4000),
+        status: "draft",
+      })
+      .returning({ id: aiReportingDraftsTable.id });
+    draftId = inserted[0]?.id ?? null;
+  }
+
+  // Audit log (non-critical)
+  await db.insert(aiReportingAuditLogsTable).values({
+    userId: user.subjectId,
+    userName: user.subjectName,
+    patientId: patientId ?? null,
+    studyInstanceUID: studyInstanceUID ?? null,
+    accessionNumber: accessionNumber ?? null,
+    provider: providerName,
+    model: model || null,
+    promptText: finalPrompt.substring(0, 2000),
+    numImages: images.length,
+    anonymized: true,
+    includedDemographics: false,
+    wasInsertedToReport: false,
+    draftId,
+    success,
+    errorMessage: errorMsg ?? null,
+  }).catch(() => { /* non-critical */ });
+
+  if (!success) {
+    res.status(502).json({ error: errorMsg ?? "AI provider error" }); return;
+  }
+
+  res.json({
+    draft: draftFindings,
+    impression: draftImpression,
+    provider: providerName,
+    model: model || null,
+    draftId,
+    aiSafetyLabel: "AI Draft – Requires Radiologist Review",
+  });
+});
+
+/**
+ * POST /api/ai-reporting/polish
+ * Phase 6: Language polish — refine grammar/formatting without changing medical content.
+ */
+router.post("/polish", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!globalSettings.enabled) {
+    res.status(403).json({ error: "AI Reporting is disabled." }); return;
+  }
+  if (!canUse(sReq, globalSettings.allowedRoles)) {
+    res.status(403).json({ error: "Insufficient permissions." }); return;
+  }
+
+  const user = sReq.staffSession!;
+  const { text } = req.body as { text?: string };
+  if (!text?.trim()) {
+    res.status(400).json({ error: "No text provided." }); return;
+  }
+
+  const providerName = await getDefaultProviderName();
+  const prompt =
+    "You are a medical language editor. Refine the following radiology report text for grammar, clarity, and professional formatting. " +
+    "Do NOT change any medical facts, measurements, or findings. Only improve language.\n\n" +
+    text.trim() +
+    "\n\nReturn ONLY the polished text with no additional commentary.";
+
+  const aiResult = await generateAiForTask("report_enhancement", prompt, [], {});
+  const success = aiResult.success;
+  const polished = aiResult.text;
+
+  // Audit log
+  await db.insert(aiReportingAuditLogsTable).values({
+    userId: user.subjectId,
+    userName: user.subjectName,
+    provider: providerName,
+    model: null,
+    promptText: prompt.substring(0, 2000),
+    numImages: 0,
+    anonymized: true,
+    success,
+    errorMessage: success ? null : (aiResult.error ?? null),
+  }).catch(() => { /* non-critical */ });
+
+  if (!success) {
+    res.status(502).json({ error: aiResult.error ?? "AI provider error" }); return;
+  }
+
+  res.json({ polished: polished.trim(), aiSafetyLabel: "AI Draft – Requires Radiologist Review" });
+});
+
+/**
+ * POST /api/ai-reporting/image-review
+ * Phase 6 C5: Vision-capable AI secondary review. Reuses the existing query
+ * infrastructure with vision-mode prompts.
+ */
+router.post("/image-review", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!globalSettings.enabled) {
+    res.status(403).json({ error: "AI Reporting is disabled." }); return;
+  }
+  if (!canUse(sReq, globalSettings.allowedRoles)) {
+    res.status(403).json({ error: "Insufficient permissions." }); return;
+  }
+
+  const user = sReq.staffSession!;
+  const { worklistId, studyInstanceUID, reportBody } = req.body as {
+    worklistId?: number;
+    studyInstanceUID?: string;
+    reportBody?: string;
+  };
+
+  if (!studyInstanceUID) {
+    res.status(400).json({ error: "No studyInstanceUID provided." }); return;
+  }
+
+  // Resolve provider — prefer vision-capable models
+  const taskRoute = await resolveTaskRoute("radiology_draft");
+  const providerName = taskRoute?.provider ?? globalSettings.defaultProvider;
+  const provConfig = await loadProviderConfig(providerName);
+  if (!provConfig || !provConfig.isEnabled) {
+    res.status(400).json({ error: `${providerName} provider is disabled or not configured.` }); return;
+  }
+  const model = taskRoute?.model ?? provConfig.defaultModel ?? "";
+
+  // Build vision prompt
+  const prompt =
+    "You are an expert radiologist assistant. Review the provided medical images carefully. " +
+    "List any significant findings you observe. Be concise and structured. " +
+    "If the current report context is provided, note any discrepancies or missed findings.\n\n" +
+    (reportBody?.trim() ? `Current report context:\n${reportBody.trim()}\n\n` : "") +
+    "Return your findings as bullet points.";
+
+  // Fetch images
+  const images = await fetchStudyImages({
+    studyInstanceUID,
+    maxImages: 6,
+    maxWidthPx: 512,
+  });
+
+  if (images.length === 0) {
+    res.status(400).json({ error: "No images available for this study." }); return;
+  }
+
+  // Call AI with images
+  const aiResult = await generateAiForTask("radiology_draft", prompt, images, { model });
+  const success = aiResult.success;
+  const aiResponse = aiResult.text;
+
+  // Audit log
+  await db.insert(aiReportingAuditLogsTable).values({
+    userId: user.subjectId,
+    userName: user.subjectName,
+    studyInstanceUID: studyInstanceUID ?? null,
+    provider: providerName,
+    model: model || null,
+    promptText: prompt.substring(0, 2000),
+    numImages: images.length,
+    anonymized: true,
+    success,
+    errorMessage: success ? null : (aiResult.error ?? null),
+  }).catch(() => { /* non-critical */ });
+
+  if (!success) {
+    res.status(502).json({ error: aiResult.error ?? "AI provider error" }); return;
+  }
+
+  res.json({
+    aiResponse: aiResponse.trim(),
+    provider: providerName,
+    model: model || null,
+    numImages: images.length,
+    aiSafetyLabel: "AI Draft – Requires Radiologist Review",
+  });
+});
+
+/**
+ * GET /api/ai-reporting/previous-reports
+ * Phase 6 C6: Fetch previous reports for the same patient.
+ */
+router.get("/previous-reports", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!canUse(sReq, globalSettings.allowedRoles)) {
+    res.status(403).json({ error: "Insufficient permissions." }); return;
+  }
+
+  const worklistId = Number(req.query["worklistId"] ?? 0);
+  if (!worklistId) {
+    res.status(400).json({ error: "worklistId required." }); return;
+  }
+
+  // Look up patient from worklist
+  const wl = await db
+    .select({ patientId: radiologyWorklistTable.patientId })
+    .from(radiologyWorklistTable)
+    .where(eq(radiologyWorklistTable.id, worklistId))
+    .limit(1);
+  const patientId = wl[0]?.patientId;
+  if (!patientId) {
+    res.json({ reports: [] }); return;
+  }
+
+  // Find previous radiology reports for this patient
+  const reports = await db
+    .select({
+      id: patientReportsTable.id,
+      title: patientReportsTable.title,
+      body: patientReportsTable.body,
+      impression: patientReportsTable.impression,
+      createdAt: patientReportsTable.createdAt,
+    })
+    .from(patientReportsTable)
+    .where(
+      and(
+        eq(patientReportsTable.patientId, patientId),
+        eq(patientReportsTable.type, "radiology"),
+      ),
+    )
+    .orderBy(desc(patientReportsTable.createdAt))
+    .limit(10);
+
+  const mapped = reports.map((r) => ({
+    id: r.id,
+    date: r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "Unknown",
+    modality: r.title?.split(" ")[0] ?? "Unknown",
+    body: r.body ?? "",
+    impression: r.impression ?? "",
+  }));
+
+  res.json({ reports: mapped });
+});
+
+/**
+ * POST /api/ai-reporting/compare
+ * Phase 6 C6: AI-powered comparison between current and previous report.
+ */
+router.post("/compare", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const globalSettings = await getGlobalSettings();
+  if (!globalSettings.enabled) {
+    res.status(403).json({ error: "AI Reporting is disabled." }); return;
+  }
+  if (!canUse(sReq, globalSettings.allowedRoles)) {
+    res.status(403).json({ error: "Insufficient permissions." }); return;
+  }
+
+  const user = sReq.staffSession!;
+  const { worklistId, previousReportId } = req.body as { worklistId?: number; previousReportId?: number };
+  if (!worklistId || !previousReportId) {
+    res.status(400).json({ error: "worklistId and previousReportId required." }); return;
+  }
+
+  // Fetch previous report
+  const prev = await db
+    .select({ body: patientReportsTable.body, impression: patientReportsTable.impression, title: patientReportsTable.title })
+    .from(patientReportsTable)
+    .where(eq(patientReportsTable.id, previousReportId))
+    .limit(1);
+  if (!prev[0]) {
+    res.status(404).json({ error: "Previous report not found." }); return;
+  }
+
+  // Fetch current worklist report context (if any)
+  const current = await db
+    .select({ body: patientReportsTable.body, impression: patientReportsTable.impression })
+    .from(patientReportsTable)
+    .where(eq(patientReportsTable.studyId, worklistId))
+    .orderBy(desc(patientReportsTable.createdAt))
+    .limit(1);
+
+  const providerName = await getDefaultProviderName();
+  const prompt =
+    "Compare the following two radiology reports and highlight changes:\n\n" +
+    "=== PREVIOUS REPORT ===\n" +
+    `Title: ${prev[0].title ?? "Unknown"}\n` +
+    `Findings: ${prev[0].body ?? ""}\n` +
+    `Impression: ${prev[0].impression ?? ""}\n\n` +
+    "=== CURRENT REPORT ===\n" +
+    `Findings: ${current[0]?.body ?? "(draft in progress)"}\n` +
+    `Impression: ${current[0]?.impression ?? ""}\n\n` +
+    "Instructions:\n" +
+    "1. List findings that are NEW in the current report.\n" +
+    "2. List findings that have RESOLVED.\n" +
+    "3. List findings that are UNCHANGED.\n" +
+    "4. Note any WORSENING or IMPROVEMENT.\n" +
+    "5. Highlight any discrepancies.\n\n" +
+    "Return the comparison as structured bullet points.";
+
+  const aiResult = await generateAiForTask("report_enhancement", prompt, [], {});
+  const success = aiResult.success;
+
+  // Audit log
+  await db.insert(aiReportingAuditLogsTable).values({
+    userId: user.subjectId,
+    userName: user.subjectName,
+    provider: providerName,
+    model: null,
+    promptText: prompt.substring(0, 2000),
+    numImages: 0,
+    anonymized: true,
+    success,
+    errorMessage: success ? null : (aiResult.error ?? null),
+  }).catch(() => { /* non-critical */ });
+
+  if (!success) {
+    res.status(502).json({ error: aiResult.error ?? "AI provider error" }); return;
+  }
+
+  res.json({
+    comparison: aiResult.text.trim(),
+    aiSafetyLabel: "AI Draft – Requires Radiologist Review",
+  });
 });
 
 /**

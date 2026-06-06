@@ -4826,6 +4826,16 @@ function RadiologySettingsTab() {
   const [impressionRules, setImpressionRules] = useState(() => isFeatureEnabled("radiologyImpressionRules"));
   const [favoriteFindingSets, setFavoriteFindingSets] = useState(() => isFeatureEnabled("radiologyFavoriteFindingSets"));
   const [smartAnalytics, setSmartAnalytics] = useState(() => isFeatureEnabled("radiologySmartAnalytics"));
+  // Phase 6: Multi-AI Copilot
+  const [aiCopilot, setAiCopilot] = useState(() => isFeatureEnabled("radiologyAICopilot"));
+  const [multiAI, setMultiAI] = useState(() => isFeatureEnabled("radiologyMultiAI"));
+  const [imageReview, setImageReview] = useState(() => isFeatureEnabled("radiologyImageReview"));
+  const [differentialDiagnosis, setDifferentialDiagnosis] = useState(() => isFeatureEnabled("radiologyDifferentialDiagnosis"));
+  const [qualityCheck, setQualityCheck] = useState(() => isFeatureEnabled("radiologyQualityCheck"));
+  const [comparePrevious, setComparePrevious] = useState(() => isFeatureEnabled("radiologyComparePrevious"));
+  const [promptManager, setPromptManager] = useState(() => isFeatureEnabled("radiologyPromptManager"));
+  const [followUp, setFollowUp] = useState(() => isFeatureEnabled("radiologyFollowUp"));
+  const [languagePolish, setLanguagePolish] = useState(() => isFeatureEnabled("radiologyLanguagePolish"));
 
   const toggles = [
     { id: "radiologyQuickAdd", label: "Quick Add Buttons", desc: "Alt+1-6 shortcut buttons for instant insertion of common findings", value: quickAdd, set: setQuickAdd },
@@ -4870,6 +4880,18 @@ function RadiologySettingsTab() {
     { id: "radiologyKnowledgeBase_v2", label: "Knowledge Base v2", desc: "Searchable DB-backed articles with classification systems", value: knowledgeBase_v2, set: setKnowledgeBase_v2 },
     { id: "radiologySignOffProfiles", label: "Sign-Off Profiles", desc: "Per-radiologist default settings and preferences", value: signOffProfiles, set: setSignOffProfiles },
     { id: "radiologyTemplateAnalytics", label: "Template Analytics", desc: "Usage tracking and per-radiologist template statistics", value: templateAnalytics, set: setTemplateAnalytics },
+  ];
+
+  const aiCopilotToggles = [
+    { id: "radiologyAICopilot", label: "AI Copilot Panel", desc: "Unified AI copilot panel with draft generation, differential, follow-up, quality check", value: aiCopilot, set: setAiCopilot },
+    { id: "radiologyMultiAI", label: "Multi-AI Provider Routing", desc: "Route different tasks to different AI providers (OpenAI, Gemini, Claude, Ollama, OpenRouter)", value: multiAI, set: setMultiAI },
+    { id: "radiologyDifferentialDiagnosis", label: "Differential Diagnosis", desc: "Structured differential diagnosis suggestions with confidence levels", value: differentialDiagnosis, set: setDifferentialDiagnosis },
+    { id: "radiologyFollowUp", label: "Follow-Up Recommendations", desc: "Condition-based follow-up and surveillance recommendations", value: followUp, set: setFollowUp },
+    { id: "radiologyImageReview", label: "Image Review Assistant", desc: "Vision-capable AI secondary review and missed finding suggestions", value: imageReview, set: setImageReview },
+    { id: "radiologyComparePrevious", label: "Previous Report Comparison", desc: "Side-by-side comparison with new findings and progression highlights", value: comparePrevious, set: setComparePrevious },
+    { id: "radiologyQualityCheck", label: "AI Quality Checker", desc: "Detect missing impression, measurements, contradictions, and errors", value: qualityCheck, set: setQualityCheck },
+    { id: "radiologyLanguagePolish", label: "Language Polish & Formatting", desc: "Refine report language, grammar, and formatting without changing medical content", value: languagePolish, set: setLanguagePolish },
+    { id: "radiologyPromptManager", label: "Prompt Manager", desc: "Admin-editable prompt library with version history and testing", value: promptManager, set: setPromptManager },
   ];
 
   const smartReportingToggles = [
@@ -4940,6 +4962,32 @@ function RadiologySettingsTab() {
         </div>
         <div className="space-y-2">
           {knowledgePlatformToggles.map((t) => (
+            <label key={t.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20 cursor-pointer">
+              <div className="pr-4">
+                <div className="text-sm font-medium">{t.label}</div>
+                <div className="text-[11px] text-muted-foreground">{t.desc}</div>
+              </div>
+              <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${t.value ? "bg-primary" : "bg-muted-foreground/40"}`}>
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${t.value ? "translate-x-5" : "translate-x-1"}`} />
+              </span>
+              <input type="checkbox" className="sr-only" checked={t.value} onChange={() => {
+                const next = !t.value;
+                t.set(next);
+                setFeatureFlag(t.id, next);
+              }} />
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Phase 6: AI Copilot Platform */}
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="font-bold text-lg flex items-center gap-2"><Bot size={16} /> AI Copilot Platform</h2>
+          <p className="text-sm text-muted-foreground mt-1">Multi-AI provider copilot for radiology. Supports OpenAI, Gemini, Claude, Ollama, OpenRouter. All AI outputs are editable and require radiologist review.</p>
+        </div>
+        <div className="space-y-2">
+          {aiCopilotToggles.map((t) => (
             <label key={t.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20 cursor-pointer">
               <div className="pr-4">
                 <div className="text-sm font-medium">{t.label}</div>

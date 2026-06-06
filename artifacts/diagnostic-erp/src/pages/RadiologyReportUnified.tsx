@@ -17,6 +17,7 @@ import ReportPrintSettingsDialog from "@/components/ReportPrintSettingsDialog";
 import RadiologyProductivityPanel from "@/components/RadiologyProductivityPanel";
 import RadiologyKnowledgePanel from "@/components/RadiologyKnowledgePanel";
 import RadiologySmartFindingsPanel from "@/components/RadiologySmartFindingsPanel";
+import RadiologyAICopilotPanel from "@/components/RadiologyAICopilotPanel";
 import {
   runQualityCheck, detectConflicts, suggestSmartImpression, classifyPriority,
   PRIORITY_META,
@@ -40,7 +41,7 @@ import {
   ClipboardPaste, RotateCcw, X, ThumbsUp, ThumbsDown,
   Zap, Star, History, Plus, HelpCircle, Keyboard, Command,
   Brain, ShieldCheck, BarChart3, Lightbulb, GitCompare, Construction,
-  Volume2, VolumeX, BookOpen, Ruler, Layers,
+  Volume2, VolumeX, BookOpen, Ruler, Layers, Bot,
   FolderOpen, UserCircle,
 } from "lucide-react";
 
@@ -299,6 +300,15 @@ export default function RadiologyReportUnified() {
   const ffFavoriteFindingSets = isFeatureEnabled("radiologyFavoriteFindingSets");
   const ffSmartAnalytics = isFeatureEnabled("radiologySmartAnalytics");
 
+  // Phase 6: AI Copilot flags
+  const ffAICopilot = isFeatureEnabled("radiologyAICopilot");
+  const ffDifferential = isFeatureEnabled("radiologyDifferentialDiagnosis");
+  const ffFollowUp = isFeatureEnabled("radiologyFollowUp");
+  const ffImageReview = isFeatureEnabled("radiologyImageReview");
+  const ffComparePrevious = isFeatureEnabled("radiologyComparePrevious");
+  const ffQualityCheck = isFeatureEnabled("radiologyQualityCheck");
+  const ffLanguagePolish = isFeatureEnabled("radiologyLanguagePolish");
+
   // ── Panel visibility (local toggles, independent of flags) ──
   const [showQuickAddPanel, setShowQuickAddPanel] = useState(false);
   const [showSmartFormatPanel, setShowSmartFormatPanel] = useState(false);
@@ -343,6 +353,10 @@ export default function RadiologyReportUnified() {
   // Phase 5: Smart Findings panel visibility
   const [showSmartFindingsPanel, setShowSmartFindingsPanel] = useState(false);
   const [smartFindingsPanel, setSmartFindingsPanel] = useState<string | null>(null);
+
+  // Phase 6: AI Copilot panel visibility
+  const [showAICopilotPanel, setShowAICopilotPanel] = useState(false);
+  const [aiCopilotTab, setAICopilotTab] = useState<string | null>(null);
 
   // ── Queries ──
   const { data: entry, isLoading: entryLoading } = useQuery<WorklistEntry>({
@@ -1041,6 +1055,19 @@ export default function RadiologyReportUnified() {
                 <Construction className="h-3.5 w-3.5" /> Smart Findings
               </Button>
             )}
+            {/* Phase 6: AI Copilot button */}
+            {ffAICopilot && (
+              <Button
+                size="sm"
+                variant={showAICopilotPanel ? "default" : "outline"}
+                className="h-7 text-xs gap-1"
+                onClick={() => setShowAICopilotPanel((p) => !p)}
+                disabled={isFinal}
+                title="AI Copilot"
+              >
+                <Bot className="h-3.5 w-3.5" /> AI Copilot
+              </Button>
+            )}
             {/* Help button */}
             <Button
               size="sm"
@@ -1552,6 +1579,46 @@ export default function RadiologyReportUnified() {
               }}
             />
           </div>
+        )}
+
+        {/* Phase 6: AI Copilot Panel */}
+        {ffAICopilot && showAICopilotPanel && (
+          <RadiologyAICopilotPanel
+            worklistId={id}
+            modality={entry?.modality ?? ""}
+            studyDescription={entry?.studyDescription}
+            studyInstanceUID={entry?.studyInstanceUID ?? null}
+            reportBody={reportBody}
+            impression={impression}
+            onInsert={(text) => {
+              const ta = textareaRef.current;
+              if (ta) {
+                const start = ta.selectionStart;
+                const end = ta.selectionEnd;
+                const before = reportBody.slice(0, start);
+                const after = reportBody.slice(end);
+                const newText = before + text + (after.startsWith("\n") || after === "" ? "" : "\n") + after;
+                setReportBody(newText);
+                setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + text.length; ta.focus(); }, 0);
+              } else {
+                setReportBody((prev) => prev + "\n" + text);
+              }
+            }}
+            onInsertImpression={(text) => {
+              setImpression((prev) => {
+                if (prev) return prev + "\n" + text;
+                return text;
+              });
+            }}
+            ffDraft={ffAICopilot}
+            ffDifferential={ffDifferential}
+            ffFollowUp={ffFollowUp}
+            ffImageReview={ffImageReview}
+            ffCompare={ffComparePrevious}
+            ffQuality={ffQualityCheck}
+            ffPolish={ffLanguagePolish}
+            ffPromptManager={isFeatureEnabled("radiologyPromptManager")}
+          />
         )}
 
         {/* Center: Report Editor */}

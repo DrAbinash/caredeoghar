@@ -205,6 +205,16 @@ const FEATURE_FLAG_DEFAULTS: Record<string, boolean> = {
   radiologyImpressionRules: false,
   radiologyFavoriteFindingSets: false,
   radiologySmartAnalytics: false,
+  // Phase 6: Enterprise Multi-AI Radiology Copilot (all default OFF)
+  radiologyAICopilot: false,
+  radiologyMultiAI: false,
+  radiologyImageReview: false,
+  radiologyDifferentialDiagnosis: false,
+  radiologyQualityCheck: false,
+  radiologyComparePrevious: false,
+  radiologyPromptManager: false,
+  radiologyFollowUp: false,
+  radiologyLanguagePolish: false,
   hideDeprecatedNav: false,
   billingDeskStepped: false,
 };
