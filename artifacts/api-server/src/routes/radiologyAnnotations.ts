@@ -80,9 +80,24 @@ radiologyAnnotationsRouter.post("/", async (req, res): Promise<void> => {
 
 // ── Update an annotation (label, coordinates, color) ─────────────────────────
 radiologyAnnotationsRouter.patch("/:id", async (req, res): Promise<void> => {
-  const id = Number(req.params.id);
-  const b = (req.body ?? {}) as Record<string, unknown>;
+  const sReq = req as StaffAuthRequest;
+  const userId = sReq.staffSession?.subjectId;
+  if (!userId) { res.status(401).json({ error: "authentication required" }); return; }
 
+  const id = Number(req.params.id);
+
+  // Fetch first to verify existence and ownership
+  const existing = await db
+    .select({ createdById: radiologyAnnotationsTable.createdById })
+    .from(radiologyAnnotationsTable)
+    .where(eq(radiologyAnnotationsTable.id, id))
+    .limit(1);
+  if (!existing[0]) { res.status(404).json({ error: "annotation not found" }); return; }
+  if (existing[0].createdById !== userId) {
+    res.status(403).json({ error: "not authorized to modify this annotation" }); return;
+  }
+
+  const b = (req.body ?? {}) as Record<string, unknown>;
   const updates: Partial<typeof radiologyAnnotationsTable.$inferInsert> = {};
   if (b.labelText !== undefined) updates.labelText = String(b.labelText);
   if (b.color !== undefined) updates.color = String(b.color);
@@ -95,7 +110,7 @@ radiologyAnnotationsRouter.patch("/:id", async (req, res): Promise<void> => {
   const [updated] = await db
     .update(radiologyAnnotationsTable)
     .set(updates)
-    .where(eq(radiologyAnnotationsTable.id, id))
+    .where(and(eq(radiologyAnnotationsTable.id, id), eq(radiologyAnnotationsTable.createdById, userId)))
     .returning();
 
   if (!updated) { res.status(404).json({ error: "annotation not found" }); return; }
@@ -104,8 +119,25 @@ radiologyAnnotationsRouter.patch("/:id", async (req, res): Promise<void> => {
 
 // ── Delete an annotation ─────────────────────────────────────────────────────
 radiologyAnnotationsRouter.delete("/:id", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const userId = sReq.staffSession?.subjectId;
+  if (!userId) { res.status(401).json({ error: "authentication required" }); return; }
+
+  const id = Number(req.params.id);
+
+  // Fetch first to verify existence and ownership
+  const existing = await db
+    .select({ createdById: radiologyAnnotationsTable.createdById })
+    .from(radiologyAnnotationsTable)
+    .where(eq(radiologyAnnotationsTable.id, id))
+    .limit(1);
+  if (!existing[0]) { res.status(404).json({ error: "annotation not found" }); return; }
+  if (existing[0].createdById !== userId) {
+    res.status(403).json({ error: "not authorized to delete this annotation" }); return;
+  }
+
   await db
     .delete(radiologyAnnotationsTable)
-    .where(eq(radiologyAnnotationsTable.id, Number(req.params.id)));
+    .where(and(eq(radiologyAnnotationsTable.id, id), eq(radiologyAnnotationsTable.createdById, userId)));
   res.json({ ok: true });
 });

@@ -345,6 +345,7 @@ Format as plain text with bullets. Note: "AI Draft – Requires Radiologist Revi
   const clinicRow = await db
     .select({ ollamaLocalOnly: clinicSettingsTable.ollamaLocalOnly })
     .from(clinicSettingsTable)
+    .orderBy(desc(clinicSettingsTable.id))
     .limit(1);
   const localOnly = clinicRow[0]?.ollamaLocalOnly ?? false;
   const activeProviders = localOnly
