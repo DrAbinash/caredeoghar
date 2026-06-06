@@ -39,8 +39,9 @@ interface Props {
 
 const PROVIDERS = [
   { id: "gemini", label: "Gemini", color: "bg-blue-100 text-blue-700" },
-  { id: "ollama", label: "Ollama (Local)", color: "bg-green-100 text-green-700" },
+  { id: "claude", label: "Claude (Haiku)", color: "bg-orange-100 text-orange-700" },
   { id: "openrouter", label: "OpenRouter (GPT-4o-mini)", color: "bg-purple-100 text-purple-700" },
+  { id: "ollama", label: "Ollama (Local)", color: "bg-green-100 text-green-700" },
 ];
 
 function ConfidenceBar({ pct }: { pct: number }) {

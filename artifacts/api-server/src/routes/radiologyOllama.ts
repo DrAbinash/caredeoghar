@@ -78,7 +78,9 @@ async function getOllamaConfig(): Promise<{ baseUrl: string; model: string; loca
   if (!row?.ollamaBaseUrl) return null;
 
   const localOnly = row.ollamaLocalOnly ?? false;
-  const validated = validateOllamaUrl(row.ollamaBaseUrl, localOnly);
+  // Admin explicitly configured this URL in Settings — always allow private/LAN hosts.
+  // The localOnly flag controls cloud-provider routing, not URL validation.
+  const validated = validateOllamaUrl(row.ollamaBaseUrl, true);
   if (!validated.ok) return null; // silently skip misconfigured URLs
 
   return {
@@ -456,6 +458,63 @@ Format as plain text with bullets. Note: "AI Draft – Requires Radiologist Revi
           confidence: 0,
           processingMs: Date.now() - pt,
           error: err instanceof Error ? err.message : "OpenRouter unavailable",
+        });
+      }
+    }
+  }
+
+  // ── Claude (via OpenRouter) ────────────────────────────────────────────────
+  // Uses anthropic/claude-3-haiku via the OpenRouter API. Requires OPENROUTER_API_KEY.
+  if (activeProviders.includes("claude")) {
+    const openRouterKey = process.env.OPENROUTER_API_KEY;
+    if (openRouterKey) {
+      const pt = Date.now();
+      try {
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), 45000);
+        const orResp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          signal: ac.signal,
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${openRouterKey}`,
+            "HTTP-Referer": "https://care-diagnostics.replit.app",
+            "X-Title": "Care Diagnostics ERP",
+          },
+          body: JSON.stringify({
+            model: "anthropic/claude-3-haiku",
+            messages: [
+              { role: "system", content: "You are a radiology AI assistant providing independent review. Always end with: AI Draft – Requires Radiologist Review" },
+              { role: "user", content: reviewPrompt },
+            ],
+            max_tokens: 1024,
+          }),
+        });
+        clearTimeout(timer);
+        const orJson = await orResp.json() as { choices?: Array<{ message?: { content?: string } }> };
+        const raw = orJson.choices?.[0]?.message?.content ?? "";
+        const processingMs = Date.now() - pt;
+        const differentials = (raw.match(/(?:\d+\.|-).*(?:diagnosis|diagnos|consider).*/gi) ?? [])
+          .slice(0, 5).map((s) => s.replace(/^\d+\.\s*|-\s*/, "").trim());
+        results.push({
+          provider: "Claude (Haiku)",
+          model: "anthropic/claude-3-haiku",
+          findings: raw,
+          differentials,
+          missedFindings: extractMissedFindings(raw),
+          confidence: scoreConfidence(raw, 4),
+          processingMs,
+        });
+      } catch (err: unknown) {
+        results.push({
+          provider: "Claude (Haiku)",
+          model: "anthropic/claude-3-haiku",
+          findings: "",
+          differentials: [],
+          missedFindings: [],
+          confidence: 0,
+          processingMs: Date.now() - pt,
+          error: err instanceof Error ? err.message : "Claude unavailable",
         });
       }
     }

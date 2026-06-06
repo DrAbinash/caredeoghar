@@ -812,7 +812,7 @@ teachingCasesRouter.post("/generate-from-report", async (req, res): Promise<void
 
 Study: ${studyLabel}
 ${combinedFindings ? `\n${combinedFindings}` : ""}
-${impression ? `\nImpression: ${impression}` : ""}
+${safeImpression ? `\nImpression: ${safeImpression}` : ""}
 
 Generate a JSON object with EXACTLY these fields:
 {
@@ -895,7 +895,7 @@ Return ONLY the JSON object. No preamble. AI Draft – Requires Radiologist Revi
     bodyPart: bodyPart ? String(bodyPart) : null,
     diagnosis: aiDiagnosis || null,
     findings: enhancedFindings || null,
-    impression: impression ? String(impression) : null,
+    impression: safeImpression || null,
     difficulty: "intermediate",
     status: "draft",
     isResearchCandidate: false,
