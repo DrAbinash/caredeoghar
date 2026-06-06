@@ -191,6 +191,50 @@ router.post("/modalities/:id/echo-test", async (req, res) => {
 
 // ─── ROUTING RULES ────────────────────────────────────────────────────────────
 
+const DEFAULT_VIEWER_SETTINGS: Record<string, string> = {
+  ohif_base_url: "http://172.16.1.139:3000",
+  dicom_web_base_url: "http://172.16.1.139:8042/dicom-web",
+  ohif_study_url_template: "{OHIF_BASE_URL}/viewer?StudyInstanceUIDs={studyInstanceUID}",
+  wado_uri_base_url: "http://172.16.1.139:8042/wado",
+  weasis_manifest_url_template: 'weasis://$dicom:get -w "http://172.16.1.139:8042/weasis?studyUID={studyInstanceUID}"',
+  pacs_ip: "172.16.1.139",
+  pacs_port: "5680",
+  pacs_ae_title: "ORTHANC2",
+  viewer_mode: "BOTH",
+  default_viewer: "OHIF",
+  ohif_enabled: "true",
+  weasis_enabled: "true",
+};
+
+router.post("/pacs-settings/load-defaults", async (_req, res) => {
+  const results: { key: string; action: "inserted" | "updated" }[] = [];
+  for (const [key, value] of Object.entries(DEFAULT_VIEWER_SETTINGS)) {
+    const [existing] = await db
+      .select({ id: pacsSettingsTable.id })
+      .from(pacsSettingsTable)
+      .where(and(eq(pacsSettingsTable.key, key), eq(pacsSettingsTable.category, "viewer")))
+      .limit(1);
+    if (existing) {
+      await db
+        .update(pacsSettingsTable)
+        .set({ value, updatedAt: new Date() })
+        .where(eq(pacsSettingsTable.id, existing.id));
+      results.push({ key, action: "updated" });
+    } else {
+      await db.insert(pacsSettingsTable).values({
+        key,
+        value,
+        category: "viewer",
+        isSecret: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      results.push({ key, action: "inserted" });
+    }
+  }
+  res.json({ ok: true, count: results.length, results });
+});
+
 router.get("/routing-rules", async (_req, res) => {
   const rows = await db
     .select()
@@ -395,7 +439,7 @@ router.get("/studies/:studyInstanceUID/weasis-launch", async (req, res) => {
     res.json({
       studyInstanceUID,
       viewerType: "WEASIS",
-      error: "No WADO URL configured. Please configure PACS → Viewer Settings.",
+      error: "Viewer settings are not configured. Go to PACS / DICOM Settings → Viewer Settings and click Load Clinic Viewer Defaults.",
       weasisUrl: null,
       fallbackDicomWebUrl: null,
       pacsType: "UNKNOWN",
@@ -459,7 +503,7 @@ router.get("/studies/:studyInstanceUID/ohif-launch", async (req, res) => {
     res.json({
       studyInstanceUID,
       viewerType: "OHIF",
-      error: "OHIF viewer URL not configured. Go to PACS Settings → Viewer Settings → OHIF Base URL.",
+      error: "Viewer settings are not configured. Go to PACS / DICOM Settings → Viewer Settings and click Load Clinic Viewer Defaults.",
       ohifUrl: null,
       dicomWebBaseUrl: dicomWebUrl || null,
       pacsType,
