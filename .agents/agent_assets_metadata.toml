@@ -292,3 +292,9 @@ id = "In_FMBsNswytxdOVJBsLr"
 uri = "file://RADIOLOGY_PRODUCTION_READINESS_AUDIT.md"
 type = "text"
 title = "Radiology Production Readiness Audit"
+
+[[outputs]]
+id = "DKi7qAEG3uw8bfM7-g9rF"
+uri = "file://RADIOLOGY_REALITY_AUDIT.md"
+type = "text"
+title = "Radiology Reality Audit — End-to-End Workflow Test"

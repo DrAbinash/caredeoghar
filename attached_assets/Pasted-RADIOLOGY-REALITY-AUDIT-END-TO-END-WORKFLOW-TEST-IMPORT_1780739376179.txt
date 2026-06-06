@@ -1,0 +1,223 @@
+RADIOLOGY REALITY AUDIT – END TO END WORKFLOW TEST
+
+IMPORTANT
+
+No code.
+
+No refactoring.
+
+No implementation.
+
+No database changes.
+
+I want a REALITY audit.
+
+==================================================
+
+QUESTION
+
+If Dr. Sugandha sits now and reports an MRI Brain study,
+
+which features actually work today?
+
+==================================================
+
+Perform an end-to-end walkthrough.
+
+START:
+
+Open study from radiology worklist.
+
+END:
+
+Finalized report visible in ERP.
+
+==================================================
+
+For every step provide:
+
+WORKING
+PARTIAL
+BROKEN
+
+and evidence.
+
+==================================================
+
+STEP 1
+
+Study arrival from modality.
+
+Verify:
+
+- DICOM puller
+- Worklist population
+- Study metadata
+- Patient linkage
+
+==================================================
+
+STEP 2
+
+Open study from worklist.
+
+Verify:
+
+- Study loads
+- Correct patient
+- Correct modality
+- Correct accession
+
+==================================================
+
+STEP 3
+
+Image viewing.
+
+Verify:
+
+- Embedded viewer
+- Weasis launch
+- OHIF launch
+- PACS launch
+
+Which actually works?
+
+==================================================
+
+STEP 4
+
+Template insertion.
+
+Verify:
+
+- Master templates
+- Personal templates
+- Macros
+- Quick findings
+
+Do they actually insert into report?
+
+==================================================
+
+STEP 5
+
+Report editing.
+
+Verify:
+
+- Findings
+- Impression
+- Recommendations
+- Auto-save
+
+==================================================
+
+STEP 6
+
+AI features.
+
+Verify individually:
+
+- AI Impression
+- AI Review
+- AI Quality Check
+- AI Follow-up
+- AI Differential Diagnosis
+- Ollama
+- GPT
+- Gemini
+- Claude
+
+Which are operational today?
+
+Which are placeholders?
+
+==================================================
+
+STEP 7
+
+Previous reports.
+
+Verify:
+
+- Fetch prior reports
+- Display comparison
+- Copy previous findings
+
+==================================================
+
+STEP 8
+
+Measurements.
+
+Verify:
+
+- Manual measurements
+- Measurement memory
+- USG measurements
+- Spinal measurements
+
+==================================================
+
+STEP 9
+
+Teaching.
+
+Verify:
+
+- Save teaching case
+- Store images
+- Store report
+- Retrieve later
+
+==================================================
+
+STEP 10
+
+Finalize.
+
+Verify:
+
+- Save draft
+- Finalize
+- Lock report
+- Print preview
+- PDF generation
+
+==================================================
+
+STEP 11
+
+ERP integration.
+
+Verify:
+
+- Report appears in ERP
+- Status updates
+- Patient access
+- Billing linkage
+
+==================================================
+
+FINAL OUTPUT
+
+Create only 4 lists.
+
+A. WORKING TODAY
+
+B. PARTIALLY WORKING
+
+C. PLACEHOLDERS / UI ONLY
+
+D. BROKEN
+
+Most importantly answer:
+
+"If Dr. Sugandha starts reporting 100 MRI/CT cases tomorrow morning, which functions can she rely on with confidence?"
+
+No architectural discussion.
+
+No future plans.
+
+Only reality.
