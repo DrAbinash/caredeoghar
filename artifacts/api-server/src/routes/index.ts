@@ -85,7 +85,9 @@ import { aiReportingRouter } from "./aiReporting";
 import { radiologyKnowledgeRouter } from "./radiologyKnowledge";
 import { radiologySmartFindingsRouter } from "./radiologySmartFindings";
 import { aiPromptTemplatesRouter } from "./aiPromptTemplates";
+import { aiPromptLibraryRouter } from "./aiPromptLibrary";
 import { aiModelRoutesRouter } from "./aiModelRoutes";
+import { aiComparisonRouter } from "./aiComparison";
 import { radiologySnippetsRouter } from "./radiologySnippets";
 import { bankingRouter, bankingWebhookRouter } from "./banking";
 import { syncRouter } from "./sync";
@@ -445,7 +447,11 @@ router.use("/ai-reporting", requireStaffAuth, aiReportingRouter);
 
 // AI Prompt Templates — modality-aware, versioned, editable-without-code prompts
 router.use("/ai-prompt-templates", requireStaffAuth, aiPromptTemplatesRouter);
+router.use("/ai-prompt-library", requireStaffAuth, aiPromptLibraryRouter);
 router.use("/ai-model-routing", requireStaffAuth, aiModelRoutesRouter);
+
+// AI Comparison Workspace
+router.use("/ai-comparison", requireStaffAuth, aiComparisonRouter);
 
 // AI endpoints — each sub-route applies its own requireStaffPermission matching
 // the data domain it accesses (patients PHI, billing records, or radiology

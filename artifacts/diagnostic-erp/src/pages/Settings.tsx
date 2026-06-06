@@ -4837,6 +4837,14 @@ function RadiologySettingsTab() {
   const [followUp, setFollowUp] = useState(() => isFeatureEnabled("radiologyFollowUp"));
   const [languagePolish, setLanguagePolish] = useState(() => isFeatureEnabled("radiologyLanguagePolish"));
 
+  // Phase 7A: Advanced Multi-AI Radiology Assistant
+  const [promptManager_v2, setPromptManager_v2] = useState(() => isFeatureEnabled("radiologyPromptManager_v2"));
+  const [imageReviewAssistant, setImageReviewAssistant] = useState(() => isFeatureEnabled("radiologyImageReviewAssistant"));
+  const [aiComparison, setAiComparison] = useState(() => isFeatureEnabled("radiologyAIComparison"));
+  const [missedFindingDetector, setMissedFindingDetector] = useState(() => isFeatureEnabled("radiologyMissedFindingDetector"));
+  const [providerRouting, setProviderRouting] = useState(() => isFeatureEnabled("radiologyProviderRouting"));
+  const [providerFallback, setProviderFallback] = useState(() => isFeatureEnabled("radiologyProviderFallback"));
+
   const toggles = [
     { id: "radiologyQuickAdd", label: "Quick Add Buttons", desc: "Alt+1-6 shortcut buttons for instant insertion of common findings", value: quickAdd, set: setQuickAdd },
     { id: "radiologySmartFormat", label: "Smart Format Templates", desc: "Shift+Alt+1-5 shortcuts for full study templates", value: smartFormat, set: setSmartFormat },
@@ -4892,6 +4900,15 @@ function RadiologySettingsTab() {
     { id: "radiologyQualityCheck", label: "AI Quality Checker", desc: "Detect missing impression, measurements, contradictions, and errors", value: qualityCheck, set: setQualityCheck },
     { id: "radiologyLanguagePolish", label: "Language Polish & Formatting", desc: "Refine report language, grammar, and formatting without changing medical content", value: languagePolish, set: setLanguagePolish },
     { id: "radiologyPromptManager", label: "Prompt Manager", desc: "Admin-editable prompt library with version history and testing", value: promptManager, set: setPromptManager },
+  ];
+
+  const phase7aToggles = [
+    { id: "radiologyPromptManager_v2", label: "AI Prompt Manager v2", desc: "Enterprise prompt library with 9 prompt types per category, versioning, doctor-specific libraries, and JSON import/export", value: promptManager_v2, set: setPromptManager_v2 },
+    { id: "radiologyImageReviewAssistant", label: "Image Review Assistant", desc: "Vision-capable AI secondary review with structured findings, differential, missed findings, and confidence scores", value: imageReviewAssistant, set: setImageReviewAssistant },
+    { id: "radiologyAIComparison", label: "AI Comparison Workspace", desc: "Run same prompt against multiple providers side-by-side with performance stats", value: aiComparison, set: setAiComparison },
+    { id: "radiologyMissedFindingDetector", label: "Missed Finding Detector", desc: "Critical finding detection for MRI Brain, Spine, CT, Chest, and Abdomen", value: missedFindingDetector, set: setMissedFindingDetector },
+    { id: "radiologyProviderRouting", label: "AI Provider Routing", desc: "Assign different AI providers to different radiology tasks (image review → Gemini, findings → GPT, etc.)", value: providerRouting, set: setProviderRouting },
+    { id: "radiologyProviderFallback", label: "Provider Fallback", desc: "Configurable fallback chain when primary provider fails (Gemini → GPT → Claude)", value: providerFallback, set: setProviderFallback },
   ];
 
   const smartReportingToggles = [
@@ -4988,6 +5005,32 @@ function RadiologySettingsTab() {
         </div>
         <div className="space-y-2">
           {aiCopilotToggles.map((t) => (
+            <label key={t.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20 cursor-pointer">
+              <div className="pr-4">
+                <div className="text-sm font-medium">{t.label}</div>
+                <div className="text-[11px] text-muted-foreground">{t.desc}</div>
+              </div>
+              <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${t.value ? "bg-primary" : "bg-muted-foreground/40"}`}>
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${t.value ? "translate-x-5" : "translate-x-1"}`} />
+              </span>
+              <input type="checkbox" className="sr-only" checked={t.value} onChange={() => {
+                const next = !t.value;
+                t.set(next);
+                setFeatureFlag(t.id, next);
+              }} />
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Phase 7A: Advanced Multi-AI Radiology Assistant */}
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="font-bold text-lg flex items-center gap-2"><Brain size={16} /> Advanced Multi-AI Radiology Assistant</h2>
+          <p className="text-sm text-muted-foreground mt-1">Enterprise-grade prompt management, multi-provider task routing, AI comparison workspace, image review, missed finding detection, and provider fallback. All OFF by default.</p>
+        </div>
+        <div className="space-y-2">
+          {phase7aToggles.map((t) => (
             <label key={t.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20 cursor-pointer">
               <div className="pr-4">
                 <div className="text-sm font-medium">{t.label}</div>

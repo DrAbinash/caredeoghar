@@ -215,6 +215,13 @@ const FEATURE_FLAG_DEFAULTS: Record<string, boolean> = {
   radiologyPromptManager: false,
   radiologyFollowUp: false,
   radiologyLanguagePolish: false,
+  // Phase 7A: Advanced Multi-AI Radiology Assistant (all default OFF)
+  radiologyPromptManager_v2: false,
+  radiologyImageReviewAssistant: false,
+  radiologyAIComparison: false,
+  radiologyMissedFindingDetector: false,
+  radiologyProviderRouting: false,
+  radiologyProviderFallback: false,
   hideDeprecatedNav: false,
   billingDeskStepped: false,
 };

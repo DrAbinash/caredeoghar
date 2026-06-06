@@ -464,6 +464,11 @@ export const AI_TASK_CATALOG: AiTaskDef[] = [
   { key: "fetal_usg_draft", label: "Fetal USG Level-4 AI Draft", description: "AI-assisted fetal ultrasound report drafting from biometry and anomaly scan data.", vision: false },
   { key: "echo_report_delivery", label: "Echo Report Delivery Message", description: "Draft patient-facing message for echo report delivery.", vision: false },
   { key: "fetal_usg_report_delivery", label: "Fetal USG Report Delivery Message", description: "Draft patient-facing message for fetal USG report delivery.", vision: false },
+  // Phase 7A: Advanced Multi-AI Tasks
+  { key: "image_review_assistant", label: "Image Review Assistant", description: "Structured image review with possible findings, differential, measurements, and follow-up recommendations.", vision: true },
+  { key: "missed_finding_detector", label: "Missed Finding Detector", description: "Knowledge-base check for potentially missed critical findings in a report.", vision: false },
+  { key: "ai_comparison", label: "AI Comparison", description: "Run the same prompt against multiple AI providers for comparison.", vision: true },
+  { key: "prompt_test", label: "Prompt Test", description: "Test any AI prompt against a selected provider for validation.", vision: false },
 ];
 
 export const AI_TASK_KEYS = AI_TASK_CATALOG.map((t) => t.key);

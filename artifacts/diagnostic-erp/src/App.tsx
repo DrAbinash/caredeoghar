@@ -50,6 +50,11 @@ const PacsDashboard         = lazy(() => import("@/pages/PacsDashboard"));
 const MwlDashboard          = lazy(() => import("@/pages/MwlDashboard"));
 const RadiologySettings     = lazy(() => import("@/pages/RadiologySettings"));
 const AiPromptTemplates     = lazy(() => import("@/pages/AiPromptTemplates"));
+const AiPromptManager       = lazy(() => import("@/pages/AiPromptManager"));
+const AiComparisonWorkspace = lazy(() => import("@/pages/AiComparisonWorkspace"));
+const MissedFindingDetector = lazy(() => import("@/pages/MissedFindingDetector"));
+const ImageReviewAssistant  = lazy(() => import("@/pages/ImageReviewAssistant"));
+const ProviderFallback      = lazy(() => import("@/pages/ProviderFallback"));
 const AiModelRouting        = lazy(() => import("@/pages/AiModelRouting"));
 const ReportTemplatesPage   = lazy(() => import("@/pages/ReportTemplates"));
 const AiAuditLog            = lazy(() => import("@/pages/AiAuditLog"));
@@ -273,6 +278,11 @@ function Router() {
               <Route path="/radiology/agent-setup" component={AgentSetup} />
               <Route path="/radiology/ai-reporting-settings" component={AiReportingSettings} />
               <Route path="/radiology/ai-prompt-templates" component={AiPromptTemplates} />
+              <Route path="/radiology/ai-prompt-manager" component={AiPromptManager} />
+              <Route path="/radiology/ai-comparison" component={AiComparisonWorkspace} />
+              <Route path="/radiology/missed-finding-detector" component={MissedFindingDetector} />
+              <Route path="/radiology/image-review" component={ImageReviewAssistant} />
+              <Route path="/radiology/provider-fallback" component={ProviderFallback} />
               <Route path="/radiology/ai-model-routing" component={AiModelRouting} />
               <Route path="/radiology/structured-report-templates" component={ReportTemplatesPage} />
               <Route path="/radiology/ai-audit-log" component={AiAuditLog} />
