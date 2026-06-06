@@ -290,7 +290,7 @@ export default function RadiologyCopilotPanel({
   const organIntelligenceEnabled = spineEnabled || brainEnabled || tumorEnabled;
   const multiAIEnabled = useMemo(() => isFeatureEnabled("multiAIImageReview"), []);
   const annotationsEnabled = useMemo(() => isFeatureEnabled("imageAnnotations"), []);
-  const aiConfidenceEnabled = useMemo(() => isFeatureEnabled("aiConfidenceVisualization"), []);
+  const aiConfidenceEnabled = useMemo(() => isFeatureEnabled("confidenceVisualization"), []);
 
   // ── Auto-run: debounced comparison with most-recent prior study ──────────
   // Fires 2.5s after currentFindings settles, but only once per (findingsText, priorStudies[0].id) pair

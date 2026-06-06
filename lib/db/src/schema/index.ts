@@ -115,3 +115,4 @@ export * from "./radiologyMemory";
 export * from "./radiologyLesions";
 export * from "./radiologyOrganIntelligence";
 export * from "./radiologyAnnotations";
+export * from "./radiologyAiReviewAudits";

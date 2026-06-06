@@ -12,7 +12,7 @@
  */
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { clinicSettingsTable } from "@workspace/db";
+import { clinicSettingsTable, radiologyAiReviewAuditsTable } from "@workspace/db";
 import { desc } from "drizzle-orm";
 import { type StaffAuthRequest } from "../middleware/requireStaffAuth";
 
@@ -279,6 +279,32 @@ function scoreConfidence(text: string, providerCalibration = 0): number {
   return Math.max(40, Math.min(95, Math.round(score)));
 }
 
+// ── Extract missed-findings sentences from AI response text ──────────────────
+// Looks for sentences containing "missed", "overlooked", "could have", etc.
+function extractMissedFindings(text: string): string[] {
+  const sentences = text.replace(/([.!?])\s+/g, "$1\n").split("\n");
+  const hits: string[] = [];
+  for (const s of sentences) {
+    const lower = s.toLowerCase();
+    if (
+      lower.includes("missed") ||
+      lower.includes("overlook") ||
+      lower.includes("not mention") ||
+      lower.includes("could have been") ||
+      lower.includes("may have been missed") ||
+      lower.includes("potential pitfall") ||
+      lower.includes("worth noting") ||
+      lower.includes("should also consider") ||
+      lower.includes("additionally") && lower.includes("subtle")
+    ) {
+      const clean = s.trim().replace(/^[-•*\d.]\s*/, "");
+      if (clean.length > 10) hits.push(clean);
+    }
+    if (hits.length >= 4) break;
+  }
+  return hits;
+}
+
 // ── POST /multi-review — fan out to Gemini + Ollama in parallel ──────────────
 // Returns structured per-provider results with deterministic confidence scores
 // and audit metadata. Providers not configured are skipped gracefully.
@@ -359,7 +385,7 @@ Format as plain text with bullets. Note: "AI Draft – Requires Radiologist Revi
           model: "gemini-2.0-flash",
           findings: raw,
           differentials,
-          missedFindings: [],
+          missedFindings: extractMissedFindings(raw),
           confidence: scoreConfidence(raw, 5), // slight positive calibration for Gemini
           processingMs,
         });
@@ -416,7 +442,7 @@ Format as plain text with bullets. Note: "AI Draft – Requires Radiologist Revi
           model: "openai/gpt-4o-mini",
           findings: raw,
           differentials,
-          missedFindings: [],
+          missedFindings: extractMissedFindings(raw),
           confidence: scoreConfidence(raw, 3),
           processingMs,
         });
@@ -453,7 +479,7 @@ Format as plain text with bullets. Note: "AI Draft – Requires Radiologist Revi
           model: config.model,
           findings: raw,
           differentials,
-          missedFindings: [],
+          missedFindings: extractMissedFindings(raw),
           confidence: scoreConfidence(raw, -5), // slight negative calibration for local models
           processingMs,
         });
@@ -472,6 +498,21 @@ Format as plain text with bullets. Note: "AI Draft – Requires Radiologist Revi
     }
   }
 
+  // ── Persist audit record ─────────────────────────────────────────────────
+  const sReq = req as StaffAuthRequest;
+  const auditUserId = sReq.staffSession?.subjectId;
+  const auditUserName = sReq.staffSession?.subjectName;
+  await db.insert(radiologyAiReviewAuditsTable).values({
+    modality: modality || null,
+    bodyPart: bodyPart || null,
+    studyUid: (b.studyUid ? String(b.studyUid) : null),
+    orderId: b.orderId ? Number(b.orderId) : null,
+    providersQueried: activeProviders as unknown as Record<string, unknown>[],
+    winnerProvider: null,
+    selectedById: auditUserId ?? null,
+    selectedByName: auditUserName ?? null,
+  }).catch(() => { /* audit failure must not break main response */ });
+
   res.json({
     results,
     totalProviders: results.length,
@@ -482,6 +523,28 @@ Format as plain text with bullets. Note: "AI Draft – Requires Radiologist Revi
     auditTimestamp: new Date().toISOString(),
     note: "AI Draft – Requires Radiologist Review",
   });
+});
+
+// ── POST /multi-review/winner — radiologist selects the best provider result ──
+// Persists the winner choice to the audit table for QA and analytics.
+radiologyOllamaRouter.post("/multi-review/winner", async (req, res): Promise<void> => {
+  const sReq = req as StaffAuthRequest;
+  const userId = sReq.staffSession?.subjectId;
+  if (!userId) { res.status(401).json({ error: "authentication required" }); return; }
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const winnerProvider = String(b.winnerProvider ?? "").trim();
+  if (!winnerProvider) { res.status(400).json({ error: "winnerProvider required" }); return; }
+  const [audit] = await db.insert(radiologyAiReviewAuditsTable).values({
+    modality: b.modality ? String(b.modality) : null,
+    bodyPart: b.bodyPart ? String(b.bodyPart) : null,
+    studyUid: b.studyUid ? String(b.studyUid) : null,
+    orderId: b.orderId ? Number(b.orderId) : null,
+    providersQueried: Array.isArray(b.providers) ? b.providers as unknown as Record<string, unknown>[] : null,
+    winnerProvider,
+    selectedById: userId,
+    selectedByName: sReq.staffSession?.subjectName ?? null,
+  }).returning();
+  res.json({ ok: true, audit });
 });
 
 // ── POST /differential — generate differential diagnosis via Ollama ──────────

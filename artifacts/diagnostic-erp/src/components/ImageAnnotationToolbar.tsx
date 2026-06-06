@@ -67,6 +67,10 @@ export default function ImageAnnotationToolbar({
   const [isKey, setIsKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState(true);
+  const [coordX, setCoordX] = useState("");
+  const [coordY, setCoordY] = useState("")
+  const [coordW, setCoordW] = useState("");
+  const [coordH, setCoordH] = useState("");
 
   const loadAnnotations = useCallback(async () => {
     if (!studyInstanceUid && !orderId) return;
@@ -88,6 +92,13 @@ export default function ImageAnnotationToolbar({
     }
     setSaving(true);
     try {
+      const x = coordX !== "" ? parseFloat(coordX) : undefined;
+      const y = coordY !== "" ? parseFloat(coordY) : undefined;
+      const w = coordW !== "" ? parseFloat(coordW) : undefined;
+      const h = coordH !== "" ? parseFloat(coordH) : undefined;
+      const coordinates = (x !== undefined || y !== undefined)
+        ? { x: x ?? 0, y: y ?? 0, width: w, height: h, normalized: true }
+        : null;
       await api.post("/api/radiology-annotations", {
         studyInstanceUid,
         seriesInstanceUid: seriesInstanceUid ?? null,
@@ -96,6 +107,7 @@ export default function ImageAnnotationToolbar({
         labelText: label.trim() || null,
         color,
         isKeyAnnotation: isKey,
+        coordinates,
         orderId: orderId ?? null,
         patientId: patientId ?? null,
         studyId: studyId ?? null,
@@ -103,6 +115,7 @@ export default function ImageAnnotationToolbar({
       toast({ title: "Annotation saved" });
       setLabel("");
       setIsKey(false);
+      setCoordX(""); setCoordY(""); setCoordW(""); setCoordH("");
       setShowForm(false);
       loadAnnotations();
     } catch (err: unknown) {
@@ -189,6 +202,30 @@ export default function ImageAnnotationToolbar({
                     />
                   ))}
                 </div>
+              </div>
+
+              {/* Image coordinates (normalized 0–1 relative to image size) */}
+              <div>
+                <Label className="text-[10px]">Image Coordinates (0–1, optional)</Label>
+                <div className="grid grid-cols-4 gap-1 mt-1">
+                  <div>
+                    <span className="text-[9px] text-muted-foreground">X</span>
+                    <Input type="number" min="0" max="1" step="0.01" value={coordX} onChange={(e) => setCoordX(e.target.value)} placeholder="0.5" className="h-6 text-[11px] px-1" />
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-muted-foreground">Y</span>
+                    <Input type="number" min="0" max="1" step="0.01" value={coordY} onChange={(e) => setCoordY(e.target.value)} placeholder="0.5" className="h-6 text-[11px] px-1" />
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-muted-foreground">W</span>
+                    <Input type="number" min="0" max="1" step="0.01" value={coordW} onChange={(e) => setCoordW(e.target.value)} placeholder="0.1" className="h-6 text-[11px] px-1" />
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-muted-foreground">H</span>
+                    <Input type="number" min="0" max="1" step="0.01" value={coordH} onChange={(e) => setCoordH(e.target.value)} placeholder="0.1" className="h-6 text-[11px] px-1" />
+                  </div>
+                </div>
+                <p className="text-[9px] text-muted-foreground mt-0.5">Normalized coordinates relative to image dimensions (0 = left/top, 1 = right/bottom)</p>
               </div>
 
               {/* Key annotation */}

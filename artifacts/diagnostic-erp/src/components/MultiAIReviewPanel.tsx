@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/fetchApi";
 import {
-  Bot, Sparkles, Copy, Check, CheckCircle, AlertTriangle, ChevronDown, ChevronUp,
+  Bot, Sparkles, Copy, Check, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Trophy,
 } from "lucide-react";
 
 interface AIProviderResult {
@@ -55,7 +55,14 @@ function ConfidenceBar({ pct }: { pct: number }) {
   );
 }
 
-function ProviderCard({ result, onUse }: { result: AIProviderResult; onUse: () => void }) {
+function ProviderCard({
+  result, onUse, isWinner, onSelectWinner,
+}: {
+  result: AIProviderResult;
+  onUse: () => void;
+  isWinner: boolean;
+  onSelectWinner: () => void;
+}) {
   const [expanded, setExpanded] = useState(true);
   const [copied, setCopied] = useState(false);
 
@@ -66,16 +73,25 @@ function ProviderCard({ result, onUse }: { result: AIProviderResult; onUse: () =
   };
 
   return (
-    <div className="border border-card-border rounded-lg overflow-hidden">
+    <div className={`border rounded-lg overflow-hidden ${isWinner ? "border-yellow-400 ring-1 ring-yellow-400" : "border-card-border"}`}>
       <div className="flex items-center gap-2 px-3 py-2 bg-muted/30">
         <Bot size={14} className="text-primary" />
         <span className="font-semibold text-xs">{result.provider}</span>
+        {isWinner && <Badge className="bg-yellow-100 text-yellow-700 text-[10px] flex items-center gap-0.5"><Trophy size={9} /> Winner</Badge>}
         <Badge variant="outline" className="text-[10px]">{result.model}</Badge>
         <div className="flex-1 mx-2">
           <ConfidenceBar pct={result.confidence} />
         </div>
         <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" onClick={handleCopy}>
           {copied ? <Check size={12} /> : <Copy size={12} />}
+        </Button>
+        <Button
+          size="sm"
+          variant={isWinner ? "default" : "outline"}
+          className={`h-6 px-2 text-[11px] ${isWinner ? "bg-yellow-500 hover:bg-yellow-600" : ""}`}
+          onClick={onSelectWinner}
+        >
+          <Trophy size={10} className="mr-1" />{isWinner ? "Winner" : "Select"}
         </Button>
         <Button size="sm" className="h-6 px-2 text-[11px]" onClick={onUse}>Use This</Button>
         <button onClick={() => setExpanded((v) => !v)} className="text-muted-foreground">
@@ -135,6 +151,7 @@ export default function MultiAIReviewPanel({ modality, bodyPart, findingsText, i
   const [caseContext, setCaseContext] = useState(findingsText ?? "");
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<AIProviderResult[]>([]);
+  const [winnerProvider, setWinnerProvider] = useState<string | null>(null);
 
   const toggleProvider = (id: string) => {
     setSelectedProviders((prev) =>
@@ -190,6 +207,21 @@ export default function MultiAIReviewPanel({ modality, bodyPart, findingsText, i
       toast({ title: "Multi-AI review failed", description: msg, variant: "destructive" });
     } finally {
       setRunning(false);
+    }
+  };
+
+  const handleSelectWinner = async (provider: string) => {
+    setWinnerProvider(provider);
+    try {
+      await api.post("/api/radiology-ollama/multi-review/winner", {
+        winnerProvider: provider,
+        modality: modality ?? "",
+        bodyPart: bodyPart ?? "",
+        providers: selectedProviders,
+      });
+      toast({ title: `${provider} selected as best review`, description: "Winner logged for QA." });
+    } catch {
+      /* winner logging is best-effort; don't block the user */
     }
   };
 
@@ -254,6 +286,8 @@ export default function MultiAIReviewPanel({ modality, bodyPart, findingsText, i
               key={i}
               result={r}
               onUse={() => onUseResult?.(r)}
+              isWinner={winnerProvider === r.provider}
+              onSelectWinner={() => handleSelectWinner(r.provider)}
             />
           ))}
         </div>

@@ -794,7 +794,11 @@ teachingCasesRouter.post("/generate-from-report", async (req, res): Promise<void
   let aiTitle = [modality, testName ?? bodyPart, diagnosis ?? "Interesting Case"].filter(Boolean).join(" — ");
   let aiPearls = "";
   let aiPitfalls = "";
-  let aiMcq = "";
+  let aiSummary = "";
+  let aiKeyFindings: string[] = [];
+  let aiDifferential: string[] = [];
+  let aiTeachingPoints: string[] = [];
+  let aiMcqs: Array<{ question: string; options: string[]; answer: string; explanation?: string }> = [];
   let aiDiagnosis = diagnosis ?? "";
 
   const geminiConfigured =
@@ -804,28 +808,36 @@ teachingCasesRouter.post("/generate-from-report", async (req, res): Promise<void
   if (geminiConfigured) {
     try {
       const { geminiGenerate } = await import("@workspace/integrations-gemini-ai");
-      const prompt = `You are an expert radiology educator creating a teaching case for trainees.
+      const prompt = `You are an expert radiology educator creating a structured teaching case for residents and fellows.
 
 Study: ${studyLabel}
 ${combinedFindings ? `\n${combinedFindings}` : ""}
 ${impression ? `\nImpression: ${impression}` : ""}
 
-Generate a JSON object with these exact fields:
+Generate a JSON object with EXACTLY these fields:
 {
   "title": "concise descriptive title (no patient names or IDs)",
   "diagnosis": "primary diagnosis in 3-5 words",
+  "summary": "2-3 sentence clinical summary for teaching",
+  "keyFindings": ["finding 1", "finding 2", "finding 3", "finding 4"],
+  "differential": ["diagnosis 1 with brief reason", "diagnosis 2 with brief reason", "diagnosis 3 with brief reason"],
+  "teachingPoints": ["teaching point 1", "teaching point 2", "teaching point 3", "teaching point 4", "teaching point 5"],
   "clinicalPearls": "3-5 concise clinical pearls as a numbered list",
   "pitfalls": "2-3 common mistakes or pitfalls as a numbered list",
-  "mcqQuestion": "a single multiple-choice question testing a key concept",
-  "mcqOptions": ["A. option", "B. option", "C. option", "D. option"],
-  "mcqAnswer": "correct option letter and brief explanation"
+  "mcqs": [
+    {"question": "MCQ 1 question stem", "options": ["A. ...", "B. ...", "C. ...", "D. ..."], "answer": "A", "explanation": "brief explanation"},
+    {"question": "MCQ 2 question stem", "options": ["A. ...", "B. ...", "C. ...", "D. ..."], "answer": "B", "explanation": "brief explanation"},
+    {"question": "MCQ 3 question stem", "options": ["A. ...", "B. ...", "C. ...", "D. ..."], "answer": "C", "explanation": "brief explanation"},
+    {"question": "MCQ 4 question stem", "options": ["A. ...", "B. ...", "C. ...", "D. ..."], "answer": "A", "explanation": "brief explanation"},
+    {"question": "MCQ 5 question stem", "options": ["A. ...", "B. ...", "C. ...", "D. ..."], "answer": "D", "explanation": "brief explanation"}
+  ]
 }
 
-Return ONLY the JSON object. No preamble. Note: AI Draft – Requires Radiologist Review`;
+Return ONLY the JSON object. No preamble. AI Draft – Requires Radiologist Review before publishing.`;
 
       const ac = new AbortController();
-      const timer = setTimeout(() => ac.abort(), 30000);
-      const rawAi = await geminiGenerate(prompt, { maxTokens: 1024 });
+      const timer = setTimeout(() => ac.abort(), 40000);
+      const rawAi = await geminiGenerate(prompt, { maxTokens: 2048 });
       clearTimeout(timer);
 
       // Extract JSON from the response
@@ -834,20 +846,23 @@ Return ONLY the JSON object. No preamble. Note: AI Draft – Requires Radiologis
         const parsed = JSON.parse(match[0]) as {
           title?: string;
           diagnosis?: string;
+          summary?: string;
+          keyFindings?: string[];
+          differential?: string[];
+          teachingPoints?: string[];
           clinicalPearls?: string;
           pitfalls?: string;
-          mcqQuestion?: string;
-          mcqOptions?: string[];
-          mcqAnswer?: string;
+          mcqs?: Array<{ question: string; options: string[]; answer: string; explanation?: string }>;
         };
         if (parsed.title) aiTitle = parsed.title;
         if (parsed.diagnosis) aiDiagnosis = parsed.diagnosis;
+        if (parsed.summary) aiSummary = parsed.summary;
+        if (Array.isArray(parsed.keyFindings)) aiKeyFindings = parsed.keyFindings;
+        if (Array.isArray(parsed.differential)) aiDifferential = parsed.differential;
+        if (Array.isArray(parsed.teachingPoints)) aiTeachingPoints = parsed.teachingPoints;
         if (parsed.clinicalPearls) aiPearls = parsed.clinicalPearls;
         if (parsed.pitfalls) aiPitfalls = parsed.pitfalls;
-        if (parsed.mcqQuestion) {
-          const opts = (parsed.mcqOptions ?? []).join("\n");
-          aiMcq = `${parsed.mcqQuestion}\n${opts}\n\nAnswer: ${parsed.mcqAnswer ?? ""}`;
-        }
+        if (Array.isArray(parsed.mcqs)) aiMcqs = parsed.mcqs.slice(0, 5);
       }
     } catch (_aiErr) {
       // AI generation is best-effort; fall through to save draft without AI content
@@ -855,11 +870,22 @@ Return ONLY the JSON object. No preamble. Note: AI Draft – Requires Radiologis
   }
 
   // ── Build enhanced findings with AI teaching content ───────────────────────
+  const mcqBlock = aiMcqs.length > 0
+    ? `\n--- AI MCQs (Draft — Requires Review) ---\n` +
+      aiMcqs.map((q, i) =>
+        `Q${i + 1}. ${q.question}\n${q.options.join("\n")}\nAnswer: ${q.answer}${q.explanation ? ` — ${q.explanation}` : ""}`
+      ).join("\n\n")
+    : "";
+
   const enhancedFindings = [
     combinedFindings || null,
-    aiPearls ? `\n--- AI Teaching Pearls (Draft — Requires Review) ---\n${aiPearls}` : null,
-    aiPitfalls ? `\n--- AI Pitfalls (Draft — Requires Review) ---\n${aiPitfalls}` : null,
-    aiMcq ? `\n--- AI MCQ (Draft — Requires Review) ---\n${aiMcq}` : null,
+    aiSummary ? `\n--- AI Summary (Draft — Requires Review) ---\n${aiSummary}` : null,
+    aiKeyFindings.length > 0 ? `\n--- Key Findings ---\n${aiKeyFindings.map((f, i) => `${i + 1}. ${f}`).join("\n")}` : null,
+    aiDifferential.length > 0 ? `\n--- Differential Diagnosis ---\n${aiDifferential.map((d, i) => `${i + 1}. ${d}`).join("\n")}` : null,
+    aiTeachingPoints.length > 0 ? `\n--- Teaching Points ---\n${aiTeachingPoints.map((t, i) => `${i + 1}. ${t}`).join("\n")}` : null,
+    aiPearls ? `\n--- Clinical Pearls (Draft — Requires Review) ---\n${aiPearls}` : null,
+    aiPitfalls ? `\n--- Pitfalls (Draft — Requires Review) ---\n${aiPitfalls}` : null,
+    mcqBlock || null,
   ].filter(Boolean).join("\n");
 
   const [newCase] = await db.insert(teachingCasesTable).values({
@@ -878,7 +904,7 @@ Return ONLY the JSON object. No preamble. Note: AI Draft – Requires Radiologis
     createdByName: userName ?? null,
   }).returning();
 
-  const aiGenerated = geminiConfigured && (aiPearls || aiPitfalls || aiMcq);
+  const aiGenerated = geminiConfigured && (aiPearls || aiPitfalls || aiMcqs.length > 0);
   res.json({
     case: newCase,
     aiGenerated,

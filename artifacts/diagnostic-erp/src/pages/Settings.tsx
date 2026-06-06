@@ -4984,8 +4984,8 @@ function RadiologySettingsTab() {
   const [teachingGenerator, setTeachingGenerator] = useState(() => isFeatureEnabled("teachingGenerator"));
   const [multiAIImageReview, setMultiAIImageReview] = useState(() => isFeatureEnabled("multiAIImageReview"));
   const [measurementAssistantFlag, setMeasurementAssistantFlag] = useState(() => isFeatureEnabled("measurementAssistant"));
-  const [aiConfidenceVisualization, setAiConfidenceVisualization] = useState(() => isFeatureEnabled("aiConfidenceVisualization"));
-  const [ollamaLocalModels, setOllamaLocalModels] = useState(() => isFeatureEnabled("ollamaLocalModels"));
+  const [confidenceVisualization, setConfidenceVisualization] = useState(() => isFeatureEnabled("confidenceVisualization"));
+  const [ollamaSupport, setOllamaSupport] = useState(() => isFeatureEnabled("ollamaSupport"));
   const [caseOfMonth, setCaseOfMonth] = useState(() => isFeatureEnabled("caseOfMonth"));
   const [annotationLayer, setAnnotationLayer] = useState(() => isFeatureEnabled("annotationLayer"));
 
@@ -5102,8 +5102,8 @@ function RadiologySettingsTab() {
     { id: "teachingGenerator", label: "Teaching Case Generator (Phase 10C)", desc: "Auto-generate teaching summaries and exam questions from cases — OFF until Phase 10C builds", value: teachingGenerator, set: setTeachingGenerator },
     { id: "researchDatabase", label: "Research Database (Phase 10C)", desc: "Case tagging, cohort building, and anonymized research export — OFF until Phase 10C builds", value: researchDatabase, set: setResearchDatabase },
     { id: "caseOfMonth", label: "Case of the Month (Phase 10C)", desc: "Editorial workflow for selecting and publishing monthly teaching cases — OFF until Phase 10C builds", value: caseOfMonth, set: setCaseOfMonth },
-    { id: "aiConfidenceVisualization", label: "AI Confidence Visualization (Phase 10C)", desc: "Show confidence scores as colour-coded bars on every AI suggestion — OFF until Phase 10C builds", value: aiConfidenceVisualization, set: setAiConfidenceVisualization },
-    { id: "ollamaLocalModels", label: "Ollama Local Models (Phase 10C)", desc: "Run privacy-preserving AI locally via Ollama — OFF until Phase 10C builds", value: ollamaLocalModels, set: setOllamaLocalModels },
+    { id: "confidenceVisualization", label: "AI Confidence Visualization (Phase 10C)", desc: "Show confidence scores as colour-coded bars on every AI suggestion — OFF until Phase 10C builds", value: confidenceVisualization, set: setConfidenceVisualization },
+    { id: "ollamaSupport", label: "Ollama Local Models (Phase 10C)", desc: "Run privacy-preserving AI locally via Ollama — OFF until Phase 10C builds", value: ollamaSupport, set: setOllamaSupport },
     { id: "annotationLayer", label: "Report Annotation Layer (Phase 10C)", desc: "Highlight text in reports and link annotations to image coordinates — OFF until Phase 10C builds", value: annotationLayer, set: setAnnotationLayer },
   ];
 

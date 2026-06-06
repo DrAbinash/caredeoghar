@@ -10,9 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { isFeatureEnabled } from "@/lib/staffSession";
+import CaseOfMonthPanel from "@/components/CaseOfMonthPanel";
 import {
   Layers, BookOpen, Plus, Trash2, ArrowLeft, Lock, Unlock,
-  GraduationCap, Star, Eye, Folder,
+  GraduationCap, Star, Eye, Folder, Calendar,
 } from "lucide-react";
 
 interface Collection {
@@ -76,6 +78,18 @@ export default function TeachingCaseCollections() {
           <Plus size={16} className="mr-2" /> New Collection
         </Button>
       </div>
+
+      {/* Case of the Month panel — gated by caseOfMonth feature flag */}
+      {isFeatureEnabled("caseOfMonth") && (
+        <div className="border border-orange-200 bg-orange-50 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Calendar size={16} className="text-orange-600" />
+            <span className="font-semibold text-sm text-orange-800">Case of the Month</span>
+            <Badge className="bg-orange-100 text-orange-700 text-[10px]">Editorial</Badge>
+          </div>
+          <CaseOfMonthPanel />
+        </div>
+      )}
 
       {showNew && (
         <div className="bg-card border border-card-border rounded-xl p-5 space-y-3">
