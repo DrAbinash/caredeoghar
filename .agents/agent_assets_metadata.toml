@@ -304,3 +304,9 @@ id = "tXcKUWcu5xCUHcD76tv8f"
 uri = "file://PRODUCTION_DEV_CONSISTENCY_AUDIT.md"
 type = "text"
 title = "Production vs Development Consistency Audit"
+
+[[outputs]]
+id = "Ju5c8_xsefiPv33V3xxc6"
+uri = "file://RE_AUDIT_PRODUCTION_JUNE_2026.md"
+type = "text"
+title = "Re-Audit: Production After Redeployment"
