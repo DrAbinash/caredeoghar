@@ -4789,11 +4789,11 @@ function OllamaSettingsCard() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    api.get<{ settings: { ollamaBaseUrl?: string | null; ollamaModel?: string | null; ollamaLocalOnly?: boolean } }>("/api/clinic-settings")
+    api.get<{ ollamaBaseUrl?: string | null; ollamaModel?: string | null; ollamaLocalOnly?: boolean }>("/api/clinic-settings")
       .then((d) => {
-        setBaseUrl(d.settings.ollamaBaseUrl ?? "");
-        setModel(d.settings.ollamaModel ?? "llama3");
-        setLocalOnly(d.settings.ollamaLocalOnly ?? false);
+        setBaseUrl(d.ollamaBaseUrl ?? "");
+        setModel(d.ollamaModel ?? "llama3");
+        setLocalOnly(d.ollamaLocalOnly ?? false);
       })
       .catch(() => {});
   }, []);

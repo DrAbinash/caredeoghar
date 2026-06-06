@@ -220,6 +220,31 @@ clinicSettingsRouter.put("/", async (req, res) => {
       update[f] = body[f];
     }
   }
+  // ── Ollama configuration ────────────────────────────────────────────────────
+  if (body.ollamaBaseUrl !== undefined) {
+    if (body.ollamaBaseUrl !== null && typeof body.ollamaBaseUrl !== "string") {
+      res.status(400).json({ error: "ollamaBaseUrl must be a string or null" }); return;
+    }
+    const trimmed = typeof body.ollamaBaseUrl === "string" ? body.ollamaBaseUrl.trim() : null;
+    if (trimmed) {
+      try {
+        const u = new URL(trimmed);
+        if (u.protocol !== "http:" && u.protocol !== "https:") {
+          res.status(400).json({ error: "ollamaBaseUrl must be http:// or https://" }); return;
+        }
+      } catch {
+        res.status(400).json({ error: "ollamaBaseUrl is not a valid URL" }); return;
+      }
+    }
+    update.ollamaBaseUrl = trimmed || null;
+  }
+  if (body.ollamaModel !== undefined) {
+    if (body.ollamaModel !== null && typeof body.ollamaModel !== "string") {
+      res.status(400).json({ error: "ollamaModel must be a string or null" }); return;
+    }
+    update.ollamaModel = typeof body.ollamaModel === "string" ? body.ollamaModel.trim() || null : null;
+  }
+
   const portalTextFields = ["portalHeading", "portalWelcomeMessage"] as const;
   for (const f of portalTextFields) {
     if (body[f] !== undefined) {

@@ -499,6 +499,9 @@ teachingCasesRouter.get("/research", async (req, res): Promise<void> => {
   const {
     modality, bodyPart, category, difficulty, researchStatus,
     isAnonymized, q,
+    sex, patientGender,
+    ageMin, ageMax,
+    tag, interesting, rare, publicationCandidate,
     page = "1", pageSize = "20",
     exportFormat,
   } = req.query as Record<string, string | undefined>;
@@ -510,6 +513,18 @@ teachingCasesRouter.get("/research", async (req, res): Promise<void> => {
   if (difficulty) conditions.push(eq(teachingCasesTable.difficulty, difficulty));
   if (researchStatus) conditions.push(eq(teachingCasesTable.researchStatus, researchStatus));
   if (isAnonymized !== undefined) conditions.push(eq(teachingCasesTable.isAnonymized, isAnonymized === "true"));
+  // Gender / sex filter (accepts either param name)
+  const genderFilter = sex ?? patientGender;
+  if (genderFilter) conditions.push(eq(teachingCasesTable.patientGender, genderFilter));
+  // Age range filter (patientAge is stored as text, compare numerically when possible)
+  if (ageMin) conditions.push(sql`${teachingCasesTable.patientAge} IS NOT NULL AND CAST(NULLIF(regexp_replace(${teachingCasesTable.patientAge}, '[^0-9]', '', 'g'), '') AS integer) >= ${Number(ageMin)}`);
+  if (ageMax) conditions.push(sql`${teachingCasesTable.patientAge} IS NOT NULL AND CAST(NULLIF(regexp_replace(${teachingCasesTable.patientAge}, '[^0-9]', '', 'g'), '') AS integer) <= ${Number(ageMax)}`);
+  // Tag filter — checks tagsJson array text
+  if (tag?.trim()) conditions.push(sql`${teachingCasesTable.tagsJson}::text ILIKE ${'%' + tag.trim() + '%'}`);
+  // Semantic shorthand filters mapped to tagsJson / researchStatus
+  if (interesting === "true") conditions.push(sql`${teachingCasesTable.tagsJson}::text ILIKE '%interesting%'`);
+  if (rare === "true") conditions.push(sql`${teachingCasesTable.tagsJson}::text ILIKE '%rare%'`);
+  if (publicationCandidate === "true") conditions.push(sql`(${teachingCasesTable.researchStatus} = 'publication' OR ${teachingCasesTable.tagsJson}::text ILIKE '%publication%')`);
   if (q?.trim()) {
     const term = `%${q.trim().toLowerCase()}%`;
     conditions.push(sql`(
