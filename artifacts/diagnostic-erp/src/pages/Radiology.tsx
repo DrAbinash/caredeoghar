@@ -20,6 +20,7 @@ import {
   CheckCircle2, PlayCircle, Hourglass, Camera, ClipboardEdit, Send,
   Mic, MicOff, Sparkles, Link2, Hand, X, Copy as CopyIcon,
   BookOpen, Plus, Trash2, Eye,
+  GraduationCap, BarChart3, Microscope,
 } from "lucide-react";
 
 type Study = {
@@ -499,6 +500,19 @@ export default function Radiology() {
             <div>Status: {risStatus}</div>
           </div>
         </div>
+      </div>
+
+      {/* Phase 8 teaching & productivity nav */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="outline" size="sm" onClick={() => window.location.href = "./teaching-cases"}>
+          <GraduationCap size={14} className="mr-1.5" /> Teaching Files
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => window.location.href = "./teaching-analytics"}>
+          <BarChart3 size={14} className="mr-1.5" /> Analytics
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => window.location.href = "./radiology/productivity"}>
+          <Microscope size={14} className="mr-1.5" /> Productivity
+        </Button>
       </div>
 
       {/* Filters */}

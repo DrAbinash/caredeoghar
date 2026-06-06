@@ -55,6 +55,16 @@ const AiComparisonWorkspace = lazy(() => import("@/pages/AiComparisonWorkspace")
 const MissedFindingDetector = lazy(() => import("@/pages/MissedFindingDetector"));
 const ImageReviewAssistant  = lazy(() => import("@/pages/ImageReviewAssistant"));
 const ProviderFallback      = lazy(() => import("@/pages/ProviderFallback"));
+const TeachingFiles         = lazy(() => import("@/pages/TeachingFiles"));
+const TeachingCaseDetail    = lazy(() => import("@/pages/TeachingCaseDetail"));
+const TeachingCollections   = lazy(() => import("@/pages/TeachingCaseCollections"));
+const TeachingFavorites     = lazy(() => import("@/pages/TeachingFavorites"));
+const TeachingAIAssistant   = lazy(() => import("@/pages/TeachingAIAssistant"));
+const TeachingResearchMode  = lazy(() => import("@/pages/TeachingResearchMode"));
+const TeachingMode          = lazy(() => import("@/pages/TeachingMode"));
+const TeachingAnalytics     = lazy(() => import("@/pages/TeachingAnalytics"));
+const TeachingPresentationMode = lazy(() => import("@/pages/TeachingPresentationMode"));
+const RadiologyProductivity   = lazy(() => import("@/pages/RadiologyProductivity"));
 const AiModelRouting        = lazy(() => import("@/pages/AiModelRouting"));
 const ReportTemplatesPage   = lazy(() => import("@/pages/ReportTemplates"));
 const AiAuditLog            = lazy(() => import("@/pages/AiAuditLog"));
@@ -166,6 +176,7 @@ const ERP_NAV_ORDER = [
   "/radiology/viewer", "/radiology/archive-lifecycle", "/radiology/watchdog", "/radiology/ai-inference-settings", "/radiology/hl7-settings", "/teleradiology",
   "/radiology/usg-measurements", "/radiology/usg-admin-settings",
   "/usg", "/usg/worklist", "/usg/measurements", "/usg/reporting", "/usg/doppler", "/usg/key-images", "/usg/settings", "/usg/critical", "/usg/analytics",
+  "/teaching-cases", "/teaching-collections", "/teaching-favorites", "/teaching-ai", "/teaching-research", "/teaching-mode", "/teaching-analytics", "/teaching-presentation",
   "/echo", "/fetal-echo", "/fetal-usg", "/fetal-usg/:studyId",
   "/settings/radiology", "/backup-replication",
   "/orders", "/tests", "/packages", "/billing", "/payments", "/reports",
@@ -283,6 +294,17 @@ function Router() {
               <Route path="/radiology/missed-finding-detector" component={MissedFindingDetector} />
               <Route path="/radiology/image-review" component={ImageReviewAssistant} />
               <Route path="/radiology/provider-fallback" component={ProviderFallback} />
+              <Route path="/teaching-cases" component={TeachingFiles} />
+              <Route path="/teaching-cases/:id" component={TeachingCaseDetail} />
+              <Route path="/teaching-collections" component={TeachingCollections} />
+              <Route path="/teaching-collections/:id" component={TeachingCollections} />
+              <Route path="/teaching-favorites" component={TeachingFavorites} />
+              <Route path="/teaching-ai" component={TeachingAIAssistant} />
+              <Route path="/teaching-research" component={TeachingResearchMode} />
+              <Route path="/teaching-mode" component={TeachingMode} />
+              <Route path="/teaching-analytics" component={TeachingAnalytics} />
+              <Route path="/teaching-presentation" component={TeachingPresentationMode} />
+              <Route path="/radiology/productivity" component={RadiologyProductivity} />
               <Route path="/radiology/ai-model-routing" component={AiModelRouting} />
               <Route path="/radiology/structured-report-templates" component={ReportTemplatesPage} />
               <Route path="/radiology/ai-audit-log" component={AiAuditLog} />

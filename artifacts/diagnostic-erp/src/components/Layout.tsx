@@ -86,6 +86,7 @@ import {
   Bell,
   Heart,
   Baby,
+  GraduationCap,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -170,6 +171,7 @@ const navItems: NavEntry[] = [
       { path: "/radiology/missed-finding-detector", icon: AlertTriangle, label: "Missed Finding Detector", featureFlag: "hideDeprecatedNav" },
       { path: "/radiology/image-review",            icon: Eye,            label: "Image Review Assistant",  featureFlag: "hideDeprecatedNav" },
       { path: "/radiology/provider-fallback",          icon: ShieldCheck,    label: "Provider Fallback",       featureFlag: "hideDeprecatedNav" },
+      { path: "/teaching-cases",                   icon: GraduationCap,    label: "Teaching Files",          featureFlag: "hideDeprecatedNav" },
       { path: "/radiology/ai-extraction-review",  icon: Microscope,   label: "AI Extraction Review",  featureFlag: "hideDeprecatedNav" },
       { path: "/radiology/pacs-settings",         icon: Settings2,    label: "PACS Settings",         ownerOnly: true, featureFlag: "hideDeprecatedNav" },
       { path: "/radiology/modality-management",   icon: Monitor,      label: "Modality Management",   ownerOnly: true, featureFlag: "hideDeprecatedNav" },
@@ -228,6 +230,7 @@ const navItems: NavEntry[] = [
       { path: "/radiology/missed-finding-detector", icon: AlertTriangle, label: "Missed Finding Detector", ownerOnly: true },
       { path: "/radiology/image-review",            icon: Eye,            label: "Image Review Assistant",  ownerOnly: true },
       { path: "/radiology/provider-fallback",          icon: ShieldCheck,    label: "Provider Fallback",       ownerOnly: true },
+      { path: "/teaching-cases",                   icon: GraduationCap,    label: "Teaching Files",          ownerOnly: true },
       { path: "/radiology/hl7-settings",          icon: Database,       label: "HL7 Settings",        ownerOnly: true },
       { path: "/radiology/advanced-tools",        icon: Cpu,            label: "Advanced Radiol Tools", ownerOnly: true },
     ],

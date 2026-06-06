@@ -79,6 +79,7 @@ export * from "./modalities";
 export * from "./aiReporting";
 export * from "./aiPromptTemplates";
 export * from "./aiPromptLibrary";
+export * from "./teachingCases";
 export * from "./aiModelRoutes";
 export * from "./aiQualityScores";
 export * from "./aiDicomFindings";

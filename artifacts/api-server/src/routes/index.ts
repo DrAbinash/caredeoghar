@@ -88,6 +88,8 @@ import { aiPromptTemplatesRouter } from "./aiPromptTemplates";
 import { aiPromptLibraryRouter } from "./aiPromptLibrary";
 import { aiModelRoutesRouter } from "./aiModelRoutes";
 import { aiComparisonRouter } from "./aiComparison";
+import { teachingCasesRouter } from "./teachingCases";
+import { radiologyCopilotRouter } from "./radiologyCopilot";
 import { radiologySnippetsRouter } from "./radiologySnippets";
 import { bankingRouter, bankingWebhookRouter } from "./banking";
 import { syncRouter } from "./sync";
@@ -452,6 +454,12 @@ router.use("/ai-model-routing", requireStaffAuth, aiModelRoutesRouter);
 
 // AI Comparison Workspace
 router.use("/ai-comparison", requireStaffAuth, aiComparisonRouter);
+
+// Phase 8: Teaching Files
+router.use("/teaching-cases", requireStaffAuth, teachingCasesRouter);
+
+// Phase 8: Radiology Copilot — Prior Study, Measurements, Smart Impression, Consistency, Follow-up
+router.use("/radiology-copilot", requireStaffAuth, radiologyCopilotRouter);
 
 // AI endpoints — each sub-route applies its own requireStaffPermission matching
 // the data domain it accesses (patients PHI, billing records, or radiology

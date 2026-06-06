@@ -225,4 +225,159 @@ router.post("/transcribe", requireStaffAuth, async (req, res) => {
   }
 });
 
+// ─── Phase 8: Teaching AI Assistant ──────────────────────────────────────────
+router.post("/teaching-assistant", requireStaffAuth, async (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const text = String(b.text ?? "").trim();
+  const mode = String(b.mode ?? "full");
+  if (!text) { res.status(400).json({ error: "text required" }); return; }
+
+  const prompt = `You are an AI Teaching Assistant for radiology residents.
+Based on the following case findings, generate structured teaching material:
+
+${text}
+
+Generate:
+1. A concise 2-paragraph summary of the case
+2. 5-7 key learning points (bullet points)
+3. A differential diagnosis list with brief rationale
+4. 5-7 exam pearls for radiology boards
+5. 5-6 multiple-choice exam questions (format: question, 4 options A-D, correct answer letter, explanation)
+6. A "Why this diagnosis" paragraph explaining the key findings
+7. 3-4 references to similar case types
+
+Return as JSON with keys: summary, learningPoints, differentialDiagnosis, examPearls, examQuestions (array of strings like "Q1\nA) ...\nB) ...\nC) ...\nD) ...\nAnswer: A\nExplanation: ..."), whyThisCase, similarCases, teachingLevel.
+Do NOT auto-finalize or sign. The radiologist is the final authority.`;
+
+  try {
+    const result = await legacyAiGenerate("teaching_assistant", prompt, { maxTokens: 4096 });
+    // Parse JSON from the response
+    let parsed: Record<string, unknown> = {};
+    try {
+      const match = result.match(/\{[\s\S]*\}/);
+      if (match) parsed = JSON.parse(match[0]);
+    } catch {
+      // Fallback to plain text
+      parsed = { summary: result, learningPoints: "", differentialDiagnosis: "", examPearls: "", examQuestions: [], whyThisCase: "", similarCases: "", teachingLevel: "resident" };
+    }
+    res.json({
+      result: {
+        summary: String(parsed.summary ?? result),
+        learningPoints: String(parsed.learningPoints ?? ""),
+        differentialDiagnosis: String(parsed.differentialDiagnosis ?? ""),
+        examPearls: String(parsed.examPearls ?? ""),
+        examQuestions: Array.isArray(parsed.examQuestions) ? parsed.examQuestions.map((q: unknown) => String(q)) : [],
+        whyThisCase: String(parsed.whyThisCase ?? ""),
+        similarCases: String(parsed.similarCases ?? ""),
+        teachingLevel: String(parsed.teachingLevel ?? "resident"),
+      },
+    });
+  } catch (err: unknown) {
+    req.log?.error({ err }, "ai teaching-assistant failed");
+    res.status(502).json({ error: "AI service unavailable. Please try again." });
+  }
+});
+
+router.post("/teaching-mode", requireStaffAuth, async (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const text = String(b.text ?? "").trim();
+  if (!text) { res.status(400).json({ error: "text required" }); return; }
+
+  const prompt = `You are an expert radiology educator. Generate teaching material for the following case:
+
+${text}
+
+Generate:
+1. "Why This Diagnosis" - explain the radiological reasoning step-by-step
+2. "Differential Diagnosis" - list top 5 differential diagnoses with distinguishing features
+3. "Learning Points" - 5-7 key educational points
+4. "Exam Pearls" - 5-7 tips for radiology board exams
+5. "References" - suggested reading or similar case types
+
+Return as JSON with keys: why, differentialDiagnosis, learningPoints, examPearls, references, teachingLevel, similarCases.
+Do NOT auto-finalize or sign. The radiologist is the final authority.`;
+
+  try {
+    const result = await legacyAiGenerate("teaching_mode", prompt, { maxTokens: 4096 });
+    let parsed: Record<string, unknown> = {};
+    try {
+      const match = result.match(/\{[\s\S]*\}/);
+      if (match) parsed = JSON.parse(match[0]);
+    } catch {
+      parsed = { why: result, differentialDiagnosis: "", learningPoints: "", examPearls: "", references: "", teachingLevel: "resident", similarCases: "" };
+    }
+    res.json({
+      result: {
+        why: String(parsed.why ?? result),
+        differentialDiagnosis: String(parsed.differentialDiagnosis ?? ""),
+        learningPoints: String(parsed.learningPoints ?? ""),
+        examPearls: String(parsed.examPearls ?? ""),
+        references: String(parsed.references ?? ""),
+        teachingLevel: String(parsed.teachingLevel ?? "resident"),
+        similarCases: String(parsed.similarCases ?? ""),
+      },
+    });
+  } catch (err: unknown) {
+    req.log?.error({ err }, "ai teaching-mode failed");
+    res.status(502).json({ error: "AI service unavailable. Please try again." });
+  }
+});
+
+router.post("/teaching-presentation", requireStaffAuth, async (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const text = String(b.text ?? "").trim();
+  const mode = String(b.mode ?? "slides");
+  if (!text) { res.status(400).json({ error: "text required" }); return; }
+
+  let prompt = "";
+  if (mode === "slides") {
+    prompt = `Generate a teaching presentation with 5-7 slides for the following radiology case:
+${text}
+
+Return as JSON: slides (array of {title, content, type} where type is "case"|"image"|"question"|"summary"|"reference"), duration, unknownCase.
+Each slide should have 50-100 words of content suitable for projection.
+Do NOT auto-finalize or sign. The radiologist is the final authority.`;
+  } else if (mode === "quiz") {
+    prompt = `Generate 5 multiple-choice quiz questions based on the following radiology case:
+${text}
+
+Return as JSON: quiz (array of {question, options (array of 4 strings), correctAnswer (0-3), explanation}), duration.
+Do NOT auto-finalize or sign. The radiologist is the final authority.`;
+  } else {
+    prompt = `Generate an "unknown case" teaching presentation from the following radiology case:
+${text}
+
+Return as JSON: unknownCase {findings, impression, reveal}, slides (array of {title, content, type}), duration.
+The unknown case should present only the findings first, then reveal the diagnosis.
+Do NOT auto-finalize or sign. The radiologist is the final authority.`;
+  }
+
+  try {
+    const result = await legacyAiGenerate("teaching_presentation", prompt, { maxTokens: 4096 });
+    let parsed: Record<string, unknown> = {};
+    try {
+      const match = result.match(/\{[\s\S]*\}/);
+      if (match) parsed = JSON.parse(match[0]);
+    } catch {
+      parsed = {
+        slides: [{ title: "Case", content: result, type: "case" }],
+        quiz: [],
+        unknownCase: { findings: text, impression: "", reveal: result },
+        duration: "10 min",
+      };
+    }
+    res.json({
+      result: {
+        slides: Array.isArray(parsed.slides) ? parsed.slides : [{ title: "Case", content: result, type: "case" }],
+        quiz: Array.isArray(parsed.quiz) ? parsed.quiz : [],
+        unknownCase: (parsed.unknownCase as Record<string, string> | undefined) ?? { findings: text, impression: "", reveal: result },
+        duration: String(parsed.duration ?? "10 min"),
+      },
+    });
+  } catch (err: unknown) {
+    req.log?.error({ err }, "ai teaching-presentation failed");
+    res.status(502).json({ error: "AI service unavailable. Please try again." });
+  }
+});
+
 export default router;

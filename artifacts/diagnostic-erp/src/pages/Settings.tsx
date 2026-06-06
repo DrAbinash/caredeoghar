@@ -21,7 +21,7 @@ import {
   Search, Globe, Copy, ExternalLink, Check, Network, MapPin, Database,
   RefreshCcw, FileCode, Send, QrCode, Palette, Bot, Inbox, ChevronRight,
   ArrowLeft, Phone, Layers, AlertTriangle, ScanLine, Receipt, Keyboard, Brain,
-  Sparkles, Construction,
+  Sparkles, Construction, GraduationCap,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -4844,6 +4844,20 @@ function RadiologySettingsTab() {
   const [missedFindingDetector, setMissedFindingDetector] = useState(() => isFeatureEnabled("radiologyMissedFindingDetector"));
   const [providerRouting, setProviderRouting] = useState(() => isFeatureEnabled("radiologyProviderRouting"));
   const [providerFallback, setProviderFallback] = useState(() => isFeatureEnabled("radiologyProviderFallback"));
+  // Phase 8: DICOM-Aware Radiology Copilot + Teaching Files
+  const [priorComparison, setPriorComparison] = useState(() => isFeatureEnabled("radiologyPriorComparison"));
+  const [measurementTracker, setMeasurementTracker] = useState(() => isFeatureEnabled("radiologyMeasurementTracker"));
+  const [smartImpression_v2, setSmartImpression_v2] = useState(() => isFeatureEnabled("radiologySmartImpression_v2"));
+  const [consistencyChecker, setConsistencyChecker] = useState(() => isFeatureEnabled("radiologyConsistencyChecker"));
+  const [followupAssistant, setFollowupAssistant] = useState(() => isFeatureEnabled("radiologyFollowupAssistant"));
+  const [dicomMetadataAssistant, setDicomMetadataAssistant] = useState(() => isFeatureEnabled("radiologyDicomMetadataAssistant"));
+  const [structuredReporting, setStructuredReporting] = useState(() => isFeatureEnabled("radiologyStructuredReporting"));
+  const [teachingMode, setTeachingMode] = useState(() => isFeatureEnabled("radiologyTeachingMode"));
+  const [teachingFiles, setTeachingFiles] = useState(() => isFeatureEnabled("radiologyTeachingFiles"));
+  const [teachingAI, setTeachingAI] = useState(() => isFeatureEnabled("radiologyTeachingAI"));
+  const [teachingCollections, setTeachingCollections] = useState(() => isFeatureEnabled("radiologyTeachingCollections"));
+  const [teachingPresentation, setTeachingPresentation] = useState(() => isFeatureEnabled("radiologyTeachingPresentation"));
+  const [teachingResearch, setTeachingResearch] = useState(() => isFeatureEnabled("radiologyTeachingResearch"));
 
   const toggles = [
     { id: "radiologyQuickAdd", label: "Quick Add Buttons", desc: "Alt+1-6 shortcut buttons for instant insertion of common findings", value: quickAdd, set: setQuickAdd },
@@ -4916,6 +4930,22 @@ function RadiologySettingsTab() {
     { id: "radiologyImpressionRules", label: "Impression Rules", desc: "Admin-editable rule-based impression generator", value: impressionRules, set: setImpressionRules },
     { id: "radiologyFavoriteFindingSets", label: "Favorite Finding Sets", desc: "Save and reuse common structured findings per user", value: favoriteFindingSets, set: setFavoriteFindingSets },
     { id: "radiologySmartAnalytics", label: "Smart Reporting Analytics", desc: "Track smart findings usage, report time, and builder statistics", value: smartAnalytics, set: setSmartAnalytics },
+  ];
+
+  const phase8Toggles = [
+    { id: "radiologyPriorComparison", label: "Prior Study Auto-Fetch", desc: "Automatically search and display prior studies for the same patient, modality, and body part", value: priorComparison, set: setPriorComparison },
+    { id: "radiologyMeasurementTracker", label: "Measurement Tracker", desc: "Track measurement history across studies with trend display and change detection", value: measurementTracker, set: setMeasurementTracker },
+    { id: "radiologySmartImpression_v2", label: "Smart Impression Builder", desc: "Generate impression directly from findings with editable output", value: smartImpression_v2, set: setSmartImpression_v2 },
+    { id: "radiologyConsistencyChecker", label: "Consistency Checker", desc: "Detect mismatches between findings and impression (side, level, measurements)", value: consistencyChecker, set: setConsistencyChecker },
+    { id: "radiologyFollowupAssistant", label: "Follow-up Intelligence", desc: "Guideline-based follow-up suggestions for BI-RADS, TI-RADS, PI-RADS, etc.", value: followupAssistant, set: setFollowupAssistant },
+    { id: "radiologyDicomMetadataAssistant", label: "DICOM Metadata Assistant", desc: "Auto-read DICOM metadata and generate technique section", value: dicomMetadataAssistant, set: setDicomMetadataAssistant },
+    { id: "radiologyStructuredReporting", label: "Structured Reporting Engine", desc: "One-click templates for all major studies with AI-fillable sections", value: structuredReporting, set: setStructuredReporting },
+    { id: "radiologyTeachingMode", label: "Teaching Mode", desc: "Educational explanations with WHY button and learning references", value: teachingMode, set: setTeachingMode },
+    { id: "radiologyTeachingFiles", label: "Teaching Files Platform", desc: "Save, search, and organize anonymized teaching cases", value: teachingFiles, set: setTeachingFiles },
+    { id: "radiologyTeachingAI", label: "AI Teaching Assistant", desc: "Generate teaching summaries, learning points, and exam questions", value: teachingAI, set: setTeachingAI },
+    { id: "radiologyTeachingCollections", label: "Teaching Collections", desc: "Create and share curated case collections", value: teachingCollections, set: setTeachingCollections },
+    { id: "radiologyTeachingPresentation", label: "Presentation Mode", desc: "Generate teaching slides, quizzes, and unknown cases", value: teachingPresentation, set: setTeachingPresentation },
+    { id: "radiologyTeachingResearch", label: "Research Mode", desc: "Track research candidates, publications, and conference submissions", value: teachingResearch, set: setTeachingResearch },
   ];
 
   return (
@@ -5031,6 +5061,32 @@ function RadiologySettingsTab() {
         </div>
         <div className="space-y-2">
           {phase7aToggles.map((t) => (
+            <label key={t.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20 cursor-pointer">
+              <div className="pr-4">
+                <div className="text-sm font-medium">{t.label}</div>
+                <div className="text-[11px] text-muted-foreground">{t.desc}</div>
+              </div>
+              <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${t.value ? "bg-primary" : "bg-muted-foreground/40"}`}>
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${t.value ? "translate-x-5" : "translate-x-1"}`} />
+              </span>
+              <input type="checkbox" className="sr-only" checked={t.value} onChange={() => {
+                const next = !t.value;
+                t.set(next);
+                setFeatureFlag(t.id, next);
+              }} />
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Phase 8: DICOM-Aware Radiology Copilot + Teaching Files */}
+      <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="font-bold text-lg flex items-center gap-2"><GraduationCap size={16} /> DICOM Radiology Copilot + Teaching</h2>
+          <p className="text-sm text-muted-foreground mt-1">Enterprise RIS/PACS-integrated copilot with prior study comparison, measurement tracking, structured reporting, teaching files, and research mode. All OFF by default.</p>
+        </div>
+        <div className="space-y-2">
+          {phase8Toggles.map((t) => (
             <label key={t.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-card-border bg-muted/20 cursor-pointer">
               <div className="pr-4">
                 <div className="text-sm font-medium">{t.label}</div>
