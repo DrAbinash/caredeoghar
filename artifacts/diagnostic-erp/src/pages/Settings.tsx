@@ -4787,6 +4787,7 @@ function OllamaSettingsCard() {
   const [model, setModel] = useState("llama3");
   const [localOnly, setLocalOnly] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
 
   useEffect(() => {
     api.get<{ ollamaBaseUrl?: string | null; ollamaModel?: string | null; ollamaLocalOnly?: boolean }>("/api/clinic-settings")
@@ -4826,8 +4827,10 @@ function OllamaSettingsCard() {
         { baseUrl: baseUrl.trim(), model: model.trim() || "llama3", allowLocal: localOnly }
       );
       if (resp.ok) {
+        const pulledModels = resp.models ?? [];
+        if (pulledModels.length > 0) setAvailableModels(pulledModels);
         const detail = [
-          resp.modelFound ? `Model "${resp.model}" found` : `Model "${resp.model}" not in list (${(resp.models ?? []).slice(0, 3).join(", ")})`,
+          resp.modelFound ? `Model "${resp.model}" found` : `Model "${resp.model}" not in list (${pulledModels.slice(0, 3).join(", ")})`,
           resp.latencyMs != null ? `${resp.latencyMs}ms` : null,
         ].filter(Boolean).join(" · ");
         toast({ title: "Ollama connection OK", description: detail });
@@ -4864,13 +4867,41 @@ function OllamaSettingsCard() {
         </div>
         <div>
           <Label className="text-sm">Model Name</Label>
-          <Input
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            placeholder="llama3"
-            className="mt-1"
-          />
-          <p className="text-[11px] text-muted-foreground mt-1">Must be pulled on the Ollama instance (e.g. <code className="font-mono">ollama pull llama3</code>).</p>
+          {availableModels.length > 0 ? (
+            <div className="mt-1 space-y-1">
+              <select
+                value={availableModels.includes(model) ? model : "__custom__"}
+                onChange={(e) => { if (e.target.value !== "__custom__") setModel(e.target.value); }}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                {availableModels.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+                {!availableModels.includes(model) && (
+                  <option value="__custom__">{model} (custom)</option>
+                )}
+              </select>
+              <p className="text-[11px] text-muted-foreground">
+                Models pulled on the Ollama instance. To use a different model, type it below after pulling it with <code className="font-mono">ollama pull &lt;name&gt;</code>.
+              </p>
+              <Input
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="llama3"
+                className="text-xs h-7"
+              />
+            </div>
+          ) : (
+            <>
+              <Input
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="llama3"
+                className="mt-1"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">Must be pulled on the Ollama instance (e.g. <code className="font-mono">ollama pull llama3</code>). Click "Test Connection" to see available models.</p>
+            </>
+          )}
         </div>
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={localOnly} onChange={(e) => setLocalOnly(e.target.checked)} className="h-4 w-4" />
