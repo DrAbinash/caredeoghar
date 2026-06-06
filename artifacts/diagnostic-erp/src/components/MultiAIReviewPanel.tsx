@@ -3,7 +3,7 @@
  * Send a case to multiple AI providers and compare findings side-by-side.
  * AI Draft – Requires Radiologist Review
  */
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -13,6 +13,8 @@ import { api } from "@/lib/fetchApi";
 import {
   Bot, Sparkles, Copy, Check, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Trophy,
 } from "lucide-react";
+import AIConfidenceBadge, { parseConfidenceFromText } from "./AIConfidenceBadge";
+import { isFeatureEnabled } from "@/lib/staffSession";
 
 interface AIProviderResult {
   provider: string;
@@ -57,12 +59,13 @@ function ConfidenceBar({ pct }: { pct: number }) {
 }
 
 function ProviderCard({
-  result, onUse, isWinner, onSelectWinner,
+  result, onUse, isWinner, onSelectWinner, confidenceVizEnabled,
 }: {
   result: AIProviderResult;
   onUse: () => void;
   isWinner: boolean;
   onSelectWinner: () => void;
+  confidenceVizEnabled: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -108,7 +111,17 @@ function ProviderCard({
 
           <div>
             <div className="text-[10px] font-semibold text-muted-foreground uppercase mb-1">Findings</div>
-            <div className="bg-muted/30 rounded p-2 whitespace-pre-wrap leading-relaxed text-[11px]">{result.findings}</div>
+            {confidenceVizEnabled ? (
+              <AIConfidenceBadge metadata={{
+                confidence: parseConfidenceFromText(result.findings),
+                provider: result.provider,
+                model: result.model,
+              }}>
+                <div className="bg-muted/30 rounded p-2 whitespace-pre-wrap leading-relaxed text-[11px]">{result.findings}</div>
+              </AIConfidenceBadge>
+            ) : (
+              <div className="bg-muted/30 rounded p-2 whitespace-pre-wrap leading-relaxed text-[11px]">{result.findings}</div>
+            )}
           </div>
 
           {result.differentials.length > 0 && (
@@ -289,6 +302,7 @@ export default function MultiAIReviewPanel({ modality, bodyPart, findingsText, i
               onUse={() => onUseResult?.(r)}
               isWinner={winnerProvider === r.provider}
               onSelectWinner={() => handleSelectWinner(r.provider)}
+              confidenceVizEnabled={isFeatureEnabled("confidenceVisualization")}
             />
           ))}
         </div>

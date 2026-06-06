@@ -14,6 +14,7 @@ import {
   TrendingUp, MessageSquare, Trash2, AlertTriangle,
 } from "lucide-react";
 import { isFeatureEnabled } from "@/lib/staffSession";
+import AIConfidenceBadge, { parseConfidenceFromText } from "./AIConfidenceBadge";
 
 interface MemorySuggestion {
   id: number;
@@ -393,7 +394,15 @@ export default function RadiologyMemoryPanel({
                           <div className="text-[10px] text-amber-600 font-medium flex items-center gap-1">
                             <AlertTriangle size={10} /> AI Draft – Requires Radiologist Review
                           </div>
-                          <Textarea value={s.text} readOnly className="text-[11px] min-h-[60px] bg-muted/30" />
+                          {isFeatureEnabled("confidenceVisualization") ? (
+                            <AIConfidenceBadge metadata={{
+                              confidence: parseConfidenceFromText(s.text),
+                            }}>
+                              <Textarea value={s.text} readOnly className="text-[11px] min-h-[60px] bg-muted/30" />
+                            </AIConfidenceBadge>
+                          ) : (
+                            <Textarea value={s.text} readOnly className="text-[11px] min-h-[60px] bg-muted/30" />
+                          )}
                           <div className="flex gap-2">
                             <Button
                               size="sm"
