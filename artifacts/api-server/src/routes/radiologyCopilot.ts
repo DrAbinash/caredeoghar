@@ -516,72 +516,79 @@ radiologyCopilotRouter.get("/productivity", async (req, res): Promise<void> => {
 // with per-parameter status: improved / stable / progressed / new / resolved
 // ══════════════════════════════════════════════════════════════════════════════
 
+// Helper: resolve report text from patientReports by studyId
+async function resolveReportText(studyId: number): Promise<{ text: string; meta: { accessionNumber: string; studyDate: string | null; modality: string } | null }> {
+  const [study] = await db
+    .select({ accessionNumber: radiologyStudiesTable.accessionNumber, studyDate: radiologyStudiesTable.studyDate, modality: radiologyStudiesTable.modality })
+    .from(radiologyStudiesTable)
+    .where(eq(radiologyStudiesTable.id, studyId))
+    .limit(1);
+  if (!study) return { text: "", meta: null };
+
+  const [report] = await db
+    .select({ body: patientReportsTable.body, impression: patientReportsTable.impression })
+    .from(patientReportsTable)
+    .where(eq(patientReportsTable.studyId, studyId))
+    .orderBy(desc(patientReportsTable.createdAt))
+    .limit(1);
+
+  let text = "";
+  if (report) {
+    try {
+      const parsed = JSON.parse(report.body ?? "");
+      if (Array.isArray(parsed)) {
+        text = parsed.map((f: { remarks?: string }) => f.remarks ?? "").filter(Boolean).join("\n");
+      } else if (typeof parsed === "object" && parsed !== null) {
+        text = Object.values(parsed as Record<string, unknown>).join("\n");
+      }
+    } catch {
+      text = report.body ?? "";
+    }
+    if (!text && report.impression) text = report.impression;
+  }
+  return { text, meta: study };
+}
+
 radiologyCopilotRouter.post("/structured-comparison", async (req, res) => {
   const {
-    currentFindings,
+    currentFindings: currentFindingsRaw,
     priorFindings: priorFindingsRaw,
+    currentStudyId,
     priorStudyId,
-    currentImpression,
-    priorImpression,
     modality,
     bodyPart,
   } = req.body as {
     currentFindings?: string;
     priorFindings?: string;
+    currentStudyId?: number;
     priorStudyId?: number;
-    currentImpression?: string;
-    priorImpression?: string;
     modality?: string;
     bodyPart?: string;
   };
 
-  if (!currentFindings?.trim()) {
-    return res.status(400).json({ error: "currentFindings is required" });
+  // Resolve current findings — from text or DB
+  let currentFindings = currentFindingsRaw ?? "";
+  let resolvedCurrentStudy: { accessionNumber: string; studyDate: string | null; modality: string } | null = null;
+  if (!currentFindings.trim() && currentStudyId) {
+    const { text, meta } = await resolveReportText(currentStudyId);
+    currentFindings = text;
+    resolvedCurrentStudy = meta;
   }
 
-  // If a priorStudyId is supplied, resolve the prior study's report text from DB
+  // Resolve prior findings — from text or DB
   let priorFindings = priorFindingsRaw ?? "";
   let resolvedPriorStudy: { accessionNumber: string; studyDate: string | null; modality: string } | null = null;
-
-  if (priorStudyId && !priorFindings.trim()) {
-    const [priorStudy] = await db
-      .select({
-        accessionNumber: radiologyStudiesTable.accessionNumber,
-        studyDate: radiologyStudiesTable.studyDate,
-        modality: radiologyStudiesTable.modality,
-      })
-      .from(radiologyStudiesTable)
-      .where(eq(radiologyStudiesTable.id, priorStudyId))
-      .limit(1);
-
-    if (priorStudy) {
-      resolvedPriorStudy = priorStudy;
-      // Fetch the report for this study (studyId = FK → radiology_studies; body = narrative text)
-      const [report] = await db
-        .select({ findingsText: patientReportsTable.body, impressionText: patientReportsTable.impression })
-        .from(patientReportsTable)
-        .where(eq(patientReportsTable.studyId, priorStudyId))
-        .orderBy(desc(patientReportsTable.createdAt))
-        .limit(1);
-      if (report) {
-        // reportData may be JSON (structured report) or plain text
-        try {
-          const parsed = JSON.parse(report.findingsText ?? "");
-          if (Array.isArray(parsed)) {
-            priorFindings = parsed.map((f: { remarks?: string }) => f.remarks ?? "").filter(Boolean).join("\n");
-          } else if (typeof parsed === "object" && parsed !== null) {
-            priorFindings = Object.values(parsed).join("\n");
-          }
-        } catch {
-          priorFindings = report.findingsText ?? "";
-        }
-        if (!priorFindings && report.impressionText) priorFindings = report.impressionText;
-      }
-    }
+  if (!priorFindings.trim() && priorStudyId) {
+    const { text, meta } = await resolveReportText(priorStudyId);
+    priorFindings = text;
+    resolvedPriorStudy = meta;
   }
 
+  if (!currentFindings.trim()) {
+    return res.status(400).json({ error: "currentFindings is required (or supply currentStudyId with an existing report)" });
+  }
   if (!priorFindings.trim()) {
-    return res.status(400).json({ error: "priorFindings is required (or supply a priorStudyId with an existing report)" });
+    return res.status(400).json({ error: "priorFindings is required (or supply priorStudyId with an existing report)" });
   }
 
   // Deterministic structural comparison — no AI required
@@ -736,6 +743,7 @@ radiologyCopilotRouter.post("/structured-comparison", async (req, res) => {
     overallTrend,
     counts,
     totalParameters: comparison.length,
+    resolvedCurrentStudy: resolvedCurrentStudy ?? null,
     resolvedPriorStudy: resolvedPriorStudy ?? null,
     note: "AI Draft – Requires Radiologist Review. Structural comparison only — not a clinical diagnosis.",
   });

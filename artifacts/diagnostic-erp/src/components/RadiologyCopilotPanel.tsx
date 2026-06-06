@@ -2,7 +2,7 @@
  * Phase 8: Radiology Copilot Panel
  * Prior Study Auto-Fetch, Smart Impression, Consistency Checker, Follow-up Suggestions
  */
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -229,6 +229,39 @@ export default function RadiologyCopilotPanel({
   const phase10Master = useMemo(() => isFeatureEnabled("dicomImageIntelligence"), []);
   const changeDetectionEnabled = useMemo(() => phase10Master && isFeatureEnabled("changeDetection"), [phase10Master]);
 
+  // ── Auto-run: debounced comparison with most-recent prior study ──────────
+  // Fires 2.5s after currentFindings settles, but only once per (findingsText, priorStudies[0].id) pair
+  const lastAutoComparedRef = useRef<{ findingsKey: string; priorId: number } | null>(null);
+  useEffect(() => {
+    if (!phase10Master) return;
+    if (!findingsText || findingsText.trim().length < 30) return;   // need meaningful text
+    const topPrior = priorStudies.find((s) => s.impression);        // most recent with a report
+    if (!topPrior) return;
+
+    const key = { findingsKey: findingsText.slice(0, 80), priorId: topPrior.id };
+    if (
+      lastAutoComparedRef.current?.findingsKey === key.findingsKey &&
+      lastAutoComparedRef.current?.priorId === key.priorId
+    ) return; // already ran this exact pair
+
+    const timer = setTimeout(async () => {
+      lastAutoComparedRef.current = key;
+      setLoadingComparison(true);
+      try {
+        const r = await fetch("/api/radiology-copilot/structured-comparison", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ currentFindings: findingsText, priorStudyId: topPrior.id }),
+        });
+        const data = await r.json();
+        if (r.ok) setComparisonResult(data);
+      } catch { /* silent — auto-run failure is non-critical */ }
+      finally { setLoadingComparison(false); }
+    }, 2500);
+
+    return () => clearTimeout(timer);
+  }, [phase10Master, findingsText, priorStudies]);
+
   // Auto-compare: when a prior study impression is known, pre-fill and offer one-click compare
   const autoCompare = useCallback(async (priorStudyId: number) => {
     if (!findingsText?.trim()) return;
@@ -416,6 +449,54 @@ export default function RadiologyCopilotPanel({
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Phase 10A: Inline structured diff — auto-populated when flags are ON */}
+            {phase10Master && (loadingComparison || comparisonResult) && (
+              <div className="mt-3 border border-border rounded-xl overflow-hidden">
+                <div className="px-3 py-2 bg-muted/30 border-b border-border flex items-center gap-2">
+                  <GitCompare size={12} className="text-primary" />
+                  <span className="text-[11px] font-semibold text-primary">Structured Prior Comparison</span>
+                  {loadingComparison && (
+                    <span className="text-[10px] text-muted-foreground ml-auto animate-pulse">Comparing...</span>
+                  )}
+                  {comparisonResult && !loadingComparison && (
+                    <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ml-auto ${
+                      comparisonResult.overallTrend === "progressed" ? "bg-red-100 text-red-700"
+                      : comparisonResult.overallTrend === "improved" ? "bg-green-100 text-green-700"
+                      : "bg-blue-100 text-blue-700"
+                    }`}>
+                      Overall: {comparisonResult.overallTrend}
+                    </span>
+                  )}
+                </div>
+                {comparisonResult && !loadingComparison && (
+                  <div className="p-2 space-y-1.5 max-h-48 overflow-y-auto">
+                    {comparisonResult.comparison.length === 0 ? (
+                      <div className="text-center py-2 text-[10px] text-muted-foreground">No significant parameter changes detected.</div>
+                    ) : (
+                      comparisonResult.comparison.map((item, i) => (
+                        <div key={i} className="flex items-start gap-2 text-[10px]">
+                          <span className={`mt-0.5 flex-shrink-0 px-1 py-0.5 rounded text-[9px] font-medium ${
+                            item.status === "progressed" ? "bg-red-100 text-red-700"
+                            : item.status === "improved" ? "bg-green-100 text-green-700"
+                            : item.status === "new" ? "bg-orange-100 text-orange-700"
+                            : item.status === "resolved" ? "bg-purple-100 text-purple-700"
+                            : "bg-blue-100 text-blue-700"
+                          }`}>{item.status}</span>
+                          <div>
+                            <span className="font-medium">{item.parameter}</span>
+                            <span className="text-muted-foreground ml-1">— {item.detail.substring(0, 80)}</span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                    <div className="text-[9px] text-amber-600 flex items-center gap-1 pt-1 border-t border-border">
+                      <AlertTriangle size={8} /> AI Draft – Requires Radiologist Review
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </>
