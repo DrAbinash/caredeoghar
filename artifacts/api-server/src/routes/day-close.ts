@@ -966,7 +966,7 @@ dayCloseRouter.post("/staff-close/:id/reopen", requireSuperAdminStaff, async (re
  * the "Post-Closure Activity" callout shown to the staff member and admin.
  */
 async function postClosureActivity(userName: string) {
-  // Find the latest close for this user (status != reopened).
+  // Find the most recent ACTUAL close for this user (skip reopened rows).
   const [latestClose] = await db
     .select({
       id:        userDayClosuresTable.id,
@@ -974,11 +974,16 @@ async function postClosureActivity(userName: string) {
       drawerStatus: userDayClosuresTable.drawerStatus,
     })
     .from(userDayClosuresTable)
-    .where(eq(userDayClosuresTable.userName, userName))
+    .where(
+      and(
+        eq(userDayClosuresTable.userName, userName),
+        sql`${userDayClosuresTable.drawerStatus} != 'reopened'`
+      )
+    )
     .orderBy(desc(userDayClosuresTable.closedAt))
     .limit(1);
 
-  if (!latestClose || latestClose.drawerStatus === "reopened") {
+  if (!latestClose) {
     return { closedAt: null, bills: [], payments: [], billTotal: 0, paymentTotal: 0 };
   }
 

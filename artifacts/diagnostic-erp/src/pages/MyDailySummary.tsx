@@ -1149,13 +1149,14 @@ export default function MyDailySummary() {
     staleTime: 30_000,
   });
 
-  // Post-closure activity — only relevant when drawer is closed.
+  // Post-closure activity — always fetch so the admin can see yesterday's
+  // post-closure bills even when today's drawer is open.
   const isDrawerClosed = drawerQ.data && drawerQ.data.drawerStatus !== "open" && drawerQ.data.drawerStatus !== "reopened";
   const postClosureQ = useQuery<PostClosureActivity>({
     queryKey: ["my-post-closure-activity"],
     queryFn: () => api.get<PostClosureActivity>("/api/day-close/my-post-closure-activity"),
-    enabled: !!isDrawerClosed,
-    refetchInterval: isDrawerClosed ? 60_000 : false,
+    enabled: true,
+    refetchInterval: 60_000,
     staleTime: 30_000,
   });
 
