@@ -674,6 +674,7 @@ function BillingDeskLayoutCard() {
     setLayout(next);
     localStorage.setItem("billingDeskLayout", next);
     setFeatureFlag("billingDeskStepped", next === "stepped");
+    window.dispatchEvent(new Event("billingDeskLayoutChanged"));
   };
 
   const toggleAutoAdvance = () => {
@@ -953,7 +954,13 @@ function ClinicInfoTab() {
 
   const { toast } = useToast();
   const save = useMutation({
-    mutationFn: (body: ClinicSettings) => api.put("/api/clinic-settings", body),
+    mutationFn: (body: ClinicSettings) => {
+      // Strip billing-desk-owned JSON fields so the Clinic Info tab doesn't
+      // accidentally clobber quick-test or Form-F test assignments saved by
+      // other specialised tabs / the Billing Desk.
+      const { quickTestIds, formFTestIds, ...rest } = body as Record<string, unknown>;
+      return api.put("/api/clinic-settings", rest);
+    },
     onSuccess: (saved) => {
       qc.invalidateQueries({ queryKey: ["clinic-settings"] });
       setForm(saved as ClinicSettings);

@@ -373,10 +373,22 @@ export default function BillingDesk() {
 
   // ── New patient form visibility ──────────────────────
   // ── Layout mode (unified / stepped) ─────────────────
-  const [layoutMode] = useState<"unified" | "stepped" | "compact">(() => {
+  const [layoutMode, setLayoutMode] = useState<"unified" | "stepped" | "compact">(() => {
     const stored = typeof window !== "undefined" ? localStorage.getItem("billingDeskLayout") : null;
     return (stored as "unified" | "stepped" | "compact") || "unified";
   });
+  useEffect(() => {
+    const handler = () => {
+      const stored = typeof window !== "undefined" ? localStorage.getItem("billingDeskLayout") : null;
+      setLayoutMode((stored as "unified" | "stepped" | "compact") || "unified");
+    };
+    window.addEventListener("storage", handler);
+    window.addEventListener("billingDeskLayoutChanged", handler);
+    return () => {
+      window.removeEventListener("storage", handler);
+      window.removeEventListener("billingDeskLayoutChanged", handler);
+    };
+  }, []);
   const isStepped = layoutMode === "stepped";
   const isCompact = layoutMode === "compact";
   const autoAdvance = isStepped && isFeatureEnabled("billingDeskAutoAdvance");
