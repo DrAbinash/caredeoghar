@@ -1501,39 +1501,34 @@ export default function BillingDesk() {
                   <UserPlus size={14} className="text-white" />
                   <span>Register New Patient</span>
                 </div>
-                <div className="p-3 space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs">First Name *</Label>
+                <div className="p-2.5 space-y-2">
+                  {/* Single compact row: Name | Phone | Age | Gender | Blood | Address */}
+                  <div className="flex flex-wrap items-end gap-1.5">
+                    <div className="flex-1 min-w-[140px] space-y-0.5">
+                      <Label className="text-[10px] font-extrabold">Name *</Label>
                       <Input
-                        value={newPatient.firstName}
-                        onChange={(e) => setNewPatient({ ...newPatient, firstName: e.target.value })}
-                        placeholder="First name"
-                        className="h-8 text-sm"
+                        value={`${newPatient.firstName} ${newPatient.lastName}`.trim()}
+                        onChange={(e) => {
+                          const parts = e.target.value.trim().split(/\s+/);
+                          const first = parts[0] || "";
+                          const last = parts.slice(1).join(" ") || "";
+                          setNewPatient({ ...newPatient, firstName: first, lastName: last });
+                        }}
+                        placeholder="Full name"
+                        className="h-7 text-xs"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Last Name *</Label>
-                      <Input
-                        value={newPatient.lastName}
-                        onChange={(e) => setNewPatient({ ...newPatient, lastName: e.target.value })}
-                        placeholder="Last name"
-                        className="h-8 text-sm"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="space-y-1 col-span-1">
-                      <Label className="text-xs">Phone *</Label>
+                    <div className="w-[110px] space-y-0.5">
+                      <Label className="text-[10px] font-extrabold">Phone *</Label>
                       <Input
                         value={newPatient.phone}
                         onChange={(e) => setNewPatient({ ...newPatient, phone: e.target.value })}
                         placeholder="10-digit"
-                        className="h-8 text-sm"
+                        className="h-7 text-xs"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Age *</Label>
+                    <div className="w-[100px] space-y-0.5">
+                      <Label className="text-[10px] font-extrabold">Age *</Label>
                       <div className="flex gap-1">
                         <Input
                           type="number"
@@ -1541,11 +1536,11 @@ export default function BillingDesk() {
                           max={newPatient.ageUnit === "years" ? 120 : 365}
                           value={newPatient.ageValue}
                           onChange={(e) => setNewPatient({ ...newPatient, ageValue: e.target.value })}
-                          placeholder="Value"
-                          className="h-8 text-sm flex-1"
+                          placeholder=""
+                          className="h-7 text-xs flex-1 min-w-0"
                         />
                         <Select value={newPatient.ageUnit} onValueChange={(v) => setNewPatient({ ...newPatient, ageUnit: v as "years" | "months" | "days" })}>
-                          <SelectTrigger className="h-8 text-sm w-[90px]"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="h-7 text-[10px] w-[52px] px-1"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="years">Yrs</SelectItem>
                             <SelectItem value="months">Mo</SelectItem>
@@ -1554,44 +1549,42 @@ export default function BillingDesk() {
                         </Select>
                       </div>
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Gender *</Label>
+                    <div className="w-[72px] space-y-0.5">
+                      <Label className="text-[10px] font-extrabold">Sex *</Label>
                       <Select value={newPatient.gender} onValueChange={(v) => setNewPatient({ ...newPatient, gender: v })}>
-                        <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="h-7 text-[10px] px-1.5"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {GENDERS.map((g) => <SelectItem key={g} value={g} className="capitalize">{g}</SelectItem>)}
+                          {GENDERS.map((g) => <SelectItem key={g} value={g} className="text-xs capitalize">{g}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Blood Group</Label>
+                    <div className="w-[68px] space-y-0.5">
+                      <Label className="text-[10px] font-extrabold">BG</Label>
                       <Select value={newPatient.bloodGroup || "none"} onValueChange={(v) => setNewPatient({ ...newPatient, bloodGroup: v === "none" ? "" : v })}>
-                        <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
+                        <SelectTrigger className="h-7 text-[10px] px-1.5"><SelectValue placeholder="—" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">—</SelectItem>
-                          {BLOOD_GROUPS.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                          {BLOOD_GROUPS.map((g) => <SelectItem key={g} value={g} className="text-xs">{g}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Address</Label>
+                    <div className="flex-[1.5] min-w-[140px] space-y-0.5">
+                      <Label className="text-[10px] font-extrabold">Address</Label>
                       <Input
                         value={newPatient.address}
                         onChange={(e) => setNewPatient({ ...newPatient, address: e.target.value })}
-                        placeholder="Address (optional)"
-                        className="h-8 text-sm"
+                        placeholder="Optional"
+                        className="h-7 text-xs"
                       />
                     </div>
                   </div>
                   <Button
                     size="sm"
-                    className="w-full bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold"
+                    className="w-full h-8 bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs"
                     disabled={!newPatient.firstName || !newPatient.lastName || !newPatient.phone || !newPatient.ageValue || createPatientMut.isPending}
                     onClick={() => createPatientMut.mutate(newPatient)}
                   >
-                    {createPatientMut.isPending ? "Registering…" : <><UserPlus size={13} className="mr-1.5" /> Register & Select</>}
+                    {createPatientMut.isPending ? "Registering…" : <><UserPlus size={12} className="mr-1" /> Register & Select</>}
                   </Button>
                 </div>
               </div>
