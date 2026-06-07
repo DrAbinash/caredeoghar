@@ -18,28 +18,33 @@ import AIConfidenceBadge, { parseConfidenceFromText } from "./AIConfidenceBadge"
 
 interface MemorySuggestion {
   id: number;
-  type: "phrase" | "impression" | "measurement" | "macro";
-  text: string;
-  context: string;
+  trigger: string;
+  phrase: string;
+  phraseType: string;
   usageCount: number;
-  lastUsed: string;
+  acceptanceCount: number;
 }
 
 interface MemoryPattern {
   id: number;
   patternType: string;
-  value: string;
-  usageCount: number;
+  key: string;
+  variant: string;
+  chosenCount: number;
+  alternativeCount: number;
+  preferenceRate: number;
   createdAt: string;
 }
 
 interface MemoryMeasurement {
   id: number;
-  label: string;
-  value: number;
+  measurementType: string;
+  value: string;
   unit: string;
-  studyDate: string;
-  orderId: number;
+  referenceRange?: string;
+  priorValues?: string[];
+  classification?: string;
+  createdAt: string;
 }
 
 interface Props {
@@ -200,13 +205,21 @@ export default function RadiologyMemoryPanel({
   };
 
   // Log feedback on a suggestion
-  const sendFeedback = async (suggestionId: number, rating: "useful" | "not_useful" | "partial") => {
+  const sendFeedback = async (suggestionText: string, rating: "useful" | "not_useful" | "partially_useful") => {
     if (!feedbackEnabled) return;
     try {
       await fetch("/api/radiology-memory/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ suggestionId, rating, context: findingsText?.slice(0, 200) }),
+        body: JSON.stringify({
+          suggestionType: "phrase",
+          suggestionText,
+          rating,
+          modality: modality || "",
+          bodyPart: bodyPart || "",
+          orderId: orderId || null,
+          reportId: null,
+        }),
       });
       toast({ title: "Feedback recorded", description: "Thank you for helping me learn." });
     } catch {
@@ -215,19 +228,21 @@ export default function RadiologyMemoryPanel({
   };
 
   // Log decision (accept/reject/edit)
-  const logDecision = async (suggestionId: number, action: "accepted" | "rejected" | "edited") => {
+  const logDecision = async (suggestionText: string, action: "accepted" | "rejected" | "edited") => {
     if (!isFeatureEnabled("radiologyDecisionMemory")) return;
     try {
       await fetch("/api/radiology-memory/decision", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          suggestionId,
+          suggestionType: "phrase",
+          suggestionText,
           action,
-          modality: modality || "",
-          bodyPart: bodyPart || "",
-          originalText: findingsText?.slice(0, 500) || "",
-          finalText: impressionText?.slice(0, 500) || "",
+          finalText: impressionText?.slice(0, 500) || null,
+          modality: modality || null,
+          bodyPart: bodyPart || null,
+          orderId: orderId || null,
+          reportId: null,
         }),
       });
     } catch {
@@ -377,9 +392,9 @@ export default function RadiologyMemoryPanel({
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="text-[10px] font-mono uppercase text-primary bg-primary/10 px-1.5 py-0.5 rounded">
-                            {s.type}
+                            {s.phraseType}
                           </span>
-                          <span className="text-xs truncate">{s.text.slice(0, 40)}...</span>
+                          <span className="text-xs truncate">{s.phrase.slice(0, 40)}...</span>
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0">
                           <span className="text-[10px] text-muted-foreground">
@@ -396,40 +411,40 @@ export default function RadiologyMemoryPanel({
                           </div>
                           {isFeatureEnabled("confidenceVisualization") ? (
                             <AIConfidenceBadge metadata={{
-                              confidence: parseConfidenceFromText(s.text),
+                              confidence: parseConfidenceFromText(s.phrase),
                             }}>
-                              <Textarea value={s.text} readOnly className="text-[11px] min-h-[60px] bg-muted/30" />
+                              <Textarea value={s.phrase} readOnly className="text-[11px] min-h-[60px] bg-muted/30" />
                             </AIConfidenceBadge>
                           ) : (
-                            <Textarea value={s.text} readOnly className="text-[11px] min-h-[60px] bg-muted/30" />
+                            <Textarea value={s.phrase} readOnly className="text-[11px] min-h-[60px] bg-muted/30" />
                           )}
                           <div className="flex gap-2">
                             <Button
                               size="sm"
                               className="flex-1 text-[10px] h-7"
                               onClick={() => {
-                                onSuggestionInsert?.(s.text);
-                                logDecision(s.id, "accepted");
+                                onSuggestionInsert?.(s.phrase);
+                                logDecision(s.phrase, "accepted");
                               }}
                             >
                               <ArrowRight size={10} className="mr-1" /> Insert
                             </Button>
                             {feedbackEnabled && (
                               <div className="flex gap-1">
-                                <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => sendFeedback(s.id, "useful")}>
+                                <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => sendFeedback(s.phrase, "useful")}>
                                   <ThumbsUp size={10} />
                                 </Button>
-                                <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => sendFeedback(s.id, "not_useful")}>
+                                <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => sendFeedback(s.phrase, "not_useful")}>
                                   <ThumbsDown size={10} />
                                 </Button>
-                                <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => sendFeedback(s.id, "partial")}>
+                                <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => sendFeedback(s.phrase, "partially_useful")}>
                                   <HelpCircle size={10} />
                                 </Button>
                               </div>
                             )}
                           </div>
                           <div className="text-[10px] text-muted-foreground">
-                            Context: {s.context}
+                            Trigger: {s.trigger}
                           </div>
                         </div>
                       )}
@@ -464,9 +479,9 @@ export default function RadiologyMemoryPanel({
                       <span className="text-[10px] font-semibold uppercase text-primary bg-primary/10 px-1.5 py-0.5 rounded">
                         {p.patternType}
                       </span>
-                      <span className="text-[10px] text-muted-foreground">{p.usageCount} uses</span>
+                      <span className="text-[10px] text-muted-foreground">{p.preferenceRate}% prefer</span>
                     </div>
-                    <p className="text-[11px]">{p.value}</p>
+                    <p className="text-[11px]">{p.variant}</p>
                   </div>
                 ))}
               </div>
@@ -491,13 +506,14 @@ export default function RadiologyMemoryPanel({
                 {measurements.map((m) => (
                   <div key={m.id} className="border rounded-lg px-3 py-2 text-xs flex items-center justify-between">
                     <div>
-                      <div className="font-medium">{m.label}</div>
+                      <div className="font-medium">{m.measurementType}</div>
                       <div className="text-[10px] text-muted-foreground">
-                        {new Date(m.studyDate).toLocaleDateString("en-IN")}
+                        {m.classification ? `Classification: ${m.classification}` : "No classification"}
                       </div>
                     </div>
                     <div className="text-right">
                       <div className="font-bold text-primary">{m.value} {m.unit}</div>
+                      <div className="text-[10px] text-muted-foreground">{m.referenceRange}</div>
                     </div>
                   </div>
                 ))}
@@ -578,7 +594,7 @@ export default function RadiologyMemoryPanel({
                 className="w-full text-xs justify-start"
                 onClick={() => {
                   if (findingsText?.trim()) {
-                    sendFeedback(0, "useful");
+                    sendFeedback(findingsText.slice(0, 200), "useful");
                   } else {
                     toast({ title: "Enter findings first", variant: "destructive" });
                   }
@@ -592,7 +608,7 @@ export default function RadiologyMemoryPanel({
                 className="w-full text-xs justify-start"
                 onClick={() => {
                   if (findingsText?.trim()) {
-                    sendFeedback(0, "partial");
+                    sendFeedback(findingsText.slice(0, 200), "partially_useful");
                   } else {
                     toast({ title: "Enter findings first", variant: "destructive" });
                   }
@@ -606,7 +622,7 @@ export default function RadiologyMemoryPanel({
                 className="w-full text-xs justify-start"
                 onClick={() => {
                   if (findingsText?.trim()) {
-                    sendFeedback(0, "not_useful");
+                    sendFeedback(findingsText.slice(0, 200), "not_useful");
                   } else {
                     toast({ title: "Enter findings first", variant: "destructive" });
                   }
@@ -619,7 +635,9 @@ export default function RadiologyMemoryPanel({
                 variant="outline"
                 className="w-full text-xs justify-start"
                 onClick={() => {
-                  logDecision(0, "rejected");
+                  if (findingsText?.trim()) {
+                    logDecision(findingsText.slice(0, 200), "rejected");
+                  }
                   toast({ title: "Decision logged", description: "I'll learn from this rejection." });
                 }}
               >

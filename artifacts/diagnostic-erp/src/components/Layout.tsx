@@ -1031,29 +1031,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-        {/* Top bar (mobile) */}
+        {/* Top bar (mobile) — minimal: just title + controls */}
         <header className={cn(!isMobile && "hidden", "sticky top-0 z-10 flex items-center gap-3 px-4 py-3 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80")}>
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="text-foreground p-1.5 -ml-1.5 rounded-md hover:bg-muted active:bg-muted/80 transition-colors"
-            aria-label="Open menu"
-          >
-            <Menu size={22} />
-          </button>
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}>
-              <Activity size={14} className="text-white" />
-            </div>
-            <span className="font-semibold text-sm truncate">
-              {flatNavLeaves(visibleNav).find(n => n.path === "/" ? location === "/" : location === n.path || location.startsWith(n.path + "/"))?.label ?? "Care Diagnostics"}
-            </span>
-          </div>
+          <span className="font-semibold text-sm truncate">
+            {flatNavLeaves(visibleNav).find(n => n.path === "/" ? location === "/" : location === n.path || location.startsWith(n.path + "/"))?.label ?? "Care Diagnostics"}
+          </span>
           <div className="ml-auto flex items-center gap-1">
-            {scannerActive && (
-              <div title="Scanner active" className="flex items-center justify-center rounded-full bg-emerald-500 text-white w-5 h-5">
-                <ScanLine size={10} />
-              </div>
-            )}
             <FullscreenToggle />
             <ThemeToggle />
           </div>
@@ -1062,11 +1045,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {/* Desktop top-right control bar — thin strip, compact icons */}
         {!isMobile && (
           <div className="flex items-center justify-end gap-1 px-3 py-0.5 border-b border-border/40 bg-card/50">
-            {scannerActive && (
-              <div title="Scanner active" className="flex items-center justify-center rounded-full bg-emerald-500 text-white w-4 h-4 mr-1">
-                <ScanLine size={9} />
-              </div>
-            )}
             <FullscreenToggle />
             <ThemeToggle />
           </div>

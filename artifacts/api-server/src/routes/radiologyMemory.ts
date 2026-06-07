@@ -387,10 +387,19 @@ radiologyMemoryRouter.get("/analytics", async (req, res): Promise<void> => {
     .orderBy(desc(radiologyMemoryUsageTable.sessionDate))
     .limit(30);
 
+  // Compute summary metrics
+  const totalReports = topImpressions.length;
+  const suggestionsUsed = accepted + edited;
+  const timeSavedMinutes = Math.round((accepted + edited) * 0.5); // estimate 30s per suggestion
+
   res.json({
+    totalReports,
+    suggestionsUsed,
+    timeSavedMinutes,
     topImpressions,
     topClassifications,
-    topPhrases,
+    topPhrases: topPhrases.map((p) => ({ phrase: p.phrase, count: p.usageCount })),
+    topTemplates: [], // not yet tracked
     decisions: {
       total: decisionStats.length,
       accepted,

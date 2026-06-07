@@ -1202,8 +1202,8 @@ export default function BillingDesk() {
 
       {/* ── TOP BAR — single ultra-compact row ── */}
       <div className="flex-shrink-0 bg-card border-b border-card-border px-2 sm:px-3 py-1 flex items-center gap-2 shadow-sm">
-        <Receipt size={14} className="text-primary flex-shrink-0" />
-        <span className="hidden sm:inline text-[11px] text-muted-foreground flex-shrink-0">· {today()}</span>
+        <span className="hidden sm:inline text-[11px] text-muted-foreground flex-shrink-0">{today()}</span>
+        <span className="text-[12px] font-bold text-foreground flex-shrink-0">Billing Desk</span>
         <div className="flex-1 min-w-0" />
         <div className="flex items-center gap-1">
           <div className="w-40 sm:w-56 lg:w-72"><BillSearchBox /></div>

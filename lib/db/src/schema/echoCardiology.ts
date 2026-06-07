@@ -53,7 +53,7 @@ export const echoMeasurementsTable = pgTable(
     mvA: real("mv_a"), // Mitral valve A velocity
     mvEaRatio: real("mv_ea_ratio"),
     mvDecelTime: real("mv_decel_time"),
-    mvEePrime: real("mv_e_e_prime"), // E/e' ratio
+    mvEePrime: real("mv_ee_prime"), // E/e' ratio
     septalEPrime: real("septal_e_prime"),
     lateralEPrime: real("lateral_e_prime"),
     avVelocity: real("av_velocity"),
