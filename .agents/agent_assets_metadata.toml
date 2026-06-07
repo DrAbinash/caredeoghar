@@ -316,3 +316,9 @@ id = "PpYOHcNh73lRpiq6IUjQI"
 uri = "file://RADIOLOGY_PACS_EVIDENCE_AUDIT_JUNE_2026.md"
 type = "text"
 title = "Radiology PACS Evidence Audit Report"
+
+[[outputs]]
+id = "y_rKlaI8yKTIIthlsZNuY"
+uri = "file://CARE_DIAGNOSTICS_MASTER_AUDIT_2026.md"
+type = "text"
+title = "Care Diagnostics Master Audit Report"
