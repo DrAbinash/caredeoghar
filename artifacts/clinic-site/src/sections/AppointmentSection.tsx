@@ -301,6 +301,7 @@ export default function AppointmentSection({ section, settings }: { section: Sec
     if (config?.gateway === "bharatpe") return handleBharatPe();
     if (config?.gateway === "phonepe") return handlePhonePe();
     if (config?.gateway === "payu") return handlePayU();
+    if (config?.gateway === "razorpay") return handleRazorpay();
     // No gateway configured — fall back to QR/UPI payment
     return handleQrPay();
   }
@@ -309,7 +310,8 @@ export default function AppointmentSection({ section, settings }: { section: Sec
     config?.gateway === "icici" ? "Orange Pay" :
     config?.gateway === "bharatpe" ? "BharatPe" :
     config?.gateway === "phonepe" ? "PhonePe" :
-    config?.gateway === "payu" ? "PayU" : "QR / UPI";
+    config?.gateway === "payu" ? "PayU" :
+    config?.gateway === "razorpay" ? "Razorpay" : "QR / UPI";
 
   if (!config || !config.enabled) {
     return (
@@ -486,7 +488,8 @@ export default function AppointmentSection({ section, settings }: { section: Sec
                 {paying
                   ? (config?.gateway === "payu" ? "Redirecting to PayU…" :
                      config?.gateway === "bharatpe" ? "Redirecting to BharatPe…" :
-                     config?.gateway === "phonepe" ? "Redirecting to PhonePe…" : "Processing…")
+                     config?.gateway === "phonepe" ? "Redirecting to PhonePe…" :
+                     config?.gateway === "icici" ? "Redirecting to Orange Pay…" : "Processing…")
                   : `Pay ₹${total.toLocaleString("en-IN")} via ${gatewayLabel}`}
               </button>
             </div>

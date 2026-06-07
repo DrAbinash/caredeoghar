@@ -98,15 +98,54 @@ export default function BookScreen() {
         name: patient.name,
         phone: patient.phone,
         email: patient.email || undefined,
-        date: patient.date,
+        selectedDate: patient.date,
         timeSlot: patient.timeSlot,
         notes: patient.notes || undefined,
         testIds: Array.from(selTests),
         packageIds: Array.from(selPkgs),
+        totalAmount: total,
+        isVip: false,
       };
-      return api.post("/api/public/booking/create", body);
+      const gateway = config?.gateway;
+      if (gateway === "icici") {
+        const res = await api.post("/api/public/booking/icici-initiate", body) as { bookingRef: string; redirectUrl: string; tranCtx: string };
+        // For mobile WebView, redirect to payment URL
+        if (res.redirectUrl) {
+          window.location.href = res.redirectUrl;
+        }
+        return res;
+      }
+      if (gateway === "payu") {
+        const res = await api.post("/api/public/booking/payu-initiate", body) as { payuUrl: string; fields: Record<string, string> };
+        // Build and submit a hidden form
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = res.payuUrl;
+        form.style.display = "none";
+        for (const [k, v] of Object.entries(res.fields)) {
+          const input = document.createElement("input");
+          input.type = "hidden"; input.name = k; input.value = String(v);
+          form.appendChild(input);
+        }
+        document.body.appendChild(form);
+        form.submit();
+        return res;
+      }
+      if (gateway === "phonepe") {
+        const res = await api.post("/api/public/booking/phonepe-initiate", body) as { redirectUrl: string };
+        if (res.redirectUrl) window.location.href = res.redirectUrl;
+        return res;
+      }
+      if (gateway === "bharatpe") {
+        const res = await api.post("/api/public/booking/bharatpe-initiate", body) as { redirectUrl: string };
+        if (res.redirectUrl) window.location.href = res.redirectUrl;
+        return res;
+      }
+      // Fallback: Razorpay or QR
+      const res = await api.post("/api/public/booking/create-order", body) as { bookingRef: string; razorpayOrderId: string; amountPaise: number; keyId: string };
+      return res;
     },
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       setSuccessRef(data.bookingRef || "");
       setStep("done");
     },
@@ -331,6 +370,9 @@ export default function BookScreen() {
                 )}
                 {config?.gateway === "cashfree" && (
                   <GatewayOption icon="credit-card" label="Cashfree" sub="Cards, UPI, Netbanking" colors={colors} />
+                )}
+                {config?.gateway === "icici" && (
+                  <GatewayOption icon="credit-card" label="Orange Pay (ICICI)" sub="Cards, UPI, Netbanking" colors={colors} />
                 )}
                 {!config?.gateway && (
                   <View style={[styles.warnBox, { backgroundColor: colors.warning + "12", borderColor: colors.warning + "40" }]}>
