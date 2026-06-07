@@ -763,7 +763,7 @@ publicBookingRouter.get("/bharatpe-callback", async (req, res): Promise<void> =>
 // ── ICICI Orange PG helpers ─────────────────────────────────────────────────
 
 const ICICI_UAT_BASE = "https://pgpayuat.icicibank.com";
-const ICICI_PROD_BASE = "https://pguat.icicibank.com";
+const ICICI_PROD_BASE = "https://pgpay.icicibank.com";
 
 function getIciciBase() {
   return process.env.NODE_ENV === "production" ? ICICI_PROD_BASE : ICICI_UAT_BASE;

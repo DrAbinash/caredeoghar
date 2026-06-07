@@ -39,3 +39,7 @@ ICICI_SECRET_KEY = "db06cca0-838b-4e01-8b20-6ac446ffb6bd"
 
 [userenv.shared]
 ENABLE_DICOM_PULL_AGENT = "1"
+
+[[ports]]
+localPort = 8080
+externalPort = 80

@@ -33,7 +33,7 @@ const paymentLimiter = rateLimit({
 // ── ICICI Helpers ─────────────────────────────────────────────────────────────
 
 const ICICI_UAT_BASE = "https://pgpayuat.icicibank.com";
-const ICICI_PROD_BASE = "https://pguat.icicibank.com";
+const ICICI_PROD_BASE = "https://pgpay.icicibank.com";
 
 function getIciciBase() {
   return process.env.NODE_ENV === "production" ? ICICI_PROD_BASE : ICICI_UAT_BASE;
