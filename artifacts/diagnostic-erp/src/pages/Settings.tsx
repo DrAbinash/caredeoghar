@@ -5519,9 +5519,13 @@ function BackupTab() {
   const runBackup = async () => {
     setRunning(true);
     try {
+      const token = JSON.parse(localStorage.getItem("erp_session") || "{}").token as string | undefined;
       const res = await fetch("/api/backup/run", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ performedBy: "user" }),
       });
       if (!res.ok) {
@@ -5529,7 +5533,7 @@ function BackupTab() {
         throw new Error(err.error || "Backup failed");
       }
       const blob = await res.blob();
-      const filename = res.headers.get("Content-Disposition")?.match(/filename="?([^"]+)"?/)?.[1] || `backup-${new Date().toISOString()}.json`;
+      const filename = res.headers.get("Content-Disposition")?.match(/filename="?([^"]+)"?/)?.[1] || `care_diagnostics_backup_${new Date().toISOString().replace(/[:.]/g, "-")}.json.enc`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
