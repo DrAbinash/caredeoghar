@@ -1227,8 +1227,7 @@ publicBookingRouter.post("/qr-initiate", createOrderLimiter, async (req, res): P
 });
 
 // ── POST /api/public/booking/qr-confirm ─────────────────────────────────────
-// Simulated confirmation for QR bookings (used during demo/demo approvals).
-// In production, staff uses the ERP /api/online-bookings/:id/confirm endpoint.
+// For BharatPe/UPI QR — staff manually confirms. ICICI uses auto-callback.
 publicBookingRouter.post("/qr-confirm", bookingLimiter, async (req, res): Promise<void> => {
   const { bookingRef } = req.body || {};
   if (!bookingRef) { res.status(400).json({ error: "Booking reference required" }); return; }
@@ -1243,9 +1242,34 @@ publicBookingRouter.post("/qr-confirm", bookingLimiter, async (req, res): Promis
     return;
   }
 
+  // Only allow manual confirmation for non-gateway bookings
+  if (booking.iciciProviderRefId) {
+    res.json({ success: false, status: booking.status, message: "Please wait for ICICI payment confirmation." });
+    return;
+  }
+
   await db.update(onlineBookingsTable)
     .set({ status: "paid" })
     .where(eq(onlineBookingsTable.id, booking.id));
 
   res.json({ success: true, bookingRef, status: "paid" });
+});
+
+// ── POST /api/public/booking/icici-status — polling for QR-to-gateway flow ───
+publicBookingRouter.post("/icici-status", bookingLimiter, async (req, res): Promise<void> => {
+  const { bookingRef } = req.body || {};
+  if (!bookingRef) { res.status(400).json({ error: "Booking reference required" }); return; }
+
+  const [booking] = await db.select().from(onlineBookingsTable)
+    .where(eq(onlineBookingsTable.bookingRef, bookingRef)).limit(1);
+
+  if (!booking) { res.status(404).json({ error: "Booking not found" }); return; }
+
+  if (booking.status === "paid" || booking.status === "confirmed") {
+    res.json({ success: true, alreadyPaid: true, bookingRef, status: booking.status });
+    return;
+  }
+
+  // If ICICI callback hasn't arrived yet, return current status
+  res.json({ success: false, status: booking.status, message: "Payment not yet received." });
 });

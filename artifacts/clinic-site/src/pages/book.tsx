@@ -319,13 +319,13 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
 
   async function handlePay() {
     if (selTests.size === 0 && selPkgs.size === 0) { setError("Please select at least one test or package."); return; }
-    // ICICI Orange Pay shows QR code instead of redirect
-    if (config?.gateway === "icici") return handleQrPay();
+    // ICICI Orange Pay — real gateway redirect with QR display
+    if (config?.gateway === "icici") return handleICICI();
     if (config?.gateway === "bharatpe") return handleBharatPe();
     if (config?.gateway === "phonepe") return handlePhonePe();
     if (config?.gateway === "payu") return handlePayU();
     if (config?.gateway === "razorpay") return handleRazorpay();
-    // No gateway configured — fall back to QR/UPI payment
+    // No gateway configured — fall back to QR/UPI payment (requires staff confirmation)
     return handleQrPay();
   }
 
@@ -337,8 +337,13 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
         testIds: Array.from(selTests), packageIds: Array.from(selPkgs),
         totalAmount: total, notes: pd.notes, isVip: pd.isVip,
       });
-      setSuccessRef(res.bookingRef);
-      window.location.href = res.redirectUrl;
+      setQrBookingRef(res.bookingRef);
+      setQrAmount(total);
+      setQrUpiUrl(res.redirectUrl); // ICICI payment gateway URL
+      setQrUpiVpa("");
+      setQrUpiName("ICICI Orange Pay");
+      setStep(5); // Show QR screen
+      setPaying(false);
     } catch (e: unknown) {
       const msg = (e as { message?: string }).message || "Something went wrong.";
       setError(msg); setPaying(false);
@@ -376,7 +381,7 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
         setSuccessRef(qrBookingRef);
         setStep(3);
       } else {
-        setError("Payment not yet confirmed. Please complete the UPI payment and try again.");
+        setError("Payment not yet confirmed. Please complete the payment and try again.");
       }
     } catch (e: unknown) {
       const msg = (e as { message?: string }).message || "Could not verify payment. Please try again.";
@@ -385,6 +390,24 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
       setQrChecking(false);
     }
   }
+
+  // Auto-poll for ICICI status when showing QR
+  useEffect(() => {
+    if (step !== 5 || config?.gateway !== "icici" || !qrBookingRef) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await bookingPost<{ success: boolean; status: string; alreadyPaid?: boolean }>("/api/public/booking/icici-status", { bookingRef: qrBookingRef });
+        if (res.success || res.alreadyPaid) {
+          setSuccessRef(qrBookingRef);
+          setStep(3);
+          clearInterval(interval);
+        }
+      } catch {
+        // Ignore polling errors
+      }
+    }, 5000); // Poll every 5 seconds
+    return () => clearInterval(interval);
+  }, [step, qrBookingRef, config?.gateway]);
 
   const gatewayLabel =
     config?.gateway === "icici" ? "ICICI Bank" :
@@ -767,17 +790,22 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
 
               <div style={{ display: "flex", gap: ".75rem", flexWrap: "wrap" }}>
                 <button style={btnOutline} onClick={() => setStep(2)}><ArrowLeft size={16} /> Back</button>
-                <button style={{ ...btnPrimary, flex: 1 }} onClick={checkQrPayment} disabled={qrChecking}>
-                  {qrChecking ? (
-                    <><Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} /> Checking...</>
-                  ) : (
-                    <>I have paid</>
-                  )}
-                </button>
+                {config?.gateway !== "icici" && (
+                  <button style={{ ...btnPrimary, flex: 1 }} onClick={checkQrPayment} disabled={qrChecking}>
+                    {qrChecking ? (
+                      <><Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} /> Checking...</>
+                    ) : (
+                      <>I have paid</>
+                    )}
+                  </button>
+                )}
               </div>
 
               <p style={{ fontSize: ".75rem", color: "hsl(var(--site-muted-fg))", marginTop: ".75rem", textAlign: "center" }}>
-                After making the payment, click "I have paid". Staff will verify and confirm your booking.
+                {config?.gateway === "icici"
+                  ? "Scan the QR code to pay via ICICI Orange Pay. Your booking will be confirmed automatically after payment."
+                  : "After making the payment, click \"I have paid\". Staff will verify and confirm your booking."
+                }
               </p>
             </div>
           </div>
