@@ -510,7 +510,7 @@ kioskRouter.post("/register", registerLimiter, async (req, res): Promise<void> =
             transactionType: "STATUS",
           };
           const statusHash = generateIciciSecureHash(statusHashParams, iciciSecretKey);
-          const statusRes = await fetch(`${getIciciBase()}/tsp/pg/api/command`, {
+          const statusRes = await fetch(`${getIciciBase()}/pg/api/command`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Accept: "application/json" },
             body: JSON.stringify({
@@ -738,7 +738,7 @@ kioskRouter.post("/icici-initiate", paymentLimiter, async (req, res): Promise<vo
   };
 
   try {
-    const iciciUrl = `${getIciciBase()}/tsp/pg/api/v2/initiateSale`;
+    const iciciUrl = `${getIciciBase()}/pg/api/v2/initiateSale`;
     logger.info({ iciciUrl, merchantId, aggregatorId, sessionRef }, "Kiosk ICICI initiateSale request");
     const iciciRes = await fetch(iciciUrl, {
       method: "POST",
@@ -841,7 +841,7 @@ async function handleKioskIciciCallback(req: any, res: any, queryOrBody: Record<
         transactionType: "STATUS",
       };
       const statusHash = generateIciciSecureHash(statusHashParams, iciciSecretKey);
-      const statusRes = await fetch(`${getIciciBase()}/tsp/pg/api/command`, {
+      const statusRes = await fetch(`${getIciciBase()}/pg/api/command`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({

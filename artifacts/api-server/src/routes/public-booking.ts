@@ -866,7 +866,7 @@ publicBookingRouter.post("/icici-initiate", createOrderLimiter, async (req, res)
   };
 
   try {
-    const iciciUrl = `${getIciciBase()}/tsp/pg/api/v2/initiateSale`;
+    const iciciUrl = `${getIciciBase()}/pg/api/v2/initiateSale`;
     logger.info({ iciciUrl, merchantId, aggregatorId, bookingRef }, "ICICI initiateSale request");
     const iciciRes = await fetch(iciciUrl, {
       method: "POST",
@@ -966,7 +966,7 @@ async function handleIciciCallback(req: any, res: any, queryOrBody: Record<strin
         transactionType: "STATUS",
       };
       const statusHash = generateIciciSecureHash(statusHashParams, secretKey);
-      const statusRes = await fetch(`${getIciciBase()}/tsp/pg/api/command`, {
+      const statusRes = await fetch(`${getIciciBase()}/pg/api/command`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({

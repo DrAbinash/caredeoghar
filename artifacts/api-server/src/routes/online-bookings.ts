@@ -413,7 +413,7 @@ onlineBookingsRouter.post("/:id/payment-link", async (req, res): Promise<void> =
       secureHash,
     };
 
-    const iciciUrl = `${process.env.ICICI_BASE_URL || "https://payment1.atomtech.in"}/tsp/pg/api/v2/initiateSale`;
+    const iciciUrl = `${process.env.ICICI_BASE_URL || "https://payment1.atomtech.in"}/pg/api/v2/initiateSale`;
     try {
       const iciciRes = await fetch(iciciUrl, {
         method: "POST",
