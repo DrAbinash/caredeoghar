@@ -319,7 +319,8 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
 
   async function handlePay() {
     if (selTests.size === 0 && selPkgs.size === 0) { setError("Please select at least one test or package."); return; }
-    if (config?.gateway === "icici") return handleICICI();
+    // ICICI Orange Pay shows QR code instead of redirect
+    if (config?.gateway === "icici") return handleQrPay();
     if (config?.gateway === "bharatpe") return handleBharatPe();
     if (config?.gateway === "phonepe") return handlePhonePe();
     if (config?.gateway === "payu") return handlePayU();
@@ -386,7 +387,7 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
   }
 
   const gatewayLabel =
-    config?.gateway === "icici" ? "Orange Pay" :
+    config?.gateway === "icici" ? "ICICI Bank" :
     config?.gateway === "bharatpe" ? "BharatPe" :
     config?.gateway === "phonepe" ? "PhonePe" :
     config?.gateway === "payu" ? "PayU" :
@@ -707,6 +708,14 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
           /* QR Payment */
           <div style={{ maxWidth: 480, margin: "0 auto" }}>
             <div style={cardStyle}>
+              {/* ICICI Bank branding for QR payment */}
+              {config?.gateway === "icici" && (
+                <div style={{ textAlign: "center", marginBottom: "1.25rem" }}>
+                  <img src="/icici-bank-logo.jpg" alt="ICICI Bank" style={{ width: "100%", maxWidth: 200, margin: "0 auto", display: "block", borderRadius: "var(--site-radius)" }} />
+                  <div style={{ fontSize: "1.1rem", fontWeight: 700, marginTop: ".5rem" }}>Pay by ICICI Bank</div>
+                  <div style={{ fontSize: "0.75rem", color: "hsl(var(--site-muted-fg))", marginTop: ".15rem" }}>Orange Pay — UPI QR</div>
+                </div>
+              )}
               <div style={{ textAlign: "center", marginBottom: "1.25rem" }}>
                 {qrUpiUrl ? (
                   <div style={{ display: "inline-block", padding: "1rem", background: "white", borderRadius: "var(--site-radius)", border: "1px solid hsl(var(--site-border))" }}>
@@ -945,13 +954,26 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
               <div style={{ display: "flex", gap: ".75rem", flexWrap: "wrap" }}>
                 <button style={btnOutline} onClick={() => setStep(1)}><ArrowLeft size={16} /> Back to Tests</button>
                 {hasRealGateway ? (
-                  <button style={{ ...btnPrimary, flex: 1, fontSize: "1rem" }} onClick={handlePay} disabled={paying}>
+                  <button style={{ ...btnPrimary, flex: 1, fontSize: "1rem", flexDirection: "column", alignItems: "center", gap: "0.15rem" }} onClick={handlePay} disabled={paying}>
                     {paying ? (
                       <>
-                        <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} /> Processing...
+                        <span style={{ fontSize: "1rem", fontWeight: 700 }}>
+                          <Loader2 size={16} style={{ animation: "spin 1s linear infinite", display: "inline", verticalAlign: "middle", marginRight: "0.35rem" }} />
+                          {config?.gateway === "icici" ? "ICICI Bank" : "Processing..."}
+                        </span>
+                        <span style={{ fontSize: "0.75rem", fontWeight: 400, opacity: 0.85 }}>
+                          {config?.gateway === "icici" ? "Orange Pay \u2014 loading QR..." : "Please wait"}
+                        </span>
                       </>
                     ) : (
-                      <>Pay {fmt(total)} via {gatewayLabel}</>
+                      <>
+                        <span style={{ fontSize: "1.1rem", fontWeight: 700 }}>
+                          {config?.gateway === "icici" ? "Pay by ICICI Bank" : `Pay ${fmt(total)} via ${gatewayLabel}`}
+                        </span>
+                        {config?.gateway === "icici" && (
+                          <span style={{ fontSize: "0.75rem", fontWeight: 400, opacity: 0.85 }}>Orange Pay \u2014 UPI QR</span>
+                        )}
+                      </>
                     )}
                   </button>
                 ) : (
@@ -995,7 +1017,13 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
 
               <p style={{ fontSize: ".78rem", color: "hsl(var(--site-muted-fg))", marginTop: "1rem", textAlign: "center" }}>
                 {hasRealGateway ? (
-                  <>Payments are processed securely via {gatewayLabel}. By proceeding, you agree to our <a href={`${BASE}policies`} style={{ color: "hsl(var(--site-primary))", textDecoration: "underline" }}>Terms &amp; Conditions</a>.</>
+                  <>
+                    {config?.gateway === "icici" ? (
+                      <>Payments processed securely via <strong>ICICI Bank Orange Pay</strong>. By proceeding, you agree to our <a href={`${BASE}policies`} style={{ color: "hsl(var(--site-primary))", textDecoration: "underline" }}>Terms &amp; Conditions</a>.</>
+                    ) : (
+                      <>Payments are processed securely via {gatewayLabel}. By proceeding, you agree to our <a href={`${BASE}policies`} style={{ color: "hsl(var(--site-primary))", textDecoration: "underline" }}>Terms &amp; Conditions</a>.</>
+                    )}
+                  </>
                 ) : (
                   <>Please scan the QR code to pay. Staff will confirm your booking after payment verification.</>
                 )}

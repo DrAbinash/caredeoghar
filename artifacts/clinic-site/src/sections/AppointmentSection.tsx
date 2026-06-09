@@ -297,7 +297,8 @@ export default function AppointmentSection({ section, settings }: { section: Sec
 
   async function handlePay() {
     if (selTests.size === 0 && selPkgs.size === 0) { setError("Please select at least one test or package."); return; }
-    if (config?.gateway === "icici") return handleICICI();
+    // ICICI Orange Pay shows QR code instead of redirect
+    if (config?.gateway === "icici") return handleQrPay();
     if (config?.gateway === "bharatpe") return handleBharatPe();
     if (config?.gateway === "phonepe") return handlePhonePe();
     if (config?.gateway === "payu") return handlePayU();
@@ -307,7 +308,7 @@ export default function AppointmentSection({ section, settings }: { section: Sec
   }
 
   const gatewayLabel =
-    config?.gateway === "icici" ? "Orange Pay" :
+    config?.gateway === "icici" ? "ICICI Bank" :
     config?.gateway === "bharatpe" ? "BharatPe" :
     config?.gateway === "phonepe" ? "PhonePe" :
     config?.gateway === "payu" ? "PayU" :
@@ -484,13 +485,26 @@ export default function AppointmentSection({ section, settings }: { section: Sec
             {error && <div style={{ color: "red", fontSize: ".85rem", marginBottom: ".75rem", padding: ".5rem .75rem", background: "hsl(0 85% 95%)", borderRadius: "var(--site-radius)" }}>{error}</div>}
             <div style={{ display: "flex", gap: ".75rem", flexWrap: "wrap" }}>
               <button type="button" onClick={() => setStep("select")} style={{ background: "hsl(var(--site-muted))", color: "inherit", border: "none", borderRadius: "var(--site-radius)", padding: ".6rem 1.1rem", cursor: "pointer", fontWeight: 600 }}>← Back</button>
-              <button type="button" className={buttonClass(settings, "primary")} onClick={handlePay} disabled={paying} style={{ flex: 1, justifyContent: "center" }}>
-                {paying
-                  ? (config?.gateway === "payu" ? "Redirecting to PayU…" :
-                     config?.gateway === "bharatpe" ? "Redirecting to BharatPe…" :
-                     config?.gateway === "phonepe" ? "Redirecting to PhonePe…" :
-                     config?.gateway === "icici" ? "Redirecting to Orange Pay…" : "Processing…")
-                  : `Pay ₹${total.toLocaleString("en-IN")} via ${gatewayLabel}`}
+              <button type="button" className={buttonClass(settings, "primary")} onClick={handlePay} disabled={paying} style={{ flex: 1, justifyContent: "center", flexDirection: "column", alignItems: "center", gap: "0.15rem" }}>
+                {paying ? (
+                  <>
+                    <span style={{ fontSize: "1rem", fontWeight: 700 }}>
+                      {config?.gateway === "icici" ? "ICICI Bank" : "Processing…"}
+                    </span>
+                    <span style={{ fontSize: "0.75rem", fontWeight: 400, opacity: 0.85 }}>
+                      {config?.gateway === "icici" ? "Orange Pay — loading QR…" : "Please wait"}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ fontSize: "1.1rem", fontWeight: 700 }}>
+                      {config?.gateway === "icici" ? "Pay by ICICI Bank" : `Pay ₹${total.toLocaleString("en-IN")}`}
+                    </span>
+                    {config?.gateway === "icici" && (
+                      <span style={{ fontSize: "0.75rem", fontWeight: 400, opacity: 0.85 }}>Orange Pay — UPI QR</span>
+                    )}
+                  </>
+                )}
               </button>
             </div>
             {bookingPhone && (

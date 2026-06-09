@@ -107,12 +107,9 @@ export default function BookScreen() {
         isVip: false,
       };
       const gateway = config?.gateway;
+      // ICICI Orange Pay shows QR code instead of redirect
       if (gateway === "icici") {
-        const res = await api.post("/api/public/booking/icici-initiate", body) as { bookingRef: string; redirectUrl: string; tranCtx: string };
-        // For mobile WebView, redirect to payment URL
-        if (res.redirectUrl) {
-          window.location.href = res.redirectUrl;
-        }
+        const res = await api.post("/api/public/booking/qr-initiate", body) as { bookingRef: string; amount: number; upiVpa: string; upiName: string; upiUrl: string; upiQrImageUrl: string; clinicName: string };
         return res;
       }
       if (gateway === "payu") {
@@ -372,7 +369,7 @@ export default function BookScreen() {
                   <GatewayOption icon="credit-card" label="Cashfree" sub="Cards, UPI, Netbanking" colors={colors} />
                 )}
                 {config?.gateway === "icici" && (
-                  <GatewayOption icon="credit-card" label="Orange Pay (ICICI)" sub="Cards, UPI, Netbanking" colors={colors} />
+                  <GatewayOption icon="credit-card" label="Pay by ICICI Bank" sub="Orange Pay — UPI QR" colors={colors} />
                 )}
                 {!config?.gateway && (
                   <View style={[styles.warnBox, { backgroundColor: colors.warning + "12", borderColor: colors.warning + "40" }]}>
