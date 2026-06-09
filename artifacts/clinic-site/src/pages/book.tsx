@@ -392,6 +392,7 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
   }
 
   // Auto-poll for ICICI status when showing QR
+  // When paid, auto-advance to step 6 (receipt page with print/download)
   useEffect(() => {
     if (step !== 5 || config?.gateway !== "icici" || !qrBookingRef) return;
     const interval = setInterval(async () => {
@@ -399,7 +400,28 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
         const res = await bookingPost<{ success: boolean; status: string; alreadyPaid?: boolean }>("/api/public/booking/icici-status", { bookingRef: qrBookingRef });
         if (res.success || res.alreadyPaid) {
           setSuccessRef(qrBookingRef);
-          setStep(3);
+          // Fetch booking details for the receipt
+          try {
+            const detailRes = await bookingGet<{ booking: Record<string, string> }>(`/api/public/booking/by-ref?ref=${encodeURIComponent(qrBookingRef)}`);
+            const b = detailRes.booking;
+            setConfirmedBooking({
+              name: b.name || "",
+              phone: b.phone || "",
+              email: b.email || "",
+              selectedDate: b.selected_date || "",
+              timeSlot: b.time_slot || "",
+              totalAmount: b.total_amount || "",
+              notes: b.notes || "",
+              testIds: b.test_ids || "",
+              packageIds: b.package_ids || "",
+              bookingRef: qrBookingRef,
+              status: b.status || "paid",
+              isVip: b.is_vip === "true",
+            });
+          } catch {
+            // Fallback: show confirmation with ref only
+          }
+          setStep(6);
           clearInterval(interval);
         }
       } catch {
