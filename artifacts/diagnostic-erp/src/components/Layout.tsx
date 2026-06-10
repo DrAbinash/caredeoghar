@@ -1033,6 +1033,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         {/* Top bar (mobile) — minimal: just title + controls */}
         <header className={cn(!isMobile && "hidden", "sticky top-0 z-10 flex items-center gap-3 px-4 py-3 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80")}>
+          <button
+            className="p-2 rounded-md text-foreground hover:bg-muted transition-colors"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Open navigation menu"
+          >
+            <Menu size={20} />
+          </button>
           <span className="font-semibold text-sm truncate">
             {flatNavLeaves(visibleNav).find(n => n.path === "/" ? location === "/" : location === n.path || location.startsWith(n.path + "/"))?.label ?? "Care Diagnostics"}
           </span>
