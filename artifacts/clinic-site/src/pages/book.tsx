@@ -394,7 +394,7 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
   // Auto-poll for ICICI status when showing QR
   // When paid, auto-advance to step 6 (receipt page with print/download)
   useEffect(() => {
-    if (step !== 5 || config?.gateway !== "icici" || !qrBookingRef) return;
+    if (step !== 5 || qrUpiName !== "ICICI Orange Pay" || !qrBookingRef) return;
     const interval = setInterval(async () => {
       try {
         const res = await bookingPost<{ success: boolean; status: string; alreadyPaid?: boolean }>("/api/public/booking/icici-status", { bookingRef: qrBookingRef });
@@ -429,7 +429,7 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
       }
     }, 5000); // Poll every 5 seconds
     return () => clearInterval(interval);
-  }, [step, qrBookingRef, config?.gateway]);
+  }, [step, qrBookingRef, qrUpiName]);
 
   const gatewayLabel =
     config?.gateway === "icici" ? "ICICI Bank" :
@@ -754,7 +754,7 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
           <div style={{ maxWidth: 480, margin: "0 auto" }}>
             <div style={cardStyle}>
               {/* ICICI Bank branding for QR payment */}
-              {config?.gateway === "icici" && (
+              {qrUpiName === "ICICI Orange Pay" && (
                 <div style={{ textAlign: "center", marginBottom: "1.25rem" }}>
                   <img src="/icici-bank-logo.jpg" alt="ICICI Bank" style={{ width: "100%", maxWidth: 200, margin: "0 auto", display: "block", borderRadius: "var(--site-radius)" }} />
                   <div style={{ fontSize: "1.1rem", fontWeight: 700, marginTop: ".5rem" }}>Pay by ICICI Bank</div>
@@ -812,7 +812,7 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
 
               <div style={{ display: "flex", gap: ".75rem", flexWrap: "wrap" }}>
                 <button style={btnOutline} onClick={() => setStep(2)}><ArrowLeft size={16} /> Back</button>
-                {config?.gateway !== "icici" && (
+                {qrUpiName !== "ICICI Orange Pay" && (
                   <button style={{ ...btnPrimary, flex: 1 }} onClick={checkQrPayment} disabled={qrChecking}>
                     {qrChecking ? (
                       <><Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} /> Checking...</>
@@ -824,7 +824,7 @@ export default function BookPage({ settings }: { settings: SiteSettings }) {
               </div>
 
               <p style={{ fontSize: ".75rem", color: "hsl(var(--site-muted-fg))", marginTop: ".75rem", textAlign: "center" }}>
-                {config?.gateway === "icici"
+                {qrUpiName === "ICICI Orange Pay"
                   ? "Scan the QR code to pay via ICICI Orange Pay. Your booking will be confirmed automatically after payment."
                   : "After making the payment, click \"I have paid\". Staff will verify and confirm your booking."
                 }
