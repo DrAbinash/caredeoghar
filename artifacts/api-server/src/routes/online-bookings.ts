@@ -313,9 +313,9 @@ onlineBookingsRouter.post("/:id/payment-link", async (req, res): Promise<void> =
   const bharatpeApiKey = process.env.BHARATPE_API_KEY || "";
   const bharatpeApiSecret = process.env.BHARATPE_API_SECRET || "";
   const bharatpeMerchantId = process.env.BHARATPE_MERCHANT_ID || (s?.bharatpeMerchantId ?? "");
-  const iciciMerchantId = process.env.ICICI_MERCHANT_ID || (s?.iciciMerchantId ?? "");
-  const iciciSecretKey = process.env.ICICI_SECRET_KEY || (s?.iciciSecretKey ?? "");
-  const iciciAggregatorId = process.env.ICICI_AGGREGATOR_ID || (s?.iciciAggregatorId ?? "");
+  const iciciMerchantId = s?.iciciMerchantId || "";
+  const iciciSecretKey = s?.iciciSecretKey || process.env.ICICI_SECRET_KEY || "";
+  const iciciAggregatorId = s?.iciciAggregatorId || "";
 
   // 1. Try BharatPe
   if (s?.bharatpeEnabled && bharatpeMerchantId && bharatpeApiKey && bharatpeApiSecret) {
@@ -393,9 +393,9 @@ onlineBookingsRouter.post("/:id/payment-link", async (req, res): Promise<void> =
       transactionType: "SALE",
       txnDate,
     };
-    const sortedKeys = Object.keys(hashParams).sort();
-    const hashStr = sortedKeys.map((k) => `${k}=${hashParams[k]}`).join("~") + `~${iciciSecretKey}`;
-    const secureHash = crypto.createHash("sha256").update(hashStr).digest("hex");
+    const keys = Object.keys(hashParams).sort();
+    const hashText = keys.map((k) => hashParams[k]).join("");
+    const secureHash = crypto.createHmac("sha256", iciciSecretKey).update(hashText).digest("hex");
 
     const payload = {
       merchantId: iciciMerchantId,
@@ -415,7 +415,8 @@ onlineBookingsRouter.post("/:id/payment-link", async (req, res): Promise<void> =
       secureHash,
     };
 
-    const iciciUrl = `${process.env.ICICI_BASE_URL || "https://payment1.atomtech.in"}/pg/api/v2/initiateSale`;
+    const iciciBase = process.env.NODE_ENV === "production" ? "https://pgpay.icicibank.com" : "https://pgpayuat.icicibank.com";
+    const iciciUrl = `${iciciBase}/pg/api/v2/initiateSale`;
     try {
       const iciciRes = await fetch(iciciUrl, {
         method: "POST",

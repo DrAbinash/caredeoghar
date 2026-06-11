@@ -98,8 +98,8 @@ publicBookingRouter.get("/config", async (_req, res): Promise<void> => {
   const bharatpeApiKey = process.env.BHARATPE_API_KEY || "";
   const bharatpeMerchantId = process.env.BHARATPE_MERCHANT_ID || settings.bharatpeMerchantId || "";
 
-  const iciciMerchantId = process.env.ICICI_MERCHANT_ID || settings.iciciMerchantId || "";
-  const iciciSecretKey = process.env.ICICI_SECRET_KEY || settings.iciciSecretKey || "";
+  const iciciMerchantId = settings.iciciMerchantId || "";
+  const iciciSecretKey = settings.iciciSecretKey || process.env.ICICI_SECRET_KEY || "";
 
   let gateway: "razorpay" | "payu" | "phonepe" | "bharatpe" | "icici" | null = null;
   if (settings.iciciEnabled && iciciMerchantId && iciciSecretKey) gateway = "icici";
@@ -770,9 +770,9 @@ function getIciciBase() {
 }
 
 function generateIciciSecureHash(params: Record<string, string>, secretKey: string): string {
-  const sortedKeys = Object.keys(params).sort();
-  const hashStr = sortedKeys.map((k) => `${k}=${params[k]}`).join("~") + `~${secretKey}`;
-  return crypto.createHash("sha256").update(hashStr).digest("hex");
+  const keys = Object.keys(params).sort();
+  const hashText = keys.map((k) => params[k]).join("");
+  return crypto.createHmac("sha256", secretKey).update(hashText).digest("hex");
 }
 
 function formatTxnDate(d = new Date()): string {
@@ -788,9 +788,9 @@ publicBookingRouter.post("/icici-initiate", createOrderLimiter, async (req, res)
     return;
   }
 
-  const merchantId = process.env.ICICI_MERCHANT_ID || settings.iciciMerchantId || "";
-  const aggregatorId = process.env.ICICI_AGGREGATOR_ID || settings.iciciAggregatorId || "";
-  const secretKey = process.env.ICICI_SECRET_KEY || settings.iciciSecretKey || "";
+  const merchantId = settings.iciciMerchantId || "";
+  const aggregatorId = settings.iciciAggregatorId || "";
+  const secretKey = settings.iciciSecretKey || process.env.ICICI_SECRET_KEY || "";
   if (!merchantId || !secretKey) {
     res.status(503).json({ error: "ICICI payment gateway not configured. Please contact the clinic." });
     return;
@@ -951,9 +951,9 @@ async function handleIciciCallback(req: any, res: any, queryOrBody: Record<strin
   }
 
   const settings = await getSettings();
-  const merchantId = process.env.ICICI_MERCHANT_ID || settings?.iciciMerchantId || "";
-  const aggregatorId = process.env.ICICI_AGGREGATOR_ID || settings?.iciciAggregatorId || "";
-  const secretKey = process.env.ICICI_SECRET_KEY || settings?.iciciSecretKey || "";
+  const merchantId = settings?.iciciMerchantId || "";
+  const aggregatorId = settings?.iciciAggregatorId || "";
+  const secretKey = settings?.iciciSecretKey || process.env.ICICI_SECRET_KEY || "";
 
   // Server-side status verification
   if (secretKey && merchantId) {

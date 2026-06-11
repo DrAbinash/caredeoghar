@@ -236,8 +236,8 @@ kioskRouter.get("/config", async (_req, res): Promise<void> => {
   const keySecret = process.env.RAZORPAY_KEY_SECRET ?? "";
   const payuKey = s.payuMerchantKey ?? "";
   const payuSalt = process.env.PAYU_MERCHANT_SALT ?? "";
-  const iciciMerchantId = process.env.ICICI_MERCHANT_ID || (s.iciciMerchantId ?? "");
-  const iciciSecretKey = process.env.ICICI_SECRET_KEY || (s.iciciSecretKey ?? "");
+  const iciciMerchantId = s.iciciMerchantId || "";
+  const iciciSecretKey = s.iciciSecretKey || process.env.ICICI_SECRET_KEY || "";
   res.json({
     enabled: (settings["kioskEnabled"] as boolean | null) ?? false,
     paymentGateway: (settings["kioskPaymentGateway"] as string | null) ?? "upi",
@@ -496,9 +496,9 @@ kioskRouter.post("/register", registerLimiter, async (req, res): Promise<void> =
       // ── ICICI MODE ── verify server-side status
       const settings = await getKioskSettings();
       const s = settings as Record<string, unknown>;
-      const iciciMerchantId = process.env.ICICI_MERCHANT_ID || (s["iciciMerchantId"] as string | undefined) || "";
-      const iciciAggregatorId = process.env.ICICI_AGGREGATOR_ID || (s["iciciAggregatorId"] as string | undefined) || "";
-      const iciciSecretKey = process.env.ICICI_SECRET_KEY || (s["iciciSecretKey"] as string | undefined) || "";
+      const iciciMerchantId = (s["iciciMerchantId"] as string | undefined) || "";
+      const iciciAggregatorId = (s["iciciAggregatorId"] as string | undefined) || "";
+      const iciciSecretKey = (s["iciciSecretKey"] as string | undefined) || process.env.ICICI_SECRET_KEY || "";
       let verified = false;
       if (iciciSecretKey && iciciMerchantId) {
         try {
@@ -648,9 +648,9 @@ kioskRouter.post("/icici-initiate", paymentLimiter, async (req, res): Promise<vo
     return;
   }
 
-  const merchantId = process.env.ICICI_MERCHANT_ID || (s["iciciMerchantId"] as string | undefined) || "";
-  const aggregatorId = process.env.ICICI_AGGREGATOR_ID || (s["iciciAggregatorId"] as string | undefined) || "";
-  const secretKey = process.env.ICICI_SECRET_KEY || (s["iciciSecretKey"] as string | undefined) || "";
+  const merchantId = (s["iciciMerchantId"] as string | undefined) || "";
+  const aggregatorId = (s["iciciAggregatorId"] as string | undefined) || "";
+  const secretKey = (s["iciciSecretKey"] as string | undefined) || process.env.ICICI_SECRET_KEY || "";
   if (!merchantId || !secretKey) {
     res.status(503).json({ error: "ICICI payment gateway not configured. Please contact staff." });
     return;
@@ -826,9 +826,9 @@ async function handleKioskIciciCallback(req: any, res: any, queryOrBody: Record<
 
   const settings = await getKioskSettings();
   const s = settings as Record<string, unknown>;
-  const iciciMerchantId = process.env.ICICI_MERCHANT_ID || (s["iciciMerchantId"] as string | undefined) || "";
-  const iciciAggregatorId = process.env.ICICI_AGGREGATOR_ID || (s["iciciAggregatorId"] as string | undefined) || "";
-  const iciciSecretKey = process.env.ICICI_SECRET_KEY || (s["iciciSecretKey"] as string | undefined) || "";
+  const iciciMerchantId = (s["iciciMerchantId"] as string | undefined) || "";
+  const iciciAggregatorId = (s["iciciAggregatorId"] as string | undefined) || "";
+  const iciciSecretKey = (s["iciciSecretKey"] as string | undefined) || process.env.ICICI_SECRET_KEY || "";
 
   // Server-side status verification
   if (iciciSecretKey && iciciMerchantId) {
