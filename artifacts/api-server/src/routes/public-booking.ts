@@ -869,7 +869,7 @@ publicBookingRouter.post("/icici-initiate", createOrderLimiter, async (req, res)
 
   try {
     const iciciUrl = `${getIciciBase()}/pg/api/v2/initiateSale`;
-    logger.info({ iciciUrl, merchantId, aggregatorId, bookingRef }, "ICICI initiateSale request");
+    logger.info({ iciciUrl, merchantId, aggregatorId, bookingRef, returnUrl, baseUrlEnv: process.env.BASE_URL || "(unset)" }, "ICICI initiateSale request");
     const iciciRes = await fetch(iciciUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
