@@ -776,7 +776,8 @@ function generateIciciSecureHash(params: Record<string, string>, secretKey: stri
 }
 
 function formatTxnDate(d = new Date()): string {
-  return d.toISOString().replace(/[-T:]/g, "").slice(0, 12);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 
 // ── POST /api/public/booking/icici-initiate ──────────────────────────────────

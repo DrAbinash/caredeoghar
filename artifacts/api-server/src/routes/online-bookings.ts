@@ -372,7 +372,9 @@ onlineBookingsRouter.post("/:id/payment-link", async (req, res): Promise<void> =
 
   // 2. Try ICICI (Orange Pay)
   if (s?.iciciEnabled && iciciMerchantId && iciciSecretKey) {
-    const txnDate = new Date().toISOString().replace(/[-T:]/g, "").slice(0, 12);
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const txnDate = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
     const amountStr = amount.toFixed(2);
     const mobile = booking.phone.replace(/\D/g, "").slice(-10);
     const hashParams: Record<string, string> = {
