@@ -762,22 +762,21 @@ publicBookingRouter.get("/bharatpe-callback", async (req, res): Promise<void> =>
 
 // ── ICICI Orange PG helpers ─────────────────────────────────────────────────
 
-const ICICI_UAT_BASE = "https://pgpayuat.icicibank.com";
-const ICICI_PROD_BASE = "https://pgpay.icicibank.com";
+const ICICI_UAT_BASE = "https://payment1.atomtech.in";
+const ICICI_PROD_BASE = "https://payment1.atomtech.in";
 
 function getIciciBase() {
   return process.env.NODE_ENV === "production" ? ICICI_PROD_BASE : ICICI_UAT_BASE;
 }
 
 function generateIciciSecureHash(params: Record<string, string>, secretKey: string): string {
-  const keys = Object.keys(params).sort();
-  const hashText = keys.map((k) => params[k]).join("");
-  return crypto.createHmac("sha256", secretKey).update(hashText).digest("hex");
+  const sortedKeys = Object.keys(params).sort();
+  const hashStr = sortedKeys.map((k) => `${k}=${params[k]}`).join("~") + `~${secretKey}`;
+  return crypto.createHash("sha256").update(hashStr).digest("hex");
 }
 
 function formatTxnDate(d = new Date()): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  return d.toISOString().replace(/[-T:]/g, "").slice(0, 12);
 }
 
 // ── POST /api/public/booking/icici-initiate ──────────────────────────────────
