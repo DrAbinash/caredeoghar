@@ -218,6 +218,8 @@ async function createPatientBillAndTokens(params: {
 }
 
 function getKioskBase(req: { headers: Record<string, string | string[] | undefined> }): string {
+  const baseUrl = process.env.BASE_URL;
+  if (baseUrl) return baseUrl;
   const domains = process.env.REPLIT_DOMAINS;
   if (domains) return `https://${domains.split(",")[0]}`;
   const host = String(req.headers["host"] || "localhost");

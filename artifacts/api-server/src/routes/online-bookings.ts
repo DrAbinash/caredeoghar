@@ -307,7 +307,7 @@ onlineBookingsRouter.post("/:id/payment-link", async (req, res): Promise<void> =
     return;
   }
 
-  const base = `${req.protocol}://${req.get("host")}`;
+  const base = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
 
   // Determine active gateway
   const bharatpeApiKey = process.env.BHARATPE_API_KEY || "";
