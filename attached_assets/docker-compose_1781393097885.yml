@@ -53,6 +53,7 @@ services:
       DATABASE_URL: postgres://${DB_USER:-erp}:${DB_PASSWORD:-changeme}@db:5432/${DB_NAME:-diagnostic_erp}
       NODE_ENV: production
       PORT: "8080"
+      BASE_URL: ${BASE_URL:-https://caredeoghar.com}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-secret}
       SESSION_SECRET: ${SESSION_SECRET:-change-me-to-another-long-random-secret}
