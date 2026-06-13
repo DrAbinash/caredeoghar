@@ -322,3 +322,9 @@ id = "y_rKlaI8yKTIIthlsZNuY"
 uri = "file://CARE_DIAGNOSTICS_MASTER_AUDIT_2026.md"
 type = "text"
 title = "Care Diagnostics Master Audit Report"
+
+[[outputs]]
+id = "QFk8I3LpYaJoR6lJncr3S"
+uri = "file://synology-deploy.zip"
+type = "unspecified"
+title = "Synology Deployment Package (zip)"

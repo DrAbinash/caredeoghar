@@ -1,0 +1,100 @@
+# =============================================================================
+# Care Diagnostics — docker-compose stack for Synology NAS
+#
+# Quick start:
+#   1. Copy this folder to your Synology (e.g., /volume1/docker/care-diagnostics)
+#   2. docker compose up -d --build
+#   3. docker compose run --rm migrate           # one-time, creates DB tables
+#   4. Open http://<nas-ip>:8888
+#
+# URL layout:
+#   /                         — clinic-site (public website)
+#   /erp/                     — diagnostic-erp (staff portal)
+#   /super-admin-portal/      — super-admin-portal
+#   /api/                     — Express REST API
+#
+# Services:
+#   db       — PostgreSQL 16 (data persists in the "db_data" volume)
+#   api      — Express API server, internal only, port 8080
+#   web      — nginx serving all three SPAs + reverse-proxy to /api,
+#              published on the host at $HOST_PORT (default 8888)
+#   migrate  — on-demand drizzle-kit push runner (no auto-start)
+# =============================================================================
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: care-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-erp}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: ${DB_NAME:-diagnostic_erp}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-erp} -d ${DB_NAME:-diagnostic_erp}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    container_name: care-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${DB_USER:-erp}:${DB_PASSWORD:-changeme}@db:5432/${DB_NAME:-diagnostic_erp}
+      NODE_ENV: production
+      PORT: "8080"
+      BASE_URL: ${BASE_URL:-https://caredeoghar.com}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-secret}
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-to-another-long-random-secret}
+      OBJECT_STORAGE_DIR: ${OBJECT_STORAGE_DIR:-/app/data/object-storage}
+      # Optional integrations — uncomment in .env to enable:
+      # AI_INTEGRATIONS_GEMINI_API_KEY: ${AI_INTEGRATIONS_GEMINI_API_KEY:-}
+      # AI_INTEGRATIONS_GEMINI_BASE_URL: ${AI_INTEGRATIONS_GEMINI_BASE_URL:-}
+      # ORTHANC_URL:                    ${ORTHANC_URL:-}
+      # ORTHANC_USERNAME:               ${ORTHANC_USERNAME:-}
+      # ORTHANC_PASSWORD:               ${ORTHANC_PASSWORD:-}
+      # OHIF_URL:                       ${OHIF_URL:-}
+      # FINGERPRINT_BRIDGE_SECRET:      ${FINGERPRINT_BRIDGE_SECRET:-}
+      # SUPER_ADMIN_USB_KEY:            ${SUPER_ADMIN_USB_KEY:-}
+    volumes:
+      - object_storage:/app/data/object-storage
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    container_name: care-web
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-8888}:80"
+    depends_on:
+      - api
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrate
+    container_name: care-migrate
+    command: ["pnpm", "--filter", "@workspace/db", "run", "push-force"]
+    environment:
+      DATABASE_URL: postgres://${DB_USER:-erp}:${DB_PASSWORD:-changeme}@db:5432/${DB_NAME:-diagnostic_erp}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "on-failure"
+
+volumes:
+  db_data:
+  object_storage:

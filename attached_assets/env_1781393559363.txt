@@ -1,0 +1,47 @@
+# =============================================================================
+# Care Diagnostics — Environmental Configuration Template
+# =============================================================================
+# Copy this file to ".env" in the same folder as your docker-compose.yml file.
+# Replace all placeholder values with secure, strong credentials.
+
+# --- NETWORK & PORTS ---------------------------------------------------------
+# Host port nginx will listen on. Open http://localhost:<HOST_PORT> (or http://<nas-ip>:<HOST_PORT>)
+HOST_PORT=8888
+
+# --- DATABASE SETTINGS -------------------------------------------------------
+# Used both by the PostgreSQL container and the API service connection string
+# ⚠️ CHANGE THESE credentials before deploying. Patient data is stored here!
+DB_USER=erp
+DB_PASSWORD=caredeogharpgpwd
+DB_NAME=diagnostic_erp
+
+# --- API SERVICES CONFIGURATION ---------------------------------------------
+NODE_ENV=production
+LOG_LEVEL=info
+
+# JWT/Session authentication secrets (Make these long, random strings)
+JWT_SECRET=change-me-to-a-long-random-secret
+SESSION_SECRET=change-me-to-another-long-random-secret
+
+# Directory inside the container where uploaded documents/reports are saved
+OBJECT_STORAGE_DIR=/app/data/object-storage
+
+# --- OPTIONAL: GEMINI AI INTEGRATION (For automated report suggestions) -----
+# AI_INTEGRATIONS_GEMINI_API_KEY=your_gemini_api_key_here
+# AI_INTEGRATIONS_GEMINI_BASE_URL=https://generativelanguage.googleapis.com
+
+# --- OPTIONAL: PACS / ORTHANC INTEGRATION (For RIS-PACS/OHIF features) ------
+# ORTHANC_URL=http://your-orthanc-ip:8042
+# ORTHANC_USERNAME=orthanc_username
+# ORTHANC_PASSWORD=orthanc_password
+# OHIF_URL=http://your-ohif-ip:3000
+
+# --- OPTIONAL: FINGERPRINT SCANNER BRIDGE ------------------------------------
+# FINGERPRINT_BRIDGE_SECRET=your-shared-secret-here
+
+# --- OPTIONAL: SUPER ADMIN HARDWARE BYPASS PIN ------------------------------
+SUPER_ADMIN_USB_KEY=d350487e-e1ec-452e-994e-bddb9fb96605
+
+# Production domain base URL for payment gateway return redirects
+PUBLIC_BASE_URL=https://caredeoghar.com
+
