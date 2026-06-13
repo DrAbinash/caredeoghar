@@ -24,14 +24,14 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: care-db
+    container_name: care-db-new
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER:-erp}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
       POSTGRES_DB: ${DB_NAME:-diagnostic_erp}
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - db_data_new:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-erp} -d ${DB_NAME:-diagnostic_erp}"]
       interval: 5s
@@ -43,7 +43,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: api
-    container_name: care-api
+    container_name: care-api-new
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://${DB_USER:-erp}:${DB_PASSWORD:-changeme}@db:5432/${DB_NAME:-diagnostic_erp}
@@ -64,7 +64,7 @@ services:
       # FINGERPRINT_BRIDGE_SECRET:      ${FINGERPRINT_BRIDGE_SECRET:-}
       # SUPER_ADMIN_USB_KEY:            ${SUPER_ADMIN_USB_KEY:-}
     volumes:
-      - object_storage:/app/data/object-storage
+      - object_storage_new:/app/data/object-storage
     depends_on:
       db:
         condition: service_healthy
@@ -74,10 +74,10 @@ services:
       context: .
       dockerfile: Dockerfile
       target: web
-    container_name: care-web
+    container_name: care-web-new
     restart: unless-stopped
     ports:
-      - "${HOST_PORT:-8888}:80"
+      - "${HOST_PORT:-8889}:80"
     depends_on:
       - api
 
@@ -86,7 +86,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: migrate
-    container_name: care-migrate
+    container_name: care-migrate-new
     command: ["pnpm", "--filter", "@workspace/db", "run", "push-force"]
     environment:
       DATABASE_URL: postgres://${DB_USER:-erp}:${DB_PASSWORD:-changeme}@db:5432/${DB_NAME:-diagnostic_erp}
@@ -96,5 +96,5 @@ services:
     restart: "on-failure"
 
 volumes:
-  db_data:
-  object_storage:
+  db_data_new:
+  object_storage_new:

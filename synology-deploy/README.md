@@ -36,7 +36,7 @@
    docker compose run --rm migrate
    ```
 
-5. **Open** `http://<your-nas-ip>:8888`
+5. **Open** `http://<your-nas-ip>:8889`
 
 ## Synology Container Manager (GUI) Alternative
 
