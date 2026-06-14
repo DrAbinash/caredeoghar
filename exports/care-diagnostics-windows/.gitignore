@@ -1,8 +1,0 @@
-node_modules/
-dist/
-*.exe
-*.msi
-*.zip
-*.tar.gz
-.DS_Store
-npm-debug.log*

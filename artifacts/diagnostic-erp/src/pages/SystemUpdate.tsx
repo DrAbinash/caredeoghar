@@ -194,19 +194,15 @@ export default function SystemUpdate() {
         </CardHeader>
         <CardContent className="text-sm space-y-3">
           <p>
-            From the Replit project, open the <span className="font-mono">windows-build/dist/</span> folder
-            after the <b>Windows Build</b> workflow finishes and download:
+            From the Replit project, open the <span className="font-mono">synology-deploy/</span> folder
+            after the build finishes and download the deployment package:
           </p>
           <ul className="list-disc list-inside space-y-1 font-mono text-xs">
-            <li>DiagnosticERP-Update.zip <span className="text-muted-foreground">— small, app-only, recommended for updates</span></li>
-            <li>DiagnosticERP-Portable.zip <span className="text-muted-foreground">— full installer, fresh installs only</span></li>
-            <li>DiagnosticERP-Setup.exe <span className="text-muted-foreground">— Windows installer</span></li>
-            <li>DiagnosticERP-Desktop-Setup.exe <span className="text-muted-foreground">— Electron desktop app</span></li>
+            <li>synology-deploy.zip <span className="text-muted-foreground">— Docker deployment package for Synology NAS</span></li>
           </ul>
           <p className="text-muted-foreground">
-            You can also accept update zips published by mirrors such as OpenCode.ai or your own GitHub Releases —
-            we only require that the zip contains an <span className="font-mono">app/</span> folder with the
-            standard layout.
+            Extract the zip, update the <span className="font-mono">.env</span> file with your credentials, and run
+            <span className="font-mono">docker compose up -d --build</span>.
           </p>
         </CardContent>
       </Card>
