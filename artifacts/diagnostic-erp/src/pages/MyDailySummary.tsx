@@ -23,6 +23,7 @@ type MyDailySummarySummary = {
   grossBilledIncludingCancelled: number;
   cancelledOnMyBills: number;
   netCollectedOnMyBills: number;
+  totalBillsCollected: number;
   outstanding: number;
   refundsAndCancellations: number;
   refundAmount: number;
@@ -165,6 +166,7 @@ type MyDailySummaryData = {
     cancelled: number;
     outstanding: number;
     netCollected: number;
+    totalBillsCollected: number;
     billCount: number;
     cashIn: number;
     digitalIn: number;
@@ -577,7 +579,10 @@ function DailyFinancialReconciliation({ summary: s }: { summary: MyDailySummaryS
   // Subtracting both would double-count the same ₹7,500.
 
   // Step 1: Effective Billing Value
-  const effectiveBilling = s.grossBilledIncludingCancelled + s.duesCollectedTotal - s.cancelledAmount;
+  // Use cancelledOnMyBills (bills I created that were cancelled) not cancelledAmount
+  // (bills I cancelled — may include bills I didn't create). Mixing the two breaks
+  // the equation because grossBilledIncludingCancelled only contains my own bills.
+  const effectiveBilling = s.grossBilledIncludingCancelled + s.duesCollectedTotal - s.cancelledOnMyBills;
 
   // Step 2: Expected Collection
   // Outstanding = money billed but not yet collected (still pending)
@@ -1206,7 +1211,8 @@ export default function MyDailySummary() {
 
   const exportConfig = useMemo<ExportConfig | null>(() => {
     if (!s || !data) return null;
-    const effectiveBilling = s.grossBilledIncludingCancelled + s.duesCollectedTotal - s.cancelledAmount;
+    // Use cancelledOnMyBills (my own cancelled bills) for the equation
+    const effectiveBilling = s.grossBilledIncludingCancelled + s.duesCollectedTotal - s.cancelledOnMyBills;
     const expectedCollection = effectiveBilling - s.outstanding - s.totalExpenses;
     const netDigitalCollection = s.digitalCollection - s.digitalRefunded;
     const expectedPhysicalCash = expectedCollection - netDigitalCollection;
@@ -1455,6 +1461,7 @@ export default function MyDailySummary() {
             <MiniKpi icon={Banknote} label="Expected Physical Cash in Counter" value={fmt(s.physicalCashInHand)} sub={`Cash ${fmt(s.cashCollection)} − Cash Exp ${fmt(s.cashExpenses)}`} iconBg="bg-blue-100 text-blue-700" border="border-l-blue-500" />
             <MiniKpi icon={Tag} label="Discounts Given" value={fmt(s.discountsGiven)} sub={s.grossBilling > 0 ? `${((s.discountsGiven / s.grossBilling) * 100).toFixed(1)}% of billing` : ""} iconBg="bg-slate-100 text-slate-700" border="border-l-slate-400" />
             <MiniKpi icon={Receipt} label="Dues Collected" value={fmt(s.duesCollectedTotal)} sub={`${s.duesBillsCount} old bill${s.duesBillsCount !== 1 ? "s" : ""} settled`} iconBg="bg-teal-100 text-teal-700" border="border-l-teal-500" />
+            <MiniKpi icon={CheckCircle2} label="Total Bills Collected" value={fmt(s.totalBillsCollected)} sub="Net + Old Dues" iconBg="bg-green-100 text-green-800" border="border-l-green-600" />
             <MiniKpi icon={XCircle} label="Cancellation Count" value={String(s.cancellationCount)} sub={s.cancellationCount > 0 ? `₹${s.cancelledAmount.toFixed(0)} written off` : "None"} iconBg="bg-gray-100 text-gray-700" border="border-l-gray-400" />
           </div>
 
@@ -1475,10 +1482,10 @@ export default function MyDailySummary() {
             <div className="text-xs text-amber-800 dark:text-amber-200">
               <p className="font-semibold">Reconciliation formula</p>
               <p className="text-[11px] mt-0.5">
-                <span className="font-semibold">Total Received</span> = Gross Billing + Dues Collected
+                <span className="font-semibold">Total Bills Collected</span> = Net Collected + Old Dues Collected
               </p>
               <p className="text-[11px]">
-                <span className="font-semibold">Gross Billing</span> = Total Bills Created − Discounts
+                <span className="font-semibold">Net Collected</span> = Active Billing − Outstanding
               </p>
             </div>
           </div>
@@ -1502,7 +1509,10 @@ export default function MyDailySummary() {
                 <RecRow label="= Active Billing" value={s.grossBilling} type="result" />
                 <RecRow label="− Outstanding / Dues" value={s.outstanding} type="deduct" note="still to collect" />
                 <div className="my-3 border-t-4 border-blue-300 dark:border-blue-700" />
-                <RecRow label="= Net Collected on My Bills" value={s.netCollectedOnMyBills} type="final" />
+                <RecRow label="= Net Collected on My Bills" value={s.netCollectedOnMyBills} type="result" />
+                <RecRow label="+ Old Dues Collected" value={s.duesCollectedTotal} type="start" note={`${s.duesBillsCount} old bills`} />
+                <div className="my-3 border-t-4 border-blue-300 dark:border-blue-700" />
+                <RecRow label="= Total Bills Collected" value={s.totalBillsCollected} type="final" />
                 <div className="pb-2" />
               </div>
             </div>

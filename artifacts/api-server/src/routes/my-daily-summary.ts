@@ -338,9 +338,10 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
     0,
   );
   const netCollectedOnMyBills = grossBilling - outstanding;
-  const discountsGiven = activeBills.reduce((s, r) => s + Number(r.discount ?? 0), 0);
   const duesCollectedTotal = duesBills.reduce((s, b) => s + b.duesCollected, 0);
   const duesBillsCount = duesBills.length;
+  const totalBillsCollected = netCollectedOnMyBills + duesCollectedTotal;
+  const discountsGiven = activeBills.reduce((s, r) => s + Number(r.discount ?? 0), 0);
 
   // ── My Cashbox side (money I personally handled) ───────────────────────
   // Equation that balances:
@@ -462,6 +463,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       const sCancelled = scancelled.reduce((s, r) => s + Number(r.totalAmount), 0);
       const sOutstanding = sactive.reduce((s, r) => s + trueOutstanding(r), 0);
       const sNetCollected = sActiveBilling - sOutstanding;
+      const sTotalBillsCollected = sNetCollected + sDues;
       const sCashIn = spayPos.reduce((s, p) => s + (isDigital(p.method) ? 0 : Number(p.amount)), 0);
       const sDigitalIn = spayPos.reduce((s, p) => s + (isDigital(p.method) ? Number(p.amount) : 0), 0);
       const sCashRef = spayNeg.reduce((s, p) => s + (isDigital(p.method) ? 0 : Math.abs(Number(p.amount))), 0);
@@ -483,6 +485,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
         cancelled: sCancelled,
         outstanding: sOutstanding,
         netCollected: sNetCollected,
+        totalBillsCollected: sTotalBillsCollected,
         billCount: sactive.length,
         cashIn: sCashIn,
         digitalIn: sDigitalIn,
@@ -514,6 +517,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       grossBilledIncludingCancelled,
       cancelledOnMyBills,
       netCollectedOnMyBills,
+      totalBillsCollected,
       outstanding,
       refundsAndCancellations,
       refundAmount,
