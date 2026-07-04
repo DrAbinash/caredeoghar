@@ -245,10 +245,10 @@ function LoginScreen({
   const [showPin, setShowPin] = useState(false);
   const [autoLoginState, setAutoLoginState] = useState<AutoLoginState>("idle");
 
-  const doLogin = async (name: string, usbPin?: string) => {
+  const doLogin = async (name: string, pin: string, usbPin?: string) => {
     setApiError(null);
     try {
-      const body: Record<string, string> = { name };
+      const body: Record<string, string> = { name, pin };
       if (usbPin) body.usbPin = usbPin;
       const res = await fetch(`${API_BASE}/super-admin/login`, {
         method: "POST",
@@ -269,7 +269,7 @@ function LoginScreen({
   };
 
   const onSubmit = async (data: LoginForm) => {
-    await doLogin(data.name, autoUsbPin ?? undefined);
+    await doLogin(data.name, data.pin, autoUsbPin ?? undefined);
   };
 
   // Auto-login: if usbPin is available from the pen drive, try common names
@@ -279,7 +279,7 @@ function LoginScreen({
     void (async () => {
       const names = ["Super Admin", "Admin", "Owner", "Manager"];
       for (const name of names) {
-        const ok = await doLogin(name, autoUsbPin);
+        const ok = await doLogin(name, "", autoUsbPin);
         if (ok) { setAutoLoginState("success"); return; }
       }
       setAutoLoginState("failed");
