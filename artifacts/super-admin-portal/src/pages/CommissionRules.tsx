@@ -274,7 +274,8 @@ export default function CommissionRules({ onBack }: { onBack: () => void }) {
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
   const handleExportCsv = () => {
-    const rows = rules.map((r) => {
+    // Export explicit commission rules
+    const ruleRows = rules.map((r) => {
       const doc = doctors.find((d) => d.id === r.doctorId);
       return {
         doctorName: doc?.name ?? "",
@@ -288,12 +289,30 @@ export default function CommissionRules({ onBack }: { onBack: () => void }) {
         isActive: r.isActive ? "true" : "false",
       };
     });
+
+    // Also export doctors with default commission but no explicit rules
+    const doctorsWithRules = new Set(rules.map((r) => r.doctorId));
+    const defaultRows = doctors
+      .filter((d) => !doctorsWithRules.has(d.id) && d.defaultCommission != null && Number(d.defaultCommission) > 0)
+      .map((d) => ({
+        doctorName: d.name,
+        name: "Default",
+        type: d.defaultCommissionType ?? "percentage",
+        value: String(d.defaultCommission),
+        scope: "all",
+        categories: "",
+        testIds: "",
+        isExclusive: "false",
+        isActive: "true",
+      }));
+
+    const rows = [...ruleRows, ...defaultRows];
     const csv = buildCsv(
       ["doctorName", "name", "type", "value", "scope", "categories", "testIds", "isExclusive", "isActive"],
       rows,
     );
     downloadCsv(csv, `commission-rules-${new Date().toISOString().slice(0, 10)}.csv`);
-    toast({ title: "Export ready", description: `${rows.length} rules exported.` });
+    toast({ title: "Export ready", description: `${rows.length} rules exported (${ruleRows.length} explicit + ${defaultRows.length} defaults).` });
   };
 
   const handleImportCsv = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -315,6 +334,7 @@ export default function CommissionRules({ onBack }: { onBack: () => void }) {
       }
       const docByName = new Map(doctors.map((d) => [d.name.toLowerCase().trim(), d.id]));
       let inserted = 0;
+      let updated = 0;
       let skipped = 0;
       for (const row of parsed) {
         const doctorName = (row.doctorName ?? row.doctorname ?? "").trim();
@@ -331,17 +351,31 @@ export default function CommissionRules({ onBack }: { onBack: () => void }) {
         const testIds = (row.testIds ?? row.testids ?? "").split(",").map((s) => Number(s.trim())).filter((n) => !Number.isNaN(n));
         const isExclusive = (row.isExclusive ?? row.isexclusive ?? "").toLowerCase() === "true";
         const isActive = (row.isActive ?? row.isactive ?? "").toLowerCase() !== "false";
-        await fetch("/api/commission/rules", {
-          method: "POST",
-          headers: { ...saAuthHeaders(), "Content-Type": "application/json" },
-          body: JSON.stringify({ doctorId, name, type, value, scope, categories, testIds, isExclusive, isActive }),
-        });
-        inserted++;
+
+        // If the row is labeled "Default" with scope=all and no categories/testIds,
+        // update the doctor's defaultCommission instead of creating an explicit rule.
+        const isDefaultRow = name.toLowerCase() === "default" && scope === "all" && categories.length === 0 && testIds.length === 0;
+        if (isDefaultRow) {
+          const res = await fetch(`/api/doctors/${doctorId}`, {
+            method: "PATCH",
+            headers: { ...saAuthHeaders(), "Content-Type": "application/json" },
+            body: JSON.stringify({ defaultCommission: value, defaultCommissionType: type }),
+          });
+          if (res.ok) updated++; else skipped++;
+        } else {
+          await fetch("/api/commission/rules", {
+            method: "POST",
+            headers: { ...saAuthHeaders(), "Content-Type": "application/json" },
+            body: JSON.stringify({ doctorId, name, type, value, scope, categories, testIds, isExclusive, isActive }),
+          });
+          inserted++;
+        }
       }
       queryClient.invalidateQueries({ queryKey: rulesQueryKey });
+      queryClient.invalidateQueries({ queryKey: ["/api/super-admin/doctors-list"] });
       toast({
         title: "Import complete",
-        description: `${inserted} inserted, ${skipped} skipped.`,
+        description: `${inserted} rules inserted, ${updated} defaults updated, ${skipped} skipped.`,
         variant: skipped > 0 ? "default" : undefined,
       });
     } catch (err) {
