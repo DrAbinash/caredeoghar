@@ -613,4 +613,152 @@ router.get("/report-by-patient", async (req, res) => {
   });
 });
 
+// ─── CSV Export of all commission rules (with doctor names) ───────────────────
+router.get("/rules/export", async (req, res) => {
+  const rows = await db
+    .select({
+      doctorName: doctorsTable.name,
+      name: commissionRulesTable.name,
+      type: commissionRulesTable.type,
+      value: commissionRulesTable.value,
+      scope: commissionRulesTable.scope,
+      categories: commissionRulesTable.categories,
+      testIds: commissionRulesTable.testIds,
+      isExclusive: commissionRulesTable.isExclusive,
+      isActive: commissionRulesTable.isActive,
+    })
+    .from(commissionRulesTable)
+    .innerJoin(doctorsTable, eq(commissionRulesTable.doctorId, doctorsTable.id))
+    .orderBy(doctorsTable.name, commissionRulesTable.name);
+
+  const headers = ["doctorName","name","type","value","scope","categories","testIds","isExclusive","isActive"];
+  const lines = rows.map(r => [
+    r.doctorName, r.name, r.type, r.value,
+    r.scope ?? "all",
+    r.categories ?? "",
+    r.testIds ?? "",
+    r.isExclusive ? "true" : "false",
+    r.isActive ? "true" : "false",
+  ].map(v => {
+    const s = String(v ?? "");
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  }).join(","));
+
+  const csv = "\ufeff" + headers.join(",") + "\r\n" + lines.join("\r\n");
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", 'attachment; filename="commission-rules.csv"');
+  res.send(csv);
+});
+
+// ─── CSV Import of commission rules ───────────────────────────────────────────
+// POST body: multipart/form-data with field "csv" containing the CSV text.
+// Headers must include: doctorName, name, type, value, scope, categories, testIds, isExclusive, isActive
+// doctorName is matched case-insensitively to an existing doctor.  Unmatched rows are skipped with a warning.
+router.post("/rules/import", async (req, res) => {
+  const raw = req.body?.csv;
+  if (typeof raw !== "string" || !raw.trim()) {
+    res.status(400).json({ error: "Missing 'csv' field in body" });
+    return;
+  }
+
+  // Simple RFC-4180-ish parser
+  const src = raw.replace(/^\ufeff/, "");
+  const parsedRows: string[][] = [];
+  let cur: string[] = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (src[i + 1] === '"') { field += '"'; i++; }
+        else { inQuotes = false; }
+      } else { field += c; }
+      continue;
+    }
+    if (c === '"') { inQuotes = true; continue; }
+    if (c === ",") { cur.push(field); field = ""; continue; }
+    if (c === "\r") { continue; }
+    if (c === "\n") { cur.push(field); parsedRows.push(cur); cur = []; field = ""; continue; }
+    field += c;
+  }
+  if (field.length > 0 || cur.length > 0) { cur.push(field); parsedRows.push(cur); }
+
+  if (parsedRows.length === 0) {
+    res.status(400).json({ error: "CSV is empty" });
+    return;
+  }
+
+  const headers = parsedRows[0].map(h => h.trim().toLowerCase());
+  const required = ["doctorname", "name", "type", "value", "scope"];
+  const missing = required.filter(h => !headers.includes(h));
+  if (missing.length) {
+    res.status(400).json({ error: `Missing required columns: ${missing.join(", ")}` });
+    return;
+  }
+
+  const get = (row: string[], col: string) => (row[headers.indexOf(col)] ?? "").trim();
+
+  const allDoctors = await db.select().from(doctorsTable);
+  const docByName = new Map(allDoctors.map(d => [d.name.toLowerCase().trim(), d.id]));
+
+  const inserted: { row: number; name: string; doctorName: string }[] = [];
+  const skipped: { row: number; reason: string }[] = [];
+
+  for (let i = 1; i < parsedRows.length; i++) {
+    const row = parsedRows[i];
+    if (row.every(c => c.trim() === "")) continue;
+
+    const doctorName = get(row, "doctorname");
+    const name = get(row, "name");
+    const type = get(row, "type") as "percentage" | "fixed";
+    const valueStr = get(row, "value");
+    const scope = get(row, "scope") as "all" | "category" | "test";
+
+    if (!name || !type || !valueStr || !scope) {
+      skipped.push({ row: i + 1, reason: "Missing required fields" });
+      continue;
+    }
+    const value = Number(valueStr);
+    if (Number.isNaN(value) || value < 0) {
+      skipped.push({ row: i + 1, reason: `Invalid value: ${valueStr}` });
+      continue;
+    }
+    if (!["percentage", "fixed"].includes(type)) {
+      skipped.push({ row: i + 1, reason: `Invalid type: ${type}` });
+      continue;
+    }
+    if (!["all", "category", "test"].includes(scope)) {
+      skipped.push({ row: i + 1, reason: `Invalid scope: ${scope}` });
+      continue;
+    }
+
+    const doctorId = docByName.get(doctorName.toLowerCase().trim());
+    if (!doctorId) {
+      skipped.push({ row: i + 1, reason: `Doctor not found: ${doctorName}` });
+      continue;
+    }
+
+    const categoriesRaw = get(row, "categories");
+    const testIdsRaw = get(row, "testIds");
+    const isExclusive = get(row, "isExclusive").toLowerCase() === "true";
+    const isActive = get(row, "isActive").toLowerCase() !== "false";
+
+    await db.insert(commissionRulesTable).values({
+      doctorId,
+      name,
+      type,
+      value: value.toString(),
+      scope,
+      categories: categoriesRaw ? JSON.stringify(categoriesRaw.split(",").map(s => s.trim()).filter(Boolean)) : null,
+      testIds: testIdsRaw ? JSON.stringify(testIdsRaw.split(",").map(s => Number(s.trim())).filter(n => !Number.isNaN(n))) : null,
+      isExclusive,
+      isActive,
+    });
+    inserted.push({ row: i + 1, name, doctorName });
+  }
+
+  res.json({ ok: true, inserted: inserted.length, skipped, details: inserted });
+});
+
 export default router;

@@ -462,6 +462,7 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       const sActiveBilling = sactive.reduce((s, r) => s + Number(r.totalAmount), 0);
       const sCancelled = scancelled.reduce((s, r) => s + Number(r.totalAmount), 0);
       const sOutstanding = sactive.reduce((s, r) => s + trueOutstanding(r), 0);
+      const sDues = duesBills.filter((d) => d.createdByName === name).reduce((s, d) => s + d.duesCollected, 0);
       const sNetCollected = sActiveBilling - sOutstanding;
       const sTotalBillsCollected = sNetCollected + sDues;
       const sCashIn = spayPos.reduce((s, p) => s + (isDigital(p.method) ? 0 : Number(p.amount)), 0);
@@ -475,7 +476,6 @@ myDailySummaryRouter.get("/", async (req: StaffAuthRequest, res) => {
       const sDigitalExp = digitalExpPerPerson[name] ?? 0;
       const sTotalExp = sCashExp + sDigitalExp;
       const sPhysCash = sNetCash - sCashExp;
-      const sDues = duesBills.filter((d) => d.createdByName === name).reduce((s, d) => s + d.duesCollected, 0);
       const sDiscounts = sactive.reduce((s, r) => s + Number(r.discount ?? 0), 0);
 
       return {

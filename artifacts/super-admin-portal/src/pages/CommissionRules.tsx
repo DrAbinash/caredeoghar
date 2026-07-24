@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/select";
 import { useForm } from "react-hook-form";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Trash2, Stethoscope, Star, Percent, Search } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Stethoscope, Star, Percent, Search, Download, Upload } from "lucide-react";
+import { buildCsv, downloadCsv, parseCsv } from "@/lib/csv";
 import {
   useListCommissionRules,
   useCreateCommissionRule,
@@ -120,6 +121,7 @@ export default function CommissionRules({ onBack }: { onBack: () => void }) {
   const [ruleOpen, setRuleOpen] = useState(false);
   const [editRule, setEditRule] = useState<CommissionRule | null>(null);
   const [discountModeSaving, setDiscountModeSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: doctorsData } = useQuery({
     queryKey: SA_DOCTORS_KEY,
@@ -271,6 +273,84 @@ export default function CommissionRules({ onBack }: { onBack: () => void }) {
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
+  const handleExportCsv = () => {
+    const rows = rules.map((r) => {
+      const doc = doctors.find((d) => d.id === r.doctorId);
+      return {
+        doctorName: doc?.name ?? "",
+        name: r.name,
+        type: r.type,
+        value: r.value,
+        scope: r.scope,
+        categories: Array.isArray(r.categories) ? r.categories.join(",") : "",
+        testIds: Array.isArray(r.testIds) ? r.testIds.join(",") : "",
+        isExclusive: r.isExclusive ? "true" : "false",
+        isActive: r.isActive ? "true" : "false",
+      };
+    });
+    const csv = buildCsv(
+      ["doctorName", "name", "type", "value", "scope", "categories", "testIds", "isExclusive", "isActive"],
+      rows,
+    );
+    downloadCsv(csv, `commission-rules-${new Date().toISOString().slice(0, 10)}.csv`);
+    toast({ title: "Export ready", description: `${rows.length} rules exported.` });
+  };
+
+  const handleImportCsv = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = parseCsv(text);
+      if (parsed.length === 0) {
+        toast({ title: "Import failed", description: "CSV is empty or invalid.", variant: "destructive" });
+        return;
+      }
+      const required = ["doctorname", "name", "type", "value", "scope"];
+      const headers = Object.keys(parsed[0]).map((h) => h.toLowerCase().trim());
+      const missing = required.filter((h) => !headers.includes(h));
+      if (missing.length) {
+        toast({ title: "Import failed", description: `Missing columns: ${missing.join(", ")}`, variant: "destructive" });
+        return;
+      }
+      const docByName = new Map(doctors.map((d) => [d.name.toLowerCase().trim(), d.id]));
+      let inserted = 0;
+      let skipped = 0;
+      for (const row of parsed) {
+        const doctorName = (row.doctorName ?? row.doctorname ?? "").trim();
+        const name = (row.name ?? "").trim();
+        const type = (row.type ?? "").trim() as "percentage" | "fixed";
+        const value = Number(row.value);
+        const scope = (row.scope ?? "").trim() as "all" | "category" | "test";
+        if (!name || !type || Number.isNaN(value) || !scope) { skipped++; continue; }
+        if (!["percentage", "fixed"].includes(type)) { skipped++; continue; }
+        if (!["all", "category", "test"].includes(scope)) { skipped++; continue; }
+        const doctorId = docByName.get(doctorName.toLowerCase());
+        if (!doctorId) { skipped++; continue; }
+        const categories = (row.categories ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+        const testIds = (row.testIds ?? row.testids ?? "").split(",").map((s) => Number(s.trim())).filter((n) => !Number.isNaN(n));
+        const isExclusive = (row.isExclusive ?? row.isexclusive ?? "").toLowerCase() === "true";
+        const isActive = (row.isActive ?? row.isactive ?? "").toLowerCase() !== "false";
+        await fetch("/api/commission/rules", {
+          method: "POST",
+          headers: { ...saAuthHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({ doctorId, name, type, value, scope, categories, testIds, isExclusive, isActive }),
+        });
+        inserted++;
+      }
+      queryClient.invalidateQueries({ queryKey: rulesQueryKey });
+      toast({
+        title: "Import complete",
+        description: `${inserted} inserted, ${skipped} skipped.`,
+        variant: skipped > 0 ? "default" : undefined,
+      });
+    } catch (err) {
+      toast({ title: "Import failed", description: String(err), variant: "destructive" });
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   return (
     <div className="min-h-screen w-full bg-background">
       <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-5">
@@ -343,6 +423,21 @@ export default function CommissionRules({ onBack }: { onBack: () => void }) {
               <Plus size={14} className="mr-1" /> Add Rule
             </Button>
           )}
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleExportCsv}>
+              <Download size={14} className="mr-1" /> Export CSV
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+              <Upload size={14} className="mr-1" /> Import CSV
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={handleImportCsv}
+            />
+          </div>
         </div>
 
         {/* Doctor cards / rules table */}
