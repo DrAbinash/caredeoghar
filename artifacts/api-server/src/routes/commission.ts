@@ -528,9 +528,29 @@ router.get("/report-by-patient", async (req, res) => {
     ruleName: string;
   };
 
+  req.log.info({
+    doctorCount: doctors.length,
+    ruleCount: allRules.length,
+    orderCount: ordersWithPatients.length,
+    orderTestCount: orderTests.length,
+    filteredDoctorCount: filteredDoctors.length,
+    dateRange: { from, to, doctorId },
+  }, "Commission report-by-patient: input summary");
+
   const result = filteredDoctors.map(doctor => {
     const doctorOrders = ordersWithPatients.filter(o => o.doctorId === doctor.id);
     const rules = allRules.filter(r => r.doctorId === doctor.id);
+    if (doctorOrders.length > 0 || rules.length > 0) {
+      req.log.info({
+        doctorId: doctor.id,
+        doctorName: doctor.name,
+        orderCount: doctorOrders.length,
+        ruleCount: rules.length,
+        defaultCommission: doctor.defaultCommission,
+        defaultCommissionType: doctor.defaultCommissionType,
+        ruleDetails: rules.map(r => ({ id: r.id, name: r.name, scope: r.scope, isActive: r.isActive, value: r.value, type: r.type })),
+      }, "Commission report-by-patient: doctor profile");
+    }
 
     // Build per-order discount-adjusted commission ratio
     const orderAdjustRatio = new Map<number, number>();
@@ -568,6 +588,20 @@ router.get("/report-by-patient", async (req, res) => {
           });
         }
         if (!matchedRule) matchedRule = rules.find(r => r.isActive && r.scope === "all");
+
+        if (rawComm === 0 && doctorOrders.length <= 3) {
+          req.log.info({
+            doctorId: doctor.id,
+            testId: ot.testId,
+            testName: test?.name,
+            price: Number(ot.price),
+            ruleCount: rules.length,
+            matchedRuleName: matchedRule?.name ?? "none",
+            ruleName,
+            defaultCommission: doctor.defaultCommission,
+            defaultCommissionType: doctor.defaultCommissionType,
+          }, "Commission report-by-patient: zero commission trace");
+        }
         rows.push({
           date: order.orderDate.toISOString().split("T")[0],
           patientName: `${order.patientFirstName} ${order.patientLastName}`.trim().toUpperCase(),
