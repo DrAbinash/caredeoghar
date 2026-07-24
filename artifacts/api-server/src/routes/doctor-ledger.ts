@@ -9,7 +9,7 @@ import {
   testsTable,
   billsTable,
 } from "@workspace/db/schema";
-import { eq, desc, and, gte, lte, inArray, sql } from "drizzle-orm";
+import { eq, desc, and, gte, lte, inArray, ne, sql } from "drizzle-orm";
 import {
   CreateDoctorPayoutBody,
   CreateDoctorPayoutParams,
@@ -84,7 +84,7 @@ async function computeEarned(opts: { from?: string; to?: string; doctorId?: numb
 
   const orders = await db.select().from(ordersTable).where(conditions.length ? and(...conditions) : undefined);
   const orderIds = orders.map(o => o.id);
-  const orderTests = orderIds.length ? await db.select().from(orderTestsTable).where(inArray(orderTestsTable.orderId, orderIds)) : [];
+  const orderTests = orderIds.length ? await db.select().from(orderTestsTable).where(and(inArray(orderTestsTable.orderId, orderIds), ne(orderTestsTable.status, "cancelled"))) : [];
 
   const filteredDoctors = opts.doctorId ? doctors.filter(d => d.id === opts.doctorId) : doctors;
 

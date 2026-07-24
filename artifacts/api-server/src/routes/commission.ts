@@ -370,15 +370,26 @@ router.get("/report-detailed", async (req, res) => {
       const byTest: Record<number, { testId: number; testName: string; category: string; count: number; revenue: number; commission: number; ruleName: string; ruleValue: number; ruleType: string }> = {};
       for (const row of testRows) {
         if (!byTest[row.testId]) {
-          // Find the matching rule to get its value and type
-          const matchedRule = rules.find(r => {
-            if (!r.isActive) return false;
-            if (r.isExclusive && r.scope === "test" && r.testIds) return (JSON.parse(r.testIds) as number[]).includes(row.testId);
-            if (r.isExclusive && r.scope === "category" && r.categories) return (JSON.parse(r.categories) as string[]).includes(row.category);
+          // Replicate calcTestCommission logic to get the correct rule metadata.
+          // 1) Exclusive specific rules
+          let matchedRule = rules.find(r => {
+            if (!r.isExclusive || !r.isActive) return false;
             if (r.scope === "test" && r.testIds) return (JSON.parse(r.testIds) as number[]).includes(row.testId);
             if (r.scope === "category" && r.categories) return (JSON.parse(r.categories) as string[]).includes(row.category);
-            return r.scope === "all";
+            return false;
           });
+          // 2) Non-exclusive specific rules
+          if (!matchedRule) {
+            matchedRule = rules.find(r => {
+              if (!r.isActive) return false;
+              if (r.isExclusive) return false;
+              if (r.scope === "test" && r.testIds) return (JSON.parse(r.testIds) as number[]).includes(row.testId);
+              if (r.scope === "category" && r.categories) return (JSON.parse(r.categories) as string[]).includes(row.category);
+              return false;
+            });
+          }
+          // 3) Catch-all rule
+          if (!matchedRule) matchedRule = rules.find(r => r.isActive && r.scope === "all");
           const ruleValue = matchedRule ? Number(matchedRule.value) : Number(doctor.defaultCommission);
           const ruleType = matchedRule ? matchedRule.type : (doctor.defaultCommissionType || "percentage");
           byTest[row.testId] = { testId: row.testId, testName: row.testName, category: row.category, count: 0, revenue: 0, commission: 0, ruleName: row.ruleName, ruleValue, ruleType };
@@ -540,14 +551,23 @@ router.get("/report-by-patient", async (req, res) => {
       for (const ot of ots) {
         const test = testMap.get(ot.testId);
         const { commission: rawComm, ruleName } = calcTestCommission(ot, test, rules, doctor);
-        const matchedRule = rules.find(r => {
-          if (!r.isActive) return false;
-          if (r.isExclusive && r.scope === "test" && r.testIds) return (JSON.parse(r.testIds) as number[]).includes(ot.testId);
-          if (r.isExclusive && r.scope === "category" && r.categories && test) return (JSON.parse(r.categories) as string[]).includes(test.category ?? "");
+        // Replicate calcTestCommission logic exactly for correct rule metadata.
+        let matchedRule = rules.find(r => {
+          if (!r.isExclusive || !r.isActive) return false;
           if (r.scope === "test" && r.testIds) return (JSON.parse(r.testIds) as number[]).includes(ot.testId);
           if (r.scope === "category" && r.categories && test) return (JSON.parse(r.categories) as string[]).includes(test.category ?? "");
-          return r.scope === "all";
+          return false;
         });
+        if (!matchedRule) {
+          matchedRule = rules.find(r => {
+            if (!r.isActive) return false;
+            if (r.isExclusive) return false;
+            if (r.scope === "test" && r.testIds) return (JSON.parse(r.testIds) as number[]).includes(ot.testId);
+            if (r.scope === "category" && r.categories && test) return (JSON.parse(r.categories) as string[]).includes(test.category ?? "");
+            return false;
+          });
+        }
+        if (!matchedRule) matchedRule = rules.find(r => r.isActive && r.scope === "all");
         rows.push({
           date: order.orderDate.toISOString().split("T")[0],
           patientName: `${order.patientFirstName} ${order.patientLastName}`.trim().toUpperCase(),
