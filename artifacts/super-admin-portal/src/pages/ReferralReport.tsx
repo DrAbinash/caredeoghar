@@ -98,6 +98,7 @@ function buildPrintHtml(
   from: string, to: string,
   doctorLabel: string,
   cols: ColFlags,
+  flatRows: Array<PatientRow & { doctorName: string }> = [],
 ) {
   const colCount = 3
     + (cols.billNo ? 1 : 0)
@@ -140,7 +141,33 @@ function buildPrintHtml(
 
   let body = "";
 
-  if (mode === "consolidated") {
+  if (mode === "flat-list") {
+    const totalAmount = flatRows.reduce((s, r) => s + r.price, 0);
+    const rowsHtml = flatRows.map((row, i) => `<tr${i % 2 === 1 ? " class='alt'" : ""}>
+      <td>${fmtDate(row.date)}</td>
+      <td>${row.patientName}</td>
+      <td>${row.testName}</td>
+      <td class='right'>${inr(row.price)}</td>
+      <td>${row.doctorName}</td>
+    </tr>`).join("");
+    body = `<table style='margin-top:12px'>
+      <thead><tr>
+        <th>Date</th>
+        <th>Patient's Name</th>
+        <th>Test Name</th>
+        <th class='right'>Amount</th>
+        <th>Ref. By Doctor</th>
+      </tr></thead>
+      <tbody>
+        ${rowsHtml}
+        <tr class='grand-row'>
+          <td colspan='3'><strong>GRAND TOTAL (${flatRows.length} rows)</strong></td>
+          <td class='right'><strong>${inr(totalAmount)}</strong></td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>`;
+  } else if (mode === "consolidated") {
     const rows = report.map((e, i) => `<tr>
       <td>${ALPHA[i] ?? i + 1})</td>
       <td>${e.doctor.name}</td>
@@ -191,6 +218,7 @@ function buildPrintHtml(
       </table>`;
     }
   }
+  
 
   return `<html><head>
     <title>Referral Report — ${from} to ${to}</title>
@@ -293,7 +321,7 @@ export default function ReferralReport({ onBack }: { onBack: () => void }) {
     const doctorLabel = doctorId
       ? doctors.find(d => d.id === doctorId)?.name ?? "—"
       : "All Doctors";
-    const html = buildPrintHtml(mode, report, grandTotal, from, to, doctorLabel, cols);
+    const html = buildPrintHtml(mode, report, grandTotal, from, to, doctorLabel, cols, flatRows);
     const win = window.open("", "_blank", "width=1000,height=750");
     if (!win) { toast({ title: "Pop-up blocked", description: "Please allow pop-ups and try again.", variant: "destructive" }); return; }
     win.document.write(html);
