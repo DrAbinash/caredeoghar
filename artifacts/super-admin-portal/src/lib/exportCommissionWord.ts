@@ -296,3 +296,113 @@ export async function exportCommissionWord(
   const safeName = meta.title.replace(/\s+/g, "_");
   saveAs(blob, `${safeName}_${meta.from}_to_${meta.to}.docx`);
 }
+
+// ── Flat-list export (DATE | PATIENT'S NAME | TEST NAME | AMOUNT | REF. BY DOCTOR) ──
+export type FlatListRow = {
+  date: string;
+  patientName: string;
+  testName: string;
+  price: number;
+  doctorName: string;
+};
+
+export async function exportFlatListWord(
+  rows: FlatListRow[],
+  meta: CommissionWordMeta,
+): Promise<void> {
+  const {
+    Document, Packer, Paragraph, Table, TableRow, TableCell,
+    TextRun, HeadingLevel, AlignmentType, WidthType, BorderStyle,
+    ShadingType,
+  } = await import("docx");
+
+  const AMBER_BG  = "FEF3C7";
+  const HEADER_BG = "F3F4F6";
+
+  const cellBorder = {
+    top:    { style: BorderStyle.SINGLE, size: 1, color: "E5E7EB" },
+    bottom: { style: BorderStyle.SINGLE, size: 1, color: "E5E7EB" },
+    left:   { style: BorderStyle.SINGLE, size: 1, color: "E5E7EB" },
+    right:  { style: BorderStyle.SINGLE, size: 1, color: "E5E7EB" },
+  };
+
+  const makeCell = (
+    text: string,
+    opts: { bold?: boolean; bg?: string; align?: typeof AlignmentType[keyof typeof AlignmentType]; color?: string } = {},
+  ) =>
+    new TableCell({
+      shading: opts.bg ? { type: ShadingType.CLEAR, fill: opts.bg } : undefined,
+      borders: cellBorder,
+      children: [new Paragraph({
+        alignment: opts.align ?? AlignmentType.LEFT,
+        children: [new TextRun({ text, bold: opts.bold, color: opts.color ?? "1A1A1A", size: 20 })],
+      })],
+    });
+
+  const totalAmount = rows.reduce((s, r) => s + r.price, 0);
+
+  const children: (InstanceType<typeof Paragraph> | InstanceType<typeof Table>)[] = [
+    new Paragraph({
+      text: "REFERRAL REPORT",
+      heading: HeadingLevel.HEADING_1,
+      alignment: AlignmentType.CENTER,
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({ text: `Period: ${meta.from}  to  ${meta.to}`, size: 18, color: "555555" }),
+        new TextRun({ text: `   |   Doctor: ${meta.doctorFilter}`, size: 18, color: "555555" }),
+      ],
+      alignment: AlignmentType.CENTER,
+    }),
+    new Paragraph({
+      children: [new TextRun({ text: `Generated: ${meta.generatedAt}`, size: 16, color: "888888", italics: true })],
+      alignment: AlignmentType.CENTER,
+    }),
+    new Paragraph({ text: "" }),
+  ];
+
+  // Data table
+  const tableRows: InstanceType<typeof TableRow>[] = [
+    // Header row
+    new TableRow({
+      tableHeader: true,
+      children: [
+        makeCell("Date",           { bold: true, bg: HEADER_BG }),
+        makeCell("Patient's Name", { bold: true, bg: HEADER_BG }),
+        makeCell("Test Name",      { bold: true, bg: HEADER_BG }),
+        makeCell("Amount",         { bold: true, bg: HEADER_BG, align: AlignmentType.RIGHT }),
+        makeCell("Ref. By Doctor", { bold: true, bg: HEADER_BG }),
+      ],
+    }),
+    // Data rows
+    ...rows.map(r =>
+      new TableRow({
+        children: [
+          makeCell(r.date),
+          makeCell(r.patientName.toUpperCase()),
+          makeCell(r.testName),
+          makeCell(INR(r.price), { align: AlignmentType.RIGHT }),
+          makeCell(r.doctorName.toUpperCase()),
+        ],
+      })
+    ),
+    // Grand total row
+    new TableRow({
+      children: [
+        makeCell(`Grand Total (${rows.length} rows)`, { bold: true, bg: AMBER_BG }),
+        makeCell("", { bg: AMBER_BG }),
+        makeCell("", { bg: AMBER_BG }),
+        makeCell(INR(totalAmount), { bold: true, bg: AMBER_BG, color: "B45309", align: AlignmentType.RIGHT }),
+        makeCell("", { bg: AMBER_BG }),
+      ],
+    }),
+  ];
+
+  children.push(
+    new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: tableRows }),
+  );
+
+  const docFile = new Document({ sections: [{ properties: {}, children }] });
+  const blob = await Packer.toBlob(docFile);
+  saveAs(blob, `Referral_Report_${meta.from}_to_${meta.to}.docx`);
+}

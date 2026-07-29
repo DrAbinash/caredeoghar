@@ -12,9 +12,9 @@ import {
   ArrowLeft, Printer, Stethoscope, Users, FileText, IndianRupee, TrendingUp, Download, FileSpreadsheet,
 } from "lucide-react";
 import { saAuthHeaders } from "@/lib/saApi";
-import { exportCommissionPdf } from "@/lib/exportCommissionPdf";
-import { exportCommissionExcel } from "@/lib/exportCommissionExcel";
-import { exportCommissionWord } from "@/lib/exportCommissionWord";
+import { exportCommissionPdf, exportFlatListPdf } from "@/lib/exportCommissionPdf";
+import { exportCommissionExcel, exportFlatListExcel } from "@/lib/exportCommissionExcel";
+import { exportCommissionWord, exportFlatListWord } from "@/lib/exportCommissionWord";
 import type { CommissionDoctorEntry, CommissionTestGroupRow } from "@workspace/api-client-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -386,6 +386,15 @@ export default function ReferralReport({ onBack }: { onBack: () => void }) {
   const exportMode: Parameters<typeof exportCommissionPdf>[2] =
     mode === "consolidated" ? "consolidated" : "standard";
 
+  const flatExportMeta = {
+    title: "Referral Report",
+    from,
+    to,
+    doctorFilter: doctorLabel,
+    generatedAt: new Date().toLocaleString("en-IN"),
+    grandTotal,
+  };
+
   const handleDownloadExcel = async () => {
     if (report.length === 0) {
       toast({ title: "No data to export", description: "Adjust the filters and try again.", variant: "destructive" });
@@ -393,19 +402,16 @@ export default function ReferralReport({ onBack }: { onBack: () => void }) {
     }
     setXlsxLoading(true);
     try {
-      await exportCommissionExcel(
-        toExportSections(report),
-        {
-          title: "Referral & Commission Report",
-          from,
-          to,
-          doctorFilter: doctorLabel,
-          generatedAt: new Date().toLocaleString("en-IN"),
-          grandTotal,
-        },
-        exportMode,
-        cols.rate,
-      );
+      if (mode === "flat-list") {
+        await exportFlatListExcel(flatRows, flatExportMeta);
+      } else {
+        await exportCommissionExcel(
+          toExportSections(report),
+          { ...flatExportMeta, title: "Referral & Commission Report" },
+          exportMode,
+          cols.rate,
+        );
+      }
     } catch (err) {
       toast({ title: "Excel export failed", description: String(err), variant: "destructive" });
     } finally {
@@ -420,19 +426,16 @@ export default function ReferralReport({ onBack }: { onBack: () => void }) {
     }
     setWordLoading(true);
     try {
-      await exportCommissionWord(
-        toExportSections(report),
-        {
-          title: "Referral & Commission Report",
-          from,
-          to,
-          doctorFilter: doctorLabel,
-          generatedAt: new Date().toLocaleString("en-IN"),
-          grandTotal,
-        },
-        exportMode,
-        cols.rate,
-      );
+      if (mode === "flat-list") {
+        await exportFlatListWord(flatRows, flatExportMeta);
+      } else {
+        await exportCommissionWord(
+          toExportSections(report),
+          { ...flatExportMeta, title: "Referral & Commission Report" },
+          exportMode,
+          cols.rate,
+        );
+      }
     } catch (err) {
       toast({ title: "Word export failed", description: String(err), variant: "destructive" });
     } finally {
@@ -447,19 +450,16 @@ export default function ReferralReport({ onBack }: { onBack: () => void }) {
     }
     setPdfLoading(true);
     try {
-      await exportCommissionPdf(
-        toExportSections(report),
-        {
-          title: "Referral & Commission Report",
-          from,
-          to,
-          doctorFilter: doctorLabel,
-          generatedAt: new Date().toLocaleString("en-IN"),
-          grandTotal,
-        },
-        exportMode,
-        cols.rate,
-      );
+      if (mode === "flat-list") {
+        await exportFlatListPdf(flatRows, flatExportMeta);
+      } else {
+        await exportCommissionPdf(
+          toExportSections(report),
+          { ...flatExportMeta, title: "Referral & Commission Report" },
+          exportMode,
+          cols.rate,
+        );
+      }
     } catch (err) {
       toast({ title: "PDF export failed", description: String(err), variant: "destructive" });
     } finally {

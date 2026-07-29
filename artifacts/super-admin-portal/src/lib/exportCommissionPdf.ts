@@ -234,3 +234,73 @@ export async function exportCommissionPdf(
   const safeName = meta.title.replace(/\s+/g, "_");
   doc.save(`${safeName}_${meta.from}_to_${meta.to}.pdf`);
 }
+
+// ── Flat-list export (DATE | PATIENT'S NAME | TEST NAME | AMOUNT | REF. BY DOCTOR) ──
+export type FlatListRow = {
+  date: string;
+  patientName: string;
+  testName: string;
+  price: number;
+  doctorName: string;
+};
+
+export async function exportFlatListPdf(
+  rows: FlatListRow[],
+  meta: CommissionPdfMeta,
+  orientation?: PaperOrientation,
+): Promise<void> {
+  const { default: jsPDF } = await import("jspdf");
+  const { default: autoTable } = await import("jspdf-autotable");
+
+  const resolvedOrientation: PaperOrientation = orientation ?? loadReportOrientation();
+  const doc = new jsPDF({ orientation: resolvedOrientation, unit: "mm", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  let y = 18;
+
+  // Header
+  doc.setFontSize(13);
+  doc.setFont("helvetica", "bold");
+  doc.text("REFERRAL REPORT", pageW / 2, y, { align: "center" });
+  y += 7;
+
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(100);
+  doc.text(`Period: ${meta.from}  to  ${meta.to}`, 14, y);
+  doc.text(`Doctor: ${meta.doctorFilter}`, pageW / 2, y, { align: "center" });
+  doc.text(`Generated: ${meta.generatedAt}`, pageW - 14, y, { align: "right" });
+  y += 8;
+  doc.setTextColor(0);
+
+  const totalAmount = rows.reduce((s, r) => s + r.price, 0);
+
+  autoTable(doc, {
+    startY: y,
+    head: [["Date", "Patient's Name", "Test Name", "Amount", "Ref. By Doctor"]],
+    body: [
+      ...rows.map(r => [r.date, r.patientName.toUpperCase(), r.testName, INR(r.price), r.doctorName.toUpperCase()]),
+      ["", `Grand Total (${rows.length} rows)`, "", INR(totalAmount), ""],
+    ],
+    styles: { fontSize: 8.5, cellPadding: 2.5 },
+    headStyles: { fillColor: [243, 244, 246], textColor: [60, 60, 60], fontStyle: "bold", fontSize: 8 },
+    columnStyles: {
+      0: { cellWidth: 22 },
+      1: { cellWidth: "auto" },
+      2: { cellWidth: "auto" },
+      3: { halign: "right", cellWidth: 30 },
+      4: { cellWidth: "auto" },
+    },
+    alternateRowStyles: { fillColor: [249, 250, 251] },
+    willDrawCell: (data) => {
+      if (data.row.index === rows.length) {
+        doc.setFillColor(254, 243, 199);
+        doc.setFont("helvetica", "bold");
+        if (data.column.index === 3) doc.setTextColor(180, 83, 9);
+      }
+    },
+    margin: { left: 14, right: 14 },
+  });
+
+  const safeName = "Referral_Report";
+  doc.save(`${safeName}_${meta.from}_to_${meta.to}.pdf`);
+}

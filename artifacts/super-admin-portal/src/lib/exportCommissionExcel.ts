@@ -335,3 +335,62 @@ export async function exportCommissionExcel(
   const safeName = meta.title.replace(/\s+/g, "_");
   saveAs(blob, `${safeName}_${meta.from}_to_${meta.to}.xlsx`);
 }
+
+// ── Flat-list export (DATE | PATIENT'S NAME | TEST NAME | AMOUNT | REF. BY DOCTOR) ──
+export type FlatListRow = {
+  date: string;
+  patientName: string;
+  testName: string;
+  price: number;
+  doctorName: string;
+};
+
+export async function exportFlatListExcel(
+  rows: FlatListRow[],
+  meta: CommissionPdfMeta,
+): Promise<void> {
+  const writeXlsxFile = (await import("write-excel-file/browser")).default as unknown as (
+    sheets: Array<{ data: RCell[][]; sheet?: string; columns?: { width: number }[] }>
+  ) => { toBlob: () => Promise<Blob> };
+
+  const totalAmount = rows.reduce((s, r) => s + r.price, 0);
+
+  const data: RCell[][] = [
+    // Title block
+    [{ value: "Referral Report", fontWeight: "bold", span: 5 }],
+    [{ value: `Period: ${meta.from} to ${meta.to}`, span: 5 }],
+    [{ value: `Doctor: ${meta.doctorFilter}`, span: 5 }],
+    [{ value: `Generated: ${meta.generatedAt}`, span: 5 }],
+    [null],
+    // Column headers
+    [
+      { value: "Date",            fontWeight: "bold", backgroundColor: HEADER_BG },
+      { value: "Patient's Name",  fontWeight: "bold", backgroundColor: HEADER_BG },
+      { value: "Test Name",       fontWeight: "bold", backgroundColor: HEADER_BG },
+      { value: "Amount (Rs.)",    fontWeight: "bold", backgroundColor: HEADER_BG, align: "right" },
+      { value: "Ref. By Doctor",  fontWeight: "bold", backgroundColor: HEADER_BG },
+    ],
+    // Data rows
+    ...rows.map(r => [
+      { value: r.date,                       type: String } as RCell,
+      { value: r.patientName.toUpperCase(),  type: String } as RCell,
+      { value: r.testName,                   type: String } as RCell,
+      { value: r.price, align: "right" }     as RCell,
+      { value: r.doctorName.toUpperCase(),   type: String } as RCell,
+    ]),
+    // Grand total
+    [
+      { value: `Grand Total (${rows.length} rows)`, fontWeight: "bold", backgroundColor: AMBER_BG, span: 3 },
+      { value: totalAmount, fontWeight: "bold", backgroundColor: AMBER_BG, color: "#B45309", align: "right" },
+      null,
+    ],
+  ];
+
+  const blob = await writeXlsxFile([{
+    data,
+    sheet: "Referral Report",
+    columns: [{ width: 14 }, { width: 28 }, { width: 32 }, { width: 16 }, { width: 28 }],
+  }]).toBlob();
+
+  saveAs(blob, `Referral_Report_${meta.from}_to_${meta.to}.xlsx`);
+}
