@@ -51,7 +51,7 @@ type ReportData = {
   grandTotal: { doctors: number; orders: number; revenue: number; commission: number };
 };
 
-type ReportMode = "by-doctor" | "test-summary" | "consolidated";
+type ReportMode = "by-doctor" | "flat-list" | "test-summary" | "consolidated";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const inr = (n: number) =>
@@ -237,8 +237,10 @@ export default function ReferralReport({ onBack }: { onBack: () => void }) {
   const [from, setFrom] = useState(firstOfMonth);
   const [to, setTo] = useState(today);
   const [doctorId, setDoctorId] = useState<number | null>(null);
-  const [mode, setMode] = useState<ReportMode>("by-doctor");
+  const [mode, setMode] = useState<ReportMode>("flat-list");
   const [cols, setCols] = useState<ColFlags>(DEFAULT_COLS);
+  const [testSearch, setTestSearch] = useState("");
+  const [patientSearch, setPatientSearch] = useState("");
 
   const { data: doctorsData } = useQuery({
     queryKey: ["/api/super-admin/doctors-list"],
@@ -267,6 +269,25 @@ export default function ReferralReport({ onBack }: { onBack: () => void }) {
 
   const report = data?.report ?? [];
   const grandTotal = data?.grandTotal ?? { doctors: 0, orders: 0, revenue: 0, commission: 0 };
+
+  // Flat rows — merge all doctors into one list sorted by date, then apply search filters
+  type FlatRow = PatientRow & { doctorName: string };
+  const allFlatRows: FlatRow[] = report
+    .flatMap(entry => entry.rows.map(row => ({ ...row, doctorName: entry.doctor.name })))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const flatRows = allFlatRows.filter(row => {
+    if (testSearch) {
+      if (!row.testName.toLowerCase().includes(testSearch.toLowerCase())) return false;
+    }
+    if (patientSearch) {
+      const ps = patientSearch.toLowerCase();
+      const hit = row.patientName.toLowerCase().includes(ps)
+        || row.billNumber.toLowerCase().includes(ps)
+        || row.patientPid.toLowerCase().includes(ps);
+      if (!hit) return false;
+    }
+    return true;
+  });
 
   const handlePrint = () => {
     const doctorLabel = doctorId
@@ -466,6 +487,24 @@ export default function ReferralReport({ onBack }: { onBack: () => void }) {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <Label className="text-xs">Test Name Contains</Label>
+                <Input
+                  placeholder="MRI, USG, CT…"
+                  value={testSearch}
+                  onChange={e => setTestSearch(e.target.value)}
+                  className="mt-1 w-40"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Patient / Bill Search</Label>
+                <Input
+                  placeholder="Name, PID, Bill no…"
+                  value={patientSearch}
+                  onChange={e => setPatientSearch(e.target.value)}
+                  className="mt-1 w-44"
+                />
+              </div>
             </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1.5" disabled={report.length === 0}>
@@ -487,8 +526,13 @@ export default function ReferralReport({ onBack }: { onBack: () => void }) {
           <div className="flex flex-wrap gap-5 items-start pt-3 border-t border-border">
             <div>
               <Label className="text-xs mb-2 block">Report View</Label>
-              <div className="flex gap-1.5">
-                {(["by-doctor", "test-summary", "consolidated"] as ReportMode[]).map(m => (
+              <div className="flex flex-wrap gap-1.5">
+                {([
+                  ["flat-list",   "Flat List"],
+                  ["by-doctor",   "By Doctor"],
+                  ["test-summary","Test Summary"],
+                  ["consolidated","Consolidated"],
+                ] as [ReportMode, string][]).map(([m, label]) => (
                   <button
                     key={m}
                     onClick={() => setMode(m)}
@@ -498,7 +542,7 @@ export default function ReferralReport({ onBack }: { onBack: () => void }) {
                         : "bg-background border-border hover:bg-muted text-muted-foreground"
                     }`}
                   >
-                    {m === "by-doctor" ? "By Doctor" : m === "test-summary" ? "Test Summary" : "Consolidated"}
+                    {label}
                   </button>
                 ))}
               </div>
@@ -556,6 +600,8 @@ export default function ReferralReport({ onBack }: { onBack: () => void }) {
             <FileText size={32} className="mx-auto mb-3 opacity-30" />
             No referral data for the selected period / doctor
           </div>
+        ) : mode === "flat-list" ? (
+          <FlatListView flatRows={flatRows} report={report} grandTotal={grandTotal} />
         ) : mode === "consolidated" ? (
           <ConsolidatedView report={report} grandTotal={grandTotal} cols={cols} />
         ) : mode === "test-summary" ? (
@@ -820,6 +866,147 @@ function TestSummaryView({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Flat List view ────────────────────────────────────────────────────────────
+// Exact spreadsheet layout: DATE | PATIENT'S NAME | TEST NAME | AMOUNT | REF. BY DOCTOR
+// With an optional doctor-wise subtotals grouping toggle.
+function FlatListView({
+  flatRows,
+  report,
+  grandTotal,
+}: {
+  flatRows: Array<PatientRow & { doctorName: string }>;
+  report: DoctorEntry[];
+  grandTotal: ReportData["grandTotal"];
+}) {
+  const [groupByDoctor, setGroupByDoctor] = useState(false);
+
+  const totalAmount = flatRows.reduce((s, r) => s + r.price, 0);
+
+  if (flatRows.length === 0) {
+    return (
+      <div className="text-center py-10 text-muted-foreground text-sm bg-card border border-border rounded-xl">
+        No rows match the current filters
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Sub-toggle */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => setGroupByDoctor(false)}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+            !groupByDoctor
+              ? "bg-primary text-primary-foreground border-primary"
+              : "bg-background border-border hover:bg-muted text-muted-foreground"
+          }`}
+        >
+          Flat List
+        </button>
+        <button
+          onClick={() => setGroupByDoctor(true)}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+            groupByDoctor
+              ? "bg-primary text-primary-foreground border-primary"
+              : "bg-background border-border hover:bg-muted text-muted-foreground"
+          }`}
+        >
+          Doctor-wise with Subtotals
+        </button>
+        <span className="text-xs text-muted-foreground ml-auto">{flatRows.length} rows · {inr(totalAmount)}</span>
+      </div>
+
+      {groupByDoctor ? (
+        /* Doctor-wise subtotals */
+        <div className="space-y-4">
+          {report.filter(e => e.rows.length > 0).map((entry, idx) => {
+            const visibleRows = entry.rows.filter(r =>
+              (flatRows as Array<PatientRow & { doctorName: string }>).some(
+                fr => fr.orderId === r.orderId && fr.testId === r.testId
+              )
+            );
+            if (visibleRows.length === 0) return null;
+            const subtotal = visibleRows.reduce((s, r) => s + r.price, 0);
+            return (
+              <div key={entry.doctor.id} className="bg-card border border-border rounded-xl overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-border bg-muted/30 flex items-center justify-between">
+                  <span className="font-bold text-sm uppercase tracking-wide">
+                    {ALPHA[idx] ?? idx + 1}) {entry.doctor.name}
+                  </span>
+                  <span className="text-xs text-muted-foreground">{visibleRows.length} rows · {inr(subtotal)}</span>
+                </div>
+                <FlatTable rows={visibleRows.map(r => ({ ...r, doctorName: entry.doctor.name }))} showDoctor={false} />
+                <div className="border-t-2 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-4 py-2.5 flex justify-between">
+                  <span className="font-bold text-xs uppercase tracking-wide text-amber-800 dark:text-amber-400">Subtotal — {entry.doctor.name}</span>
+                  <span className="font-bold tabular-nums text-amber-800 dark:text-amber-400">{inr(subtotal)}</span>
+                </div>
+              </div>
+            );
+          })}
+          <div className="bg-amber-100 dark:bg-amber-900/40 border-2 border-amber-400 dark:border-amber-600 rounded-xl px-5 py-3 flex items-center justify-between">
+            <span className="font-bold text-sm">Grand Total</span>
+            <span className="font-bold text-base tabular-nums">{inr(totalAmount)}</span>
+          </div>
+        </div>
+      ) : (
+        /* Pure flat list */
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <FlatTable rows={flatRows} showDoctor={true} />
+          <div className="border-t-2 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 flex justify-between">
+            <span className="font-bold text-xs uppercase tracking-wide text-amber-800 dark:text-amber-400">
+              Grand Total &nbsp;<span className="font-normal text-muted-foreground">({flatRows.length} rows · {grandTotal.doctors} doctors)</span>
+            </span>
+            <span className="font-bold text-base tabular-nums text-amber-800 dark:text-amber-400">{inr(totalAmount)}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FlatTable({
+  rows,
+  showDoctor,
+}: {
+  rows: Array<PatientRow & { doctorName: string }>;
+  showDoctor: boolean;
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border bg-muted/20">
+            <th className="text-left px-4 py-2.5 text-xs font-bold uppercase text-muted-foreground whitespace-nowrap tracking-wider">Date</th>
+            <th className="text-left px-4 py-2.5 text-xs font-bold uppercase text-muted-foreground tracking-wider">Patient's Name</th>
+            <th className="text-left px-4 py-2.5 text-xs font-bold uppercase text-muted-foreground tracking-wider">Test Name</th>
+            <th className="text-right px-4 py-2.5 text-xs font-bold uppercase text-muted-foreground whitespace-nowrap tracking-wider">Amount</th>
+            {showDoctor && (
+              <th className="text-left px-4 py-2.5 text-xs font-bold uppercase text-muted-foreground tracking-wider whitespace-nowrap">Ref. by Doctor</th>
+            )}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr
+              key={`${row.orderId}-${row.testId}-${i}`}
+              className={`border-b border-border/60 last:border-0 ${i % 2 === 1 ? "bg-muted/10" : ""}`}
+            >
+              <td className="px-4 py-2.5 whitespace-nowrap text-muted-foreground text-xs tabular-nums">{fmtDate(row.date)}</td>
+              <td className="px-4 py-2.5 font-medium uppercase">{row.patientName}</td>
+              <td className="px-4 py-2.5">{row.testName}</td>
+              <td className="px-4 py-2.5 text-right font-semibold tabular-nums">{inr(row.price)}</td>
+              {showDoctor && (
+                <td className="px-4 py-2.5 font-medium uppercase text-muted-foreground">{row.doctorName}</td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

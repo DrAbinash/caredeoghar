@@ -10,7 +10,7 @@ import {
   billsTable,
   patientsTable,
 } from "@workspace/db/schema";
-import { eq, desc, and, gte, lte, inArray, ne } from "drizzle-orm";
+import { eq, desc, and, gte, lte, inArray, ne, isNull } from "drizzle-orm";
 import {
   CreateCommissionRuleBody,
   UpdateCommissionRuleBody,
@@ -477,7 +477,8 @@ router.get("/report-by-patient", async (req, res) => {
   if (from) conditions.push(gte(ordersTable.createdAt, new Date(from)));
   if (to) conditions.push(lte(ordersTable.createdAt, new Date(to + "T23:59:59Z")));
 
-  // Fetch orders joined with patient names
+  // Fetch orders joined with patient names — ONLY orders that have a non-cancelled bill.
+  // This prevents duplicate unbilled retry-orders from inflating referral commission rows.
   const ordersWithPatients = await db
     .select({
       orderId: ordersTable.id,
@@ -487,9 +488,15 @@ router.get("/report-by-patient", async (req, res) => {
       patientFirstName: patientsTable.firstName,
       patientLastName: patientsTable.lastName,
       patientPid: patientsTable.patientId,
+      billNumber: billsTable.billNumber,
+      billDiscount: billsTable.discount,
     })
     .from(ordersTable)
     .innerJoin(patientsTable, eq(ordersTable.patientId, patientsTable.id))
+    .innerJoin(billsTable, and(
+      eq(billsTable.orderId, ordersTable.id),
+      isNull(billsTable.cancelledAt),
+    ))
     .where(conditions.length ? and(...conditions) : undefined);
 
   const orderIds = ordersWithPatients.map(o => o.orderId);
@@ -498,16 +505,10 @@ router.get("/report-by-patient", async (req, res) => {
         .where(and(inArray(orderTestsTable.orderId, orderIds), ne(orderTestsTable.status, "cancelled")))
     : [];
 
-  const billsForOrders = orderIds.length
-    ? await db
-        .select({ orderId: billsTable.orderId, billNumber: billsTable.billNumber, discount: billsTable.discount })
-        .from(billsTable).where(inArray(billsTable.orderId, orderIds))
-    : [];
-
-  const billByOrderId = new Map<number, { billNumber: string; discount: number }>();
-  for (const b of billsForOrders) {
-    if (b.orderId != null) billByOrderId.set(b.orderId, { billNumber: b.billNumber, discount: Number(b.discount ?? 0) });
-  }
+  // Build bill lookup directly from the join result (already restricted to non-cancelled bills)
+  const billByOrderId = new Map<number, { billNumber: string; discount: number }>(
+    ordersWithPatients.map(o => [o.orderId, { billNumber: o.billNumber ?? "", discount: Number(o.billDiscount ?? 0) }])
+  );
 
   const filteredDoctors = doctors.filter(d => !doctorId || d.id === Number(doctorId));
 
