@@ -89,14 +89,20 @@ async function resolveLedgerForOrder(orderId: number): Promise<number> {
  * `parseBillNumberParts` handles both shapes so the renumber logic keeps
  * working across the migration.
  */
-export async function generateBillNumber(_ledgerId: number): Promise<string> {
+export async function generateBillNumber(
+  _ledgerId: number,
+  tx?: Parameters<Parameters<typeof db.transaction>[0]>[0],
+): Promise<string> {
   const date = new Date();
   const yyyymm = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}`;
   // Use the global MAX across ALL numeric bills, not a per-ledger count.
   // COUNT per ledger breaks when multiple ledgers share the same bill_number
   // unique space — ledger A and B independently arrive at the same sequence
   // number and collide on the UNIQUE constraint.
-  const [row] = await db
+  // When called inside a transaction, pass tx so the read is on the same
+  // connection and sees any rows inserted (but not yet committed) by this tx.
+  const conn = tx ?? db;
+  const [row] = await (conn as typeof db)
     .select({ maxBill: sql<string | null>`MAX(bill_number)` })
     .from(billsTable)
     .where(sql`bill_number ~ '^[0-9]+$'`);
@@ -475,8 +481,16 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
   // writes outside any transaction — a mid-flight failure (e.g. unique-key
   // collision on billNumber) would leave the order/patient mutated with no
   // matching bill row.
-  const { bill, pat, validPayments: txPayments } = await db.transaction(async (tx) => {
-    const billNumber = await generateBillNumber(ledgerId);
+  // Retry up to 5 times on bill_number unique collision (two concurrent
+  // requests can race to the same MAX and generate the same number).
+  const MAX_BILL_NUMBER_RETRIES = 5;
+  let lastBillError: unknown;
+  let transactionResult: { bill: typeof billsTable.$inferSelect; pat: typeof patientsTable.$inferSelect | undefined; validPayments: Array<{ amount: number; method?: string; referenceNumber?: string; notes?: string }> } | undefined;
+
+  for (let attempt = 0; attempt < MAX_BILL_NUMBER_RETRIES; attempt++) {
+    try {
+      transactionResult = await db.transaction(async (tx) => {
+        const billNumber = await generateBillNumber(ledgerId, tx);
 
     if (!order.ledgerId) {
       await tx.update(ordersTable).set({ ledgerId }).where(eq(ordersTable.id, orderId));
@@ -523,8 +537,30 @@ billsRouter.post("/", async (req: StaffAuthRequest, res) => {
       });
     }
 
-    return { bill: billRow, pat: patRow, validPayments };
-  });
+        return { bill: billRow, pat: patRow, validPayments };
+      }); // end db.transaction
+
+      break; // success — exit retry loop
+    } catch (err: unknown) {
+      const pgCode = (err as { cause?: { code?: string } })?.cause?.code
+        ?? (err as { code?: string })?.code;
+      const constraint = (err as { cause?: { constraint?: string } })?.cause?.constraint
+        ?? (err as { constraint?: string })?.constraint;
+      if (pgCode === "23505" && constraint === "bills_bill_number_unique") {
+        // Two concurrent requests raced to the same bill number — retry
+        lastBillError = err;
+        continue;
+      }
+      throw err; // any other error is fatal
+    }
+  } // end retry loop
+
+  if (!transactionResult) {
+    // Exhausted retries — should be extremely rare
+    throw lastBillError ?? new Error("Failed to generate a unique bill number after multiple attempts");
+  }
+
+  const { bill, pat, validPayments: txPayments } = transactionResult;
 
   // Auto-generate queue token (per book, resets daily) — never blocks bill creation
   let tokenInfo: { tokenNo: number; tokenDate: string } | null = null;
