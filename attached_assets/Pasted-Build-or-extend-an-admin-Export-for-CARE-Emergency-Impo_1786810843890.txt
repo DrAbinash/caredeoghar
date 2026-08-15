@@ -1,0 +1,53 @@
+Build (or extend) an admin “Export for CARE Emergency Import” screen.
+
+CONTEXT
+- On-prem CARE ERP imports via Settings → Emergency Billing using:
+  - CARE_EMERGENCY_BILLING_JSON_V1 (preferred)
+  - CARE_EMERGENCY_BILLING_V1 (CSV)
+- Goal: month-end referring-doctor COMMISSION after import.
+- CARE commission uses orders.doctor_id + order_tests.test_id + captured unit prices.
+- Do NOT invent columns. Match CARE emergency contract exactly.
+
+STEP A — MASTER DATA UPLOAD (same fields as CARE)
+Support Upload CSV for:
+1) doctors.csv — columns exactly: id,name,specialization
+2) tests.csv — columns exactly: id,code,name,category,price,is_active
+Store as CARE mapping tables on Replit (replace on upload).
+Show last uploaded_at + row counts.
+If mapping tables empty, block export with: “Upload CARE doctors.csv and tests.csv first.”
+
+STEP B — DATE-SELECTABLE EXPORT (not fixed dates)
+UI fields (required):
+- From date (IST calendar day, inclusive) — date picker
+- To date (IST calendar day, inclusive) — date picker
+- Optional: preset chips “Last 7 days”, “This month (IST)”, “Previous month (IST)” that only fill the pickers
+Validate: From ≤ To; max span default 62 days (allow override with confirm)
+Filter bills by IST bill/created date in [From 00:00:00 IST, To 23:59:59.999 IST]
+I will change dates and re-export whenever I need more days. Never hardcode dates.
+
+STEP C — ID MAPPING FOR COMMISSION
+For each Replit bill line / referring doctor:
+- Map referring doctor → CARE doctors.id using exact name match first, then careful fuzzy; write mapping-report
+- Map each test → CARE diagnostic_tests.id using code first, then name
+- referringDoctorId MUST be CARE doctors.id (integer) when commission should apply
+- careServiceId MUST be CARE tests.id
+- Walk-in/self: referringDoctorId = null, referringDoctorName = null or "Self"
+- If a commission-relevant doctor/test is UNMAPPED: fail that row into errors.csv; do not silently invent ids
+
+STEP D — OUTPUT FILES
+1) replit-care-emergency-YYYYMMDD-YYYYMMDD.json
+   format: CARE_EMERGENCY_BILLING_JSON_V1, version: 1
+   One transaction per bill; multi-test = multiple lines[]
+   emergencyBillNumber: EMG-YYYYMMDD-XXXXX (IST date of bill)
+   emergencyTransactionUuid: stable UUID per Replit bill id (never reuse)
+   payments[].method only: cash | upi | card
+   Exclude void/cancelled OR status VOID
+   unitPrice = captured billed price (not current tariff)
+2) mapping-report-doctors.csv / mapping-report-tests.csv
+3) totals.txt: bill count, gross, discount, net, collected, due, rows with referringDoctorId set, date range used
+4) Optional CSV twin: CARE_EMERGENCY_BILLING_V1 with exact CARE column order and pipe lists
+
+checksumSha256 = sha256 of JSON without the checksum field (same key order as CARE contract).
+
+Deliver UI: Upload masters → Pick dates → Preview totals → Download package.
+Do not upload to CARE yourself.

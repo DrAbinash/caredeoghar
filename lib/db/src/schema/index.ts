@@ -97,6 +97,7 @@ export * from "./aiVoiceTranscriptions";
 export * from "./aiPatientCommunications";
 export * from "./aiNormalReportTemplates";
 export * from "./drawerAuditLog";
+export * from "./careMappings";
 export * from "./enterpriseRadiology";
 export * from "./usgMeasurements";
 export * from "./echoCardiology";

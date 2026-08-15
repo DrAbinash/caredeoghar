@@ -2352,6 +2352,23 @@ async function runStartupMigrations(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS care_doctors_master (
+        id SERIAL PRIMARY KEY,
+        care_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        specialization TEXT NOT NULL DEFAULT '',
+        uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS care_tests_master (
+        id SERIAL PRIMARY KEY,
+        care_id INTEGER NOT NULL,
+        code TEXT NOT NULL DEFAULT '',
+        name TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT '',
+        price NUMERIC(10,2) NOT NULL DEFAULT 0,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
     `);
 
     logger.info("Startup migrations applied");

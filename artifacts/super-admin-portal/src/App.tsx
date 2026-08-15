@@ -28,6 +28,7 @@ const AuditTrail       = lazy(() => import("./pages/AuditTrail"));
 const RolePermissions  = lazy(() => import("./pages/RolePermissions"));
 const SystemHealthPage = lazy(() => import("./pages/SystemHealth"));
 const SecurityDashboard = lazy(() => import("./pages/SecurityDashboard"));
+const CareExport        = lazy(() => import("./pages/CareExport"));
 
 function PageLoader() {
   return (
@@ -397,7 +398,7 @@ function LoginScreen({
 }
 
 function ActiveSessionScreen({
-  session, onEject, onManageBooks, onReferralReport, onCommissionRules, onDoctorLedger, onMoneyTrailAudit, onDoctorManager, onBackups, onAuditTrail, onRolePermissions, onSystemHealth, onSecurityDashboard,
+  session, onEject, onManageBooks, onReferralReport, onCommissionRules, onDoctorLedger, onMoneyTrailAudit, onDoctorManager, onBackups, onAuditTrail, onRolePermissions, onSystemHealth, onSecurityDashboard, onCareExport,
 }: {
   session: Session;
   onEject: () => void;
@@ -412,6 +413,7 @@ function ActiveSessionScreen({
   onRolePermissions: () => void;
   onSystemHealth: () => void;
   onSecurityDashboard: () => void;
+  onCareExport: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
@@ -577,6 +579,10 @@ function ActiveSessionScreen({
                 <ScrollText size={14} className="mr-2" />
                 Immutable Audit Trail
               </Button>
+              <Button variant="outline" className="w-full justify-start" onClick={onCareExport}>
+                <FolderOpen size={14} className="mr-2" />
+                CARE Emergency Export
+              </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
               Run a full money-trail audit, sign it off, and archive the snapshot. Auto-runs on the 1st of every month and emails the summary.
@@ -631,8 +637,8 @@ function ActiveSessionScreen({
   );
 }
 
-type SaView = "home" | "books" | "referral-report" | "commission-rules" | "doctor-ledger" | "money-trail-audit" | "doctor-manager" | "backups" | "audit-trail" | "role-permissions" | "system-health" | "security-dashboard";
-const HASH_VIEWS: SaView[] = ["books", "referral-report", "commission-rules", "doctor-ledger", "money-trail-audit", "doctor-manager", "backups", "audit-trail", "role-permissions", "system-health", "security-dashboard"];
+type SaView = "home" | "books" | "referral-report" | "commission-rules" | "doctor-ledger" | "money-trail-audit" | "doctor-manager" | "backups" | "audit-trail" | "role-permissions" | "system-health" | "security-dashboard" | "care-export";
+const HASH_VIEWS: SaView[] = ["books", "referral-report", "commission-rules", "doctor-ledger", "money-trail-audit", "doctor-manager", "backups", "audit-trail", "role-permissions", "system-health", "security-dashboard", "care-export"];
 function viewFromHash(): SaView {
   const h = (window.location.hash || "").replace(/^#/, "");
   return (HASH_VIEWS as string[]).includes(h) ? (h as SaView) : "home";
@@ -763,6 +769,8 @@ function App() {
           <SystemHealthPage onBack={() => setView("home")} />
         ) : view === "security-dashboard" ? (
           <SecurityDashboard onBack={() => setView("home")} />
+        ) : view === "care-export" ? (
+          <CareExport onBack={() => setView("home")} />
         ) : (
           <ActiveSessionScreen
             session={session}
@@ -778,6 +786,7 @@ function App() {
             onRolePermissions={() => setView("role-permissions")}
             onSystemHealth={() => setView("system-health")}
             onSecurityDashboard={() => setView("security-dashboard")}
+            onCareExport={() => setView("care-export")}
           />
         )}
       </Suspense>

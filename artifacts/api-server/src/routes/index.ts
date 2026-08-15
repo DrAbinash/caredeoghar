@@ -43,6 +43,7 @@ import { portalRouter } from "./portal";
 import { patientReportsRouter, signaturesRouter, publicReportsRouter } from "./patient-reports";
 import { teleradiologyRouter } from "./teleradiology";
 import { doctorLedgerRouter } from "./doctor-ledger";
+import careExportRouter from "./care-export";
 import { machinesRouter } from "./machines";
 import { departmentsRouter } from "./departments";
 import { branchesRouter } from "./branches";
@@ -546,6 +547,7 @@ router.use("/users", requireStaffAuth, userPreferencesRouter);
 router.use("/users", requireStaffAuth, requireStaffPermission("/settings"), usersRouter);
 router.use("/commission", requireSuperAdmin, commissionRouter);
 router.use("/doctor-ledger", requireSuperAdmin, doctorLedgerRouter);
+router.use("/care-export", requireSuperAdmin, careExportRouter);
 
 // ─── WhatsApp Chatbot module ───────────────────────────────────────────────────
 // Provider-agnostic WhatsApp chatbot: webhook receiver, bot engine,
