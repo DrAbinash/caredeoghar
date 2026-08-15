@@ -27,6 +27,7 @@ const Banking         = lazy(() => import("@/pages/Banking"));
 const Register        = lazy(() => import("@/pages/Register"));
 const Settings        = lazy(() => import("@/pages/Settings"));
 const SystemUpdate    = lazy(() => import("@/pages/SystemUpdate"));
+const CareExport      = lazy(() => import("@/pages/CareExport"));
 const Dues            = lazy(() => import("@/pages/Dues"));
 const DicomNodes      = lazy(() => import("@/pages/DicomNodes"));
 const Discounts       = lazy(() => import("@/pages/Discounts"));
@@ -392,6 +393,7 @@ function Router() {
               <Route path="/settings" component={Settings} />
               <Route path="/whatsapp-chatbot" component={WhatsAppChatbot} />
               <Route path="/system-update" component={SystemUpdate} />
+              <Route path="/care-export" component={CareExport} />
               <Route component={NotFound} />
             </Switch>
           </Layout>

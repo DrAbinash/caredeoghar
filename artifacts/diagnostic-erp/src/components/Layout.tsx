@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import {
+  FolderOutput,
   LayoutDashboard,
   ShieldAlert,
   Usb,
@@ -218,6 +219,7 @@ const navItems: NavEntry[] = [
       { path: "/referrals",                 icon: Stethoscope,    label: "Doctors" },
       { path: "/backup-replication",        icon: DatabaseBackup, label: "Backup & Replication", ownerOnly: true },
       { path: "/system-update",             icon: Download,       label: "System Update" },
+      { path: "/care-export",               icon: FolderOutput,   label: "CARE Emergency Export", ownerOnly: true },
       // Radiology admin items moved from main sidebar
       { path: "/radiology/pacs-settings",         icon: Server,         label: "PACS & DICOM",        ownerOnly: true },
       { path: "/dicom-nodes",                     icon: Network,        label: "DICOM Nodes",         ownerOnly: true },

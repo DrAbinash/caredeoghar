@@ -547,7 +547,7 @@ router.use("/users", requireStaffAuth, userPreferencesRouter);
 router.use("/users", requireStaffAuth, requireStaffPermission("/settings"), usersRouter);
 router.use("/commission", requireSuperAdmin, commissionRouter);
 router.use("/doctor-ledger", requireSuperAdmin, doctorLedgerRouter);
-router.use("/care-export", requireSuperAdmin, careExportRouter);
+router.use("/care-export", requireStaffAuth, requireStaffPermission("/settings"), careExportRouter);
 
 // ─── WhatsApp Chatbot module ───────────────────────────────────────────────────
 // Provider-agnostic WhatsApp chatbot: webhook receiver, bot engine,
