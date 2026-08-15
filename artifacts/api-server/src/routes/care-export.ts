@@ -333,41 +333,76 @@ router.get("/generate", async (req, res) => {
     return { careId: row.careId, careName: row.careName || null, matchType: row.matchType };
   }
 
-  function mapTest(code: string, name: string): { careId: number | null; careName: string; matchType: string } {
+  function mapTest(code: string, name: string): {
+    careId: number | null; careCode: string; careName: string; careCategory: string; matchType: string;
+  } {
     const testKey = code.toLowerCase().trim() + "|" + name.toLowerCase().trim();
     if (testMapRows.has(testKey)) {
       const r = testMapRows.get(testKey)!;
-      return { careId: r.careId, careName: r.careName, matchType: r.matchType };
+      return { careId: r.careId, careCode: (r as unknown as { careCode: string }).careCode ?? "", careName: r.careName, careCategory: (r as unknown as { careCategory: string }).careCategory ?? "", matchType: r.matchType };
     }
     let match = careTestByCode.get(code.toLowerCase().trim());
     let matchType = "code";
     if (!match || !code.trim()) { match = careTestByName.get(name.toLowerCase().trim()); matchType = "name"; }
-    const row: TestMapRow = {
+    const row = {
       replitCode: code,
       replitName: name,
       careId: match?.careId ?? null,
+      careCode: match?.code ?? "",
       careName: match?.name ?? "",
+      careCategory: match?.category ?? "",
       matchType: match ? matchType : "unmatched",
     };
-    testMapRows.set(testKey, row);
-    return { careId: row.careId, careName: row.careName, matchType: row.matchType };
+    testMapRows.set(testKey, row as unknown as TestMapRow);
+    return { careId: row.careId, careCode: row.careCode, careName: row.careName, careCategory: row.careCategory, matchType: row.matchType };
   }
 
-  // Build transactions
+  // Fixed CARE session UUID (no real sessions — placeholder per spec)
+  const SESSION_UUID = "00000000-0000-4000-8000-000000000001";
+
+  // DS225-compliant transaction shape
   type CareTransaction = {
-    emergencyBillNumber: string;
     emergencyTransactionUuid: string;
-    billDate: string;
-    patientName: string;
+    emergencyBillNumber: string;
+    emergencySessionUuid: string;
+    status: "PENDING";
+    createdAt: string;
+    createdByStaffId: 0;
+    createdByStaffName: "Replit Export";
+    voidedAt: null;
+    voidedByStaffName: null;
+    voidReason: null;
+    patient: {
+      carePatientId: null;
+      uhid: null;
+      firstName: string;
+      lastName: string;
+      sex: "M" | "F" | "O";
+      ageValue: number | null;
+      ageUnit: string | null;
+      dateOfBirth: string | null;
+      mobile: string;
+    };
     referringDoctorId: number | null;
     referringDoctorName: string | null;
-    lines: Array<{ careServiceId: number; serviceName: string; unitPrice: number; quantity: number }>;
+    lines: Array<{
+      careServiceId: number;
+      serviceCode: string;
+      serviceName: string;
+      category: string;
+      quantity: number;
+      unitPrice: number;
+      lineGross: number;
+    }>;
+    grossAmount: number;
+    discountAmount: number;
+    discountReason: null;
+    netAmount: number;
+    amountReceived: number;
+    dueAmount: number;
     payments: Array<{ method: string; amount: number }>;
-    subtotal: number;
-    discount: number;
-    total: number;
-    paid: number;
-    balance: number;
+    notes: string;
+    tariffSyncedAt: null;
   };
 
   const transactions: CareTransaction[] = [];
@@ -380,7 +415,7 @@ router.get("/generate", async (req, res) => {
     // Map doctor
     const doctorMap = mapDoctor(doctor?.name ?? null);
 
-    // Map tests
+    // Map tests → build DS225 lines
     const lineErrors: string[] = [];
     const lines: CareTransaction["lines"] = [];
     for (const { ot, test } of tests) {
@@ -389,27 +424,28 @@ router.get("/generate", async (req, res) => {
         lineErrors.push(`test "${test.name}" (code: ${test.code}) unmapped`);
         continue;
       }
+      const unitPrice = Number(ot.price);
       lines.push({
         careServiceId: testMap.careId,
+        serviceCode: testMap.careCode || test.code,
         serviceName: ot.displayName ?? test.name,
-        unitPrice: Number(ot.price),
+        category: testMap.careCategory || test.category,
         quantity: 1,
+        unitPrice,
+        lineGross: Number((unitPrice * 1).toFixed(2)),
       });
     }
 
     if (lineErrors.length > 0) {
-      errors.push({
-        billNumber: bill.billNumber,
-        reason: lineErrors.join("; "),
-      });
-      continue; // exclude this bill entirely
+      errors.push({ billNumber: bill.billNumber, reason: lineErrors.join("; ") });
+      continue;
     }
     if (lines.length === 0) {
       errors.push({ billNumber: bill.billNumber, reason: "No active tests found" });
       continue;
     }
 
-    // Referring doctor: unmatched → error only if doctor was set (walk-in is fine)
+    // Unmatched referred doctor → skip bill
     if (doctor && doctorMap.careId === null && doctorMap.matchType !== "walk-in") {
       errors.push({
         billNumber: bill.billNumber,
@@ -422,35 +458,68 @@ router.get("/generate", async (req, res) => {
     const billDate = istDateStr(new Date(bill.createdAt));
     const emgDate  = billDate.replace(/-/g, "");
 
+    // Patient — use DB first/last name fields directly
+    const rawFirst = (patient as unknown as { firstName?: string }).firstName ?? patient.name ?? "";
+    const rawLast  = (patient as unknown as { lastName?: string }).lastName ?? "";
+    const firstName = rawFirst.trim() || (patient.name.split(" ")[0] ?? patient.name);
+    const lastName  = rawLast.trim() || (patient.name.includes(" ") ? patient.name.split(" ").slice(1).join(" ") : "-") || "-";
+    const genderRaw = ((patient as unknown as { gender?: string }).gender ?? "").toLowerCase();
+    const sex: "M" | "F" | "O" = genderRaw === "male" ? "M" : genderRaw === "female" ? "F" : "O";
+    const rawPhone = ((patient as unknown as { phone?: string }).phone ?? "").replace(/\D/g, "");
+    const mobile   = rawPhone || "0000000000";
+    const dob      = (patient as unknown as { dateOfBirth?: string }).dateOfBirth ?? null;
+    const ageValue = (patient as unknown as { ageValue?: number | null }).ageValue ?? null;
+    const ageUnit  = (patient as unknown as { ageUnit?: string | null }).ageUnit ?? null;
+
     transactions.push({
-      emergencyBillNumber: `EMG-${emgDate}-${pad(billSeq, 5)}`,
       emergencyTransactionUuid: billUuid(bill.id),
-      billDate,
-      patientName: patient.name,
+      emergencyBillNumber: `EMG-${emgDate}-${pad(billSeq, 5)}`,
+      emergencySessionUuid: SESSION_UUID,
+      status: "PENDING",
+      createdAt: new Date(bill.createdAt).toISOString(),
+      createdByStaffId: 0,
+      createdByStaffName: "Replit Export",
+      voidedAt: null,
+      voidedByStaffName: null,
+      voidReason: null,
+      patient: {
+        carePatientId: null,
+        uhid: null,
+        firstName,
+        lastName,
+        sex,
+        ageValue,
+        ageUnit,
+        dateOfBirth: dob || null,
+        mobile,
+      },
       referringDoctorId: doctorMap.careId,
       referringDoctorName: doctorMap.careId ? (doctorMap.careName ?? doctor?.name ?? null) : null,
       lines,
+      grossAmount: Number(bill.subtotal),
+      discountAmount: Number(bill.discount),
+      discountReason: null,
+      netAmount: Number(bill.totalAmount),
+      amountReceived: Number(bill.paidAmount),
+      dueAmount: Number(bill.balanceAmount),
       payments: pays.map(p => ({ method: careMethod(p.method), amount: Number(p.amount) })),
-      subtotal: Number(bill.subtotal),
-      discount: Number(bill.discount),
-      total: Number(bill.totalAmount),
-      paid: Number(bill.paidAmount),
-      balance: Number(bill.balanceAmount),
+      notes: `replit-bill:${bill.billNumber}`,
+      tariffSyncedAt: null,
     });
   }
 
-  // Build JSON (without checksum first, then add it)
-  const exportObj = {
+  // ── Root JSON envelope — key order matters for checksum
+  const exportedAt = new Date().toISOString();
+  const unsignedObj = {
     format: "CARE_EMERGENCY_BILLING_JSON_V1",
     version: 1,
-    exportedAt: new Date().toISOString(),
-    dateFrom: from,
-    dateTo: to,
+    exportedAt,
+    masterDataLastSyncedAt: null,
+    sessions: [] as unknown[],
     transactions,
   };
-  const jsonForChecksum = JSON.stringify(exportObj);
-  const checksum = createHash("sha256").update(jsonForChecksum).digest("hex");
-  const finalJson = JSON.stringify({ ...exportObj, checksumSha256: checksum }, null, 2);
+  const checksum  = createHash("sha256").update(JSON.stringify(unsignedObj)).digest("hex");
+  const finalJson = JSON.stringify({ ...unsignedObj, checksumSha256: checksum }, null, 2);
 
   // ── Mapping report CSVs
   const docMapCsv = [
@@ -468,54 +537,73 @@ router.get("/generate", async (req, res) => {
   ].join("\n");
 
   // ── Totals
-  const grossTotal  = transactions.reduce((s, t) => s + t.subtotal, 0);
-  const discTotal   = transactions.reduce((s, t) => s + t.discount, 0);
-  const netTotal    = transactions.reduce((s, t) => s + t.total, 0);
-  const paidTotal   = transactions.reduce((s, t) => s + t.paid, 0);
-  const dueTotal    = transactions.reduce((s, t) => s + t.balance, 0);
-  const withRef     = transactions.filter(t => t.referringDoctorId !== null).length;
+  const grossTotal = transactions.reduce((s, t) => s + t.grossAmount, 0);
+  const discTotal  = transactions.reduce((s, t) => s + t.discountAmount, 0);
+  const netTotal   = transactions.reduce((s, t) => s + t.netAmount, 0);
+  const paidTotal  = transactions.reduce((s, t) => s + t.amountReceived, 0);
+  const dueTotal   = transactions.reduce((s, t) => s + t.dueAmount, 0);
+  const withRef    = transactions.filter(t => t.referringDoctorId !== null).length;
   const fmt = (n: number) => n.toFixed(2);
 
   const totalsTxt = [
     `CARE Emergency Export — Totals`,
     `Date Range   : ${from} to ${to}`,
-    `Generated At : ${new Date().toISOString()}`,
+    `Generated At : ${exportedAt}`,
     ``,
     `Bills Exported         : ${transactions.length}`,
     `Bills Skipped (errors) : ${errors.length}`,
-    `Gross (subtotal)       : ${fmt(grossTotal)}`,
+    `Gross Amount           : ${fmt(grossTotal)}`,
     `Discount               : ${fmt(discTotal)}`,
-    `Net (total)            : ${fmt(netTotal)}`,
-    `Collected (paid)       : ${fmt(paidTotal)}`,
-    `Due (balance)          : ${fmt(dueTotal)}`,
+    `Net Amount             : ${fmt(netTotal)}`,
+    `Amount Received        : ${fmt(paidTotal)}`,
+    `Due Amount             : ${fmt(dueTotal)}`,
     `With Referring Doctor  : ${withRef}`,
   ].join("\n");
 
-  // ── Optional CSV twin (CARE_EMERGENCY_BILLING_V1)
+  // ── Optional CSV twin (CARE_EMERGENCY_BILLING_V1) — exact CARE column order
   let csvTwin: string | null = null;
   if (includeCSV === "true" || includeCSV === "1") {
-    const csvRows: string[] = [
-      "emergencyBillNumber|emergencyTransactionUuid|billDate|patientName|referringDoctorId|referringDoctorName|careServiceIds|serviceNames|unitPrices|quantities|paymentMethods|paymentAmounts|subtotal|discount|total|paid|balance",
-    ];
+    const CSV_HEADER = "format,emergency_transaction_uuid,emergency_bill_number,emergency_session_uuid,status,created_at,created_by_staff_id,created_by_staff_name,voided_at,voided_by_staff_name,void_reason,care_patient_id,uhid,first_name,last_name,sex,age_value,age_unit,date_of_birth,mobile,referring_doctor_id,referring_doctor_name,service_ids,service_codes,service_names,quantities,unit_prices,gross_amount,discount_amount,discount_reason,net_amount,amount_received,due_amount,payment_methods,payment_amounts,notes,tariff_synced_at";
+    const csvRows: string[] = [CSV_HEADER];
     for (const t of transactions) {
       csvRows.push([
-        t.emergencyBillNumber,
+        "CARE_EMERGENCY_BILLING_V1",
         t.emergencyTransactionUuid,
-        t.billDate,
-        t.patientName,
+        t.emergencyBillNumber,
+        t.emergencySessionUuid,
+        t.status,
+        t.createdAt,
+        t.createdByStaffId,
+        t.createdByStaffName,
+        t.voidedAt ?? "",
+        t.voidedByStaffName ?? "",
+        t.voidReason ?? "",
+        t.patient.carePatientId ?? "",
+        t.patient.uhid ?? "",
+        t.patient.firstName,
+        t.patient.lastName,
+        t.patient.sex,
+        t.patient.ageValue ?? "",
+        t.patient.ageUnit ?? "",
+        t.patient.dateOfBirth ?? "",
+        t.patient.mobile,
         t.referringDoctorId ?? "",
         t.referringDoctorName ?? "",
         t.lines.map(l => l.careServiceId).join("|"),
+        t.lines.map(l => l.serviceCode).join("|"),
         t.lines.map(l => l.serviceName).join("|"),
-        t.lines.map(l => l.unitPrice.toFixed(2)).join("|"),
         t.lines.map(l => l.quantity).join("|"),
+        t.lines.map(l => l.unitPrice.toFixed(2)).join("|"),
+        t.grossAmount.toFixed(2),
+        t.discountAmount.toFixed(2),
+        t.discountReason ?? "",
+        t.netAmount.toFixed(2),
+        t.amountReceived.toFixed(2),
+        t.dueAmount.toFixed(2),
         t.payments.map(p => p.method).join("|"),
         t.payments.map(p => p.amount.toFixed(2)).join("|"),
-        t.subtotal.toFixed(2),
-        t.discount.toFixed(2),
-        t.total.toFixed(2),
-        t.paid.toFixed(2),
-        t.balance.toFixed(2),
+        t.notes,
+        t.tariffSyncedAt ?? "",
       ].join(","));
     }
     csvTwin = csvRows.join("\n");

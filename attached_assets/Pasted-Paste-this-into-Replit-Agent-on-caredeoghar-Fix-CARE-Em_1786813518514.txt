@@ -1,0 +1,127 @@
+Paste this into Replit Agent on `caredeoghar`:
+
+---
+
+**Fix CARE Emergency JSON/CSV export so CARE can actually import it.**
+
+### What’s wrong today
+`artifacts/api-server/src/routes/care-export.ts` emits `format: "CARE_EMERGENCY_BILLING_JSON_V1"` but each **transaction object is the wrong shape**. CARE’s importer (`@workspace/emergency-billing` / Settings → Emergency Billing) expects the DS225 full contract, not the simplified fields you emit now (`patientName`, `subtotal`, `paid`, `balance`, thin `lines[]`).
+
+Keep: master upload, date range, mapping, EMG numbers, stable UUID, skip unmapped rows, UI flow.  
+Change: **only the JSON/CSV payload shape** to match CARE exactly. Do not invent a new format string.
+
+### Root JSON package (required keys)
+```json
+{
+  "format": "CARE_EMERGENCY_BILLING_JSON_V1",
+  "version": 1,
+  "exportedAt": "<ISO-8601>",
+  "masterDataLastSyncedAt": null,
+  "sessions": [],
+  "transactions": [ /* ... */ ],
+  "checksumSha256": "<sha256 of JSON.stringify of the object WITHOUT checksumSha256>"
+}
+```
+
+Checksum unsigned object **must** use exactly these keys in this order when stringifying for hash:
+`format`, `version`, `exportedAt`, `masterDataLastSyncedAt`, `sessions`, `transactions`  
+(Do **not** put `dateFrom` / `dateTo` inside the import JSON. Keep date range only in `totals.txt` / download filenames / API response metadata.)
+
+### Each transaction MUST look like this (field names exact)
+```json
+{
+  "emergencyTransactionUuid": "xxxxxxxx-xxxx-[1-8]xxx-[89ab]xxx-xxxxxxxxxxxx",
+  "emergencyBillNumber": "EMG-YYYYMMDD-XXXXX",
+  "emergencySessionUuid": "00000000-0000-4000-8000-000000000001",
+  "status": "PENDING",
+  "createdAt": "<bill createdAt ISO UTC>",
+  "createdByStaffId": 0,
+  "createdByStaffName": "Replit Export",
+  "voidedAt": null,
+  "voidedByStaffName": null,
+  "voidReason": null,
+  "patient": {
+    "carePatientId": null,
+    "uhid": null,
+    "firstName": "<first token of patient name, or full name if single word>",
+    "lastName": "<remaining name or \"-\">",
+    "sex": "O",
+    "ageValue": null,
+    "ageUnit": null,
+    "dateOfBirth": null,
+    "mobile": "<patient phone digits only, or \"0000000000\" if missing>"
+  },
+  "referringDoctorId": 123,
+  "referringDoctorName": "Dr Example",
+  "lines": [
+    {
+      "careServiceId": 45,
+      "serviceCode": "<mapped CARE test code or Replit code>",
+      "serviceName": "<display/service name>",
+      "category": "<category or \"\">",
+      "quantity": 1,
+      "unitPrice": 1500,
+      "lineGross": 1500
+    }
+  ],
+  "grossAmount": 1500,
+  "discountAmount": 0,
+  "discountReason": null,
+  "netAmount": 1500,
+  "amountReceived": 1500,
+  "dueAmount": 0,
+  "payments": [{ "method": "cash", "amount": 1500 }],
+  "notes": "replit-bill:BILL-123",
+  "tariffSyncedAt": null
+}
+```
+
+### Field mapping from your current wrong export
+| You emit now | CARE expects |
+| --- | --- |
+| `patientName` | `patient.firstName` + `patient.lastName` (split; lastName `"-"` if empty) |
+| `billDate` | use for EMG date only; also set `createdAt` from real bill timestamp ISO |
+| `subtotal` | `grossAmount` |
+| `discount` | `discountAmount` |
+| `total` | `netAmount` |
+| `paid` | `amountReceived` |
+| `balance` | `dueAmount` |
+| `lines[].careServiceId/serviceName/unitPrice/quantity` | keep + add `serviceCode`, `category`, `lineGross` (= qty × unitPrice, 2 dp) |
+| (missing) | `status: "PENDING"`, session UUID, staff fields as above |
+| walk-in | `referringDoctorId: null`, `referringDoctorName: null` |
+
+Payments: only `cash` | `upi` | `card` (keep your existing method normalize).  
+Exclude cancelled/void bills (keep current behavior).  
+Unmapped doctor/test → still skip bill into `errors.csv` (no invented IDs).
+
+### Optional CSV twin — MUST use CARE columns exactly
+If `includeCSV` is on, emit `CARE_EMERGENCY_BILLING_V1` with **this header order** (snake_case), one row per bill, pipe-joined multi-value fields:
+
+```
+format,emergency_transaction_uuid,emergency_bill_number,emergency_session_uuid,status,created_at,created_by_staff_id,created_by_staff_name,voided_at,voided_by_staff_name,void_reason,care_patient_id,uhid,first_name,last_name,sex,age_value,age_unit,date_of_birth,mobile,referring_doctor_id,referring_doctor_name,service_ids,service_codes,service_names,quantities,unit_prices,gross_amount,discount_amount,discount_reason,net_amount,amount_received,due_amount,payment_methods,payment_amounts,notes,tariff_synced_at
+```
+
+- First data cell `format` = `CARE_EMERGENCY_BILLING_V1`
+- `service_ids` = pipe of `careServiceId`, etc.
+- Do **not** use the current camelCase header (`emergencyBillNumber|...`).
+
+### Keep unchanged
+- Upload CARE `doctors.csv` / `tests.csv` masters; block export if empty  
+- Selectable From/To IST dates + presets  
+- Mapping reports + `totals.txt` + `errors.csv`  
+- Stable UUID per Replit bill id (never reuse)  
+- `EMG-YYYYMMDD-XXXXX` from IST bill date  
+- Do not upload to CARE yourself  
+
+### Acceptance check
+After fix, a downloaded `.json` must:
+1. Parse as `CARE_EMERGENCY_BILLING_JSON_V1` with `transactions[].patient.firstName` present  
+2. Have `grossAmount` / `netAmount` / `amountReceived` / `dueAmount` (not `subtotal`/`paid`)  
+3. Have every line with `careServiceId`, `serviceCode`, `serviceName`, `quantity`, `unitPrice`, `lineGross`  
+4. Be uploadable in on-prem CARE → Settings → Emergency Billing → preview without “malformed patient” failures  
+
+Prefer fixing JSON first; CSV twin second. Commit when done.
+
+---
+
+After Replit pushes, say the word and I’ll re-check `main` against CARE’s parser.
